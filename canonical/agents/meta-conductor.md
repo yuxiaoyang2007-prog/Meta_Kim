@@ -510,7 +510,7 @@ Conductor's rollback is governed by `controlState: rollback` in the run artifact
 
 **Good Workflow Configuration (A-level)**:
 ```
-Workflow Family: Business (current task subset of 10 phases)
+Workflow Family: Business (current task subset of 11 phases)
 Card Deck: [Critical(low) → Fetch(low) → Thinking(mid) → Execution(high) → Review(mid) → Meta-Review(mid) → Verification(mid) → Evolution(low)]
 Parallel: Phase 2-3 parallel (Artisan + Sentinel no dependency)
 Rhythm: Phase 4 has Skip condition (simple tasks with no security risk → skip Sentinel)

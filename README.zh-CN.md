@@ -45,8 +45,11 @@ npx --yes github:KimYx0207/Meta_Kim meta-kim
 ```bash
 git clone https://github.com/KimYx0207/Meta_Kim.git
 cd Meta_Kim
+npm install
 node setup.mjs
 ```
+
+> 💡 **安装之后**：`setup.mjs` 结尾会打印产物位置。任何时候想再看一眼（或对比上次安装），在安装目录里跑 `npm run meta:status` 即可。
 
 如果你准备维护仓库，优先改 `canonical/` 和 `config/contracts/workflow-contract.json`，然后执行：
 
@@ -745,6 +748,16 @@ flowchart TB
 
 ## FAQ
 
+### Q：我用 `npx` 装的，文件在哪？
+
+Meta_Kim 把产物写到 3 个地方：
+
+1. **当前目录** — `.claude/`、`.codex/`、`.cursor/`、`openclaw/` 本项目的 runtime 投影
+2. **用户 home** — `~/.claude/skills/meta-theory/`（以及 `.codex / .cursor / .openclaw`）跨项目共享的全局 skill
+3. **清单** — `~/.meta-kim/install-manifest.json` 记录所有改动，支持安全卸载
+
+在你跑 `npx` 的那个目录下运行 `npm run meta:status`（或 `node setup.mjs --check`）查看完整足迹。想回滚就跑 `npm run meta:uninstall`。
+
 ### Q：Meta_Kim 和普通的 AI 编码助手有什么区别？
 
 普通 AI 编码助手是你问什么它就做什么，没有中间的治理环节。Meta_Kim 在"问"和"做"之间加了好几层：先确认你到底要什么，再规划谁来做，做完还要审查，审完还要验证，验证通过还要沉淀经验。**它不是另一个 AI，是给 AI 装了一套工程纪律。**
@@ -787,6 +800,7 @@ npx --yes github:KimYx0207/Meta_Kim meta-kim
 ```bash
 git clone https://github.com/KimYx0207/Meta_Kim.git
 cd Meta_Kim
+npm install
 node setup.mjs
 ```
 
@@ -813,6 +827,41 @@ Meta_Kim 使用 MCP（Model Context Protocol）来扩展 agent 的能力边界�
 - [AGENTS.md](AGENTS.md)
 - [config/contracts/workflow-contract.json](config/contracts/workflow-contract.json)
 - [docs/runtime-capability-matrix.md](docs/runtime-capability-matrix.md)
+
+---
+
+## 第三方依赖
+
+Meta_Kim 本身采用 MIT 协议。以下可选技能仓库通过 `node setup.mjs` 单独安装，各自的许可证独立适用。
+
+### npm 依赖
+
+| 包名 | License |
+|------|---------|
+| [`@inquirer/prompts`](https://github.com/SBoudrias/Inquirer.js) | MIT |
+| [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) | MIT |
+| [`zod`](https://github.com/colinhacks/zod) | MIT |
+
+### 可选技能仓库
+
+| 仓库 | License |
+|-----|---------|
+| [KimYx0207/agent-teams-playbook](https://github.com/KimYx0207/agent-teams-playbook) | MIT |
+| [KimYx0207/findskill](https://github.com/KimYx0207/findskill) | MIT |
+| [KimYx0207/HookPrompt](https://github.com/KimYx0207/HookPrompt) | MIT |
+| [obra/superpowers](https://github.com/obra/superpowers) | MIT |
+| [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code) | MIT |
+| [OthmanAdi/planning-with-files](https://github.com/OthmanAdi/planning-with-files) | MIT |
+| [HKUDS/CLI-Anything](https://github.com/HKUDS/CLI-Anything) | Apache 2.0 |
+| [garrytan/gstack](https://github.com/garrytan/gstack) | MIT |
+| [anthropics/skills](https://github.com/anthropics/skills) | 未声明许可证（© Anthropic, PBC） |
+
+### 可选 pip 包
+
+| 包名 | License |
+|------|---------|
+| [`graphifyy`](https://github.com/safishamsi/graphify) | MIT |
+| [`mcp-memory-service`](https://pypi.org/project/mcp-memory-service/) | Apache 2.0 |
 
 ---
 

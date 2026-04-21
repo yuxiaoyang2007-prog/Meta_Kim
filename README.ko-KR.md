@@ -45,8 +45,11 @@ npx --yes github:KimYx0207/Meta_Kim meta-kim
 ```bash
 git clone https://github.com/KimYx0207/Meta_Kim.git
 cd Meta_Kim
+npm install
 node setup.mjs
 ```
+
+> 💡 **설치 후**: `setup.mjs`가 산출물 위치를 출력합니다. 언제든 다시 확인(또는 이전 설치와 비교)하려면 설치한 디렉터리에서 `npm run meta:status`를 실행하세요.
 
 저장소를 유지보수할 계획이라면, 먼저 `canonical/`과 `config/contracts/workflow-contract.json`을 수정한 뒤 다음을 실행하세요:
 
@@ -745,6 +748,16 @@ flowchart TB
 
 ## FAQ
 
+### `npx`로 설치했는데, 파일이 어디에 있나요?
+
+Meta_Kim은 3 곳에 기록합니다:
+
+1. **현재 디렉터리** — `.claude/`, `.codex/`, `.cursor/`, `openclaw/` 이 프로젝트의 런타임 투영
+2. **홈 디렉터리** — `~/.claude/skills/meta-theory/` (및 `.codex / .cursor / .openclaw`) 프로젝트 간 공유되는 전역 스킬
+3. **매니페스트** — `~/.meta-kim/install-manifest.json`이 모든 변경사항을 추적하여 안전한 롤백을 지원
+
+`npx`를 실행한 디렉터리에서 `npm run meta:status` (또는 `node setup.mjs --check`)를 실행하여 전체 풋프린트를 확인하세요. 롤백하려면 `npm run meta:uninstall`을 실행하세요.
+
 ### Meta_Kim은 일반 AI 코딩 보조와 뭐가 다르나요?
 
 일반 AI 코딩 보조는 물으면 바로 합니다. 그 사이에 거버넌스가 없습니다. Meta_Kim은 "묻는 것"과 "하는 것" 사이에 여러 층을 추가합니다: 먼저 무엇을 원하는지 확인하고, 누가 할지 계획하고, 끝나면 검토하고, 검토 후 검증하고, 검증 후 경험을 보존합니다. **또 다른 AI가 아니라 AI에 엔지니어링 규율을 장착하는 것입니다.**
@@ -787,6 +800,7 @@ npx --yes github:KimYx0207/Meta_Kim meta-kim
 ```bash
 git clone https://github.com/KimYx0207/Meta_Kim.git
 cd Meta_Kim
+npm install
 node setup.mjs
 ```
 
@@ -816,6 +830,41 @@ Meta_Kim은 MCP(Model Context Protocol)를 사용하여 agent의 역량 경계�
 - [config/contracts/workflow-contract.json](config/contracts/workflow-contract.json)
 - [docs/runtime-capability-matrix.md](docs/runtime-capability-matrix.md)
 - [canonical/skills/meta-theory/SKILL.md](canonical/skills/meta-theory/SKILL.md)
+
+---
+
+## 서드파티 의존성
+
+Meta_Kim 자체는 MIT 라이선스입니다. 다음 선택적 스킬 저장소는 `node setup.mjs`를 통해 별도로 설치되며, 각 저장소의 라이선스가 독립적으로 적용됩니다.
+
+### npm 의존성
+
+| 패키지 | License |
+|--------|---------|
+| [`@inquirer/prompts`](https://github.com/SBoudrias/Inquirer.js) | MIT |
+| [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) | MIT |
+| [`zod`](https://github.com/colinhacks/zod) | MIT |
+
+### 선택적 스킬 저장소
+
+| 저장소 | License |
+|--------|---------|
+| [KimYx0207/agent-teams-playbook](https://github.com/KimYx0207/agent-teams-playbook) | MIT |
+| [KimYx0207/findskill](https://github.com/KimYx0207/findskill) | MIT |
+| [KimYx0207/HookPrompt](https://github.com/KimYx0207/HookPrompt) | MIT |
+| [obra/superpowers](https://github.com/obra/superpowers) | MIT |
+| [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code) | MIT |
+| [OthmanAdi/planning-with-files](https://github.com/OthmanAdi/planning-with-files) | MIT |
+| [HKUDS/CLI-Anything](https://github.com/HKUDS/CLI-Anything) | Apache 2.0 |
+| [garrytan/gstack](https://github.com/garrytan/gstack) | MIT |
+| [anthropics/skills](https://github.com/anthropics/skills) | 라이선스 미선언（© Anthropic, PBC） |
+
+### 선택적 pip 패키지
+
+| 패키지 | License |
+|--------|---------|
+| [`graphifyy`](https://github.com/safishamsi/graphify) | MIT |
+| [`mcp-memory-service`](https://pypi.org/project/mcp-memory-service/) | Apache 2.0 |
 
 ---
 

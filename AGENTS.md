@@ -132,7 +132,7 @@ Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verificat
 The department-run contract is defined separately in `config/contracts/workflow-contract.json`:
 
 ```text
-direction -> planning -> execution -> review -> meta_review -> revision -> verify -> summary -> feedback -> evolve
+direction -> planning -> execution -> review -> meta_review -> revision -> verify -> summary -> feedback -> evolve -> mirror
 ```
 
 The relationship is:

@@ -313,6 +313,14 @@ ${r ? `Raw error: ${r}` : ""}
     layer3Label: "Layer 3 (SQL / MCP Memory Service)",
     layer3Note:
       "requires server startup: python -m mcp_memory_service (then http://localhost:8000)",
+    installLocationsHeading: "Installation locations:",
+    installLocationsProject: "Project-level (this directory)",
+    installLocationsGlobal: "Global-level (shared across projects)",
+    installLocationsManifest: "Install manifest (for safe rollback)",
+    usefulCommandsHeading: "Next useful commands:",
+    cmdWhereStatus: "view all artifact locations",
+    cmdWhereStatusDiff: "diff against previous install",
+    cmdWhereUninstall: "safe uninstall",
     postInstallNotesReminder: "Reminder:",
     postInstallNotesReminderText:
       "Run node setup.mjs --check to verify your installation at any time.",
@@ -456,6 +464,11 @@ Possible causes:
     mcpMemoryHookInstalled: "SessionStart hook installed",
     mcpMemoryHookWarnings:
       "Hook installation reported warnings (non-blocking) — underlying stderr shown below:",
+    mcpMemoryAutoStarting: "Starting MCP Memory Service (HTTP, background)...",
+    mcpMemoryAutoStarted: "MCP Memory Service running at http://localhost:8000",
+    mcpMemoryAutoStartFailed: "Auto-start failed — start manually:",
+    mcpMemoryAutoStartManual: "  memory server --http",
+    mcpMemoryAutoStartBoot: "Boot auto-start configured",
     updateHeading: "Update Mode",
     updateNpm: "Reinstalling npm dependencies...",
     updateSkills: "Updating all skills...",
@@ -503,6 +516,20 @@ Possible causes:
     footprintFirstInstall:
       "First install on this machine — no previous footprint recorded.",
     footprintRefreshNote: "Running install will refresh these entries.",
+    footprintScopeGlobal: "Global",
+    footprintScopeProject: "Project",
+    footprintEntries: "entries",
+    footprintCategoryLabels: {
+      A: "Global runtime skills",
+      B: "Global runtime hooks",
+      C: "Global settings.json merges",
+      D: "Project runtime skills",
+      E: "Project runtime hooks",
+      F: "Project runtime agents",
+      G: "Project settings + MCP config",
+      H: "Project local state (.meta-kim/)",
+      I: "Shared dependencies (pip / git hooks)",
+    },
     installCancelled: "Installation cancelled",
     installComplete: "Installation complete!",
     // Warning messages
@@ -723,6 +750,14 @@ ${r ? `原始错误：${r}` : ""}
     layer3Label: "第三层（SQL / MCP Memory Service）",
     layer3Note:
       "需手动启动服务器：python -m mcp_memory_service（然后访问 http://localhost:8000）",
+    installLocationsHeading: "安装位置：",
+    installLocationsProject: "项目级（当前目录）",
+    installLocationsGlobal: "全局级（跨项目共享）",
+    installLocationsManifest: "安装清单（可安全卸载）",
+    usefulCommandsHeading: "常用后续命令：",
+    cmdWhereStatus: "查看所有产物位置",
+    cmdWhereStatusDiff: "对比上次安装",
+    cmdWhereUninstall: "安全卸载",
     postInstallNotesReminder: "提醒：",
     postInstallNotesReminderText:
       "随时可运行 node setup.mjs --check 验证安装状态。",
@@ -853,6 +888,11 @@ ${r ? `原始错误：${r}` : ""}
     mcpMemoryHookInstalled: "SessionStart 钩子已安装",
     mcpMemoryHookWarnings:
       "钩子安装产生警告（不影响后续流程）——以下是子进程 stderr 原文：",
+    mcpMemoryAutoStarting: "正在启动 MCP Memory Service（HTTP 后台模式）...",
+    mcpMemoryAutoStarted: "MCP Memory Service 已运行于 http://localhost:8000",
+    mcpMemoryAutoStartFailed: "自动启动失败——请手动启动：",
+    mcpMemoryAutoStartManual: "  memory server --http",
+    mcpMemoryAutoStartBoot: "已配置开机自启",
     updateHeading: "更新模式",
     updateNpm: "正在重新安装 npm 依赖...",
     updateSkills: "正在更新所有技能...",
@@ -897,6 +937,20 @@ ${r ? `原始错误：${r}` : ""}
     footprintTitle: "安装足迹（上次安装记录）",
     footprintFirstInstall: "首次安装 — 无历史足迹可显示。",
     footprintRefreshNote: "本次安装将刷新上述条目。",
+    footprintScopeGlobal: "全局",
+    footprintScopeProject: "项目",
+    footprintEntries: "条",
+    footprintCategoryLabels: {
+      A: "全局运行时技能",
+      B: "全局运行时钩子",
+      C: "全局 settings.json 合并",
+      D: "项目运行时技能",
+      E: "项目运行时钩子",
+      F: "项目运行时智能体",
+      G: "项目 settings + MCP 配置",
+      H: "项目本地状态 (.meta-kim/)",
+      I: "共享依赖 (pip / git 钩子)",
+    },
     installCancelled: "安装已取消",
     installComplete: "安装完成！",
     // Warning messages
@@ -1122,6 +1176,15 @@ ${r ? `生エラー：${r}` : ""}
     layer3Label: "第3層（SQL / MCP Memory Service）",
     layer3Note:
       "サーバー手動起動が必要：python -m mcp_memory_service（次に http://localhost:8000 にアクセス）",
+    installLocationsHeading: "インストール先：",
+    installLocationsProject: "プロジェクトレベル（このディレクトリ）",
+    installLocationsGlobal: "グローバルレベル（プロジェクト間で共有）",
+    installLocationsManifest:
+      "インストールマニフェスト（安全にアンインストール可能）",
+    usefulCommandsHeading: "次によく使うコマンド：",
+    cmdWhereStatus: "すべての成果物の場所を表示",
+    cmdWhereStatusDiff: "前回のインストールとの差分",
+    cmdWhereUninstall: "安全にアンインストール",
     postInstallNotesReminder: "補足：",
     postInstallNotesReminderText:
       "node setup.mjs --check でいつでも導入状態を確認できます。",
@@ -1268,6 +1331,13 @@ ${r ? `生エラー：${r}` : ""}
     mcpMemoryHookInstalled: "SessionStart フックをインストールしました",
     mcpMemoryHookWarnings:
       "フックのインストール中に警告が発生しました（非ブロッキング）——子プロセスの stderr を以下に表示します:",
+    mcpMemoryAutoStarting:
+      "MCP Memory Service（HTTP バックグラウンド）を起動中...",
+    mcpMemoryAutoStarted:
+      "MCP Memory Service が http://localhost:8000 で実行中",
+    mcpMemoryAutoStartFailed: "自動起動に失敗——手動で起動してください：",
+    mcpMemoryAutoStartManual: "  memory server --http",
+    mcpMemoryAutoStartBoot: "起動時自動開始を設定しました",
     updateHeading: "アップデートモード",
     updateNpm: "npm依存関係を再インストール中...",
     updateSkills: "すべてのスキルを更新中...",
@@ -1319,6 +1389,20 @@ ${r ? `生エラー：${r}` : ""}
     footprintFirstInstall:
       "このマシンでの初回インストール — 前回の足跡はありません。",
     footprintRefreshNote: "インストール実行時に上記エントリは更新されます。",
+    footprintScopeGlobal: "グローバル",
+    footprintScopeProject: "プロジェクト",
+    footprintEntries: "件",
+    footprintCategoryLabels: {
+      A: "グローバルランタイムスキル",
+      B: "グローバルランタイムフック",
+      C: "グローバル settings.json マージ",
+      D: "プロジェクトランタイムスキル",
+      E: "プロジェクトランタイムフック",
+      F: "プロジェクトランタイムエージェント",
+      G: "プロジェクト settings + MCP 設定",
+      H: "プロジェクトローカル状態 (.meta-kim/)",
+      I: "共有依存関係 (pip / git フック)",
+    },
     installCancelled: "インストールがキャンセルされました",
     installComplete: "インストール完了！",
     // 警告メッセージ
@@ -1544,6 +1628,14 @@ ${r ? `원본 오류：${r}` : ""}
     layer3Label: "제3층 (SQL / MCP Memory Service)",
     layer3Note:
       "서버 수동 시작 필요: python -m mcp_memory_service (그러면 http://localhost:8000 에 접속)",
+    installLocationsHeading: "설치 위치:",
+    installLocationsProject: "프로젝트 레벨 (현재 디렉터리)",
+    installLocationsGlobal: "전역 레벨 (프로젝트 간 공유)",
+    installLocationsManifest: "설치 매니페스트 (안전하게 제거 가능)",
+    usefulCommandsHeading: "다음에 자주 사용하는 명령:",
+    cmdWhereStatus: "모든 산출물 위치 확인",
+    cmdWhereStatusDiff: "이전 설치와 비교",
+    cmdWhereUninstall: "안전하게 제거",
     postInstallNotesReminder: "참고:",
     postInstallNotesReminderText:
       "node setup.mjs --check로 언제든지 설치 상태를 확인할 수 있습니다.",
@@ -1681,6 +1773,12 @@ ${r ? `원본 오류：${r}` : ""}
     mcpMemoryHookInstalled: "SessionStart 훅 설치 완료",
     mcpMemoryHookWarnings:
       "훅 설치에서 경고가 발생했습니다 (비차단) — 하위 프로세스의 stderr 원문은 아래와 같습니다:",
+    mcpMemoryAutoStarting: "MCP Memory Service (HTTP 백그라운드) 시작 중...",
+    mcpMemoryAutoStarted:
+      "MCP Memory Service가 http://localhost:8000에서 실행 중",
+    mcpMemoryAutoStartFailed: "자동 시작 실패 — 수동으로 시작하세요:",
+    mcpMemoryAutoStartManual: "  memory server --http",
+    mcpMemoryAutoStartBoot: "부팅 시 자동 시작 구성 완료",
     updateHeading: "업데이트 모드",
     updateNpm: "npm 의존성 재설치 중...",
     updateSkills: "모든 스킬 업데이트 중...",
@@ -1726,6 +1824,20 @@ ${r ? `원본 오류：${r}` : ""}
     footprintTitle: "설치 발자국 (이전 설치 기록)",
     footprintFirstInstall: "이 머신에서 첫 설치 — 이전 발자국이 없습니다.",
     footprintRefreshNote: "설치 실행 시 위 항목들이 갱신됩니다.",
+    footprintScopeGlobal: "전역",
+    footprintScopeProject: "프로젝트",
+    footprintEntries: "항목",
+    footprintCategoryLabels: {
+      A: "전역 런타임 스킬",
+      B: "전역 런타임 훅",
+      C: "전역 settings.json 병합",
+      D: "프로젝트 런타임 스킬",
+      E: "프로젝트 런타임 훅",
+      F: "프로젝트 런타임 에이전트",
+      G: "프로젝트 settings + MCP 설정",
+      H: "프로젝트 로컬 상태 (.meta-kim/)",
+      I: "공유 의존성 (pip / git 훅)",
+    },
     installCancelled: "설치가 취소되었습니다",
     installComplete: "설치 완료!",
     // 경고 메시지
@@ -2306,7 +2418,7 @@ ${C.dim}${t.installOverviewEstimated}${C.reset}${t.installOverviewTime}
  * to refresh. Pure read-only; safe to call even when no manifest exists.
  */
 async function showExistingFootprint(installScope) {
-  const { readManifest, manifestPathFor, listByCategory, CATEGORY_LABELS } =
+  const { readManifest, manifestPathFor, listByCategory } =
     await import("./scripts/install-manifest.mjs");
 
   const sources = [];
@@ -2314,7 +2426,7 @@ async function showExistingFootprint(installScope) {
     try {
       const m = readManifest(manifestPathFor("global"));
       if (m && m.entries?.length > 0)
-        sources.push({ label: "Global", manifest: m });
+        sources.push({ scope: "global", manifest: m });
     } catch {
       /* manifest read is best-effort */
     }
@@ -2323,7 +2435,7 @@ async function showExistingFootprint(installScope) {
     try {
       const m = readManifest(manifestPathFor("project", PROJECT_DIR));
       if (m && m.entries?.length > 0)
-        sources.push({ label: "Project", manifest: m });
+        sources.push({ scope: "project", manifest: m });
     } catch {
       /* manifest read is best-effort */
     }
@@ -2334,20 +2446,26 @@ async function showExistingFootprint(installScope) {
     console.log(`${C.dim}${t.footprintFirstInstall}${C.reset}\n`);
     return;
   }
+  console.log("");
 
-  for (const { label, manifest } of sources) {
+  for (let i = 0; i < sources.length; i++) {
+    if (i > 0) console.log("");
+    const { scope, manifest } = sources[i];
     const grouped = listByCategory(manifest);
+    const scopeLabel =
+      scope === "global" ? t.footprintScopeGlobal : t.footprintScopeProject;
     console.log(
-      `  ${C.cyan}${label}${C.reset}: ${manifest.entries.length} entries`,
+      `${C.cyan}${scopeLabel}${C.reset}: ${manifest.entries.length} ${t.footprintEntries}`,
     );
     for (const [cat, items] of Object.entries(grouped)) {
       if (items.length === 0) continue;
-      console.log(
-        `    ${cat}. ${CATEGORY_LABELS[cat]}: ${C.bold}${items.length}${C.reset}`,
-      );
+      const catLabel = t.footprintCategoryLabels?.[cat] ?? cat;
+      console.log(`${cat}. ${catLabel}: ${C.bold}${items.length}${C.reset}`);
     }
   }
-  console.log(`${C.dim}${t.footprintRefreshNote}${C.reset}\n`);
+  console.log("");
+  console.log(`${C.dim}${t.footprintRefreshNote}${C.reset}`);
+  console.log("");
 }
 
 /** Execute with progress indicator */
@@ -3405,6 +3523,152 @@ function checkMcpMemoryService(python) {
   };
 }
 
+function findMemoryBinPath(resolved) {
+  const plat = platform();
+  const pythonCmd = resolved.python.command || resolved.python;
+  const pythonDir = dirname(pythonCmd);
+  const binName = plat === "win32" ? "memory.exe" : "memory";
+
+  const sameDir = join(pythonDir, binName);
+  if (existsSync(sameDir)) return sameDir;
+
+  if (plat === "win32") {
+    const scriptsDir = join(pythonDir, "Scripts", binName);
+    if (existsSync(scriptsDir)) return scriptsDir;
+  }
+
+  const binDir = join(pythonDir, "..", "bin", binName);
+  if (existsSync(binDir)) return resolve(binDir);
+
+  return null;
+}
+
+async function startMcpMemoryServiceBackground(resolved) {
+  const memoryBin = findMemoryBinPath(resolved);
+  if (!memoryBin) {
+    warn(t.mcpMemoryAutoStartFailed);
+    info(t.mcpMemoryAutoStartManual);
+    return;
+  }
+
+  info(t.mcpMemoryAutoStarting);
+  const env = { ...process.env, MCP_ALLOW_ANONYMOUS_ACCESS: "true" };
+  const plat = platform();
+
+  try {
+    if (plat === "win32") {
+      execSync(`start /B "" "${memoryBin}" server --http`, {
+        env,
+        stdio: "ignore",
+      });
+    } else {
+      execSync(`nohup "${memoryBin}" server --http >/dev/null 2>&1 &`, {
+        env,
+        stdio: "ignore",
+        shell: "/bin/bash",
+      });
+    }
+  } catch {
+    // Background start may report errors but still succeed
+  }
+
+  await new Promise((r) => setTimeout(r, 4000));
+
+  try {
+    const healthy = await new Promise((resolve) => {
+      const http = require("http");
+      const req = http.get(
+        "http://127.0.0.1:8000/api/health",
+        { timeout: 5000 },
+        (res) => {
+          let body = "";
+          res.on("data", (c) => (body += c));
+          res.on("end", () => resolve(body.includes("healthy")));
+        },
+      );
+      req.on("error", () => resolve(false));
+      req.on("timeout", () => {
+        req.destroy();
+        resolve(false);
+      });
+    });
+
+    if (healthy) {
+      ok(t.mcpMemoryAutoStarted);
+      const bootOk = configureBootAutoStart(memoryBin);
+      if (bootOk) ok(t.mcpMemoryAutoStartBoot);
+      return;
+    }
+  } catch {}
+
+  warn(t.mcpMemoryAutoStartFailed);
+  info(t.mcpMemoryAutoStartManual);
+}
+
+function configureBootAutoStart(memoryBin) {
+  const plat = platform();
+  try {
+    if (plat === "win32") {
+      const startupDir = join(
+        homedir(),
+        "AppData",
+        "Roaming",
+        "Microsoft",
+        "Windows",
+        "Start Menu",
+        "Programs",
+        "Startup",
+      );
+      if (!existsSync(startupDir)) return false;
+      const cmdPath = join(startupDir, "mcp-memory-start.cmd");
+      const vbsPath = join(startupDir, "mcp-memory-silent.vbs");
+      writeFileSync(
+        cmdPath,
+        `@echo off\r\nset MCP_ALLOW_ANONYMOUS_ACCESS=true\r\n"${memoryBin}" server --http\r\n`,
+      );
+      writeFileSync(
+        vbsPath,
+        `Set WshShell = CreateObject("WScript.Shell")\r\nWshShell.Run """${cmdPath}""", 0, False\r\n`,
+      );
+      return true;
+    }
+    if (plat === "darwin") {
+      const launchDir = join(homedir(), "Library", "LaunchAgents");
+      mkdirSync(launchDir, { recursive: true });
+      const logPath = join(homedir(), ".meta-kim", "mcp-memory.log");
+      mkdirSync(join(homedir(), ".meta-kim"), { recursive: true });
+      writeFileSync(
+        join(launchDir, "com.meta-kim.mcp-memory-service.plist"),
+        `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.meta-kim.mcp-memory-service</string>
+  <key>ProgramArguments</key><array>
+    <string>${memoryBin}</string><string>server</string><string>--http</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>MCP_ALLOW_ANONYMOUS_ACCESS</key><string>true</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>${logPath}</string>
+  <key>StandardErrorPath</key><string>${logPath}</string>
+</dict></plist>`,
+      );
+      return true;
+    }
+    // Linux: XDG autostart
+    const autoDir = join(homedir(), ".config", "autostart");
+    mkdirSync(autoDir, { recursive: true });
+    writeFileSync(
+      join(autoDir, "mcp-memory-service.desktop"),
+      `[Desktop Entry]\nType=Application\nName=MCP Memory Service\nExec=env MCP_ALLOW_ANONYMOUS_ACCESS=true "${memoryBin}" server --http\nNoDisplay=true\n`,
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function installMcpMemoryServiceStep(inUpdateMode = false) {
   heading(t.stepMcpMemory);
 
@@ -3526,6 +3790,9 @@ async function installMcpMemoryServiceStep(inUpdateMode = false) {
   // pipeline (pip package → .mcp.json → hook file → SessionStart registration
   // → health check) runs from a single `node setup.mjs` invocation.
   await runMcpMemoryHookInstaller();
+
+  // Step 4.8 — start the HTTP server in background and configure boot auto-start
+  await startMcpMemoryServiceBackground(resolved);
 }
 
 function ensureNetworkxCompatibility(python) {
@@ -3679,6 +3946,28 @@ function showNextSteps(runtimes) {
   console.log(`${C.dim}${t.layer1Label} — ${t.layer1Note}${C.reset}`);
   console.log(`${C.dim}${t.layer2Label} — ${t.layer2Note}${C.reset}`);
   console.log(`${C.dim}${t.layer3Label} — ${t.layer3Note}${C.reset}`);
+  console.log("");
+  console.log(`${C.bold}${C.cyan}● ${t.installLocationsHeading}${C.reset}`);
+  console.log(
+    `${C.dim}• ${t.installLocationsProject}: .claude/  .codex/  .cursor/  openclaw/${C.reset}`,
+  );
+  console.log(
+    `${C.dim}• ${t.installLocationsGlobal}: ~/.claude/skills/  ~/.codex/skills/  ~/.cursor/skills/  ~/.openclaw/skills/${C.reset}`,
+  );
+  console.log(
+    `${C.dim}• ${t.installLocationsManifest}: ~/.meta-kim/install-manifest.json${C.reset}`,
+  );
+  console.log("");
+  console.log(`${C.bold}${C.cyan}● ${t.usefulCommandsHeading}${C.reset}`);
+  console.log(
+    `${C.dim}  npm run meta:status        # ${t.cmdWhereStatus}${C.reset}`,
+  );
+  console.log(
+    `${C.dim}  npm run meta:status:diff   # ${t.cmdWhereStatusDiff}${C.reset}`,
+  );
+  console.log(
+    `${C.dim}  npm run meta:uninstall     # ${t.cmdWhereUninstall}${C.reset}`,
+  );
   console.log("");
   console.log(
     `${C.dim}${C.yellow}★ ${t.postInstallNotesReminder} ${t.postInstallNotesReminderText}${C.reset}`,

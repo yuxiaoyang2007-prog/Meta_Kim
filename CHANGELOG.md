@@ -1,12 +1,53 @@
 # Changelog
 
+> 🇨🇳 [中文版](./CHANGELOG.zh-CN.md) | English version
+
 All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
-## [Unreleased]
+## [2.0.15] - 2026-04-20
 
 ### Added
+
+- **`mirror` as the 11th business workflow phase** — `config/contracts/workflow-contract.json` already declared `mirror` (Mirror Publish / 镜像发布) as a terminal phase appended after `evolve`; this release closes the gap by syncing every dependent test and doc to the 11-phase contract. Post-sync state: `phases.length = 11`, `terminalPhases.length = 7`, `labels.{zh-CN,en-US}` each have 11 entries, and `tests/meta-theory/07-contract-compliance.test.mjs` + `tests/meta-theory/12-ten-step-workflow.test.mjs` pass without flakiness.
+
+### Fixed
+
+- **`install-plugin-bundles` dry-run flakiness** — `scripts/install-global-skills-all-runtimes.mjs` (line 1576–1583) was short-circuiting the "already exists" branch even under `--dry-run`, so the sparse-checkout preview for plugin-bundle specs like `obra/superpowers` would never print on machines that had the target directory cached. Added a single-line `!dryRun &&` guard so dry-run always prints the intended command (the idempotent skip still applies to real installs). Restores 3 previously-failing tests in `tests/setup/install-plugin-bundles.test.mjs` (`Codex .codex/`, `Cursor .cursor/`, `OpenClaw skills/`).
+
+### Changed
+
+- **11-phase contract synced across tests + top-level docs**: `tests/meta-theory/07-contract-compliance.test.mjs`, `tests/meta-theory/12-ten-step-workflow.test.mjs`, `AGENTS.md`, `CLAUDE.md`, `canonical/agents/meta-conductor.md`, `canonical/skills/meta-theory/references/dev-governance.md`, `canonical/skills/meta-theory/references/ten-step-governance.md`. Counts updated (`10 → 11`, `6 → 7` terminal), phase lists append `mirror`, zh-CN/en-US labels extended with `镜像发布` / `Mirror Publish`.
+
+### Known Issues
+
+- `README.md` / `README.zh-CN.md` / `README.ja-JP.md` / `README.ko-KR.md` still describe the pre-`mirror` 10-stage workflow in prose and Mermaid diagrams; a multi-language README sync is deferred to a follow-up release.
+- Callers that first-run `meta:verify:all` on a fresh clone must run `npm run meta:sync:global` beforehand, otherwise `meta:check:global` hard-fails on the missing `~/.codex/skills/meta-theory/` (and `.cursor` / `.openclaw`) directories. Documenting this as a Getting Started prerequisite is queued.
+
+## [2.0.14] - 2026-04-20
+
+### Added
+
+- **MCP Memory SessionEnd auto-save + Layered injection (L1/L2/L3)**: Two complementary progress-tracking mechanisms for cross-session continuity.
+  - **`scripts/install-mcp-memory-hooks.mjs`** — Extended to handle Stop hook (`stop-save-progress.mjs`) and commands directory (`save-progress/`). Now registers both SessionStart and Stop hooks in `settings.json`. Stop hook auto-extracts completed/remaining tasks from session transcript via regex patterns and persists to `.claude/project-task-state.json`.
+  - **`canonical/runtime-assets/claude/hooks/stop-save-progress.mjs`** — Node.js Stop hook that reads session transcript, extracts task keywords (完成/搞定/新增/修复 etc.), and calls `mcp_memory_global.py --mode save`. Runs after every Claude Code session, exits 0 always.
+  - **`canonical/runtime-assets/claude/memory-hooks/mcp_memory_global.py`** — Upgraded with layered injection:
+    - L1 compact: task state only (~120 chars) — always shown
+    - L2 filtered: project memories with relevance > 0.55 (~400 chars) — context-triggered
+    - L3 full: recent memories (~800 chars) — on demand via `--mode query-memories`
+  - **`canonical/runtime-assets/claude/commands/save-progress/SKILL.md`** — Manual save command (`/save-progress`). Allows explicit task state persistence when user wants precise control.
+  - **Chinese-friendly limits**: `MIN_RELEVANCE=0.55` (lowered for Chinese embedding models), `MAX_LEN_COMPACT=120`, `MAX_LEN_L2=400`, `MAX_LEN_L3=800`.
+
+### Fixed
+
+- **`scripts/install-mcp-memory-hooks.mjs` async + `fs` import bug** — `copyCommandsDir()` used `fs.readdir()` but imported sync `fs` module, causing "fs is not defined" error. Fixed by importing `readdir` from `node:fs/promises`. Also fixed `registered is not defined` error by properly capturing return values from `registerSessionStartHook()` and `registerStopHook()`.
+
+## [2.0.13] - 2026-04-20
+
+### Added
+
+- **Layer 3 auto-start on setup**: `node setup.mjs` now automatically starts the MCP Memory Service (HTTP mode) in the background after installation, then verifies the health endpoint at `http://localhost:8000`. If the server starts successfully, a platform-specific boot auto-start entry is created (Windows Startup VBS / macOS LaunchAgent / Linux XDG autostart). The entire sequence is non-blocking — failures print manual instructions instead of aborting setup. Five new i18n keys added per language (en / zh-CN / ja-JP / ko-KR): `mcpMemoryAutoStarting`, `mcpMemoryAutoStarted`, `mcpMemoryAutoStartFailed`, `mcpMemoryAutoStartManual`, `mcpMemoryAutoStartBoot`.
 
 - **Install Manifest Phase 4 — manifest-driven uninstall**: `scripts/uninstall.mjs` now prefers the install manifest over the filesystem-scan heuristic, so teardown follows the exact set of entries Meta_Kim actually wrote (rather than a path-pattern guess).
   - New `manifestEntryToFinding(entry)` adapter maps a schema-v1 manifest entry onto the scan-finding shape that `planActions` already consumes. Entries with `kind` of `pip-package` / `mcp-server` / `git-hook` return `null` — they need dedicated actions the pipeline does not model yet, so only `file` / `dir` / `settings-merge` entries reach `planActions`.

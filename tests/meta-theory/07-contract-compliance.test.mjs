@@ -15,7 +15,7 @@ describe("workflow-contract.json — schema compliance", async () => {
     assert.notEqual(contract.schemaVersion, undefined);
     assert.ok(
       contract.schemaVersion >= 6,
-      "schemaVersion should be >= 6 after Critical/Fetch/Thinking/Review packet hardening"
+      "schemaVersion should be >= 6 after Critical/Fetch/Thinking/Review packet hardening",
     );
   });
 
@@ -29,7 +29,10 @@ describe("workflow-contract.json — schema compliance", async () => {
 
   test("canonicalExecutionSpineStages has all 8 stages", () => {
     const stages = contract.businessWorkflow?.canonicalExecutionSpineStages;
-    assert.ok(Array.isArray(stages), "canonicalExecutionSpineStages should be an array");
+    assert.ok(
+      Array.isArray(stages),
+      "canonicalExecutionSpineStages should be an array",
+    );
     const expected = [
       "critical",
       "fetch",
@@ -46,13 +49,13 @@ describe("workflow-contract.json — schema compliance", async () => {
     assert.equal(stages.length, 8);
   });
 
-  test("businessWorkflow.phases has 10 entries", () => {
+  test("businessWorkflow.phases has 11 entries", () => {
     const phases = contract.businessWorkflow?.phases;
     assert.ok(Array.isArray(phases), "phases should be an array");
-    assert.equal(phases.length, 10);
+    assert.equal(phases.length, 11);
   });
 
-  test("all 10 phase names present", () => {
+  test("all 11 phase names present", () => {
     const phases = contract.businessWorkflow?.phases;
     const expected = [
       "direction",
@@ -65,6 +68,7 @@ describe("workflow-contract.json — schema compliance", async () => {
       "summary",
       "feedback",
       "evolve",
+      "mirror",
     ];
     for (const name of expected) {
       assert.ok(phases.includes(name), `missing phase: ${name}`);
@@ -75,7 +79,7 @@ describe("workflow-contract.json — schema compliance", async () => {
     const owner = contract.gates?.planning?.owner;
     assert.ok(
       typeof owner === "string" && owner.includes("meta-conductor"),
-      `planning gate owner should include "meta-conductor", got: ${owner}`
+      `planning gate owner should include "meta-conductor", got: ${owner}`,
     );
   });
 
@@ -112,21 +116,21 @@ describe("workflow-contract.json — schema compliance", async () => {
   test("runDiscipline.executionOwnership.anonymousExecutionForbidden is true", () => {
     assert.equal(
       contract.runDiscipline?.executionOwnership?.anonymousExecutionForbidden,
-      true
+      true,
     );
   });
 
   test("protocols has runHeader key", () => {
     assert.ok(
       contract.protocols?.runHeader !== undefined,
-      "protocols should have runHeader"
+      "protocols should have runHeader",
     );
   });
 
   test("protocols has workerTaskPacket key", () => {
     assert.ok(
       contract.protocols?.workerTaskPacket !== undefined,
-      "protocols should have workerTaskPacket"
+      "protocols should have workerTaskPacket",
     );
   });
 
@@ -158,7 +162,10 @@ describe("workflow-contract.json — schema compliance", async () => {
 
   test("publicDisplayRequires has all 5 conditions", () => {
     const conditions = contract.runDiscipline?.publicDisplayRequires;
-    assert.ok(Array.isArray(conditions), "publicDisplayRequires should be an array");
+    assert.ok(
+      Array.isArray(conditions),
+      "publicDisplayRequires should be an array",
+    );
     const expected = [
       "verifyPassed",
       "summaryClosed",
@@ -180,7 +187,7 @@ describe("workflow-contract.json — schema compliance", async () => {
     assert.equal(gate.blockCompletionWithoutClosedDeliverableChain, true);
     assert.deepEqual(
       [...(gate.requiredConditions ?? [])].sort(),
-      [...(contract.runDiscipline?.publicDisplayRequires ?? [])].sort()
+      [...(contract.runDiscipline?.publicDisplayRequires ?? [])].sort(),
     );
   });
 
@@ -188,8 +195,16 @@ describe("workflow-contract.json — schema compliance", async () => {
     const classification = contract.runDiscipline?.taskClassification ?? {};
     assert.equal(classification.classifierVersion, "v2");
     assert.deepEqual(classification.taskClassEnum, ["Q", "A", "P", "S"]);
-    assert.deepEqual(classification.requestClassEnum, ["query", "execute", "plan", "strategy"]);
-    assert.deepEqual(classification.queryScopeEnum, ["current_project", "all_projects"]);
+    assert.deepEqual(classification.requestClassEnum, [
+      "query",
+      "execute",
+      "plan",
+      "strategy",
+    ]);
+    assert.deepEqual(classification.queryScopeEnum, [
+      "current_project",
+      "all_projects",
+    ]);
     assert.deepEqual(classification.registryStatusEnum, [
       "known",
       "prompt_join",
@@ -201,7 +216,9 @@ describe("workflow-contract.json — schema compliance", async () => {
     assert.ok(classification.governanceFlowEnum.includes("proposal_review"));
     assert.ok(classification.triggerReasonEnum.includes("multi_file"));
     assert.ok(classification.triggerReasonEnum.includes("owner_missing"));
-    assert.ok(classification.upgradeReasonEnum.includes("owner_creation_required"));
+    assert.ok(
+      classification.upgradeReasonEnum.includes("owner_creation_required"),
+    );
     assert.ok(classification.bypassReasonEnum.includes("pure_query"));
     assert.equal(classification.ownerRequiredByDefault, true);
     assert.equal(classification.onlyQueryMayBypassOwner, true);
@@ -210,16 +227,39 @@ describe("workflow-contract.json — schema compliance", async () => {
   test("card governance model is explicit", () => {
     const cardGovernance = contract.runDiscipline?.cardGovernance ?? {};
     assert.equal(cardGovernance.enabled, true);
-    assert.equal(cardGovernance.dealerRoleModel, "conductor-primary-warden-escalation");
-    for (const type of ["info", "action", "risk", "silence", "default", "upgrade"]) {
-      assert.ok(cardGovernance.cardTypeEnum?.includes(type), `missing cardType: ${type}`);
+    assert.equal(
+      cardGovernance.dealerRoleModel,
+      "conductor-primary-warden-escalation",
+    );
+    for (const type of [
+      "info",
+      "action",
+      "risk",
+      "silence",
+      "default",
+      "upgrade",
+    ]) {
+      assert.ok(
+        cardGovernance.cardTypeEnum?.includes(type),
+        `missing cardType: ${type}`,
+      );
     }
-    for (const decision of ["deal", "suppress", "defer", "skip", "interrupt_insert", "escalate"]) {
-      assert.ok(cardGovernance.cardDecisionEnum?.includes(decision), `missing cardDecision: ${decision}`);
+    for (const decision of [
+      "deal",
+      "suppress",
+      "defer",
+      "skip",
+      "interrupt_insert",
+      "escalate",
+    ]) {
+      assert.ok(
+        cardGovernance.cardDecisionEnum?.includes(decision),
+        `missing cardDecision: ${decision}`,
+      );
     }
     assert.equal(
       cardGovernance.defaultNoCardPolicy,
-      "prefer_silence_without_clear_intervention_gain"
+      "prefer_silence_without_clear_intervention_gain",
     );
   });
 
@@ -229,29 +269,57 @@ describe("workflow-contract.json — schema compliance", async () => {
     assert.equal(silencePolicy.requiresInterruptionJustification, true);
     assert.equal(silencePolicy.deferRequiresDeadline, true);
     for (const item of ["none", "no_card", "defer", "intentional_silence"]) {
-      assert.ok(silencePolicy.silenceDecisionEnum?.includes(item), `missing silence decision: ${item}`);
+      assert.ok(
+        silencePolicy.silenceDecisionEnum?.includes(item),
+        `missing silence decision: ${item}`,
+      );
     }
 
     const control = contract.runDiscipline?.controlIntervention ?? {};
     assert.equal(control.requiresReturnToMainChain, true);
     for (const item of ["skip", "interrupt", "override", "escalation_insert"]) {
-      assert.ok(control.decisionTypeEnum?.includes(item), `missing control decision type: ${item}`);
+      assert.ok(
+        control.decisionTypeEnum?.includes(item),
+        `missing control decision type: ${item}`,
+      );
     }
-    for (const owner of ["meta-sentinel", "meta-prism", "meta-warden", "meta-conductor"]) {
-      assert.ok(control.insertedGovernanceOwners?.includes(owner), `missing inserted governance owner: ${owner}`);
+    for (const owner of [
+      "meta-sentinel",
+      "meta-prism",
+      "meta-warden",
+      "meta-conductor",
+    ]) {
+      assert.ok(
+        control.insertedGovernanceOwners?.includes(owner),
+        `missing inserted governance owner: ${owner}`,
+      );
     }
 
     const shell = contract.runDiscipline?.deliveryShell ?? {};
-    for (const item of ["one_line", "structured_status", "technical_detail", "review_delta", "executive_summary", "artifact_link"]) {
-      assert.ok(shell.shellTypeEnum?.includes(item), `missing shell type: ${item}`);
+    for (const item of [
+      "one_line",
+      "structured_status",
+      "technical_detail",
+      "review_delta",
+      "executive_summary",
+      "artifact_link",
+    ]) {
+      assert.ok(
+        shell.shellTypeEnum?.includes(item),
+        `missing shell type: ${item}`,
+      );
     }
     for (const item of ["direct", "digest", "deferred", "quiet"]) {
-      assert.ok(shell.presentationModeEnum?.includes(item), `missing presentation mode: ${item}`);
+      assert.ok(
+        shell.presentationModeEnum?.includes(item),
+        `missing presentation mode: ${item}`,
+      );
     }
   });
 
   test("protocolFirst requires taskClassification packet", () => {
-    const requiredPackets = contract.runDiscipline?.protocolFirst?.requiredPackets ?? [];
+    const requiredPackets =
+      contract.runDiscipline?.protocolFirst?.requiredPackets ?? [];
     assert.ok(requiredPackets.includes("taskClassification"));
     assert.ok(requiredPackets.includes("fetchPacket"));
     assert.ok(requiredPackets.includes("cardPlanPacket"));
@@ -262,13 +330,15 @@ describe("workflow-contract.json — schema compliance", async () => {
 
   test("dispatch envelope is mandatory for non-query governance flows", () => {
     const envelopeWhen =
-      contract.runDiscipline?.protocolFirst?.dispatchEnvelopePacketRequiredWhenGovernanceFlows ?? [];
+      contract.runDiscipline?.protocolFirst
+        ?.dispatchEnvelopePacketRequiredWhenGovernanceFlows ?? [];
     assert.ok(envelopeWhen.includes("simple_exec"));
     assert.ok(envelopeWhen.includes("complex_dev"));
     assert.ok(envelopeWhen.includes("meta_analysis"));
     assert.ok(!envelopeWhen.includes("query"));
 
-    const fields = contract.protocols?.dispatchEnvelopePacket?.requiredFields ?? [];
+    const fields =
+      contract.protocols?.dispatchEnvelopePacket?.requiredFields ?? [];
     for (const field of [
       "ownerAgent",
       "taskRef",
@@ -282,25 +352,38 @@ describe("workflow-contract.json — schema compliance", async () => {
       "reviewOwner",
       "verificationOwner",
     ]) {
-      assert.ok(fields.includes(field), `dispatchEnvelopePacket missing ${field}`);
+      assert.ok(
+        fields.includes(field),
+        `dispatchEnvelopePacket missing ${field}`,
+      );
     }
-    assert.deepEqual(contract.protocols?.dispatchEnvelopePacket?.memoryModeEnum, [
-      "project_only",
-      "cross_project_readonly",
-    ]);
+    assert.deepEqual(
+      contract.protocols?.dispatchEnvelopePacket?.memoryModeEnum,
+      ["project_only", "cross_project_readonly"],
+    );
     assert.deepEqual(contract.protocols?.dispatchEnvelopePacket?.routeEnum, [
       "project_only",
       "cross_project",
     ]);
-    assert.deepEqual(contract.protocols?.dispatchEnvelopePacket?.ownerSelectionEnum, [
-      "capability_first",
-    ]);
+    assert.deepEqual(
+      contract.protocols?.dispatchEnvelopePacket?.ownerSelectionEnum,
+      ["capability_first"],
+    );
   });
 
   test("task classification and fetch packet record project scope", () => {
-    const taskFields = contract.protocols?.taskClassification?.requiredFields ?? [];
-    for (const field of ["queryScope", "projectRef", "registryStatus", "crossProjectReason"]) {
-      assert.ok(taskFields.includes(field), `taskClassification missing ${field}`);
+    const taskFields =
+      contract.protocols?.taskClassification?.requiredFields ?? [];
+    for (const field of [
+      "queryScope",
+      "projectRef",
+      "registryStatus",
+      "crossProjectReason",
+    ]) {
+      assert.ok(
+        taskFields.includes(field),
+        `taskClassification missing ${field}`,
+      );
     }
 
     const fetchFields = contract.protocols?.fetchPacket?.requiredFields ?? [];
@@ -321,46 +404,71 @@ describe("workflow-contract.json — schema compliance", async () => {
     const reviewFields = contract.protocols?.reviewPacket?.requiredFields ?? [];
     assert.ok(reviewFields.includes("sourceProjects"));
     assert.ok(reviewFields.includes("crossProjectContaminationCheck"));
-    assert.deepEqual(contract.protocols?.reviewPacket?.crossProjectContaminationCheckEnum, [
-      "pass",
-      "fail",
-    ]);
+    assert.deepEqual(
+      contract.protocols?.reviewPacket?.crossProjectContaminationCheckEnum,
+      ["pass", "fail"],
+    );
 
-    const reviewFindingFields = contract.protocols?.reviewFinding?.requiredFields ?? [];
+    const reviewFindingFields =
+      contract.protocols?.reviewFinding?.requiredFields ?? [];
     assert.ok(reviewFindingFields.includes("sourceProject"));
 
-    const summaryFields = contract.protocols?.summaryPacket?.requiredFields ?? [];
+    const summaryFields =
+      contract.protocols?.summaryPacket?.requiredFields ?? [];
     assert.ok(summaryFields.includes("sourceProjects"));
   });
 
   test("orchestration task board is mandatory for non-query governance flows", () => {
     const boardWhen =
-      contract.runDiscipline?.protocolFirst?.orchestrationTaskBoardPacketRequiredWhenGovernanceFlows ?? [];
+      contract.runDiscipline?.protocolFirst
+        ?.orchestrationTaskBoardPacketRequiredWhenGovernanceFlows ?? [];
     assert.ok(boardWhen.includes("simple_exec"));
     assert.ok(boardWhen.includes("complex_dev"));
     assert.ok(boardWhen.includes("meta_analysis"));
     assert.ok(!boardWhen.includes("query"));
 
-    const fields = contract.protocols?.orchestrationTaskBoardPacket?.requiredFields ?? [];
-    for (const field of ["dispatchBoardId", "boardMode", "tasks", "synthesisOwner"]) {
-      assert.ok(fields.includes(field), `orchestrationTaskBoardPacket missing ${field}`);
+    const fields =
+      contract.protocols?.orchestrationTaskBoardPacket?.requiredFields ?? [];
+    for (const field of [
+      "dispatchBoardId",
+      "boardMode",
+      "tasks",
+      "synthesisOwner",
+    ]) {
+      assert.ok(
+        fields.includes(field),
+        `orchestrationTaskBoardPacket missing ${field}`,
+      );
     }
 
-    const taskFields = contract.protocols?.orchestrationTask?.requiredFields ?? [];
-    for (const field of ["taskId", "taskKind", "owner", "sequence", "dependsOn", "deliverable"]) {
-      assert.ok(taskFields.includes(field), `orchestrationTask missing ${field}`);
+    const taskFields =
+      contract.protocols?.orchestrationTask?.requiredFields ?? [];
+    for (const field of [
+      "taskId",
+      "taskKind",
+      "owner",
+      "sequence",
+      "dependsOn",
+      "deliverable",
+    ]) {
+      assert.ok(
+        taskFields.includes(field),
+        `orchestrationTask missing ${field}`,
+      );
     }
   });
 
   test("capability gap and execution agent packets are conditionally enforced", () => {
     const gapWhen =
-      contract.runDiscipline?.protocolFirst?.capabilityGapPacketRequiredWhenUpgradeReasons ?? [];
+      contract.runDiscipline?.protocolFirst
+        ?.capabilityGapPacketRequiredWhenUpgradeReasons ?? [];
     assert.ok(
       gapWhen.includes("owner_creation_required"),
-      "capabilityGapPacket must be required when owner creation is needed"
+      "capabilityGapPacket must be required when owner creation is needed",
     );
 
-    const gapFields = contract.protocols?.capabilityGapPacket?.requiredFields ?? [];
+    const gapFields =
+      contract.protocols?.capabilityGapPacket?.requiredFields ?? [];
     for (const field of [
       "gapId",
       "requestedCapability",
@@ -370,15 +478,20 @@ describe("workflow-contract.json — schema compliance", async () => {
       "requestedBy",
       "approvedBy",
     ]) {
-      assert.ok(gapFields.includes(field), `capabilityGapPacket missing ${field}`);
+      assert.ok(
+        gapFields.includes(field),
+        `capabilityGapPacket missing ${field}`,
+      );
     }
 
     const cardWhen =
-      contract.runDiscipline?.protocolFirst?.executionAgentCardRequiredWhenResolutionActions ?? [];
+      contract.runDiscipline?.protocolFirst
+        ?.executionAgentCardRequiredWhenResolutionActions ?? [];
     assert.ok(cardWhen.includes("create_execution_agent"));
     assert.ok(cardWhen.includes("upgrade_execution_agent"));
 
-    const cardFields = contract.protocols?.executionAgentCard?.requiredFields ?? [];
+    const cardFields =
+      contract.protocols?.executionAgentCard?.requiredFields ?? [];
     for (const field of [
       "agentId",
       "purpose",
@@ -388,7 +501,10 @@ describe("workflow-contract.json — schema compliance", async () => {
       "inputs",
       "outputs",
     ]) {
-      assert.ok(cardFields.includes(field), `executionAgentCard missing ${field}`);
+      assert.ok(
+        cardFields.includes(field),
+        `executionAgentCard missing ${field}`,
+      );
     }
   });
 
@@ -399,12 +515,16 @@ describe("workflow-contract.json — schema compliance", async () => {
     assert.ok(localState.profileKeyRequires?.includes("repo_path_hash"));
     assert.ok(localState.profileKeyRequires?.includes("runtime_family"));
     assert.equal(localState.runIndex?.canonicalSource, false);
-    assert.equal(localState.globalProjectRegistry?.pathPattern, "~/.meta-kim/global/project-registry.sqlite");
+    assert.equal(
+      localState.globalProjectRegistry?.pathPattern,
+      "~/.meta-kim/global/project-registry.sqlite",
+    );
     assert.equal(localState.globalProjectRegistry?.storesProjectBodies, false);
     assert.equal(localState.compaction?.localOnly, true);
     assert.equal(localState.compaction?.publicArtifactForbidden, true);
 
-    const compactionFields = contract.protocols?.compactionPacket?.requiredFields ?? [];
+    const compactionFields =
+      contract.protocols?.compactionPacket?.requiredFields ?? [];
     for (const field of [
       "packetVersion",
       "runRef",
@@ -417,40 +537,67 @@ describe("workflow-contract.json — schema compliance", async () => {
       "summaryDelta",
       "writebackDecision",
     ]) {
-      assert.ok(compactionFields.includes(field), `compactionPacket missing ${field}`);
+      assert.ok(
+        compactionFields.includes(field),
+        `compactionPacket missing ${field}`,
+      );
     }
-    assert.deepEqual(contract.protocols?.compactionPacket?.verifyGateStateEnum, [
-      "pending_verify",
-      "verified",
-      "accepted_risk",
-    ]);
+    assert.deepEqual(
+      contract.protocols?.compactionPacket?.verifyGateStateEnum,
+      ["pending_verify", "verified", "accepted_risk"],
+    );
   });
 
   test("intentPacket protocol and conditional governance flows are defined", () => {
-    const when = contract.runDiscipline?.protocolFirst?.intentPacketRequiredWhenGovernanceFlows ?? [];
+    const when =
+      contract.runDiscipline?.protocolFirst
+        ?.intentPacketRequiredWhenGovernanceFlows ?? [];
     assert.ok(when.includes("complex_dev"));
     assert.ok(when.includes("meta_analysis"));
     const fields = contract.protocols?.intentPacket?.requiredFields ?? [];
-    for (const field of ["trueUserIntent", "successCriteria", "nonGoals", "intentPacketVersion"]) {
+    for (const field of [
+      "trueUserIntent",
+      "successCriteria",
+      "nonGoals",
+      "intentPacketVersion",
+    ]) {
       assert.ok(fields.includes(field), `intentPacket missing ${field}`);
     }
   });
 
   test("intentGatePacket protocol and conditional governance flows are defined", () => {
-    const when = contract.runDiscipline?.protocolFirst?.intentGatePacketRequiredWhenGovernanceFlows ?? [];
+    const when =
+      contract.runDiscipline?.protocolFirst
+        ?.intentGatePacketRequiredWhenGovernanceFlows ?? [];
     assert.ok(when.includes("complex_dev"));
     assert.ok(when.includes("meta_analysis"));
     const fields = contract.protocols?.intentGatePacket?.requiredFields ?? [];
-    for (const field of ["ambiguitiesResolved", "requiresUserChoice", "defaultAssumptions", "intentGatePacketVersion"]) {
+    for (const field of [
+      "ambiguitiesResolved",
+      "requiresUserChoice",
+      "defaultAssumptions",
+      "intentGatePacketVersion",
+    ]) {
       assert.ok(fields.includes(field), `intentGatePacket missing ${field}`);
     }
-    const soft = contract.runDiscipline?.runArtifactValidation?.softPublicReadyTodoGate;
-    assert.ok(soft?.environmentVariable, "softPublicReadyTodoGate.environmentVariable");
+    const soft =
+      contract.runDiscipline?.runArtifactValidation?.softPublicReadyTodoGate;
+    assert.ok(
+      soft?.environmentVariable,
+      "softPublicReadyTodoGate.environmentVariable",
+    );
     assert.equal(soft?.environmentValue, "1");
-    const comment = contract.runDiscipline?.runArtifactValidation?.softCommentReviewGate;
-    assert.ok(comment?.environmentVariable, "softCommentReviewGate.environmentVariable");
+    const comment =
+      contract.runDiscipline?.runArtifactValidation?.softCommentReviewGate;
+    assert.ok(
+      comment?.environmentVariable,
+      "softCommentReviewGate.environmentVariable",
+    );
     assert.equal(comment?.environmentValue, "1");
-    assert.ok(comment?.summaryBooleanField, "softCommentReviewGate.summaryBooleanField");
+    assert.ok(
+      comment?.summaryBooleanField,
+      "softCommentReviewGate.summaryBooleanField",
+    );
   });
 
   test("finding closure rules are explicit", () => {
@@ -460,70 +607,205 @@ describe("workflow-contract.json — schema compliance", async () => {
     assert.equal(closure.revisionResponseRequiresFixArtifact, true);
     assert.equal(closure.verificationRequiresFreshEvidence, true);
     assert.equal(closure.closureRequiresVerificationResult, true);
-    for (const state of ["open", "fixed_pending_verify", "verified_closed", "accepted_risk"]) {
-      assert.ok(closure.closeStateEnum?.includes(state), `missing close state: ${state}`);
+    for (const state of [
+      "open",
+      "fixed_pending_verify",
+      "verified_closed",
+      "accepted_risk",
+    ]) {
+      assert.ok(
+        closure.closeStateEnum?.includes(state),
+        `missing close state: ${state}`,
+      );
     }
     for (const transition of [
       "open->fixed_pending_verify",
       "fixed_pending_verify->verified_closed",
       "fixed_pending_verify->accepted_risk",
     ]) {
-      assert.ok(closure.legalTransitions?.includes(transition), `missing close state transition: ${transition}`);
+      assert.ok(
+        closure.legalTransitions?.includes(transition),
+        `missing close state transition: ${transition}`,
+      );
     }
   });
 
   test("card / review / revision / verification / summary protocols are explicit", () => {
-    const cardPlanFields = contract.protocols?.cardPlanPacket?.requiredFields ?? [];
-    for (const field of ["dealerOwner", "dealerMode", "cards", "deliveryShells", "silenceDecision", "controlDecisions", "defaultShellId"]) {
-      assert.ok(cardPlanFields.includes(field), `cardPlanPacket missing ${field}`);
+    const cardPlanFields =
+      contract.protocols?.cardPlanPacket?.requiredFields ?? [];
+    for (const field of [
+      "dealerOwner",
+      "dealerMode",
+      "cards",
+      "deliveryShells",
+      "silenceDecision",
+      "controlDecisions",
+      "defaultShellId",
+    ]) {
+      assert.ok(
+        cardPlanFields.includes(field),
+        `cardPlanPacket missing ${field}`,
+      );
     }
 
-    const cardDecisionFields = contract.protocols?.cardDecision?.requiredFields ?? [];
-    for (const field of ["cardId", "cardType", "cardIntent", "cardDecision", "cardAudience", "cardTiming", "cardShell", "cardPriority", "cardReason", "cardSource", "cardSuppressed", "suppressionReason", "deliveryShellId"]) {
-      assert.ok(cardDecisionFields.includes(field), `cardDecision missing ${field}`);
+    const cardDecisionFields =
+      contract.protocols?.cardDecision?.requiredFields ?? [];
+    for (const field of [
+      "cardId",
+      "cardType",
+      "cardIntent",
+      "cardDecision",
+      "cardAudience",
+      "cardTiming",
+      "cardShell",
+      "cardPriority",
+      "cardReason",
+      "cardSource",
+      "cardSuppressed",
+      "suppressionReason",
+      "deliveryShellId",
+    ]) {
+      assert.ok(
+        cardDecisionFields.includes(field),
+        `cardDecision missing ${field}`,
+      );
     }
 
-    const deliveryShellFields = contract.protocols?.deliveryShell?.requiredFields ?? [];
-    for (const field of ["deliveryShellId", "shellType", "presentationMode", "exposureLevel", "interventionForm", "audience", "contentBoundary"]) {
-      assert.ok(deliveryShellFields.includes(field), `deliveryShell missing ${field}`);
+    const deliveryShellFields =
+      contract.protocols?.deliveryShell?.requiredFields ?? [];
+    for (const field of [
+      "deliveryShellId",
+      "shellType",
+      "presentationMode",
+      "exposureLevel",
+      "interventionForm",
+      "audience",
+      "contentBoundary",
+    ]) {
+      assert.ok(
+        deliveryShellFields.includes(field),
+        `deliveryShell missing ${field}`,
+      );
     }
 
-    const silenceDecisionFields = contract.protocols?.silenceDecision?.requiredFields ?? [];
-    for (const field of ["silenceDecision", "noInterventionPreferred", "interruptionJustified", "deferUntil", "reasonForSilence"]) {
-      assert.ok(silenceDecisionFields.includes(field), `silenceDecision missing ${field}`);
+    const silenceDecisionFields =
+      contract.protocols?.silenceDecision?.requiredFields ?? [];
+    for (const field of [
+      "silenceDecision",
+      "noInterventionPreferred",
+      "interruptionJustified",
+      "deferUntil",
+      "reasonForSilence",
+    ]) {
+      assert.ok(
+        silenceDecisionFields.includes(field),
+        `silenceDecision missing ${field}`,
+      );
     }
 
-    const controlDecisionFields = contract.protocols?.controlDecision?.requiredFields ?? [];
-    for (const field of ["decisionId", "decisionType", "skipReason", "interruptReason", "overrideReason", "insertedGovernanceOwner", "emergencyGovernanceTriggered", "returnsToStage", "rejoinCondition"]) {
-      assert.ok(controlDecisionFields.includes(field), `controlDecision missing ${field}`);
+    const controlDecisionFields =
+      contract.protocols?.controlDecision?.requiredFields ?? [];
+    for (const field of [
+      "decisionId",
+      "decisionType",
+      "skipReason",
+      "interruptReason",
+      "overrideReason",
+      "insertedGovernanceOwner",
+      "emergencyGovernanceTriggered",
+      "returnsToStage",
+      "rejoinCondition",
+    ]) {
+      assert.ok(
+        controlDecisionFields.includes(field),
+        `controlDecision missing ${field}`,
+      );
     }
 
-    const reviewPacketFields = contract.protocols?.reviewPacket?.requiredFields ?? [];
+    const reviewPacketFields =
+      contract.protocols?.reviewPacket?.requiredFields ?? [];
     assert.ok(reviewPacketFields.includes("findings"));
 
-    const reviewFindingFields = contract.protocols?.reviewFinding?.requiredFields ?? [];
-    for (const field of ["findingId", "severity", "owner", "summary", "requiredAction", "fixArtifact", "verifiedBy", "closeState"]) {
-      assert.ok(reviewFindingFields.includes(field), `reviewFinding missing ${field}`);
+    const reviewFindingFields =
+      contract.protocols?.reviewFinding?.requiredFields ?? [];
+    for (const field of [
+      "findingId",
+      "severity",
+      "owner",
+      "summary",
+      "requiredAction",
+      "fixArtifact",
+      "verifiedBy",
+      "closeState",
+    ]) {
+      assert.ok(
+        reviewFindingFields.includes(field),
+        `reviewFinding missing ${field}`,
+      );
     }
 
-    const revisionFields = contract.protocols?.revisionResponse?.requiredFields ?? [];
-    for (const field of ["findingId", "actionId", "owner", "responseType", "status", "fixArtifact", "responseSummary"]) {
-      assert.ok(revisionFields.includes(field), `revisionResponse missing ${field}`);
+    const revisionFields =
+      contract.protocols?.revisionResponse?.requiredFields ?? [];
+    for (const field of [
+      "findingId",
+      "actionId",
+      "owner",
+      "responseType",
+      "status",
+      "fixArtifact",
+      "responseSummary",
+    ]) {
+      assert.ok(
+        revisionFields.includes(field),
+        `revisionResponse missing ${field}`,
+      );
     }
 
-    const verificationPacketFields = contract.protocols?.verificationPacket?.requiredFields ?? [];
-    for (const field of ["fixEvidence", "revisionResponses", "verificationResults", "closeFindings"]) {
-      assert.ok(verificationPacketFields.includes(field), `verificationPacket missing ${field}`);
+    const verificationPacketFields =
+      contract.protocols?.verificationPacket?.requiredFields ?? [];
+    for (const field of [
+      "fixEvidence",
+      "revisionResponses",
+      "verificationResults",
+      "closeFindings",
+    ]) {
+      assert.ok(
+        verificationPacketFields.includes(field),
+        `verificationPacket missing ${field}`,
+      );
     }
 
-    const verificationResultFields = contract.protocols?.verificationResult?.requiredFields ?? [];
-    for (const field of ["findingId", "verifiedBy", "result", "evidence", "closeState"]) {
-      assert.ok(verificationResultFields.includes(field), `verificationResult missing ${field}`);
+    const verificationResultFields =
+      contract.protocols?.verificationResult?.requiredFields ?? [];
+    for (const field of [
+      "findingId",
+      "verifiedBy",
+      "result",
+      "evidence",
+      "closeState",
+    ]) {
+      assert.ok(
+        verificationResultFields.includes(field),
+        `verificationResult missing ${field}`,
+      );
     }
 
-    const summaryPacketFields = contract.protocols?.summaryPacket?.requiredFields ?? [];
-    for (const field of ["verifyPassed", "summaryClosed", "singleDeliverableMaintained", "deliverableChainClosed", "consolidatedDeliverablePresent", "publicReady", "deliveryShellsUsed", "blockedBy"]) {
-      assert.ok(summaryPacketFields.includes(field), `summaryPacket missing ${field}`);
+    const summaryPacketFields =
+      contract.protocols?.summaryPacket?.requiredFields ?? [];
+    for (const field of [
+      "verifyPassed",
+      "summaryClosed",
+      "singleDeliverableMaintained",
+      "deliverableChainClosed",
+      "consolidatedDeliverablePresent",
+      "publicReady",
+      "deliveryShellsUsed",
+      "blockedBy",
+    ]) {
+      assert.ok(
+        summaryPacketFields.includes(field),
+        `summaryPacket missing ${field}`,
+      );
     }
   });
 
@@ -535,7 +817,8 @@ describe("workflow-contract.json — schema compliance", async () => {
     assert.equal(decision.noneRequiresReason, true);
     assert.equal(decision.writebackRequiresTargets, true);
 
-    const evolutionFields = contract.protocols?.evolutionWritebackPacket?.requiredFields ?? [];
+    const evolutionFields =
+      contract.protocols?.evolutionWritebackPacket?.requiredFields ?? [];
     for (const field of [
       "ownerAssessment",
       "writebackDecision",
@@ -547,19 +830,35 @@ describe("workflow-contract.json — schema compliance", async () => {
       "scarIds",
       "syncRequired",
     ]) {
-      assert.ok(evolutionFields.includes(field), `evolutionWritebackPacket missing ${field}`);
+      assert.ok(
+        evolutionFields.includes(field),
+        `evolutionWritebackPacket missing ${field}`,
+      );
     }
   });
 
   test("run artifact validation is contract-backed", () => {
-    const runArtifactValidation = contract.runDiscipline?.runArtifactValidation ?? {};
-    assert.equal(runArtifactValidation.script, "scripts/validate-run-artifact.mjs");
+    const runArtifactValidation =
+      contract.runDiscipline?.runArtifactValidation ?? {};
+    assert.equal(
+      runArtifactValidation.script,
+      "scripts/validate-run-artifact.mjs",
+    );
     assert.equal(runArtifactValidation.findingLineageRequired, true);
-    assert.equal(runArtifactValidation.deliverableLinkMustReferencePrimaryDeliverable, true);
+    assert.equal(
+      runArtifactValidation.deliverableLinkMustReferencePrimaryDeliverable,
+      true,
+    );
     assert.equal(runArtifactValidation.summaryPacketRequired, true);
     assert.equal(runArtifactValidation.cardPlanPacketRequired, true);
-    assert.equal(runArtifactValidation.orchestrationTaskBoardPacketRequired, true);
-    assert.equal(runArtifactValidation.publicReadyField, "summaryPacket.publicReady");
+    assert.equal(
+      runArtifactValidation.orchestrationTaskBoardPacketRequired,
+      true,
+    );
+    assert.equal(
+      runArtifactValidation.publicReadyField,
+      "summaryPacket.publicReady",
+    );
   });
 
   test("dealer role is explicit without adding a new agent", () => {
@@ -567,7 +866,10 @@ describe("workflow-contract.json — schema compliance", async () => {
     assert.equal(dealer.primaryOwner, "meta-conductor");
     assert.equal(dealer.escalationOwner, "meta-warden");
     for (const source of ["meta-sentinel", "meta-prism", "user", "system"]) {
-      assert.ok(dealer.interruptSources?.includes(source), `missing interrupt source: ${source}`);
+      assert.ok(
+        dealer.interruptSources?.includes(source),
+        `missing interrupt source: ${source}`,
+      );
     }
   });
 });
@@ -602,7 +904,7 @@ describe("evolution-contract.json — schema compliance", async () => {
       for (const field of requiredFields) {
         assert.ok(
           value?.[field] !== undefined,
-          `dimension "${dim}" missing field "${field}"`
+          `dimension "${dim}" missing field "${field}"`,
         );
       }
     }
@@ -612,7 +914,7 @@ describe("evolution-contract.json — schema compliance", async () => {
     const storage = evo.evolutionFeedbackLoop?.patternReuse?.storage ?? "";
     assert.ok(
       storage.includes("skills"),
-      `patternReuse storage should reference skills, got: ${storage}`
+      `patternReuse storage should reference skills, got: ${storage}`,
     );
   });
 
@@ -620,7 +922,7 @@ describe("evolution-contract.json — schema compliance", async () => {
     const storage = evo.evolutionFeedbackLoop?.boundaryDrift?.storage ?? "";
     assert.ok(
       storage.includes("agents"),
-      `boundaryDrift storage should reference agents, got: ${storage}`
+      `boundaryDrift storage should reference agents, got: ${storage}`,
     );
   });
 
@@ -629,7 +931,7 @@ describe("evolution-contract.json — schema compliance", async () => {
     const combined = `${entry.target ?? ""} ${entry.storage ?? ""} ${entry.trigger ?? ""}`;
     assert.ok(
       combined.includes("scar"),
-      `scarDetected should reference scar protocol, got: ${combined}`
+      `scarDetected should reference scar protocol, got: ${combined}`,
     );
   });
 
@@ -647,7 +949,7 @@ describe("evolution-contract.json — schema compliance", async () => {
     for (const dim of expected) {
       assert.ok(
         keys.includes(dim),
-        `missing amplification operation for: ${dim}`
+        `missing amplification operation for: ${dim}`,
       );
     }
   });
@@ -660,7 +962,7 @@ describe("scar-protocol.md — schema compliance", async () => {
     for (const scarType of SCAR_TYPES) {
       assert.ok(
         content.includes(scarType),
-        `scar type "${scarType}" not found in scar-protocol.md`
+        `scar type "${scarType}" not found in scar-protocol.md`,
       );
     }
   });
@@ -669,7 +971,7 @@ describe("scar-protocol.md — schema compliance", async () => {
     for (const level of SCAR_IMPACT_LEVELS) {
       assert.ok(
         content.includes(level),
-        `impact level "${level}" not found in scar-protocol.md`
+        `impact level "${level}" not found in scar-protocol.md`,
       );
     }
   });
@@ -688,7 +990,7 @@ describe("scar-protocol.md — schema compliance", async () => {
     for (const field of requiredFields) {
       assert.ok(
         content.includes(field),
-        `schema field "${field}" not found in scar-protocol.md`
+        `schema field "${field}" not found in scar-protocol.md`,
       );
     }
   });

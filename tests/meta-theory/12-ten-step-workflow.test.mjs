@@ -1,30 +1,30 @@
 /**
  * 12-ten-step-workflow.test.mjs
  *
- * Tests the 10-stage business workflow:
- * direction → planning → execution → review → meta_review → revision → verify → summary → feedback → evolve
+ * Tests the 11-stage business workflow:
+ * direction → planning → execution → review → meta_review → revision → verify → summary → feedback → evolve → mirror
  *
  * Validates:
- * - Exactly 10 phases are defined
+ * - Exactly 11 phases are defined
  * - Marker phases (meta_review/verify/evolve) require explicit closure
  * - Terminal phases are correctly identified
- * - Labels (zh-CN and en-US) are complete for all 10 phases
+ * - Labels (zh-CN and en-US) are complete for all 11 phases
  * - Summary preference order is correct
- * - The 10-stage workflow is distinct from the 8-stage spine
+ * - The 11-stage workflow is distinct from the 8-stage spine
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { readJson } from "./_helpers.mjs";
 
-describe("Part A: 10-phase business workflow structure", async () => {
+describe("Part A: 11-phase business workflow structure", async () => {
   const contract = await readJson("config/contracts/workflow-contract.json");
 
-  test("businessWorkflow.phases has exactly 10 entries", () => {
+  test("businessWorkflow.phases has exactly 11 entries", () => {
     const phases = contract.businessWorkflow?.phases ?? [];
-    assert.equal(phases.length, 10, `Expected 10 phases, got ${phases.length}`);
+    assert.equal(phases.length, 11, `Expected 11 phases, got ${phases.length}`);
   });
 
-  test("all 10 phase names are correct", () => {
+  test("all 11 phase names are correct", () => {
     const phases = contract.businessWorkflow?.phases ?? [];
     const expected = [
       "direction",
@@ -37,6 +37,7 @@ describe("Part A: 10-phase business workflow structure", async () => {
       "summary",
       "feedback",
       "evolve",
+      "mirror",
     ];
     for (const name of expected) {
       assert.ok(phases.includes(name), `Missing phase: ${name}`);
@@ -95,12 +96,12 @@ describe("Part B: marker phases", async () => {
 describe("Part C: terminal phases", async () => {
   const contract = await readJson("config/contracts/workflow-contract.json");
 
-  test("terminalPhases has exactly 6 entries", () => {
+  test("terminalPhases has exactly 7 entries", () => {
     const terminals = contract.businessWorkflow?.terminalPhases ?? [];
     assert.equal(
       terminals.length,
-      6,
-      `Expected 6 terminal phases, got ${terminals.length}`,
+      7,
+      `Expected 7 terminal phases, got ${terminals.length}`,
     );
   });
 
@@ -113,6 +114,7 @@ describe("Part C: terminal phases", async () => {
       "summary",
       "feedback",
       "evolve",
+      "mirror",
     ];
     for (const t of expected) {
       assert.ok(terminals.includes(t), `Missing terminal phase: ${t}`);
@@ -123,7 +125,7 @@ describe("Part C: terminal phases", async () => {
 describe("Part D: phase labels (i18n)", async () => {
   const contract = await readJson("config/contracts/workflow-contract.json");
 
-  test("labels.zh-CN has all 10 phases", () => {
+  test("labels.zh-CN has all 11 phases", () => {
     const labels = contract.businessWorkflow?.labels?.["zh-CN"] ?? {};
     const expected = [
       "CEO方向", // direction
@@ -136,6 +138,7 @@ describe("Part D: phase labels (i18n)", async () => {
       "经理汇总", // summary
       "CEO反馈", // feedback
       "Agent进化", // evolve
+      "镜像发布", // mirror
     ];
     for (const [phase, label] of Object.entries(labels)) {
       assert.ok(
@@ -143,10 +146,10 @@ describe("Part D: phase labels (i18n)", async () => {
         `zh-CN label for phase "${phase}" must be non-empty`,
       );
     }
-    assert.equal(Object.keys(labels).length, 10, "zh-CN must have 10 labels");
+    assert.equal(Object.keys(labels).length, 11, "zh-CN must have 11 labels");
   });
 
-  test("labels.en-US has all 10 phases", () => {
+  test("labels.en-US has all 11 phases", () => {
     const labels = contract.businessWorkflow?.labels?.["en-US"] ?? {};
     for (const [phase, label] of Object.entries(labels)) {
       assert.ok(
@@ -154,7 +157,7 @@ describe("Part D: phase labels (i18n)", async () => {
         `en-US label for phase "${phase}" must be non-empty`,
       );
     }
-    assert.equal(Object.keys(labels).length, 10, "en-US must have 10 labels");
+    assert.equal(Object.keys(labels).length, 11, "en-US must have 11 labels");
   });
 
   test("zh-CN and en-US labels are different for each phase", () => {
@@ -189,7 +192,7 @@ describe("Part E: summary preference order", async () => {
   });
 });
 
-describe("Part F: gates for 10-phase workflow", async () => {
+describe("Part F: gates for 11-phase workflow", async () => {
   const contract = await readJson("config/contracts/workflow-contract.json");
   const gates = contract.gates ?? {};
 

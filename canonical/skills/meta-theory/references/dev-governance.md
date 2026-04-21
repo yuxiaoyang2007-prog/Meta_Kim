@@ -347,7 +347,7 @@ On receiving an escalation signal: re-enter Fetch (Stage 2) to find a more capab
 - Cross-system dependency detected (Stage 3 Thinking identifies shared components across module boundaries)
 - Multi-team handoff required (business department + meta department coordination)
 - Security-sensitive or permission-critical changes
-- Business run contract explicitly requires 10-step phases (direction/planning/execution/review/meta-review/revision/verification/summary/feedback/evolution)
+- Business run contract explicitly requires 11-step phases (direction/planning/execution/review/meta-review/revision/verification/summary/feedback/evolution/mirror)
 
 **Note**: The 8-stage spine is the **minimum executable chain** regardless of complexity. The 10-step governance is an **upgrade layer** for complex scenarios — the 8 stages still run, but extended with direction refinement, summary, and feedback phases before Evolution.
 

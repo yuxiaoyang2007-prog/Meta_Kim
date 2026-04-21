@@ -1,20 +1,25 @@
 /**
  * install-mcp-memory-hooks.mjs
  *
- * Installs MCP Memory Service Claude Code hooks (SessionStart).
+ * Installs MCP Memory Service Claude Code hooks (SessionStart + Stop) and commands.
  *
  * What this script does (in order):
  *   1. Copy the canonical Python hook from canonical/runtime-assets/claude/memory-hooks/
  *      to ~/.claude/hooks/mcp_memory_global.py
  *   2. Seed ~/.claude/hooks/config.json from config.template.json if not present
  *      (NEVER overwrite an existing config — user customizations are preserved)
- *   3. Register the SessionStart hook in ~/.claude/settings.json
- *   4. Warn if MCP server not responding on http://localhost:8000
+ *   3. Copy stop-save-progress.mjs from canonical/runtime-assets/claude/hooks/
+ *      to ~/.claude/hooks/meta-kim/
+ *   4. Copy commands from canonical/runtime-assets/claude/commands/ to ~/.claude/commands/
+ *      (e.g., save-progress command)
+ *   5. Register the SessionStart hook in ~/.claude/settings.json
+ *   6. Register the Stop hook in ~/.claude/settings.json (stop-save-progress.mjs)
+ *   7. Warn if MCP server not responding on http://localhost:8000
  *
  * Usage:
  *   node scripts/install-mcp-memory-hooks.mjs           # Install (idempotent)
  *   node scripts/install-mcp-memory-hooks.mjs --check   # Dry-run: verify only, no side effects
- *   node scripts/install-mcp-memory-hooks.mjs --remove  # Uninstall SessionStart hook (keeps files)
+ *   node scripts/install-mcp-memory-hooks.mjs --remove  # Uninstall hooks (keeps files)
  *
  * Exit codes:
  *   0  success
@@ -31,6 +36,7 @@ import {
   writeFileSync,
   statSync,
 } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -52,10 +58,31 @@ const CANONICAL_CONFIG_TEMPLATE = join(
   CANONICAL_HOOK_DIR,
   "config.template.json",
 );
+const CANONICAL_HOOKS_DIR = join(
+  REPO_ROOT,
+  "canonical",
+  "runtime-assets",
+  "claude",
+  "hooks",
+);
+const CANONICAL_STOP_HOOK_SOURCE = join(
+  CANONICAL_HOOKS_DIR,
+  "stop-save-progress.mjs",
+);
+const CANONICAL_COMMANDS_DIR = join(
+  REPO_ROOT,
+  "canonical",
+  "runtime-assets",
+  "claude",
+  "commands",
+);
 
 const HOOKS_TARGET_DIR = join(homedir(), ".claude", "hooks");
 const HOOK_TARGET = join(HOOKS_TARGET_DIR, "mcp_memory_global.py");
 const CONFIG_TARGET = join(HOOKS_TARGET_DIR, "config.json");
+const META_KIM_HOOKS_DIR = join(HOOKS_TARGET_DIR, "meta-kim");
+const STOP_HOOK_TARGET = join(META_KIM_HOOKS_DIR, "stop-save-progress.mjs");
+const COMMANDS_TARGET_DIR = join(homedir(), ".claude", "commands");
 const CLAUDE_SETTINGS = join(homedir(), ".claude", "settings.json");
 
 // ── Formatting helpers ──────────────────────────────────
@@ -114,6 +141,87 @@ function filesEqual(a, b) {
   try {
     return readFileSync(a, "utf8") === readFileSync(b, "utf8");
   } catch {
+    return false;
+  }
+}
+
+function copyStopHookFile() {
+  if (!existsSync(CANONICAL_STOP_HOOK_SOURCE)) {
+    warn(`Canonical stop hook source missing: ${CANONICAL_STOP_HOOK_SOURCE}`);
+    info("stop-save-progress.mjs will not be installed.");
+    return false;
+  }
+
+  ensureDir(META_KIM_HOOKS_DIR);
+
+  if (
+    existsSync(STOP_HOOK_TARGET) &&
+    filesEqual(CANONICAL_STOP_HOOK_SOURCE, STOP_HOOK_TARGET)
+  ) {
+    ok(`Stop hook already up-to-date: ${STOP_HOOK_TARGET}`);
+    return true;
+  }
+
+  try {
+    copyFileSync(CANONICAL_STOP_HOOK_SOURCE, STOP_HOOK_TARGET);
+    ok(`Stop hook copied → ${STOP_HOOK_TARGET}`);
+    return true;
+  } catch (err) {
+    warn(`Failed to copy stop hook: ${err.message}`);
+    return false;
+  }
+}
+
+async function copyCommandsDir() {
+  if (!existsSync(CANONICAL_COMMANDS_DIR)) {
+    ok("No commands to install (canonical/commands/ not found)");
+    return true;
+  }
+
+  try {
+    const entries = await readdir(CANONICAL_COMMANDS_DIR, {
+      withFileTypes: true,
+    });
+    if (entries.length === 0) {
+      ok("No commands to install (canonical/commands/ is empty)");
+      return true;
+    }
+
+    ensureDir(COMMANDS_TARGET_DIR);
+    let installed = 0;
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const srcDir = join(CANONICAL_COMMANDS_DIR, entry.name);
+      const destDir = join(COMMANDS_TARGET_DIR, entry.name);
+
+      // Read SKILL.md from source
+      const srcSkill = join(srcDir, "SKILL.md");
+      if (!existsSync(srcSkill)) {
+        warn(`Skipping ${entry.name}: SKILL.md not found`);
+        continue;
+      }
+
+      ensureDir(destDir);
+      const destSkill = join(destDir, "SKILL.md");
+
+      if (existsSync(destSkill) && filesEqual(srcSkill, destSkill)) {
+        ok(`Command "${entry.name}" already up-to-date`);
+      } else {
+        copyFileSync(srcSkill, destSkill);
+        ok(`Command "${entry.name}" installed → ${destSkill}`);
+      }
+      installed++;
+    }
+
+    if (installed > 0) {
+      info(
+        `${installed} command(s) available: ${entries.map((e) => "/" + e.name).join(", ")}`,
+      );
+    }
+    return true;
+  } catch (err) {
+    warn(`Failed to install commands: ${err.message}`);
     return false;
   }
 }
@@ -265,9 +373,95 @@ function removeSessionStartHook() {
   }
 }
 
+function registerStopHook() {
+  if (!existsSync(CLAUDE_SETTINGS)) {
+    warn(`${CLAUDE_SETTINGS} not found — skipping Stop hook registration`);
+    return false;
+  }
+
+  try {
+    const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
+    const pythonCmd = pickPythonCommand();
+
+    const existingBlocks = settings.hooks?.Stop ?? [];
+    const alreadyRegistered = existingBlocks.some((b) =>
+      b?.hooks?.some((h) => h?.command?.includes("stop-save-progress.mjs")),
+    );
+
+    if (alreadyRegistered) {
+      ok("Stop hook already registered");
+      return true;
+    }
+
+    const stopHookCommand = `node "${STOP_HOOK_TARGET}"`;
+
+    const nextSettings = {
+      ...settings,
+      hooks: {
+        ...(settings.hooks ?? {}),
+        Stop: [
+          ...existingBlocks,
+          {
+            matcher: "*",
+            hooks: [
+              {
+                type: "command",
+                command: stopHookCommand,
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    writeFileSync(
+      CLAUDE_SETTINGS,
+      JSON.stringify(nextSettings, null, 2) + "\n",
+    );
+    ok("Stop hook registered in settings.json");
+    return true;
+  } catch (err) {
+    warn(`Failed to register Stop hook: ${err.message}`);
+    return false;
+  }
+}
+
+function removeStopHook() {
+  if (!existsSync(CLAUDE_SETTINGS)) return;
+  try {
+    const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
+    if (!settings.hooks?.Stop) return;
+
+    const filteredBlocks = settings.hooks.Stop.map((block) => ({
+      ...block,
+      hooks: (block?.hooks ?? []).filter(
+        (h) => !h?.command?.includes("stop-save-progress.mjs"),
+      ),
+    })).filter((block) => (block.hooks ?? []).length > 0);
+
+    const nextHooks = { ...settings.hooks };
+    if (filteredBlocks.length === 0) {
+      delete nextHooks.Stop;
+    } else {
+      nextHooks.Stop = filteredBlocks;
+    }
+
+    const nextSettings = { ...settings, hooks: nextHooks };
+    if (Object.keys(nextHooks).length === 0) delete nextSettings.hooks;
+
+    writeFileSync(
+      CLAUDE_SETTINGS,
+      JSON.stringify(nextSettings, null, 2) + "\n",
+    );
+    ok("Stop hook removed from settings.json");
+  } catch (err) {
+    warn(`Failed to remove Stop hook: ${err.message}`);
+  }
+}
+
 // ── Commands ────────────────────────────────────────────
 
-function install() {
+async function install() {
   console.log(`\n${bold("Installing MCP Memory Claude Code hooks...")}\n`);
 
   ensureDir(HOOKS_TARGET_DIR);
@@ -281,7 +475,10 @@ function install() {
   }
 
   seedConfigIfMissing();
-  const registered = registerSessionStartHook();
+  copyStopHookFile();
+  await copyCommandsDir();
+  const sessionStartOk = registerSessionStartHook();
+  const stopOk = registerStopHook();
 
   console.log("");
   info("Checking MCP Memory Service health...");
@@ -294,12 +491,12 @@ function install() {
     info("Or:            uv run memory server -s hybrid");
   }
 
-  if (!registered) {
+  if (!sessionStartOk || !stopOk) {
     warn(
-      "SessionStart hook not registered — Claude Code may need a restart or manual config",
+      "Some hooks were not registered — Claude Code may need a restart or manual config",
     );
     console.log(
-      `\n${yellow("Done with warnings.")} Restart Claude Code to load the hook.\n`,
+      `\n${yellow("Done with warnings.")} Restart Claude Code to load the hooks.\n`,
     );
     process.exit(1);
   }
@@ -365,7 +562,9 @@ function remove() {
   );
 
   removeSessionStartHook();
+  removeStopHook();
   info(`Hook file retained (manual delete: rm "${HOOK_TARGET}")`);
+  info(`Stop hook file retained (manual delete: rm "${STOP_HOOK_TARGET}")`);
   info(`Config retained (manual delete: rm "${CONFIG_TARGET}")`);
   ok("Done.\n");
 }
@@ -379,5 +578,8 @@ if (args.includes("--check")) {
 } else if (args.includes("--remove")) {
   remove();
 } else {
-  install();
+  install().catch((err) => {
+    console.error(`Installation failed: ${err.message}`);
+    process.exit(1);
+  });
 }

@@ -191,7 +191,7 @@ Detail: `references/intent-amplification.md`.
 
 ## Complexity routing
 
-Not every task runs all ten steps.
+Not every task runs all eleven steps.
 
 ### Simple (<2 files)
 

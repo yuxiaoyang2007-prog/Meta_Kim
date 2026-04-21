@@ -1575,6 +1575,7 @@ async function installPluginBundlesForNonClaudeRuntimes(
 
       if (
         !updateMode &&
+        !dryRun &&
         !staleResidue &&
         (await pathExists(targetDir)) &&
         !(await isEmptyDir(targetDir))

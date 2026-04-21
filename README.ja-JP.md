@@ -45,8 +45,11 @@ npx --yes github:KimYx0207/Meta_Kim meta-kim
 ```bash
 git clone https://github.com/KimYx0207/Meta_Kim.git
 cd Meta_Kim
+npm install
 node setup.mjs
 ```
+
+> 💡 **インストール後**：`setup.mjs` が成果物の場所を出力します。いつでも再確認（または前回との差分表示）したいときは、インストール先のディレクトリで `npm run meta:status` を実行してください。
 
 リポジトリを保守する場合は、まず `canonical/` と `config/contracts/workflow-contract.json` を編集し、そのあとで同期と検証を実行します。
 
@@ -743,6 +746,16 @@ flowchart TB
 
 ## FAQ
 
+### Q: `npx` でインストールしましたが、ファイルはどこにありますか?
+
+Meta_Kim は 3 ヶ所に書き込みます：
+
+1. **現在のディレクトリ** — `.claude/`、`.codex/`、`.cursor/`、`openclaw/` このプロジェクト用のランタイム投影
+2. **ホームディレクトリ** — `~/.claude/skills/meta-theory/`（および `.codex / .cursor / .openclaw`）プロジェクト間で共有されるグローバルスキル
+3. **マニフェスト** — `~/.meta-kim/install-manifest.json` がすべての変更を追跡し、安全なロールバックを可能にします
+
+`npx` を実行したディレクトリで `npm run meta:status`（または `node setup.mjs --check`）を実行して完全なフットプリントを確認できます。ロールバックしたい場合は `npm run meta:uninstall` を実行してください。
+
 ### Q: Meta_Kim と普通の AI コーディング支援の違いは何ですか?
 
 普通の AI コーディング支援は、聞かれたことをそのままやります。Meta_Kim はその間に統治層を挟みます。まず何を求めているかを確定し、次に誰がやるかを決め、実行後はレビューし、検証し、学びを残します。**単なる AI ではなく、AI に工程規律を持たせる仕組みです。**
@@ -786,6 +799,7 @@ npx --yes github:KimYx0207/Meta_Kim meta-kim
 ```bash
 git clone https://github.com/KimYx0207/Meta_Kim.git
 cd Meta_Kim
+npm install
 node setup.mjs
 ```
 
@@ -813,6 +827,41 @@ Meta_Kim は MCP（Model Context Protocol）を使って agent の能力境界�
 - [AGENTS.md](AGENTS.md)
 - [config/contracts/workflow-contract.json](config/contracts/workflow-contract.json)
 - [docs/runtime-capability-matrix.md](docs/runtime-capability-matrix.md)
+
+---
+
+## サードパーティの依存関係
+
+Meta_Kim 自体は MIT ライセンスです。以下のオプションスキルリポジトリは `node setup.mjs` で個別にインストールされ、それぞれのライセンスが独立して適用されます。
+
+### npm 依存関係
+
+| パッケージ | License |
+|-----------|---------|
+| [`@inquirer/prompts`](https://github.com/SBoudrias/Inquirer.js) | MIT |
+| [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) | MIT |
+| [`zod`](https://github.com/colinhacks/zod) | MIT |
+
+### オプションスキルリポジトリ
+
+| リポジトリ | License |
+|----------|---------|
+| [KimYx0207/agent-teams-playbook](https://github.com/KimYx0207/agent-teams-playbook) | MIT |
+| [KimYx0207/findskill](https://github.com/KimYx0207/findskill) | MIT |
+| [KimYx0207/HookPrompt](https://github.com/KimYx0207/HookPrompt) | MIT |
+| [obra/superpowers](https://github.com/obra/superpowers) | MIT |
+| [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code) | MIT |
+| [OthmanAdi/planning-with-files](https://github.com/OthmanAdi/planning-with-files) | MIT |
+| [HKUDS/CLI-Anything](https://github.com/HKUDS/CLI-Anything) | Apache 2.0 |
+| [garrytan/gstack](https://github.com/garrytan/gstack) | MIT |
+| [anthropics/skills](https://github.com/anthropics/skills) | ライセンス未宣言（© Anthropic, PBC） |
+
+### オプション pip パッケージ
+
+| パッケージ | License |
+|-----------|---------|
+| [`graphifyy`](https://github.com/safishamsi/graphify) | MIT |
+| [`mcp-memory-service`](https://pypi.org/project/mcp-memory-service/) | Apache 2.0 |
 
 ---
 
