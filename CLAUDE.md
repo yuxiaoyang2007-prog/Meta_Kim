@@ -202,7 +202,7 @@ You:
 
 ## Project Hooks In Claude Code
 
-Claude Code has 8 hook scripts wired from `.claude/settings.json` (the `Stop` event runs two commands in order):
+Claude Code has 10 hook scripts wired from `.claude/settings.json` (the `Stop` event runs four commands in order):
 
 - `block-dangerous-bash.mjs`
 - `pre-git-push-confirm.mjs`
@@ -210,6 +210,8 @@ Claude Code has 8 hook scripts wired from `.claude/settings.json` (the `Stop` ev
 - `post-typecheck.mjs`
 - `post-console-log-warn.mjs`
 - `subagent-context.mjs`
+- `stop-memory-save.mjs`
+- `stop-compaction.mjs`
 - `stop-console-log-audit.mjs`
 - `stop-completion-guard.mjs` (optional premature-completion guard; off unless `META_KIM_STOP_COMPLETION_GUARD` is set)
 
@@ -221,6 +223,8 @@ These cover:
 - type checking
 - console logging warnings
 - subagent context injection
+- session-end MCP Memory save
+- session-end compaction packet
 - session-end console audit
 - optional session-end completion heuristic (`hint` or `block`)
 
@@ -380,6 +384,7 @@ Useful supporting commands:
 - All installer user-facing strings are localized through `scripts/meta-kim-i18n.mjs` (en / zh-CN / ja-JP / ko-KR). `sync-runtimes.mjs` `tryReadCanonical` warnings and `setup.mjs` `runMcpMemoryHookInstaller` progress / success / warning messages now respect `META_KIM_LANG` / `--lang`.
 - `runMcpMemoryHookInstaller` uses `withProgress` + `stdio: pipe` so child-process output is captured silently and only surfaces (as dimmed `stderr`) on non-zero exit, restoring the consistent step-label UX on slow hook installs.
 - MCP Memory Service default port is **8000** (upstream `MCP_HTTP_PORT=8000`). Override via `MCP_MEMORY_URL` env var or by editing `~/.claude/hooks/config.json`. Legacy installs that wrote `:8888` into `~/.claude/hooks/config.json` need a one-line edit — see `CHANGELOG.md` `Migration Notes`.
+- `stop-memory-save.mjs` (Stop hook) writes session summaries to MCP Memory Service on session end, enabling cross-session continuity without manual intervention.
 
 ## Reading Notes
 

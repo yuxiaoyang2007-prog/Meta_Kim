@@ -450,6 +450,7 @@ Claude Code では、Meta_Kim は **Hook** によって自動化されていま�
 - **型チェック** - 編集後に TypeScript のチェックを走らせます
 - **console.log の警告** - `console.log` を見つけたら削除を促します
 - **セッション終了時の監査** - 終了前に未解決問題を確認します
+- **セッション終了時のメモリ保存** - セッション終了時に要約を MCP Memory Service に書き込みます
 - **子 agent への文脈注入** - プロジェクト文脈を自動で注入します
 
 これらの Hook は「あると便利」ではなく、統治システムの実行面です。
@@ -463,9 +464,9 @@ Meta_Kim はすでに 4 つのプラットフォームに対応しています�
 | プラットフォーム | 状態 | 映射方法 |
 | --- | --- | --- |
 | **Claude Code** | 完全対応 | `.claude/agents/*.md` + `SKILL.md` + hooks + MCP |
-| **Codex** | 完全対応 | `.codex/agents/*.toml` + skills + commands |
-| **OpenClaw** | 完全対応 | `openclaw/` のディレクトリ構造 + workspaces |
-| **Cursor** | 完全対応 | `.cursor/agents/*.md` + skills + MCP |
+| **Codex** | 完全対応 | `.codex/agents/*.toml` + skills + commands + hooks |
+| **OpenClaw** | 完全対応 | `openclaw/` のディレクトリ構造 + workspaces + hooks |
+| **Cursor** | 完全対応 | `.cursor/agents/*.md` + skills + hooks + MCP |
 
 中核ロジックは同じで、`canonical/` が共通の正典ソースです。同期スクリプト `npm run sync:runtimes` により、各プラットフォームの構造へ投影されます。
 
@@ -474,9 +475,9 @@ flowchart TB
     CANONICAL["canonical/<br/>統一ソース層"]
 
     CANONICAL --> |npm run sync:runtimes| CLAUDE[".claude/<br/>Claude Code<br/>エージェント・スキル・フック"]
-    CANONICAL --> |npm run sync:runtimes| CODEX[".codex/<br/>Codex<br/>エージェント定義・スキル"]
-    CANONICAL --> |npm run sync:runtimes| OPENCLAW["openclaw/<br/>OpenClaw<br/>ワークスペース・スキル"]
-    CANONICAL --> |npm run sync:runtimes| CURSOR[".cursor/<br/>Cursor<br/>エージェント・スキル・MCP"]
+    CANONICAL --> |npm run sync:runtimes| CODEX[".codex/<br/>Codex<br/>エージェント定義・スキル・フック"]
+    CANONICAL --> |npm run sync:runtimes| OPENCLAW["openclaw/<br/>OpenClaw<br/>ワークスペース・スキル・フック"]
+    CANONICAL --> |npm run sync:runtimes| CURSOR[".cursor/<br/>Cursor<br/>エージェント・スキル・フック・MCP"]
 
     NEW[新しいプラットフォーム...] -.-> |設定で映射| CANONICAL
 
@@ -563,7 +564,7 @@ Meta_Kim の門とプロトコルは 4 層の実行保障があります。グ�
 | 実行層 | グローバル導入で利用可能 | Meta_Kim リポジトリが必要 |
 | --- | --- | --- |
 | **Prompt 層**（agents + skills に定義された門・プロトコルルール） | 対応 — `~/.claude/skills/` と `~/.claude/agents/` に導入済み、AI は prompt に従う | — |
-| **Hook 層**（セッション終了時の門チェック、危険コマンド遮断） | 対応 — `.claude/settings.json` に設定済み | — |
+| **Hook 層**（セッション終了時の門チェック、MCP Memory Service へのメモリ保存、危険コマンド遮断） | 対応 — `.claude/settings.json` に設定済み | — |
 | **設定層**（workflow-contract.json のプロトコルフィールド定義） | 対応 — プロトコルルールは skill prompt に組み込み済み | — |
 | **コード検証**（`npm run validate:run` による packet chain のハードチェック） | — | 必要 — スクリプトは `scripts/validate-run-artifact.mjs` にあり |
 
@@ -632,11 +633,11 @@ Meta_Kim の記憶は一枚岩ではありません。3 層に分かれ、各層
   - ベクトル検索 - キーワード一致ではなく意味理解で探します
   - 精度の高い想起 - 履歴会話から最も関連の強い文脈を引けます
 - **激活**: `node setup.mjs` が MCP Memory Service（第三層）をインストール・設定します；インストール後サーバーを手動で起動する必要があります。
-  - **Claude Code**: SessionStart Hook は `node setup.mjs` 時に自動登録
+  - **Claude Code**: SessionStart Hook と Stop メモリ保存 Hook は `node setup.mjs` 時に自動登録；セッション開始時に `mcp_memory_global.py --mode session` でプロジェクト状態を書き込みます
   - **他のツール**: `mcp-memory-service/claude-hooks/` を参照して手動インストール
 - **サーバー起動**: `npm start`（mcp-memory-service ディレクトリ）または `python -m mcp_memory_service`、次に `http://localhost:8000` にアクセス
 - **ポート上書き**: サーバーは `MCP_HTTP_PORT` を尊重します（デフォルト `8000`、上流と同一）。Meta_Kim の SessionStart フックは `MCP_MEMORY_URL` を読み、到達可能な任意のエンドポイントを指せます。`8888` がハードコードされていた旧版 Meta_Kim からのアップグレードの場合は、CHANGELOG の `Migration Notes` にある `~/.claude/hooks/config.json` の 1 行修正手順を参照してください。
-- **Hook**: Claude Code は自動登録；他のツールは mcp-memory-service ドキュメントを参照
+- **Hook**: Claude Code は自動登録（SessionStart でプロジェクト状態書き込み、Stop でセッション要約を MCP Memory に保存）；他のツールは mcp-memory-service ドキュメントを参照
 - **クエリ**: `npm run query:runs -- --owner <agent>`——agent ごとに過去の run を検索、または `npm run index:runs -- <artifact>` で手動インデックス化
 
 ### 三層の協調

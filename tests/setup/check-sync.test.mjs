@@ -45,12 +45,12 @@ function validateWorkspaces(homeDir, workspaceIds, allDirs) {
 }
 
 describe("validateHooks()", () => {
-  test("returns all present when all 9 hooks exist", () => {
+  test("returns all present when all 10 hooks exist", () => {
     const hooksDir = "/home/user/.claude/hooks/meta-kim";
     const allFiles = CANONICAL_HOOKS.map((h) => path.join(hooksDir, h));
     const result = validateHooks(hooksDir, allFiles);
     assert.strictEqual(result.allPresent, true);
-    assert.strictEqual(result.present.length, 9);
+    assert.strictEqual(result.present.length, 10);
     assert.strictEqual(result.missing.length, 0);
   });
 

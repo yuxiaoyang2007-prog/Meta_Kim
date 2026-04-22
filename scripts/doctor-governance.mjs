@@ -33,6 +33,7 @@ const EXPECTED_CLAUDE_HOOK_COMMANDS = [
   "node .claude/hooks/post-console-log-warn.mjs",
   "node .claude/hooks/subagent-context.mjs",
   "node .claude/hooks/stop-compaction.mjs",
+  "node .claude/hooks/stop-memory-save.mjs",
   "node .claude/hooks/stop-console-log-audit.mjs",
   "node .claude/hooks/stop-completion-guard.mjs",
 ];

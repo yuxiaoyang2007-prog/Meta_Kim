@@ -454,6 +454,7 @@ Claude Code에서 Meta_Kim은 **Hook**을 사용하여 자동화합니다:
 - **타입 검사**: 편집 후 TypeScript 검사를 실행합니다
 - **console.log 경고**: `console.log`를 제거하라고 알립니다
 - **세션 종료 감사**: 세션이 끝나기 전에 남은 이슈를 확인합니다
+- **세션 종료 메모리 저장**: 세션 종료 시 요약을 MCP Memory Service에 기록합니다
 - **하위 agent 문맥 주입**: 하위 agent에 프로젝트 문맥을 자동으로 주입합니다
 
 이 Hook들은 선택적 장식이 아닙니다. 거버넌스 시스템의 실행 레이어 보호 장치입니다.
@@ -467,9 +468,9 @@ Meta_Kim은 현재 4개 플랫폼에 매핑되어 있습니다:
 | 플랫폼 | 상태 | 매핑 방식 |
 | --- | --- | --- |
 | **Claude Code** | 완전 지원 | `.claude/agents/*.md` + `SKILL.md` + hooks + MCP |
-| **Codex** | 완전 지원 | `.codex/agents/*.toml` + skills + commands |
-| **OpenClaw** | 완전 지원 | `openclaw/` 디렉터리 구조 + workspaces |
-| **Cursor** | 완전 지원 | `.cursor/agents/*.md` + skills + MCP |
+| **Codex** | 완전 지원 | `.codex/agents/*.toml` + skills + commands + hooks |
+| **OpenClaw** | 완전 지원 | `openclaw/` 디렉터리 구조 + workspaces + hooks |
+| **Cursor** | 완전 지원 | `.cursor/agents/*.md` + skills + hooks + MCP |
 
 핵심 논리는 동일(`canonical/`)하며, `npm run sync:runtimes`를 통해 다른 플랫폼별 파일 구조로 투영합니다.
 
@@ -478,9 +479,9 @@ flowchart TB
     CANONICAL["canonical/<br/>(단일 소스 레이어)"]
 
     CANONICAL --> |npm run sync:runtimes| CLAUDE[".claude/<br/>Claude Code<br/>agents + skills + hooks"]
-    CANONICAL --> |npm run sync:runtimes| CODEX[".codex/<br/>Codex<br/>agents.toml + skills"]
-    CANONICAL --> |npm run sync:runtimes| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills"]
-    CANONICAL --> |npm run sync:runtimes| CURSOR[".cursor/<br/>Cursor<br/>agents + skills + MCP"]
+    CANONICAL --> |npm run sync:runtimes| CODEX[".codex/<br/>Codex<br/>agents.toml + skills + hooks"]
+    CANONICAL --> |npm run sync:runtimes| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills + hooks"]
+    CANONICAL --> |npm run sync:runtimes| CURSOR[".cursor/<br/>Cursor<br/>agents + skills + hooks + MCP"]
 
     NEW[새 플랫폼...] -.-> |설정 매핑| CANONICAL
 
@@ -567,7 +568,7 @@ Meta_Kim의 문과 프로토콜은 4계층 실행 보장이 있습니다. 전역
 | 실행 계층 | 전역 설치로 사용 가능 | Meta_Kim 저장소 필요 |
 | --- | --- | --- |
 | **Prompt 계층** (agents + skills에 정의된 Gate/Protocol 규칙) | 가능 — `~/.claude/skills/`, `~/.claude/agents/`에 설치됨, AI가 prompt를 따름 | — |
-| **Hook 계층** (세션 종료 시 Gate 확인, 위험 명령 차단) | 가능 — `.claude/settings.json`에 설정됨 | — |
+| **Hook 계층** (세션 종료 시 Gate 확인, MCP Memory Service 메모리 저장, 위험 명령 차단) | 가능 — `.claude/settings.json`에 설정됨 | — |
 | **설정 계층** (workflow-contract.json의 프로토콜 필드 정의) | 가능 — 프로토콜 규칙이 skill prompt에 내장됨 | — |
 | **코드 검증** (`npm run validate:run`으로 packet chain 하드 체크) | — | 필요 — 스크립트는 `scripts/validate-run-artifact.mjs`에 위치 |
 
@@ -634,11 +635,11 @@ Meta_Kim은 단일 기억 레이어를 사용하지 않습니다. 세 가지 다
   - 벡터 수준 검색 — 키워드 매칭이 아닌 의미 이해
   - 정밀 리콜 — 과거 세션에서 가장 관련성 높은 문맥 검색
 - **활성화**: `node setup.mjs` 가 MCP Memory Service（3층）를 설치하고 설정합니다；설치 후 서버를 수동으로 시작해야 합니다.
-  - **Claude Code**: SessionStart Hook 은 `node setup.mjs` 시 자동 등록
+  - **Claude Code**: SessionStart Hook과 Stop 메모리 저장 Hook이 `node setup.mjs` 시 자동 등록；세션 시작 시 `mcp_memory_global.py --mode session`으로 프로젝트 상태를 기록합니다
   - **기타 도구**: `mcp-memory-service/claude-hooks/` 참조하여 수동 설치
 - **서버 시작**: `npm start`（mcp-memory-service 디렉토리）또는 `python -m mcp_memory_service`，그 다음 `http://localhost:8000` 접속
 - **포트 재정의**: 서버는 `MCP_HTTP_PORT`를 존중합니다(기본 `8000`, 상류와 동일). Meta_Kim의 SessionStart 훅은 `MCP_MEMORY_URL`을 읽으므로 도달 가능한 엔드포인트를 가리키면 됩니다. `8888`이 하드코딩된 구버전 Meta_Kim에서 업그레이드하는 경우, CHANGELOG의 `Migration Notes`에 있는 `~/.claude/hooks/config.json` 한 줄 수정 가이드를 참고하세요.
-- **Hook**: Claude Code 자동 등록；기타 도구는 mcp-memory-service 문서 참조
+- **Hook**: Claude Code 자동 등록（SessionStart로 프로젝트 상태 기록, Stop으로 세션 요약을 MCP Memory에 저장）；기타 도구는 mcp-memory-service 문서 참조
 - **쿼리**: `npm run query:runs -- --owner <agent>`——agent별로 과거 run 검색，또는 `npm run index:runs -- <artifact>`로 수동 인덱싱
 
 ### 3층 협업

@@ -110,6 +110,7 @@ const REPO_META_KIM_HOOK_FILES = [
   "post-console-log-warn.mjs",
   "subagent-context.mjs",
   "stop-compaction.mjs",
+  "stop-memory-save.mjs",
   "stop-console-log-audit.mjs",
   "stop-completion-guard.mjs",
 ];

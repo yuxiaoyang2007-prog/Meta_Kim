@@ -454,6 +454,7 @@ flowchart TD
 - **类型检查**：编辑后自动跑 TypeScript 检查
 - **console.log 警告**：写了 console.log 会提醒你删掉
 - **会话结束审计**：会话结束前检查是否有遗留问题
+- **会话结束记忆保存**：会话结束时将摘要写入 MCP Memory Service
 - **子 agent 上下文注入**：自动给子 agent 注入项目上下文
 
 这些 Hook 不是可选的锦上添花——它们是治理系统的执行层保障。
@@ -467,9 +468,9 @@ Meta_Kim 当前已经映射了 4 个平台：
 | 平台 | 状态 | 映射方式 |
 | --- | --- | --- |
 | **Claude Code** | 完整支持 | `.claude/agents/*.md` + `SKILL.md` + hooks + MCP |
-| **Codex** | 完整支持 | `.codex/agents/*.toml` + skills + commands |
-| **OpenClaw** | 完整支持 | `openclaw/` 目录结构 + workspaces |
-| **Cursor** | 完整支持 | `.cursor/agents/*.md` + skills + MCP |
+| **Codex** | 完整支持 | `.codex/agents/*.toml` + skills + commands + hooks |
+| **OpenClaw** | 完整支持 | `openclaw/` 目录结构 + workspaces + hooks |
+| **Cursor** | 完整支持 | `.cursor/agents/*.md` + skills + hooks + MCP |
 
 核心逻辑是同一套（`canonical/` 目录），只是通过同步脚本（`npm run sync:runtimes`）投影到不同平台的文件结构。
 
@@ -478,9 +479,9 @@ flowchart TB
     CANONICAL["canonical/<br/>（统一源码层）"]
 
     CANONICAL --> |npm run sync:runtimes| CLAUDE[".claude/<br/>Claude Code<br/>agents + skills + hooks"]
-    CANONICAL --> |npm run sync:runtimes| CODEX[".codex/<br/>Codex<br/>agents.toml + skills"]
-    CANONICAL --> |npm run sync:runtimes| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills"]
-    CANONICAL --> |npm run sync:runtimes| CURSOR[".cursor/<br/>Cursor<br/>agents + skills + MCP"]
+    CANONICAL --> |npm run sync:runtimes| CODEX[".codex/<br/>Codex<br/>agents.toml + skills + hooks"]
+    CANONICAL --> |npm run sync:runtimes| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills + hooks"]
+    CANONICAL --> |npm run sync:runtimes| CURSOR[".cursor/<br/>Cursor<br/>agents + skills + hooks + MCP"]
 
     NEW[新平台...] -.-> |配置映射| CANONICAL
 
@@ -500,7 +501,7 @@ flowchart TB
 | --- | --- | --- | --- | --- |
 | **agent** | 原生 agents/subagents，项目级与用户级都成熟 | custom agents/subagents 很强 | workspace 型 agent，支持 agent-to-agent | agent 投影可用，较轻 |
 | **skill/references** | 原生 skill、references、全局技能生态完整 | `.agents/skills/` 兼容很好 | workspace skill + installable skill | skill/references 接入较轻 |
-| **hook/自动化** | 项目级 hooks + settings.json + 插件生态 | 没有仓库级原生 hook 文件面 | 有 workspace boot/hook 风格能力 | 原生治理 hook 最弱 |
+| **hook/自动化** | 项目级 hooks + settings.json + 插件生态（12 events） | hooks.json 原生支持（5 events, v0.117.0+） | Plugin SDK hooks（28 hooks） | hooks.json 原生支持（4 events） |
 | **MCP/配置** | 原生 MCP 与配置面完整 | 可接 runtime adapter 与 MCP | workspace config 明确 | 可接 MCP，但整体较轻 |
 | **治理闭环承载力** | **最高** | 高，但低于 Claude Code | 高，但形态不同 | 最轻 |
 
@@ -567,7 +568,7 @@ Meta_Kim 的门和协议有四层执行保障。全局安装（`node setup.mjs`�
 | 执行层 | 全局安装后能用 | 需要 Meta_Kim 仓库 |
 | --- | --- | --- |
 | **Prompt 层**（agents + skills 中定义的门和协议规则） | 能用 — 安装到 `~/.claude/skills/` 和 `~/.claude/agents/`，AI 读 prompt 就会遵守 | — |
-| **Hook 层**（会话结束时的门检查、危险命令拦截） | 能用 — 配置在 `.claude/settings.json` 中 | — |
+| **Hook 层**（会话结束时的门检查、记忆保存至 MCP Memory Service、危险命令拦截） | 能用 — 配置在 `.claude/settings.json` 中 | — |
 | **配置层**（workflow-contract.json 中的协议字段定义） | 能用 — 协议规则已嵌入 skill prompt，AI 知道每个 packet 必须有哪些字段 | — |
 | **代码校验**（`npm run validate:run` 硬校验 packet 链闭合） | — | 需要 — 脚本在 `scripts/validate-run-artifact.mjs` |
 
@@ -634,11 +635,11 @@ Meta_Kim 的记忆不是单一的。它有三层，各有分工，共同保障 a
   • 向量级检索——不是关键词匹配，而是语义理解
   - 精准召回——从历史会话中找到最相关的上下文
 - **激活方式**：`node setup.mjs` 安装并配置 MCP Memory Service（第三层）；安装后需手动启动服务器。
-  - **Claude Code**：SessionStart Hook 在 `node setup.mjs` 时自动注册
+  - **Claude Code**：SessionStart Hook 和 Stop 记忆保存 Hook 在 `node setup.mjs` 时自动注册；会话启动时通过 `mcp_memory_global.py --mode session` 写入项目状态
   - **其他工具**（Codex、OpenClaw、Cursor）：参见 `mcp-memory-service/claude-hooks/` 手动安装
 - **启动服务器**：`npm start`（在 mcp-memory-service 目录下）或 `python -m mcp_memory_service`，然后访问 `http://localhost:8000`
 - **端口覆盖**：服务器遵循 `MCP_HTTP_PORT`（默认 `8000`，与上游一致）；Meta_Kim 的 SessionStart hook 读取 `MCP_MEMORY_URL`，可指向任意可达端点。若你是从旧版 Meta_Kim（硬编码 `8888`）升级而来，请按 CHANGELOG 的 `Migration Notes` 中给出的一行方案修正 `~/.claude/hooks/config.json`。
-- **Hook**：Claude Code 自动注册；其他工具参见 mcp-memory-service 文档
+- **Hook**：Claude Code 自动注册（SessionStart 写入项目状态，Stop 保存会话摘要到 MCP Memory）；其他工具参见 mcp-memory-service 文档
 - **查询**：`npm run query:runs -- --owner <agent>`——按 agent 查找历史 run，或 `npm run index:runs -- <artifact>` 手动索引 run 产物
 
 ### 三层协同

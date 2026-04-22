@@ -6,19 +6,27 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
-## [2.0.15] - 2026-04-20
+## [2.0.15] - 2026-04-21
 
 ### 新增
 
+- **stop-memory-save hook**: 新增 Stop hook (`stop-memory-save.mjs`)，在会话结束时将摘要写入 MCP Memory Service，实现跨会话连续性，无需手动干预。现在共有 10 个 hook 接入 `doctor:governance` 和 `validate:run`。
+- **tests/setup/check-sync.test.mjs**: 预期 hook 数量从 9 更新为 10（新增 stop-memory-save）。
+- **scripts/runtime-sync-check.mjs、doctor-governance.mjs、footprint.mjs、claude-settings-merge.mjs**: 在 hook 文件/命令列表中添加了 `stop-memory-save.mjs`。
 - **`mirror` 作为业务工作流的第 11 个阶段** — `config/contracts/workflow-contract.json` 早已把 `mirror`（镜像发布 / Mirror Publish）声明为 `evolve` 之后的终态阶段；本次发布补齐所有依赖测试和文档，使三方同步到 11 阶段契约。同步后状态：`phases.length = 11`、`terminalPhases.length = 7`、`labels.{zh-CN,en-US}` 各有 11 条，`tests/meta-theory/07-contract-compliance.test.mjs` 与 `tests/meta-theory/12-ten-step-workflow.test.mjs` 不再 flaky。
 
 ### 修复
 
+- **四端 hooks 纠正** — 四个平台（Claude Code、Codex、OpenClaw、Cursor）均有原生 hooks 系统。此前文档错误标注仅 Claude Code 有 hooks。Codex 支持 `hooks.json`（5 个事件，v0.117.0+），OpenClaw 支持 Plugin SDK hooks（28 个），Cursor 支持 `hooks.json`（4 个事件）。已更新 `runtime-capability-matrix.md`、`runtime-coverage-audit.md`、`distribution-matrix.md` 及四语言 README。
+- **PWF hook 联合部署** — `install-global-skills-all-runtimes.mjs` 现在自动部署 planning-with-files 生命周期 hooks 到 Codex（`.codex/hooks/` + `hooks.json`）和 Cursor（`.cursor/hooks/` + `hooks.json`）。
+- **Superpowers 稀疏回退** — 新增 `fallbackContentDir` 逻辑，当平台子目录（`.codex/`、`.cursor/`）内容过少时自动回退到 `skills/` 主内容目录。
 - **`install-plugin-bundles` dry-run 状态串味** — `scripts/install-global-skills-all-runtimes.mjs`（1576–1583 行）在 `--dry-run` 模式下也会走"目录已存在就跳过"的幂等短路，导致 `obra/superpowers` 之类插件包的 sparse-checkout 预览命令在目标目录已缓存的机器上永远不会打印。单行 patch 加 `!dryRun &&`，让 dry-run 永远展示命令，真实执行的幂等性保持不变。修复 `tests/setup/install-plugin-bundles.test.mjs` 的 3 个历史失败（`Codex .codex/`、`Cursor .cursor/`、`OpenClaw skills/`）。
 
 ### 变更
 
 - **11 阶段契约同步到测试和顶层文档**：`tests/meta-theory/07-contract-compliance.test.mjs`、`tests/meta-theory/12-ten-step-workflow.test.mjs`、`AGENTS.md`、`CLAUDE.md`、`canonical/agents/meta-conductor.md`、`canonical/skills/meta-theory/references/dev-governance.md`、`canonical/skills/meta-theory/references/ten-step-governance.md`。计数升级（`10 → 11`、终态 `6 → 7`），阶段数组末尾追加 `mirror`，zh-CN / en-US labels 各加一条 `镜像发布` / `Mirror Publish`。
+- **discover-global-capabilities.mjs** — 新增 Cursor 平台扫描（skills + plugins）。
+- **README 跨平台映射** — 在四语言 README（EN/ZH/JA/KO）中为 Codex、OpenClaw、Cursor 条目补充 hooks 说明。
 
 ### 已知问题
 

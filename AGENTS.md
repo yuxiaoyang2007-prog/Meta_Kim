@@ -319,6 +319,7 @@ Useful supporting commands:
 - `package.json` adds an explicit `files` whitelist so `npx --yes github:KimYx0207/Meta_Kim meta-kim` always receives the complete `canonical/` tree (older publications occasionally dropped `canonical/runtime-assets/openclaw/openclaw.template.json` / `canonical/runtime-assets/codex/config.toml.example`). Run `npm cache clean --force` if your local tarball predates the whitelist.
 - Installer i18n is now complete for `setup.mjs` `runMcpMemoryHookInstaller` and `sync-runtimes.mjs` `tryReadCanonical`; all locale strings live in `scripts/meta-kim-i18n.mjs` (en / zh-CN / ja-JP / ko-KR).
 - MCP Memory Service default port is **8000** (upstream `MCP_HTTP_PORT=8000`). Override via `MCP_MEMORY_URL` env or `~/.claude/hooks/config.json`. Legacy Meta_Kim installs wrote `:8888` — see `CHANGELOG.md` `Migration Notes`.
+- `stop-memory-save.mjs` (Stop hook) writes session summaries to MCP Memory Service on session end, enabling cross-session continuity without manual intervention.
 
 ## Reading Notes
 

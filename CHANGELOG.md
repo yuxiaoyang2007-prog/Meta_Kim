@@ -6,19 +6,27 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
-## [2.0.15] - 2026-04-20
+## [2.0.15] - 2026-04-21
 
 ### Added
 
+- **stop-memory-save hook**: New Stop hook (`stop-memory-save.mjs`) writes session summaries to MCP Memory Service on session end. Enables cross-session continuity without manual intervention. All 10 hooks now wired in `doctor:governance` and `validate:run` expectations.
+- **tests/setup/check-sync.test.mjs**: Updated expected hook count from 9 to 10 (stop-memory-save added).
+- **scripts/runtime-sync-check.mjs, doctor-governance.mjs, footprint.mjs, claude-settings-merge.mjs**: Added `stop-memory-save.mjs` to hook file/command lists.
 - **`mirror` as the 11th business workflow phase** — `config/contracts/workflow-contract.json` already declared `mirror` (Mirror Publish / 镜像发布) as a terminal phase appended after `evolve`; this release closes the gap by syncing every dependent test and doc to the 11-phase contract. Post-sync state: `phases.length = 11`, `terminalPhases.length = 7`, `labels.{zh-CN,en-US}` each have 11 entries, and `tests/meta-theory/07-contract-compliance.test.mjs` + `tests/meta-theory/12-ten-step-workflow.test.mjs` pass without flakiness.
 
 ### Fixed
 
+- **4-runtime hooks correction** — All four platforms (Claude Code, Codex, OpenClaw, Cursor) have native hooks systems. Previous docs incorrectly stated only Claude Code had hooks. Codex has `hooks.json` (5 events since v0.117.0), OpenClaw has Plugin SDK hooks (28 hooks), and Cursor has `hooks.json` (4 events). Updated `runtime-capability-matrix.md`, `runtime-coverage-audit.md`, `distribution-matrix.md`, and all 4 README language variants.
+- **PWF hook co-deployment** — `install-global-skills-all-runtimes.mjs` now deploys planning-with-files lifecycle hooks to Codex (`.codex/hooks/` + `hooks.json`) and Cursor (`.cursor/hooks/` + `hooks.json`) via new `deployHookSubdirs()` and `deployHookConfigFiles()` helpers.
+- **Superpowers sparse fallback** — Added `fallbackContentDir` logic to detect when platform-specific subdirs (`.codex/`, `.cursor/`) are too sparse and fall back to the main `skills/` content directory.
 - **`install-plugin-bundles` dry-run flakiness** — `scripts/install-global-skills-all-runtimes.mjs` (line 1576–1583) was short-circuiting the "already exists" branch even under `--dry-run`, so the sparse-checkout preview for plugin-bundle specs like `obra/superpowers` would never print on machines that had the target directory cached. Added a single-line `!dryRun &&` guard so dry-run always prints the intended command (the idempotent skip still applies to real installs). Restores 3 previously-failing tests in `tests/setup/install-plugin-bundles.test.mjs` (`Codex .codex/`, `Cursor .cursor/`, `OpenClaw skills/`).
 
 ### Changed
 
 - **11-phase contract synced across tests + top-level docs**: `tests/meta-theory/07-contract-compliance.test.mjs`, `tests/meta-theory/12-ten-step-workflow.test.mjs`, `AGENTS.md`, `CLAUDE.md`, `canonical/agents/meta-conductor.md`, `canonical/skills/meta-theory/references/dev-governance.md`, `canonical/skills/meta-theory/references/ten-step-governance.md`. Counts updated (`10 → 11`, `6 → 7` terminal), phase lists append `mirror`, zh-CN/en-US labels extended with `镜像发布` / `Mirror Publish`.
+- **discover-global-capabilities.mjs** — Added Cursor platform scanning (skills + plugins).
+- **README cross-platform mapping** — Added hooks to Codex, OpenClaw, and Cursor entries in all 4 language READMEs (EN/ZH/JA/KO).
 
 ### Known Issues
 
