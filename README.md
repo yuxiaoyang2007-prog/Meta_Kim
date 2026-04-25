@@ -51,11 +51,11 @@ node setup.mjs
 
 > 💡 **After install**: `setup.mjs` prints where every artifact lives. To revisit that summary anytime (or diff vs. the previous install), run `npm run meta:status` in the directory where you installed.
 
-If you plan to maintain the repository, edit `canonical/` and `config/contracts/workflow-contract.json` first, then run:
+If you plan to maintain the repository, edit `canonical/` and `config/contracts/workflow-contract.json` first, then run (requires Node.js >= 22.13.0):
 
 ```bash
-npm run sync:runtimes
-npm run validate
+npm run meta:sync
+npm run meta:validate
 ```
 
 Recommended reading order:
@@ -268,7 +268,7 @@ These artifacts are not optional documents. They are the system’s source of tr
 
 The current implementation carries these artifacts explicitly: `taskClassification` before execution, `cardPlanPacket` before dealing, `dispatchEnvelopePacket` before dispatch, `reviewPacket.findings` after review, `revisionResponses` + `verificationResults` + `closeFindings` between revision and verification, `summaryPacket` before external publication, and `writebackDecision` before evolution.
 
-`npm run validate:run` checks whether these artifact chains close completely.
+`npm run meta:validate:run` checks whether these artifact chains close completely.
 
 ### Gates = stage reached does not mean stage passed
 
@@ -473,16 +473,16 @@ Meta_Kim currently maps to four platforms:
 | **OpenClaw** | Fully supported | `openclaw/` directory structure + workspaces + hooks |
 | **Cursor** | Fully supported | `.cursor/agents/*.md` + skills + hooks + MCP |
 
-The core logic is the same (`canonical/`), and the repository projects it into different platform-specific file structures through `npm run sync:runtimes`.
+The core logic is the same (`canonical/`), and the repository projects it into different platform-specific file structures through `npm run meta:sync`.
 
 ```mermaid
 flowchart TB
     CANONICAL["canonical/<br/>(single source layer)"]
 
-    CANONICAL --> |npm run sync:runtimes| CLAUDE[".claude/<br/>Claude Code<br/>agents + skills + hooks"]
-    CANONICAL --> |npm run sync:runtimes| CODEX[".codex/<br/>Codex<br/>agents.toml + skills + hooks"]
-    CANONICAL --> |npm run sync:runtimes| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills + hooks"]
-    CANONICAL --> |npm run sync:runtimes| CURSOR[".cursor/<br/>Cursor<br/>agents + skills + hooks + MCP"]
+    CANONICAL --> |npm run meta:sync| CLAUDE[".claude/<br/>Claude Code<br/>agents + skills + hooks"]
+    CANONICAL --> |npm run meta:sync| CODEX[".codex/<br/>Codex<br/>agents.toml + skills + hooks"]
+    CANONICAL --> |npm run meta:sync| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills + hooks"]
+    CANONICAL --> |npm run meta:sync| CURSOR[".cursor/<br/>Cursor<br/>agents + skills + hooks + MCP"]
 
     NEW[New platform...] -.-> |config mapping| CANONICAL
 
@@ -549,7 +549,7 @@ When you're halfway through a conversation and your token budget runs out, the c
 
 *Example: You ask Meta_Kim to do a complex multi-file refactor. You get through step 6 before the session ends. Next session, the system reads the compaction packet: "at step 6, step 7 hasn't started" — picks up from step 7, no need to start over.*
 
-**Other files:** `doctor-cache/` stores `npm run doctor:governance` results (written after each run), `migrations/` tracks schema upgrades between Meta_Kim versions, `profile.json` stores profile metadata. All managed by scripts — you never edit them by hand.
+**Other files:** `doctor-cache/` stores `npm run meta:doctor:governance` results (written after each run), `migrations/` tracks schema upgrades between Meta_Kim versions, `profile.json` stores profile metadata. All managed by scripts — you never edit them by hand.
 
 **Quick reference:**
 
@@ -557,9 +557,9 @@ When you're halfway through a conversation and your token budget runs out, the c
 | --- | --- | --- |
 | `local.overrides.json` | Remembers your runtime selection from `setup.mjs` | Auto — first `setup.mjs` run |
 | `state/{profile}/profile.json` | Profile metadata (creation time, name) | Auto — `setup.mjs` creates the `default` profile |
-| `state/{profile}/run-index.sqlite` | Indexed governed run records — who ran what, what was found, what's still open | On demand — `npm run index:runs -- <artifact>` |
+| `state/{profile}/run-index.sqlite` | Indexed governed run records — who ran what, what was found, what's still open | On demand — `npm run meta:index:runs -- <artifact>` |
 | `state/{profile}/compaction/` | Cross-session handoff packets: unfinished steps, pending findings, open verification gates | On demand — governed run that needs to survive a session break |
-| `state/{profile}/doctor-cache/` | Cached results from `npm run doctor:governance` | On demand — `doctor:governance` writes here |
+| `state/{profile}/doctor-cache/` | Cached results from `npm run meta:doctor:governance` | On demand — `doctor:governance` writes here |
 | `state/{profile}/migrations/` | State migration tracking (schema upgrades between versions) | Auto — when state schema changes between versions |
 
 ### What works globally vs. in-repo only
@@ -571,7 +571,7 @@ Meta_Kim's gates and protocols work on three enforcement layers. After global in
 | **Prompt layer** (agents + skills enforce gates/protocols) | Works — installed to `~/.claude/skills/` and `~/.claude/agents/` | — |
 | **Hook layer** (session-end gate checks, memory save to MCP Memory Service, dangerous command blocking) | Works — configured in `.claude/settings.json` | — |
 | **Config layer** (contract definitions are referenced in skill prompts) | Works — AI reads the rules from the installed skill | — |
-| **Code validation** (`npm run validate:run` hard-checks packet chains) | — | Required — script lives in `scripts/validate-run-artifact.mjs` |
+| **Code validation** (`npm run meta:validate:run` hard-checks packet chains) | — | Required — script lives in `scripts/validate-run-artifact.mjs` |
 
 The first three layers are the primary defense and work everywhere. Code validation is a final safety net that requires running from the Meta_Kim repo (or pointing to its scripts).
 
@@ -599,7 +599,7 @@ Each layer has different activation requirements:
 
 - **Responsibility**: project-level code knowledge graph
 - **Storage**: `graphify-out/graph.json` (NetworkX node-link format); for humans and agents, prefer `graphify-out/GRAPH_REPORT.md` when present
-- **Mechanism (data)**: `node setup.mjs` (optional Python step) installs graphify and **idempotently** runs `python -m graphify claude install` and `python -m graphify hook install` even if graphify was already installed via pip; git hooks rebuild the graph on commit/checkout in the **current repo**. `npm run graphify:install` does the same (including hooks).
+- **Mechanism (data)**: `node setup.mjs` (optional Python step) installs graphify and **idempotently** runs `python -m graphify claude install` and `python -m graphify hook install` even if graphify was already installed via pip; git hooks rebuild the graph on commit/checkout in the **current repo**. `npm run meta:graphify:install` does the same (including hooks).
 - **Mechanism (usage)**: synced meta-theory `dev-governance.md` Fetch **Step 0.5** defines how the model should detect and use the graph — not a background service. Claude Code subagents get a **short hint** via `subagent-context.mjs`, not automatic embedding of `graph.json`. Codex / OpenClaw / Cursor share the same reference after `sync:runtimes` but have no SubagentStart hook; optional `python -m graphify codex install` or `python -m graphify claw install` in a **target repo** patches that repo’s docs per graphify CLI (`python -m graphify --help`).
 - **Core value**:
   - Make memory increasingly familiar with the project - not by remembering raw code, but by understanding structure and relationships
@@ -609,7 +609,7 @@ Each layer has different activation requirements:
   - Fuzzy nodes > 30% -> mark the graph as low quality and fall back to direct file reads
   - Total nodes < 10 -> the graph is too sparse and should fall back to Glob/Grep
   - A "god node" with too many incoming edges -> mark as a serial bottleneck
-- **Activation**: `node setup.mjs` optional Python step or `npm run graphify:install` — install/check, networkx, Claude-side registration, **this repo’s** git hooks; first graph build still depends on a hook run or a manual build command
+- **Activation**: `node setup.mjs` optional Python step or `npm run meta:graphify:install` — install/check, networkx, Claude-side registration, **this repo’s** git hooks; first graph build still depends on a hook run or a manual build command
 - **Query**: `python -m graphify query "your question"` — natural language query against the code graph
 
 ### Platform Automation Comparison
@@ -641,7 +641,7 @@ For multi-platform setups, run `node setup.mjs` — it loops through all selecte
 - **Start server**: `npm start` in the mcp-memory-service directory (or `python -m mcp_memory_service`), then access at `http://localhost:8000`
 - **Port override**: the server honors `MCP_HTTP_PORT` (default `8000`, matching upstream); Meta_Kim reads `MCP_MEMORY_URL` in the SessionStart hook so point it at any reachable endpoint. If you are upgrading from an older Meta_Kim install that hard-coded `8888`, see the CHANGELOG's `Migration Notes` for the one-line `~/.claude/hooks/config.json` fix.
 - **Hooks**: auto-registered for Claude Code (SessionStart writes project context, Stop saves session summary to MCP Memory); for other tools see the mcp-memory-service documentation
-- **Query**: `npm run query:runs -- --owner <agent>` — find past runs by agent, or `npm run index:runs -- <artifact>` for manual indexing of validated run artifacts
+- **Query**: `npm run meta:query:runs -- --owner <agent>` — find past runs by agent, or `npm run meta:index:runs -- <artifact>` for manual indexing of validated run artifacts
 
 ### How the three layers work together
 
@@ -703,11 +703,11 @@ The three memory layers work together toward two core goals:
 
 | Command | Purpose |
 | --- | --- |
-| `npm run sync:runtimes` | Sync from canonical sources to all four runtimes |
-| `npm run check:runtimes` | Check whether the four runtimes are in sync |
-| `npm run validate` | Validate repository integrity |
-| `npm run verify:all` | Full validation, including runtime smoke checks |
-| `npm run doctor:governance` | Governance health check |
+| `npm run meta:sync` | Sync from canonical sources to all four runtimes |
+| `npm run meta:check:runtimes` | Check whether the four runtimes are in sync |
+| `npm run meta:validate` | Validate repository integrity |
+| `npm run meta:verify:all` | Full validation, including runtime smoke checks |
+| `npm run meta:doctor:governance` | Governance health check |
 
 ### Skills and dependencies
 
@@ -737,13 +737,13 @@ The extracted tree lands in `~/.<runtime>/skills/<id>/`. Run `npm run meta:deps:
 
 | Command | Purpose |
 | --- | --- |
-| `npm run validate:run -- <file.json>` | Validate governed run artifacts |
-| `npm run eval:agents` | Lightweight runtime smoke test |
-| `npm run eval:agents:live` | Live prompt-backed acceptance |
+| `npm run meta:validate:run -- <file.json>` | Validate governed run artifacts |
+| `npm run meta:eval:agents` | Lightweight runtime smoke test |
+| `npm run meta:eval:agents:live` | Live prompt-backed acceptance |
 | `npm run probe:clis` | Probe local CLI tools |
-| `npm run test:mcp` | MCP self-test |
-| `npm run index:runs -- <dir>` | Index validated run artifacts |
-| `npm run query:runs -- --owner <agent>` | Query the run index |
+| `npm run meta:test:mcp` | MCP self-test |
+| `npm run meta:index:runs -- <dir>` | Index validated run artifacts |
+| `npm run meta:query:runs -- --owner <agent>` | Query the run index |
 | `npm run migrate:meta-kim -- <dir> --apply` | Import an older prompt pack |
 
 ---

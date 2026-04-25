@@ -51,11 +51,11 @@ node setup.mjs
 
 > 💡 **설치 후**: `setup.mjs`가 산출물 위치를 출력합니다. 언제든 다시 확인(또는 이전 설치와 비교)하려면 설치한 디렉터리에서 `npm run meta:status`를 실행하세요.
 
-저장소를 유지보수할 계획이라면, 먼저 `canonical/`과 `config/contracts/workflow-contract.json`을 수정한 뒤 다음을 실행하세요:
+저장소를 유지보수할 계획이라면, 먼저 `canonical/`과 `config/contracts/workflow-contract.json`을 수정한 뒤 다음을 실행하세요 (Node.js >= 22.13.0 필요):
 
 ```bash
-npm run sync:runtimes
-npm run validate
+npm run meta:sync
+npm run meta:validate
 ```
 
 권장 읽기 순서:
@@ -268,7 +268,7 @@ flowchart LR
 
 현재 구현에서 이 산출물들은 명시적으로 전달됩니다: 실행 전 `taskClassification`, 발행 전 `cardPlanPacket`, 분배 전 `dispatchEnvelopePacket`, 검토 후 `reviewPacket.findings`, 수정과 검증 사이의 `revisionResponses` + `verificationResults` + `closeFindings`, 외부 공개 전 `summaryPacket`, 진화 전 `writebackDecision`.
 
-`npm run validate:run`은 이 산출물 체인이 완전히 닫히는지 확인합니다.
+`npm run meta:validate:run`은 이 산출물 체인이 완전히 닫히는지 확인합니다.
 
 ### 문(Gate) = 단계에 도달했다고 통과한 것은 아닙니다
 
@@ -472,16 +472,16 @@ Meta_Kim은 현재 4개 플랫폼에 매핑되어 있습니다:
 | **OpenClaw** | 완전 지원 | `openclaw/` 디렉터리 구조 + workspaces + hooks |
 | **Cursor** | 완전 지원 | `.cursor/agents/*.md` + skills + hooks + MCP |
 
-핵심 논리는 동일(`canonical/`)하며, `npm run sync:runtimes`를 통해 다른 플랫폼별 파일 구조로 투영합니다.
+핵심 논리는 동일(`canonical/`)하며, `npm run meta:sync`를 통해 다른 플랫폼별 파일 구조로 투영합니다.
 
 ```mermaid
 flowchart TB
     CANONICAL["canonical/<br/>(단일 소스 레이어)"]
 
-    CANONICAL --> |npm run sync:runtimes| CLAUDE[".claude/<br/>Claude Code<br/>agents + skills + hooks"]
-    CANONICAL --> |npm run sync:runtimes| CODEX[".codex/<br/>Codex<br/>agents.toml + skills + hooks"]
-    CANONICAL --> |npm run sync:runtimes| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills + hooks"]
-    CANONICAL --> |npm run sync:runtimes| CURSOR[".cursor/<br/>Cursor<br/>agents + skills + hooks + MCP"]
+    CANONICAL --> |npm run meta:sync| CLAUDE[".claude/<br/>Claude Code<br/>agents + skills + hooks"]
+    CANONICAL --> |npm run meta:sync| CODEX[".codex/<br/>Codex<br/>agents.toml + skills + hooks"]
+    CANONICAL --> |npm run meta:sync| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills + hooks"]
+    CANONICAL --> |npm run meta:sync| CURSOR[".cursor/<br/>Cursor<br/>agents + skills + hooks + MCP"]
 
     NEW[새 플랫폼...] -.-> |설정 매핑| CANONICAL
 
@@ -548,7 +548,7 @@ flowchart TB
 
 *예: Meta_Kim에게 복잡한 다중 파일 리팩토링을 맡기고, 6단계까지 완료한 후 세션이 끝났습니다. 다음 세션에서 시스템이 compaction 패킷을 읽어 "6단계 완료, 7단계 미시작"을 확인 — 7단계부터 바로 시작하고 처음부터 다시 할 필요가 없습니다.*
 
-**기타 파일:** `doctor-cache/`는 `npm run doctor:governance` 실행 결과를 저장(각 실행 후 기록), `migrations/`는 버전 간 데이터 구조 업그레이드 추적, `profile.json`은 프로필 메타데이터입니다. 모두 스크립트가 자동 관리하므로 수동 편집할 필요가 없습니다.
+**기타 파일:** `doctor-cache/`는 `npm run meta:doctor:governance` 실행 결과를 저장(각 실행 후 기록), `migrations/`는 버전 간 데이터 구조 업그레이드 추적, `profile.json`은 프로필 메타데이터입니다. 모두 스크립트가 자동 관리하므로 수동 편집할 필요가 없습니다.
 
 **빠른 참고:**
 
@@ -556,9 +556,9 @@ flowchart TB
 | --- | --- | --- |
 | `local.overrides.json` | `setup.mjs`에서 선택한 런타임 기억 | 자동 — 최초 `setup.mjs` 실행 시 |
 | `state/{profile}/profile.json` | 프로필 메타데이터 (생성 시간, 이름) | 자동 — `setup.mjs`가 `default` 프로필 생성 |
-| `state/{profile}/run-index.sqlite` | 거버넌스 run 인덱스 — 누가 무엇을 실행했는지, 무엇을 발견했는지, 미해결 사항 | 온디맨드 — `npm run index:runs -- <artifact>` |
+| `state/{profile}/run-index.sqlite` | 거버넌스 run 인덱스 — 누가 무엇을 실행했는지, 무엇을 발견했는지, 미해결 사항 | 온디맨드 — `npm run meta:index:runs -- <artifact>` |
 | `state/{profile}/compaction/` | 세션 간 인계 패킷: 미완료 단계, 미처리 발견, 미폐쇄 검증 게이트 | 온디맨드 — 세션을 넘어 이어질 때 기록 |
-| `state/{profile}/doctor-cache/` | `npm run doctor:governance` 캐시 결과 | 온디맨드 — `doctor:governance` 실행 후 기록 |
+| `state/{profile}/doctor-cache/` | `npm run meta:doctor:governance` 캐시 결과 | 온디맨드 — `doctor:governance` 실행 후 기록 |
 | `state/{profile}/migrations/` | 상태 마이그레이션 추적 (버전 간 스키마 업그레이드) | 자동 — 버전 간 상태 스키마 변경 시 |
 
 ### 전역 설치 후 사용 가능한 기능
@@ -570,7 +570,7 @@ Meta_Kim의 문과 프로토콜은 4계층 실행 보장이 있습니다. 전역
 | **Prompt 계층** (agents + skills에 정의된 Gate/Protocol 규칙) | 가능 — `~/.claude/skills/`, `~/.claude/agents/`에 설치됨, AI가 prompt를 따름 | — |
 | **Hook 계층** (세션 종료 시 Gate 확인, MCP Memory Service 메모리 저장, 위험 명령 차단) | 가능 — `.claude/settings.json`에 설정됨 | — |
 | **설정 계층** (workflow-contract.json의 프로토콜 필드 정의) | 가능 — 프로토콜 규칙이 skill prompt에 내장됨 | — |
-| **코드 검증** (`npm run validate:run`으로 packet chain 하드 체크) | — | 필요 — 스크립트는 `scripts/validate-run-artifact.mjs`에 위치 |
+| **코드 검증** (`npm run meta:validate:run`으로 packet chain 하드 체크) | — | 필요 — 스크립트는 `scripts/validate-run-artifact.mjs`에 위치 |
 
 앞의 3계층은 주요 방어선으로, 전역 설치 후 어떤 프로젝트에서도 작동합니다. 코드 검증은 마지막 안전망으로, Meta_Kim 저장소 디렉토리에서 실행해야 합니다(또는 스크립트 경로를 지정).
 
@@ -598,7 +598,7 @@ Meta_Kim은 단일 기억 레이어를 사용하지 않습니다. 세 가지 다
 
 - **책임**: 프로젝트 수준 코드 지식 그래프
 - **저장 위치**: `graphify-out/graph.json` (NetworkX node-link 형식). 심층 탐색 시 동일 디렉터리 `GRAPH_REPORT.md` 우선
-- **메커니즘 (데이터)**: `node setup.mjs` 선택 Python 단계는 graphify 설치 후 **멱등적으로** `python -m graphify claude install` 및 `python -m graphify hook install` 실행(pip로 이미 설치된 경우에도 hook 보완). git hook은 **현재 리포지토리**에서 commit/checkout 시 재구축. `npm run graphify:install`도 동일(hook 포함).
+- **메커니즘 (데이터)**: `node setup.mjs` 선택 Python 단계는 graphify 설치 후 **멱등적으로** `python -m graphify claude install` 및 `python -m graphify hook install` 실행(pip로 이미 설치된 경우에도 hook 보완). git hook은 **현재 리포지토리**에서 commit/checkout 시 재구축. `npm run meta:graphify:install`도 동일(hook 포함).
 - **메커니즘 (사용)**: 동기화된 meta-theory `dev-governance.md` Fetch **Step 0.5**가 모델 측 검출/사용 규칙. 백그라운드 데몬 아님. Claude Code 하위 에이전트는 `subagent-context.mjs`로 **짧은 힌트**만. Codex/OpenClaw/Cursor는 SubagentStart hook 없음, `sync:runtimes` 후 동일 참조 공유. 다른 런타임은 **대상 리포지토리**에서 `python -m graphify codex install` 또는 `claw install` 선택(`python -m graphify --help`).
 - **핵심 가치**:
   - 기억이 프로젝트에 점점 익숙해집니다 — 코드 원문이 아닌 구조와 관계를 이해
@@ -608,7 +608,7 @@ Meta_Kim은 단일 기억 레이어를 사용하지 않습니다. 세 가지 다
   - 모호한 노드 > 30% → 저품질 그래프로 표시, 직접 파일 읽기로 대체
   - 총 노드 < 10 → 그래프가 너무 희소, Glob/Grep으로 대체
   - "갓 노드"(높은 진입도) → 직렬 병목으로 플래그
-- **활성화**: 선택 Python 단계 `node setup.mjs` 또는 `npm run graphify:install`——설치/검사, networkx, Claude 측 등록, **해당 리포지토리** git hook. 최초 그래프 생성은 hook 실행 또는 수동 빌드에 따름
+- **활성화**: 선택 Python 단계 `node setup.mjs` 또는 `npm run meta:graphify:install`——설치/검사, networkx, Claude 측 등록, **해당 리포지토리** git hook. 최초 그래프 생성은 hook 실행 또는 수동 빌드에 따름
 - **쿼리**: `python -m graphify query "당신의 질문"`——자연어로 코드 그래프에 쿼리
 
 ### 플랫폼 자동화 비교
@@ -640,7 +640,7 @@ Meta_Kim은 단일 기억 레이어를 사용하지 않습니다. 세 가지 다
 - **서버 시작**: `npm start`（mcp-memory-service 디렉토리）또는 `python -m mcp_memory_service`，그 다음 `http://localhost:8000` 접속
 - **포트 재정의**: 서버는 `MCP_HTTP_PORT`를 존중합니다(기본 `8000`, 상류와 동일). Meta_Kim의 SessionStart 훅은 `MCP_MEMORY_URL`을 읽으므로 도달 가능한 엔드포인트를 가리키면 됩니다. `8888`이 하드코딩된 구버전 Meta_Kim에서 업그레이드하는 경우, CHANGELOG의 `Migration Notes`에 있는 `~/.claude/hooks/config.json` 한 줄 수정 가이드를 참고하세요.
 - **Hook**: Claude Code 자동 등록（SessionStart로 프로젝트 상태 기록, Stop으로 세션 요약을 MCP Memory에 저장）；기타 도구는 mcp-memory-service 문서 참조
-- **쿼리**: `npm run query:runs -- --owner <agent>`——agent별로 과거 run 검색，또는 `npm run index:runs -- <artifact>`로 수동 인덱싱
+- **쿼리**: `npm run meta:query:runs -- --owner <agent>`——agent별로 과거 run 검색，또는 `npm run meta:index:runs -- <artifact>`로 수동 인덱싱
 
 ### 3층 협업
 
@@ -702,11 +702,11 @@ flowchart TB
 
 | 명령 | 목적 |
 | --- | --- |
-| `npm run sync:runtimes` | canonical에서 4개 런타임으로 동기화 |
-| `npm run check:runtimes` | 런타임 미러 일치 여부 확인 |
-| `npm run validate` | 프로젝트 정합성 검증 |
-| `npm run verify:all` | 전체 검증 (runtime smoke 포함) |
-| `npm run doctor:governance` | 거버넌스 건강 점검 |
+| `npm run meta:sync` | canonical에서 4개 런타임으로 동기화 |
+| `npm run meta:check:runtimes` | 런타임 미러 일치 여부 확인 |
+| `npm run meta:validate` | 프로젝트 정합성 검증 |
+| `npm run meta:verify:all` | 전체 검증 (runtime smoke 포함) |
+| `npm run meta:doctor:governance` | 거버넌스 건강 점검 |
 
 ### 스킬 및 의존성
 
@@ -736,13 +736,13 @@ flowchart TB
 
 | 명령 | 목적 |
 | --- | --- |
-| `npm run validate:run -- <file.json>` | governed run 산출물 검증 |
-| `npm run eval:agents` | 경량 runtime smoke 테스트 |
-| `npm run eval:agents:live` | 실시간 prompt 포함 런타임 수락 |
+| `npm run meta:validate:run -- <file.json>` | governed run 산출물 검증 |
+| `npm run meta:eval:agents` | 경량 runtime smoke 테스트 |
+| `npm run meta:eval:agents:live` | 실시간 prompt 포함 런타임 수락 |
 | `npm run probe:clis` | 로컬 CLI 도구 탐지 |
-| `npm run test:mcp` | MCP 자체 테스트 |
-| `npm run index:runs -- <dir>` | 검증된 run 산출물 인덱스 |
-| `npm run query:runs -- --owner <agent>` | run 인덱스 조회 |
+| `npm run meta:test:mcp` | MCP 자체 테스트 |
+| `npm run meta:index:runs -- <dir>` | 검증된 run 산출물 인덱스 |
+| `npm run meta:query:runs -- --owner <agent>` | run 인덱스 조회 |
 | `npm run migrate:meta-kim -- <dir> --apply` | 이전 프롬프트 팩 가져오기 |
 
 ---

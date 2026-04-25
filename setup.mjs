@@ -23,6 +23,7 @@ import {
   rmSync,
   readdirSync,
   cpSync,
+  statSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
@@ -294,17 +295,13 @@ ${r ? `Raw error: ${r}` : ""}
       "After installation, here is what is available and how each layer activates:",
     postInstallNotesPlatformSync: "Platform capability sync:",
     platformClauleCode: "Claude Code",
-    platformClauleCodeCap:
-      "agents + skills + hooks (Layer 1 Memory auto / Layer 2 Graphify auto / Layer 3 SQL needs server startup)",
+    platformClauleCodeCap: "agents + skills + hooks",
     platformCodex: "Codex",
-    platformCodexCap:
-      "agents + skills (Layer 1 Memory needs manual hook config / Layer 2 Graphify auto / Layer 3 SQL needs server startup)",
+    platformCodexCap: "agents + skills",
     platformOpenClaw: "OpenClaw",
-    platformOpenClawCap:
-      "workspace + skills (Layer 1 Memory needs manual hook config / Layer 2 Graphify auto / Layer 3 SQL needs server startup)",
+    platformOpenClawCap: "workspace + skills",
     platformCursor: "Cursor",
-    platformCursorCap:
-      "agents + skills (Layer 1 Memory needs manual hook config / Layer 2 Graphify auto / Layer 3 SQL needs server startup)",
+    platformCursorCap: "agents + skills",
     postInstallNotesLayerActivation: "Three-layer memory activation:",
     layer1Label: "Layer 1 (Memory)",
     layer1Note: "automatic — built into Claude Code",
@@ -622,9 +619,29 @@ Possible causes:
       "migration helper: npm run migrate:meta-kim -- <source-dir> --apply",
     actionPrompt: "What would you like to do?",
     actionInstall: "Install — Full first-time setup",
+    actionInstallQuick: "Quick setup — Pick one platform, ready to use",
     actionUpdate: "Update — Refresh skills & sync tools",
     actionCheck: "Check — Verify dependencies & sync status",
     actionExit: "Exit",
+
+    npxQuickHeading: "Quick Setup",
+    npxQuickPlatformPrompt: "Which platform do you use?",
+    npxQuickPlatformClaude: "Claude Code",
+    npxQuickPlatformOpenclaw: "OpenClaw",
+    npxQuickPlatformCodex: "Codex CLI",
+    npxQuickPlatformCursor: "Cursor",
+    npxQuickPlatformAll: "All platforms",
+    npxQuickDirPrompt: "Where should I create the project?",
+    npxQuickDirDefault: "~/Desktop/Meta_Kim",
+    npxQuickCreating: "Creating project at",
+    npxQuickCopyFiles: "Copying platform files",
+    npxQuickDirExists: "Directory already exists — will update files inside",
+    npxQuickDone: "Project ready!",
+    npxQuickOpenIn: "Open your platform in this directory:",
+    npxQuickAskDeploy:
+      "Deploy runtime files to a custom directory? (e.g. Desktop)",
+    npxQuickDeployYes: "Yes, deploy to a custom directory",
+    npxQuickDeployNo: "No, skip for now",
     aboutAuthor: "About the Author",
     contactWebsite: "Website",
     contactGithub: "GitHub",
@@ -731,17 +748,13 @@ ${r ? `原始错误：${r}` : ""}
     postInstallNotesIntro: "安装完成后，各层能力的使用方式如下：",
     postInstallNotesPlatformSync: "各平台能力同步情况：",
     platformClauleCode: "Claude Code",
-    platformClauleCodeCap:
-      "agents + skills + hooks（第1层 Memory 自动 / 第2层 Graphify 自动 / 第3层 SQL 需启动服务）",
+    platformClauleCodeCap: "agents + skills + hooks",
     platformCodex: "Codex",
-    platformCodexCap:
-      "agents + skills（第1层 Memory 需手动配置 hooks / 第2层 Graphify 自动 / 第3层 SQL 需启动服务）",
+    platformCodexCap: "agents + skills",
     platformOpenClaw: "OpenClaw",
-    platformOpenClawCap:
-      "workspace + skills（第1层 Memory 需手动配置 hooks / 第2层 Graphify 自动 / 第3层 SQL 需启动服务）",
+    platformOpenClawCap: "workspace + skills",
     platformCursor: "Cursor",
-    platformCursorCap:
-      "agents + skills（第1层 Memory 需手动配置 hooks / 第2层 Graphify 自动 / 第3层 SQL 需启动服务）",
+    platformCursorCap: "agents + skills",
     postInstallNotesLayerActivation: "三层记忆激活方式：",
     layer1Label: "第一层（Memory）",
     layer1Note: "自动激活——内置于 Claude Code",
@@ -1041,9 +1054,28 @@ ${r ? `原始错误：${r}` : ""}
       "迁移助手：npm run migrate:meta-kim -- <source-dir> --apply",
     actionPrompt: "你想做什么？",
     actionInstall: "安装 — 首次完整安装",
+    actionInstallQuick: "快速配置 — 选一个平台，开箱即用",
     actionUpdate: "更新 — 刷新技能并同步配置",
     actionCheck: "检查 — 验证依赖和同步状态",
     actionExit: "退出",
+
+    npxQuickHeading: "快速配置",
+    npxQuickPlatformPrompt: "你用哪个平台？",
+    npxQuickPlatformClaude: "Claude Code",
+    npxQuickPlatformOpenclaw: "OpenClaw",
+    npxQuickPlatformCodex: "Codex CLI",
+    npxQuickPlatformCursor: "Cursor",
+    npxQuickPlatformAll: "全部平台",
+    npxQuickDirPrompt: "项目创建在哪里？",
+    npxQuickDirDefault: "~/Desktop/Meta_Kim",
+    npxQuickCreating: "正在创建项目：",
+    npxQuickCopyFiles: "正在拷贝平台文件",
+    npxQuickDirExists: "目录已存在 — 将更新其中的文件",
+    npxQuickDone: "项目就绪！",
+    npxQuickOpenIn: "在该目录打开你的平台：",
+    npxQuickAskDeploy: "要把运行时文件部署到指定目录吗？（比如桌面）",
+    npxQuickDeployYes: "是，部署到指定目录",
+    npxQuickDeployNo: "不用了，跳过",
     aboutAuthor: "关于作者",
     contactWebsite: "个人主页",
     contactGithub: "GitHub",
@@ -1157,17 +1189,13 @@ ${r ? `生エラー：${r}` : ""}
     postInstallNotesIntro: "インストール完了後、各層の使い方は以下の通りです：",
     postInstallNotesPlatformSync: "各プラットフォームの同期状況：",
     platformClauleCode: "Claude Code",
-    platformClauleCodeCap:
-      "agents + skills + hooks（第1層 Memory 自動 / 第2層 Graphify 自動 / 第3層 SQL サーバー起動必要）",
+    platformClauleCodeCap: "agents + skills + hooks",
     platformCodex: "Codex",
-    platformCodexCap:
-      "agents + skills（第1層 Memory hooks手動設定必要 / 第2層 Graphify 自動 / 第3層 SQL サーバー起動必要）",
+    platformCodexCap: "agents + skills",
     platformOpenClaw: "OpenClaw",
-    platformOpenClawCap:
-      "workspace + skills（第1層 Memory hooks手動設定必要 / 第2層 Graphify 自動 / 第3層 SQL サーバー起動必要）",
+    platformOpenClawCap: "workspace + skills",
     platformCursor: "Cursor",
-    platformCursorCap:
-      "agents + skills（第1層 Memory hooks手動設定必要 / 第2層 Graphify 自動 / 第3層 SQL サーバー起動必要）",
+    platformCursorCap: "agents + skills",
     postInstallNotesLayerActivation: "3層メモリの有効化方法：",
     layer1Label: "第1層（Memory）",
     layer1Note: "自動有効 — Claude Code に組み込み済み",
@@ -1495,9 +1523,30 @@ ${r ? `生エラー：${r}` : ""}
       "マイグレーションヘルパー：npm run migrate:meta-kim -- <source-dir> --apply",
     actionPrompt: "何をしますか？",
     actionInstall: "インストール — 初回セットアップ",
+    actionInstallQuick:
+      "クイックセットアップ — プラットフォームを選んですぐ使う",
     actionUpdate: "アップデート — スキル更新＆設定同期",
     actionCheck: "チェック — 依存関係と同期状態を確認",
     actionExit: "終了",
+
+    npxQuickHeading: "クイックセットアップ",
+    npxQuickPlatformPrompt: "どのプラットフォームを使いますか？",
+    npxQuickPlatformClaude: "Claude Code",
+    npxQuickPlatformOpenclaw: "OpenClaw",
+    npxQuickPlatformCodex: "Codex CLI",
+    npxQuickPlatformCursor: "Cursor",
+    npxQuickPlatformAll: "すべてのプラットフォーム",
+    npxQuickDirPrompt: "プロジェクトをどこに作成しますか？",
+    npxQuickDirDefault: "~/Desktop/Meta_Kim",
+    npxQuickCreating: "プロジェクトを作成中：",
+    npxQuickCopyFiles: "プラットフォームファイルをコピー中",
+    npxQuickDirExists: "ディレクトリが既に存在します — ファイルを更新します",
+    npxQuickDone: "プロジェクトの準備完了！",
+    npxQuickOpenIn: "このディレクトリでプラットフォームを開く：",
+    npxQuickAskDeploy:
+      "ランタイムファイルを指定ディレクトリにデプロイしますか？（例：デスクトップ）",
+    npxQuickDeployYes: "はい、指定ディレクトリにデプロイ",
+    npxQuickDeployNo: "スキップ",
     aboutAuthor: "作者について",
     contactWebsite: "ウェブサイト",
     contactGithub: "GitHub",
@@ -1609,17 +1658,13 @@ ${r ? `원본 오류：${r}` : ""}
     postInstallNotesIntro: "설치 완료 후 각 층의 사용 방식은 다음과 같습니다:",
     postInstallNotesPlatformSync: "각 플랫폼 동기화 현황:",
     platformClauleCode: "Claude Code",
-    platformClauleCodeCap:
-      "agents + skills + hooks (Layer 1 Memory 자동 / Layer 2 Graphify 자동 / Layer 3 SQL 서버 시작 필요)",
+    platformClauleCodeCap: "agents + skills + hooks",
     platformCodex: "Codex",
-    platformCodexCap:
-      "agents + skills (Layer 1 Memory hooks 수동 설정 필요 / Layer 2 Graphify 자동 / Layer 3 SQL 서버 시작 필요)",
+    platformCodexCap: "agents + skills",
     platformOpenClaw: "OpenClaw",
-    platformOpenClawCap:
-      "workspace + skills (Layer 1 Memory hooks 수동 설정 필요 / Layer 2 Graphify 자동 / Layer 3 SQL 서버 시작 필요)",
+    platformOpenClawCap: "workspace + skills",
     platformCursor: "Cursor",
-    platformCursorCap:
-      "agents + skills (Layer 1 Memory hooks 수동 설정 필요 / Layer 2 Graphify 자동 / Layer 3 SQL 서버 시작 필요)",
+    platformCursorCap: "agents + skills",
     postInstallNotesLayerActivation: "3층 메모리 활성화 방식:",
     layer1Label: "제1층 (Memory)",
     layer1Note: "자동 활성화 — Claude Code에 내장됨",
@@ -1929,9 +1974,29 @@ ${r ? `원본 오류：${r}` : ""}
       "마이그레이션 도우미：npm run migrate:meta-kim -- <source-dir> --apply",
     actionPrompt: "무엇을 하시겠습니까?",
     actionInstall: "설치 — 최초 전체 설정",
+    actionInstallQuick: "빠른 설정 — 플랫폼 하나 선택, 바로 사용",
     actionUpdate: "업데이트 — 스킬 갱신 및 설정 동기화",
     actionCheck: "확인 — 의존성 및 동기화 상태 검증",
     actionExit: "종료",
+
+    npxQuickHeading: "빠른 설정",
+    npxQuickPlatformPrompt: "어떤 플랫폼을 사용하시나요?",
+    npxQuickPlatformClaude: "Claude Code",
+    npxQuickPlatformOpenclaw: "OpenClaw",
+    npxQuickPlatformCodex: "Codex CLI",
+    npxQuickPlatformCursor: "Cursor",
+    npxQuickPlatformAll: "모든 플랫폼",
+    npxQuickDirPrompt: "프로젝트를 어디에 만들까요?",
+    npxQuickDirDefault: "~/Desktop/Meta_Kim",
+    npxQuickCreating: "프로젝트 생성 중:",
+    npxQuickCopyFiles: "플랫폼 파일 복사 중",
+    npxQuickDirExists: "디렉터리가 이미 존재합니다 — 파일을 업데이트합니다",
+    npxQuickDone: "프로젝트 준비 완료!",
+    npxQuickOpenIn: "이 디렉터리에서 플랫폼 열기:",
+    npxQuickAskDeploy:
+      "런타임 파일을 지정 디렉터리에 배포할까요? (예: 바탕 화면)",
+    npxQuickDeployYes: "네, 지정 디렉터리에 배포",
+    npxQuickDeployNo: "건너뛰기",
     aboutAuthor: "작성자 소개",
     contactWebsite: "웹사이트",
     contactGithub: "GitHub",
@@ -1941,6 +2006,13 @@ ${r ? `원본 오류：${r}` : ""}
 };
 
 let t = I18N.en; // default, overwritten by selectLanguage()
+let quickDeployDir = null; // set by npx quick deploy — target directory for the user
+
+function detectNpxMode() {
+  const normalized = PROJECT_DIR.replace(/\\/g, "/").toLowerCase();
+  return normalized.includes("_npx") || normalized.includes("npm-cache");
+}
+
 if (langArg) {
   const code = normalizeLangCliArg(langArg);
   const langMatch = LANGUAGES.find((l) => l.code === code);
@@ -2480,6 +2552,209 @@ async function withProgress(label, fn) {
     console.log(`${C.red}✗${C.reset}`);
     throw err;
   }
+}
+
+// ── Quick deploy (npx mode) ────────────────────────────
+
+const QUICK_PLATFORMS = [
+  { id: "claude", labelKey: "npxQuickPlatformClaude" },
+  { id: "openclaw", labelKey: "npxQuickPlatformOpenclaw" },
+  { id: "codex", labelKey: "npxQuickPlatformCodex" },
+  { id: "cursor", labelKey: "npxQuickPlatformCursor" },
+  { id: "all", labelKey: "npxQuickPlatformAll" },
+];
+
+async function askQuickPlatform() {
+  const labels = QUICK_PLATFORMS.map((p) => t[p.labelKey]);
+  const idx = await askSelect(t.npxQuickPlatformPrompt, labels);
+  return QUICK_PLATFORMS[idx].id;
+}
+
+async function askTargetDirectory() {
+  const rawDefault = t.npxQuickDirDefault;
+  const expandedDefault = rawDefault
+    .replace(/^~\//, homedir() + "/")
+    .replace(/^~\\/, homedir() + "\\");
+  const answer = await ask(
+    `${t.npxQuickDirPrompt} ${C.dim}[${rawDefault}]${C.reset}`,
+  );
+  const raw = (answer || "").trim();
+  if (!raw) return expandedDefault;
+  if (raw.startsWith("~/")) return join(homedir(), raw.slice(2));
+  return resolve(raw);
+}
+
+function copyDirRecursive(src, dest) {
+  if (!existsSync(src)) return 0;
+  mkdirSync(dest, { recursive: true });
+  let count = 0;
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
+    const srcPath = join(src, entry.name);
+    const destPath = join(dest, entry.name);
+    if (entry.isDirectory()) {
+      count += copyDirRecursive(srcPath, destPath);
+    } else {
+      cpSync(srcPath, destPath);
+      count++;
+    }
+  }
+  return count;
+}
+
+function deployPlatformFiles(platformId, targetDir) {
+  let fileCount = 0;
+  const copyIfExists = (srcRel, destRel) => {
+    const src = join(PROJECT_DIR, srcRel);
+    const dest = join(targetDir, destRel);
+    if (!existsSync(src)) return;
+    mkdirSync(dirname(dest), { recursive: true });
+    if (existsSync(src) && statSync(src).isDirectory()) {
+      fileCount += copyDirRecursive(src, dest);
+    } else {
+      cpSync(src, dest);
+      fileCount++;
+    }
+  };
+
+  if (platformId === "claude" || platformId === "all") {
+    copyIfExists(".claude", ".claude");
+    if (existsSync(join(PROJECT_DIR, ".mcp.json")))
+      copyIfExists(".mcp.json", ".mcp.json");
+  }
+  if (platformId === "openclaw" || platformId === "all") {
+    copyIfExists("openclaw", "openclaw");
+  }
+  if (platformId === "codex" || platformId === "all") {
+    copyIfExists(".codex", ".codex");
+    copyIfExists(".agents", ".agents");
+  }
+  if (platformId === "cursor" || platformId === "all") {
+    copyIfExists(".cursor", ".cursor");
+  }
+  return fileCount;
+}
+
+async function askDeployDirectory() {
+  console.log("");
+
+  const choiceIdx = await askSelect(t.npxQuickAskDeploy, [
+    t.npxQuickDeployYes,
+    t.npxQuickDeployNo,
+  ]);
+  if (choiceIdx !== 0) {
+    console.log("");
+    return null;
+  }
+
+  const targetDir = await askTargetDirectory();
+  console.log("");
+  return targetDir;
+}
+
+async function copyToDeployDir(activeTargets, targetDir) {
+  if (existsSync(targetDir)) {
+    console.log(`${C.dim}  ${t.npxQuickDirExists}${C.reset}`);
+  } else {
+    mkdirSync(targetDir, { recursive: true });
+  }
+
+  console.log(`${C.dim}  ${t.npxQuickCreating} ${targetDir}${C.reset}`);
+
+  for (const platformId of activeTargets) {
+    await withProgress(`  ${t.npxQuickCopyFiles} (${platformId})`, async () => {
+      const count = deployPlatformFiles(platformId, targetDir);
+      return count > 0;
+    });
+  }
+  quickDeployDir = targetDir;
+
+  console.log(`${C.green}${C.bold}✓ ${t.npxQuickDone}${C.reset}`);
+  console.log(`${C.dim}  ${targetDir}${C.reset}`);
+  console.log("");
+}
+
+async function runQuickDeploy() {
+  heading(t.npxQuickHeading);
+
+  const platformId = await askQuickPlatform();
+  const targetDir = await askTargetDirectory();
+
+  if (existsSync(targetDir)) {
+    console.log(`${C.dim}  ${t.npxQuickDirExists}${C.reset}`);
+  } else {
+    mkdirSync(targetDir, { recursive: true });
+  }
+
+  console.log(`${C.dim}  ${t.npxQuickCreating} ${targetDir}${C.reset}`);
+
+  // Run normal install to PROJECT_DIR first (generates runtime files)
+  const runtimes = await detectRuntimes();
+
+  // npm install deps
+  await withProgress(t.progressNpmInstall, async () => {
+    if (
+      existsSync(join(PROJECT_DIR, "node_modules", "@modelcontextprotocol"))
+    ) {
+      return true;
+    }
+    info(t.runningNpm);
+    const result = spawnSync("npm", ["install"], {
+      cwd: PROJECT_DIR,
+      stdio: "inherit",
+      shell: isWin,
+    });
+    return result.status === 0;
+  });
+
+  // Sync runtimes to PROJECT_DIR
+  await withProgress(t.progressSyncConfig, async () => {
+    const configResult = await autoConfigure("project");
+    return !!configResult;
+  });
+
+  // Copy platform files to target directory
+  await withProgress(t.npxQuickCopyFiles, async () => {
+    const count = deployPlatformFiles(platformId, targetDir);
+    quickDeployDir = targetDir;
+    return count > 0;
+  });
+
+  // Install global skills
+  await withProgress(t.progressPrepareDir, async () => {
+    if (!existsSync(SKILLS_DIR)) mkdirSync(SKILLS_DIR, { recursive: true });
+    ok(t.globalDirReady(SKILLS_DIR));
+    return true;
+  });
+
+  await withProgress(t.progressInstallSkills, async () => {
+    const localOverrides = await loadLocalOverrides();
+    const proxyEnv = localOverrides.gitProxy
+      ? { META_KIM_GIT_PROXY: localOverrides.gitProxy }
+      : {};
+    const targets = platformId === "all" ? "claude" : platformId;
+    const installResult = runNodeScript(
+      "scripts/install-global-skills-all-runtimes.mjs",
+      ["--targets", targets, "--skills", ""],
+      proxyEnv,
+    );
+    return installResult.status === 0;
+  });
+
+  await withProgress(t.progressSyncMeta, () => {
+    const targets = platformId === "all" ? "claude" : platformId;
+    const syncResult = runNodeScript("scripts/sync-global-meta-theory.mjs", [
+      "--targets",
+      targets,
+    ]);
+    return syncResult.status === 0;
+  });
+
+  console.log("");
+  console.log(`${C.green}${C.bold}✓ ${t.npxQuickDone}${C.reset}`);
+  console.log(`${C.dim}  ${targetDir}${C.reset}`);
+  console.log("");
+
+  showNextSteps(runtimes);
 }
 
 // ── Install scope selection ─────────────────────────────
@@ -3859,12 +4134,16 @@ async function validate() {
 }
 
 function showNextSteps(runtimes) {
+  const displayDir = quickDeployDir || PROJECT_DIR;
+
   console.log(`${C.bold}${t.howToUse}${C.reset}
 `);
 
   if (runtimes.claude) {
-    console.log(`${C.dim}1.${C.reset} ${t.step1Open}`);
-    console.log(`${C.dim}cd "${PROJECT_DIR}" && claude${C.reset}`);
+    console.log(
+      `${C.dim}1.${C.reset} ${quickDeployDir ? t.npxQuickOpenIn : t.step1Open}`,
+    );
+    console.log(`${C.dim}cd "${displayDir}" && claude${C.reset}`);
     console.log("");
     console.log(`${C.dim}2.${C.reset} ${t.step2Try}`);
     console.log(`${C.dim}/meta-theory review my agent definitions${C.reset}`);
@@ -3902,18 +4181,27 @@ function showNextSteps(runtimes) {
   console.log("");
   console.log(`${C.bold}${t.usefulCommands}${C.reset}
 `);
-  console.log(
-    `${C.dim}node setup.mjs --update          # ${t.cmdUpdate}${C.reset}`,
-  );
-  console.log(
-    `${C.dim}node setup.mjs --check           # ${t.cmdCheck}${C.reset}`,
-  );
-  console.log(
-    `${C.dim}npm run meta:doctor:governance    # ${t.cmdDoctor}${C.reset}`,
-  );
-  console.log(
-    `${C.dim}npm run meta:verify:all           # ${t.cmdVerify}${C.reset}`,
-  );
+  if (quickDeployDir) {
+    console.log(
+      `${C.dim}npx --yes github:KimYx0207/Meta_Kim meta-kim -- --update${C.reset}`,
+    );
+    console.log(
+      `${C.dim}npx --yes github:KimYx0207/Meta_Kim meta-kim -- --check${C.reset}`,
+    );
+  } else {
+    console.log(
+      `${C.dim}node setup.mjs --update          # ${t.cmdUpdate}${C.reset}`,
+    );
+    console.log(
+      `${C.dim}node setup.mjs --check           # ${t.cmdCheck}${C.reset}`,
+    );
+    console.log(
+      `${C.dim}npm run meta:doctor:governance    # ${t.cmdDoctor}${C.reset}`,
+    );
+    console.log(
+      `${C.dim}npm run meta:verify:all           # ${t.cmdVerify}${C.reset}`,
+    );
+  }
 
   console.log("");
   console.log(`${C.bold}${t.postInstallNotesHeading}${C.reset}`);
@@ -3949,7 +4237,7 @@ function showNextSteps(runtimes) {
   console.log("");
   console.log(`${C.bold}${C.cyan}● ${t.installLocationsHeading}${C.reset}`);
   console.log(
-    `${C.dim}• ${t.installLocationsProject}: .claude/  .codex/  .cursor/  openclaw/${C.reset}`,
+    `${C.dim}• ${t.installLocationsProject}: ${displayDir}${C.reset}`,
   );
   console.log(
     `${C.dim}• ${t.installLocationsGlobal}: ~/.claude/skills/  ~/.codex/skills/  ~/.cursor/skills/  ~/.openclaw/skills/${C.reset}`,
@@ -4240,6 +4528,9 @@ async function runInstall() {
     selectedSkillIds = await resolveSelectedSkillDependencyIds();
   }
 
+  // Ask deploy directory BEFORE confirm (so user decides upfront)
+  const deployDir = await askDeployDirectory();
+
   // Show installation overview
   showInstallOverview(activeTargets, installScope, selectedSkillIds);
   await showExistingFootprint(installScope);
@@ -4386,23 +4677,10 @@ async function runInstall() {
 
   console.log(`\n${C.bold}${C.green}✓ ${t.installComplete}${C.reset}\n`);
 
-  // Post-install activation status table
-  const activationStatus = `
-┌─────────────────────────────────────────────────────────────┐
-│  Meta_Kim 安装概览                                           │
-├─────────────────────────────────────────────────────────────┤
-│  ✓ Layer 1 (Memory)      已自动激活 — 记忆在本次会话生效      │
-│  ✓ Layer 2 (Graphify)    已安装 — 下次 git 操作时生成图谱     │
-│  ○ Layer 3 (SQLite-Vec)  未启动 — 需要运行 MCP 服务           │
-│     启动命令: npm run meta:doctor  选择 "运行环境诊断"         │
-├─────────────────────────────────────────────────────────────┤
-│  接下来:                                                    │
-│  1. 运行 npm run meta:check 验证安装状态                    │
-│  2. 在当前目录启动 Claude Code 开始使用                      │
-│  3. 遇到问题? 运行 npm run meta:doctor                     │
-└─────────────────────────────────────────────────────────────┘
-`;
-  console.log(activationStatus);
+  // Copy runtime files to user-chosen directory (if opted in earlier)
+  if (deployDir) {
+    await copyToDeployDir(activeTargets, deployDir);
+  }
 
   showNextSteps(runtimes);
 }
@@ -4420,6 +4698,9 @@ async function runUpdate() {
 
   // Ask proxy configuration (saves to localOverrides)
   await askProxyConfig();
+
+  // Ask deploy directory BEFORE update starts
+  const deployDir = await askDeployDirectory();
 
   // ── 1. npm install (always — new code may have new deps) ────────────
   info(t.updateNpm);
@@ -4509,6 +4790,11 @@ async function runUpdate() {
   const { supportedTargets } = await resolveTargetContext(args);
   checkSync(runtimes, supportedTargets);
   console.log(`\n${C.bold}${C.green}✓ ${t.updateComplete}${C.reset}\n`);
+
+  // Copy runtime files to user-chosen directory (if opted in earlier)
+  if (deployDir) {
+    await copyToDeployDir(activeTargets, deployDir);
+  }
 }
 
 async function runCheck() {
