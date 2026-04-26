@@ -68,7 +68,7 @@ describe("sync-runtimes / inferProjectCategory", () => {
       CATEGORIES.D,
     );
     assert.equal(
-      inferProjectCategory(p(".codex/skills/meta-theory.md"), REPO),
+      inferProjectCategory(p(".codex/skills/meta-theory/SKILL.md"), REPO),
       CATEGORIES.D,
     );
     assert.equal(
@@ -80,7 +80,7 @@ describe("sync-runtimes / inferProjectCategory", () => {
       CATEGORIES.D,
     );
     assert.equal(
-      inferProjectCategory(p("openclaw/skills/meta-theory.md"), REPO),
+      inferProjectCategory(p("openclaw/skills/meta-theory/SKILL.md"), REPO),
       CATEGORIES.D,
     );
   });

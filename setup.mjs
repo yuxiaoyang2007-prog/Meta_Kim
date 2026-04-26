@@ -16,7 +16,8 @@
  *   META_KIM_PROMPT_INSTALL_SCOPE=1 / META_KIM_PROMPT_PROXY=1
  */
 
-import { execSync, spawnSync } from "node:child_process";
+import { execSync, spawnSync, spawn } from "node:child_process";
+import http from "node:http";
 import {
   existsSync,
   mkdirSync,
@@ -379,11 +380,11 @@ ${r ? `Raw error: ${r}` : ""}
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
     syncCodexAgents: (n) => `Codex agents: ${n}/8 .toml files`,
-    syncCodexSkills: "Codex skills/meta-theory.md",
+    syncCodexSkills: "Codex skills/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw workspaces: ${n}/8 agents — each folder has the 9 required .md files (BOOT, SOUL, …)`,
     syncOpenclawSkill: "OpenClaw shared meta-theory",
-    syncSharedSkills: "Shared skills/meta-theory.md",
+    syncSharedSkills: "Shared skills/meta-theory/SKILL.md",
     syncCursorAgents: (n) => `Cursor agents: ${n}/8 .md files`,
     syncCursorSkills: "Cursor skills/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
@@ -446,6 +447,8 @@ Possible causes:
       "MCP Memory Service installation failed (non-blocking)",
     mcpMemoryAlreadyInstalled: (v) =>
       `MCP Memory Service ${v} — already installed`,
+    mcpMemoryStopping: "Stopping running MCP Memory Service before upgrade...",
+    mcpMemoryStopped: "MCP Memory Service stopped",
     mcpMemoryUpgrading: "Upgrading MCP Memory Service to latest version...",
     mcpMemoryUpgraded: (v) => `MCP Memory Service upgraded to ${v}`,
     mcpMemoryUpgradeFailed: "MCP Memory Service upgrade failed (non-blocking)",
@@ -504,6 +507,7 @@ Possible causes:
     progressPrepareDir: "Prepare global skills directory",
     progressNpmInstall: "Install npm dependencies",
     progressSyncConfig: "Sync tool configurations",
+    progressCleanupLegacy: "Clean up legacy skill files",
     progressInstallSkills: "Install global skills (may take several minutes)",
     progressSyncMeta: "Sync meta-theory",
     progressValidate: "Validate installation",
@@ -825,11 +829,11 @@ ${r ? `原始错误：${r}` : ""}
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
     syncCodexAgents: (n) => `Codex 智能体: ${n}/8 .toml 文件`,
-    syncCodexSkills: "Codex 技能/meta-theory.md",
+    syncCodexSkills: "Codex 技能/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw 工作区：${n}/8 个智能体，各目录 9 个必备 Markdown 已齐（含 BOOT、SOUL 等；不含子文件夹里的额外文件）`,
     syncOpenclawSkill: "OpenClaw 共享 meta-theory",
-    syncSharedSkills: "共享技能/meta-theory.md",
+    syncSharedSkills: "共享技能/meta-theory/SKILL.md",
     syncCursorAgents: (n) => `Cursor 智能体: ${n}/8 .md 文件`,
     syncCursorSkills: "Cursor 技能/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
@@ -886,6 +890,8 @@ ${r ? `原始错误：${r}` : ""}
     mcpMemoryInstalled: "MCP Memory Service 已安装",
     mcpMemoryInstallFailed: "MCP Memory Service 安装失败（不影响其他功能）",
     mcpMemoryAlreadyInstalled: (v) => `MCP Memory Service ${v} — 已安装`,
+    mcpMemoryStopping: "升级前正在停止 MCP Memory Service...",
+    mcpMemoryStopped: "MCP Memory Service 已停止",
     mcpMemoryUpgrading: "正在升级 MCP Memory Service 至最新版本...",
     mcpMemoryUpgraded: (v) => `MCP Memory Service 已升级至 ${v}`,
     mcpMemoryUpgradeFailed: "MCP Memory Service 升级失败（不影响其他功能）",
@@ -942,6 +948,7 @@ ${r ? `原始错误：${r}` : ""}
     progressPrepareDir: "准备全局技能目录",
     progressNpmInstall: "安装 npm 依赖",
     progressSyncConfig: "同步配置文件",
+    progressCleanupLegacy: "清理旧版技能文件",
     progressInstallSkills: "安装全局技能（可能需要几分钟）",
     progressSyncMeta: "同步 meta-theory",
     progressValidate: "验证安装",
@@ -1273,11 +1280,11 @@ ${r ? `生エラー：${r}` : ""}
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
     syncCodexAgents: (n) => `Codex エージェント: ${n}/8 .toml ファイル`,
-    syncCodexSkills: "Codex スキル/meta-theory.md",
+    syncCodexSkills: "Codex スキル/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw ワークスペース: ${n}/8 エージェント — 各フォルダに必須の .md 9 件（BOOT、SOUL など）`,
     syncOpenclawSkill: "OpenClaw 共有 meta-theory",
-    syncSharedSkills: "共有スキル/meta-theory.md",
+    syncSharedSkills: "共有スキル/meta-theory/SKILL.md",
     syncCursorAgents: (n) => `Cursor エージェント: ${n}/8 .md ファイル`,
     syncCursorSkills: "Cursor スキル/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
@@ -1339,6 +1346,8 @@ ${r ? `生エラー：${r}` : ""}
       "MCP Memory Service インストール失敗（非ブロッキング）",
     mcpMemoryAlreadyInstalled: (v) =>
       `MCP Memory Service ${v} — すでにインストール済み`,
+    mcpMemoryStopping: "アップグレード前に MCP Memory Service を停止中...",
+    mcpMemoryStopped: "MCP Memory Service を停止しました",
     mcpMemoryUpgrading:
       "MCP Memory Service を最新バージョンにアップグレード中...",
     mcpMemoryUpgraded: (v) =>
@@ -1407,6 +1416,7 @@ ${r ? `生エラー：${r}` : ""}
     progressPrepareDir: "グローバルスキルディレクトリを準備",
     progressNpmInstall: "npm依存関係をインストール",
     progressSyncConfig: "設定を同期",
+    progressCleanupLegacy: "レガシースキルファイルをクリーンアップ",
     progressInstallSkills:
       "グローバルスキルをインストール（数分かかる場合があります）",
     progressSyncMeta: "meta-theory を同期",
@@ -1737,11 +1747,11 @@ ${r ? `원본 오류：${r}` : ""}
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
     syncCodexAgents: (n) => `Codex 에이전트: ${n}/8 .toml 파일`,
-    syncCodexSkills: "Codex 스킬/meta-theory.md",
+    syncCodexSkills: "Codex 스킬/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw 워크스페이스: ${n}/8 에이전트 — 각 폴더에 필수 .md 9개(BOOT, SOUL 등)`,
     syncOpenclawSkill: "OpenClaw 공유 meta-theory",
-    syncSharedSkills: "공유 스킬/meta-theory.md",
+    syncSharedSkills: "공유 스킬/meta-theory/SKILL.md",
     syncCursorAgents: (n) => `Cursor 에이전트: ${n}/8 .md 파일`,
     syncCursorSkills: "Cursor 스킬/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
@@ -1801,6 +1811,8 @@ ${r ? `원본 오류：${r}` : ""}
     mcpMemoryInstalled: "MCP Memory Service 설치 완료",
     mcpMemoryInstallFailed: "MCP Memory Service 설치 실패 (비차단)",
     mcpMemoryAlreadyInstalled: (v) => `MCP Memory Service ${v} — 이미 설치됨`,
+    mcpMemoryStopping: "업그레이드 전 MCP Memory Service 중지 중...",
+    mcpMemoryStopped: "MCP Memory Service 중지됨",
     mcpMemoryUpgrading:
       "MCP Memory Service을(를) 최신 버전으로 업그레이드 중...",
     mcpMemoryUpgraded: (v) =>
@@ -1861,6 +1873,7 @@ ${r ? `원본 오류：${r}` : ""}
     progressPrepareDir: "전역 스킬 디렉토리 준비",
     progressNpmInstall: "npm 의존성 설치",
     progressSyncConfig: "설정 동기화",
+    progressCleanupLegacy: "레거시 스킬 파일 정리",
     progressInstallSkills: "전역 스킬 설치(몇 분 소요될 수 있음)",
     progressSyncMeta: "meta-theory 동기화",
     progressValidate: "설치 검증",
@@ -2706,6 +2719,13 @@ async function runQuickDeploy() {
     return result.status === 0;
   });
 
+  // Clean up legacy skill files before sync
+  await withProgress(t.progressCleanupLegacy, () => {
+    const n = cleanupLegacySkills("both");
+    if (n > 0) ok(`Cleaned ${n} legacy file(s)`);
+    return true;
+  });
+
   // Sync runtimes to PROJECT_DIR
   await withProgress(t.progressSyncConfig, async () => {
     const configResult = await autoConfigure("project");
@@ -2981,7 +3001,7 @@ function checkSync(
 
     const codexSkillPath = join(
       PROJECT_DIR,
-      ".agents",
+      ".codex",
       "skills",
       "meta-theory",
       "SKILL.md",
@@ -3251,6 +3271,72 @@ function runNodeScript(scriptRelative, extraArgs = [], envOverrides = {}) {
     },
   };
   return spawnSync(spawnConfig.command, spawnConfig.args, mergedOptions);
+}
+
+// ── Legacy skill file cleanup ────────────────────────────
+// Precise removal of old single-file skill format that was replaced
+// by directory format (meta-theory.md → meta-theory/SKILL.md).
+
+const LEGACY_PROJECT_PATHS = [
+  join(PROJECT_DIR, ".claude", "skills", "meta-theory.md"),
+  join(PROJECT_DIR, ".codex", "skills", "meta-theory.md"),
+  join(PROJECT_DIR, ".codex", "skills", "references"),
+  join(PROJECT_DIR, "openclaw", "skills", "meta-theory.md"),
+  join(PROJECT_DIR, "openclaw", "skills", "references"),
+  join(PROJECT_DIR, ".cursor", "skills", "meta-theory.md"),
+];
+
+const LEGACY_GLOBAL_PATHS = [
+  {
+    id: "claude",
+    file: join(homedir(), ".claude", "skills", "meta-theory.md"),
+  },
+  {
+    id: "codex",
+    file: join(homedir(), ".codex", "skills", "meta-theory.md"),
+    dir: join(homedir(), ".codex", "skills", "references"),
+  },
+  {
+    id: "openclaw",
+    file: join(homedir(), ".openclaw", "skills", "meta-theory.md"),
+    dir: join(homedir(), ".openclaw", "skills", "references"),
+  },
+  {
+    id: "cursor",
+    file: join(homedir(), ".cursor", "skills", "meta-theory.md"),
+  },
+];
+
+function cleanupLegacySkills(scope = "project") {
+  let cleaned = 0;
+
+  if (scope === "project" || scope === "both") {
+    for (const p of LEGACY_PROJECT_PATHS) {
+      if (!existsSync(p)) continue;
+      try {
+        rmSync(p, { recursive: true, force: true });
+        cleaned++;
+      } catch {
+        // Best-effort: locked or permission-denied is non-fatal
+      }
+    }
+  }
+
+  if (scope === "global" || scope === "both") {
+    for (const { file, dir } of LEGACY_GLOBAL_PATHS) {
+      for (const p of [file, dir]) {
+        if (!existsSync(p)) continue;
+        try {
+          rmSync(p, { recursive: true, force: true });
+          cleaned++;
+        } catch {
+          // Best-effort
+        }
+      }
+    }
+  }
+
+  return cleaned;
 }
 
 // ── Step 3: Auto-configure project files ────────────────
@@ -3800,9 +3886,28 @@ function checkMcpMemoryService(python) {
 
 function findMemoryBinPath(resolved) {
   const plat = platform();
-  const pythonCmd = resolved.python.command || resolved.python;
-  const pythonDir = dirname(pythonCmd);
   const binName = plat === "win32" ? "memory.exe" : "memory";
+
+  // Strategy 1: resolve python executable, then check nearby directories
+  let pythonCmd = resolved.python.command || resolved.python;
+  if (
+    !/\//.test(pythonCmd) &&
+    !/\\/.test(pythonCmd) &&
+    !/[A-Za-z]:/.test(pythonCmd)
+  ) {
+    try {
+      const launcher = resolved.python;
+      const result = spawnSync(
+        launcher.command,
+        [...launcher.args, "-c", "import sys; print(sys.executable)"],
+        { encoding: "utf8", shell: false },
+      );
+      if (result.status === 0 && result.stdout.trim()) {
+        pythonCmd = result.stdout.trim();
+      }
+    } catch {}
+  }
+  const pythonDir = dirname(pythonCmd);
 
   const sameDir = join(pythonDir, binName);
   if (existsSync(sameDir)) return sameDir;
@@ -3815,7 +3920,42 @@ function findMemoryBinPath(resolved) {
   const binDir = join(pythonDir, "..", "bin", binName);
   if (existsSync(binDir)) return resolve(binDir);
 
+  // Strategy 2: search system PATH (handles cross-install pip --user case)
+  const whichCmd = plat === "win32" ? "where" : "which";
+  try {
+    const result = spawnSync(whichCmd, [binName], {
+      encoding: "utf8",
+      shell: true,
+    });
+    if (result.status === 0 && result.stdout.trim()) {
+      const found = result.stdout.trim().split(/\r?\n/)[0];
+      if (found && existsSync(found)) return found;
+    }
+  } catch {}
+
   return null;
+}
+
+function stopMcpMemoryService() {
+  const plat = platform();
+  try {
+    if (plat === "win32") {
+      execSync("taskkill /F /IM memory.exe", { stdio: "pipe" });
+    } else if (plat === "darwin") {
+      try {
+        execSync(
+          "launchctl unload ~/Library/LaunchAgents/com.meta-kim.mcp-memory-service.plist 2>/dev/null",
+          { stdio: "pipe" },
+        );
+      } catch {}
+      execSync("pkill -f 'memory server --http'", { stdio: "pipe" });
+    } else {
+      execSync("pkill -f 'memory server --http'", { stdio: "pipe" });
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function startMcpMemoryServiceBackground(resolved) {
@@ -3828,33 +3968,31 @@ async function startMcpMemoryServiceBackground(resolved) {
 
   info(t.mcpMemoryAutoStarting);
   const env = { ...process.env, MCP_ALLOW_ANONYMOUS_ACCESS: "true" };
-  const plat = platform();
 
   try {
-    if (plat === "win32") {
-      execSync(`start /B "" "${memoryBin}" server --http`, {
-        env,
-        stdio: "ignore",
-      });
-    } else {
-      execSync(`nohup "${memoryBin}" server --http >/dev/null 2>&1 &`, {
-        env,
-        stdio: "ignore",
-        shell: "/bin/bash",
-      });
-    }
+    const child = spawn(memoryBin, ["server", "--http"], {
+      env,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.unref();
   } catch {
     // Background start may report errors but still succeed
   }
 
-  await new Promise((r) => setTimeout(r, 4000));
+  // Poll health endpoint — service may need several seconds to initialize
+  const POLL_INTERVAL = 1500;
+  const POLL_MAX_MS = 10000;
+  const pollStart = Date.now();
+  let healthy = false;
 
-  try {
-    const healthy = await new Promise((resolve) => {
-      const http = require("http");
+  while (Date.now() - pollStart < POLL_MAX_MS) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+    healthy = await new Promise((resolve) => {
       const req = http.get(
         "http://127.0.0.1:8000/api/health",
-        { timeout: 5000 },
+        { timeout: 3000 },
         (res) => {
           let body = "";
           res.on("data", (c) => (body += c));
@@ -3867,14 +4005,15 @@ async function startMcpMemoryServiceBackground(resolved) {
         resolve(false);
       });
     });
+    if (healthy) break;
+  }
 
-    if (healthy) {
-      ok(t.mcpMemoryAutoStarted);
-      const bootOk = configureBootAutoStart(memoryBin);
-      if (bootOk) ok(t.mcpMemoryAutoStartBoot);
-      return;
-    }
-  } catch {}
+  if (healthy) {
+    ok(t.mcpMemoryAutoStarted);
+    const bootOk = configureBootAutoStart(memoryBin);
+    if (bootOk) ok(t.mcpMemoryAutoStartBoot);
+    return;
+  }
 
   warn(t.mcpMemoryAutoStartFailed);
   info(t.mcpMemoryAutoStartManual);
@@ -3965,6 +4104,13 @@ async function installMcpMemoryServiceStep(inUpdateMode = false) {
   const existing = checkMcpMemoryService(python);
   if (existing.installed) {
     if (inUpdateMode) {
+      // Stop running service before upgrading (Windows locks the binary)
+      info(t.mcpMemoryStopping);
+      const stopped = stopMcpMemoryService();
+      if (stopped) {
+        ok(t.mcpMemoryStopped);
+        await new Promise((r) => setTimeout(r, 2000));
+      }
       // Upgrade in update mode
       info(t.mcpMemoryUpgrading);
       const upgradeResult = runPythonModule(python, [
@@ -4574,6 +4720,13 @@ async function runInstall() {
     });
 
     stepNum++;
+    await withProgress(t.stepLabel(stepNum, t.progressCleanupLegacy), () => {
+      const n = cleanupLegacySkills(installScope);
+      if (n > 0) ok(`Cleaned ${n} legacy file(s)`);
+      return true;
+    });
+
+    stepNum++;
     await withProgress(t.stepLabel(stepNum, t.progressSyncConfig), async () => {
       const configResult = await autoConfigure(installScope);
       if (!configResult) {
@@ -4724,6 +4877,10 @@ async function runUpdate() {
   // ── 2.5 [Optional] MCP Memory Service (Layer 3) ─────────────────
   console.log("");
   await installMcpMemoryServiceStep(true);
+
+  // ── 2.8. Clean up legacy skill files ───────────────────────────────
+  const legacyCount = cleanupLegacySkills(updateScope);
+  if (legacyCount > 0) ok(`Cleaned ${legacyCount} legacy file(s)`);
 
   // ── 3. sync-runtimes (scope from user selection) ──────────────────
   if (updateScope === "global") {

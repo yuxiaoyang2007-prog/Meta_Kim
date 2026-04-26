@@ -106,8 +106,20 @@ async function resolveTargets() {
 
   cleanupTargets = [
     {
+      label: "legacy Claude Code flat skill",
+      dir: path.join(runtimeHomes.claude.dir, "skills", "meta-theory.md"),
+    },
+    {
+      label: "legacy Codex flat skill",
+      dir: path.join(runtimeHomes.codex.dir, "skills", "meta-theory.md"),
+    },
+    {
       label: "legacy OpenClaw flat skill",
       dir: path.join(runtimeHomes.openclaw.dir, "skills", "meta-theory.md"),
+    },
+    {
+      label: "legacy Cursor flat skill",
+      dir: path.join(runtimeHomes.cursor.dir, "skills", "meta-theory.md"),
     },
   ];
 }

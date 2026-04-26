@@ -27,14 +27,63 @@ const REQUIRED_WORKSPACE_FILES = [
 ];
 
 const ROLE_CONTRACT_MARKERS = {
-  "meta-warden": ["## Required Deliverables", "Participation Summary", "Gate Decisions", "Escalation Decisions", "Final Synthesis"],
-  "meta-conductor": ["## Required Deliverables", "Dispatch Board", "Card Deck", "Worker Task Board", "Handoff Plan"],
-  "meta-genesis": ["## Required Deliverables", "SOUL.md Draft", "Boundary Definition", "Reasoning Rules", "Stress-Test Record"],
-  "meta-artisan": ["## Required Deliverables", "Skill Loadout", "MCP / Tool Loadout", "Fallback Plan", "Capability Gap List", "Adoption Notes"],
-  "meta-sentinel": ["## Required Deliverables", "Threat Model", "Permission Matrix", "Hook Configuration", "Rollback Rules"],
-  "meta-librarian": ["## Required Deliverables", "Memory Architecture", "Continuity Protocol", "Retention Policy", "Recovery Evidence"],
-  "meta-prism": ["## Required Deliverables", "Assertion Report", "Verification Closure Packet", "Drift Findings", "Closure Conditions"],
-  "meta-scout": ["## Required Deliverables", "Capability Baseline", "Candidate Comparison", "Security Notes", "Adoption Brief"],
+  "meta-warden": [
+    "## Required Deliverables",
+    "Participation Summary",
+    "Gate Decisions",
+    "Escalation Decisions",
+    "Final Synthesis",
+  ],
+  "meta-conductor": [
+    "## Required Deliverables",
+    "Dispatch Board",
+    "Card Deck",
+    "Worker Task Board",
+    "Handoff Plan",
+  ],
+  "meta-genesis": [
+    "## Required Deliverables",
+    "SOUL.md Draft",
+    "Boundary Definition",
+    "Reasoning Rules",
+    "Stress-Test Record",
+  ],
+  "meta-artisan": [
+    "## Required Deliverables",
+    "Skill Loadout",
+    "MCP / Tool Loadout",
+    "Fallback Plan",
+    "Capability Gap List",
+    "Adoption Notes",
+  ],
+  "meta-sentinel": [
+    "## Required Deliverables",
+    "Threat Model",
+    "Permission Matrix",
+    "Hook Configuration",
+    "Rollback Rules",
+  ],
+  "meta-librarian": [
+    "## Required Deliverables",
+    "Memory Architecture",
+    "Continuity Protocol",
+    "Retention Policy",
+    "Recovery Evidence",
+  ],
+  "meta-prism": [
+    "## Required Deliverables",
+    "Assertion Report",
+    "Verification Closure Packet",
+    "Drift Findings",
+    "Closure Conditions",
+  ],
+  "meta-scout": [
+    "## Required Deliverables",
+    "Capability Baseline",
+    "Candidate Comparison",
+    "Security Notes",
+    "Adoption Brief",
+  ],
 };
 
 // --- Data Collection Helpers ---
@@ -51,7 +100,10 @@ async function readJsonFrontmatter(filePath) {
       const sep = trimmed.indexOf(":");
       if (sep === -1) continue;
       const key = trimmed.slice(0, sep).trim();
-      const value = trimmed.slice(sep + 1).trim().replace(/^['"]|['"]$/g, "");
+      const value = trimmed
+        .slice(sep + 1)
+        .trim()
+        .replace(/^['"]|['"]$/g, "");
       data[key] = value;
     }
     return data;
@@ -96,15 +148,22 @@ async function listAgents() {
 async function collectAgentHealth(agentId) {
   const canonicalMdPath = path.join(CLAUDE_AGENTS_DIR, `${agentId}.md`);
   const workspaceDir = path.join(OPENCLAW_WORKSPACES_DIR, agentId);
-  const skillPath = path.join(repoRoot, "openclaw", "skills", "meta-theory.md");
+  const skillPath = path.join(
+    repoRoot,
+    "openclaw",
+    "skills",
+    "meta-theory",
+    "SKILL.md",
+  );
 
-  const [frontmatter, canonicalRaw, heartbeatRaw, soulRaw, skillRaw] = await Promise.all([
-    readJsonFrontmatter(canonicalMdPath),
-    readFileRaw(canonicalMdPath),
-    readFileRaw(path.join(workspaceDir, "HEARTBEAT.md")),
-    readFileRaw(path.join(workspaceDir, "SOUL.md")),
-    readFileRaw(skillPath),
-  ]);
+  const [frontmatter, canonicalRaw, heartbeatRaw, soulRaw, skillRaw] =
+    await Promise.all([
+      readJsonFrontmatter(canonicalMdPath),
+      readFileRaw(canonicalMdPath),
+      readFileRaw(path.join(workspaceDir, "HEARTBEAT.md")),
+      readFileRaw(path.join(workspaceDir, "SOUL.md")),
+      readFileRaw(skillPath),
+    ]);
 
   // Collect workspace file completeness
   const workspaceFileStatus = {};
@@ -129,7 +188,7 @@ async function collectAgentHealth(agentId) {
     ".claude",
     "skills",
     "meta-theory",
-    "SKILL.md"
+    "SKILL.md",
   );
   const canonicalSkillRaw = await readFileRaw(canonicalSkillPath);
   const skillSynced = canonicalSkillRaw && skillRaw === canonicalSkillRaw;
@@ -142,18 +201,31 @@ async function collectAgentHealth(agentId) {
 
   // Version
   const canonicalVersion =
-    (canonicalRaw?.match(/^version:\s*([\d.]+)/m)?.[1]) ||
+    canonicalRaw?.match(/^version:\s*([\d.]+)/m)?.[1] ||
     frontmatter?.version ||
     "unknown";
 
   // Boundary markers check
-  const hasOwnBoundary = canonicalRaw?.includes("只管") || canonicalRaw?.includes("Own") || canonicalRaw?.includes("own");
-  const hasRefuseBoundary = canonicalRaw?.includes("不碰") || canonicalRaw?.includes("Refuse") || canonicalRaw?.includes("refuse") || canonicalRaw?.includes("Touch");
-  const hasFiveStandard = canonicalRaw?.includes("元理论验证") || canonicalRaw?.includes("五标准") || canonicalRaw?.includes("Meta-Theory Verification") || canonicalRaw?.includes("Meta-Theory Validation") || canonicalRaw?.includes("Five Criteria");
+  const hasOwnBoundary =
+    canonicalRaw?.includes("只管") ||
+    canonicalRaw?.includes("Own") ||
+    canonicalRaw?.includes("own");
+  const hasRefuseBoundary =
+    canonicalRaw?.includes("不碰") ||
+    canonicalRaw?.includes("Refuse") ||
+    canonicalRaw?.includes("refuse") ||
+    canonicalRaw?.includes("Touch");
+  const hasFiveStandard =
+    canonicalRaw?.includes("元理论验证") ||
+    canonicalRaw?.includes("五标准") ||
+    canonicalRaw?.includes("Meta-Theory Verification") ||
+    canonicalRaw?.includes("Meta-Theory Validation") ||
+    canonicalRaw?.includes("Five Criteria");
   const hasSoul = soulRaw && soulRaw.length > 100;
   const requiredRoleMarkers = ROLE_CONTRACT_MARKERS[agentId] ?? [];
   const roleContractCoverage = requiredRoleMarkers.length
-    ? requiredRoleMarkers.filter((marker) => canonicalRaw?.includes(marker)).length / requiredRoleMarkers.length
+    ? requiredRoleMarkers.filter((marker) => canonicalRaw?.includes(marker))
+        .length / requiredRoleMarkers.length
     : 1;
 
   // Health score components (0-1 scale)
@@ -166,7 +238,9 @@ async function collectAgentHealth(agentId) {
     soulExists: hasSoul ? 1 : 0,
     roleContract: roleContractCoverage,
   };
-  const healthScore = Object.values(scoreComponents).reduce((a, b) => a + b, 0) / Object.keys(scoreComponents).length;
+  const healthScore =
+    Object.values(scoreComponents).reduce((a, b) => a + b, 0) /
+    Object.keys(scoreComponents).length;
 
   return {
     agentId,
@@ -213,22 +287,26 @@ function renderMarkdown(agents, summary) {
   // Summary table
   lines.push(`## Summary`);
   lines.push(``);
-  lines.push(`| Agent | Version | Frontmatter | Boundaries | Workspace | Skill Sync | Health |`);
-  lines.push(`|------|---------|-------------|-----------|-----------|------------|--------|`);
+  lines.push(
+    `| Agent | Version | Frontmatter | Boundaries | Workspace | Skill Sync | Health |`,
+  );
+  lines.push(
+    `|------|---------|-------------|-----------|-----------|------------|--------|`,
+  );
   for (const a of agents) {
     lines.push(
       `| ${a.agentId} | ${a.version} | ${a.frontmatterComplete && a.description ? "✅" : "❌"} | ` +
-      `${a.hasOwnBoundary && a.hasRefuseBoundary ? "✅" : "⚠️"} | ` +
-      `${a.workspaceFilesComplete}/${a.workspaceFilesTotal} | ` +
-      `${a.skillSynced ? "✅" : "❌"} | ` +
-      `${a.healthScore}% |`
+        `${a.hasOwnBoundary && a.hasRefuseBoundary ? "✅" : "⚠️"} | ` +
+        `${a.workspaceFilesComplete}/${a.workspaceFilesTotal} | ` +
+        `${a.skillSynced ? "✅" : "❌"} | ` +
+        `${a.healthScore}% |`,
     );
   }
   lines.push(``);
 
   // Overall health
   const avgHealth = Math.round(
-    agents.reduce((s, a) => s + a.healthScore, 0) / agents.length
+    agents.reduce((s, a) => s + a.healthScore, 0) / agents.length,
   );
   lines.push(`**Overall Health**: ${avgHealth}%`);
   lines.push(``);
@@ -236,14 +314,18 @@ function renderMarkdown(agents, summary) {
   // Five-standard coverage
   lines.push(`## Meta Standard Coverage`);
   lines.push(``);
-  lines.push(`| Agent | Meta Theory | Boundary Defined | Workspace Complete | Skill Synced |`);
-  lines.push(`|------|------------|-----------------|------------------|-------------|`);
+  lines.push(
+    `| Agent | Meta Theory | Boundary Defined | Workspace Complete | Skill Synced |`,
+  );
+  lines.push(
+    `|------|------------|-----------------|------------------|-------------|`,
+  );
   for (const a of agents) {
     lines.push(
       `| ${a.agentId} | ${a.scoreComponents.fiveStandard === 1 ? "✅" : "❌"} | ` +
-      `${a.scoreComponents.boundaryDefined === 1 ? "✅" : "⚠️"} | ` +
-      `${a.scoreComponents.workspaceComplete === 1 ? "✅" : Math.round(a.scoreComponents.workspaceComplete * 100) + "%"} | ` +
-      `${a.scoreComponents.skillSynced === 1 ? "✅" : "❌"} |`
+        `${a.scoreComponents.boundaryDefined === 1 ? "✅" : "⚠️"} | ` +
+        `${a.scoreComponents.workspaceComplete === 1 ? "✅" : Math.round(a.scoreComponents.workspaceComplete * 100) + "%"} | ` +
+        `${a.scoreComponents.skillSynced === 1 ? "✅" : "❌"} |`,
     );
   }
   lines.push(``);
@@ -251,16 +333,24 @@ function renderMarkdown(agents, summary) {
   // Issues
   const issues = [];
   for (const a of agents) {
-    if (!a.frontmatterComplete) issues.push(`⚠️ ${a.agentId}: frontmatter incomplete`);
-    if (!a.skillSynced) issues.push(`⚠️ ${a.agentId}: SKILL.md not synced to workspace`);
+    if (!a.frontmatterComplete)
+      issues.push(`⚠️ ${a.agentId}: frontmatter incomplete`);
+    if (!a.skillSynced)
+      issues.push(`⚠️ ${a.agentId}: SKILL.md not synced to workspace`);
     if (a.scoreComponents.workspaceComplete < 1)
-      issues.push(`⚠️ ${a.agentId}: workspace file missing ${REQUIRED_WORKSPACE_FILES.filter((f) => a.workspaceFileStatus[f] === "❌").join(", ")}`);
+      issues.push(
+        `⚠️ ${a.agentId}: workspace file missing ${REQUIRED_WORKSPACE_FILES.filter((f) => a.workspaceFileStatus[f] === "❌").join(", ")}`,
+      );
     if (!a.hasOwnBoundary || !a.hasRefuseBoundary)
-      issues.push(`⚠️ ${a.agentId}: boundary definition missing (owns/refuses)`);
+      issues.push(
+        `⚠️ ${a.agentId}: boundary definition missing (owns/refuses)`,
+      );
     if (!a.hasFiveStandard)
       issues.push(`⚠️ ${a.agentId}: missing meta theory validation table`);
     if (a.scoreComponents.roleContract < 1)
-      issues.push(`⚠️ ${a.agentId}: station deliverables markers incomplete (${a.roleContractCoverage}%)`);
+      issues.push(
+        `⚠️ ${a.agentId}: station deliverables markers incomplete (${a.roleContractCoverage}%)`,
+      );
   }
 
   lines.push(`## Issues Found`);
@@ -281,12 +371,20 @@ function renderMarkdown(agents, summary) {
     lines.push(`### ${a.agentId}`);
     lines.push(``);
     lines.push(`- **Version**: ${a.version}`);
-    lines.push(`- **Canonical**: ${a.canonicalMdPath} (${a.canonicalLines} lines, mtime: ${a.canonicalMtime})`);
-    lines.push(`- **Workspace**: ${a.workspaceDir}/ (${a.workspaceFilesComplete}/${a.workspaceFilesTotal} files, mtime: ${a.heartbeatMtime})`);
+    lines.push(
+      `- **Canonical**: ${a.canonicalMdPath} (${a.canonicalLines} lines, mtime: ${a.canonicalMtime})`,
+    );
+    lines.push(
+      `- **Workspace**: ${a.workspaceDir}/ (${a.workspaceFilesComplete}/${a.workspaceFilesTotal} files, mtime: ${a.heartbeatMtime})`,
+    );
     lines.push(`- **SOUL.md lines**: ${a.soulLines}`);
     lines.push(`- **Health Score**: ${a.healthScore}%`);
-    lines.push(`- **Frontmatter**: name=${!!a.frontmatterComplete} description=${!!a.description}`);
-    lines.push(`- **Boundaries**: 只管=${a.hasOwnBoundary} 不碰=${a.hasRefuseBoundary}`);
+    lines.push(
+      `- **Frontmatter**: name=${!!a.frontmatterComplete} description=${!!a.description}`,
+    );
+    lines.push(
+      `- **Boundaries**: 只管=${a.hasOwnBoundary} 不碰=${a.hasRefuseBoundary}`,
+    );
     lines.push(`- **Five-Standard**: ${a.hasFiveStandard ? "✅" : "❌"}`);
     lines.push(`- **Skill Synced**: ${a.skillSynced ? "✅" : "❌"}`);
     lines.push(`- **Role Contract Coverage**: ${a.roleContractCoverage}%`);
@@ -316,7 +414,9 @@ async function main() {
   const summary = {
     timestamp: new Date().toISOString(),
     totalAgents: agents.length,
-    avgHealth: Math.round(agents.reduce((s, a) => s + a.healthScore, 0) / agents.length),
+    avgHealth: Math.round(
+      agents.reduce((s, a) => s + a.healthScore, 0) / agents.length,
+    ),
     allSynced: agents.every((a) => a.skillSynced),
     allFrontmatter: agents.every((a) => a.frontmatterComplete && a.description),
     allBoundaries: agents.every((a) => a.hasOwnBoundary && a.hasRefuseBoundary),

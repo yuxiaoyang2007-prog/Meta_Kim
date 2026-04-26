@@ -115,7 +115,8 @@ async function loadRuntimeData() {
     repoRoot,
     "openclaw",
     "skills",
-    "meta-theory.md",
+    "meta-theory",
+    "SKILL.md",
   );
 
   const [metaTheory, runtimeMatrix, openclawSkill] = await Promise.all([

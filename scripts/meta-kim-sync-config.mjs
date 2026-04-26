@@ -73,7 +73,7 @@ const runtimeProfileCatalog = {
       assetTypes: ["agents", "skills", "config", "mcp"],
       outputPaths: {
         agentsDir: ".codex/agents",
-        legacySkillFile: ".codex/skills/meta-theory.md",
+        skillRoot: ".codex/skills/meta-theory",
         projectSkillsDir: ".agents/skills",
         configExampleFile: "codex/config.toml.example",
       },
@@ -96,7 +96,7 @@ const runtimeProfileCatalog = {
       assetTypes: ["workspaces", "skills", "config", "mcp"],
       outputPaths: {
         workspacesDir: "openclaw/workspaces",
-        skillsDir: "openclaw/skills",
+        skillRoot: "openclaw/skills/meta-theory",
         templateConfigFile: "openclaw/openclaw.template.json",
       },
     },
@@ -370,6 +370,7 @@ const runtimeProjectionLayouts = {
   codex: {
     project: {
       agentsDir: [".codex", "agents"],
+      skillRoot: [".codex", "skills", "meta-theory"],
       legacySkillFile: [".codex", "skills", "meta-theory.md"],
       legacySkillReferencesDir: [".codex", "skills", "references"],
       projectSkillRoot: [".agents", "skills", "meta-theory"],
@@ -384,6 +385,7 @@ const runtimeProjectionLayouts = {
   openclaw: {
     project: {
       workspacesRoot: ["openclaw", "workspaces"],
+      skillRoot: ["openclaw", "skills", "meta-theory"],
       legacySkillFile: ["openclaw", "skills", "meta-theory.md"],
       legacySkillReferencesDir: ["openclaw", "skills", "references"],
       templateConfigFile: ["openclaw", "openclaw.template.json"],
