@@ -322,6 +322,20 @@ function loadSkillsManifest() {
         ...(skill.installRoot ? { installRoot: skill.installRoot } : {}),
         ...(skill.pluginHookCompat ? { pluginHookCompat: true } : {}),
         ...(skill.installMethod ? { installMethod: skill.installMethod } : {}),
+        ...(skill.legacyNames ? { legacyNames: skill.legacyNames } : {}),
+        ...(skill.hookSubdirs ? { hookSubdirs: skill.hookSubdirs } : {}),
+        ...(skill.hookConfigFiles
+          ? { hookConfigFiles: skill.hookConfigFiles }
+          : {}),
+        ...(skill.fallbackContentDir
+          ? { fallbackContentDir: skill.fallbackContentDir }
+          : {}),
+        ...(skill.hookExtraFiles
+          ? { hookExtraFiles: skill.hookExtraFiles }
+          : {}),
+        ...(skill.hookSettingsMerge
+          ? { hookSettingsMerge: skill.hookSettingsMerge }
+          : {}),
       });
     }
 
@@ -1481,6 +1495,7 @@ async function installAllSkillsForRuntime(label, runtimeHome, runtimeId) {
     }
     emitHeader();
     const targetDir = resolveSkillTargetDir(runtimeHome, spec);
+    await cleanupLegacySkillNames(runtimeHome, spec);
     if (spec.subdir) {
       await installGitSkillFromSubdir(
         spec.id,
@@ -1494,8 +1509,12 @@ async function installAllSkillsForRuntime(label, runtimeHome, runtimeId) {
     await sanitizeCompatibilityRoots(runtimeId, skillsRoot, spec);
     await ensureHookLayoutAliases(runtimeHome, spec);
     // Hook co-deployment for subdirExtraction installs (e.g. planning-with-files)
-    await deployHookSubdirs(spec, targetDir, runtimeId);
-    await deployHookConfigFiles(spec, targetDir, runtimeId);
+    await deployHookSubdirs(spec, runtimeHome, runtimeId);
+    await deployHookConfigFiles(spec, runtimeHome, runtimeId);
+    await deployHookExtraFiles(spec, runtimeHome, runtimeId);
+    await patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId);
+    await mergeHookSettings(spec, runtimeHome, runtimeId);
+    await cleanupDisabledSkillResidue(runtimeHome, spec.id);
   }
   const hasManifestSkillCreator = SKILL_REPOS.some(
     (spec) => spec.id === "skill-creator",
@@ -1706,8 +1725,11 @@ async function installPluginBundlesForNonClaudeRuntimes(
       }
 
       // Hook co-deployment for plugin bundles
-      await deployHookSubdirs(spec, targetDir, runtimeId);
-      await deployHookConfigFiles(spec, targetDir, runtimeId);
+      await deployHookSubdirs(spec, runtimeHome, runtimeId);
+      await deployHookConfigFiles(spec, runtimeHome, runtimeId);
+      await deployHookExtraFiles(spec, runtimeHome, runtimeId);
+      await patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId);
+      await mergeHookSettings(spec, runtimeHome, runtimeId);
     }
   }
 }
@@ -1717,6 +1739,40 @@ async function installClaudePlugins() {
     return;
   }
   console.log(`\n${C.bold}${AMBER}${t.pluginsHeader}${C.reset}`);
+
+  // Auto-register plugin marketplaces if not already present.
+  // This is needed on fresh Mac/Linux installs where marketplaces are not
+  // pre-registered (unlike Windows which has them installed by default).
+  // Registry: marketplace-id -> GitHub repo URL (marketplace.json's "name" field
+  // becomes the marketplace-id used in "plugin@marketplace" spec).
+  const MARKETPLACE_URLS = {
+    "superpowers-marketplace":
+      "https://github.com/obra/superpowers-marketplace",
+    "everything-claude-code":
+      "https://github.com/affaan-m/everything-claude-code",
+  };
+
+  if (dryRun) {
+    const neededMarketplaces = new Set(
+      CLAUDE_PLUGIN_SPECS.map((spec) => spec.split("@")[1]).filter(
+        (id) => id in MARKETPLACE_URLS,
+      ),
+    );
+    if (neededMarketplaces.size > 0) {
+      console.log(`\n${C.dim}  Checking plugin marketplaces...${C.reset}`);
+      for (const mktId of neededMarketplaces) {
+        console.log(
+          t.dryRun(
+            `claude plugin marketplace add ${MARKETPLACE_URLS[mktId]} (${mktId})`,
+          ),
+        );
+      }
+    }
+    for (const spec of CLAUDE_PLUGIN_SPECS) {
+      console.log(t.dryRun(`claude plugin install ${spec}`));
+    }
+    return;
+  }
 
   // Probe which claude invocation method works.
   // Windows edge-case: a broken npm .cmd shim may shadow a working
@@ -1751,18 +1807,6 @@ async function installClaudePlugins() {
     console.warn(`${C.yellow}⚠${C.reset} ${t.warnClaNotFound}`);
     return;
   }
-
-  // Auto-register plugin marketplaces if not already present.
-  // This is needed on fresh Mac/Linux installs where marketplaces are not
-  // pre-registered (unlike Windows which has them installed by default).
-  // Registry: marketplace-id -> GitHub repo URL (marketplace.json's "name" field
-  // becomes the marketplace-id used in "plugin@marketplace" spec).
-  const MARKETPLACE_URLS = {
-    "superpowers-marketplace":
-      "https://github.com/obra/superpowers-marketplace",
-    "everything-claude-code":
-      "https://github.com/affaan-m/everything-claude-code",
-  };
 
   // Collect marketplace IDs needed by CLAUDE_PLUGIN_SPECS (spec format: "name@marketplace")
   const neededMarketplaces = new Set(
@@ -2193,9 +2237,168 @@ async function cleanupStaleStagingDirs(homes) {
 // ── Two-phase install helpers ─────────────────────────────────
 
 /**
- * Stage a skill repo to a temporary staging directory (full clone).
- * Returns true if staging succeeded.
+ * Remove legacy-named skill directories/symlinks before installing the current skill.
+ * For example, when "find-skills" was renamed to "findskill", this removes the old
+ * "find-skills" directory or symlink so both do not coexist.
+ *
+ * @param {string} runtimeHome - The runtime home directory (e.g. ~/.claude)
+ * @param {object} spec - The skill spec from the manifest (must have .id, may have .legacyNames)
  */
+async function cleanupLegacySkillNames(runtimeHome, spec) {
+  const legacyNames = spec.legacyNames;
+  if (!legacyNames || legacyNames.length === 0) {
+    return;
+  }
+
+  const installSegment = skillInstallRootSegment(spec);
+
+  for (const legacyName of legacyNames) {
+    const legacyDir = path.join(runtimeHome, installSegment, legacyName);
+    if (!(await pathExists(legacyDir))) {
+      continue;
+    }
+
+    if (dryRun) {
+      console.log(t.dryRun(`remove legacy skill dir: ${legacyDir}`));
+      continue;
+    }
+
+    try {
+      const stat = await fs.lstat(legacyDir);
+      if (stat.isSymbolicLink()) {
+        await fs.unlink(legacyDir);
+      } else {
+        await rmDirWithRetry(legacyDir);
+      }
+      console.log(
+        `${C.green}✓${C.reset} ${t.warnLegacyNameRemoved(spec.id, legacyName, legacyDir)}`,
+      );
+    } catch (error) {
+      if (isWindowsLockError(error)) {
+        console.warn(
+          `${C.yellow}⚠${C.reset} ${t.warnStagingLocked(legacyDir)}`,
+        );
+        continue;
+      }
+      console.warn(
+        `${C.yellow}⚠${C.reset} ${spec.id}: failed to remove legacy "${legacyName}" at ${legacyDir}: ${error.message}`,
+      );
+    }
+  }
+}
+
+/**
+ * Remove stale .disabled/{skillId}/ residue after a skill is successfully installed/updated.
+ * When a skill was previously disabled and then reinstalled, the old disabled copy should
+ * not linger alongside the active version.
+ *
+ * @param {string} runtimeHome - The runtime home directory (e.g. ~/.codex)
+ * @param {string} skillId - The skill identifier
+ */
+async function cleanupDisabledSkillResidue(runtimeHome, skillId) {
+  const installSegments = ["skills", "plugins"];
+
+  for (const segment of installSegments) {
+    const disabledDir = path.join(runtimeHome, segment, ".disabled", skillId);
+    if (!(await pathExists(disabledDir))) {
+      continue;
+    }
+
+    if (dryRun) {
+      console.log(t.dryRun(`remove disabled residue: ${disabledDir}`));
+      continue;
+    }
+
+    try {
+      const stat = await fs.lstat(disabledDir);
+      if (stat.isSymbolicLink()) {
+        await fs.unlink(disabledDir);
+      } else {
+        await rmDirWithRetry(disabledDir);
+      }
+      console.log(
+        `${C.green}✓${C.reset} ${t.warnDisabledResidueRemoved(skillId, disabledDir)}`,
+      );
+    } catch (error) {
+      if (isWindowsLockError(error)) {
+        console.warn(
+          `${C.yellow}⚠${C.reset} ${t.warnStagingLocked(disabledDir)}`,
+        );
+        continue;
+      }
+      console.warn(
+        `${C.yellow}⚠${C.reset} ${skillId}: failed to remove .disabled/ residue at ${disabledDir}: ${error.message}`,
+      );
+    }
+  }
+}
+
+/**
+ * Sweep .disabled/ directories under skills/ and plugins/ for any entries
+ * that have an active counterpart (same name exists in the parent segment).
+ * This catches residue from skills deployed outside the manifest (e.g. meta-theory
+ * via sync:runtimes) that would not be covered by per-skill cleanup.
+ */
+async function sweepStaleDisabledDirs(runtimeHome) {
+  const segments = ["skills", "plugins"];
+
+  for (const segment of segments) {
+    const disabledRoot = path.join(runtimeHome, segment, ".disabled");
+    if (!(await pathExists(disabledRoot))) continue;
+
+    let entries;
+    try {
+      entries = await fs.readdir(disabledRoot);
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const activeDir = path.join(runtimeHome, segment, entry);
+      const disabledDir = path.join(disabledRoot, entry);
+
+      if (!(await pathExists(activeDir))) continue;
+
+      if (dryRun) {
+        console.log(t.dryRun(`remove stale disabled: ${disabledDir}`));
+        continue;
+      }
+
+      try {
+        const stat = await fs.lstat(disabledDir);
+        if (stat.isSymbolicLink()) {
+          await fs.unlink(disabledDir);
+        } else if (stat.isDirectory()) {
+          await rmDirWithRetry(disabledDir);
+        }
+        console.log(
+          `${C.green}✓${C.reset} ${t.warnDisabledResidueRemoved(entry, disabledDir)}`,
+        );
+      } catch (error) {
+        if (isWindowsLockError(error)) {
+          console.warn(
+            `${C.yellow}⚠${C.reset} ${t.warnStagingLocked(disabledDir)}`,
+          );
+          continue;
+        }
+        console.warn(
+          `${C.yellow}⚠${C.reset} ${entry}: failed to sweep .disabled/ at ${disabledDir}: ${error.message}`,
+        );
+      }
+    }
+
+    // Remove .disabled/ dir itself if now empty
+    try {
+      const remaining = await fs.readdir(disabledRoot);
+      if (remaining.length === 0 && !dryRun) {
+        await fs.rmdir(disabledRoot);
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+}
+
 /**
  * Clone a skill repo to the staging directory, skipping download if the skill
  * already exists at preExistingPath (first target runtime's install location).
@@ -2502,6 +2705,8 @@ async function installSkillsToMultipleRuntimes(
         const staged = stagedSkills.get(spec.id);
         const targetDir = resolveSkillTargetDir(runtimeHome, spec);
 
+        await cleanupLegacySkillNames(runtimeHome, spec);
+
         // staged?.success can be true even when stagedPath is empty (skip-clone
         // when skill already exists at first runtime). In that case fall through
         // to direct install so "already exists" output is printed.
@@ -2535,6 +2740,7 @@ async function installSkillsToMultipleRuntimes(
 
         await sanitizeCompatibilityRoots(runtimeId, skillsRoot, spec);
         await ensureHookLayoutAliases(runtimeHome, spec);
+        await cleanupDisabledSkillResidue(runtimeHome, spec.id);
       }
 
       // skill-creator fallback (if not in manifest)
@@ -2788,6 +2994,14 @@ async function main() {
     }
   }
 
+  // Sweep stale .disabled/ entries (covers skills deployed outside the manifest,
+  // e.g. meta-theory via sync:runtimes)
+  for (const rid of activeTargets) {
+    if (homes[rid]) {
+      await sweepStaleDisabledDirs(homes[rid]);
+    }
+  }
+
   console.log(`\n${t.done}`);
   console.log(t.noteCodexOpenclaw);
   console.log(t.activeTargets(activeTargets));
@@ -2801,14 +3015,14 @@ async function main() {
 
 // ========== Hook Co-Deployment ==========
 
-async function deployHookSubdirs(spec, targetDir, runtimeId) {
+async function deployHookSubdirs(spec, runtimeHome, runtimeId) {
   const hookSubdirs = spec.hookSubdirs;
   if (!hookSubdirs || !hookSubdirs[runtimeId]) return;
 
   const subdirs = hookSubdirs[runtimeId];
   if (!Array.isArray(subdirs) || subdirs.length === 0) return;
 
-  const hooksDir = path.join(targetDir, "hooks");
+  const hooksDir = path.join(runtimeHome, "hooks");
   if (!dryRun) {
     await fs.mkdir(hooksDir, { recursive: true });
   }
@@ -2862,7 +3076,7 @@ async function deployHookSubdirs(spec, targetDir, runtimeId) {
   }
 }
 
-async function deployHookConfigFiles(spec, targetDir, runtimeId) {
+async function deployHookConfigFiles(spec, runtimeHome, runtimeId) {
   const hookConfigFiles = spec.hookConfigFiles;
   if (!hookConfigFiles || !hookConfigFiles[runtimeId]) return;
 
@@ -2870,7 +3084,7 @@ async function deployHookConfigFiles(spec, targetDir, runtimeId) {
   if (dryRun) {
     console.log(
       t.dryRun(
-        `git sparse-checkout ${spec.repo}:${configFile} -> ${targetDir}`,
+        `git sparse-checkout ${spec.repo}:${configFile} -> ${runtimeHome}`,
       ),
     );
     return;
@@ -2897,10 +3111,10 @@ async function deployHookConfigFiles(spec, targetDir, runtimeId) {
     });
     const srcPath = path.join(tmp, ...configFile.split("/").filter(Boolean));
     if (await pathExists(srcPath)) {
-      const destPath = path.join(targetDir, path.basename(configFile));
+      const destPath = path.join(runtimeHome, path.basename(configFile));
       await fs.copyFile(srcPath, destPath);
       console.log(
-        `${C.green}✓${C.reset} ${spec.id} ${path.basename(configFile)} -> ${targetDir} ${C.dim}(from ${configFile})${C.reset}`,
+        `${C.green}✓${C.reset} ${spec.id} ${path.basename(configFile)} -> ${runtimeHome} ${C.dim}(from ${configFile})${C.reset}`,
       );
     }
   } catch {
@@ -2908,6 +3122,431 @@ async function deployHookConfigFiles(spec, targetDir, runtimeId) {
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }
+}
+
+function codexPlanningHookCommand(runtimeHome, scriptName) {
+  const scriptPath = path.join(runtimeHome, "hooks", scriptName);
+  if (os.platform() === "win32") {
+    return `python "${scriptPath}"`;
+  }
+  return `python3 "${scriptPath}" 2>/dev/null || python "${scriptPath}" 2>/dev/null || true`;
+}
+
+function buildCodexPlanningHooksJson(runtimeHome) {
+  return {
+    hooks: {
+      SessionStart: [
+        {
+          matcher: "startup|resume",
+          hooks: [
+            {
+              type: "command",
+              command: codexPlanningHookCommand(runtimeHome, "session_start.py"),
+              statusMessage: "Loading planning context",
+            },
+          ],
+        },
+      ],
+      UserPromptSubmit: [
+        {
+          hooks: [
+            {
+              type: "command",
+              command: codexPlanningHookCommand(
+                runtimeHome,
+                "user_prompt_submit.py",
+              ),
+            },
+          ],
+        },
+      ],
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            {
+              type: "command",
+              command: codexPlanningHookCommand(runtimeHome, "pre_tool_use.py"),
+              statusMessage: "Checking plan before Bash",
+            },
+          ],
+        },
+      ],
+      PostToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            {
+              type: "command",
+              command: codexPlanningHookCommand(runtimeHome, "post_tool_use.py"),
+              statusMessage: "Reviewing Bash against plan",
+            },
+          ],
+        },
+      ],
+      Stop: [
+        {
+          hooks: [
+            {
+              type: "command",
+              command: codexPlanningHookCommand(runtimeHome, "stop.py"),
+              timeout: 30,
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function buildCodexPlanningHookAdapterPy() {
+  return [
+    "#!/usr/bin/env python3",
+    "from __future__ import annotations",
+    "",
+    "import json",
+    "import shutil",
+    "import subprocess",
+    "import sys",
+    "from pathlib import Path",
+    "from typing import Any",
+    "",
+    "",
+    "HOOK_DIR = Path(__file__).resolve().parent",
+    "",
+    "",
+    "def load_payload() -> dict[str, Any]:",
+    "    raw = sys.stdin.read().strip()",
+    "    if not raw:",
+    "        return {}",
+    "    try:",
+    "        payload = json.loads(raw)",
+    "    except json.JSONDecodeError:",
+    "        return {}",
+    "    return payload if isinstance(payload, dict) else {}",
+    "",
+    "",
+    "def cwd_from_payload(payload: dict[str, Any]) -> Path:",
+    '    cwd = payload.get("cwd")',
+    "    if isinstance(cwd, str) and cwd:",
+    "        return Path(cwd)",
+    "    return Path.cwd()",
+    "",
+    "",
+    "def emit_json(payload: dict[str, Any]) -> None:",
+    "    if not payload:",
+    "        return",
+    "    json.dump(payload, sys.stdout, ensure_ascii=False)",
+    '    sys.stdout.write("\\n")',
+    "",
+    "",
+    "def parse_json(text: str) -> dict[str, Any]:",
+    "    if not text.strip():",
+    "        return {}",
+    "    try:",
+    "        payload = json.loads(text)",
+    "    except json.JSONDecodeError:",
+    "        return {}",
+    "    return payload if isinstance(payload, dict) else {}",
+    "",
+    "",
+    "def _read_lines(path: Path) -> list[str]:",
+    "    try:",
+    '        return path.read_text(encoding="utf-8", errors="replace").splitlines()',
+    "    except OSError:",
+    "        return []",
+    "",
+    "",
+    "def _head(path: Path, count: int) -> str:",
+    '    return "\\n".join(_read_lines(path)[:count])',
+    "",
+    "",
+    "def _tail(path: Path, count: int) -> str:",
+    '    return "\\n".join(_read_lines(path)[-count:])',
+    "",
+    "",
+    "def _count_statuses(plan_file: Path) -> tuple[int, int, int, int]:",
+    "    lines = _read_lines(plan_file)",
+    '    total = sum(1 for line in lines if "### Phase" in line)',
+    '    complete = sum(1 for line in lines if "**Status:** complete" in line)',
+    '    in_progress = sum(1 for line in lines if "**Status:** in_progress" in line)',
+    '    pending = sum(1 for line in lines if "**Status:** pending" in line)',
+    "    if complete == 0 and in_progress == 0 and pending == 0:",
+    '        complete = sum(1 for line in lines if "[complete]" in line)',
+    '        in_progress = sum(1 for line in lines if "[in_progress]" in line)',
+    '        pending = sum(1 for line in lines if "[pending]" in line)',
+    "    return total, complete, in_progress, pending",
+    "",
+    "",
+    "def _native_user_prompt_submit(cwd: Path) -> tuple[str, str]:",
+    '    plan_file = cwd / "task_plan.md"',
+    "    if not plan_file.is_file():",
+    '        return "", ""',
+    "    parts = [",
+    '        "[planning-with-files] ACTIVE PLAN -- current state:",',
+    "        _head(plan_file, 50),",
+    '        "",',
+    '        "=== recent progress ===",',
+    '        _tail(cwd / "progress.md", 20),',
+    '        "",',
+    '        "[planning-with-files] Read findings.md for research context. Continue from the current phase.",',
+    "    ]",
+    '    return "\\n".join(parts).strip(), ""',
+    "",
+    "",
+    "def _native_session_start(cwd: Path) -> tuple[str, str]:",
+    '    skill_script = HOOK_DIR.parent / "skills" / "planning-with-files" / "scripts" / "session-catchup.py"',
+    "    if skill_script.is_file():",
+    "        subprocess.run(",
+    "            [sys.executable, str(skill_script), str(cwd)],",
+    "            cwd=str(cwd),",
+    "            text=True,",
+    "            capture_output=True,",
+    "            check=False,",
+    "        )",
+    '    return _native_user_prompt_submit(cwd)',
+    "",
+    "",
+    "def _native_pre_tool_use(cwd: Path) -> tuple[str, str]:",
+    '    plan_file = cwd / "task_plan.md"',
+    '    stderr = _head(plan_file, 30) if plan_file.is_file() else ""',
+    '    return json.dumps({"decision": "allow"}), stderr',
+    "",
+    "",
+    "def _native_post_tool_use(cwd: Path) -> tuple[str, str]:",
+    '    if (cwd / "task_plan.md").is_file():',
+    '        return "[planning-with-files] Update progress.md with what you just did. If a phase is now complete, update task_plan.md status.", ""',
+    '    return "", ""',
+    "",
+    "",
+    "def _native_stop(cwd: Path) -> tuple[str, str]:",
+    '    plan_file = cwd / "task_plan.md"',
+    "    if not plan_file.is_file():",
+    '        return "", ""',
+    "    total, complete, _in_progress, _pending = _count_statuses(plan_file)",
+    "    if complete == total and total > 0:",
+    '        message = f"[planning-with-files] ALL PHASES COMPLETE ({complete}/{total}). If the user has additional work, add new phases to task_plan.md before starting."',
+    "    else:",
+    '        message = f"[planning-with-files] Task incomplete ({complete}/{total} phases done). Update progress.md, then read task_plan.md and continue working on the remaining phases."',
+    '    return json.dumps({"followup_message": message}, ensure_ascii=False), ""',
+    "",
+    "",
+    "def _run_native_script(script_name: str, cwd: Path) -> tuple[str, str]:",
+    '    if script_name == "session-start.sh":',
+    "        return _native_session_start(cwd)",
+    '    if script_name == "user-prompt-submit.sh":',
+    "        return _native_user_prompt_submit(cwd)",
+    '    if script_name == "pre-tool-use.sh":',
+    "        return _native_pre_tool_use(cwd)",
+    '    if script_name == "post-tool-use.sh":',
+    "        return _native_post_tool_use(cwd)",
+    '    if script_name == "stop.sh":',
+    "        return _native_stop(cwd)",
+    '    return "", ""',
+    "",
+    "",
+    "def run_shell_script(script_name: str, cwd: Path) -> tuple[str, str]:",
+    '    sh_bin = shutil.which("sh")',
+    "    script_path = HOOK_DIR / script_name",
+    "    if sh_bin and script_path.is_file():",
+    "        result = subprocess.run(",
+    "            [sh_bin, str(script_path)],",
+    "            cwd=str(cwd),",
+    "            text=True,",
+    "            capture_output=True,",
+    "            check=False,",
+    "        )",
+    "        return result.stdout.strip(), result.stderr.strip()",
+    "    return _run_native_script(script_name, cwd)",
+    "",
+    "",
+    "def main_guard(func) -> int:",
+    "    try:",
+    "        func()",
+    "    except Exception as exc:  # pragma: no cover",
+    '        print(f"[planning-with-files hook] {exc}", file=sys.stderr)',
+    "        return 0",
+    "    return 0",
+    "",
+  ].join("\n");
+}
+
+function buildCodexWrapperPy(scriptName) {
+  return [
+    "#!/usr/bin/env python3",
+    "from __future__ import annotations",
+    "",
+    "import codex_hook_adapter as adapter",
+    "",
+    "",
+    "def main() -> None:",
+    "    payload = adapter.load_payload()",
+    "    root = adapter.cwd_from_payload(payload)",
+    `    stdout, _ = adapter.run_shell_script("${scriptName}", root)`,
+    "    if stdout:",
+    '        adapter.emit_json({"systemMessage": stdout})',
+    "",
+    "",
+    'if __name__ == "__main__":',
+    "    raise SystemExit(adapter.main_guard(main))",
+    "",
+  ].join("\n");
+}
+
+async function patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId) {
+  if (
+    runtimeId !== "codex" ||
+    spec.id !== "planning-with-files" ||
+    dryRun
+  ) {
+    return;
+  }
+
+  const hooksDir = path.join(runtimeHome, "hooks");
+  if (!(await pathExists(hooksDir))) {
+    return;
+  }
+
+  await fs.writeFile(
+    path.join(runtimeHome, "hooks.json"),
+    `${JSON.stringify(buildCodexPlanningHooksJson(runtimeHome), null, 2)}\n`,
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(hooksDir, "codex_hook_adapter.py"),
+    buildCodexPlanningHookAdapterPy(),
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(hooksDir, "session_start.py"),
+    buildCodexWrapperPy("session-start.sh"),
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(hooksDir, "user_prompt_submit.py"),
+    buildCodexWrapperPy("user-prompt-submit.sh"),
+    "utf8",
+  );
+  console.log(
+    `${C.green}✓${C.reset} ${spec.id} Codex hooks patched for ${os.platform()}`,
+  );
+}
+
+// ========== Hook Extra Files Deployment ==========
+
+async function deployHookExtraFiles(spec, runtimeHome, runtimeId) {
+  const hookExtraFiles = spec.hookExtraFiles;
+  if (!hookExtraFiles || !hookExtraFiles[runtimeId]) return;
+
+  const entries = hookExtraFiles[runtimeId];
+  if (!Array.isArray(entries) || entries.length === 0) return;
+
+  for (const entry of entries) {
+    if (!entry.src || !entry.dest) continue;
+    if (dryRun) {
+      console.log(
+        t.dryRun(
+          `deploy extra file ${spec.repo}:${entry.src} -> ${path.join(runtimeHome, entry.dest)}`,
+        ),
+      );
+      continue;
+    }
+
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "meta-kim-hextra-"));
+    try {
+      const parentDir = path.dirname(entry.src).replace(/\\/g, "/");
+      await runGitAsync(
+        [
+          "clone",
+          "--depth",
+          "1",
+          "--filter=blob:none",
+          "--sparse",
+          spec.repo,
+          tmp,
+        ],
+        { skillLabel: `${spec.id}-extra (${runtimeId})` },
+      );
+      await runGitAsync(["sparse-checkout", "set", parentDir || "."], {
+        cwd: tmp,
+      });
+      const srcPath = path.join(tmp, ...entry.src.split("/").filter(Boolean));
+      if (await pathExists(srcPath)) {
+        const destPath = path.join(runtimeHome, entry.dest);
+        await fs.mkdir(path.dirname(destPath), { recursive: true });
+        await fs.copyFile(srcPath, destPath);
+        console.log(
+          `${C.green}✓${C.reset} ${spec.id} ${path.basename(entry.src)} -> ${destPath}`,
+        );
+      }
+    } catch {
+      // extra file absent — non-fatal
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  }
+}
+
+// ========== Hook Settings Merge ==========
+
+async function mergeHookSettings(spec, runtimeHome, runtimeId) {
+  const hookSettingsMerge = spec.hookSettingsMerge;
+  if (!hookSettingsMerge || !hookSettingsMerge[runtimeId]) return;
+
+  const cfg = hookSettingsMerge[runtimeId];
+  if (!cfg.event || !cfg.hookFile) return;
+
+  const settingsPath = path.join(runtimeHome, "settings.json");
+  const hookScriptPath = path.join(runtimeHome, "hooks", cfg.hookFile);
+
+  if (dryRun) {
+    console.log(
+      t.dryRun(`merge hook ${cfg.event} -> ${settingsPath} (${cfg.hookFile})`),
+    );
+    return;
+  }
+
+  if (!(await pathExists(hookScriptPath))) return;
+
+  let settings = {};
+  if (await pathExists(settingsPath)) {
+    try {
+      settings = JSON.parse(await fs.readFile(settingsPath, "utf8"));
+    } catch {
+      return;
+    }
+  }
+
+  if (!settings.hooks) settings.hooks = {};
+  const existingEntries = settings.hooks[cfg.event] || [];
+
+  const normalizedPath = hookScriptPath.replace(/\\/g, "/");
+  const alreadyRegistered = existingEntries.some((group) =>
+    (group.hooks || []).some((h) => {
+      const cmd = (h.command || "").replace(/\\/g, "/");
+      return cmd.includes(cfg.hookFile);
+    }),
+  );
+
+  if (alreadyRegistered) return;
+
+  const newEntry = {
+    hooks: [
+      {
+        type: "command",
+        command: `node "${hookScriptPath.replace(/\\/g, "\\\\")}"`,
+        ...(cfg.timeout ? { timeout: cfg.timeout } : {}),
+      },
+    ],
+  };
+
+  existingEntries.push(newEntry);
+  settings.hooks[cfg.event] = existingEntries;
+
+  await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), "utf8");
+  console.log(
+    `${C.green}✓${C.reset} ${spec.id} hook registered: ${cfg.event} -> ${cfg.hookFile}`,
+  );
 }
 
 main().catch((err) => {

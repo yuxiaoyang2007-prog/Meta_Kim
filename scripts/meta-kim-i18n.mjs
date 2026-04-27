@@ -173,6 +173,10 @@ const STRINGS = {
       `${id}: quarantined invalid SKILL.md within managed install (${detail})`,
     warnReplaceFailed: (id, dir, msg) =>
       `${id}: failed to replace existing install at ${dir}: ${msg}`,
+    warnLegacyNameRemoved: (skillId, legacyName, dir) =>
+      `${skillId}: removed legacy "${legacyName}" at ${dir} (renamed skill)`,
+    warnDisabledResidueRemoved: (skillId, dir) =>
+      `${skillId}: removed stale .disabled/ residue at ${dir}`,
     summaryInstallFailures: (n) => `Installation failures (${n}):`,
     summaryArchiveFallbacks: (n) => `Archive fallbacks used (${n}):`,
     summaryArchiveFallbackLine: (id, category) =>
@@ -391,6 +395,10 @@ const STRINGS = {
       `${id}：已隔离托管安装中的无效 SKILL.md（${detail}）`,
     warnReplaceFailed: (id, dir, msg) =>
       `${id}：替换已有安装失败 ${dir}：${msg}`,
+    warnLegacyNameRemoved: (skillId, legacyName, dir) =>
+      `${skillId}：已移除旧名称 "${legacyName}" 位于 ${dir}（技能已重命名）`,
+    warnDisabledResidueRemoved: (skillId, dir) =>
+      `${skillId}：已移除过时的 .disabled/ 残留 ${dir}`,
     summaryInstallFailures: (n) => `安装失败（${n}）：`,
     summaryArchiveFallbacks: (n) => `使用了归档回退（${n}）：`,
     summaryArchiveFallbackLine: (id, category) =>
@@ -607,6 +615,10 @@ const STRINGS = {
       `${id}：管理下インストールの無効な SKILL.md を隔離しました（${detail}）`,
     warnReplaceFailed: (id, dir, msg) =>
       `${id}：既存インストールの置換に失敗 ${dir}：${msg}`,
+    warnLegacyNameRemoved: (skillId, legacyName, dir) =>
+      `${skillId}：旧名 "${legacyName}" を削除しました ${dir}（スキル名変更）`,
+    warnDisabledResidueRemoved: (skillId, dir) =>
+      `${skillId}：古い .disabled/ 残留を削除しました ${dir}`,
     summaryInstallFailures: (n) => `インストール失敗（${n}）：`,
     summaryArchiveFallbacks: (n) => `アーカイブフォールバック使用（${n}）：`,
     summaryArchiveFallbackLine: (id, category) =>
@@ -829,6 +841,10 @@ const STRINGS = {
       `${id}：관리 설치 내 무효한 SKILL.md 격리 완료（${detail}）`,
     warnReplaceFailed: (id, dir, msg) =>
       `${id}：기존 설치 교체 실패 ${dir}：${msg}`,
+    warnLegacyNameRemoved: (skillId, legacyName, dir) =>
+      `${skillId}：레거시 "${legacyName}" 제거됨 ${dir} (스킬 이름 변경)`,
+    warnDisabledResidueRemoved: (skillId, dir) =>
+      `${skillId}：오래된 .disabled/ 잔여물 제거됨 ${dir}`,
     summaryInstallFailures: (n) => `설치 실패（${n}）：`,
     summaryArchiveFallbacks: (n) => `아카이브 폴백 사용（${n}）：`,
     summaryArchiveFallbackLine: (id, category) =>

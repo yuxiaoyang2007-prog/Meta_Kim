@@ -6,6 +6,29 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.0.16] - 2026-04-26
+
+### 修复
+
+- **四端 skill 清理** — `install-global-skills-all-runtimes.mjs` 四个关键修复：
+  - `legacyNames` 支持 — 新增 manifest 字段用于删除旧 skill 目录（如 `find-skills` → `findskill`）。`cleanupLegacySkillNames()` 在安装前运行，清理过期的符号链接和目录。
+  - `.disabled/ 残留清理` — 新增 `cleanupDisabledSkillResidue()`（单 skill）和 `sweepStaleDisabledDirs()`（全局清扫），当活跃版本存在时删除 `.disabled/{skillId}/`。捕获 manifest 外部署的 skill 残留（如通过 sync:runtimes 部署的 meta-theory）。
+  - `loadSkillsManifest()` 字段传播 bug — `hookSubdirs`、`hookConfigFiles` 和 `fallbackContentDir` 从未从 manifest 复制到运行时 spec 对象。由于这个预存 bug，hooks 从未被部署。修复方式是为这三个字段添加展开运算符。
+  - `deployHookSubdirs/deployHookConfigFiles` 目标路径 bug — 两个函数接收的是 `targetDir`（skills 根目录）但当作 `runtimeHome` 使用，导致 hooks 部署到错误路径。修改函数签名直接接收 `runtimeHome` 并更新所有 4 个调用点。
+
+### 新增
+
+- **hookprompt hook 部署机制** — hookprompt 现在作为 hook 系统正确安装，而非 skill clone：
+  - 新增 `hookExtraFiles` manifest 字段 — 部署额外文件到 hooks 旁（如 `prompt-optimizer-meta.md` 到 `~/.claude/`）。
+  - 新增 `hookSettingsMerge` manifest 字段 — 在 `settings.json` 中注册 hook 命令，路径指向已部署的 hook 脚本。
+  - 安装脚本新增 `deployHookExtraFiles()` 和 `mergeHookSettings()` 函数。
+  - `skills-manifest.schema.json` 新增三个字段的 schema 定义。
+  - hookprompt manifest 条目现在包含 Claude 平台的 `hookSubdirs`、`hookExtraFiles` 和 `hookSettingsMerge`。
+
+### 变更
+
+- **i18n 新增** — 在 `meta-kim-i18n.mjs` 中为所有 4 种语言（en、zh-CN、ja-JP、ko-KR）添加 `warnLegacyNameRemoved` 和 `warnDisabledResidueRemoved` key。
+
 ## [2.0.15] - 2026-04-21
 
 ### 新增

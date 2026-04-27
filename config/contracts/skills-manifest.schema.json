@@ -71,12 +71,60 @@
             "enum": ["pluginMarketplace", "gitClone", "gitCloneInstallScript", "subdirExtraction", "manual"],
             "description": "How this skill is installed on target platforms. pluginMarketplace=Claude Code plugin marketplace; gitClone=plain git clone; gitCloneInstallScript=git clone then run setup script; subdirExtraction=git clone with subdir extraction; manual=copy files manually per README"
           },
+          "legacyNames": {
+            "type": "array",
+            "description": "Previous directory names for this skill that should be removed when installing the current version. Used to clean up renamed skills (e.g. find-skills -> findskill).",
+            "items": {
+              "type": "string"
+            }
+          },
           "targets": {
             "type": "array",
             "description": "Which runtimes this skill applies to. If omitted, applies to all runtimes.",
             "items": {
               "type": "string",
               "enum": ["claude", "codex", "openclaw", "cursor", "opencode"]
+            }
+          },
+          "hookSubdirs": {
+            "type": "object",
+            "description": "Per-runtime subdirectories within the repo that contain hook files to deploy to the runtime's hooks/ directory.",
+            "additionalProperties": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "hookConfigFiles": {
+            "type": "object",
+            "description": "Per-runtime hook config files within the repo to deploy alongside hooks.",
+            "additionalProperties": { "type": "string" }
+          },
+          "hookExtraFiles": {
+            "type": "object",
+            "description": "Per-runtime extra files to deploy alongside hooks (e.g. templates). Each entry is { src, dest } where dest is relative to runtimeHome.",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["src", "dest"],
+                "properties": {
+                  "src": { "type": "string", "description": "Source path within the repo" },
+                  "dest": { "type": "string", "description": "Destination path relative to runtimeHome" }
+                }
+              }
+            }
+          },
+          "hookSettingsMerge": {
+            "type": "object",
+            "description": "Per-runtime hook settings to merge into the runtime's settings.json. Registers a hook command pointing to the deployed hookFile.",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["event", "hookFile"],
+              "properties": {
+                "event": { "type": "string", "description": "Hook event name (e.g. UserPromptSubmit)" },
+                "hookFile": { "type": "string", "description": "Filename of the deployed hook script (must exist in hooks/)" },
+                "timeout": { "type": "integer", "description": "Hook timeout in milliseconds" }
+              }
             }
           }
         }

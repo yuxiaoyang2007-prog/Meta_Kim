@@ -23,6 +23,7 @@
         "win32": "windows",
         "default": "original"
       },
+      "legacyNames": ["find-skills"],
       "targets": [
         "claude",
         "codex",
@@ -34,6 +35,21 @@
       "id": "hookprompt",
       "repo": "${skillOwner}/HookPrompt",
       "installMethod": "manual",
+      "hookSubdirs": {
+        "claude": [".claude/hooks"]
+      },
+      "hookExtraFiles": {
+        "claude": [
+          { "src": ".claude/prompt-optimizer-meta.md", "dest": "prompt-optimizer-meta.md" }
+        ]
+      },
+      "hookSettingsMerge": {
+        "claude": {
+          "event": "UserPromptSubmit",
+          "hookFile": "user-prompt-submit.js",
+          "timeout": 10000
+        }
+      },
       "targets": [
         "claude"
       ]

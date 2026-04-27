@@ -6,6 +6,29 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.0.16] - 2026-04-26
+
+### Fixed
+
+- **Skill cleanup across platforms** — Four critical fixes to `install-global-skills-all-runtimes.mjs`:
+  - `legacyNames` support — Added manifest field to remove old skill directories (e.g. `find-skills` → `findskill`). `cleanupLegacySkillNames()` runs before install to clean stale symlinks and directories.
+  - `.disabled/ residue cleanup` — Added `cleanupDisabledSkillResidue()` (per-skill) and `sweepStaleDisabledDirs()` (general sweep) to remove `.disabled/{skillId}/` when the active version exists. Catches residue from skills deployed outside the manifest (e.g. meta-theory via sync:runtimes).
+  - `loadSkillsManifest()` field propagation bug — `hookSubdirs`, `hookConfigFiles`, and `fallbackContentDir` were never copied from manifest to runtime spec objects. Hooks were never deployed because of this pre-existing bug. Fixed by adding spread operators for these three fields.
+  - `deployHookSubdirs/deployHookConfigFiles` destination path bug — Both functions received `targetDir` (skills root) but used it as `runtimeHome`, causing hooks to deploy to wrong paths. Changed function signature to receive `runtimeHome` directly and updated all 4 call sites.
+
+### Added
+
+- **hookprompt hook deployment mechanism** — hookprompt is now properly installed as a hook system rather than a skill clone:
+  - New `hookExtraFiles` manifest field — Deploys extra files alongside hooks (e.g. `prompt-optimizer-meta.md` to `~/.claude/`).
+  - New `hookSettingsMerge` manifest field — Registers hook commands in `settings.json` with correct paths to deployed hook scripts.
+  - New `deployHookExtraFiles()` and `mergeHookSettings()` functions in install script.
+  - Updated `skills-manifest.schema.json` with schema definitions for all three new fields.
+  - hookprompt manifest entry now includes `hookSubdirs`, `hookExtraFiles`, and `hookSettingsMerge` for Claude platform.
+
+### Changed
+
+- **i18n additions** — Added `warnLegacyNameRemoved` and `warnDisabledResidueRemoved` keys to all 4 languages (en, zh-CN, ja-JP, ko-KP) in `meta-kim-i18n.mjs`.
+
 ## [2.0.15] - 2026-04-21
 
 ### Added
