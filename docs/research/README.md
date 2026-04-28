@@ -50,5 +50,5 @@ Three-stage deep research conducted on 2026-04-13:
 |-------|-------------|-------------|---------------|-------------|-------|
 | Claude Code | `~/.claude/skills/` | Y | Y | Y | Y |
 | Codex | `~/.codex/skills/` | Y | Y | N | N |
-| OpenClaw | `~/.openclaw/skills/` | Y | Y | N | N |
-| Cursor | `~/.cursor/skills/` | Y | Y | N | N |
+| OpenClaw | `~/.openclaw/skills/` | Y | Y | N | Y |
+| Cursor | `~/.cursor/skills/` | Y | Y | N | Y |

@@ -716,7 +716,7 @@ flowchart TB
 | `npm run meta:deps:install:all-runtimes` | 安装到所有 runtime |
 | `npm run meta:deps:install:claude-plugins` | 只安装 Claude Code marketplace plugin |
 | `npm run discover:global` | 扫描全局能力 |
-| `npm run sync:global:meta-theory` | 同步 meta-theory 到用户级 |
+| `npm run meta:sync:global` | 同步 meta-theory 到用户级 |
 
 #### Plugin 市场类 skill（Superpowers、Everything Claude Code、cli-anything）
 

@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import path from "node:path";
 
 import {
+  buildCursorAgent,
+  buildCodexGraphifyContextHook,
+  buildCodexProjectHooksJson,
   inferProjectCategory,
   inferProjectPurpose,
 } from "../../scripts/sync-runtimes.mjs";
@@ -36,6 +39,13 @@ describe("sync-runtimes / inferProjectCategory", () => {
   test("maps any .codex/ config file to category G", () => {
     assert.equal(
       inferProjectCategory(p(".codex/config.toml"), REPO),
+      CATEGORIES.G,
+    );
+  });
+
+  test("maps Codex slash commands to project settings category", () => {
+    assert.equal(
+      inferProjectCategory(p(".codex/commands/meta-theory.md"), REPO),
       CATEGORIES.G,
     );
   });
@@ -142,5 +152,44 @@ describe("sync-runtimes / inferProjectPurpose", () => {
     assert.equal(inferProjectPurpose(null), null);
     assert.equal(inferProjectPurpose(undefined), null);
     assert.equal(inferProjectPurpose("Z"), null);
+  });
+});
+
+describe("sync-runtimes / Codex project hooks", () => {
+  test("uses a cross-platform Node command instead of Unix shell syntax", () => {
+    const config = buildCodexProjectHooksJson();
+    const command =
+      config.hooks.PreToolUse[0].hooks[0].command;
+
+    assert.match(command, /node(\.exe)?/);
+    assert.match(command, /\.codex\/hooks\/graphify-context\.mjs/);
+    assert.doesNotMatch(command, /\[ -f|\|\| true|2>\/dev\/null/);
+  });
+
+  test("graphify hook script exits cleanly when no graph exists", () => {
+    const source = buildCodexGraphifyContextHook();
+
+    assert.match(source, /existsSync\(graphPath\)/);
+    assert.match(source, /systemMessage/);
+    assert.doesNotMatch(source, /\[ -f|\|\| true|2>\/dev\/null/);
+  });
+});
+
+describe("sync-runtimes / Cursor agents", () => {
+  test("emits Cursor-required YAML frontmatter", () => {
+    const rendered = buildCursorAgent({
+      id: "meta-warden",
+      title: "Meta-Warden",
+      summary: "Coordinates the team",
+      sourceFile: "canonical/agents/meta-warden.md",
+      description: "Coordinates dispatch and final synthesis",
+      body: "Body instructions",
+    });
+
+    assert.match(rendered, /^---\nname: meta-warden\n/);
+    assert.match(
+      rendered,
+      /description: "Coordinates dispatch and final synthesis"\n---\n\n# Meta-Warden/,
+    );
   });
 });

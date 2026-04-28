@@ -68,6 +68,11 @@
       }
     }
   },
+  "skills": {
+    "load": {
+      "extraDirs": ["__REPO_ROOT__\\openclaw\\skills"]
+    }
+  },
   "tools": {
     "agentToAgent": {
       "enabled": true,

@@ -600,7 +600,7 @@ Each layer has different activation requirements:
 - **Responsibility**: project-level code knowledge graph
 - **Storage**: `graphify-out/graph.json` (NetworkX node-link format); for humans and agents, prefer `graphify-out/GRAPH_REPORT.md` when present
 - **Mechanism (data)**: `node setup.mjs` (optional Python step) installs graphify and **idempotently** runs `python -m graphify claude install` and `python -m graphify hook install` even if graphify was already installed via pip; git hooks rebuild the graph on commit/checkout in the **current repo**. `npm run meta:graphify:install` does the same (including hooks).
-- **Mechanism (usage)**: synced meta-theory `dev-governance.md` Fetch **Step 0.5** defines how the model should detect and use the graph — not a background service. Claude Code subagents get a **short hint** via `subagent-context.mjs`, not automatic embedding of `graph.json`. Codex / OpenClaw / Cursor share the same reference after `sync:runtimes` but have no SubagentStart hook; optional `python -m graphify codex install` or `python -m graphify claw install` in a **target repo** patches that repo’s docs per graphify CLI (`python -m graphify --help`).
+- **Mechanism (usage)**: synced meta-theory `dev-governance.md` Fetch **Step 0.5** defines how the model should detect and use the graph — not a background service. Claude Code subagents get a **short hint** via `subagent-context.mjs`, not automatic embedding of `graph.json`. Codex / OpenClaw / Cursor share the same reference after `meta:sync` but have no SubagentStart hook; optional `python -m graphify codex install` or `python -m graphify claw install` in a **target repo** patches that repo’s docs per graphify CLI (`python -m graphify --help`).
 - **Core value**:
   - Make memory increasingly familiar with the project - not by remembering raw code, but by understanding structure and relationships
   - **Reduce hallucinations** - agents answer from graph facts instead of guessing
@@ -717,7 +717,7 @@ The three memory layers work together toward two core goals:
 | `npm run meta:deps:install:all-runtimes` | Install them into all runtimes |
 | `npm run meta:deps:install:claude-plugins` | Install Claude Code marketplace plugins only |
 | `npm run discover:global` | Scan global capabilities |
-| `npm run sync:global:meta-theory` | Sync meta-theory to the user-level runtime |
+| `npm run meta:sync:global` | Sync meta-theory to the user-level runtime |
 
 #### Plugin-marketplace skills (Superpowers, Everything Claude Code, cli-anything)
 

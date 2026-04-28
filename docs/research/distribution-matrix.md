@@ -7,7 +7,7 @@ Cross-referencing platform capabilities with dependency requirements to determin
 | Feature | Claude Code | Codex | OpenClaw | Cursor |
 |---------|------------|-------|----------|--------|
 | Global Skills Path | `~/.claude/skills/` | `~/.codex/skills/` | `~/.openclaw/skills/` | `~/.cursor/skills/` |
-| Project Skills Path | `.claude/skills/` | `.agents/skills/` | `skills/` | `.agents/skills/` |
+| Project Skills Path | `.claude/skills/` | `.agents/skills/` | `<workspace>/skills/` or `skills.load.extraDirs[]` | `.cursor/skills/` |
 | SKILL.md Format | Y | Y | Y | Y |
 | allowed-tools | Y | Y | Y | Y |
 | context:fork | Y | N | N | N |

@@ -6,6 +6,24 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.0.17] - 2026-04-27
+
+### Added
+
+- **Codex `/meta-theory` command projection** — Added canonical Codex command source at `canonical/runtime-assets/codex/commands/meta-theory.md`, plus project/global sync support so Codex can load `/meta-theory` from `.codex/commands/` and `~/.codex/commands/`.
+
+### Fixed
+
+- **Codex command validation and packaging** — `config/sync.json`, `scripts/meta-kim-sync-config.mjs`, `scripts/sync-runtimes.mjs`, `scripts/sync-global-meta-theory.mjs`, `scripts/validate-project.mjs`, and setup tests now treat Codex commands as a first-class runtime asset. `.gitignore` root anchoring was corrected so canonical Codex runtime assets are not accidentally ignored.
+- **OpenClaw skill-root wiring** — Verified OpenClaw's installed CLI behavior and wired the project projection through `skills.load.extraDirs` in `canonical/runtime-assets/openclaw/openclaw.template.json`, using `__REPO_ROOT__\\openclaw\\skills` so generated configs can load repo-local OpenClaw skills without pretending they live in the managed user skill directory.
+- **Cursor agent and skill path parity** — Verified Cursor's built-in `create-subagent` / `create-skill` guidance and updated Cursor agent generation to emit YAML frontmatter under `.cursor/agents/*.md`. Cursor docs now distinguish project skills (`.cursor/skills/<skill>/SKILL.md`), user skills (`~/.cursor/skills/`), internal built-ins (`~/.cursor/skills-cursor/`), and user agents (`~/.cursor/agents/`).
+- **Global capability discovery roots** — `scripts/discover-global-capabilities.mjs` now scans the real OpenClaw and Cursor user roots: OpenClaw `~/.openclaw/skills` plus `~/.agents/skills`, Cursor `~/.cursor/agents`, `~/.cursor/skills`, and `~/.cursor/skills-cursor`.
+
+### Changed
+
+- **Runtime documentation refreshed** — Updated `AGENTS.md`, `CLAUDE.md`, `README.md`, `README.zh-CN.md`, `docs/runtime-capability-matrix.md`, and research docs to match the verified Codex, OpenClaw, and Cursor runtime locations and command/skill behavior.
+- **OpenClaw evaluation hydration** — `scripts/eval-meta-agents.mjs` now recursively hydrates `__REPO_ROOT__` placeholders in generated OpenClaw config objects, not only the agent workspace path.
+
 ## [2.0.16] - 2026-04-26
 
 ### Fixed

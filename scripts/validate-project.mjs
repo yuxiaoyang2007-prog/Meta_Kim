@@ -1224,6 +1224,12 @@ async function validateOpenClawArtifacts(agentIds) {
       `canonical OpenClaw template is missing enabled hook ${hookName}.`,
     );
   }
+
+  const extraSkillDirs = templateConfig.skills?.load?.extraDirs ?? [];
+  assert(
+    extraSkillDirs.includes("__REPO_ROOT__\\openclaw\\skills"),
+    "canonical OpenClaw template must register repo-local openclaw/skills via skills.load.extraDirs.",
+  );
 }
 
 async function validatePortableSkill() {
@@ -1336,6 +1342,23 @@ async function validateCodexArtifacts() {
       `canonical/runtime-assets/codex/config.toml.example is missing ${expected}`,
     );
   }
+  const commandPath = path.join(
+    canonicalRuntimeAssetsDir,
+    "codex",
+    "commands",
+    "meta-theory.md",
+  );
+  const command = await fs.readFile(commandPath, "utf8");
+  for (const expected of [
+    "name: meta-theory",
+    "~/.codex/skills/meta-theory/SKILL.md",
+    ".agents/skills/meta-theory/SKILL.md",
+  ]) {
+    assert(
+      command.includes(expected),
+      `canonical/runtime-assets/codex/commands/meta-theory.md is missing ${expected}`,
+    );
+  }
 }
 
 async function validatePackageJson() {
@@ -1376,8 +1399,11 @@ async function validatePackageJson() {
       "node scripts/install-global-skills-all-runtimes.mjs --update --targets claude",
     "package.json meta:deps:update must use the Node-based installer with --targets claude.",
   );
+  const setupTestScript = pkg.scripts?.["meta:test:setup"] ?? "";
   assert(
-    pkg.scripts?.["meta:test:setup"] === "node --test tests/setup/*.test.mjs",
+    /tests\/setup\/\*\.test\.mjs/.test(setupTestScript) &&
+      (/node --test/.test(setupTestScript) ||
+        /scripts\/run-node-tests\.mjs/.test(setupTestScript)),
     "package.json must expose meta:test:setup for installer regression coverage.",
   );
   assert(

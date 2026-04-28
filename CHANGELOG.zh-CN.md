@@ -6,6 +6,24 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.0.17] - 2026-04-27
+
+### 新增
+
+- **Codex `/meta-theory` 命令投影** — 新增 canonical Codex 命令源 `canonical/runtime-assets/codex/commands/meta-theory.md`，并补齐项目级 / 全局同步，让 Codex 能从 `.codex/commands/` 和 `~/.codex/commands/` 加载 `/meta-theory`。
+
+### 修复
+
+- **Codex 命令验证与打包** — `config/sync.json`、`scripts/meta-kim-sync-config.mjs`、`scripts/sync-runtimes.mjs`、`scripts/sync-global-meta-theory.mjs`、`scripts/validate-project.mjs` 和 setup 测试现在把 Codex commands 作为一等运行时资产处理。同步修正 `.gitignore` 根目录锚定，避免 canonical Codex runtime assets 被误忽略。
+- **OpenClaw skill 根目录接线** — 已核对 OpenClaw 已安装 CLI 的实际加载逻辑，并在 `canonical/runtime-assets/openclaw/openclaw.template.json` 通过 `skills.load.extraDirs` 接入 `__REPO_ROOT__\\openclaw\\skills`，让生成配置能加载仓库内 OpenClaw skills，而不是错误假定它们位于用户级 managed skills 目录。
+- **Cursor agent / skill 路径对齐** — 已核对 Cursor 内置 `create-subagent` / `create-skill` 指南，并把 Cursor agent 生成改为在 `.cursor/agents/*.md` 写入 YAML frontmatter。Cursor 文档现在区分项目 skills（`.cursor/skills/<skill>/SKILL.md`）、用户 skills（`~/.cursor/skills/`）、内置 skills（`~/.cursor/skills-cursor/`）和用户 agents（`~/.cursor/agents/`）。
+- **全局能力发现根目录** — `scripts/discover-global-capabilities.mjs` 现在扫描真实的 OpenClaw / Cursor 用户根目录：OpenClaw `~/.openclaw/skills` 加 `~/.agents/skills`，Cursor `~/.cursor/agents`、`~/.cursor/skills` 和 `~/.cursor/skills-cursor`。
+
+### 变更
+
+- **运行时文档刷新** — 更新 `AGENTS.md`、`CLAUDE.md`、`README.md`、`README.zh-CN.md`、`docs/runtime-capability-matrix.md` 和 research 文档，使其匹配已验证的 Codex、OpenClaw、Cursor 运行时位置与命令 / skill 行为。
+- **OpenClaw 评估配置占位符递归替换** — `scripts/eval-meta-agents.mjs` 现在会递归替换生成配置对象里的 `__REPO_ROOT__`，不再只处理 agent workspace 路径。
+
 ## [2.0.16] - 2026-04-26
 
 ### 修复

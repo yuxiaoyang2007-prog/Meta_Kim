@@ -40,8 +40,7 @@ const PLATFORMS = {
     baseDir: () => path.join(os.homedir(), ".openclaw"),
     scanners: {
       agents: async (baseDir) => scanOpenClawAgents(baseDir),
-      skills: async (baseDir) =>
-        scanSkillFilesRecursive(path.join(baseDir, "skills")),
+      skills: async (baseDir) => scanOpenClawSkills(baseDir),
       hooks: async (baseDir) => scanHookFiles(path.join(baseDir, "hooks")),
       commands: async (baseDir) =>
         scanCommandFiles(path.join(baseDir, "commands")),
@@ -63,8 +62,8 @@ const PLATFORMS = {
     name: "Cursor",
     baseDir: () => path.join(os.homedir(), ".cursor"),
     scanners: {
-      agents: async () => [],
-      skills: async (baseDir) => scanSkillFiles(path.join(baseDir, "skills")),
+      agents: async (baseDir) => scanMarkdownFiles(path.join(baseDir, "agents")),
+      skills: async (baseDir) => scanCursorSkills(baseDir),
       plugins: async (baseDir) =>
         scanPluginFiles(path.join(baseDir, "plugins")),
     },
@@ -314,6 +313,32 @@ async function scanSkillFilesRecursive(dir) {
     });
   }
   return results;
+}
+
+async function mergeCapabilityLists(...lists) {
+  const byPath = new Map();
+  for (const list of lists) {
+    for (const item of list) {
+      byPath.set(item.path, item);
+    }
+  }
+  return Array.from(byPath.values()).sort((left, right) =>
+    left.id.localeCompare(right.id),
+  );
+}
+
+async function scanOpenClawSkills(baseDir) {
+  return mergeCapabilityLists(
+    await scanSkillFilesRecursive(path.join(baseDir, "skills")),
+    await scanSkillFilesRecursive(path.join(os.homedir(), ".agents", "skills")),
+  );
+}
+
+async function scanCursorSkills(baseDir) {
+  return mergeCapabilityLists(
+    await scanSkillFilesRecursive(path.join(baseDir, "skills")),
+    await scanSkillFilesRecursive(path.join(baseDir, "skills-cursor")),
+  );
 }
 
 async function scanHookFiles(dir) {

@@ -8,15 +8,15 @@ canonical/skills/commit-review/
 
 # ========== Runtime Projections (Generated from canonical/) ==========
 # These are DERIVED assets, NOT source. Edit canonical/ instead.
-.claude/
-.mcp.json
-.codex/
-codex/
-.agents/
-openclaw/
-openclaw/workspaces/*/.openclaw/
-shared-skills/
-.cursor/
+/.claude/
+/.mcp.json
+/.codex/
+/codex/
+/.agents/
+/openclaw/
+/openclaw/workspaces/*/.openclaw/
+/shared-skills/
+/.cursor/
 
 # ========== Local State (Never commit) ==========
 .meta-kim/

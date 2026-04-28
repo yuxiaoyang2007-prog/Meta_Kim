@@ -74,6 +74,24 @@ describe("install platform config", () => {
     assert.equal(shouldUseCliShell("darwin"), false);
     assert.equal(shouldUseCliShell("linux"), false);
   });
+
+  test("Codex planning hooks use Node runner on every platform", () => {
+    const source = readFileSync(
+      path.join(repoRoot, "scripts", "install-global-skills-all-runtimes.mjs"),
+      "utf8",
+    );
+    const commandFunction = source.match(
+      /function codexPlanningHookCommand[\s\S]*?\n}\n/,
+    )?.[0];
+
+    assert.ok(commandFunction);
+    assert.match(commandFunction, /codex_hook_runner\.mjs/);
+    assert.match(commandFunction, /process\.execPath/);
+    assert.match(commandFunction, /shellToken/);
+    assert.match(commandFunction, /return `\$\{shellToken\(nodePath\)\}/);
+    assert.doesNotMatch(commandFunction, /os\.platform\(\) === "win32"/);
+    assert.doesNotMatch(commandFunction, /return `node |return `"\$\{nodePath\}"|python3|2>\/dev\/null|\|\| true/);
+  });
 });
 
 describe("python launcher selection", () => {

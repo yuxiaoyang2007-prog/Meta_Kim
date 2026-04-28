@@ -42,7 +42,7 @@ When this repository is opened in Codex:
 - `.agents/skills/meta-theory/` is the project skill mirror (directory layout); `.codex/skills/` may hold the portable skill surface depending on sync scope
 - `codex/config.toml.example` is generated from `canonical/runtime-assets/codex/config.toml.example` and shows how user-global Codex can wire MCP and skills
 
-**Cursor parity (same repo, fourth runtime):** `.cursor/agents/*.md`, `.cursor/skills/meta-theory/`, `.cursor/mcp.json` — all refreshed by `npm run sync:runtimes` per `config/sync.json`.
+**Cursor parity (same repo, fourth runtime):** `.cursor/agents/*.md`, `.cursor/skills/meta-theory/`, `.cursor/mcp.json` — all refreshed by `npm run meta:sync` per `config/sync.json`.
 
 Important maintenance rule:
 
@@ -267,50 +267,50 @@ For multi-platform setups, run `node setup.mjs` — it loops through all selecte
 
 After changing canonical files:
 
-1. run `npm run sync:runtimes`
+1. run `npm run meta:sync`
 2. run `npm run discover:global`
-3. run `npm run validate` (or `npm run check` = `check:runtimes` + `validate`)
-4. run `npm run validate:run -- <artifact.json>` when you want to verify a recorded governed run
-5. run `npm run index:runs -- <artifact-dir-or-file>` when you want validated governed runs queryable from the local run index
-6. use `npm run query:runs -- --owner <agent>` when continuity or retrieval should consult the local run index first
-7. run `npm run doctor:governance` when mirrors, hooks, local profiles, or run-index health might have drifted
+3. run `npm run meta:validate` (or `npm run meta:check` = `meta:check:runtimes` + `meta:validate`)
+4. run `npm run meta:validate:run -- <artifact.json>` when you want to verify a recorded governed run
+5. run `npm run meta:index:runs -- <artifact-dir-or-file>` when you want validated governed runs queryable from the local run index
+6. use `npm run meta:query:runs -- --owner <agent>` when continuity or retrieval should consult the local run index first
+7. run `npm run meta:doctor:governance` when mirrors, hooks, local profiles, or run-index health might have drifted
 8. run `npm run migrate:meta-kim -- <source-dir> --apply` when importing an older prompt pack or single-agent repo into local migration state
-9. run `npm run eval:agents` when smoke-level runtime acceptance matters
-10. run `npm run eval:agents:live` only when you explicitly need slower prompt-backed runtime acceptance
-11. run `npm run verify:all` before release or after larger changes
-12. run `npm run verify:all:live` only before runtime-sensitive releases that need the live acceptance layer
+9. run `npm run meta:eval:agents` when smoke-level runtime acceptance matters
+10. run `npm run meta:eval:agents:live` only when you explicitly need slower prompt-backed runtime acceptance
+11. run `npm run meta:verify:all` before release or after larger changes
+12. run `npm run meta:verify:all:live` only before runtime-sensitive releases that need the live acceptance layer
 13. read `docs/runtime-capability-matrix.md` whenever you touch trigger, card, silence, shell, review, verification, stop, or writeback behavior across runtimes
 
-`npm run verify:all` runs `check`, `check:global:meta-theory`, `eval:agents --require-all-runtimes`, `test:setup`, and `test:meta-theory`.
+`npm run meta:verify:all` runs `meta:check`, `meta:check:global`, `eval-meta-agents --require-all-runtimes`, `meta:test:setup`, and `meta:test:meta-theory`.
 
 Runtime target selection has two layers:
 
 - `config/sync.json` declares repo-level `supportedTargets` and `defaultTargets`
 - `.meta-kim/local.overrides.json` stores machine-level `activeTargets`
-- `setup.mjs`, `sync:global:meta-theory`, and `deps:install:all-runtimes` act on `activeTargets`
-- `sync:runtimes` acts on repo `supportedTargets` unless `--targets` overrides it
+- `setup.mjs`, `meta:sync:global`, and `meta:deps:install:all-runtimes` act on `activeTargets`
+- `meta:sync` acts on repo `supportedTargets` unless `--targets` overrides it
 
 Useful supporting commands:
 
-- `npm run check`
-- `npm run check:runtimes`
-- `npm run check:global:meta-theory`
-- `npm run show:global:meta-theory-targets`
-- `npm run doctor:governance`
-- `npm run index:runs -- <artifact-dir-or-file>`
-- `npm run query:runs -- --owner <agent>`
-- `npm run rebuild:run-index -- <artifact-dir-or-file>`
+- `npm run meta:check`
+- `npm run meta:check:runtimes`
+- `npm run meta:check:global`
+- `npm run meta:show:global:targets`
+- `npm run meta:doctor:governance`
+- `npm run meta:index:runs -- <artifact-dir-or-file>`
+- `npm run meta:query:runs -- --owner <agent>`
+- `npm run meta:rebuild:run-index -- <artifact-dir-or-file>`
 - `npm run migrate:meta-kim -- <source-dir> --apply`
-- `npm run probe:clis`
-- `npm run test:mcp`
-- `npm run graphify:check` (optional; target projects and this repo’s `graphify-out/` workflow)
+- `npm run meta:probe:clis`
+- `npm run meta:test:mcp`
+- `npm run meta:graphify:check` (optional; target projects and this repo’s `graphify-out/` workflow)
 - `node scripts/agent-health-report.mjs`
 - `npm run meta:deps:install` / `npm run meta:deps:install:all-runtimes` and `npm run meta:deps:update` / `npm run meta:deps:update:all-runtimes`
 - `npm run meta:deps:install:claude-plugins`
-- `npm run sync:global:meta-theory`
+- `npm run meta:sync:global`
 - `npm run prompt:next-iteration`
 
-`eval:agents` is the lightweight runtime smoke layer: it checks CLI availability, runtime wiring, hooks, and registry/config scaffolding without opening live prompt sessions. Use the `:live` variants only when you actually need real Claude / Codex / OpenClaw prompt-backed acceptance.
+`meta:eval:agents` is the lightweight runtime smoke layer: it checks CLI availability, runtime wiring, hooks, and registry/config scaffolding without opening live prompt sessions. Use the `:live` variants only when you actually need real Claude / Codex / OpenClaw prompt-backed acceptance.
 
 **Tooling:** Node `>=22.13.0` (see `package.json` `engines`).
 

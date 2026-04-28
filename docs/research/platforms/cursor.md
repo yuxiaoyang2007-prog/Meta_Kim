@@ -12,20 +12,20 @@
 
 - Standard: **AgentSkills open standard** (`SKILL.md` with YAML frontmatter)
 - Cursor adopted the AgentSkills standard, confirmed by:
-  - Skills CLI listing (mintlify.com/vercel-labs/skills) includes Cursor
+  - Cursor built-in `create-skill` skill documents `~/.cursor/skills/` and `.cursor/skills/`
   - Multiple third-party projects (gstack, superpowers, everything-claude-code) explicitly list Cursor support
-  - Cursor documentation references `.agents/skills/` as project-level skill path
 
 ### Path Conventions
 
 | Scope | Path |
 |-------|------|
 | Global skills | `~/.cursor/skills/<skill-id>/SKILL.md` |
-| Project skills | `.agents/skills/<skill-id>/SKILL.md` |
+| Project skills | `.cursor/skills/<skill-id>/SKILL.md` |
 | Agent definitions | `.cursor/agents/*.md` |
+| User agent definitions | `~/.cursor/agents/*.md` |
 | MCP config | `.cursor/mcp.json` |
 
-Note: The `.agents/skills/` project-level path is a **universal path** shared by Cursor, Codex, Cline, GitHub Copilot, and Gemini CLI.
+Note: `.agents/skills/` may exist as a portable AgentSkills mirror for other runtimes, but Cursor's own built-in `create-skill` guidance names `.cursor/skills/` for project skills and `~/.cursor/skills/` for personal skills.
 
 ### Supported Features
 
@@ -39,26 +39,27 @@ Note: The `.agents/skills/` project-level path is a **universal path** shared by
 
 ### Agent Format
 
-Cursor agents use plain Markdown files (no YAML frontmatter):
+Cursor agents use Markdown files with YAML frontmatter:
 
 ```markdown
-# Agent Title
+---
+name: code-reviewer
+description: Reviews code for quality and best practices
+---
 
-> Agent summary
-
-Agent instructions and behavior description...
+You are a code reviewer...
 ```
 
-This differs from Claude Code (YAML frontmatter + body) and Codex (TOML format).
+This matches Cursor's built-in `create-subagent` guidance. It differs from Codex's TOML custom-agent format.
 
 ### Evidence of Cursor Skill Support
 
-1. **Skills CLI** (mintlify.com/vercel-labs/skills): Lists Cursor among 40+ supported agents
+1. **Cursor built-in `create-skill` skill**: Documents `~/.cursor/skills/skill-name/` and `.cursor/skills/skill-name/`
 2. **gstack** (garrytan/gstack): Documentation explicitly mentions `~/.cursor/skills/gstack-*/` as install path
 3. **superpowers** (obra/superpowers): Lists Cursor in supported platforms
 4. **everything-claude-code** (affaan-m): Lists Cursor in supported platforms
 5. **planning-with-files** (OthmanAdi): 16+ platforms including Cursor
-6. **AgentSkills standard**: Universal `.agents/skills/` path works for Cursor
+6. **Cursor built-in `create-subagent` skill**: Documents `.cursor/agents/` and `~/.cursor/agents/` with required `name` and `description` frontmatter
 
 ### Plugin System
 
@@ -73,14 +74,14 @@ Cursor supports plugins via Claude Code marketplace infrastructure:
 - Hooks system via `.cursor/hooks.json` (userPromptSubmit, preToolUse, postToolUse, stop)
 - No context:fork capability
 - Plugin system reuses Claude Code marketplace (not a separate ecosystem)
-- Agent format is plain Markdown (no frontmatter)
-- Shares `.agents/skills/` universal project path with Codex and others
+- Agent format is Markdown with YAML frontmatter
+- Project skill path is `.cursor/skills/`
 - Global skill install path is `~/.cursor/skills/`
-- No global agents directory (agents are project-level only)
+- Global agent path exists as `~/.cursor/agents/`, but project `.cursor/agents/` has higher priority
 
 ## Data Sources
 
-- Skills CLI reference (mintlify.com/vercel-labs/skills)
+- Cursor built-in `create-skill` and `create-subagent` skills in `~/.cursor/skills-cursor/`
 - gstack README (explicit `~/.cursor/skills/` mention)
 - superpowers README (lists Cursor support)
 - everything-claude-code README (lists Cursor support)

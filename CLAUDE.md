@@ -42,7 +42,7 @@ A valid meta unit must:
 
 Claude Code is a first-class projection. Separate **what sync generates** from **what you edit long-term**:
 
-**Generated / runtime wiring (from `canonical/` + `canonical/runtime-assets/claude/` via `npm run sync:runtimes`):**
+**Generated / runtime wiring (from `canonical/` + `canonical/runtime-assets/claude/` via `npm run meta:sync`):**
 
 - `.claude/agents/*.md`
 - `.claude/skills/meta-theory/` (portable `meta-theory` + `references/`)
@@ -247,18 +247,18 @@ Files that should usually remain derived or runtime-specific:
 - `.mcp.json`
 - `.codex/agents/*.toml`
 - `.agents/skills/meta-theory/`
-- `.codex/skills/meta-theory.md` and `.codex/skills/references/*`
-- `openclaw/skills/meta-theory.md` and `openclaw/skills/references/*`
+- `.codex/skills/meta-theory/SKILL.md` and `.codex/skills/meta-theory/references/*`
+- `openclaw/skills/meta-theory/SKILL.md` and `openclaw/skills/meta-theory/references/*`
 - `openclaw/workspaces/*`
 - `.cursor/agents/*.md`
 - `.cursor/skills/meta-theory/`
 - `.cursor/mcp.json`
 
-`npm run sync:runtimes` writes the **same** portable `meta-theory` skill (main file + `references/`) into `.claude/skills/meta-theory/`, `openclaw/skills/`, `.codex/skills/` (and related Codex paths), `.agents/skills/meta-theory/`, and **`.cursor/skills/meta-theory/`**. It also refreshes agents, hooks, settings, and MCP templates per target (including **`.cursor/agents/`** and **`.cursor/mcp.json`**). Default targets are `config/sync.json` → `supportedTargets`; machine overrides live in `.meta-kim/local.overrides.json` → `activeTargets`. If trees disagree, re-run sync from `canonical/` — do not hand-edit projections as a second source of truth.
+`npm run meta:sync` writes the **same** portable `meta-theory` skill (main file + `references/`) into `.claude/skills/meta-theory/`, `openclaw/skills/meta-theory/`, `.codex/skills/meta-theory/`, `.agents/skills/meta-theory/`, and **`.cursor/skills/meta-theory/`**. It also refreshes agents, hooks, settings, MCP templates, and the Codex `/meta-theory` command per target (including **`.cursor/agents/`** and **`.cursor/mcp.json`**). Default targets are `config/sync.json` → `supportedTargets`; machine overrides live in `.meta-kim/local.overrides.json` → `activeTargets`. If trees disagree, re-run sync from `canonical/` — do not hand-edit projections as a second source of truth.
 
 ### meta-theory reference language
 
-- **`SKILL.md` / `meta-theory.md` and all `references/*.md`**: English, model-facing (kept in sync across runtimes via `sync:runtimes`).
+- **`SKILL.md` and all `references/*.md`**: English, model-facing (kept in sync across runtimes via `meta:sync`).
 - **`docs/meta.md`**: optional long-form narrative; may include Chinese historical sections. Not mirrored into the portable skill; cite it when depth matters.
 - **Evolution writeback:** when persistence is configured, gaps and patterns may be recorded under `memory/` per canonical `meta-theory` `SKILL.md`.
 
@@ -337,44 +337,44 @@ python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; 
 
 After changing canonical prompts, skills, hooks, or runtime-facing contracts:
 
-1. run `npm run sync:runtimes`
+1. run `npm run meta:sync`
 2. run `npm run discover:global`
-3. run `npm run validate` (or `npm run check`, which runs `check:runtimes` then `validate`)
-4. run `npm run validate:run -- <artifact.json>` when you want to verify a recorded governed run
-5. run `npm run index:runs -- <artifact-dir-or-file>` when validated governed runs should become queryable from the local run index
-6. use `npm run query:runs -- --owner <agent>` when continuity should consult the local run index before memory/files
-7. run `npm run doctor:governance` when mirrors, hooks, local profiles, or run-index health may have drifted
+3. run `npm run meta:validate` (or `npm run meta:check`, which runs `meta:check:runtimes` then `meta:validate`)
+4. run `npm run meta:validate:run -- <artifact.json>` when you want to verify a recorded governed run
+5. run `npm run meta:index:runs -- <artifact-dir-or-file>` when validated governed runs should become queryable from the local run index
+6. use `npm run meta:query:runs -- --owner <agent>` when continuity should consult the local run index before memory/files
+7. run `npm run meta:doctor:governance` when mirrors, hooks, local profiles, or run-index health may have drifted
 8. run `npm run migrate:meta-kim -- <source-dir> --apply` when importing an older prompt pack or single-agent repo into local migration state
-9. run `npm run eval:agents` when smoke-level runtime acceptance matters
-10. run `npm run eval:agents:live` only when you explicitly need slower prompt-backed runtime acceptance
-11. run `npm run verify:all` before release or after larger changes
-12. run `npm run verify:all:live` only before runtime-sensitive releases that need the live acceptance layer
+9. run `npm run meta:eval:agents` when smoke-level runtime acceptance matters
+10. run `npm run meta:eval:agents:live` only when you explicitly need slower prompt-backed runtime acceptance
+11. run `npm run meta:verify:all` before release or after larger changes
+12. run `npm run meta:verify:all:live` only before runtime-sensitive releases that need the live acceptance layer
 13. check `docs/runtime-capability-matrix.md` when changing behavior that must stay parity-aligned across Claude / Codex / OpenClaw / Cursor
 
-`npm run verify:all` runs, in order: `check` (runtime mirror + project validate), `check:global:meta-theory`, `eval:agents --require-all-runtimes`, `test:setup`, and `test:meta-theory`.
+`npm run meta:verify:all` runs, in order: `meta:check` (runtime mirror + project validate), `meta:check:global`, `eval-meta-agents --require-all-runtimes`, `meta:test:setup`, and `meta:test:meta-theory`.
 
 Useful supporting commands:
 
-- `npm run check` — `check:runtimes` + `validate`
-- `npm run check:runtimes`
-- `npm run check:global:meta-theory` — verify user-level Claude merge targets for `sync:global:meta-theory`
-- `npm run show:global:meta-theory-targets` — print where global sync will write
-- `npm run doctor:governance`
-- `npm run index:runs -- <artifact-dir-or-file>`
-- `npm run query:runs -- --owner <agent>`
-- `npm run rebuild:run-index -- <artifact-dir-or-file>`
+- `npm run meta:check` — `meta:check:runtimes` + `meta:validate`
+- `npm run meta:check:runtimes`
+- `npm run meta:check:global` — verify user-level runtime merge targets for `meta:sync:global`
+- `npm run meta:show:global:targets` — print where global sync will write
+- `npm run meta:doctor:governance`
+- `npm run meta:index:runs -- <artifact-dir-or-file>`
+- `npm run meta:query:runs -- --owner <agent>`
+- `npm run meta:rebuild:run-index -- <artifact-dir-or-file>`
 - `npm run migrate:meta-kim -- <source-dir> --apply`
-- `npm run probe:clis`
-- `npm run test:mcp`
-- `npm run graphify:install` / `npm run graphify:update` — helper wrappers around graphify setup
+- `npm run meta:probe:clis`
+- `npm run meta:test:mcp`
+- `npm run meta:graphify:install` / `npm run meta:graphify:update` — helper wrappers around graphify setup
 - `node scripts/agent-health-report.mjs`
 - `npm run meta:deps:install` or `npm run meta:deps:install:all-runtimes` — install third-party skill repos into global runtime skill dirs (`all-runtimes` includes Codex/OpenClaw/Cursor where applicable; see README)
 - `npm run meta:deps:update` / `npm run meta:deps:update:all-runtimes` — same with `--update`
 - `npm run meta:deps:install:claude-plugins` — optional Claude Code marketplace plugins (e.g. full Superpowers bundle)
-- `npm run sync:global:meta-theory` — sync portable `meta-theory` + merge Meta_Kim hooks into user-level Claude settings
+- `npm run meta:sync:global` — sync portable `meta-theory` + merge Meta_Kim hooks into user-level Claude settings
 - `npm run prompt:next-iteration` — maintainer helper for structured next-step prompts after a governed run
 
-`eval:agents` is the lightweight runtime smoke layer: it checks CLI availability, runtime wiring, hooks, and registry/config scaffolding without opening live prompt sessions. Use the `:live` variants only when you actually need real Claude / Codex / OpenClaw prompt-backed acceptance.
+`meta:eval:agents` is the lightweight runtime smoke layer: it checks CLI availability, runtime wiring, hooks, and registry/config scaffolding without opening live prompt sessions. Use the `:live` variants only when you actually need real Claude / Codex / OpenClaw prompt-backed acceptance.
 
 **Tooling:** Node `>=22.13.0` (see `package.json` `engines`). CLI entry: `npx --yes github:KimYx0207/Meta_Kim meta-kim` / `bin/meta-kim.mjs`.
 

@@ -37,6 +37,7 @@
       ".codex/agents",
       ".codex/skills",
       ".codex/capability-index",
+      ".codex/commands",
       ".agents/skills",
       "codex/config.toml.example"
     ],

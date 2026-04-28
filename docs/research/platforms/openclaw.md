@@ -18,8 +18,10 @@
 | Scope | Path |
 |-------|------|
 | Global skills | `~/.openclaw/skills/<skill-id>/SKILL.md` |
-| Project skills | `openclaw/skills/<skill-id>/` |
-| Shared skills | `shared-skills/<skill-id>.md` |
+| Personal shared skills | `~/.agents/skills/<skill-id>/SKILL.md` |
+| Workspace skills | `<workspace>/skills/<skill-id>/SKILL.md` |
+| Extra configured skills | `skills.load.extraDirs[]` in `openclaw.json` |
+| Meta_Kim repo extra skills | `openclaw/skills/<skill-id>/SKILL.md` via `openclaw/openclaw.template.json` `skills.load.extraDirs` |
 | Workspace config | `openclaw/workspaces/<agent-id>/` |
 | Template config | `openclaw/openclaw.template.json` |
 
@@ -49,23 +51,24 @@ OpenClaw has a unique workspace model where each agent gets its own workspace di
 
 ### Shared Skills Layer
 
-OpenClaw uses a `shared-skills/` directory for project-level skills that are shared across all workspaces, avoiding duplication.
+OpenClaw loads skills from managed `~/.openclaw/skills/`, personal `~/.agents/skills/`, `<workspace>/skills/`, and configured `skills.load.extraDirs[]`. Meta_Kim keeps one repo-local copy at `openclaw/skills/` and registers it through the generated OpenClaw template instead of duplicating the skill under every workspace.
 
 ### Differences from Claude Code
 
-- No hooks system
+- Has OpenClaw internal/plugin hooks, not Claude Code hook files
 - No context:fork capability
-- No plugin marketplace
+- Plugin support exists in OpenClaw; do not assume Claude marketplace compatibility
 - Has workspace-per-agent model (unique to OpenClaw)
-- Has shared-skills layer for deduplication
+- Uses `skills.load.extraDirs[]` for repo-local shared skill deduplication
 - Supports both SKILL.md directory format and single-file Markdown format
 
 ## Data Sources
 
-- OpenClaw GitHub repository
+- OpenClaw CLI 2026.4.15 (`openclaw skills list --json`, `openclaw skills info`)
+- OpenClaw installed runtime source (`skills-Cwx5TftI.js`) showing managed, personal, project, workspace, and extra skill roots
 - mintlify.com/vercel-labs/skills (AgentSkills standard)
 - Meta_Kim project integration code
 
 ## Research Date
 
-2026-04-13
+2026-04-27

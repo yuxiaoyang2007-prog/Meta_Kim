@@ -1182,16 +1182,30 @@ async function createOpenClawEvalConfig() {
   const rawConfig = JSON.parse(
     await fs.readFile(openclawTemplateConfigPath, "utf8"),
   );
+  const hydrateRepoRoot = (value) => {
+    if (typeof value === "string") {
+      return value
+        .replace("__REPO_ROOT__\\", `${repoRoot}\\`)
+        .replace("__REPO_ROOT__/", `${repoRoot}/`);
+    }
+    if (Array.isArray(value)) {
+      return value.map((item) => hydrateRepoRoot(item));
+    }
+    if (value && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [key, hydrateRepoRoot(item)]),
+      );
+    }
+    return value;
+  };
+
   const config = {
-    ...rawConfig,
+    ...hydrateRepoRoot(rawConfig),
     agents: {
       ...rawConfig.agents,
-      list: (rawConfig.agents?.list ?? []).map((agent) => ({
-        ...agent,
-        workspace: String(agent.workspace ?? "")
-          .replace("__REPO_ROOT__\\", `${repoRoot}\\`)
-          .replace("__REPO_ROOT__/", `${repoRoot}/`),
-      })),
+      list: (rawConfig.agents?.list ?? []).map((agent) =>
+        hydrateRepoRoot(agent),
+      ),
     },
   };
 

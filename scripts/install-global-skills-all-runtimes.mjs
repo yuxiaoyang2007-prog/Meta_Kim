@@ -3125,11 +3125,12 @@ async function deployHookConfigFiles(spec, runtimeHome, runtimeId) {
 }
 
 function codexPlanningHookCommand(runtimeHome, scriptName) {
+  const nodePath = process.execPath;
   const scriptPath = path.join(runtimeHome, "hooks", scriptName);
-  if (os.platform() === "win32") {
-    return `python "${scriptPath}"`;
-  }
-  return `python3 "${scriptPath}" 2>/dev/null || python "${scriptPath}" 2>/dev/null || true`;
+  const runnerPath = path.join(runtimeHome, "hooks", "codex_hook_runner.mjs");
+  const shellToken = (value) =>
+    /[\s"]/u.test(value) ? JSON.stringify(value) : value;
+  return `${shellToken(nodePath)} ${shellToken(runnerPath)} ${shellToken(scriptPath)}`;
 }
 
 function buildCodexPlanningHooksJson(runtimeHome) {
@@ -3371,6 +3372,114 @@ function buildCodexPlanningHookAdapterPy() {
   ].join("\n");
 }
 
+function buildCodexHookRunnerMjs() {
+  return [
+    'import { spawnSync } from "node:child_process";',
+    'import { existsSync, readFileSync } from "node:fs";',
+    'import os from "node:os";',
+    'import path from "node:path";',
+    'import process from "node:process";',
+    "",
+    "const scriptPath = process.argv[2];",
+    "",
+    "function pathEntries() {",
+    "  return String(process.env.PATH || process.env.Path || process.env.path || '')",
+    "    .split(path.delimiter)",
+    "    .filter(Boolean);",
+    "}",
+    "",
+    "function isWindowsApps(filePath) {",
+    "  return filePath.toLowerCase().includes('microsoft\\\\windowsapps');",
+    "}",
+    "",
+    "function commandWorks(command, args = []) {",
+    "  const result = spawnSync(command, [...args, '--version'], {",
+    "    encoding: 'utf8',",
+    "    windowsHide: true,",
+    "    timeout: 5000,",
+    "  });",
+    "  return result.status === 0;",
+    "}",
+    "",
+    "function pythonCandidates() {",
+    "  const candidates = [];",
+    "  for (const envKey of ['META_KIM_PYTHON', 'PYTHON', 'PYTHON3']) {",
+    "    const value = process.env[envKey];",
+    "    if (value) candidates.push({ command: value, args: [] });",
+    "  }",
+    "",
+    "  if (os.platform() === 'win32') {",
+    "    for (const dir of pathEntries()) {",
+    "      for (const name of ['python.exe', 'python3.exe']) {",
+    "        const filePath = path.join(dir, name);",
+    "        if (!existsSync(filePath) || isWindowsApps(filePath)) continue;",
+    "        candidates.push({ command: filePath, args: [] });",
+    "      }",
+    "    }",
+    "    for (const filePath of [",
+    "      'D:\\\\ProgramData\\\\anaconda3\\\\python.exe',",
+    "      'C:\\\\ProgramData\\\\anaconda3\\\\python.exe',",
+    "      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python311', 'python.exe'),",
+    "      path.join(os.homedir(), '.openclaw', 'skills', 'Python313', 'Python313', 'python.exe'),",
+    "    ]) {",
+    "      if (existsSync(filePath)) candidates.push({ command: filePath, args: [] });",
+    "    }",
+    "    candidates.push({ command: 'py', args: ['-3'] });",
+    "  }",
+    "",
+    "  candidates.push({ command: 'python3', args: [] });",
+    "  candidates.push({ command: 'python', args: [] });",
+    "",
+    "  const seen = new Set();",
+    "  return candidates.filter((candidate) => {",
+    "    const key = `${candidate.command}\\0${candidate.args.join('\\0')}`;",
+    "    if (seen.has(key)) return false;",
+    "    seen.add(key);",
+    "    return true;",
+    "  });",
+    "}",
+    "",
+    "function findPython() {",
+    "  for (const candidate of pythonCandidates()) {",
+    "    if (commandWorks(candidate.command, candidate.args)) return candidate;",
+    "  }",
+    "  return null;",
+    "}",
+    "",
+    "function main() {",
+    "  if (!scriptPath) return 0;",
+    "  const python = findPython();",
+    "  if (!python) return 0;",
+    "  let input = '';",
+    "  try {",
+    "    input = readFileSync(0, 'utf8');",
+    "  } catch {",
+    "    input = '';",
+    "  }",
+    "  const result = spawnSync(",
+    "    python.command,",
+    "    [...python.args, scriptPath],",
+    "    {",
+    "      input,",
+    "      encoding: 'utf8',",
+    "      env: {",
+    "        ...process.env,",
+    "        PYTHONIOENCODING: 'utf-8',",
+    "        PYTHONUTF8: '1',",
+    "      },",
+    "      windowsHide: true,",
+    "      timeout: 30000,",
+    "    },",
+    "  );",
+    "  if (result.stdout) process.stdout.write(result.stdout);",
+    "  return 0;",
+    "}",
+    "",
+    "process.exitCode = main();",
+    "",
+  ].join("\n");
+}
+
 function buildCodexWrapperPy(scriptName) {
   return [
     "#!/usr/bin/env python3",
@@ -3385,6 +3494,70 @@ function buildCodexWrapperPy(scriptName) {
     `    stdout, _ = adapter.run_shell_script("${scriptName}", root)`,
     "    if stdout:",
     '        adapter.emit_json({"systemMessage": stdout})',
+    "",
+    "",
+    'if __name__ == "__main__":',
+    "    raise SystemExit(adapter.main_guard(main))",
+    "",
+  ].join("\n");
+}
+
+function buildCodexPreToolUseWrapperPy() {
+  return [
+    "#!/usr/bin/env python3",
+    "from __future__ import annotations",
+    "",
+    "import codex_hook_adapter as adapter",
+    "",
+    "",
+    "def main() -> None:",
+    "    payload = adapter.load_payload()",
+    "    root = adapter.cwd_from_payload(payload)",
+    '    stdout, stderr = adapter.run_shell_script("pre-tool-use.sh", root)',
+    "",
+    "    result = adapter.parse_json(stdout)",
+    '    decision = result.get("decision")',
+    '    if decision and decision != "allow":',
+    "        adapter.emit_json(result)",
+    "        return",
+    "",
+    "    if stderr:",
+    '        adapter.emit_json({"systemMessage": stderr})',
+    "",
+    "",
+    'if __name__ == "__main__":',
+    "    raise SystemExit(adapter.main_guard(main))",
+    "",
+  ].join("\n");
+}
+
+function buildCodexStopWrapperPy() {
+  return [
+    "#!/usr/bin/env python3",
+    "from __future__ import annotations",
+    "",
+    "import codex_hook_adapter as adapter",
+    "",
+    "",
+    "def main() -> None:",
+    "    payload = adapter.load_payload()",
+    "    root = adapter.cwd_from_payload(payload)",
+    '    stdout, _ = adapter.run_shell_script("stop.sh", root)',
+    "    result = adapter.parse_json(stdout)",
+    "",
+    '    message = result.get("followup_message")',
+    "    if not isinstance(message, str) or not message:",
+    "        return",
+    "",
+    '    if "ALL PHASES COMPLETE" in message:',
+    '        adapter.emit_json({"systemMessage": message})',
+    "        return",
+    "",
+    '    if bool(payload.get("stop_hook_active")):',
+    '        adapter.emit_json({"systemMessage": message})',
+    "        return",
+    "",
+    '    adapter.emit_json({"decision": "block", "reason": message})',
     "",
     "",
     'if __name__ == "__main__":',
@@ -3418,6 +3591,11 @@ async function patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId) 
     "utf8",
   );
   await fs.writeFile(
+    path.join(hooksDir, "codex_hook_runner.mjs"),
+    buildCodexHookRunnerMjs(),
+    "utf8",
+  );
+  await fs.writeFile(
     path.join(hooksDir, "session_start.py"),
     buildCodexWrapperPy("session-start.sh"),
     "utf8",
@@ -3425,6 +3603,21 @@ async function patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId) 
   await fs.writeFile(
     path.join(hooksDir, "user_prompt_submit.py"),
     buildCodexWrapperPy("user-prompt-submit.sh"),
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(hooksDir, "pre_tool_use.py"),
+    buildCodexPreToolUseWrapperPy(),
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(hooksDir, "post_tool_use.py"),
+    buildCodexWrapperPy("post-tool-use.sh"),
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(hooksDir, "stop.py"),
+    buildCodexStopWrapperPy(),
     "utf8",
   );
   console.log(

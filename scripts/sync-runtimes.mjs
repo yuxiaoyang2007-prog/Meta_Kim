@@ -81,6 +81,9 @@ export function inferProjectCategory(filePath, rootDir = repoRoot) {
   ) {
     return CATEGORIES.D;
   }
+  if (rel.startsWith(".codex/commands/")) {
+    return CATEGORIES.G;
+  }
   if (rel === "openclaw/openclaw.template.json" || rel.startsWith(".codex/")) {
     return CATEGORIES.G;
   }
@@ -153,6 +156,9 @@ function resolveProjectionDirs(scope) {
     codexUsesDirectorySkill: true,
     codexAgentsDir: codex.agentsDir,
     codexProjectSkillRoot: globalScope ? null : codex.projectSkillRoot,
+    codexHooksDir: globalScope ? null : codex.hooksDir,
+    codexHooksFile: globalScope ? null : codex.hooksFile,
+    codexCommandsDir: codex.commandsDir,
     codexConfigExamplePath: codex.configExampleFile,
 
     // OpenClaw
@@ -182,6 +188,9 @@ function resolveProjectionDirs(scope) {
       codexAgents: codex.display.agentsDir,
       codexSkills: codex.display.skillRoot,
       codexProjectSkills: globalScope ? null : ".agents/skills",
+      codexHooks: globalScope ? null : codex.display.hooksDir,
+      codexHooksFile: globalScope ? null : codex.display.hooksFile,
+      codexCommands: codex.display.commandsDir,
       codexConfig: codex.display.configExampleFile,
       openclawWorkspaces: globalScope
         ? openclaw.baseDir
@@ -216,6 +225,12 @@ const canonicalCodexConfigExamplePath = path.join(
   canonicalRuntimeAssetsDir,
   "codex",
   "config.toml.example",
+);
+const canonicalCodexCommandPath = path.join(
+  canonicalRuntimeAssetsDir,
+  "codex",
+  "commands",
+  "meta-theory.md",
 );
 const canonicalOpenClawTemplatePath = path.join(
   canonicalRuntimeAssetsDir,
@@ -568,10 +583,20 @@ ${instructions}
 
 /**
  * Build a Cursor-compatible agent Markdown file.
- * Cursor agents live in .cursor/agents/*.md — plain Markdown, no YAML frontmatter.
+ * Cursor agents live in .cursor/agents/*.md and require YAML frontmatter.
  */
-function buildCursorAgent(agent) {
-  return `# ${agent.title}
+export function buildCursorAgent(agent) {
+  const description = String(agent.description ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\r?\n/g, "\\n");
+
+  return `---
+name: ${agent.id}
+description: "${description}"
+---
+
+# ${agent.title}
 
 > ${agent.summary}
 
@@ -790,6 +815,57 @@ function applyRuntimePaths(content, targetId) {
     result = result.replace(pattern, replacement);
   }
   return result;
+}
+
+export function buildCodexGraphifyContextHook() {
+  return [
+    'import { existsSync, readFileSync } from "node:fs";',
+    'import path from "node:path";',
+    'import process from "node:process";',
+    "",
+    "function readPayload() {",
+    "  try {",
+    '    const raw = readFileSync(0, "utf8");',
+    '    return raw.trim() ? JSON.parse(raw) : {};',
+    "  } catch {",
+    "    return {};",
+    "  }",
+    "}",
+    "",
+    "const payload = readPayload();",
+    'const cwd = typeof payload.cwd === "string" && payload.cwd ? payload.cwd : process.cwd();',
+    'const graphPath = path.join(cwd, "graphify-out", "graph.json");',
+    "",
+    "if (existsSync(graphPath)) {",
+    "  console.log(",
+    "    JSON.stringify({",
+    '      systemMessage: "graphify: Knowledge graph exists. Read graphify-out/GRAPH_REPORT.md for god nodes and community structure before searching raw files.",',
+    "    }),",
+    "  );",
+    "}",
+    "",
+  ].join("\n");
+}
+
+export function buildCodexProjectHooksJson() {
+  const nodePath = process.execPath;
+  const shellToken = (value) =>
+    /[\s"]/u.test(value) ? JSON.stringify(value) : value;
+  return {
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            {
+              type: "command",
+              command: `${shellToken(nodePath)} ".codex/hooks/graphify-context.mjs"`,
+            },
+          ],
+        },
+      ],
+    },
+  };
 }
 
 async function syncClaudeProjection(
@@ -1176,6 +1252,44 @@ Examples:
       ).changed
     ) {
       changedFiles.push(dp.codexConfig);
+    }
+
+    const codexMetaTheoryCommand = await tryReadCanonical(
+      canonicalCodexCommandPath,
+    );
+    if (
+      codexMetaTheoryCommand &&
+      (
+        await writeGeneratedFile(
+          path.join(dirs.codexCommandsDir, "meta-theory.md"),
+          codexMetaTheoryCommand,
+        )
+      ).changed
+    ) {
+      changedFiles.push(`${dp.codexCommands}/meta-theory.md`);
+    }
+
+    if (dirs.codexHooksDir && dirs.codexHooksFile) {
+      if (
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexHooksDir, "graphify-context.mjs"),
+            buildCodexGraphifyContextHook(),
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexHooks}/graphify-context.mjs`);
+      }
+      if (
+        (
+          await writeGeneratedJson(
+            dirs.codexHooksFile,
+            buildCodexProjectHooksJson(),
+          )
+        ).changed
+      ) {
+        changedFiles.push(dp.codexHooksFile);
+      }
     }
 
     for (const agent of agents) {

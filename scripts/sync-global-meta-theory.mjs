@@ -55,6 +55,12 @@ const skipGlobalHooks = process.argv.includes("--skip-global-hooks");
 const cliArgs = process.argv.slice(2);
 
 const repoHooksDir = path.join(canonicalRuntimeAssetsDir, "claude", "hooks");
+const codexMetaTheoryCommandSource = path.join(
+  canonicalRuntimeAssetsDir,
+  "codex",
+  "commands",
+  "meta-theory.md",
+);
 
 let runtimeHomes = {};
 let allowedRoots = [];
@@ -176,6 +182,27 @@ async function copyCanonicalSkill(targetDir, targetId) {
       category: CATEGORIES.A,
     }),
   );
+}
+
+async function copyCodexMetaTheoryCommand() {
+  const commandsDir = path.join(runtimeHomes.codex.dir, "commands");
+  const targetPath = path.join(commandsDir, "meta-theory.md");
+  assertHomeBound(targetPath);
+  if (!(await pathExists(codexMetaTheoryCommandSource))) {
+    throw new Error(
+      `Missing canonical Codex command source: ${codexMetaTheoryCommandSource}`,
+    );
+  }
+  await fs.mkdir(commandsDir, { recursive: true });
+  await fs.copyFile(codexMetaTheoryCommandSource, targetPath);
+  recordSafe((rec) =>
+    rec.recordFile(targetPath, {
+      source: "sync-global-meta-theory",
+      purpose: "codex-global-command",
+      category: CATEGORIES.A,
+    }),
+  );
+  return targetPath;
 }
 
 async function removeIfExists(targetPath) {
@@ -333,6 +360,25 @@ async function runCheck() {
     }
   }
 
+  if (selectedTargetIds.includes("codex")) {
+    const commandPath = path.join(
+      runtimeHomes.codex.dir,
+      "commands",
+      "meta-theory.md",
+    );
+    const sourceRaw = await fs.readFile(codexMetaTheoryCommandSource, "utf8");
+    const targetRaw = (await pathExists(commandPath))
+      ? await fs.readFile(commandPath, "utf8")
+      : null;
+    const commandInSync = targetRaw === sourceRaw;
+    console.log(
+      `${commandInSync ? `${C.green}✓${C.reset}` : `${C.yellow}⊘${C.reset}`} ${C.dim}Codex /meta-theory command: ${commandPath}${C.reset}`,
+    );
+    if (!commandInSync) {
+      failed = true;
+    }
+  }
+
   process.exitCode = failed ? 1 : 0;
 }
 
@@ -375,6 +421,13 @@ async function runSync() {
     );
   }
 
+  if (selectedTargetIds.includes("codex")) {
+    const commandPath = await copyCodexMetaTheoryCommand();
+    console.log(
+      `${C.green}✓${C.reset} ${C.dim}Synced Codex /meta-theory command: ${commandPath}${C.reset}`,
+    );
+  }
+
   if (manifestRecorder) {
     const result = await manifestRecorder.flush();
     if (result.ok) {
@@ -410,6 +463,11 @@ function printTargets() {
   console.log("- META_KIM_OPENCLAW_HOME or OPENCLAW_HOME");
   console.log("- META_KIM_CODEX_HOME or CODEX_HOME");
   console.log("- META_KIM_CURSOR_HOME or CURSOR_HOME");
+  console.log("");
+  console.log("Codex slash command (when codex is an active target):");
+  console.log(
+    `- ${path.join(runtimeHomes.codex.dir, "commands", "meta-theory.md")}`,
+  );
   console.log("");
   console.log("Claude Code hooks (unless --skip-global-hooks):");
   console.log(`- Scripts: ${globalMetaKimHooksDir()}`);
