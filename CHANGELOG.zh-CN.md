@@ -6,6 +6,29 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.0.19] - 2026-04-28
+
+### 修复
+
+- **跨运行时 MCP Memory 持久化** — `install-mcp-memory-hooks.mjs` 现在除 Claude Code 外，也会为 Codex、Cursor、OpenClaw 安装 MCP Memory 生命周期钩子。Codex 写入 `~/.codex/hooks.json` 的 SessionStart / UserPromptSubmit / Stop；Cursor 写入 `~/.cursor/hooks.json` 的 beforeSubmitPrompt / stop；OpenClaw 写入 `~/.openclaw/hooks/mcp-memory-service` managed hook。
+- **MCP Memory Service API 对齐** — Claude 的 SessionStart 记忆查询改用上游 `POST /api/memories/search`，同时兼容旧的 `results[].memory` 返回结构。跨运行时保存钩子使用 `POST /api/memories`，并按上游建议带上 `X-Agent-ID` 和 `conversation_id`。
+- **MCP Memory 端点兼容性** — 跨运行时记忆 hook 现在同时支持 `http://` 和 `https://` 形式的 `MCP_MEMORY_URL`。
+- **记忆服务健康检查表述** — 安装器不再在当前 shell 无法访问 `localhost:8000`、但 `memory.exe` 正在运行时直接误报服务 down；现在会区分“不可响应”和“当前 shell 无法验证但进程存在”。
+
+## [2.0.18] - 2026-04-28
+
+### 修复
+
+- **Codex `/meta-theory` agent team 执行** — `/meta-theory` 现在明确授权 Codex 使用 sub-agent delegation；非简单任务先应用 `agent-teams-playbook`，再把能力匹配后的执行计划转换成 Codex `spawn_agent` 调用，避免复杂任务只在主线程里做完。
+- **quick deploy 根目录入口文件** — `setup.mjs` 现在会在 Claude 部署时复制 `CLAUDE.md`，在 Codex、OpenClaw、Cursor 部署时复制 `AGENTS.md`。`all` 模式下 `AGENTS.md` 只复制一次，避免冗余操作，同时保留各运行时需要的项目入口。
+- **planning hook 阶段统计** — planning-with-files 的 shell / PowerShell stop 与 check 脚本现在会跨运行时打补丁，Codex adapter 模板也会同时识别 `## Phase` 和 `### Phase`，避免重新安装后 Stop hook 误报 `7/0 phases done`。
+- **Claude Code smoke 验证** — `eval-meta-agents` 现在兼容不再提供 `agents` 子命令的 Claude Code 版本，改为直接校验 `.claude/agents/*.md`。Windows CLI 解析也会优先使用 npm 风格的 `~/.local/claude.cmd`，再考虑 native `~/.local/bin/claude.exe`。
+
+### 测试
+
+- 新增 setup 测试，覆盖 quick deploy 入口文件、Codex planning hook 阶段解析、Claude smoke fallback。
+- 已于 2026-04-28 使用 `npm run meta:verify:all` 完成发布级验证。
+
 ## [2.0.17] - 2026-04-27
 
 ### 新增

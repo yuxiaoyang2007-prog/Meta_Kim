@@ -460,12 +460,14 @@ Possible causes:
     mcpMemoryServerStartHint:
       "MCP Memory Service installed — start with: python -m mcp_memory_service  (or: uv run memory server -s hybrid)",
     mcpMemoryHookInstalling:
-      "Installing Claude Code SessionStart hook for memory service...",
-    mcpMemoryHookInstalled: "SessionStart hook installed",
+      "Installing MCP Memory hooks for Claude Code, Codex, Cursor, and OpenClaw...",
+    mcpMemoryHookInstalled: "MCP Memory runtime hooks installed",
     mcpMemoryHookWarnings:
       "Hook installation reported warnings (non-blocking) — underlying stderr shown below:",
     mcpMemoryAutoStarting: "Starting MCP Memory Service (HTTP, background)...",
     mcpMemoryAutoStarted: "MCP Memory Service running at http://localhost:8000",
+    mcpMemoryAutoStartUnverified:
+      "MCP Memory Service process is running; continuing",
     mcpMemoryAutoStartFailed: "Auto-start failed — start manually:",
     mcpMemoryAutoStartManual: "  memory server --http",
     mcpMemoryAutoStartBoot: "Boot auto-start configured",
@@ -903,12 +905,14 @@ ${r ? `原始错误：${r}` : ""}
     mcpMemoryServerStartHint:
       "MCP Memory Service 已安装——启动方式：python -m mcp_memory_service  （或：uv run memory server -s hybrid）",
     mcpMemoryHookInstalling:
-      "正在安装 Claude Code SessionStart 钩子（供记忆服务使用）...",
-    mcpMemoryHookInstalled: "SessionStart 钩子已安装",
+      "正在安装 Claude Code、Codex、Cursor、OpenClaw 的 MCP Memory 钩子...",
+    mcpMemoryHookInstalled: "MCP Memory 运行时钩子已安装",
     mcpMemoryHookWarnings:
       "钩子安装产生警告（不影响后续流程）——以下是子进程 stderr 原文：",
     mcpMemoryAutoStarting: "正在启动 MCP Memory Service（HTTP 后台模式）...",
     mcpMemoryAutoStarted: "MCP Memory Service 已运行于 http://localhost:8000",
+    mcpMemoryAutoStartUnverified:
+      "MCP Memory Service 进程正在运行，继续安装",
     mcpMemoryAutoStartFailed: "自动启动失败——请手动启动：",
     mcpMemoryAutoStartManual: "  memory server --http",
     mcpMemoryAutoStartBoot: "已配置开机自启",
@@ -1364,14 +1368,16 @@ ${r ? `生エラー：${r}` : ""}
     mcpMemoryServerStartHint:
       "MCP Memory Service がインストールされました——起動方法：python -m mcp_memory_service  （または：uv run memory server -s hybrid）",
     mcpMemoryHookInstalling:
-      "メモリサービス用の Claude Code SessionStart フックをインストール中...",
-    mcpMemoryHookInstalled: "SessionStart フックをインストールしました",
+      "Claude Code、Codex、Cursor、OpenClaw の MCP Memory フックをインストール中...",
+    mcpMemoryHookInstalled: "MCP Memory ランタイムフックをインストールしました",
     mcpMemoryHookWarnings:
       "フックのインストール中に警告が発生しました（非ブロッキング）——子プロセスの stderr を以下に表示します:",
     mcpMemoryAutoStarting:
       "MCP Memory Service（HTTP バックグラウンド）を起動中...",
     mcpMemoryAutoStarted:
       "MCP Memory Service が http://localhost:8000 で実行中",
+    mcpMemoryAutoStartUnverified:
+      "MCP Memory Service プロセスは実行中です。インストールを続行します",
     mcpMemoryAutoStartFailed: "自動起動に失敗——手動で起動してください：",
     mcpMemoryAutoStartManual: "  memory server --http",
     mcpMemoryAutoStartBoot: "起動時自動開始を設定しました",
@@ -1826,13 +1832,15 @@ ${r ? `원본 오류：${r}` : ""}
     mcpMemoryServerStartHint:
       "MCP Memory Service 설치 완료——시작 방법: python -m mcp_memory_service  (또는: uv run memory server -s hybrid)",
     mcpMemoryHookInstalling:
-      "메모리 서비스용 Claude Code SessionStart 훅 설치 중...",
-    mcpMemoryHookInstalled: "SessionStart 훅 설치 완료",
+      "Claude Code, Codex, Cursor, OpenClaw용 MCP Memory 훅 설치 중...",
+    mcpMemoryHookInstalled: "MCP Memory 런타임 훅 설치 완료",
     mcpMemoryHookWarnings:
       "훅 설치에서 경고가 발생했습니다 (비차단) — 하위 프로세스의 stderr 원문은 아래와 같습니다:",
     mcpMemoryAutoStarting: "MCP Memory Service (HTTP 백그라운드) 시작 중...",
     mcpMemoryAutoStarted:
       "MCP Memory Service가 http://localhost:8000에서 실행 중",
+    mcpMemoryAutoStartUnverified:
+      "MCP Memory Service 프로세스가 실행 중이므로 설치를 계속합니다",
     mcpMemoryAutoStartFailed: "자동 시작 실패 — 수동으로 시작하세요:",
     mcpMemoryAutoStartManual: "  memory server --http",
     mcpMemoryAutoStartBoot: "부팅 시 자동 시작 구성 완료",
@@ -2628,6 +2636,18 @@ function deployPlatformFiles(platformId, targetDir) {
       fileCount++;
     }
   };
+
+  if (platformId === "claude" || platformId === "all") {
+    copyIfExists("CLAUDE.md", "CLAUDE.md");
+  }
+  if (
+    platformId === "openclaw" ||
+    platformId === "codex" ||
+    platformId === "cursor" ||
+    platformId === "all"
+  ) {
+    copyIfExists("AGENTS.md", "AGENTS.md");
+  }
 
   if (platformId === "claude" || platformId === "all") {
     copyIfExists(".claude", ".claude");
@@ -3476,7 +3496,10 @@ async function installAllSkills() {
 // ── Step 4.5: Optional Python tools (graphify) ─────────
 
 function checkPython310() {
-  return detectPython310();
+  return detectPython310(spawnSync, platform(), {
+    requirePip: true,
+    bootstrapPip: true,
+  });
 }
 
 // graphify platform name → graphify install command
@@ -3526,7 +3549,7 @@ async function downloadAndInstallPython() {
       // available" and for genuine failures alike — re-run detection either
       // way so an already-installed Python (that just isn't on PATH) is not
       // reported as "winget unavailable".
-      const newPython = detectPython310();
+      const newPython = checkPython310();
       if (newPython) {
         if (result.status === 0) ok(t.pythonInstallSuccess);
         return newPython;
@@ -3958,6 +3981,32 @@ function stopMcpMemoryService() {
   }
 }
 
+function isMcpMemoryProcessRunning() {
+  if (platform() !== "win32") return false;
+  try {
+    const result = spawnSync(
+      "pwsh.exe",
+      [
+        "-NoProfile",
+        "-Command",
+        "if (Get-Process -Name memory -ErrorAction SilentlyContinue) { 'running' }",
+      ],
+      { encoding: "utf8", windowsHide: true },
+    );
+    if (result.status === 0 && result.stdout.includes("running")) return true;
+  } catch {}
+
+  try {
+    const result = spawnSync("tasklist", ["/FI", "IMAGENAME eq memory.exe"], {
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    return result.status === 0 && /\bmemory\.exe\b/iu.test(result.stdout);
+  } catch {
+    return false;
+  }
+}
+
 async function startMcpMemoryServiceBackground(resolved) {
   const memoryBin = findMemoryBinPath(resolved);
   if (!memoryBin) {
@@ -4010,6 +4059,13 @@ async function startMcpMemoryServiceBackground(resolved) {
 
   if (healthy) {
     ok(t.mcpMemoryAutoStarted);
+    const bootOk = configureBootAutoStart(memoryBin);
+    if (bootOk) ok(t.mcpMemoryAutoStartBoot);
+    return;
+  }
+
+  if (isMcpMemoryProcessRunning()) {
+    ok(t.mcpMemoryAutoStartUnverified);
     const bootOk = configureBootAutoStart(memoryBin);
     if (bootOk) ok(t.mcpMemoryAutoStartBoot);
     return;
@@ -4207,9 +4263,9 @@ async function installMcpMemoryServiceStep(inUpdateMode = false) {
 
   info(t.mcpMemoryServerStartHint);
 
-  // Step 4.7 — auto-install the Claude Code SessionStart hook so the full
-  // pipeline (pip package → .mcp.json → hook file → SessionStart registration
-  // → health check) runs from a single `node setup.mjs` invocation.
+  // Step 4.7 — auto-install runtime memory hooks so the full pipeline
+  // (pip package → .mcp.json → hook files → runtime registration →
+  // health check) runs from a single `node setup.mjs` invocation.
   await runMcpMemoryHookInstaller();
 
   // Step 4.8 — start the HTTP server in background and configure boot auto-start

@@ -1,7 +1,7 @@
 /**
  * install-mcp-memory-hooks.mjs
  *
- * Installs MCP Memory Service Claude Code hooks (SessionStart + Stop) and commands.
+ * Installs MCP Memory Service hooks and commands.
  *
  * What this script does (in order):
  *   1. Copy the canonical Python hook from canonical/runtime-assets/claude/memory-hooks/
@@ -14,7 +14,8 @@
  *      (e.g., save-progress command)
  *   5. Register the SessionStart hook in ~/.claude/settings.json
  *   6. Register the Stop hook in ~/.claude/settings.json (stop-save-progress.mjs + stop-memory-save.mjs)
- *   7. Warn if MCP server not responding on http://localhost:8000
+ *   7. Install lifecycle memory bridges for Codex, Cursor, and OpenClaw
+ *   8. Warn if MCP server not responding on http://localhost:8000
  *
  * Usage:
  *   node scripts/install-mcp-memory-hooks.mjs           # Install (idempotent)
@@ -33,7 +34,9 @@ import {
   mkdirSync,
   copyFileSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
+  rmSync,
   statSync,
 } from "node:fs";
 import { readdir } from "node:fs/promises";
@@ -80,6 +83,22 @@ const CANONICAL_COMMANDS_DIR = join(
   "claude",
   "commands",
 );
+const CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE = join(
+  REPO_ROOT,
+  "canonical",
+  "runtime-assets",
+  "shared",
+  "hooks",
+  "meta-kim-memory-save.mjs",
+);
+const CANONICAL_OPENCLAW_MEMORY_HOOK_DIR = join(
+  REPO_ROOT,
+  "canonical",
+  "runtime-assets",
+  "openclaw",
+  "hooks",
+  "mcp-memory-service",
+);
 
 const HOOKS_TARGET_DIR = join(homedir(), ".claude", "hooks");
 const HOOK_TARGET = join(HOOKS_TARGET_DIR, "mcp_memory_global.py");
@@ -92,6 +111,10 @@ const MEMORY_SAVE_HOOK_TARGET = join(
 );
 const COMMANDS_TARGET_DIR = join(homedir(), ".claude", "commands");
 const CLAUDE_SETTINGS = join(homedir(), ".claude", "settings.json");
+const CODEX_HOME = join(homedir(), ".codex");
+const CURSOR_HOME = join(homedir(), ".cursor");
+const OPENCLAW_HOME = join(homedir(), ".openclaw");
+const CROSS_RUNTIME_HOOK_FILE = "meta-kim-memory-save.mjs";
 
 // ── Formatting helpers ──────────────────────────────────
 
@@ -124,17 +147,38 @@ function run(cmd, args, opts = {}) {
   });
 }
 
-function checkServerHealth(url = "http://localhost:8000/api/health") {
+function isMemoryProcessRunning() {
+  if (process.platform !== "win32") return false;
   try {
-    const result = run("curl", ["-s", "--max-time", "2", url]);
+    const ps = run("pwsh.exe", [
+      "-NoProfile",
+      "-Command",
+      "if (Get-Process -Name memory -ErrorAction SilentlyContinue) { 'running' }",
+    ]);
+    if (ps.status === 0 && ps.stdout.includes("running")) return true;
+  } catch {
+    // fall through
+  }
+  try {
+    const result = run("tasklist", ["/FI", "IMAGENAME eq memory.exe"]);
+    return result.status === 0 && /\bmemory\.exe\b/iu.test(result.stdout);
+  } catch {
+    return false;
+  }
+}
+
+function checkServerHealthStatus(url = "http://localhost:8000/api/health") {
+  const curl = process.platform === "win32" ? "curl.exe" : "curl";
+  try {
+    const result = run(curl, ["--noproxy", "*", "-s", "--max-time", "2", url]);
     if (result.status === 0 && result.stdout) {
       const data = JSON.parse(result.stdout);
-      return data.status === "healthy";
+      return data.status === "healthy" ? "healthy" : "down";
     }
   } catch {
     // fall through
   }
-  return false;
+  return isMemoryProcessRunning() ? "unknown" : "down";
 }
 
 function ensureDir(dir) {
@@ -151,6 +195,35 @@ function filesEqual(a, b) {
   } catch {
     return false;
   }
+}
+
+function copyDir(src, dest) {
+  if (!existsSync(src)) return false;
+  ensureDir(dest);
+  for (const entry of readdirSyncCompat(src)) {
+    const srcPath = join(src, entry.name);
+    const destPath = join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDir(srcPath, destPath);
+    } else if (!existsSync(destPath) || !filesEqual(srcPath, destPath)) {
+      copyFileSync(srcPath, destPath);
+    }
+  }
+  return true;
+}
+
+function readdirSyncCompat(dir) {
+  return statSync(dir).isDirectory()
+    ? readdirSync(dir, { withFileTypes: true })
+    : [];
+}
+
+function commandToken(value) {
+  return /[\s"]/u.test(value) ? JSON.stringify(value) : value;
+}
+
+function nodeHookCommand(hookPath, args = []) {
+  return [process.execPath, hookPath, ...args].map(commandToken).join(" ");
 }
 
 function copyStopHookFile() {
@@ -496,10 +569,164 @@ function removeStopHook() {
   }
 }
 
+function readJsonFile(filePath, fallback = {}) {
+  if (!existsSync(filePath)) return fallback;
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function copyCrossRuntimeMemoryHook(runtimeHome) {
+  if (!existsSync(CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE)) {
+    warn(
+      `Cross-runtime memory hook source missing: ${CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE}`,
+    );
+    return null;
+  }
+
+  const hooksDir = join(runtimeHome, "hooks");
+  ensureDir(hooksDir);
+  const target = join(hooksDir, CROSS_RUNTIME_HOOK_FILE);
+  if (existsSync(target) && filesEqual(CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE, target)) {
+    ok(`Cross-runtime memory hook already up-to-date: ${target}`);
+  } else {
+    copyFileSync(CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE, target);
+    ok(`Cross-runtime memory hook copied -> ${target}`);
+  }
+  return target;
+}
+
+function registerCodexMemoryHook(hookPath) {
+  const hooksJson = join(CODEX_HOME, "hooks.json");
+  const settings = readJsonFile(hooksJson, { hooks: {} });
+  if (!settings.hooks) settings.hooks = {};
+
+  const withoutMemoryBlocks = (eventName) =>
+    (Array.isArray(settings.hooks[eventName]) ? settings.hooks[eventName] : [])
+      .map((block) => {
+        const hooks = (block?.hooks ?? []).filter(
+          (hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
+        );
+        return hooks.length > 0 ? { ...block, hooks } : null;
+      })
+      .filter(Boolean);
+
+  settings.hooks.SessionStart = [{
+    matcher: "startup|resume",
+    hooks: [
+      {
+        type: "command",
+        command: nodeHookCommand(hookPath, ["--event", "session-start"]),
+        timeout: 10,
+        statusMessage: "Loading Meta_Kim memory",
+      },
+    ],
+  }, ...withoutMemoryBlocks("SessionStart")];
+  settings.hooks.UserPromptSubmit = [{
+    hooks: [
+      {
+        type: "command",
+        command: nodeHookCommand(hookPath, ["--event", "user-prompt"]),
+        timeout: 10,
+      },
+    ],
+  }, ...withoutMemoryBlocks("UserPromptSubmit")];
+  settings.hooks.Stop = [{
+    hooks: [
+      {
+        type: "command",
+        command: nodeHookCommand(hookPath, ["--event", "stop"]),
+        timeout: 10,
+      },
+    ],
+  }, ...withoutMemoryBlocks("Stop")];
+  writeFileSync(hooksJson, JSON.stringify(settings, null, 2) + "\n");
+  ok(`Codex lifecycle memory hooks registered first in ${hooksJson}`);
+  return true;
+}
+
+function registerCursorMemoryHook(hookPath) {
+  const hooksJson = join(CURSOR_HOME, "hooks.json");
+  const settings = readJsonFile(hooksJson, { version: 1, hooks: {} });
+  if (!settings.hooks) settings.hooks = {};
+
+  const withoutMemoryHooks = (eventName) =>
+    (Array.isArray(settings.hooks[eventName]) ? settings.hooks[eventName] : [])
+      .filter((hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE));
+
+  settings.hooks.beforeSubmitPrompt = [{
+    command: nodeHookCommand(hookPath, ["--event", "user-prompt"]),
+    timeout: 10,
+  }, ...withoutMemoryHooks("beforeSubmitPrompt")];
+  settings.hooks.stop = [{
+    command: nodeHookCommand(hookPath, ["--event", "stop"]),
+    timeout: 10,
+  }, ...withoutMemoryHooks("stop")];
+  writeFileSync(hooksJson, JSON.stringify(settings, null, 2) + "\n");
+  ok(`Cursor prompt/stop memory hooks registered first in ${hooksJson}`);
+  return true;
+}
+
+function installOpenClawMemoryHook() {
+  if (!existsSync(CANONICAL_OPENCLAW_MEMORY_HOOK_DIR)) {
+    warn(`OpenClaw memory hook source missing: ${CANONICAL_OPENCLAW_MEMORY_HOOK_DIR}`);
+    return false;
+  }
+  const targetDir = join(OPENCLAW_HOME, "hooks", "mcp-memory-service");
+  copyDir(CANONICAL_OPENCLAW_MEMORY_HOOK_DIR, targetDir);
+  ok(`OpenClaw MCP memory hook installed -> ${targetDir}`);
+  return true;
+}
+
+function installCrossRuntimeMemoryHooks() {
+  const codexHook = copyCrossRuntimeMemoryHook(CODEX_HOME);
+  const cursorHook = copyCrossRuntimeMemoryHook(CURSOR_HOME);
+  const codexOk = codexHook ? registerCodexMemoryHook(codexHook) : false;
+  const cursorOk = cursorHook ? registerCursorMemoryHook(cursorHook) : false;
+  const openclawOk = installOpenClawMemoryHook();
+  return codexOk && cursorOk && openclawOk;
+}
+
+function removeCrossRuntimeMemoryHooks() {
+  for (const [runtimeHome, hooksFile, eventNames] of [
+    [CODEX_HOME, "hooks.json", ["SessionStart", "UserPromptSubmit", "Stop"]],
+    [CURSOR_HOME, "hooks.json", ["beforeSubmitPrompt", "stop"]],
+  ]) {
+    const hooksJson = join(runtimeHome, hooksFile);
+    if (!existsSync(hooksJson)) continue;
+    const settings = readJsonFile(hooksJson, null);
+    if (!settings?.hooks) continue;
+    for (const eventName of eventNames) {
+      if (!settings.hooks[eventName]) continue;
+      settings.hooks[eventName] = settings.hooks[eventName]
+        .map((block) => {
+          if (block?.command) {
+            return String(block.command).includes(CROSS_RUNTIME_HOOK_FILE) ? null : block;
+          }
+          const hooks = (block?.hooks ?? []).filter(
+            (hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
+          );
+          return hooks.length > 0 ? { ...block, hooks } : null;
+        })
+        .filter(Boolean);
+      if (settings.hooks[eventName].length === 0) delete settings.hooks[eventName];
+    }
+    writeFileSync(hooksJson, JSON.stringify(settings, null, 2) + "\n");
+  }
+
+  const openclawHookDir = join(OPENCLAW_HOME, "hooks", "mcp-memory-service");
+  if (existsSync(openclawHookDir)) {
+    rmSync(openclawHookDir, { recursive: true, force: true });
+  }
+}
+
 // ── Commands ────────────────────────────────────────────
 
 async function install() {
-  console.log(`\n${bold("Installing MCP Memory Claude Code hooks...")}\n`);
+  console.log(`\n${bold("Installing MCP Memory runtime hooks...")}\n`);
 
   ensureDir(HOOKS_TARGET_DIR);
 
@@ -516,30 +743,33 @@ async function install() {
   await copyCommandsDir();
   const sessionStartOk = registerSessionStartHook();
   const stopOk = registerStopHook();
+  const crossRuntimeOk = installCrossRuntimeMemoryHooks();
 
   console.log("");
   info("Checking MCP Memory Service health...");
-  const healthy = checkServerHealth();
-  if (healthy) {
+  const health = checkServerHealthStatus();
+  if (health === "healthy") {
     ok("MCP Memory Service is running on http://localhost:8000");
+  } else if (health === "unknown") {
+    warn("Could not verify http://localhost:8000 from this shell, but memory.exe is running");
   } else {
     warn("MCP Memory Service is NOT responding on http://localhost:8000");
     info("Start it with: python -m mcp_memory_service");
     info("Or:            uv run memory server -s hybrid");
   }
 
-  if (!sessionStartOk || !stopOk) {
+  if (!sessionStartOk || !stopOk || !crossRuntimeOk) {
     warn(
-      "Some hooks were not registered — Claude Code may need a restart or manual config",
+      "Some hooks were not registered — restart runtimes or review hook config",
     );
     console.log(
-      `\n${yellow("Done with warnings.")} Restart Claude Code to load the hooks.\n`,
+      `\n${yellow("Done with warnings.")} Restart Claude Code / Codex / Cursor / OpenClaw to load hooks.\n`,
     );
     process.exit(1);
   }
 
   console.log(
-    `\n${green("Done!")} Restart Claude Code for hooks to take effect.\n`,
+    `\n${green("Done!")} Restart Claude Code / Codex / Cursor / OpenClaw for hooks to take effect.\n`,
   );
 }
 
@@ -585,10 +815,47 @@ function check() {
     warn(`settings.json not found: ${CLAUDE_SETTINGS}`);
   }
 
-  const healthy = checkServerHealth();
-  healthy
-    ? ok("MCP Memory Service responding on :8000")
-    : warn("MCP Memory Service NOT responding on :8000");
+  for (const [label, runtimeHome, hooksFile, eventNames] of [
+    ["Codex", CODEX_HOME, "hooks.json", ["SessionStart", "UserPromptSubmit", "Stop"]],
+    ["Cursor", CURSOR_HOME, "hooks.json", ["beforeSubmitPrompt", "stop"]],
+  ]) {
+    const hookFile = join(runtimeHome, "hooks", CROSS_RUNTIME_HOOK_FILE);
+    existsSync(hookFile)
+      ? ok(`${label} memory hook installed: ${hookFile}`)
+      : warn(`${label} memory hook missing: ${hookFile}`);
+    const cfg = readJsonFile(join(runtimeHome, hooksFile), null);
+    for (const eventName of eventNames) {
+      const entries = cfg?.hooks?.[eventName] ?? [];
+      const registered = Array.isArray(entries)
+        ? entries.some((entry) => {
+            if (entry?.command) {
+              return String(entry.command).includes(CROSS_RUNTIME_HOOK_FILE);
+            }
+            return (entry?.hooks ?? []).some((hook) =>
+              String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
+            );
+          })
+        : false;
+      registered
+        ? ok(`${label} ${eventName} memory hook registered`)
+        : warn(`${label} ${eventName} memory hook NOT registered`);
+    }
+  }
+
+  const openclawHookDir = join(OPENCLAW_HOME, "hooks", "mcp-memory-service");
+  existsSync(join(openclawHookDir, "HOOK.md")) &&
+  existsSync(join(openclawHookDir, "handler.ts"))
+    ? ok(`OpenClaw MCP memory hook installed: ${openclawHookDir}`)
+    : warn(`OpenClaw MCP memory hook missing: ${openclawHookDir}`);
+
+  const health = checkServerHealthStatus();
+  if (health === "healthy") {
+    ok("MCP Memory Service responding on :8000");
+  } else if (health === "unknown") {
+    warn("MCP Memory Service health could not be verified from this shell, but memory.exe is running");
+  } else {
+    warn("MCP Memory Service NOT responding on :8000");
+  }
 
   console.log("");
 }
@@ -600,10 +867,12 @@ function remove() {
 
   removeSessionStartHook();
   removeStopHook();
+  removeCrossRuntimeMemoryHooks();
   info(`Hook file retained (manual delete: rm "${HOOK_TARGET}")`);
   info(
     `Stop hook files retained (manual delete: rm "${STOP_HOOK_TARGET}" "${MEMORY_SAVE_HOOK_TARGET}")`,
   );
+  info("Cross-runtime hook files retained in ~/.codex/hooks, ~/.cursor/hooks, and ~/.openclaw/hooks");
   info(`Config retained (manual delete: rm "${CONFIG_TARGET}")`);
   ok("Done.\n");
 }

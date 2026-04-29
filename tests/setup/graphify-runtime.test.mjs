@@ -8,6 +8,8 @@ import {
   runPythonModule,
   meetsMinimumVersion,
   checkNetworkx,
+  ensurePip,
+  discoverWindowsPythonPathCommands,
 } from "../../scripts/graphify-runtime.mjs";
 
 describe("detectPython310()", () => {
@@ -56,6 +58,54 @@ describe("detectPython310()", () => {
     assert.deepEqual(python.args, ["-3"]);
     assert.deepEqual(calls[0], ["py", ["-3", "--version"]]);
   });
+
+  test("skips a version-compatible interpreter when pip is unavailable", () => {
+    const python = detectPython310((command, args) => {
+      const joined = args.join(" ");
+      if (joined === "-m pip --version") {
+        return {
+          status: command === "python" ? 0 : 1,
+          stdout: command === "python" ? "pip 24.0" : "",
+          stderr: command === "python" ? "" : "No module named pip",
+        };
+      }
+      if (joined === "--version") {
+        return {
+          status: 0,
+          stdout: command === "python3" ? "Python 3.11.7" : "Python 3.12.1",
+          stderr: "",
+        };
+      }
+      return { status: 1, stdout: "", stderr: "" };
+    }, "linux", { requirePip: true });
+
+    assert.equal(python.command, "python");
+    assert.equal(python.version.minor, 12);
+  });
+
+  test("can bootstrap missing pip with ensurepip before selecting Python", () => {
+    let pipChecks = 0;
+    const python = detectPython310((command, args) => {
+      assert.equal(command, "python3");
+      const joined = args.join(" ");
+      if (joined === "--version") {
+        return { status: 0, stdout: "Python 3.11.7", stderr: "" };
+      }
+      if (joined === "-m pip --version") {
+        pipChecks += 1;
+        return pipChecks === 1
+          ? { status: 1, stdout: "", stderr: "No module named pip" }
+          : { status: 0, stdout: "pip 24.0", stderr: "" };
+      }
+      if (joined === "-m ensurepip --upgrade") {
+        return { status: 0, stdout: "Successfully installed pip", stderr: "" };
+      }
+      return { status: 1, stdout: "", stderr: "" };
+    }, "linux", { requirePip: true, bootstrapPip: true });
+
+    assert.equal(python.command, "python3");
+    assert.equal(python.pipBootstrapped, true);
+  });
 });
 
 describe("runPythonModule()", () => {
@@ -94,6 +144,56 @@ describe("graphify helpers", () => {
       formatPythonLauncher({ command: "py", args: ["-3"] }),
       "py -3",
     );
+  });
+});
+
+describe("discoverWindowsPythonPathCommands()", () => {
+  test("reads all python.exe entries from PATH instead of only the first", () => {
+    const commands = discoverWindowsPythonPathCommands((command, args) => {
+      assert.equal(command, "where.exe");
+      if (args[0] === "python") {
+        return {
+          status: 0,
+          stdout:
+            "C:\\repo\\.venv\\Scripts\\python.exe\r\nC:\\Python312\\python.exe\r\n",
+          stderr: "",
+        };
+      }
+      return { status: 1, stdout: "", stderr: "" };
+    });
+
+    assert.deepEqual(commands, [
+      { command: "C:\\repo\\.venv\\Scripts\\python.exe", args: [] },
+      { command: "C:\\Python312\\python.exe", args: [] },
+    ]);
+  });
+});
+
+describe("ensurePip()", () => {
+  test("uses ensurepip when pip is missing", () => {
+    const calls = [];
+    let pipChecks = 0;
+    const result = ensurePip({ command: "python", args: [] }, (command, args) => {
+      calls.push([command, args]);
+      if (args.join(" ") === "-m pip --version") {
+        pipChecks += 1;
+        return pipChecks === 1
+          ? { status: 1, stdout: "", stderr: "No module named pip" }
+          : { status: 0, stdout: "pip 24.0", stderr: "" };
+      }
+      if (args.join(" ") === "-m ensurepip --upgrade") {
+        return { status: 0, stdout: "ok", stderr: "" };
+      }
+      return { status: 1, stdout: "", stderr: "" };
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.bootstrapped, true);
+    assert.deepEqual(calls.map((call) => call[1]), [
+      ["-m", "pip", "--version"],
+      ["-m", "ensurepip", "--upgrade"],
+      ["-m", "pip", "--version"],
+    ]);
   });
 });
 

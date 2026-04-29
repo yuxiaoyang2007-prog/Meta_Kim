@@ -70,11 +70,10 @@ const runtimeProfileCatalog = {
     projection: {
       supportsRepoProjection: true,
       supportsLocalActivation: true,
-      assetTypes: ["agents", "skills", "config", "mcp"],
+      assetTypes: ["agents", "skills", "hooks", "commands", "config", "mcp"],
       outputPaths: {
         agentsDir: ".codex/agents",
         skillRoot: ".codex/skills/meta-theory",
-        projectSkillsDir: ".agents/skills",
         commandsDir: ".codex/commands",
         configExampleFile: "codex/config.toml.example",
       },
@@ -82,7 +81,7 @@ const runtimeProfileCatalog = {
     activation: {
       supportsGlobalSkillSync: true,
       supportsGlobalDependencyInstall: true,
-      supportsGlobalHooks: false,
+      supportsGlobalHooks: true,
       envKeys: ["META_KIM_CODEX_HOME", "CODEX_HOME"],
       defaultHomeDir: ".codex",
     },
@@ -94,7 +93,7 @@ const runtimeProfileCatalog = {
     projection: {
       supportsRepoProjection: true,
       supportsLocalActivation: true,
-      assetTypes: ["workspaces", "skills", "config", "mcp"],
+      assetTypes: ["workspaces", "skills", "hooks", "config", "mcp"],
       outputPaths: {
         workspacesDir: "openclaw/workspaces",
         skillRoot: "openclaw/skills/meta-theory",
@@ -104,7 +103,7 @@ const runtimeProfileCatalog = {
     activation: {
       supportsGlobalSkillSync: true,
       supportsGlobalDependencyInstall: true,
-      supportsGlobalHooks: false,
+      supportsGlobalHooks: true,
       envKeys: ["META_KIM_OPENCLAW_HOME", "OPENCLAW_HOME"],
       defaultHomeDir: ".openclaw",
     },
@@ -116,7 +115,7 @@ const runtimeProfileCatalog = {
     projection: {
       supportsRepoProjection: true,
       supportsLocalActivation: true,
-      assetTypes: ["agents", "skills", "mcp"],
+      assetTypes: ["agents", "skills", "hooks", "mcp"],
       outputPaths: {
         agentsDir: ".cursor/agents",
         skillRoot: ".cursor/skills/meta-theory",
@@ -126,7 +125,7 @@ const runtimeProfileCatalog = {
     activation: {
       supportsGlobalSkillSync: true,
       supportsGlobalDependencyInstall: true,
-      supportsGlobalHooks: false,
+      supportsGlobalHooks: true,
       envKeys: ["META_KIM_CURSOR_HOME", "CURSOR_HOME"],
       defaultHomeDir: ".cursor",
     },
@@ -374,7 +373,6 @@ const runtimeProjectionLayouts = {
       skillRoot: [".codex", "skills", "meta-theory"],
       legacySkillFile: [".codex", "skills", "meta-theory.md"],
       legacySkillReferencesDir: [".codex", "skills", "references"],
-      projectSkillRoot: [".agents", "skills", "meta-theory"],
       hooksDir: [".codex", "hooks"],
       hooksFile: [".codex", "hooks.json"],
       commandsDir: [".codex", "commands"],
@@ -383,6 +381,8 @@ const runtimeProjectionLayouts = {
     global: {
       agentsDir: ["agents"],
       skillRoot: ["skills", "meta-theory"],
+      hooksDir: ["hooks"],
+      hooksFile: ["hooks.json"],
       commandsDir: ["commands"],
       configExampleFile: ["config.toml.example"],
     },
@@ -393,11 +393,13 @@ const runtimeProjectionLayouts = {
       skillRoot: ["openclaw", "skills", "meta-theory"],
       legacySkillFile: ["openclaw", "skills", "meta-theory.md"],
       legacySkillReferencesDir: ["openclaw", "skills", "references"],
+      hooksDir: ["openclaw", "hooks"],
       templateConfigFile: ["openclaw", "openclaw.template.json"],
     },
     global: {
       workspacesRoot: [],
       skillRoot: ["skills", "meta-theory"],
+      hooksDir: ["hooks"],
       templateConfigFile: ["openclaw.template.json"],
     },
   },
@@ -405,11 +407,15 @@ const runtimeProjectionLayouts = {
     project: {
       agentsDir: [".cursor", "agents"],
       skillRoot: [".cursor", "skills", "meta-theory"],
+      hooksDir: [".cursor", "hooks"],
+      hooksFile: [".cursor", "hooks.json"],
       mcpFile: [".cursor", "mcp.json"],
     },
     global: {
       agentsDir: ["agents"],
       skillRoot: ["skills", "meta-theory"],
+      hooksDir: ["hooks"],
+      hooksFile: ["hooks.json"],
       mcpFile: ["mcp.json"],
     },
   },

@@ -18,9 +18,9 @@ Meta_Kim 同时对接 Claude Code、Codex、OpenClaw、Cursor，但四者不是�
 | 理论总源 | 可读仓库文档 | 可读仓库文档 | 可读 workspace 文档 | 可读仓库文档 | `docs/meta.md` |
 | 角色 / 代理入口 | `.claude/agents/*.md` + `~/.claude/agents/*.md` | `.codex/agents/*.toml` + `~/.codex/agents/*.toml` | `openclaw/workspaces/<agent>/` + `~/.openclaw/agents/` | `.cursor/agents/*.md` + `~/.cursor/agents/*.md`（项目级优先） | Claude agent 为主源，全局能力通过发现器整合 |
 | 子代理 / 多代理 | 原生 subagents | 原生 custom agents / subagents | 原生多 agent + agent-to-agent | Cursor 原生 agent rules | 8 个 meta agent 四端全映射，全局 agents 按需调用 |
-| Skill | `.claude/skills/<name>/SKILL.md` + `~/.claude/skills/` | `.agents/skills/<name>/SKILL.md` + `~/.codex/skills/` | `<workspace>/skills/` + `skills.load.extraDirs[]` + `~/.openclaw/skills/` + `~/.agents/skills/` | `.cursor/skills/<name>/SKILL.md` + `~/.cursor/skills/` | Claude skill 为主源，镜像到其他运行时 |
+| Skill | `.claude/skills/<name>/SKILL.md` + `~/.claude/skills/` | `.codex/skills/<name>/SKILL.md` + `~/.codex/skills/` | `<workspace>/skills/` + `skills.load.extraDirs[]` + `~/.openclaw/skills/` | `.cursor/skills/<name>/SKILL.md` + `~/.cursor/skills/` | Claude skill 为主源，镜像到其他运行时 |
 | Hook / 守卫 | `.claude/settings.json` hooks (12 events) + `~/.claude/hooks/` | `.codex/hooks.json` (5 events, v0.117.0+) | Plugin SDK 28 hooks + bundled hooks | `.cursor/hooks.json` (4 events, 有bugs) | 四端均有原生 hook，格式各异 |
-| 记忆 | 文档与会话上下文 | 宿主状态 / SQLite | `MEMORY.md` + `session-memory` hook | 文档与会话上下文 | 元记忆策略主源写在 agent / skill 中 |
+| 记忆 | SessionStart + Stop MCP Memory hooks | SessionStart / UserPromptSubmit / Stop MCP Memory hooks | `MEMORY.md` + `session-memory` + MCP Memory managed hook | beforeSubmitPrompt / stop MCP Memory hooks | 元记忆策略主源写在 canonical runtime assets 中 |
 | **全局能力索引** | **`npm run discover:global`** | **`npm run discover:global`** | **`npm run discover:global`** | **`npm run discover:global`** | **`.claude/capability-index/global-capabilities.json`** |
 
 ## 一.五、全局能力发现（新增）
@@ -82,8 +82,7 @@ npm run discover:global -- --json
 ## 三、派生产物
 
 - Codex custom agents：`.codex/agents/*.toml`
-- Codex project skill：`.agents/skills/meta-theory/SKILL.md`
-- Codex portable skill：`.codex/skills/meta-theory/SKILL.md`
+- Codex project skill：`.codex/skills/meta-theory/SKILL.md`
 - Codex slash command：`.codex/commands/meta-theory.md` / `~/.codex/commands/meta-theory.md`
 - OpenClaw workspaces：`openclaw/workspaces/*`
 - OpenClaw installable skill：`openclaw/skills/meta-theory/SKILL.md`

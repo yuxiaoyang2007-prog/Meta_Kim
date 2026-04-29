@@ -80,6 +80,7 @@ function getWindowsCliSearchDirs() {
   }
   if (up) {
     dirs.push(path.join(up, "scoop", "shims"));
+    dirs.push(path.join(up, ".local"));
     dirs.push(path.join(up, ".local", "bin"));
   }
   return [...new Set(dirs)];
@@ -1227,6 +1228,31 @@ async function runClaudeDiscovery(agentIds) {
     `Claude discovery: checking ${agentIds.length} registered agent(s)`,
   );
   const cmd = await getResolvedClaudeCommand();
+  const help = await runCommandWithIgnoredStdin(
+    cmd.file,
+    cmd.toArgs(["--help"]),
+    {
+      cwd: repoRoot,
+      timeout: 30_000,
+      env: { ...process.env, CI: "1", NO_COLOR: "1" },
+    },
+  );
+  const supportsAgentsCommand = /^\s{2}agents\s/m.test(help.stdout);
+
+  if (!supportsAgentsCommand) {
+    const projectAgentFiles = (await fs.readdir(path.join(repoRoot, ".claude", "agents")))
+      .filter((file) => file.endsWith(".md"))
+      .map((file) => file.replace(/\.md$/, ""));
+    const projectAgents = new Set(projectAgentFiles);
+    const missing = agentIds.filter((agentId) => !projectAgents.has(agentId));
+    return {
+      ok: missing.length === 0,
+      missing,
+      source: "project-files",
+      cliSupportsAgentsCommand: false,
+    };
+  }
+
   const { stdout } = await runCommandWithIgnoredStdin(
     cmd.file,
     cmd.toArgs(["agents"]),
@@ -1241,6 +1267,8 @@ async function runClaudeDiscovery(agentIds) {
   return {
     ok: missing.length === 0,
     missing,
+    source: "claude-agents-command",
+    cliSupportsAgentsCommand: true,
   };
 }
 

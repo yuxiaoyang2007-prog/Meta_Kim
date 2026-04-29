@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import process from "node:process";
+import { spawnSync } from "node:child_process";
 import {
   detectPython310,
   extractPipShowVersion,
@@ -16,10 +17,13 @@ function fail(message) {
   process.exitCode = 1;
 }
 
-function ensurePython() {
-  const python = detectPython310();
+function ensurePython({ requirePip = false } = {}) {
+  const python = detectPython310(spawnSync, process.platform, {
+    requirePip,
+    bootstrapPip: requirePip,
+  });
   if (!python) {
-    fail("Python 3.10+ not found");
+    fail(requirePip ? "Python 3.10+ with pip not found" : "Python 3.10+ not found");
     return null;
   }
   return python;
@@ -44,7 +48,7 @@ function runCheck() {
 }
 
 function installGraphify({ upgrade = false } = {}) {
-  const python = ensurePython();
+  const python = ensurePython({ requirePip: true });
   if (!python) {
     return;
   }

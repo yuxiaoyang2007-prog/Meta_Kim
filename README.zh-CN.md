@@ -500,7 +500,7 @@ flowchart TB
 | 能力面 | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
 | **agent** | 原生 agents/subagents，项目级与用户级都成熟 | custom agents/subagents 很强 | workspace 型 agent，支持 agent-to-agent | agent 投影可用，较轻 |
-| **skill/references** | 原生 skill、references、全局技能生态完整 | `.agents/skills/` 兼容很好 | workspace skill + installable skill | skill/references 接入较轻 |
+| **skill/references** | 原生 skill、references、全局技能生态完整 | `.codex/skills/` 兼容很好 | workspace skill + installable skill | skill/references 接入较轻 |
 | **hook/自动化** | 项目级 hooks + settings.json + 插件生态（12 events） | hooks.json 原生支持（5 events, v0.117.0+） | Plugin SDK hooks（28 hooks） | hooks.json 原生支持（4 events） |
 | **MCP/配置** | 原生 MCP 与配置面完整 | 可接 runtime adapter 与 MCP | workspace config 明确 | 可接 MCP，但整体较轻 |
 | **治理闭环承载力** | **最高** | 高，但低于 Claude Code | 高，但形态不同 | 最轻 |
@@ -512,7 +512,7 @@ flowchart TB
 | 层 | 位置 | 作用 |
 | --- | --- | --- |
 | **canonical 主源** | `canonical/`、`config/contracts/workflow-contract.json` | 长期维护优先改这里 |
-| **运行时投影** | `.claude/`、`.codex/`、`.agents/skills/`、`openclaw/`、`.cursor/` | 同一能力投到不同运行时 |
+| **运行时投影** | `.claude/`、`.codex/`、`openclaw/`、`.cursor/` | 同一能力投到不同运行时 |
 | **本地状态** | `.meta-kim/state/{profile}/`、`.meta-kim/local.overrides.json` | profile 级状态、run index、continuity |
 | **脚本与校验** | `scripts/`、`npm run *` | 同步、校验、发现、验收 |
 
@@ -634,12 +634,14 @@ Meta_Kim 的记忆不是单一的。它有三层，各有分工，共同保障 a
   - 跨会话连续性——上次聊到哪了，这次能接上
   • 向量级检索——不是关键词匹配，而是语义理解
   - 精准召回——从历史会话中找到最相关的上下文
-- **激活方式**：`node setup.mjs` 安装并配置 MCP Memory Service（第三层）；安装后需手动启动服务器。
-  - **Claude Code**：SessionStart Hook 和 Stop 记忆保存 Hook 在 `node setup.mjs` 时自动注册；会话启动时通过 `mcp_memory_global.py --mode session` 写入项目状态
-  - **其他工具**（Codex、OpenClaw、Cursor）：参见 `mcp-memory-service/claude-hooks/` 手动安装
+- **激活方式**：`node setup.mjs` 安装并配置 MCP Memory Service（第三层），同时安装各运行时记忆 hook，并尝试在后台启动 HTTP 服务。
+  - **Claude Code**：SessionStart Hook 和 Stop 记忆保存 Hook 在 `node setup.mjs` 时自动注册；会话启动时通过 `mcp_memory_global.py --mode session` 写入项目状态。
+  - **Codex**：`~/.codex/hooks.json` 自动写入 SessionStart、UserPromptSubmit、Stop 桥接，调用 `meta-kim-memory-save.mjs`，覆盖开始 / 提示提交 / 结束。
+  - **OpenClaw**：`~/.openclaw/hooks/mcp-memory-service` 自动安装 managed hook，覆盖 `command:new`、`command:reset`、`session:compact:after`、`command:stop`。
+  - **Cursor**：`~/.cursor/hooks.json` 自动写入 `beforeSubmitPrompt` 和 `stop` 桥接，复用共享记忆 hook。
 - **启动服务器**：`npm start`（在 mcp-memory-service 目录下）或 `python -m mcp_memory_service`，然后访问 `http://localhost:8000`
 - **端口覆盖**：服务器遵循 `MCP_HTTP_PORT`（默认 `8000`，与上游一致）；Meta_Kim 的 SessionStart hook 读取 `MCP_MEMORY_URL`，可指向任意可达端点。若你是从旧版 Meta_Kim（硬编码 `8888`）升级而来，请按 CHANGELOG 的 `Migration Notes` 中给出的一行方案修正 `~/.claude/hooks/config.json`。
-- **Hook**：Claude Code 自动注册（SessionStart 写入项目状态，Stop 保存会话摘要到 MCP Memory）；其他工具参见 mcp-memory-service 文档
+- **Hook**：Claude Code、Codex、OpenClaw、Cursor 都会自动注册；各运行时使用自己的 hook 格式，但共享同一个 MCP Memory HTTP 端点。
 - **查询**：`npm run meta:query:runs -- --owner <agent>`——按 agent 查找历史 run，或 `npm run meta:index:runs -- <artifact>` 手动索引 run 产物
 
 ### 三层协同

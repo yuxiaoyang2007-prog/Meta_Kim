@@ -294,16 +294,20 @@ def _new_state():
 def load_filtered_project_memories(project_tag, limit=5):
     """L2: Load project memories filtered by relevance (threshold lowered for Chinese)."""
     try:
-        data = _api_post("/api/search", {
+        data = _api_post("/api/memories/search", {
             "query": project_tag,
             "limit": 20,
         })
-        results = data.get("results", [])
-        filtered = [
-            r for r in results
-            if r.get("similarity_score", 0) >= MIN_RELEVANCE
-        ]
-        return [r["memory"] for r in filtered[:limit] if "memory" in r]
+        results = data.get("memories", data.get("results", []))
+        memories = []
+        for result in results:
+            memory = result.get("memory", result) if isinstance(result, dict) else None
+            if not isinstance(memory, dict):
+                continue
+            score = memory.get("similarity_score", result.get("similarity_score", 0))
+            if score >= MIN_RELEVANCE:
+                memories.append(memory)
+        return memories[:limit]
     except Exception:
         return []
 

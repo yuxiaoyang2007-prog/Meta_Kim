@@ -39,7 +39,7 @@ When this repository is opened in Codex:
 
 - `AGENTS.md` is the project guide you are reading now
 - `.codex/agents/*.toml` contains the 8 Codex custom-agent mirrors
-- `.agents/skills/meta-theory/` is the project skill mirror (directory layout); `.codex/skills/` may hold the portable skill surface depending on sync scope
+- `.codex/skills/meta-theory/` is the Codex project skill mirror (directory layout)
 - `codex/config.toml.example` is generated from `canonical/runtime-assets/codex/config.toml.example` and shows how user-global Codex can wire MCP and skills
 
 **Cursor parity (same repo, fourth runtime):** `.cursor/agents/*.md`, `.cursor/skills/meta-theory/`, `.cursor/mcp.json` — all refreshed by `npm run meta:sync` per `config/sync.json`.
@@ -48,7 +48,7 @@ Important maintenance rule:
 
 - `canonical/agents/*.md` and `canonical/skills/meta-theory/SKILL.md` are the canonical sources
 - `config/contracts/workflow-contract.json` is the canonical run-discipline and gate contract (not overwritten by agent/skill sync)
-- `.codex/agents/*`, `.codex/skills/*`, `.agents/skills/*`, and Cursor/OpenClaw projection trees are derived runtime assets unless explicitly stated otherwise
+- `.codex/agents/*`, `.codex/skills/*`, and Cursor/OpenClaw projection trees are derived runtime assets unless explicitly stated otherwise
 
 ## Capability-First Rule
 
@@ -87,6 +87,24 @@ That is why the normal public front door should be:
 - `meta-warden`
 
 The other seven meta agents are backstage specialists, not the public menu.
+
+### Codex Meta-Theory Enforcement
+
+When the user asks to run `meta theory`, `meta-theory`, `/meta-theory`, `run meta theory`, `execute meta theory`, `元理论`, or equivalent governance wording, do not treat it as a loose promise or ordinary chat style.
+
+Codex must first run the visible or internal Stage 1-3 protocol:
+
+```text
+Critical -> Fetch -> Thinking
+```
+
+That means:
+
+- clarify ambiguity before dispatch when needed
+- run Fetch-first capability discovery before naming agents
+- enumerate at least two viable solution paths before choosing one
+- for non-trivial Type A/B/C/D/E work, map `Agent(...)` to Codex `spawn_agent` after user authorization and dispatch independent work in parallel when possible
+- if this behavior fails, perform an Evolution writeback to `canonical/skills/meta-theory/SKILL.md` or `config/contracts/workflow-contract.json`, then run `npm run meta:sync`
 
 ## Critical Rule: Orchestrate Before You Execute
 
@@ -233,8 +251,7 @@ Files that should usually be treated as mirrors or adapters:
 - `.mcp.json`
 - `.claude/capability-index/` (including `meta-kim-capabilities.json` and `global-capabilities.json` from `discover:global`)
 - `.codex/agents/*.toml`
-- `.codex/skills/` (e.g. `meta-theory.md` and `references/` when present)
-- `.agents/skills/meta-theory/`
+- `.codex/skills/` (e.g. `meta-theory/SKILL.md` and `references/` when present)
 - `.cursor/agents/*.md`
 - `.cursor/skills/meta-theory/`
 - `.cursor/mcp.json`

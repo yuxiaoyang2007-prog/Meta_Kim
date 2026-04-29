@@ -53,7 +53,7 @@
 | MCP | `.mcp.json` | `config.toml` 例子 | 共享同一 MCP server | `.cursor/mcp.json` | 已覆盖 |
 | Hook / 守卫 | `.claude/settings.json` (12 events) | `.codex/hooks.json` (5 events) | Plugin SDK 28 hooks + bundled hooks | `.cursor/hooks.json` (4 events) | 已覆盖，但不是 1:1 同构 |
 | 启动文件 | `CLAUDE.md` / agent prompt | `AGENTS.md` / custom agent prompt | `BOOT.md` / `BOOTSTRAP.md` / `IDENTITY.md` | `.cursorrules` / agent prompt | 已覆盖 |
-| 记忆入口 | 文档式约定 | 宿主上下文 + SQLite/agents state | `MEMORY.md` + `session-memory` hook | 文档式约定 | 已覆盖 |
+| 记忆入口 | SessionStart + Stop MCP Memory hooks | SessionStart / UserPromptSubmit / Stop MCP Memory hooks | `MEMORY.md` + `session-memory` + MCP Memory managed hook | beforeSubmitPrompt / stop MCP Memory hooks | 已覆盖 |
 | 多代理路由 | Claude 原生委派 | Codex subagents | OpenClaw agent-to-agent | Cursor 原生 agent 委派 | 已覆盖 |
 | Sandbox / Approval | Claude 原生 permission / tool control | `sandbox_mode` / `approval_policy` | 宿主网关与工具约束 | Cursor 原生 approval | 已覆盖到仓库配置入口 |
 | 本地验证 | `claude agents` + schema eval | `codex exec --json` smoke | `openclaw config validate` + 本地 agent smoke | `.cursor/agents/` 存在性检查 | 已覆盖 |

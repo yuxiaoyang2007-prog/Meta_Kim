@@ -20,6 +20,26 @@ const planningWithFilesSkill = skillsManifest.skills.find(
 );
 
 describe("install platform config", () => {
+  test("quick deploy copies root runtime guide files", () => {
+    const source = readFileSync(path.join(repoRoot, "setup.mjs"), "utf8");
+    const match = source.match(
+      /function deployPlatformFiles\(platformId, targetDir\) \{[\s\S]*?\n\}/,
+    );
+    assert.ok(match, "deployPlatformFiles body not found");
+    const body = match[0];
+
+    assert.match(body, /copyIfExists\("CLAUDE\.md", "CLAUDE\.md"\)/);
+    assert.match(body, /copyIfExists\("AGENTS\.md", "AGENTS\.md"\)/);
+    assert.match(body, /platformId === "claude" \|\| platformId === "all"/);
+    assert.match(body, /platformId === "openclaw"/);
+    assert.match(body, /platformId === "codex"/);
+    assert.match(body, /platformId === "cursor"/);
+    assert.equal(
+      body.match(/copyIfExists\("AGENTS\.md", "AGENTS\.md"\)/g)?.length,
+      1,
+    );
+  });
+
   test("findskill uses windows subdir on Windows", () => {
     assert.equal(findskillPackSubdirForPlatform("win32"), "windows");
     assert.equal(resolveManifestSkillSubdir(findskillSkill, "win32"), "windows");
@@ -91,6 +111,42 @@ describe("install platform config", () => {
     assert.match(commandFunction, /return `\$\{shellToken\(nodePath\)\}/);
     assert.doesNotMatch(commandFunction, /os\.platform\(\) === "win32"/);
     assert.doesNotMatch(commandFunction, /return `node |return `"\$\{nodePath\}"|python3|2>\/dev\/null|\|\| true/);
+  });
+
+  test("Codex planning hook adapter counts level-2 and level-3 phases", () => {
+    const source = readFileSync(
+      path.join(repoRoot, "scripts", "install-global-skills-all-runtimes.mjs"),
+      "utf8",
+    );
+    const adapterFunction = source.match(
+      /function buildCodexPlanningHookAdapterPy[\s\S]*?\n}\n/,
+    )?.[0];
+
+    assert.ok(adapterFunction);
+    assert.match(adapterFunction, /"import re"/);
+    assert.match(adapterFunction, /#\{2,3\}\\\\s\+Phase\\\\b/);
+    assert.doesNotMatch(
+      adapterFunction,
+      /total = sum\(1 for line in lines if "### Phase" in line\)/,
+    );
+  });
+
+  test("planning-with-files phase counter patch covers shell and PowerShell hooks", () => {
+    const source = readFileSync(
+      path.join(repoRoot, "scripts", "install-global-skills-all-runtimes.mjs"),
+      "utf8",
+    );
+    const patchFunction = source.match(
+      /async function patchPlanningWithFilesPhaseCounters[\s\S]*?\n}\n/,
+    )?.[0];
+
+    assert.ok(patchFunction);
+    assert.match(patchFunction, /runtimeHome, "hooks", "stop\.sh"/);
+    assert.match(patchFunction, /runtimeHome, "hooks", "stop\.ps1"/);
+    assert.match(patchFunction, /"check-complete\.sh"/);
+    assert.match(patchFunction, /"check-complete\.ps1"/);
+    assert.match(patchFunction, /#\{2,3\}\[\[:space:\]\]\+Phase\\\\b/);
+    assert.match(patchFunction, /\(\?m\)\^#\{2,3\}\\\\s\+Phase\\\\b/);
   });
 });
 

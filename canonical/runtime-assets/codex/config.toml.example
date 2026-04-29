@@ -4,7 +4,7 @@
 # Project custom agents are auto-loaded from:
 #   REPLACE_WITH_REPO_ROOT/.codex/agents/
 # Project skills are auto-discovered from:
-#   REPLACE_WITH_REPO_ROOT/.agents/skills/
+#   REPLACE_WITH_REPO_ROOT/.codex/skills/
 
 # model and model_reasoning_effort are inherited from your Codex CLI configuration
 approval_policy = "on-request"

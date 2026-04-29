@@ -92,8 +92,76 @@ export function discoverWindowsPythonPaths(env = process.env) {
   return found;
 }
 
+export function discoverWindowsPythonPathCommands(spawnFn = spawnSync) {
+  const found = [];
+  const seen = new Set();
+  for (const commandName of ["python", "python3"]) {
+    let result;
+    try {
+      result = spawnFn("where.exe", [commandName], {
+        encoding: "utf8",
+        shell: false,
+      });
+    } catch {
+      continue;
+    }
+    if (result?.error || result?.status !== 0) continue;
+    for (const line of readProcessText(result).split(/\r?\n/u)) {
+      const exePath = line.trim();
+      if (!/python(?:3)?\.exe$/iu.test(exePath)) continue;
+      const key = exePath.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      found.push({ command: exePath, args: [] });
+    }
+  }
+  return found;
+}
+
 export function formatPythonLauncher(python) {
   return [python.command, ...python.args].join(" ");
+}
+
+export function ensurePip(python, spawnFn = spawnSync) {
+  const pipCheck = runPythonModule(
+    python,
+    ["-m", "pip", "--version"],
+    spawnFn,
+  );
+  if (pipCheck.status === 0) {
+    return { ok: true, bootstrapped: false, errorText: "" };
+  }
+
+  const bootstrap = runPythonModule(
+    python,
+    ["-m", "ensurepip", "--upgrade"],
+    spawnFn,
+  );
+  if (bootstrap.status !== 0) {
+    return {
+      ok: false,
+      bootstrapped: false,
+      errorText: [readProcessText(pipCheck), readProcessText(bootstrap)]
+        .filter(Boolean)
+        .join("\n"),
+    };
+  }
+
+  const recheck = runPythonModule(
+    python,
+    ["-m", "pip", "--version"],
+    spawnFn,
+  );
+  return {
+    ok: recheck.status === 0,
+    bootstrapped: recheck.status === 0,
+    errorText:
+      recheck.status === 0
+        ? ""
+        : [readProcessText(pipCheck), readProcessText(bootstrap), readProcessText(recheck)]
+            .filter(Boolean)
+            .join("\n"),
+  };
 }
 
 export function detectPython310(
@@ -122,11 +190,30 @@ export function detectPython310(
       parsed &&
       (parsed.major > 3 || (parsed.major === 3 && parsed.minor >= 10))
     ) {
-      return {
+      const python = {
         ...candidate,
         version: parsed,
         versionText,
       };
+      if (options.requirePip) {
+        const pip = options.bootstrapPip
+          ? ensurePip(python, spawnFn)
+          : {
+              ok:
+                runPythonModule(
+                  python,
+                  ["-m", "pip", "--version"],
+                  spawnFn,
+                ).status === 0,
+              bootstrapped: false,
+            };
+        if (!pip.ok) return null;
+        return {
+          ...python,
+          pipBootstrapped: Boolean(pip.bootstrapped),
+        };
+      }
+      return python;
     }
     return null;
   };
@@ -139,6 +226,11 @@ export function detectPython310(
   // Windows fallback: PATH may miss python.exe installed by winget or the
   // Python.org installer. Scan common install roots and try absolute paths.
   if (platform === "win32") {
+    for (const candidate of discoverWindowsPythonPathCommands(spawnFn)) {
+      const hit = tryCandidate(candidate);
+      if (hit) return { ...hit, absolutePath: true };
+    }
+
     const env = options.env ?? process.env;
     const discovered = discoverWindowsPythonPaths(env);
     for (const { major, minor, path: exePath } of discovered) {

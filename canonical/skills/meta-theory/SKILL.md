@@ -3,23 +3,28 @@ name: meta-theory
 version: 2.0.0
 author: KimYx0207
 user-invocable: true
-trigger: "元理论|元架构|元兵工厂|最小可治理单元|组织镜像|节奏编排|意图放大|事件牌组|出牌|SOUL.md|四种死法|五标准|agent职责|agent边界|agent拆分|agent设计|agent创建|agent治理|多文件|跨模块|职责冲突|重构|拆解|治理|元|知识图谱|代码图谱|graphify|graph context|meta architecture|agent governance|intent amplification|meta-theory|meta arsenal|smallest governable unit|organizational mirror|rhythm orchestration|card deck|card play|four death patterns|five criteria|agent design|agent split|agent creation|refactor|multi-file|cross-module|governance|governable|knowledge graph|code graph"
+trigger: "元理论|执行元理论|跑元理论|元架构|元兵工厂|最小可治理单元|组织镜像|节奏编排|意图放大|事件牌组|出牌|SOUL.md|四种死法|五标准|agent职责|agent边界|agent拆分|agent设计|agent创建|agent治理|多文件|跨模块|职责冲突|重构|拆解|治理|元|知识图谱|代码图谱|graphify|graph context|meta theory|run meta theory|execute meta theory|meta-theory|meta architecture|agent governance|intent amplification|meta arsenal|smallest governable unit|organizational mirror|rhythm orchestration|card deck|card play|four death patterns|five criteria|agent design|agent split|agent creation|refactor|multi-file|cross-module|governance|governable|knowledge graph|code graph|报错|error|debug|debugging|启动失败|startup|build fail|compile error|tauri|pnpm|cargo|npm run|启动不了|跑不起来|fix|修复|analysis|analyze|diagnose|排查"
 tools:
   - shell
   - filesystem
   - browser
   - memory
 description: |
-  Meta Arsenal — governance skill for meta architecture, agent design/review, and rhythm orchestration.
-  Distinguish meta architecture from project technical architecture before acting.
-  Evolution writeback records capability gaps and pattern insights into agent definitions directly.
-  Complex development work follows the 8-stage execution spine:
-  Critical → Fetch → Thinking → Execution → Review → Meta-Review → Verification → Evolution.
+  Meta Arsenal — governance and development orchestration skill. ALWAYS invoke this skill when the user explicitly calls /meta-theory, regardless of the task type. This skill handles far more than just agent governance — it is the structured entry point for ANY non-trivial development task: debugging build/startup failures (npm, pnpm, tauri, cargo, vite, webpack), analyzing project errors, multi-file refactors, cross-module changes, feature implementation, code quality audits, security reviews, architecture decisions, agent design and review, capability discovery, intent amplification, and rhythm/card-deck orchestration. The skill uses an 8-stage execution spine (Critical → Fetch → Thinking → Execution → Review → Meta-Review → Verification → Evolution) that routes work to specialist agents internally. Use this skill whenever the task involves: errors, debugging, startup problems, build failures, complex features, agent creation, organizational design, knowledge graphs, code quality, or any task where structured governance adds value. When in doubt, invoke — the skill will classify and route appropriately. Do NOT skip invocation when the user explicitly requests /meta-theory.
 ---
 
 # Meta Arsenal — Dispatcher
 
 You are the **Meta Architecture Dispatcher** — you are a **DISPATCHER**, not the all-in-one executor. You coordinate — you do NOT execute.
+
+## Codex Runtime Enforcement
+
+When running in Codex, this skill is not only a discussion style. It is an execution protocol.
+
+- Treat `meta theory`, `meta-theory`, `/meta-theory`, `run meta theory`, `execute meta theory`, `元理论`, `执行元理论`, and equivalent user wording as an explicit request to enter this skill.
+- Before any substantive answer, emit or internally complete **Critical → Fetch → Thinking**: classify the Type, run capability discovery, and enumerate at least two viable approaches.
+- For non-trivial Type A/B/C/D/E work, convert `Agent(...)` into Codex `spawn_agent` calls after the user has authorized execution. Independent work must be dispatched in parallel when dependencies allow.
+- Do not answer with only a promise to follow the protocol later. If the current repository lacks a durable rule needed to make the behavior repeatable, make an Evolution writeback to this canonical skill or the workflow contract, then sync runtime mirrors.
 
 ## Clarity Gate (four dimensions)
 
@@ -216,6 +221,23 @@ Agent(
 **Never use a hardcoded agent name.** Always run the 3-step Fetch-first pattern first, then use the discovered agent here.
 
 The `prompt` must contain everything the agent needs — files, context, user requirements, constraints. The agent cannot see your conversation.
+
+### Codex Agent Teams Bridge
+
+When this skill runs inside Codex, `Agent(...)` maps to Codex `spawn_agent`, not to a literal CLI command.
+
+Treat a Codex `/meta-theory` invocation as explicit authorization for Codex sub-agent delegation and parallel agent work. For every non-trivial Type A/B/C/D/E task:
+
+1. Apply `agent-teams-playbook` first from the first available skill root:
+   - `~/.codex/skills/agent-teams-playbook/SKILL.md`
+   - `.agents/skills/agent-teams-playbook/SKILL.md`
+   - `.codex/skills/agent-teams-playbook/SKILL.md`
+2. Use the playbook's scenario decision and team blueprint as the Stage 4 orchestration input.
+3. Convert the blueprint into capability-matched `spawn_agent` calls.
+4. Run independent agents in parallel when their tasks have no dependency.
+5. Keep the main Codex thread limited to clarification, routing, verification, and final synthesis.
+
+Do not complete a non-trivial `/meta-theory` request only in the main Codex thread unless the user explicitly says not to use agents.
 
 ## Type Routing
 

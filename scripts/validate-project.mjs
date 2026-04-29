@@ -37,6 +37,18 @@ const canonicalOpenClawTemplatePath = path.join(
   "openclaw",
   "openclaw.template.json",
 );
+const canonicalSharedMemoryHookPath = path.join(
+  canonicalRuntimeAssetsDir,
+  "shared",
+  "hooks",
+  "meta-kim-memory-save.mjs",
+);
+const canonicalOpenClawMemoryHookDir = path.join(
+  canonicalRuntimeAssetsDir,
+  "openclaw",
+  "hooks",
+  "mcp-memory-service",
+);
 
 /** Must match config/contracts/workflow-contract.json runDiscipline.publicDisplayRequires (set equality). */
 const EXPECTED_PUBLIC_DISPLAY_REQUIRES = [
@@ -1230,6 +1242,19 @@ async function validateOpenClawArtifacts(agentIds) {
     extraSkillDirs.includes("__REPO_ROOT__\\openclaw\\skills"),
     "canonical OpenClaw template must register repo-local openclaw/skills via skills.load.extraDirs.",
   );
+
+  for (const fileName of ["HOOK.md", "handler.ts"]) {
+    await fs.access(path.join(canonicalOpenClawMemoryHookDir, fileName));
+  }
+  const sharedMemoryHook = await fs.readFile(
+    canonicalSharedMemoryHookPath,
+    "utf8",
+  );
+  assert(
+    sharedMemoryHook.includes("--event") &&
+      sharedMemoryHook.includes("/api/memories/search"),
+    "canonical shared memory hook must support lifecycle events and MCP memory search.",
+  );
 }
 
 async function validatePortableSkill() {
@@ -1335,7 +1360,7 @@ async function validateCodexArtifacts() {
     "sandbox_mode",
     "[agents]",
     "[mcp_servers.meta_kim_runtime]",
-    ".agents/skills/",
+    ".codex/skills/",
   ]) {
     assert(
       configExample.includes(expected),
@@ -1352,7 +1377,7 @@ async function validateCodexArtifacts() {
   for (const expected of [
     "name: meta-theory",
     "~/.codex/skills/meta-theory/SKILL.md",
-    ".agents/skills/meta-theory/SKILL.md",
+    ".codex/skills/meta-theory/SKILL.md",
   ]) {
     assert(
       command.includes(expected),

@@ -395,16 +395,7 @@ function resolveHomes() {
 }
 
 function resolveCompatibilitySkillRoots(runtimeId, primarySkillsRoot) {
-  if (runtimeId !== "codex") {
-    return [];
-  }
-
-  const legacyCodexSkillsRoot = path.join(os.homedir(), ".agents", "skills");
-  if (path.resolve(legacyCodexSkillsRoot) === path.resolve(primarySkillsRoot)) {
-    return [];
-  }
-
-  return [legacyCodexSkillsRoot];
+  return [];
 }
 
 /** Primary deploy segment under each runtime home: skills/ (default) or plugins/ (rare). */
@@ -1512,6 +1503,7 @@ async function installAllSkillsForRuntime(label, runtimeHome, runtimeId) {
     await deployHookSubdirs(spec, runtimeHome, runtimeId);
     await deployHookConfigFiles(spec, runtimeHome, runtimeId);
     await deployHookExtraFiles(spec, runtimeHome, runtimeId);
+    await patchPlanningWithFilesPhaseCounters(spec, runtimeHome, runtimeId);
     await patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId);
     await mergeHookSettings(spec, runtimeHome, runtimeId);
     await cleanupDisabledSkillResidue(runtimeHome, spec.id);
@@ -1728,6 +1720,7 @@ async function installPluginBundlesForNonClaudeRuntimes(
       await deployHookSubdirs(spec, runtimeHome, runtimeId);
       await deployHookConfigFiles(spec, runtimeHome, runtimeId);
       await deployHookExtraFiles(spec, runtimeHome, runtimeId);
+      await patchPlanningWithFilesPhaseCounters(spec, runtimeHome, runtimeId);
       await patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId);
       await mergeHookSettings(spec, runtimeHome, runtimeId);
     }
@@ -3206,6 +3199,7 @@ function buildCodexPlanningHookAdapterPy() {
     "from __future__ import annotations",
     "",
     "import json",
+    "import re",
     "import shutil",
     "import subprocess",
     "import sys",
@@ -3268,7 +3262,7 @@ function buildCodexPlanningHookAdapterPy() {
     "",
     "def _count_statuses(plan_file: Path) -> tuple[int, int, int, int]:",
     "    lines = _read_lines(plan_file)",
-    '    total = sum(1 for line in lines if "### Phase" in line)',
+    '    total = sum(1 for line in lines if re.match(r"^#{2,3}\\s+Phase\\b", line))',
     '    complete = sum(1 for line in lines if "**Status:** complete" in line)',
     '    in_progress = sum(1 for line in lines if "**Status:** in_progress" in line)',
     '    pending = sum(1 for line in lines if "**Status:** pending" in line)',
@@ -3564,6 +3558,77 @@ function buildCodexStopWrapperPy() {
     "    raise SystemExit(adapter.main_guard(main))",
     "",
   ].join("\n");
+}
+
+async function patchTextFileIfExists(filePath, replacements) {
+  if (!(await pathExists(filePath))) {
+    return false;
+  }
+  let content = await fs.readFile(filePath, "utf8");
+  const original = content;
+  for (const [from, to] of replacements) {
+    content = content.replace(from, to);
+  }
+  if (content === original) {
+    return false;
+  }
+  await fs.writeFile(filePath, content, "utf8");
+  return true;
+}
+
+async function patchPlanningWithFilesPhaseCounters(spec, runtimeHome, runtimeId) {
+  if (spec.id !== "planning-with-files" || dryRun) {
+    return;
+  }
+
+  const shReplacements = [
+    [
+      'TOTAL=$(grep -c "### Phase" "$PLAN_FILE" || true)',
+      'TOTAL=$(grep -Ec "^#{2,3}[[:space:]]+Phase\\b" "$PLAN_FILE" || true)',
+    ],
+  ];
+  const ps1Replacements = [
+    [
+      '$TOTAL = ([regex]::Matches($content, "### Phase")).Count',
+      '$TOTAL = ([regex]::Matches($content, "(?m)^#{2,3}\\s+Phase\\b")).Count',
+    ],
+  ];
+  const candidates = [
+    [path.join(runtimeHome, "hooks", "stop.sh"), shReplacements],
+    [path.join(runtimeHome, "hooks", "stop.ps1"), ps1Replacements],
+    [
+      path.join(
+        runtimeHome,
+        "skills",
+        "planning-with-files",
+        "scripts",
+        "check-complete.sh",
+      ),
+      shReplacements,
+    ],
+    [
+      path.join(
+        runtimeHome,
+        "skills",
+        "planning-with-files",
+        "scripts",
+        "check-complete.ps1",
+      ),
+      ps1Replacements,
+    ],
+  ];
+
+  let patched = 0;
+  for (const [filePath, replacements] of candidates) {
+    if (await patchTextFileIfExists(filePath, replacements)) {
+      patched += 1;
+    }
+  }
+  if (patched > 0) {
+    console.log(
+      `${C.green}✓${C.reset} ${spec.id} phase counters patched for ${runtimeId} (${patched} file${patched === 1 ? "" : "s"})`,
+    );
+  }
 }
 
 async function patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId) {

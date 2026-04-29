@@ -37,19 +37,23 @@
       ".codex/agents",
       ".codex/skills",
       ".codex/capability-index",
+      ".codex/hooks",
+      ".codex/hooks.json",
       ".codex/commands",
-      ".agents/skills",
       "codex/config.toml.example"
     ],
     "openclaw": [
       "openclaw/workspaces",
       "openclaw/skills",
+      "openclaw/hooks",
       "openclaw/capability-index",
       "openclaw/openclaw.template.json"
     ],
     "cursor": [
       ".cursor/agents",
       ".cursor/skills",
+      ".cursor/hooks",
+      ".cursor/hooks.json",
       ".cursor/capability-index",
       ".cursor/mcp.json"
     ]
