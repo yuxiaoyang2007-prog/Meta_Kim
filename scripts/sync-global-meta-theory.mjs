@@ -20,6 +20,7 @@ import {
   resolveRuntimeHomeInfo,
 } from "./meta-kim-sync-config.mjs";
 import { CATEGORIES, openRecorder } from "./install-manifest.mjs";
+import { validateSkillFrontmatter } from "./install-skill-sanitizer.mjs";
 
 // Recorder is lazily opened in runSync(); helpers record through this holder
 // so we do not have to thread recorder arg through every sync function.
@@ -184,6 +185,16 @@ async function copyCanonicalSkill(targetDir, targetId) {
   );
 }
 
+async function assertCanonicalSkillFrontmatter() {
+  const raw = await fs.readFile(sourceSkillFile, "utf8");
+  const validation = validateSkillFrontmatter(raw);
+  if (!validation.ok) {
+    throw new Error(
+      `Invalid canonical skill frontmatter in ${sourceSkillFile}: ${validation.message}`,
+    );
+  }
+}
+
 async function copyCodexMetaTheoryCommand() {
   const commandsDir = path.join(runtimeHomes.codex.dir, "commands");
   const targetPath = path.join(commandsDir, "meta-theory.md");
@@ -257,6 +268,24 @@ async function syncClaudeGlobalSettingsHooks() {
   assertHomeBound(settingsPath);
 
   const template = buildMetaKimHooksTemplate(absHooks);
+  const recordSettingsMerge = () => {
+    recordSafe((rec) => {
+      const managedCommands = [];
+      for (const blocks of Object.values(template)) {
+        for (const block of blocks ?? []) {
+          for (const h of block.hooks ?? []) {
+            if (h?.command) managedCommands.push(h.command);
+          }
+        }
+      }
+      rec.recordSettingsMerge(settingsPath, managedCommands, {
+        source: "sync-global-meta-theory",
+        purpose: "claude-global-settings-merge",
+        category: CATEGORIES.C,
+      });
+    });
+  };
+
   let base = {};
   if (await pathExists(settingsPath)) {
     const raw = await fs.readFile(settingsPath, "utf8");
@@ -285,6 +314,7 @@ async function syncClaudeGlobalSettingsHooks() {
     console.log(
       `Claude Code settings hooks already up to date: ${settingsPath}`,
     );
+    recordSettingsMerge();
     return;
   }
 
@@ -297,24 +327,11 @@ async function syncClaudeGlobalSettingsHooks() {
 
   await fs.writeFile(settingsPath, out, "utf8");
   console.log(`Merged Meta_Kim hooks into ${settingsPath}`);
-  recordSafe((rec) => {
-    const managedCommands = [];
-    for (const blocks of Object.values(template)) {
-      for (const block of blocks ?? []) {
-        for (const h of block.hooks ?? []) {
-          if (h?.command) managedCommands.push(h.command);
-        }
-      }
-    }
-    rec.recordSettingsMerge(settingsPath, managedCommands, {
-      source: "sync-global-meta-theory",
-      purpose: "claude-global-settings-merge",
-      category: CATEGORIES.C,
-    });
-  });
+  recordSettingsMerge();
 }
 
 async function runCheck() {
+  await assertCanonicalSkillFrontmatter();
   const sourceFingerprint = await fingerprintDir(sourceDir);
   let failed = false;
 
@@ -388,9 +405,11 @@ async function runSync() {
   if (!(await pathExists(sourceSkillFile))) {
     throw new Error(`Missing canonical skill source: ${sourceSkillFile}`);
   }
+  await assertCanonicalSkillFrontmatter();
   manifestRecorder = openRecorder({
     scope: "global",
     metaKimVersion: process.env.META_KIM_VERSION ?? null,
+    replaceSources: ["sync-global-meta-theory"],
   });
 
   for (const target of cleanupTargets) {
