@@ -6,6 +6,20 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.0.24] - 2026-05-11
+
+### 修复
+
+- **Windows 下 MCP Memory Service 静默开机启动** — Windows 开机自启现在只在 Startup 中保留静默 VBS launcher，将命令 wrapper 移到 `~/.meta-kim/`，并在更新时删除旧版会弹出终端窗口的 `mcp-memory-start.cmd`。
+- **跨平台 MCP Memory 启动健康检查** — Windows、macOS、Linux 的开机启动 wrapper 会在启动后轮询 `http://127.0.0.1:8000/api/health`，如果 60 秒内未进入 healthy 状态，就向用户显示可见失败提示。
+- **启动失败提示国际化** — MCP Memory 开机启动失败提示现在使用 setup i18n 文案，覆盖英文、中文、日文、韩文，不再硬编码英文。
+- **发布元数据漂移** — 同步 `package-lock.json` 中的包版本号。
+
+### 测试
+
+- 新增 setup 回归测试，覆盖 Windows 静默迁移、跨平台健康检查 wrapper、用户可见失败提示，以及基于 i18n 的 MCP Memory 启动提示文案。
+- 更新有效 cross-project run artifact fixture，补齐 `verifySteps`，使其符合当前 run validator 合约。
+
 ## [2.0.23] - 2026-05-05
 
 ### 新增

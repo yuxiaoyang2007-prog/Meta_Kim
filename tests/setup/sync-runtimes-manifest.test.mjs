@@ -192,6 +192,18 @@ describe("sync-runtimes / Codex project hooks", () => {
     );
   });
 
+  test("does not emit quoted absolute Node paths that fail in PowerShell", () => {
+    const hookPath = "C:\\Users\\Kim\\Path With Spaces\\meta-kim-memory-save.mjs";
+    const config = buildCodexProjectHooksJson({
+      memoryHookPath: hookPath,
+    });
+    const command = config.hooks.SessionStart[0].hooks[0].command;
+
+    assert.equal(command, `node ${JSON.stringify(hookPath)} --event session-start`);
+    assert.doesNotMatch(command, /Program Files/);
+    assert.doesNotMatch(command, /^"/);
+  });
+
   test("graphify hook script exits cleanly when no graph exists", () => {
     const source = buildCodexGraphifyContextHook();
 

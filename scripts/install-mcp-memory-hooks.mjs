@@ -223,7 +223,12 @@ function commandToken(value) {
 }
 
 function nodeHookCommand(hookPath, args = []) {
-  return [process.execPath, hookPath, ...args].map(commandToken).join(" ");
+  // Hooks are stored as shell command strings and may be executed by
+  // PowerShell, cmd.exe, bash, or zsh depending on the host runtime. A quoted
+  // absolute Windows Node path works in cmd.exe but fails in PowerShell without
+  // the call operator. Use the PATH-resolved `node` binary and quote only
+  // script/argument tokens that require it.
+  return ["node", hookPath, ...args].map(commandToken).join(" ");
 }
 
 function copyStopHookFile() {

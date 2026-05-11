@@ -225,7 +225,11 @@
       "visualOrAssetPlan": "none",
       "dependsOn": [],
       "parallelGroup": "auth-pattern",
-      "mergeOwner": "meta-warden"
+      "mergeOwner": "meta-warden",
+      "verifySteps": [
+        { "step": "extract shared auth pattern module from source projects", "verify": "shared auth pattern module references both source projects correctly" },
+        { "step": "screen shared artifact for project-specific secrets", "verify": "no project-specific secrets found in shared artifact" }
+      ]
     }
   ],
   "workerResultPackets": [

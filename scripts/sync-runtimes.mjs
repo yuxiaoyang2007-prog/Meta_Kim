@@ -882,7 +882,12 @@ function commandToken(value) {
 }
 
 function nodeHookCommand(scriptPath, args = []) {
-  const nodePath = process.execPath;
+  // Hook command strings are interpreted by the host runtime's shell.
+  // A quoted absolute Windows Node path like
+  // "C:\Program Files\nodejs\node.exe" script.mjs works in cmd.exe but
+  // fails in PowerShell unless prefixed with `&`. The portable contract is:
+  // require `node` on PATH, and quote only arguments that need quoting.
+  const nodePath = "node";
   return [nodePath, scriptPath, ...args].map(commandToken).join(" ");
 }
 

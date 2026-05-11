@@ -471,6 +471,9 @@ Possible causes:
     mcpMemoryAutoStartFailed: "Auto-start failed — start manually:",
     mcpMemoryAutoStartManual: "  memory server --http",
     mcpMemoryAutoStartBoot: "Boot auto-start configured",
+    mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
+    mcpMemoryAutoStartFailureMessage:
+      "Meta_Kim MCP Memory Service failed to start or did not become healthy at http://127.0.0.1:8000. Cross-session memory may be unavailable. Please start it manually: python -m mcp_memory_service",
     updateHeading: "Update Mode",
     updateNpm: "Reinstalling npm dependencies...",
     updateSkills: "Updating all skills...",
@@ -916,6 +919,9 @@ ${r ? `原始错误：${r}` : ""}
     mcpMemoryAutoStartFailed: "自动启动失败——请手动启动：",
     mcpMemoryAutoStartManual: "  memory server --http",
     mcpMemoryAutoStartBoot: "已配置开机自启",
+    mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
+    mcpMemoryAutoStartFailureMessage:
+      "Meta_Kim MCP Memory Service 启动失败，或未在 http://127.0.0.1:8000 变为 healthy。跨会话记忆可能不可用。请手动启动：python -m mcp_memory_service",
     updateHeading: "更新模式",
     updateNpm: "正在重新安装 npm 依赖...",
     updateSkills: "正在更新所有技能...",
@@ -1381,6 +1387,9 @@ ${r ? `生エラー：${r}` : ""}
     mcpMemoryAutoStartFailed: "自動起動に失敗——手動で起動してください：",
     mcpMemoryAutoStartManual: "  memory server --http",
     mcpMemoryAutoStartBoot: "起動時自動開始を設定しました",
+    mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
+    mcpMemoryAutoStartFailureMessage:
+      "Meta_Kim MCP Memory Service の起動に失敗したか、http://127.0.0.1:8000 が healthy になりませんでした。クロスセッションメモリが利用できない可能性があります。手動で起動してください: python -m mcp_memory_service",
     updateHeading: "アップデートモード",
     updateNpm: "npm依存関係を再インストール中...",
     updateSkills: "すべてのスキルを更新中...",
@@ -1844,6 +1853,9 @@ ${r ? `원본 오류：${r}` : ""}
     mcpMemoryAutoStartFailed: "자동 시작 실패 — 수동으로 시작하세요:",
     mcpMemoryAutoStartManual: "  memory server --http",
     mcpMemoryAutoStartBoot: "부팅 시 자동 시작 구성 완료",
+    mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
+    mcpMemoryAutoStartFailureMessage:
+      "Meta_Kim MCP Memory Service를 시작하지 못했거나 http://127.0.0.1:8000 이 healthy 상태가 되지 않았습니다. 세션 간 메모리를 사용할 수 없을 수 있습니다. 수동으로 시작하세요: python -m mcp_memory_service",
     updateHeading: "업데이트 모드",
     updateNpm: "npm 의존성 재설치 중...",
     updateSkills: "모든 스킬 업데이트 중...",
@@ -4077,6 +4089,10 @@ async function startMcpMemoryServiceBackground(resolved) {
 
 function configureBootAutoStart(memoryBin) {
   const plat = platform();
+  const shellQuote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
+  const psSingleQuote = (value) => `'${String(value).replace(/'/g, "''")}'`;
+  const failureTitle = t.mcpMemoryAutoStartFailureTitle;
+  const failureMessage = t.mcpMemoryAutoStartFailureMessage;
   try {
     if (plat === "win32") {
       const startupDir = join(
@@ -4090,11 +4106,47 @@ function configureBootAutoStart(memoryBin) {
         "Startup",
       );
       if (!existsSync(startupDir)) return false;
-      const cmdPath = join(startupDir, "mcp-memory-start.cmd");
+      const metaKimDir = join(homedir(), ".meta-kim");
+      mkdirSync(metaKimDir, { recursive: true });
+      const psPath = join(metaKimDir, "mcp-memory-start.ps1");
+      const cmdPath = join(metaKimDir, "mcp-memory-start.cmd");
       const vbsPath = join(startupDir, "mcp-memory-silent.vbs");
+      const legacyCmdPath = join(startupDir, "mcp-memory-start.cmd");
+      if (existsSync(legacyCmdPath)) rmSync(legacyCmdPath, { force: true });
+      const escapedMemoryBin = memoryBin.replace(/'/g, "''");
+      writeFileSync(
+        psPath,
+        `$ErrorActionPreference = "SilentlyContinue"\r\n` +
+          `$env:MCP_ALLOW_ANONYMOUS_ACCESS = "true"\r\n` +
+          `$memoryBin = '${escapedMemoryBin}'\r\n` +
+          `$failureTitle = ${psSingleQuote(failureTitle)}\r\n` +
+          `$failureMessage = ${psSingleQuote(failureMessage)}\r\n` +
+          `$logDir = Join-Path $env:USERPROFILE ".meta-kim"\r\n` +
+          `$stdoutLog = Join-Path $logDir "mcp-memory.out.log"\r\n` +
+          `$stderrLog = Join-Path $logDir "mcp-memory.err.log"\r\n` +
+          `function Test-MetaKimMemoryHealth {\r\n` +
+          `  try {\r\n` +
+          `    $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 3\r\n` +
+          `    return ($response.Content -match "healthy")\r\n` +
+          `  } catch { return $false }\r\n` +
+          `}\r\n` +
+          `if (Test-MetaKimMemoryHealth) { exit 0 }\r\n` +
+          `try {\r\n` +
+          `  Start-Process -FilePath $memoryBin -ArgumentList @("server", "--http") -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog\r\n` +
+          `} catch {}\r\n` +
+          `$healthy = $false\r\n` +
+          `for ($i = 0; $i -lt 30; $i++) {\r\n` +
+          `  Start-Sleep -Seconds 2\r\n` +
+          `  if (Test-MetaKimMemoryHealth) { $healthy = $true; break }\r\n` +
+          `}\r\n` +
+          `if (-not $healthy) {\r\n` +
+          `  Add-Type -AssemblyName PresentationFramework\r\n` +
+          `  [System.Windows.MessageBox]::Show($failureMessage, $failureTitle, "OK", "Warning") | Out-Null\r\n` +
+          `}\r\n`,
+      );
       writeFileSync(
         cmdPath,
-        `@echo off\r\nset MCP_ALLOW_ANONYMOUS_ACCESS=true\r\n"${memoryBin}" server --http\r\n`,
+        `@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${psPath}"\r\n`,
       );
       writeFileSync(
         vbsPath,
@@ -4105,8 +4157,36 @@ function configureBootAutoStart(memoryBin) {
     if (plat === "darwin") {
       const launchDir = join(homedir(), "Library", "LaunchAgents");
       mkdirSync(launchDir, { recursive: true });
-      const logPath = join(homedir(), ".meta-kim", "mcp-memory.log");
-      mkdirSync(join(homedir(), ".meta-kim"), { recursive: true });
+      const metaKimDir = join(homedir(), ".meta-kim");
+      mkdirSync(metaKimDir, { recursive: true });
+      const logPath = join(metaKimDir, "mcp-memory.log");
+      const scriptPath = join(metaKimDir, "mcp-memory-start.sh");
+      writeFileSync(
+        scriptPath,
+        `#!/bin/sh\n` +
+          `export MCP_ALLOW_ANONYMOUS_ACCESS=true\n` +
+          `MEMORY_BIN=${shellQuote(memoryBin)}\n` +
+          `LOG_PATH=${shellQuote(logPath)}\n` +
+          `TITLE=${shellQuote(failureTitle)}\n` +
+          `MSG=${shellQuote(failureMessage)}\n` +
+          `check_health() {\n` +
+          `  command -v curl >/dev/null 2>&1 && curl -fsS --max-time 3 http://127.0.0.1:8000/api/health 2>/dev/null | grep -q healthy\n` +
+          `}\n` +
+          `notify_failure() {\n` +
+          `  osascript -e "display dialog \\"$MSG\\" with title \\"$TITLE\\" buttons {\\"OK\\"} with icon caution" >/dev/null 2>&1 || true\n` +
+          `}\n` +
+          `check_health && exit 0\n` +
+          `"$MEMORY_BIN" server --http >>"$LOG_PATH" 2>&1 &\n` +
+          `healthy=0\n` +
+          `i=0\n` +
+          `while [ "$i" -lt 30 ]; do\n` +
+          `  sleep 2\n` +
+          `  if check_health; then healthy=1; break; fi\n` +
+          `  i=$((i + 1))\n` +
+          `done\n` +
+          `[ "$healthy" -eq 1 ] || notify_failure\n`,
+        { mode: 0o755 },
+      );
       writeFileSync(
         join(launchDir, "com.meta-kim.mcp-memory-service.plist"),
         `<?xml version="1.0" encoding="UTF-8"?>
@@ -4114,7 +4194,7 @@ function configureBootAutoStart(memoryBin) {
 <plist version="1.0"><dict>
   <key>Label</key><string>com.meta-kim.mcp-memory-service</string>
   <key>ProgramArguments</key><array>
-    <string>${memoryBin}</string><string>server</string><string>--http</string>
+    <string>/bin/sh</string><string>${scriptPath}</string>
   </array>
   <key>EnvironmentVariables</key><dict>
     <key>MCP_ALLOW_ANONYMOUS_ACCESS</key><string>true</string>
@@ -4128,10 +4208,44 @@ function configureBootAutoStart(memoryBin) {
     }
     // Linux: XDG autostart
     const autoDir = join(homedir(), ".config", "autostart");
+    const metaKimDir = join(homedir(), ".meta-kim");
     mkdirSync(autoDir, { recursive: true });
+    mkdirSync(metaKimDir, { recursive: true });
+    const logPath = join(metaKimDir, "mcp-memory.log");
+    const scriptPath = join(metaKimDir, "mcp-memory-start.sh");
+    writeFileSync(
+      scriptPath,
+      `#!/bin/sh\n` +
+        `export MCP_ALLOW_ANONYMOUS_ACCESS=true\n` +
+        `MEMORY_BIN=${shellQuote(memoryBin)}\n` +
+        `LOG_PATH=${shellQuote(logPath)}\n` +
+        `TITLE=${shellQuote(failureTitle)}\n` +
+        `MSG=${shellQuote(failureMessage)}\n` +
+        `check_health() {\n` +
+        `  command -v curl >/dev/null 2>&1 && curl -fsS --max-time 3 http://127.0.0.1:8000/api/health 2>/dev/null | grep -q healthy\n` +
+        `}\n` +
+        `notify_failure() {\n` +
+        `  if command -v notify-send >/dev/null 2>&1; then notify-send "$TITLE" "$MSG"; return; fi\n` +
+        `  if command -v zenity >/dev/null 2>&1; then zenity --warning --title="$TITLE" --text="$MSG"; return; fi\n` +
+        `  if command -v kdialog >/dev/null 2>&1; then kdialog --sorry "$MSG" --title "$TITLE"; return; fi\n` +
+        `  if command -v xmessage >/dev/null 2>&1; then xmessage -center "$MSG"; return; fi\n` +
+        `  printf '%s\\n' "$MSG" >>"$LOG_PATH"\n` +
+        `}\n` +
+        `check_health && exit 0\n` +
+        `"$MEMORY_BIN" server --http >>"$LOG_PATH" 2>&1 &\n` +
+        `healthy=0\n` +
+        `i=0\n` +
+        `while [ "$i" -lt 30 ]; do\n` +
+        `  sleep 2\n` +
+        `  if check_health; then healthy=1; break; fi\n` +
+        `  i=$((i + 1))\n` +
+        `done\n` +
+        `[ "$healthy" -eq 1 ] || notify_failure\n`,
+      { mode: 0o755 },
+    );
     writeFileSync(
       join(autoDir, "mcp-memory-service.desktop"),
-      `[Desktop Entry]\nType=Application\nName=MCP Memory Service\nExec=env MCP_ALLOW_ANONYMOUS_ACCESS=true "${memoryBin}" server --http\nNoDisplay=true\n`,
+      `[Desktop Entry]\nType=Application\nName=MCP Memory Service\nExec=/bin/sh "${scriptPath}"\nNoDisplay=true\n`,
     );
     return true;
   } catch {

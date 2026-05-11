@@ -6,6 +6,20 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.0.24] - 2026-05-11
+
+### Fixed
+
+- **Silent MCP Memory Service boot on Windows** — Windows boot auto-start now keeps only the silent VBS launcher in Startup, moves the command wrapper under `~/.meta-kim/`, and removes the legacy visible `mcp-memory-start.cmd` from Startup during update.
+- **Cross-platform MCP Memory startup health guard** — Windows, macOS, and Linux boot launchers now poll `http://127.0.0.1:8000/api/health` after startup and show a user-visible failure notice when the service does not become healthy within 60 seconds.
+- **Localized startup failure notices** — MCP Memory boot failure messages now use setup i18n strings for English, Chinese, Japanese, and Korean instead of hard-coded English text.
+- **Release metadata drift** — Synchronized `package-lock.json` with the package version.
+
+### Tests
+
+- Added setup regression coverage for silent Windows migration, cross-platform health-checked launchers, user-visible failure notices, and i18n-backed MCP Memory startup messages.
+- Updated the valid cross-project run artifact fixture with `verifySteps` so it satisfies the current run validator contract.
+
 ## [2.0.23] - 2026-05-05
 
 ### Added
