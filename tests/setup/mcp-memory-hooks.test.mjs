@@ -65,7 +65,16 @@ describe("MCP memory cross-runtime hooks", () => {
     const source = readRepoFile("scripts", "install-mcp-memory-hooks.mjs");
 
     assert.match(source, /return \["node", hookPath, \.\.\.args\]/);
+    assert.match(source, /const normalized = String\(value\)\.replace/);
     assert.doesNotMatch(source, /\[process\.execPath, hookPath/);
+  });
+
+  test("installer avoids WindowsApps python shim for Claude memory hook", () => {
+    const source = readRepoFile("scripts", "install-mcp-memory-hooks.mjs");
+
+    assert.match(source, /WindowsApps\[\\\\\/\]\+python/);
+    assert.match(source, /AppData", "Local", "Programs", "Python"/);
+    assert.match(source, /return cmd\.replace/);
   });
 
   test("OpenClaw managed hook is packaged", () => {

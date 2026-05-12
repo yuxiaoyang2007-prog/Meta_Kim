@@ -6,6 +6,18 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.0.25] - 2026-05-11
+
+### 修复
+
+- **Claude hook 命令跨平台兼容性** — Claude 全局与仓库级 hook 命令生成现在统一输出正斜杠路径，避免 Windows 路径（如 `C:\Users\...`）在 bash 类 shell 执行时被转义破坏。
+- **Windows 下 MCP Memory Python hook 启动** — MCP Memory hook 安装器现在优先选择明确的 Python 可执行文件，跳过 WindowsApps 的 Python 占位 shim，并写出更稳的跨 shell Python hook 命令。
+
+### 测试
+
+- 新增 setup 回归测试，覆盖 Claude hook 正斜杠路径生成与 WindowsApps Python shim 规避。
+- 发布前已验证定向 setup 测试与完整项目校验。
+
 ## [2.0.24] - 2026-05-11
 
 ### 修复

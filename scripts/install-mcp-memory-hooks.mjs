@@ -219,7 +219,8 @@ function readdirSyncCompat(dir) {
 }
 
 function commandToken(value) {
-  return /[\s"]/u.test(value) ? JSON.stringify(value) : value;
+  const normalized = String(value).replace(/\\/g, "/");
+  return /[\s"]/u.test(normalized) ? JSON.stringify(normalized) : normalized;
 }
 
 function nodeHookCommand(hookPath, args = []) {
@@ -377,15 +378,27 @@ function seedConfigIfMissing() {
 }
 
 function pickPythonCommand() {
-  // Prefer explicit python3, fall back to python. The hook itself targets 3.10+.
+  // Prefer explicit Python executables. On Windows, the Microsoft Store
+  // WindowsApps shim can exist on PATH but fail at hook runtime, so skip it.
   const candidates =
     process.platform === "win32"
-      ? ["python", "python3"]
-      : ["python3", "python"];
+      ? [
+          process.env.PYTHON,
+          join(homedir(), "AppData", "Local", "Programs", "Python", "Python311", "python.exe"),
+          join(homedir(), "AppData", "Local", "Programs", "Python", "Python312", "python.exe"),
+          join(homedir(), "AppData", "Local", "Programs", "Python", "Python313", "python.exe"),
+          "python",
+          "python3",
+        ]
+      : [process.env.PYTHON, "python3", "python"];
   for (const cmd of candidates) {
+    if (!cmd) continue;
+    if (process.platform === "win32" && /WindowsApps[\\/]+python(?:3)?\.exe$/iu.test(cmd)) {
+      continue;
+    }
     try {
       const result = run(cmd, ["--version"]);
-      if (result.status === 0) return cmd;
+      if (result.status === 0) return cmd.replace(/\\/g, "/");
     } catch {
       // try next
     }

@@ -6,6 +6,18 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.0.25] - 2026-05-11
+
+### Fixed
+
+- **Claude hook command portability** — Claude global and repo hook command generation now writes slash-normalized paths, preventing Windows paths such as `C:\Users\...` from being mangled when hooks are executed through bash-like shells.
+- **MCP Memory Python hook startup on Windows** — The MCP Memory hook installer now prefers explicit Python executables, skips the WindowsApps Python shim, and writes shell-portable Python hook commands.
+
+### Tests
+
+- Added setup regression coverage for slash-normalized Claude hook commands and WindowsApps Python shim avoidance.
+- Verified targeted setup tests and full project validation before release.
+
 ## [2.0.24] - 2026-05-11
 
 ### Fixed

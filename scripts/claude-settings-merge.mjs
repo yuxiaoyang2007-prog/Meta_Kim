@@ -40,7 +40,7 @@ export function isGlobalMetaKimManagedHookCommand(command) {
  * escaping once, correctly.
  */
 export function hookCommandNode(absScriptPath) {
-  return `node "${absScriptPath}"`;
+  return `node "${absScriptPath.replace(/\\/g, "/")}"`;
 }
 
 /** Hook blocks matching Meta_Kim canonical runtime (absolute paths under meta-kim/). */
@@ -266,7 +266,7 @@ export function rewriteRepoHookCommandsToAbsolute(settings, repoRoot) {
             path.sep +
             hookName +
             ".mjs";
-          h.command = `node "${absPath}"`;
+          h.command = hookCommandNode(absPath);
         }
       }
     }
