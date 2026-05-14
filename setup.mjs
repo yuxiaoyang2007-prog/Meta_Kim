@@ -75,6 +75,16 @@ const updateMode = args.includes("--update") || args.includes("-u");
 const checkOnly = args.includes("--check");
 const silentMode = args.includes("--silent") || !process.stdout.isTTY;
 
+function writeUtf8BomFileSync(path, content) {
+  writeFileSync(
+    path,
+    Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from(content, "utf8"),
+    ]),
+  );
+}
+
 /** Interactive extras (default off): full install uses scope "both" and skips proxy prompts. */
 const promptInstallScope =
   args.includes("--prompt-install-scope") ||
@@ -4114,7 +4124,7 @@ function configureBootAutoStart(memoryBin) {
       const legacyCmdPath = join(startupDir, "mcp-memory-start.cmd");
       if (existsSync(legacyCmdPath)) rmSync(legacyCmdPath, { force: true });
       const escapedMemoryBin = memoryBin.replace(/'/g, "''");
-      writeFileSync(
+      writeUtf8BomFileSync(
         psPath,
         `$ErrorActionPreference = "SilentlyContinue"\r\n` +
           `$env:MCP_ALLOW_ANONYMOUS_ACCESS = "true"\r\n` +

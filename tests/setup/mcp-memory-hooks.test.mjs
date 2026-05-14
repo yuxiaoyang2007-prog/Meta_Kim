@@ -110,6 +110,8 @@ describe("MCP memory cross-runtime hooks", () => {
 
     assert.match(source, /const shellQuote = \(value\) =>/);
     assert.match(source, /const psSingleQuote = \(value\) =>/);
+    assert.match(source, /function writeUtf8BomFileSync/);
+    assert.match(source, /Buffer\.from\(\[0xef, 0xbb, 0xbf\]\)/);
     assert.match(source, /mcpMemoryAutoStartFailureTitle/);
     assert.match(source, /mcpMemoryAutoStartFailureMessage/);
     assert.match(source, /启动失败/);
@@ -117,6 +119,7 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.match(source, /시작하지 못했거나/);
     assert.match(source, /const metaKimDir = join\(homedir\(\), "\.meta-kim"\)/);
     assert.match(source, /const psPath = join\(metaKimDir, "mcp-memory-start\.ps1"\)/);
+    assert.match(source, /writeUtf8BomFileSync\(\s*psPath,/);
     assert.match(source, /const cmdPath = join\(metaKimDir, "mcp-memory-start\.cmd"\)/);
     assert.match(source, /const vbsPath = join\(startupDir, "mcp-memory-silent\.vbs"\)/);
     assert.match(source, /const legacyCmdPath = join\(startupDir, "mcp-memory-start\.cmd"\)/);
