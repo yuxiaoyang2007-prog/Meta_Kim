@@ -197,6 +197,8 @@ The current hardening layer now expects:
 - local-only `compactionPacket` handoff state under `.meta-kim/state/{profile}/compaction/` when continuity is needed between sessions
 - no final public-ready claim before the public-display gate passes
 
+**Planning Files (Mandatory at Stage 3, Supplement)**: When `planning-with-files` skill is installed, create `task_plan.md`, `findings.md`, `progress.md` at Stage 3 (Thinking) as persistent planning state. This is a supplement to protocol artifacts — not a replacement. The Conductor (or main thread acting as Conductor) is the sole writer. Update `progress.md` after every subsequent stage. Skip only when `queryBypass: true`. See `dev-governance.md` Step 3.7 for full specification.
+
 Main-thread responsibility in Codex:
 
 - scope clarification

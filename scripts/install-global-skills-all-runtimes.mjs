@@ -1950,6 +1950,7 @@ async function installClaudePlugins() {
     // spec format is "bareName@marketplace" — resolve repo from skills.json manifest
     const pluginRepoMap = {
       superpowers: "obra/superpowers",
+      ecc: "affaan-m/everything-claude-code",
       "everything-claude-code": "affaan-m/everything-claude-code",
       "code-simplifier": "claude-plugins-official/code-simplifier",
       "rust-analyzer-lsp": "claude-plugins-official/rust-analyzer-lsp",
@@ -1957,6 +1958,14 @@ async function installClaudePlugins() {
       "pyright-lsp": "claude-plugins-official/pyright-lsp",
     };
     const repoFull = pluginRepoMap[bareName] ?? `${bareName}/${bareName}`;
+    // Plugin rename migration: ECC renamed from "everything-claude-code" to "ecc".
+    // If the new bareName isn't installed but the old one is, treat as already present.
+    const RENAME_ALIASES = { ecc: "everything-claude-code" };
+    const effectiveBareName = installedNames.has(bareName)
+      ? bareName
+      : RENAME_ALIASES[bareName] && installedNames.has(RENAME_ALIASES[bareName])
+        ? RENAME_ALIASES[bareName]
+        : bareName;
     // Look up by full spec ("bareName@marketplace"), not bare name.
     // installed_plugins.json can carry stale cross-marketplace entries for the
     // same bare name (e.g. both "superpowers@claude-plugins-official" and
@@ -1968,10 +1977,10 @@ async function installClaudePlugins() {
     const localVersion = localRecord?.version ?? null;
 
     if (!updateMode) {
-      // Non-update mode: skip if bare name is already installed
-      if (installedNames.has(bareName)) {
+      // Non-update mode: skip if bare name (or rename alias) is already installed
+      if (installedNames.has(effectiveBareName)) {
         console.log(
-          `${C.yellow}⊘${C.reset} ${C.dim}${t.skipAlreadyInstalled(bareName)}${C.reset}`,
+          `${C.yellow}⊘${C.reset} ${C.dim}${t.skipAlreadyInstalled(effectiveBareName)}${C.reset}`,
         );
         continue;
       }

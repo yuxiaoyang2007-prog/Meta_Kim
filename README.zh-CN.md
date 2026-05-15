@@ -64,6 +64,18 @@ npm run meta:validate
 2. `AGENTS.md`
 3. `docs/runtime-capability-matrix.md`
 
+### 使用路径
+
+全局安装后（`node setup.mjs` 或 `npx`），各场景下什么自动生效、什么需要手动触发：
+
+| 你在哪里 | 自动生效的部分 | 需要显式触发 |
+|---|---|---|
+| Meta_Kim 仓库 + Claude Code | 完整治理（CLAUDE.md 提供 8-stage spine、门、分发规则） | — |
+| 任意其他项目 + Claude Code | Hooks（安全拦截、格式化、记忆保存）+ `/meta-theory` skill | 说"run meta theory"或输入 `/meta-theory` |
+| Codex | AGENTS.md 规则 + 8 个自定义 agent + `/meta-theory` 命令 | 输入"run meta theory"或 `/meta-theory` |
+| OpenClaw | Workspace agent + Plugin SDK hooks（28 个事件） | 需要配置 `auth.json` |
+| Cursor | Agent 投影 + skill 镜像 + hooks | 最轻量；适合阅读和轻量操作 |
+
 ---
 
 ## 联系方式

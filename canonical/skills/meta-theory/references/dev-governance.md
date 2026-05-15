@@ -405,6 +405,30 @@ Extract each agent's "Own / Do Not Touch" boundaries
 Score match: does "Own" cover the needed capability?
 ```
 
+**Step 1.5 — Global capability search** (fast keyword match via search index):
+```
+IF capability not found in local scan:
+  Grep the capability-search-index.tsv in .meta-kim/state/{profile}/capability-index/
+  Search by keyword (e.g., "review|audit", "debug|error", "frontend|ui")
+  TSV format: type <tab> key <tab> name <tab> description <tab> trigger <tab> section_headings
+  Each matching line identifies a candidate agent/skill with its platform and ID
+  Score match from description and keywords
+```
+
+**Step 1.6 — Skill co-discovery** (run alongside agent search, NOT deferred to Evolution):
+```
+Using the SAME capability keywords from Step 1–1.5:
+  Grep capability-search-index.tsv filtering for type=skills
+  Collect matching skill IDs and descriptions
+  Record in fetchPacket.recommendedSkills per sub-task:
+    { "subTaskId": "task-001", "skills": ["coding-standards", "code-security"], "source": "search-index" }
+  ALSO check matched agent's YAML frontmatter for recommended_skills field
+    (pre-populated by previous Evolution runs — gives faster lookup without re-searching)
+  Merge both sources: search-index discovery + agent's recommended_skills
+```
+
+**Why Step 1.6 runs during Fetch, not Evolution**: The first run must already know which skills to use. Evolution only caches the discovery for faster future runs. Skill ignorance on first run = agent does worse work for no reason.
+
 **Step 0.5 — Project Graph Context** (auto-detection, runs before Step 1):
 ```
 CHECK: Does graphify-out/graph.json exist in the target project root?
@@ -456,13 +480,42 @@ Search known specialist ecosystems already integrated by Meta_Kim:
 ```
 
 **Step 5 — Owner resolution branch** (if no match found):
+
+**Step 5a — Output `capabilityGapPacket` (mandatory):**
+```json
+{
+  "capabilityGapPacket": {
+    "gapCapability": "[capability description]",
+    "gapType": "durable | recurring | project-specific | one-off",
+    "searchedSources": ["local-agents", "capability-index", "global-registry", "findskill", "specialist-ecosystem"],
+    "bestPartialMatch": null,
+    "resolutionAction": "pending_user_confirmation",
+    "userConfirmationRequired": true
+  }
+}
 ```
-Mark capabilityGap: "no agent declares Own [capability]"
+
+**Step 5b — User confirmation gate:**
+```
 IF gap is durable / recurring / project-specific
-  → trigger Type B creation pipeline before execution
-ELSE
+  → ASK user: "Capability gap detected: {gapCapability}. Trigger Type B creation pipeline? (yes/no)"
+  → IF user approves → trigger Type B creation pipeline before execution
+  → IF user declines → generalPurpose fallback + Evolution follow-up required
+ELSE (gap is one-off / emergency)
   → invoke Agent(subagent_type="generalPurpose") or Codex default subagent as a TEMPORARY owner
   → record justification + require Evolution follow-up
+```
+
+**Step 5c — Record gap resolution in `fetchPacket`:**
+```json
+{
+  "gapResolution": {
+    "userAsked": true,
+    "userResponse": "approved | declined | one-off-auto",
+    "resolutionPath": "type-b | generalPurpose-fallback",
+    "evolutionFollowUpRequired": true
+  }
+}
 ```
 
 ### Match Scoring
@@ -591,11 +644,14 @@ Break Stage 1's task into independent sub-tasks:
       "mergeOwner": "agent responsible for consolidation",
       "taskPacketId": "task-001",
       "fileScope": ["file-or-module-a", "file-or-module-b"],
-      "constraints": ["boundary1", "dependency1"]
+      "constraints": ["boundary1", "dependency1"],
+      "recommendedSkills": ["skill-id-1", "skill-id-2"]
     }
   ]
 }
 ```
+
+`recommendedSkills` comes from Fetch Step 1.6 — skills discovered via search index + agent's own `recommended_skills` YAML field (cached by previous Evolution runs). During Execution, include these skill references in the agent's dispatch prompt so the agent invokes them during work.
 
 ### Step 3.5: Protocol-First Dispatch Artifacts
 
@@ -692,7 +748,8 @@ Thinking must lock down the execution protocol before any `Agent` tool invocatio
       "dependsOn": [],
       "parallelGroup": "group-a",
       "mergeOwner": "agent name",
-      "deliverableLink": "how this packet connects back to the primary deliverable"
+      "deliverableLink": "how this packet connects back to the primary deliverable",
+      "recommendedSkills": ["skill-id-1", "skill-id-2"]
     }
   ],
   "resultMergePlan": {
@@ -703,6 +760,62 @@ Thinking must lock down the execution protocol before any `Agent` tool invocatio
 ```
 
 Independent work that can be parallelized must be marked with the same `parallelGroup`. Any task that has no declared `owner`, `dependsOn`, and `mergeOwner` is not ready for Execution.
+
+### Step 3.6: Decomposition Acceptance Gate
+
+Before proceeding to Step 4, the plan must pass this gate:
+
+| Check | Condition | Fail Action |
+|-------|-----------|-------------|
+| **Multi-file / multi-capability** | Task spans >1 file OR >1 capability dimension | MUST produce >= 2 `workerTaskPackets` |
+| **Single-Packet Anti-Pattern** | Only 1 packet produced for a multi-file / multi-capability task | REJECT — re-decompose or justify why a single packet is genuinely sufficient (single-file, single-capability, pure logic change) |
+| **Packet completeness** | Every packet has non-empty `owner`, `dependsOn` (or explicit `[]`), `parallelGroup`, `mergeOwner` | REJECT — fill missing fields |
+
+Single-packet justification is only valid when ALL of: (1) exactly 1 file, (2) exactly 1 capability dimension, (3) no cross-module impact, (4) no durable artifact handoff.
+
+Output:
+```json
+{
+  "decompositionGate": {
+    "packetCount": 2,
+    "multiFileOrMultiCapability": true,
+    "singlePacketJustification": null,
+    "gateResult": "PASS"
+  }
+}
+```
+
+### Step 3.7: Planning Files Supplement (Mandatory)
+
+**This step is SUPPLEMENT, not replacement.** It does NOT replace any protocol artifacts from Steps 3–3.6. It creates persistent planning files alongside the dispatch protocol for human visibility and cross-session continuity.
+
+When `planning-with-files` skill is installed, invoke it first (`/planning-with-files` via Skill tool) and let its templates drive file creation. When not installed, create files manually using the templates below.
+
+**Files to create** (in project root, NOT in skill directory):
+
+| File | Purpose | Source Data |
+|------|---------|-------------|
+| `task_plan.md` | Phase roadmap, decisions, errors | Stages 1–3 scope, decomposition, protocol artifacts |
+| `findings.md` | Research, discoveries, technical decisions | Fetch results, capability matches, skill discoveries |
+| `progress.md` | Session log, test results, error log | All stage actions as they complete |
+
+**Creation rules:**
+
+1. `task_plan.md` — Populate Goal from Stage 1 scope; Phases from Step 3 decomposition (each `workerTaskPacket` = one phase); Key Questions from Clarity Gate; Decisions from option exploration.
+2. `findings.md` — Populate Requirements from user request; Research Findings from Fetch Stage 2 results; Technical Decisions from Step 3 option exploration; Resources from capability index matches.
+3. `progress.md` — Create session header; log Stages 1–3 actions as Phase 1 entries.
+
+**Update rules (supplement throughout the run):**
+
+- After Stage 4 (Execution): update `progress.md` with agent outputs, files created/modified, test results.
+- After Stage 5 (Review): update `progress.md` with review findings; update `findings.md` with issues discovered.
+- After Stage 6 (Meta-Review): update `task_plan.md` phase statuses.
+- After Stage 7 (Verification): update `progress.md` with verification results.
+- After Stage 8 (Evolution): mark all phases complete in `task_plan.md`; log evolution writebacks in `findings.md`.
+
+**Conductor is the sole writer.** No other agent writes planning files. Sub-agents return results; Conductor (or the dispatcher thread acting as Conductor) persists them.
+
+**Skip condition:** Only skip when `queryBypass: true` (pure query, no file modifications). For all Type A/B/C/D/E runs with execution, this step is MANDATORY.
 
 ### Step 4: `cardDeck` (stage-card rhythm) + delivery plan
 
@@ -1142,6 +1255,25 @@ scar:
 **Rule**: Evolution may not silently disappear. Every run must emit either:
 - `writebackDecision = "writeback"` with concrete targets, or
 - `writebackDecision = "none"` with a concrete `decisionReason`
+
+### Evolution Writeback Checklist (mandatory before marking Evolution complete)
+
+Before marking Evolution complete, walk through this checklist and record the result for every item:
+
+```json
+{
+  "evolutionWritebackChecklist": {
+    "agentBoundaryEdit": { "needed": false, "targets": [], "reason": "no boundary issues found" },
+    "skillCreateOrUpdate": { "needed": false, "targets": [], "reason": "no reusable pattern discovered" },
+    "capabilityIndexUpdate": { "needed": false, "targets": [], "reason": "no coverage gap found" },
+    "contractRefinement": { "needed": false, "targets": [], "reason": "no gate or protocol refinement needed" },
+    "scarRecord": { "needed": false, "scarIds": [], "reason": "no violation detected" },
+    "syncRequired": { "needed": false, "reason": "no canonical files modified" }
+  }
+}
+```
+
+Each item must be explicitly addressed — omitting an item is equivalent to an unstated assumption, which violates the Explicitness design principle.
 
 ### Evolution Artifacts Storage
 

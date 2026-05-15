@@ -220,6 +220,7 @@ async function collectAgentHealth(agentId) {
     canonicalRaw?.includes("五标准") ||
     canonicalRaw?.includes("Meta-Theory Verification") ||
     canonicalRaw?.includes("Meta-Theory Validation") ||
+    canonicalRaw?.includes("Meta-Theory Compliance") ||
     canonicalRaw?.includes("Five Criteria");
   const hasSoul = soulRaw && soulRaw.length > 100;
   const requiredRoleMarkers = ROLE_CONTRACT_MARKERS[agentId] ?? [];

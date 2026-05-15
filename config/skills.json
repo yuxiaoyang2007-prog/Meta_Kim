@@ -71,7 +71,7 @@
     {
       "id": "everything-claude-code",
       "repo": "affaan-m/everything-claude-code",
-      "claudePlugin": "everything-claude-code@everything-claude-code",
+      "claudePlugin": "ecc@everything-claude-code",
       "installMethod": "pluginMarketplace",
       "targets": [
         "claude",

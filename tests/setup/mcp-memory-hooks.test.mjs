@@ -114,6 +114,8 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.match(source, /Buffer\.from\(\[0xef, 0xbb, 0xbf\]\)/);
     assert.match(source, /mcpMemoryAutoStartFailureTitle/);
     assert.match(source, /mcpMemoryAutoStartFailureMessage/);
+    assert.match(source, /HF_HUB_OFFLINE/);
+    assert.match(source, /TRANSFORMERS_OFFLINE/);
     assert.match(source, /启动失败/);
     assert.match(source, /起動に失敗/);
     assert.match(source, /시작하지 못했거나/);
@@ -127,6 +129,7 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.match(source, /function Test-MetaKimMemoryHealth/);
     assert.match(source, /http:\/\/127\.0\.0\.1:8000\/api\/health/);
     assert.match(source, /Start-Process -FilePath \$memoryBin/);
+    assert.match(source, /for \(\$i = 0; \$i -lt 150; \$i\+\+\)/);
     assert.match(source, /System\.Windows\.MessageBox/);
     assert.match(source, /\[System\.Windows\.MessageBox\]::Show\(\$failureMessage, \$failureTitle/);
     assert.doesNotMatch(source, /const cmdPath = join\(startupDir, "mcp-memory-start\.cmd"\)/);
@@ -136,6 +139,7 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.match(source, /TITLE=\$\{shellQuote\(failureTitle\)\}/);
     assert.match(source, /MSG=\$\{shellQuote\(failureMessage\)\}/);
     assert.match(source, /osascript -e "display dialog/);
+    assert.match(source, /while \[ "\$i" -lt 150 \]/);
     assert.match(source, /notify-send "\$TITLE" "\$MSG"/);
     assert.match(source, /zenity --warning/);
     assert.match(source, /kdialog --sorry/);

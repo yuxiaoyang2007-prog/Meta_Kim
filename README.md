@@ -64,6 +64,18 @@ Recommended reading order:
 2. `AGENTS.md`
 3. `docs/runtime-capability-matrix.md`
 
+### Usage Paths
+
+After global install (`node setup.mjs` or `npx`), what works where:
+
+| Where you are | What works automatically | What needs explicit trigger |
+|---|---|---|
+| Meta_Kim repo with Claude Code | Full governance via CLAUDE.md (8-stage spine, gates, dispatch rules) | — |
+| Any other project with Claude Code | Hooks (safety, format, memory save) + `/meta-theory` skill | Say "run meta theory" or type `/meta-theory` |
+| Codex | AGENTS.md rules + 8 custom agents + `/meta-theory` command | Type "run meta theory" or `/meta-theory` |
+| OpenClaw | Workspace agents + Plugin SDK hooks (28 events) | Requires `auth.json` configured |
+| Cursor | Agent projections + skill mirrors + hooks | Lightweight; mainly read + review |
+
 ---
 
 ## Contact

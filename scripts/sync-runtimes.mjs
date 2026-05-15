@@ -1096,11 +1096,29 @@ async function syncClaudeProjection(
   ) {
     changedFiles.push(displayPaths.claudeSettings);
   }
-  if (
-    claudeMcpProjectionPath &&
-    (await writeGeneratedFile(claudeMcpProjectionPath, mcpContent)).changed
-  ) {
-    changedFiles.push(displayPaths.claudeMcp);
+  if (claudeMcpProjectionPath) {
+    // Only write meta-kim-runtime MCP config when inside the Meta_Kim repo.
+    // The MCP server script (scripts/mcp/meta-runtime-server.mjs) only exists
+    // inside this repo — writing it to external projects breaks MCP startup.
+    if (inRepoRoot) {
+      if (
+        (await writeGeneratedFile(claudeMcpProjectionPath, mcpContent)).changed
+      ) {
+        changedFiles.push(displayPaths.claudeMcp);
+      }
+    } else {
+      const stripped = { mcpServers: {} };
+      if (
+        (
+          await writeGeneratedFile(
+            claudeMcpProjectionPath,
+            `${JSON.stringify(stripped, null, 2)}\n`,
+          )
+        ).changed
+      ) {
+        changedFiles.push(displayPaths.claudeMcp);
+      }
+    }
   }
 }
 

@@ -71,6 +71,7 @@ const EXPECTED_PUBLIC_DISPLAY_REQUIRES = [
 const EXPECTED_CLAUDE_HOOK_COMMANDS = [
   "node .claude/hooks/block-dangerous-bash.mjs",
   "node .claude/hooks/pre-git-push-confirm.mjs",
+  "node .claude/hooks/enforce-agent-dispatch.mjs",
   "node .claude/hooks/post-format.mjs",
   "node .claude/hooks/post-typecheck.mjs",
   "node .claude/hooks/post-console-log-warn.mjs",
@@ -79,6 +80,7 @@ const EXPECTED_CLAUDE_HOOK_COMMANDS = [
   "node .claude/hooks/stop-compaction.mjs",
   "node .claude/hooks/stop-console-log-audit.mjs",
   "node .claude/hooks/stop-completion-guard.mjs",
+  "node .claude/hooks/stop-spine-cleanup.mjs",
 ];
 
 const GRAPHIFY_MAX_REPORT_AGE_DAYS = 14;
@@ -1349,14 +1351,21 @@ async function validateDocumentationFacts() {
   const testFiles = await walkFilesByExtensions(path.join(repoRoot, "tests"), [
     ".mjs",
   ]);
-  const knownGapsPath = path.join(repoRoot, "tests", "fixtures", "known-doc-gaps.json");
+  const knownGapsPath = path.join(
+    repoRoot,
+    "tests",
+    "fixtures",
+    "known-doc-gaps.json",
+  );
   const knownDocGaps = (await exists(knownGapsPath))
     ? JSON.parse(await fs.readFile(knownGapsPath, "utf8"))
     : [];
   for (const filePath of testFiles) {
     const raw = await fs.readFile(filePath, "utf8");
     const relativePath = toRepoRelative(filePath);
-    const docGapWarnings = [...raw.matchAll(/console\.warn\(([\s\S]*?DOC GAP[\s\S]*?)\);/g)];
+    const docGapWarnings = [
+      ...raw.matchAll(/console\.warn\(([\s\S]*?DOC GAP[\s\S]*?)\);/g),
+    ];
     for (const warning of docGapWarnings) {
       const message = warning[1];
       const allowed = knownDocGaps.some(
@@ -1828,7 +1837,12 @@ async function validateClaudeSettings() {
 
   assert(
     hooks.PreToolUse[0]?.matcher === "Bash",
-    "canonical Claude settings PreToolUse must target Bash.",
+    "canonical Claude settings PreToolUse[0] must target Bash.",
+  );
+  assert(
+    hooks.PreToolUse[1]?.matcher ===
+      "Write|Edit|Bash|Agent|MultiEdit|NotebookEdit",
+    "canonical Claude settings PreToolUse[1] must target execution + agent tools.",
   );
   assert(
     hooks.PostToolUse[0]?.matcher === "Edit|Write",

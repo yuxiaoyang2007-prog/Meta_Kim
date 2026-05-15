@@ -28,6 +28,7 @@ const execFileAsync = promisify(execFile);
 const EXPECTED_CLAUDE_HOOK_COMMANDS = [
   "node .claude/hooks/block-dangerous-bash.mjs",
   "node .claude/hooks/pre-git-push-confirm.mjs",
+  "node .claude/hooks/enforce-agent-dispatch.mjs",
   "node .claude/hooks/post-format.mjs",
   "node .claude/hooks/post-typecheck.mjs",
   "node .claude/hooks/post-console-log-warn.mjs",
@@ -36,6 +37,7 @@ const EXPECTED_CLAUDE_HOOK_COMMANDS = [
   "node .claude/hooks/stop-memory-save.mjs",
   "node .claude/hooks/stop-console-log-audit.mjs",
   "node .claude/hooks/stop-completion-guard.mjs",
+  "node .claude/hooks/stop-spine-cleanup.mjs",
 ];
 
 const CONTRACT = path.join(

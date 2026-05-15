@@ -4038,7 +4038,12 @@ async function startMcpMemoryServiceBackground(resolved) {
   }
 
   info(t.mcpMemoryAutoStarting);
-  const env = { ...process.env, MCP_ALLOW_ANONYMOUS_ACCESS: "true" };
+  const env = {
+    ...process.env,
+    MCP_ALLOW_ANONYMOUS_ACCESS: "true",
+    HF_HUB_OFFLINE: "1",
+    TRANSFORMERS_OFFLINE: "1",
+  };
 
   try {
     const child = spawn(memoryBin, ["server", "--http"], {
@@ -4128,6 +4133,8 @@ function configureBootAutoStart(memoryBin) {
         psPath,
         `$ErrorActionPreference = "SilentlyContinue"\r\n` +
           `$env:MCP_ALLOW_ANONYMOUS_ACCESS = "true"\r\n` +
+          `$env:HF_HUB_OFFLINE = "1"\r\n` +
+          `$env:TRANSFORMERS_OFFLINE = "1"\r\n` +
           `$memoryBin = '${escapedMemoryBin}'\r\n` +
           `$failureTitle = ${psSingleQuote(failureTitle)}\r\n` +
           `$failureMessage = ${psSingleQuote(failureMessage)}\r\n` +
@@ -4145,7 +4152,7 @@ function configureBootAutoStart(memoryBin) {
           `  Start-Process -FilePath $memoryBin -ArgumentList @("server", "--http") -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog\r\n` +
           `} catch {}\r\n` +
           `$healthy = $false\r\n` +
-          `for ($i = 0; $i -lt 30; $i++) {\r\n` +
+          `for ($i = 0; $i -lt 150; $i++) {\r\n` +
           `  Start-Sleep -Seconds 2\r\n` +
           `  if (Test-MetaKimMemoryHealth) { $healthy = $true; break }\r\n` +
           `}\r\n` +
@@ -4175,6 +4182,8 @@ function configureBootAutoStart(memoryBin) {
         scriptPath,
         `#!/bin/sh\n` +
           `export MCP_ALLOW_ANONYMOUS_ACCESS=true\n` +
+          `export HF_HUB_OFFLINE=1\n` +
+          `export TRANSFORMERS_OFFLINE=1\n` +
           `MEMORY_BIN=${shellQuote(memoryBin)}\n` +
           `LOG_PATH=${shellQuote(logPath)}\n` +
           `TITLE=${shellQuote(failureTitle)}\n` +
@@ -4189,7 +4198,7 @@ function configureBootAutoStart(memoryBin) {
           `"$MEMORY_BIN" server --http >>"$LOG_PATH" 2>&1 &\n` +
           `healthy=0\n` +
           `i=0\n` +
-          `while [ "$i" -lt 30 ]; do\n` +
+          `while [ "$i" -lt 150 ]; do\n` +
           `  sleep 2\n` +
           `  if check_health; then healthy=1; break; fi\n` +
           `  i=$((i + 1))\n` +
@@ -4208,6 +4217,8 @@ function configureBootAutoStart(memoryBin) {
   </array>
   <key>EnvironmentVariables</key><dict>
     <key>MCP_ALLOW_ANONYMOUS_ACCESS</key><string>true</string>
+    <key>HF_HUB_OFFLINE</key><string>1</string>
+    <key>TRANSFORMERS_OFFLINE</key><string>1</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>${logPath}</string>
@@ -4227,6 +4238,8 @@ function configureBootAutoStart(memoryBin) {
       scriptPath,
       `#!/bin/sh\n` +
         `export MCP_ALLOW_ANONYMOUS_ACCESS=true\n` +
+        `export HF_HUB_OFFLINE=1\n` +
+        `export TRANSFORMERS_OFFLINE=1\n` +
         `MEMORY_BIN=${shellQuote(memoryBin)}\n` +
         `LOG_PATH=${shellQuote(logPath)}\n` +
         `TITLE=${shellQuote(failureTitle)}\n` +
@@ -4245,7 +4258,7 @@ function configureBootAutoStart(memoryBin) {
         `"$MEMORY_BIN" server --http >>"$LOG_PATH" 2>&1 &\n` +
         `healthy=0\n` +
         `i=0\n` +
-        `while [ "$i" -lt 30 ]; do\n` +
+        `while [ "$i" -lt 150 ]; do\n` +
         `  sleep 2\n` +
         `  if check_health; then healthy=1; break; fi\n` +
         `  i=$((i + 1))\n` +

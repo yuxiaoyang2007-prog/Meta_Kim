@@ -61,21 +61,21 @@ describe("installPluginBundlesForNonClaudeRuntimes (dry-run e2e)", () => {
     );
   });
 
-  test("Claude marketplace path is exercised for everything-claude-code", () => {
+  test("Claude marketplace path is exercised for everything-claude-code / ecc", () => {
     const { status, out } = runDryRun();
     assert.equal(status, 0);
     const plain = stripAnsi(out);
     assert.match(plain, /everything-claude-code/);
     const marketplaceExercised =
-      /claude plugin install everything-claude-code@everything-claude-code/.test(
+      /claude plugin install ecc@everything-claude-code/.test(
         plain,
       ) ||
-      /everything-claude-code.*(already installed|已安装|이미 설치됨|既にインストール)/i.test(
+      /(ecc|everything-claude-code).*(already installed|已安装|이미 설치됨|既にインストール)/i.test(
         plain,
       );
     assert.ok(
       marketplaceExercised,
-      "expected either install command or already-installed skip for everything-claude-code",
+      "expected either install command for ecc or already-installed skip for everything-claude-code",
     );
   });
 

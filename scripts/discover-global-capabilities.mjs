@@ -17,7 +17,8 @@ import { ensureProfileState } from "./meta-kim-local-state.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
-const CANONICAL_CAPABILITY_INDEX = "config/capability-index/meta-kim-capabilities.json";
+const CANONICAL_CAPABILITY_INDEX =
+  "config/capability-index/meta-kim-capabilities.json";
 const LOCAL_GLOBAL_INVENTORY =
   ".meta-kim/state/{profile}/capability-index/global-capabilities.json";
 
@@ -66,7 +67,8 @@ const PLATFORMS = {
     name: "Cursor",
     baseDir: () => path.join(os.homedir(), ".cursor"),
     scanners: {
-      agents: async (baseDir) => scanMarkdownFiles(path.join(baseDir, "agents")),
+      agents: async (baseDir) =>
+        scanMarkdownFiles(path.join(baseDir, "agents")),
       skills: async (baseDir) => scanCursorSkills(baseDir),
       plugins: async (baseDir) =>
         scanPluginFiles(path.join(baseDir, "plugins")),
@@ -467,38 +469,60 @@ async function scanCommandFiles(dir) {
 
 // ========== Agent 元数据提取 ==========
 
+function parseSimpleYaml(text) {
+  const metadata = {};
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const colonIndex = trimmed.indexOf(":");
+    if (colonIndex > 0) {
+      const key = trimmed.slice(0, colonIndex).trim();
+      let value = trimmed.slice(colonIndex + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (value === "|" || value === ">") continue;
+      metadata[key] = value;
+    }
+  }
+  return metadata;
+}
+
+function extractContentKeywords(content, maxChars = 3000) {
+  const chunk = content.slice(0, maxChars);
+  const headings = [...chunk.matchAll(/^#{1,3}\s+(.+)$/gm)].map((m) =>
+    m[1].trim(),
+  );
+  const cleaned = headings
+    .map((h) => h.replace(/[*`#]/g, "").trim())
+    .filter((h) => h.length > 2 && h.length < 80);
+  return [...new Set(cleaned)].slice(0, 20);
+}
+
 async function extractAgentMetadata(filePath) {
   try {
     const content = await fs.readFile(filePath, "utf8");
+    const metadata = {};
 
-    // 提取 YAML frontmatter
     const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (frontmatterMatch) {
-      const metadata = {};
-      for (const line of frontmatterMatch[1].split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) continue;
-        const colonIndex = trimmed.indexOf(":");
-        if (colonIndex > 0) {
-          const key = trimmed.slice(0, colonIndex).trim();
-          let value = trimmed.slice(colonIndex + 1).trim();
-          if (
-            (value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))
-          ) {
-            value = value.slice(1, -1);
-          }
-          metadata[key] = value;
-        }
-      }
-      return metadata;
+      Object.assign(metadata, parseSimpleYaml(frontmatterMatch[1]));
     }
 
-    // 提取标题
     const titleMatch = content.match(/^#\s+(.+)$/m);
-    if (titleMatch) {
-      return { title: titleMatch[1].trim() };
+    if (titleMatch && !metadata.title) {
+      metadata.title = titleMatch[1].trim();
     }
+
+    const keywords = extractContentKeywords(content);
+    if (keywords.length > 0) {
+      metadata._keywords = keywords.join(" | ");
+    }
+
+    return metadata;
   } catch {}
   return {};
 }
@@ -525,29 +549,19 @@ async function extractCodexAgentMetadata(filePath) {
 async function extractSkillMetadata(filePath) {
   try {
     const content = await fs.readFile(filePath, "utf8");
+    const metadata = {};
 
-    // YAML frontmatter
     const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (frontmatterMatch) {
-      const metadata = {};
-      for (const line of frontmatterMatch[1].split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) continue;
-        const colonIndex = trimmed.indexOf(":");
-        if (colonIndex > 0) {
-          const key = trimmed.slice(0, colonIndex).trim();
-          let value = trimmed.slice(colonIndex + 1).trim();
-          if (
-            (value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))
-          ) {
-            value = value.slice(1, -1);
-          }
-          metadata[key] = value;
-        }
-      }
-      return metadata;
+      Object.assign(metadata, parseSimpleYaml(frontmatterMatch[1]));
     }
+
+    const keywords = extractContentKeywords(content);
+    if (keywords.length > 0) {
+      metadata._keywords = keywords.join(" | ");
+    }
+
+    return metadata;
   } catch {}
   return {};
 }
@@ -657,8 +671,12 @@ async function scanPlatform(platformId, platform) {
 // ========== 索引构建 ==========
 
 async function collectRepoCanonicalCapabilities() {
-  const agents = await scanMarkdownFiles(path.join(repoRoot, "canonical", "agents"));
-  const skills = await scanSkillFiles(path.join(repoRoot, "canonical", "skills"));
+  const agents = await scanMarkdownFiles(
+    path.join(repoRoot, "canonical", "agents"),
+  );
+  const skills = await scanSkillFiles(
+    path.join(repoRoot, "canonical", "skills"),
+  );
   const skillReferences = await scanMarkdownFilesRecursive(
     path.join(repoRoot, "canonical", "skills", "meta-theory", "references"),
   );
@@ -728,13 +746,22 @@ async function buildRepoCapabilityIndex() {
     },
     byCapabilityType: {
       agents: Object.fromEntries(
-        capabilities.agents.map((cap) => [`repo:${cap.namespace}:${cap.id}`, cap]),
+        capabilities.agents.map((cap) => [
+          `repo:${cap.namespace}:${cap.id}`,
+          cap,
+        ]),
       ),
       skills: Object.fromEntries(
-        capabilities.skills.map((cap) => [`repo:${cap.namespace}:${cap.id}`, cap]),
+        capabilities.skills.map((cap) => [
+          `repo:${cap.namespace}:${cap.id}`,
+          cap,
+        ]),
       ),
       hooks: Object.fromEntries(
-        capabilities.hooks.map((cap) => [`repo:${cap.namespace}:${cap.id}`, cap]),
+        capabilities.hooks.map((cap) => [
+          `repo:${cap.namespace}:${cap.id}`,
+          cap,
+        ]),
       ),
       plugins: {},
       commands: {},
@@ -910,13 +937,45 @@ async function main() {
     `${JSON.stringify(globalInventory, null, 2)}\n`,
   );
 
-  console.error(`\n✅ Canonical index written to ${CANONICAL_CAPABILITY_INDEX}`);
-  console.error(`✅ Local inventory written to ${path.relative(repoRoot, localInventoryPath).replace(/\\/g, "/")}`);
-  console.error(`✅ Canonical index mirrored to ${platformIndexDirs.length} platforms:`);
+  console.error(
+    `\n✅ Canonical index written to ${CANONICAL_CAPABILITY_INDEX}`,
+  );
+  console.error(
+    `✅ Local inventory written to ${path.relative(repoRoot, localInventoryPath).replace(/\\/g, "/")}`,
+  );
+  console.error(
+    `✅ Canonical index mirrored to ${platformIndexDirs.length} platforms:`,
+  );
   for (const dir of platformIndexDirs) {
     const rel = path.relative(repoRoot, dir).replace(/\\/g, "/");
     console.error(`   ${rel}/`);
   }
+
+  // Generate grep-friendly search index
+  const searchLines = [];
+  for (const [type, items] of Object.entries(
+    globalInventory.byCapabilityType,
+  )) {
+    for (const [key, cap] of Object.entries(items)) {
+      const name = cap.metadata?.name || cap.id || "";
+      const desc = (cap.metadata?.description || "")
+        .replace(/\n/g, " ")
+        .substring(0, 300);
+      const kw = cap.metadata?._keywords || "";
+      const trigger = (cap.metadata?.trigger || "")
+        .replace(/\n/g, " ")
+        .substring(0, 200);
+      searchLines.push(`${type}\t${key}\t${name}\t${desc}\t${trigger}\t${kw}`);
+    }
+  }
+  const searchIndexPath = path.join(
+    path.dirname(localInventoryPath),
+    "capability-search-index.tsv",
+  );
+  await fs.writeFile(searchIndexPath, searchLines.join("\n") + "\n", "utf8");
+  console.error(
+    `✅ Search index written to capability-search-index.tsv (${searchLines.length} entries)`,
+  );
 }
 
 await main();
