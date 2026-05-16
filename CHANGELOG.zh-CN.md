@@ -6,6 +6,36 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.0.30] - 2026-05-15
+
+### 变更
+
+- **项目本地 MCP 配置** — 在 Meta_Kim 源仓库内同步时，`meta-kim-runtime` 现在会渲染为绝对路径。普通项目复制配置时，不再从 runtime sync 继承这个只适合源仓库使用的 MCP。
+- **Claude 插件安装标识** — Everything Claude Code 的安装标识从过时的 `ecc@everything-claude-code` 更新为上游当前的 `ecc@ecc`。
+- **MCP Memory Service 端口策略** — 移除旧的 `8888` 回退/迁移说明，公开文档统一使用上游默认端口 `8000`。
+- **发布元数据** — `package.json` 和 `package-lock.json` 同步到 `2.0.30`。
+
+### 修复
+
+- **`meta-kim-runtime` 人话提醒** — `setup.mjs --check` 和项目校验现在会明确说明：`meta-kim-runtime` 是 Meta_Kim 源仓库里的辅助查询 MCP。普通项目手动复制配置后，如果这个 MCP 报路径错误，可以删除该 MCP block，不影响 agents 从 `.claude/agents/`、`.codex/agents/`、`.cursor/agents/` 或 `openclaw/workspaces/` 被发现。
+- **Python MCP 命令选择** — MCP Memory Service 注册现在会保留实际检测到的 Python 启动器，不再在不合适的机器上回退为裸 `python`。
+- **无本地密钥的运行时 smoke 校验** — Claude smoke 校验现在会在 `claude agents` 被声明但实际不可用时回退检查 `.claude/agents/`；OpenClaw smoke 校验在本机未配置 `auth.json` 时也能做模板/workspace 结构校验。
+
+## [2.0.29] - 2026-05-15
+
+### 新增
+
+- **Meta-theory dispatch 自动激活 hook** — 新增 `activate-meta-theory-spine.mjs` PreToolUse hook，检测 `Skill("meta-theory")` 激活时自动初始化 spine state。激活后 `enforce-agent-dispatch.mjs` 阻止执行工具（Write/Edit/Bash）直到 agents 被 dispatch。三层强制执行：hook（系统层）+ 规则文件（所有运行时）+ SKILL.md 门控（协议层）。
+- **DISPATCH IS MANDATORY 门控** — 在 `canonical/skills/meta-theory/SKILL.md` 新增顶层门控节，5 条硬规则：主线程仅做调度、>3 句执行层输出触发 STOP、"简单任务"不是借口、hook 在系统层强制、拿不准就 dispatch。
+- **CLAUDE.md dispatch 硬规则** — 新增 "Meta-Theory Dispatch is Non-Negotiable" 节，覆盖全部 5 种 Type（A/B/C/D/E），明确每种 Type 的 dispatch 目标。
+- **AGENTS.md dispatch 硬规则** — 在 Codex 入口新增 "DISPATCH IS MANDATORY — NON-NEGOTIABLE GATE" 节，4 条硬规则含 `spawn_agent` 不可用时的降级路径处理。
+- **Codex 命令 dispatch 门控** — 更新 `canonical/runtime-assets/codex/commands/meta-theory.md`，加入强制 dispatch 规则和阻塞原因记录。
+- **Cursor dispatch 规则文件** — 新增 `.cursor/rules/meta-theory-dispatch.mdc`，alwaysApply=true，覆盖全部 5 种 Type 的平台特定 dispatch 指引。
+
+### 变更
+
+- **settings.json hook 注册** — PreToolUse matcher 新增 `Skill`，指向 `activate-meta-theory-spine.mjs`，实现 meta-theory skill 激活时自动初始化 spine state。
+
 ## [2.0.28] - 2026-05-15
 
 ### 新增
@@ -283,7 +313,7 @@
 ### 修复
 
 - **`scripts/claude-settings-merge.mjs` hookCommandNode 双转义问题** — Windows 路径双重 JSON 编码问题已修复。
-- **MCP Memory Service 默认端口修正为 `8000`**（原为 `8888`）。更新了 `mcp_memory_global.py`、`config.template.json`、`install-mcp-memory-hooks.mjs`、`setup.mjs` 和所有4个 README 文件。
+- **MCP Memory Service 默认端口修正为 `8000`**。更新了 `mcp_memory_global.py`、`config.template.json`、`install-mcp-memory-hooks.mjs`、`setup.mjs` 和所有4个 README 文件。
 - **`setup.mjs` `runMcpMemoryHookInstaller` i18n + 进度 UX** — 内存 hook 安装步骤的国际化修复。
 - **`scripts/install-mcp-memory-hooks.mjs` 控制台输出左对齐** — 移除了多余的缩进。
 - **`scripts/sync-runtimes.mjs` 缺少 canonical 警告国际化** — 新增 en / zh-CN / ja-JP / ko-KR 翻译。
@@ -293,7 +323,7 @@
 ### 新增
 
 - **Third-party Dependencies README 章节**：所有4个 README（EN/zh-CN/ja-JP/ko-KR）新增第三方依赖章节，在 License 之前。
-- **MCP Memory Service 默认端口修正**：从 `8888` 改为官方 `8000`。
+- **MCP Memory Service 默认端口修正**：统一为官方 `8000`。
 
 ### 修复
 

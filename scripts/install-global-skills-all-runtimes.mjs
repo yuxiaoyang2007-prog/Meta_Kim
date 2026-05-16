@@ -1739,10 +1739,9 @@ async function installClaudePlugins() {
   // Registry: marketplace-id -> GitHub repo URL (marketplace.json's "name" field
   // becomes the marketplace-id used in "plugin@marketplace" spec).
   const MARKETPLACE_URLS = {
+    ecc: "https://github.com/affaan-m/everything-claude-code",
     "superpowers-marketplace":
       "https://github.com/obra/superpowers-marketplace",
-    "everything-claude-code":
-      "https://github.com/affaan-m/everything-claude-code",
   };
 
   if (dryRun) {
@@ -1958,14 +1957,6 @@ async function installClaudePlugins() {
       "pyright-lsp": "claude-plugins-official/pyright-lsp",
     };
     const repoFull = pluginRepoMap[bareName] ?? `${bareName}/${bareName}`;
-    // Plugin rename migration: ECC renamed from "everything-claude-code" to "ecc".
-    // If the new bareName isn't installed but the old one is, treat as already present.
-    const RENAME_ALIASES = { ecc: "everything-claude-code" };
-    const effectiveBareName = installedNames.has(bareName)
-      ? bareName
-      : RENAME_ALIASES[bareName] && installedNames.has(RENAME_ALIASES[bareName])
-        ? RENAME_ALIASES[bareName]
-        : bareName;
     // Look up by full spec ("bareName@marketplace"), not bare name.
     // installed_plugins.json can carry stale cross-marketplace entries for the
     // same bare name (e.g. both "superpowers@claude-plugins-official" and
@@ -1977,10 +1968,10 @@ async function installClaudePlugins() {
     const localVersion = localRecord?.version ?? null;
 
     if (!updateMode) {
-      // Non-update mode: skip if bare name (or rename alias) is already installed
-      if (installedNames.has(effectiveBareName)) {
+      // Non-update mode: skip only when the canonical full spec is installed.
+      if (localRecord) {
         console.log(
-          `${C.yellow}⊘${C.reset} ${C.dim}${t.skipAlreadyInstalled(effectiveBareName)}${C.reset}`,
+          `${C.yellow}⊘${C.reset} ${C.dim}${t.skipAlreadyInstalled(spec)}${C.reset}`,
         );
         continue;
       }
@@ -2024,6 +2015,7 @@ async function installClaudePlugins() {
       console.warn(
         `${C.yellow}⚠${C.reset} ${t.warnPluginFailed(spec, p.status)}`,
       );
+      continue;
     } else if (updateMode) {
       console.log(`${C.green}✓${C.reset} ${t.pluginUpdated(spec)}`);
     }

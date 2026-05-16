@@ -100,6 +100,17 @@ The other seven meta agents are backstage specialists, not the public menu.
 
 ### Codex Meta-Theory Enforcement
 
+**DISPATCH IS MANDATORY — NON-NEGOTIABLE GATE**
+
+When `/meta-theory` is activated, the Codex main thread is the dispatcher ONLY. All execution (analysis, code, review, design) belongs to dispatched `spawn_agent` calls.
+
+**Hard rules:**
+
+1. The main thread does scope, delegation, review, and synthesis ONLY. Never execute substantive analysis or code in the main thread.
+2. Before producing >3 sentences of execution-layer output, STOP — dispatch via `spawn_agent` instead.
+3. "Simple task" is not an excuse. The cost of unnecessary dispatch < cost of governance bypass.
+4. If `spawn_agent` is unavailable, record the blocked reason and follow the degraded path — do not silently continue as main-thread execution.
+
 When the user asks to run `meta theory`, `meta-theory`, `/meta-theory`, `run meta theory`, `execute meta theory`, `元理论`, or equivalent governance wording, do not treat it as a loose promise or ordinary chat style.
 
 Codex must first run the visible or internal Stage 1-3 protocol:
@@ -351,7 +362,7 @@ Useful supporting commands:
 
 - `package.json` adds an explicit `files` whitelist so `npx --yes github:KimYx0207/Meta_Kim meta-kim` always receives the complete `canonical/` tree (older publications occasionally dropped `canonical/runtime-assets/openclaw/openclaw.template.json` / `canonical/runtime-assets/codex/config.toml.example`). Run `npm cache clean --force` if your local tarball predates the whitelist.
 - Installer i18n is now complete for `setup.mjs` `runMcpMemoryHookInstaller` and `sync-runtimes.mjs` `tryReadCanonical`; all locale strings live in `scripts/meta-kim-i18n.mjs` (en / zh-CN / ja-JP / ko-KR).
-- MCP Memory Service default port is **8000** (upstream `MCP_HTTP_PORT=8000`). Override via `MCP_MEMORY_URL` env or `~/.claude/hooks/config.json`. Legacy Meta_Kim installs wrote `:8888` — see `CHANGELOG.md` `Migration Notes`.
+- MCP Memory Service port is **8000**.
 - `stop-memory-save.mjs` (Stop hook) writes session summaries to MCP Memory Service on session end, enabling cross-session continuity without manual intervention.
 
 ## Reading Notes

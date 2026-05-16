@@ -37,5 +37,18 @@ describe("eval-meta-agents Claude smoke", () => {
     assert.match(discovery, /\.claude", "agents"/);
     assert.match(discovery, /source: "project-files"/);
     assert.match(discovery, /source: "claude-agents-command"/);
+    assert.match(discovery, /claude-agents-command-unavailable/);
+  });
+
+  test("OpenClaw smoke can structurally validate without local auth secrets", () => {
+    const source = readFileSync(
+      path.join(repoRoot, "scripts", "eval-meta-agents.mjs"),
+      "utf8",
+    );
+
+    assert.match(source, /function isMissingOpenClawAuthError/);
+    assert.match(source, /async function runOpenClawStructuralSmoke/);
+    assert.match(source, /openclaw_auth_not_configured/);
+    assert.match(source, /source: "structural-template"/);
   });
 });

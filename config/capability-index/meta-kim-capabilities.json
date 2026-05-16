@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-14T16:47:09.198Z",
+  "generatedAt": "2026-05-15T15:56:02.814Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -97,8 +97,8 @@
         "type": "skills",
         "namespace": "canonical",
         "path": "canonical/skills/meta-theory/SKILL.md",
-        "size": 22261,
-        "modified": "2026-05-14T16:33:02.445Z"
+        "size": 24355,
+        "modified": "2026-05-15T08:03:54.973Z"
       },
       "repo:canonical-reference:create-agent": {
         "id": "create-agent",
@@ -115,8 +115,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/dev-governance.md",
         "relativePath": "dev-governance.md",
-        "size": 58745,
-        "modified": "2026-05-14T15:56:24.219Z"
+        "size": 62947,
+        "modified": "2026-05-14T17:26:03.141Z"
       },
       "repo:canonical-reference:intent-amplification": {
         "id": "intent-amplification",
@@ -180,8 +180,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
         "relativePath": "enforce-agent-dispatch.mjs",
-        "size": 4196,
-        "modified": "2026-05-14T14:14:12.274Z"
+        "size": 4329,
+        "modified": "2026-05-14T17:31:30.380Z"
       },
       "repo:canonical-runtime-assets:post-console-log-warn.mjs": {
         "id": "post-console-log-warn.mjs",

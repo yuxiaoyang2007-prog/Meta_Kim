@@ -28,7 +28,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { join, dirname, resolve } from "node:path";
+import { join, dirname, resolve, isAbsolute } from "node:path";
 import { homedir, platform, tmpdir } from "node:os";
 import { createInterface } from "node:readline";
 import {
@@ -398,6 +398,8 @@ ${r ? `Raw error: ${r}` : ""}
     syncCursorAgents: (n) => `Cursor agents: ${n}/8 .md files`,
     syncCursorSkills: "Cursor skills/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
+    mcpRuntimeProjectOnly: (p) =>
+      `${p} contains meta-kim-runtime, but its script path is not usable here. This MCP is only for the Meta_Kim source repo; remove the meta-kim-runtime block in copied projects. Agents still load from .claude/.codex/.cursor/openclaw files.`,
     syncOk: "All sync targets verified",
     syncMissing: (p) => `Missing: ${p}`,
     syncPartial: (label, got, need) => `${label}: got ${got}, need ${need}`,
@@ -852,6 +854,8 @@ ${r ? `原始错误：${r}` : ""}
     syncCursorAgents: (n) => `Cursor 智能体: ${n}/8 .md 文件`,
     syncCursorSkills: "Cursor 技能/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
+    mcpRuntimeProjectOnly: (p) =>
+      `${p} 包含 meta-kim-runtime，但这里的脚本路径不可用。这个 MCP 只给 Meta_Kim 源仓库使用；复制到普通项目时请删除 meta-kim-runtime 这一块。Agent 仍会从 .claude/.codex/.cursor/openclaw 文件加载。`,
     syncOk: "所有同步目标验证通过",
     syncMissing: (p) => `缺失：${p}`,
     syncPartial: (label, got, need) => `${label}：实际 ${got}，需要 ${need}`,
@@ -1308,6 +1312,8 @@ ${r ? `生エラー：${r}` : ""}
     syncCursorAgents: (n) => `Cursor エージェント: ${n}/8 .md ファイル`,
     syncCursorSkills: "Cursor スキル/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
+    mcpRuntimeProjectOnly: (p) =>
+      `${p} に meta-kim-runtime がありますが、この場所ではスクリプトパスを使用できません。この MCP は Meta_Kim ソースリポジトリ専用です。コピー先プロジェクトでは meta-kim-runtime ブロックを削除してください。Agents は .claude/.codex/.cursor/openclaw ファイルから引き続き読み込まれます。`,
     syncOk: "すべての同期ターゲット検証済み",
     syncMissing: (p) => `不足：${p}`,
     syncPartial: (label, got, need) => `${label}：実際 ${got}、必要 ${need}`,
@@ -1780,6 +1786,8 @@ ${r ? `원본 오류：${r}` : ""}
     syncCursorAgents: (n) => `Cursor 에이전트: ${n}/8 .md 파일`,
     syncCursorSkills: "Cursor 스킬/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
+    mcpRuntimeProjectOnly: (p) =>
+      `${p}에 meta-kim-runtime이 있지만 이 위치에서는 스크립트 경로를 사용할 수 없습니다. 이 MCP는 Meta_Kim 소스 저장소 전용입니다. 복사한 일반 프로젝트에서는 meta-kim-runtime 블록을 삭제하세요. Agents는 계속 .claude/.codex/.cursor/openclaw 파일에서 로드됩니다.`,
     syncOk: "모든 동기화 대상 확인 완료",
     syncMissing: (p) => `누락: ${p}`,
     syncPartial: (label, got, need) => `${label}: 실제 ${got}, 필요 ${need}`,
@@ -2942,6 +2950,30 @@ function openclawWorkspaceMdComplete(wsPath) {
   return OPENCLAW_WORKSPACE_MD.every((name) => existsSync(join(wsPath, name)));
 }
 
+function metaKimRuntimeNotice(mcpPath) {
+  if (!existsSync(mcpPath)) return null;
+  try {
+    const config = JSON.parse(readFileSync(mcpPath, "utf8"));
+    const server = config.mcpServers?.["meta-kim-runtime"];
+    if (!server) return null;
+    const scriptPath = server.args?.[0];
+    if (!scriptPath) return t.mcpRuntimeProjectOnly(mcpPath);
+    if (
+      scriptPath.includes("__REPO_ROOT__") ||
+      scriptPath.includes("REPLACE_WITH_REPO_ROOT")
+    ) {
+      return t.mcpRuntimeProjectOnly(mcpPath);
+    }
+    const resolvedScript = isAbsolute(scriptPath)
+      ? scriptPath
+      : join(PROJECT_DIR, scriptPath);
+    if (!existsSync(resolvedScript)) return t.mcpRuntimeProjectOnly(mcpPath);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function checkSync(
   runtimes,
   repoTargets = ["claude", "codex", "openclaw", "cursor"],
@@ -3008,8 +3040,12 @@ function checkSync(
       allOk = false;
     }
 
-    if (existsSync(join(PROJECT_DIR, ".mcp.json"))) ok(t.syncClaudeMcp);
-    else {
+    const claudeMcp = join(PROJECT_DIR, ".mcp.json");
+    if (existsSync(claudeMcp)) {
+      ok(t.syncClaudeMcp);
+      const notice = metaKimRuntimeNotice(claudeMcp);
+      if (notice) warn(notice);
+    } else {
       warn(t.syncMissing(".mcp.json"));
       allOk = false;
     }
@@ -3128,8 +3164,11 @@ function checkSync(
     }
 
     const cursorMcp = join(PROJECT_DIR, ".cursor", "mcp.json");
-    if (existsSync(cursorMcp)) ok(t.syncCursorMcp);
-    else {
+    if (existsSync(cursorMcp)) {
+      ok(t.syncCursorMcp);
+      const notice = metaKimRuntimeNotice(cursorMcp);
+      if (notice) warn(notice);
+    } else {
       warn(t.syncMissing(".cursor/mcp.json"));
       allOk = false;
     }
@@ -4357,15 +4396,10 @@ async function installMcpMemoryServiceStep(inUpdateMode = false) {
   // Register in project .mcp.json. When running inside a venv we write the
   // absolute python path so Claude Code can launch it without shell PATH setup.
   // `python` here is a launcher descriptor { command, args, version, ... }.
-  const memoryServerConfig = resolved.venvCreated
-    ? {
-        command: python.command,
-        args: [...python.args, "-m", "mcp_memory_service"],
-      }
-    : {
-        command: "python",
-        args: ["-m", "mcp_memory_service"],
-      };
+  const memoryServerConfig = {
+    command: python.command,
+    args: [...python.args, "-m", "mcp_memory_service"],
+  };
 
   const mcpPath = join(PROJECT_DIR, ".mcp.json");
   if (existsSync(mcpPath)) {

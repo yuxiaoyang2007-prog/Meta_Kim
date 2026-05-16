@@ -4,6 +4,7 @@
 <p style="font-size: 1.2em; color: #7c3aed; font-weight: 600; margin-top: 0;">META_KIM</p>
 
 <p>
+  语言：
   <a href="README.md">English</a> |
   <a href="README.zh-CN.md">简体中文</a> |
   <a href="README.ja-JP.md">日本語</a> |
@@ -652,7 +653,7 @@ Meta_Kim 的记忆不是单一的。它有三层，各有分工，共同保障 a
   - **OpenClaw**：`~/.openclaw/hooks/mcp-memory-service` 自动安装 managed hook，覆盖 `command:new`、`command:reset`、`session:compact:after`、`command:stop`。
   - **Cursor**：`~/.cursor/hooks.json` 自动写入 `beforeSubmitPrompt` 和 `stop` 桥接，复用共享记忆 hook。
 - **启动服务器**：`npm start`（在 mcp-memory-service 目录下）或 `python -m mcp_memory_service`，然后访问 `http://localhost:8000`
-- **端口覆盖**：服务器遵循 `MCP_HTTP_PORT`（默认 `8000`，与上游一致）；Meta_Kim 的 SessionStart hook 读取 `MCP_MEMORY_URL`，可指向任意可达端点。若你是从旧版 Meta_Kim（硬编码 `8888`）升级而来，请按 CHANGELOG 的 `Migration Notes` 中给出的一行方案修正 `~/.claude/hooks/config.json`。
+- **端口**：服务器和 Meta_Kim hooks 统一使用 `http://localhost:8000`。
 - **Hook**：Claude Code、Codex、OpenClaw、Cursor 都会自动注册；各运行时使用自己的 hook 格式，但共享同一个 MCP Memory HTTP 端点。
 - **查询**：`npm run meta:query:runs -- --owner <agent>`——按 agent 查找历史 run，或 `npm run meta:index:runs -- <artifact>` 手动索引 run 产物
 

@@ -4,6 +4,7 @@
 <p style="font-size: 1.2em; color: #7c3aed; font-weight: 600; margin-top: 0;">META_KIM</p>
 
 <p>
+  언어:
   <a href="README.md">English</a> |
   <a href="README.zh-CN.md">简体中文</a> |
   <a href="README.ja-JP.md">日本語</a> |
@@ -73,7 +74,7 @@ npm run meta:validate
 GitHub <a href="https://github.com/KimYx0207">KimYx0207</a> |
 X <a href="https://x.com/KimYx0207">@KimYx0207</a> |
 공식 사이트 <a href="https://www.aiking.dev/">aiking.dev</a> |
-위챗 공식 계정: **老金带你玩AI**
+위챗 공식 계정: **라오진과 함께하는 AI**
 
 Feishu 지식 베이스:
 <a href="https://my.feishu.cn/wiki/OhQ8wqntFihcI1kWVDlcNdpznFf">지속 업데이트 입구</a>
@@ -638,7 +639,7 @@ Meta_Kim은 단일 기억 레이어를 사용하지 않습니다. 세 가지 다
   - **Claude Code**: SessionStart Hook과 Stop 메모리 저장 Hook이 `node setup.mjs` 시 자동 등록；세션 시작 시 `mcp_memory_global.py --mode session`으로 프로젝트 상태를 기록합니다
   - **기타 도구**: `mcp-memory-service/claude-hooks/` 참조하여 수동 설치
 - **서버 시작**: `npm start`（mcp-memory-service 디렉토리）또는 `python -m mcp_memory_service`，그 다음 `http://localhost:8000` 접속
-- **포트 재정의**: 서버는 `MCP_HTTP_PORT`를 존중합니다(기본 `8000`, 상류와 동일). Meta_Kim의 SessionStart 훅은 `MCP_MEMORY_URL`을 읽으므로 도달 가능한 엔드포인트를 가리키면 됩니다. `8888`이 하드코딩된 구버전 Meta_Kim에서 업그레이드하는 경우, CHANGELOG의 `Migration Notes`에 있는 `~/.claude/hooks/config.json` 한 줄 수정 가이드를 참고하세요.
+- **포트**: 서버와 Meta_Kim hooks는 `http://localhost:8000`을 사용합니다.
 - **Hook**: Claude Code 자동 등록（SessionStart로 프로젝트 상태 기록, Stop으로 세션 요약을 MCP Memory에 저장）；기타 도구는 mcp-memory-service 문서 참조
 - **쿼리**: `npm run meta:query:runs -- --owner <agent>`——agent별로 과거 run 검색，또는 `npm run meta:index:runs -- <artifact>`로 수동 인덱싱
 

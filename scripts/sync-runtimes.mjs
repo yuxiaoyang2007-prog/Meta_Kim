@@ -700,6 +700,15 @@ async function writeGeneratedJson(filePath, value) {
   return writeGeneratedFile(filePath, nextContent);
 }
 
+function renderMetaKimRuntimeMcp(content, rootDir) {
+  const normalizedRoot = rootDir.replace(/\\/g, "/");
+  return content.replaceAll("__REPO_ROOT__", normalizedRoot);
+}
+
+function emptyMcpConfigContent() {
+  return `${JSON.stringify({ mcpServers: {} }, null, 2)}\n`;
+}
+
 async function removeGeneratedPath(filePath) {
   if (!filePath) return { changed: false };
 
@@ -1101,18 +1110,19 @@ async function syncClaudeProjection(
     // The MCP server script (scripts/mcp/meta-runtime-server.mjs) only exists
     // inside this repo — writing it to external projects breaks MCP startup.
     if (inRepoRoot) {
+      const renderedMcpContent = renderMetaKimRuntimeMcp(mcpContent, repoRoot);
       if (
-        (await writeGeneratedFile(claudeMcpProjectionPath, mcpContent)).changed
+        (await writeGeneratedFile(claudeMcpProjectionPath, renderedMcpContent))
+          .changed
       ) {
         changedFiles.push(displayPaths.claudeMcp);
       }
     } else {
-      const stripped = { mcpServers: {} };
       if (
         (
           await writeGeneratedFile(
             claudeMcpProjectionPath,
-            `${JSON.stringify(stripped, null, 2)}\n`,
+            emptyMcpConfigContent(),
           )
         ).changed
       ) {
@@ -1239,6 +1249,14 @@ Examples:
     const templateRaw = await tryReadCanonical(canonicalOpenClawTemplatePath);
     if (templateRaw) {
       templateConfig = JSON.parse(templateRaw);
+    }
+
+    if (templateConfig !== null) {
+      const renderedTemplateRaw = renderMetaKimRuntimeMcp(
+        JSON.stringify(templateConfig),
+        repoRoot,
+      );
+      templateConfig = JSON.parse(renderedTemplateRaw);
     }
 
     if (
@@ -1518,9 +1536,14 @@ Examples:
     // MCP config (.cursor/mcp.json) — reuse Claude's MCP template
     if (dirs.cursorMcpPath) {
       const mcpContent = await tryReadCanonical(canonicalClaudeMcpPath);
+      const cursorInRepoRoot = dirs.cursorMcpPath.includes(repoRoot);
+      const renderedMcpContent = cursorInRepoRoot
+        ? renderMetaKimRuntimeMcp(mcpContent, repoRoot)
+        : emptyMcpConfigContent();
       if (
         mcpContent &&
-        (await writeGeneratedFile(dirs.cursorMcpPath, mcpContent)).changed
+        (await writeGeneratedFile(dirs.cursorMcpPath, renderedMcpContent))
+          .changed
       ) {
         changedFiles.push(dp.cursorMcp);
       }

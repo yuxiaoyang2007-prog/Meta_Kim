@@ -67,16 +67,16 @@ describe("installPluginBundlesForNonClaudeRuntimes (dry-run e2e)", () => {
     const plain = stripAnsi(out);
     assert.match(plain, /everything-claude-code/);
     const marketplaceExercised =
-      /claude plugin install ecc@everything-claude-code/.test(
-        plain,
-      ) ||
-      /(ecc|everything-claude-code).*(already installed|已安装|이미 설치됨|既にインストール)/i.test(
+      /claude plugin install ecc@ecc/.test(plain) ||
+      /ecc@ecc.*(already installed|已安装|이미 설치됨|既にインストール)/i.test(
         plain,
       );
     assert.ok(
       marketplaceExercised,
-      "expected either install command for ecc or already-installed skip for everything-claude-code",
+      "expected install command or already-installed skip for canonical ecc@ecc",
     );
+    assert.doesNotMatch(plain, /ecc@everything-claude-code/);
+    assert.doesNotMatch(plain, /everything-claude-code@everything-claude-code/);
   });
 
   test("Codex runtime extracts .codex/ subdir for superpowers", () => {

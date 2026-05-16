@@ -1873,6 +1873,32 @@ async function validateMcpConfig() {
     "canonical/runtime-assets/claude/mcp.json is missing meta-kim-runtime.",
   );
   assert(server.command === "node", "meta-kim-runtime must run through node.");
+  assert(
+    server.args?.includes("__REPO_ROOT__/scripts/mcp/meta-runtime-server.mjs"),
+    "canonical/runtime-assets/claude/mcp.json must use the __REPO_ROOT__ MCP template path.",
+  );
+
+  for (const relativePath of [".mcp.json", ".cursor/mcp.json"]) {
+    const runtimeMcpPath = path.join(repoRoot, relativePath);
+    if (!(await exists(runtimeMcpPath))) continue;
+    const runtimeConfig = JSON.parse(await fs.readFile(runtimeMcpPath, "utf8"));
+    const runtimeServer = runtimeConfig.mcpServers?.["meta-kim-runtime"];
+    if (!runtimeServer) continue;
+    const runtimeArg = runtimeServer.args?.[0] ?? "";
+    assert(
+      !runtimeArg.includes("__REPO_ROOT__") &&
+        !runtimeArg.includes("REPLACE_WITH_REPO_ROOT"),
+      `${relativePath} must not contain an unresolved MCP path placeholder.`,
+    );
+    assert(
+      path.isAbsolute(runtimeArg),
+      `${relativePath} meta-kim-runtime must use an absolute script path.`,
+    );
+    assert(
+      await exists(runtimeArg),
+      `${relativePath} meta-kim-runtime script path does not exist: ${runtimeArg}. meta-kim-runtime is only useful inside the Meta_Kim source repo. If this config was copied into another project, remove the meta-kim-runtime block; meta agents still load from .claude/.codex/.cursor/openclaw files.`,
+    );
+  }
 }
 
 async function validateMcpSelfTest() {

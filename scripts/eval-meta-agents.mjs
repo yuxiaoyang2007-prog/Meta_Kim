@@ -1239,8 +1239,10 @@ async function runClaudeDiscovery(agentIds) {
   );
   const supportsAgentsCommand = /^\s{2}agents\s/m.test(help.stdout);
 
-  if (!supportsAgentsCommand) {
-    const projectAgentFiles = (await fs.readdir(path.join(repoRoot, ".claude", "agents")))
+  async function discoverFromProjectFiles(extra = {}) {
+    const projectAgentFiles = (
+      await fs.readdir(path.join(repoRoot, ".claude", "agents"))
+    )
       .filter((file) => file.endsWith(".md"))
       .map((file) => file.replace(/\.md$/, ""));
     const projectAgents = new Set(projectAgentFiles);
@@ -1250,18 +1252,35 @@ async function runClaudeDiscovery(agentIds) {
       missing,
       source: "project-files",
       cliSupportsAgentsCommand: false,
+      ...extra,
     };
   }
 
-  const { stdout } = await runCommandWithIgnoredStdin(
-    cmd.file,
-    cmd.toArgs(["agents"]),
-    {
-      cwd: repoRoot,
-      timeout: 120_000,
-      env: { ...process.env, NO_COLOR: "1" },
-    },
-  );
+  if (!supportsAgentsCommand) {
+    return discoverFromProjectFiles();
+  }
+
+  let stdout;
+  try {
+    ({ stdout } = await runCommandWithIgnoredStdin(
+      cmd.file,
+      cmd.toArgs(["agents"]),
+      {
+        cwd: repoRoot,
+        timeout: 120_000,
+        env: { ...process.env, NO_COLOR: "1" },
+      },
+    ));
+  } catch (error) {
+    if (String(error.message).includes("'claude agents' is not available")) {
+      return discoverFromProjectFiles({
+        cliSupportsAgentsCommand: true,
+        fallbackReason: "claude-agents-command-unavailable",
+        fallbackError: error.message,
+      });
+    }
+    throw error;
+  }
 
   const missing = agentIds.filter((agentId) => !stdout.includes(agentId));
   return {
@@ -1655,8 +1674,72 @@ async function collectOpenClawBaseStatus() {
   };
 }
 
+function isMissingOpenClawAuthError(error) {
+  return String(error?.message ?? "").includes("Missing source OpenClaw auth file:");
+}
+
+async function runOpenClawStructuralSmoke(authError) {
+  const template = JSON.parse(
+    await fs.readFile(openclawTemplateConfigPath, "utf8"),
+  );
+  const agentIds = await loadClaudeAgentIds();
+  const templateAgents = new Set(
+    (template.agents?.list ?? []).map((agent) => agent.id),
+  );
+  const missingAgents = agentIds.filter((agentId) => !templateAgents.has(agentId));
+  const workspaces = await Promise.all(
+    agentIds.map((agentId) =>
+      fileExists(path.join(repoRoot, "openclaw", "workspaces", agentId, "AGENTS.md")),
+    ),
+  );
+  const hasAllWorkspaces = workspaces.every(Boolean);
+  const hooks = template.hooks?.internal?.entries ?? {};
+  const hasRequiredHooks =
+    template.hooks?.internal?.enabled === true &&
+    hooks["boot-md"]?.enabled === true &&
+    hooks["command-logger"]?.enabled === true &&
+    hooks["session-memory"]?.enabled === true;
+  const allowList = template.tools?.agentToAgent?.allow ?? [];
+  const allowsAllAgents = agentIds.every((agentId) => allowList.includes(agentId));
+  const skillsExtraDirs = template.skills?.load?.extraDirs ?? [];
+  const hasSkillsExtraDir = skillsExtraDirs.some((entry) =>
+    String(entry).includes("openclaw"),
+  );
+  const ok =
+    missingAgents.length === 0 &&
+    hasAllWorkspaces &&
+    hasRequiredHooks &&
+    allowsAllAgents &&
+    hasSkillsExtraDir;
+
+  return {
+    status: ok ? "passed" : "failed",
+    ok,
+    mode: "smoke",
+    source: "structural-template",
+    runtimeAuthHydration: {
+      skipped: true,
+      reason: "openclaw_auth_not_configured",
+      error: authError.message,
+    },
+    missingAgents,
+    workspacesOk: hasAllWorkspaces,
+    hooksOk: hasRequiredHooks,
+    allowListOk: allowsAllAgents,
+    skillsExtraDirOk: hasSkillsExtraDir,
+  };
+}
+
 async function runOpenClawSmoke() {
-  const baseStatus = await collectOpenClawBaseStatus();
+  let baseStatus;
+  try {
+    baseStatus = await collectOpenClawBaseStatus();
+  } catch (error) {
+    if (isMissingOpenClawAuthError(error)) {
+      return runOpenClawStructuralSmoke(error);
+    }
+    throw error;
+  }
   try {
     const ok =
       baseStatus.validationOutput.toLowerCase().includes("config valid") &&

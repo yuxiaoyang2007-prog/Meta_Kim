@@ -6,6 +6,36 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.0.30] - 2026-05-15
+
+### Changed
+
+- **Project-local MCP wiring** — `meta-kim-runtime` now renders to an absolute Meta_Kim source-repo path when synced inside this repository. Copied configs in ordinary projects no longer inherit the source-only MCP block from runtime sync.
+- **Claude plugin install spec** — Updated Everything Claude Code installation from the obsolete `ecc@everything-claude-code` spec to the current upstream `ecc@ecc` marketplace/plugin id.
+- **MCP Memory Service port policy** — Removed legacy `8888` fallback/migration guidance and standardized public docs on the upstream `8000` default.
+- **Release metadata** — Bumped package metadata and lockfile state to `2.0.30`.
+
+### Fixed
+
+- **Human-readable `meta-kim-runtime` warning** — `setup.mjs --check` and project validation now explain that `meta-kim-runtime` is a Meta_Kim source-repo helper MCP. In manually copied ordinary projects, users can remove that MCP block without affecting agent discovery from `.claude/agents/`, `.codex/agents/`, `.cursor/agents/`, or `openclaw/workspaces/`.
+- **Python MCP command selection** — MCP Memory Service registration now preserves the detected Python launcher instead of falling back to a bare `python` command on machines where that is not the working interpreter.
+- **Runtime smoke validation without local secrets** — Claude smoke validation now falls back to `.claude/agents/` when `claude agents` is advertised but unavailable, and OpenClaw smoke validation can structurally verify templates/workspaces when local `auth.json` is not configured.
+
+## [2.0.29] - 2026-05-15
+
+### Added
+
+- **Meta-theory dispatch auto-activation hook** — New `activate-meta-theory-spine.mjs` PreToolUse hook detects `Skill("meta-theory")` activation and auto-initializes spine state. When active, `enforce-agent-dispatch.mjs` blocks execution tools (Write/Edit/Bash) until agents are dispatched. Three-layer enforcement: hook (system-level) + rule files (all runtimes) + SKILL.md gate (protocol-level).
+- **DISPATCH IS MANDATORY gate in SKILL.md** — New top-level section in `canonical/skills/meta-theory/SKILL.md` with 5 hard rules: main thread is dispatcher only, >3 sentences of execution output triggers STOP, "simple task" is not an excuse, hook enforces at system level, when in doubt dispatch.
+- **CLAUDE.md dispatch hard rule** — New "Meta-Theory Dispatch is Non-Negotiable" section covering all 5 Types (A/B/C/D/E) with explicit dispatch targets per Type.
+- **AGENTS.md dispatch hard rule** — New "DISPATCH IS MANDATORY — NON-NEGOTIABLE GATE" section in Codex entry with 4 hard rules including degraded path handling when `spawn_agent` is unavailable.
+- **Codex command dispatch gate** — Updated `canonical/runtime-assets/codex/commands/meta-theory.md` with mandatory dispatch rule and blocked-reason recording.
+- **Cursor dispatch rule file** — New `.cursor/rules/meta-theory-dispatch.mdc` with alwaysApply=true, covering all 5 Types with platform-specific dispatch guidance.
+
+### Changed
+
+- **settings.json hook registration** — Added `Skill` to PreToolUse matcher, routing to `activate-meta-theory-spine.mjs` for automatic spine state initialization on meta-theory skill activation.
+
 ## [2.0.28] - 2026-05-15
 
 ### Added
@@ -290,13 +320,12 @@ When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the
 
 - **`scripts/claude-settings-merge.mjs` hookCommandNode double-escape (was Known Issue in Phase 1)** — `hookCommandNode(absScriptPath)` previously produced Windows paths that were double-JSON-encoded when serialized back to `settings.json` (observed as `\\\\` on disk), and the matchers `isGlobalMetaKimManagedHookCommand` / `isRepoMetaKimHookCommand` only checked the single-backslash form so they silently missed the double-escaped entries. Fixed at the source in 37d84fde: `hookCommandNode` now writes a single-escaped path and the matchers tolerate both single- and double-backslash forms. The local normalizing matcher that Phase 1 shipped inside `footprint.mjs` + `uninstall.mjs` is retained as a defense-in-depth layer for legacy on-disk settings written by older sync runs.
 
-- **MCP Memory Service default port corrected to `8000` (was `8888`)** — the upstream `doobidoo/mcp-memory-service` project defaults to `MCP_HTTP_PORT=8000` (verified against `run_server.py` and `docs/integration/multi-client.md`). Meta_Kim previously hard-coded `localhost:8888` in 10 places, so the health check in `scripts/install-mcp-memory-hooks.mjs` reported `MCP Memory Service is NOT responding` even when the server was running correctly on the official port. Updated:
+- **MCP Memory Service default port corrected to `8000`** — Meta_Kim now uses the upstream default port consistently. Updated:
   - `canonical/runtime-assets/claude/memory-hooks/mcp_memory_global.py` — `MCP_MEMORY_URL` env-var default
   - `canonical/runtime-assets/claude/memory-hooks/config.template.json` — `memoryService.http.endpoint`
   - `scripts/install-mcp-memory-hooks.mjs` — header comment, `checkServerHealth()` URL, install/check success/warn messages (5 occurrences)
   - `setup.mjs` — 4 i18n locale strings for the `mcpMemoryServerStartHint` guidance
   - `README.md`, `README.zh-CN.md`, `README.ja-JP.md`, `README.ko-KR.md` — "start server" instruction
-  Users can still override via `MCP_MEMORY_URL` env var or by editing `~/.claude/hooks/config.json`.
 
 - **`setup.mjs` `runMcpMemoryHookInstaller` i18n + progress UX** — the memory-hook installer step previously (a) printed four hard-coded English strings bypassing the per-locale `t.*` system and (b) used `stdio: "inherit"` to pipe the Python child process's raw stdout directly to the terminal, producing ~10s of silent no-feedback time and breaking the 4-language install experience. Fixed: function is now `async`, wrapped in `withProgress(t.mcpMemoryHookInstalling, …)` so users see a clean per-locale label with the existing dim arrow marker; child `stdio` is now `["ignore", "pipe", "pipe"]` so stdout is captured silently; on non-zero exit the captured `stderr` is surfaced in dim style under `t.mcpMemoryHookWarnings` so the underlying Python error is still discoverable. The single call site (`installMcpMemoryServiceStep`) now `await`s the installer. Three new i18n keys added per language (en / zh-CN / ja-JP / ko-KR): `mcpMemoryHookInstalling`, `mcpMemoryHookInstalled`, `mcpMemoryHookWarnings`.
 
@@ -313,10 +342,6 @@ When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the
 ### Migration Notes
 
 - Users on a new machine should run `node setup.mjs` then `npm run meta:sync:global` — do **not** copy `~/.claude/settings.json` between machines (hook `command` values are absolute paths and will not resolve under a different username or OS). `npm run meta:doctor:hooks` detects and `:fix` cleans up after an accidental copy.
-
-- **MCP Memory Service port migration (`8888` → `8000`)**: existing installs have a local `~/.claude/hooks/config.json` that was seeded from the *old* template with `endpoint: "http://127.0.0.1:8888"`. That file is *preserved by design* (user customizations are never overwritten), so the template fix alone will not migrate it. Two safe paths forward:
-  1. Edit `~/.claude/hooks/config.json` manually: change `memoryService.http.endpoint` from `:8888` to `:8000`.
-  2. Or `rm ~/.claude/hooks/config.json` and re-run `node scripts/install-mcp-memory-hooks.mjs`; it will re-seed from the corrected template. Either step makes the SessionStart health check green against the stock `memory server --http` default port.
 
 - **`npx` stale-tarball cache**: if `npx --yes github:KimYx0207/Meta_Kim meta-kim` warns about missing canonical files (e.g. `openclaw.template.json`, `codex/config.toml.example`) during `sync:runtimes`, your local npx cache is holding a pre-`files`-whitelist tarball. Clear it with `npm cache clean --force` (or `rm -rf ~/.npm/_npx`) and re-run the command to pull a fresh tarball that includes the complete `canonical/` tree.
 
@@ -478,7 +503,7 @@ When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the
 
 ## [2.0.4] - 2026-04-15
 
-- **README Layer 3 correction**: Fixed false "All three layers activate automatically" claim. Layer 1 requires Claude Code runtime, Layer 2 is auto-installed by setup.mjs, Layer 3 requires manual server startup on port 8888. All 4 languages (EN/ZH/JA/KO) synchronized.
+- **README Layer 3 correction**: Fixed false "All three layers activate automatically" claim. Layer 1 requires Claude Code runtime, Layer 2 is auto-installed by setup.mjs, Layer 3 requires manual server startup. All 4 languages (EN/ZH/JA/KO) synchronized.
 - **setup.mjs Layer 3 install**: Added Step 4.6 for MCP Memory Service (mcp-memory-service) installation — pip install, .mcp.json registration, i18n strings across all 4 languages.
 - **install-mcp-memory-hooks.mjs**: New script to install Claude Code SessionStart hooks for MCP Memory Service — verifies server health, registers hooks, warns if server not running.
 
