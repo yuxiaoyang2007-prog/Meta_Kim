@@ -6,6 +6,7 @@
  */
 
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 try {
   const diff = execSync("git diff --name-only HEAD", {
@@ -24,7 +25,7 @@ try {
 
   for (const file of files) {
     try {
-      const content = require("node:fs").readFileSync(file, "utf8");
+      const content = readFileSync(file, "utf8");
       const matches = content.match(/console\.(log|debug|info)\(/g);
       if (matches) {
         violations.push(`${file}: ${matches.length} console.log(s)`);

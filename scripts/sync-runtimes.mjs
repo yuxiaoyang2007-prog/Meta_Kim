@@ -1076,9 +1076,7 @@ async function syncClaudeProjection(
         throw error;
       }
     }
-    const canonCopy = structuredClone(canonicalParsed);
-    // Keep relative paths — do NOT rewrite to absolute (breaks cross-machine portability)
-    const merged = mergeRepoClaudeSettings(base, canonCopy);
+    const merged = mergeRepoClaudeSettings(base, canonicalParsed, repoRoot);
     finalSettingsContent = `${JSON.stringify(merged, null, 2)}\n`;
   } else {
     let base = {};

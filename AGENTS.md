@@ -104,6 +104,8 @@ The other seven meta agents are backstage specialists, not the public menu.
 
 When `/meta-theory` is activated, the Codex main thread is the dispatcher ONLY. All execution (analysis, code, review, design) belongs to dispatched `spawn_agent` calls.
 
+For Codex, the activation itself is the user's explicit subagent request: `/meta-theory`, `meta-theory`, `meta theory`, `元理论`, or a `[$meta-theory](...)` skill mention means the user is explicitly asking for subagents / delegation / parallel agent work. Do not ask the user to separately say "use subagents" before dispatching.
+
 **Hard rules:**
 
 1. The main thread does scope, delegation, review, and synthesis ONLY. Never execute substantive analysis or code in the main thread.
@@ -385,4 +387,4 @@ This project has a graphify knowledge graph at graphify-out/.
 Rules:
 - Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
 - If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
-- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"` to keep the graph current
+- After modifying code files in this session, run `npm run meta:graphify:rebuild` to keep the graph current across Windows, macOS, and Linux

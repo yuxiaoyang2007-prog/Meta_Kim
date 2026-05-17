@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-15T15:56:02.814Z",
+  "generatedAt": "2026-05-16T17:37:16.166Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -97,8 +97,8 @@
         "type": "skills",
         "namespace": "canonical",
         "path": "canonical/skills/meta-theory/SKILL.md",
-        "size": 24355,
-        "modified": "2026-05-15T08:03:54.973Z"
+        "size": 26622,
+        "modified": "2026-05-16T17:37:04.685Z"
       },
       "repo:canonical-reference:create-agent": {
         "id": "create-agent",
@@ -115,8 +115,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/dev-governance.md",
         "relativePath": "dev-governance.md",
-        "size": 62947,
-        "modified": "2026-05-14T17:26:03.141Z"
+        "size": 62480,
+        "modified": "2026-05-16T17:37:04.686Z"
       },
       "repo:canonical-reference:intent-amplification": {
         "id": "intent-amplification",
@@ -252,8 +252,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/stop-console-log-audit.mjs",
         "relativePath": "stop-console-log-audit.mjs",
-        "size": 1090,
-        "modified": "2026-04-13T13:35:56.019Z"
+        "size": 1107,
+        "modified": "2026-05-16T14:06:24.573Z"
       },
       "repo:canonical-runtime-assets:stop-memory-save.mjs": {
         "id": "stop-memory-save.mjs",

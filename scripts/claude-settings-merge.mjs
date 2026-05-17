@@ -103,7 +103,9 @@ export function stripGlobalMetaKimHookEntriesFromBlocks(blocks) {
 // ── Repo .claude/hooks/*.mjs (sync-runtimes project scope) ──────────────
 
 const REPO_META_KIM_HOOK_FILES = [
+  "activate-meta-theory-spine.mjs",
   "block-dangerous-bash.mjs",
+  "enforce-agent-dispatch.mjs",
   "pre-git-push-confirm.mjs",
   "post-format.mjs",
   "post-typecheck.mjs",
@@ -113,6 +115,7 @@ const REPO_META_KIM_HOOK_FILES = [
   "stop-memory-save.mjs",
   "stop-console-log-audit.mjs",
   "stop-completion-guard.mjs",
+  "stop-spine-cleanup.mjs",
 ];
 
 export function isRepoMetaKimHookCommand(command) {
@@ -223,10 +226,15 @@ export function mergePermissionsDenyUnion(canonicalPerm, basePerm) {
  * @param {Record<string, unknown>} base - existing ~/.meta or user file (may be {})
  * @param {Record<string, unknown>} canonical - parsed canonical/runtime-assets/claude/settings.json with repo hook paths already resolved (e.g. absolute).
  */
-export function mergeRepoClaudeSettings(base, canonical) {
+export function mergeRepoClaudeSettings(base, canonical, repoRoot = null) {
   const out = { ...base };
+  const canonicalForMerge = structuredClone(canonical);
 
-  for (const [k, v] of Object.entries(canonical)) {
+  if (repoRoot) {
+    rewriteRepoHookCommandsToAbsolute(canonicalForMerge, repoRoot);
+  }
+
+  for (const [k, v] of Object.entries(canonicalForMerge)) {
     if (k === "hooks" || k === "permissions") {
       continue;
     }
@@ -236,11 +244,11 @@ export function mergeRepoClaudeSettings(base, canonical) {
   }
 
   out.permissions = mergePermissionsDenyUnion(
-    canonical.permissions,
+    canonicalForMerge.permissions,
     base.permissions,
   );
 
-  const canonHooks = canonical.hooks;
+  const canonHooks = canonicalForMerge.hooks;
   out.hooks = mergeRepoMetaKimHooksIntoSettings(base, canonHooks).hooks;
 
   return out;

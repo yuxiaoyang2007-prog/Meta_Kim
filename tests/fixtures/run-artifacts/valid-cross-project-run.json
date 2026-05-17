@@ -103,6 +103,10 @@
       "Read-only access to project-auth-refresh-hardening sources.",
       "Only the shared pattern library gets write changes."
     ],
+    "pendingUserChoices": [],
+    "userLanguage": "en",
+    "languageSource": "latest_user_message_or_explicit_preference",
+    "nativeChoiceSurface": "conversation_fallback",
     "intentGatePacketVersion": "v1"
   },
   "cardPlanPacket": {
@@ -122,7 +126,9 @@
         "cardSource": "meta-conductor",
         "cardSuppressed": false,
         "suppressionReason": "",
-        "deliveryShellId": "shell-structured-status"
+        "deliveryShellId": "shell-structured-status",
+        "choiceSurface": "conversation_fallback",
+        "userLanguage": "en"
       },
       {
         "cardId": "card-risk",
@@ -137,7 +143,9 @@
         "cardSource": "meta-sentinel",
         "cardSuppressed": false,
         "suppressionReason": "",
-        "deliveryShellId": "shell-review-delta"
+        "deliveryShellId": "shell-review-delta",
+        "choiceSurface": "conversation_fallback",
+        "userLanguage": "en"
       }
     ],
     "deliveryShells": [
@@ -148,7 +156,9 @@
         "exposureLevel": "internal",
         "interventionForm": "conversation",
         "audience": "developer",
-        "contentBoundary": "status + next action only"
+        "contentBoundary": "status + next action only",
+        "userLanguage": "en",
+        "languageSource": "latest_user_message_or_explicit_preference"
       },
       {
         "deliveryShellId": "shell-review-delta",
@@ -157,7 +167,9 @@
         "exposureLevel": "review",
         "interventionForm": "task_packet",
         "audience": "reviewer",
-        "contentBoundary": "finding + evidence + closure target"
+        "contentBoundary": "finding + evidence + closure target",
+        "userLanguage": "en",
+        "languageSource": "latest_user_message_or_explicit_preference"
       }
     ],
     "silenceDecision": {

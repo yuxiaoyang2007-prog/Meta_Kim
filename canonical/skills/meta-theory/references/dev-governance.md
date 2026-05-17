@@ -75,7 +75,7 @@ Before Stage 4 starts, Thinking must produce explicit protocol artifacts for the
 
 If these protocol artifacts do not exist, the run is not ready for Execution.
 
-For `governanceFlow` in `complex_dev` or `meta_analysis`, the machine-validated JSON artifact must also include **`intentPacket`** (`trueUserIntent`, `successCriteria`, `nonGoals`, `intentPacketVersion: v1`) and **`intentGatePacket`** (`ambiguitiesResolved`, `requiresUserChoice`, `defaultAssumptions`, `intentGatePacketVersion: v1`; if `requiresUserChoice` is true, include non-empty `pendingUserChoices[]`) before Execution — see `config/contracts/workflow-contract.json` (`protocols.intentPacket`, `protocols.intentGatePacket`, `runDiscipline.protocolFirst.intentPacketRequiredWhenGovernanceFlows` / `intentGatePacketRequiredWhenGovernanceFlows`).
+For `governanceFlow` in `complex_dev` or `meta_analysis`, the machine-validated JSON artifact must also include **`intentPacket`** (`trueUserIntent`, `successCriteria`, `nonGoals`, `intentPacketVersion: v1`) and **`intentGatePacket`** (`ambiguitiesResolved`, `requiresUserChoice`, `defaultAssumptions`, `pendingUserChoices`, `userLanguage`, `languageSource`, `nativeChoiceSurface`, `intentGatePacketVersion: v1`; if `requiresUserChoice` is true, include non-empty `pendingUserChoices[]`) before Execution — see `config/contracts/workflow-contract.json` (`protocols.intentPacket`, `protocols.intentGatePacket`, `runDiscipline.protocolFirst.intentPacketRequiredWhenGovernanceFlows` / `intentGatePacketRequiredWhenGovernanceFlows`).
 
 If `taskClassification.upgradeReasons` includes `owner_creation_required`, the artifact must also include **`capabilityGapPacket`** before Execution. If `capabilityGapPacket.resolutionAction` is `create_execution_agent` or `upgrade_execution_agent`, the artifact must include **`executionAgentCard`** before Conductor may dispatch the new owner.
 
@@ -133,6 +133,10 @@ The 8-stage spine is the **human-readable orchestration surface**. Underneath it
 
 **Rule**: this is an **invisible skeleton only**. The user-facing workflow still speaks in stage language and concrete deliverables. State labels exist to support gates, skips, interrupts, and evolution logging — not to become a second product interface.
 
+### User Language Rule
+
+Stage names remain canonical English protocol labels (`Critical`, `Fetch`, `Thinking`, `Review`, etc.). All user-facing text around those labels follows the user's latest language or explicit language preference. Do not hardcode Chinese, English, or any single language into option labels, clarifying questions, confirmation cards, or summaries. Record the language decision in `intentGatePacket.userLanguage`, `intentGatePacket.languageSource`, `cardDecision.userLanguage`, and `deliveryShell.languageSource`.
+
 ### Card Governance Model
 
 Meta_Kim no longer treats **dealing cards** as just a metaphor. In engineering terms:
@@ -165,6 +169,8 @@ Every real run may emit card decisions through a `cardPlanPacket`. Each card rec
 - `cardSuppressed`
 - `suppressionReason`
 - `deliveryShellId`
+- `choiceSurface`
+- `userLanguage`
 
 Card families:
 
@@ -682,7 +688,7 @@ Thinking must lock down the execution protocol before any `Agent` tool invocatio
     "visualPolicy": "visual strategy",
     "handoffPlan": "how the chain closes"
   },
-  "cardPlanPacket": {
+    "cardPlanPacket": {
     "dealerOwner": "meta-conductor",
     "dealerMode": "conductor-primary-warden-escalation",
     "cards": [
@@ -699,7 +705,9 @@ Thinking must lock down the execution protocol before any `Agent` tool invocatio
         "cardSource": "meta-conductor",
         "cardSuppressed": false,
         "suppressionReason": "",
-        "deliveryShellId": "shell-tech-detail"
+        "deliveryShellId": "shell-tech-detail",
+        "choiceSurface": "conversation_fallback",
+        "userLanguage": "match_latest_user_message"
       }
     ],
     "deliveryShells": [
@@ -710,7 +718,9 @@ Thinking must lock down the execution protocol before any `Agent` tool invocatio
         "exposureLevel": "internal",
         "interventionForm": "agent_dispatch",
         "audience": "developer-owner",
-        "contentBoundary": "implementation packet only"
+        "contentBoundary": "implementation packet only",
+        "userLanguage": "match_latest_user_message",
+        "languageSource": "latest_user_message_or_explicit_preference"
       }
     ],
     "silenceDecision": {

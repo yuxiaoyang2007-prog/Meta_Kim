@@ -19,6 +19,36 @@ describe("graphify idempotent wiring (contract)", () => {
     assert.ok(hookIdx > claudeIdx, "hook install must follow claude install");
   });
 
+  test("graphify-cli.mjs has a rebuild command that uses graphify update", () => {
+    const src = readFileSync(
+      path.join(root, "scripts/graphify-cli.mjs"),
+      "utf8",
+    );
+
+    assert.match(src, /function runRebuild\(\)/);
+    assert.match(src, /spawnSync\("graphify", \["update", "\."\]/);
+    assert.match(src, /\["-m", "graphify", "update", "\."\]/);
+    assert.match(src, /case "rebuild":/);
+  });
+
+  test("package exposes a cross-platform graphify rebuild script", () => {
+    const pkg = JSON.parse(
+      readFileSync(path.join(root, "package.json"), "utf8"),
+    );
+
+    assert.equal(
+      pkg.scripts["meta:graphify:rebuild"],
+      "node scripts/graphify-cli.mjs rebuild",
+    );
+  });
+
+  test("AGENTS uses the cross-platform graphify rebuild script", () => {
+    const src = readFileSync(path.join(root, "AGENTS.md"), "utf8");
+
+    assert.match(src, /npm run meta:graphify:rebuild/);
+    assert.doesNotMatch(src, /python3 -c "from graphify\.watch/);
+  });
+
   test("setup.mjs installPythonTools wires graphify for all activeTargets", () => {
     const lines = readFileSync(path.join(root, "setup.mjs"), "utf8").split(
       /\r?\n/,

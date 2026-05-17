@@ -653,9 +653,10 @@ For multi-platform setups, run `node setup.mjs` — it loops through all selecte
   - For **Codex**: `~/.codex/hooks.json` receives SessionStart, UserPromptSubmit, and Stop bridges to `meta-kim-memory-save.mjs`, so start/prompt/end checkpoints are automatic.
   - For **OpenClaw**: `~/.openclaw/hooks/mcp-memory-service` receives a managed hook for `command:new`, `command:reset`, `session:compact:after`, and `command:stop`.
   - For **Cursor**: `~/.cursor/hooks.json` receives `beforeSubmitPrompt` and `stop` bridges to the shared memory hook.
-- **Start server**: `npm start` in the mcp-memory-service directory (or `python -m mcp_memory_service`), then access at `http://localhost:8000`
+- **Start server**: `memory server --http` (with `MCP_ALLOW_ANONYMOUS_ACCESS=true` on macOS/Linux, or `$env:MCP_ALLOW_ANONYMOUS_ACCESS="true"` in Windows PowerShell), then access at `http://localhost:8000`.
 - **Port**: the server and Meta_Kim hooks use `http://localhost:8000`.
 - **Hooks**: auto-registered for Claude Code, Codex, OpenClaw, and Cursor; each runtime uses its native hook format while sharing the same MCP Memory HTTP endpoint.
+- **MCP registration vs writes**: `.mcp.json` registers the MCP Memory server (`memory server`) for client access. Automatic session writes are separate lifecycle hooks: Claude Code uses `stop-memory-save.mjs`, Codex/Cursor use `meta-kim-memory-save.mjs`, and OpenClaw uses its managed `mcp-memory-service` hook.
 - **Query**: `npm run meta:query:runs -- --owner <agent>` — find past runs by agent, or `npm run meta:index:runs -- <artifact>` for manual indexing of validated run artifacts
 
 ### How the three layers work together

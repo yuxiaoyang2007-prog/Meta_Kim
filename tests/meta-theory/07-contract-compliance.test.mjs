@@ -263,6 +263,47 @@ describe("workflow-contract.json — schema compliance", async () => {
     );
   });
 
+  test("user language and native choice surfaces are explicit", () => {
+    const language = contract.runDiscipline?.userLanguagePolicy ?? {};
+    assert.equal(language.hardcodedSingleHumanLanguageForbidden, true);
+    assert.equal(language.stageLabelsRemainCanonicalEnglish, true);
+    assert.equal(
+      language.userFacingTextLanguageSource,
+      "latest_user_message_or_explicit_preference",
+    );
+    assert.ok(language.fallbackLocale, "userLanguagePolicy.fallbackLocale");
+
+    const cardGovernance = contract.runDiscipline?.cardGovernance ?? {};
+    for (const surface of [
+      "native_choice",
+      "native_mode_picker",
+      "native_hook_prompt",
+      "conversation_fallback",
+    ]) {
+      assert.ok(
+        cardGovernance.choiceSurfaceEnum?.includes(surface),
+        `missing choice surface: ${surface}`,
+      );
+    }
+
+    const matrix = contract.runDiscipline?.runtimeNativeChoiceSurfaces ?? {};
+    for (const runtime of ["claude", "codex", "openclaw", "cursor"]) {
+      assert.ok(matrix[runtime], `missing runtime choice surface: ${runtime}`);
+      assert.ok(
+        typeof matrix[runtime].primarySurface === "string",
+        `${runtime}.primarySurface must be a string`,
+      );
+      assert.ok(
+        Array.isArray(matrix[runtime].fallbackSurfaces),
+        `${runtime}.fallbackSurfaces must be an array`,
+      );
+      assert.ok(
+        typeof matrix[runtime].triggerDescription === "string",
+        `${runtime}.triggerDescription must be a string`,
+      );
+    }
+  });
+
   test("silence / skip / interrupt / shell policies are explicit", () => {
     const silencePolicy = contract.runDiscipline?.silencePolicy ?? {};
     assert.equal(silencePolicy.noInterventionPreferred, true);
@@ -576,6 +617,10 @@ describe("workflow-contract.json — schema compliance", async () => {
       "ambiguitiesResolved",
       "requiresUserChoice",
       "defaultAssumptions",
+      "pendingUserChoices",
+      "userLanguage",
+      "languageSource",
+      "nativeChoiceSurface",
       "intentGatePacketVersion",
     ]) {
       assert.ok(fields.includes(field), `intentGatePacket missing ${field}`);
@@ -664,6 +709,8 @@ describe("workflow-contract.json — schema compliance", async () => {
       "cardSuppressed",
       "suppressionReason",
       "deliveryShellId",
+      "choiceSurface",
+      "userLanguage",
     ]) {
       assert.ok(
         cardDecisionFields.includes(field),
@@ -681,6 +728,8 @@ describe("workflow-contract.json — schema compliance", async () => {
       "interventionForm",
       "audience",
       "contentBoundary",
+      "userLanguage",
+      "languageSource",
     ]) {
       assert.ok(
         deliveryShellFields.includes(field),

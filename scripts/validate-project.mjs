@@ -631,6 +631,59 @@ async function validateWorkflowContract() {
       "prefer_silence_without_clear_intervention_gain",
     "workflow-contract.json cardGovernance must define the default no-card policy.",
   );
+  for (const item of [
+    "native_choice",
+    "native_mode_picker",
+    "native_hook_prompt",
+    "conversation_fallback",
+  ]) {
+    assert(
+      cardGovernance?.choiceSurfaceEnum?.includes(item),
+      `workflow-contract.json cardGovernance.choiceSurfaceEnum must include ${item}.`,
+    );
+  }
+
+  const userLanguagePolicy = contract.runDiscipline?.userLanguagePolicy;
+  assert(
+    userLanguagePolicy?.hardcodedSingleHumanLanguageForbidden === true,
+    "workflow-contract.json userLanguagePolicy must forbid hardcoded single-language user-facing text.",
+  );
+  assert(
+    userLanguagePolicy?.stageLabelsRemainCanonicalEnglish === true,
+    "workflow-contract.json userLanguagePolicy must keep protocol stage labels canonical English.",
+  );
+  assert(
+    userLanguagePolicy?.userFacingTextLanguageSource ===
+      "latest_user_message_or_explicit_preference",
+    "workflow-contract.json userLanguagePolicy must follow latest user language or explicit preference.",
+  );
+  assert(
+    typeof userLanguagePolicy?.fallbackLocale === "string" &&
+      userLanguagePolicy.fallbackLocale.length > 0,
+    "workflow-contract.json userLanguagePolicy must define fallbackLocale.",
+  );
+
+  const runtimeNativeChoiceSurfaces =
+    contract.runDiscipline?.runtimeNativeChoiceSurfaces ?? {};
+  for (const runtime of ["claude", "codex", "openclaw", "cursor"]) {
+    assert(
+      runtimeNativeChoiceSurfaces[runtime],
+      `workflow-contract.json runtimeNativeChoiceSurfaces must include ${runtime}.`,
+    );
+    assert(
+      typeof runtimeNativeChoiceSurfaces[runtime]?.primarySurface === "string",
+      `workflow-contract.json runtimeNativeChoiceSurfaces.${runtime}.primarySurface must be a string.`,
+    );
+    assert(
+      Array.isArray(runtimeNativeChoiceSurfaces[runtime]?.fallbackSurfaces),
+      `workflow-contract.json runtimeNativeChoiceSurfaces.${runtime}.fallbackSurfaces must be an array.`,
+    );
+    assert(
+      typeof runtimeNativeChoiceSurfaces[runtime]?.triggerDescription ===
+        "string",
+      `workflow-contract.json runtimeNativeChoiceSurfaces.${runtime}.triggerDescription must be a string.`,
+    );
+  }
 
   const silencePolicy = contract.runDiscipline?.silencePolicy;
   assert(
@@ -872,6 +925,19 @@ async function validateWorkflowContract() {
       ],
     ],
     [
+      "intentGatePacket",
+      [
+        "ambiguitiesResolved",
+        "requiresUserChoice",
+        "defaultAssumptions",
+        "pendingUserChoices",
+        "userLanguage",
+        "languageSource",
+        "nativeChoiceSurface",
+        "intentGatePacketVersion",
+      ],
+    ],
+    [
       "cardPlanPacket",
       [
         "dealerOwner",
@@ -947,6 +1013,8 @@ async function validateWorkflowContract() {
         "cardSuppressed",
         "suppressionReason",
         "deliveryShellId",
+        "choiceSurface",
+        "userLanguage",
       ],
     ],
     [
@@ -959,6 +1027,8 @@ async function validateWorkflowContract() {
         "interventionForm",
         "audience",
         "contentBoundary",
+        "userLanguage",
+        "languageSource",
       ],
     ],
     [

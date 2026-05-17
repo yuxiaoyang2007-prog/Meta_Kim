@@ -378,24 +378,69 @@ function seedConfigIfMissing() {
 }
 
 function pickPythonCommand() {
-  // Prefer explicit Python executables. On Windows, the Microsoft Store
-  // WindowsApps shim can exist on PATH but fail at hook runtime, so skip it.
-  const candidates =
-    process.platform === "win32"
-      ? [
-          process.env.PYTHON,
-          join(homedir(), "AppData", "Local", "Programs", "Python", "Python311", "python.exe"),
-          join(homedir(), "AppData", "Local", "Programs", "Python", "Python312", "python.exe"),
-          join(homedir(), "AppData", "Local", "Programs", "Python", "Python313", "python.exe"),
-          "python",
-          "python3",
-        ]
-      : [process.env.PYTHON, "python3", "python"];
+  // Cross-platform Python resolver.
+  // Windows: the Microsoft Store WindowsApps shim intercepts bare `python`
+  // and returns exit code 49 without stderr — must be filtered out at every stage.
+  const isWin = process.platform === "win32";
+  const candidates = [];
+
+  // 1. Explicit PYTHON env var (highest priority)
+  if (process.env.PYTHON) candidates.push(process.env.PYTHON);
+
+  // 2. System discovery via where/which — finds all versions in PATH
+  const finder = isWin ? "where.exe" : "which";
+  for (const name of ["python3", "python"]) {
+    try {
+      const result = run(finder, [name]);
+      if (result.status === 0 && result.stdout) {
+        const paths = result.stdout
+          .trim()
+          .split(/\r?\n/)
+          .map((p) => p.trim())
+          .filter(Boolean);
+        candidates.push(...paths);
+      }
+    } catch {
+      // not found
+    }
+  }
+
+  // 3. Dynamic Windows install paths (no hardcoded version numbers)
+  if (isWin) {
+    const programsDir = process.env.LOCALAPPDATA
+      ? join(process.env.LOCALAPPDATA, "Programs")
+      : join(homedir(), "AppData", "Local", "Programs");
+    if (existsSync(programsDir)) {
+      try {
+        const entries = readdirSync(programsDir);
+        const pythonDirs = entries
+          .filter((e) => /^Python\d+$/i.test(e))
+          .sort((a, b) => {
+            const va = parseInt(a.replace(/\D/g, ""), 10);
+            const vb = parseInt(b.replace(/\D/g, ""), 10);
+            return vb - va; // highest version first
+          });
+        for (const dir of pythonDirs) {
+          candidates.push(join(programsDir, dir, "python.exe"));
+        }
+      } catch {
+        // can't read directory
+      }
+    }
+  }
+
+  // 4. Validate each candidate (dedup + skip WindowsApps shim + verify --version)
+  const seen = new Set();
   for (const cmd of candidates) {
     if (!cmd) continue;
-    if (process.platform === "win32" && /WindowsApps[\\/]+python(?:3)?\.exe$/iu.test(cmd)) {
+    const normalized = cmd.replace(/\\/g, "/").toLowerCase();
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+
+    if (isWin && /WindowsApps[\\/]+python(?:3)?\.exe$/iu.test(cmd)) {
       continue;
     }
+
     try {
       const result = run(cmd, ["--version"]);
       if (result.status === 0) return cmd.replace(/\\/g, "/");
@@ -403,7 +448,9 @@ function pickPythonCommand() {
       // try next
     }
   }
-  return "python"; // last resort
+
+  warn("No working Python found — hook will likely fail at runtime");
+  return "python3"; // python3 is less likely to be a Store shim on Windows
 }
 
 function registerSessionStartHook() {
@@ -608,7 +655,10 @@ function copyCrossRuntimeMemoryHook(runtimeHome) {
   const hooksDir = join(runtimeHome, "hooks");
   ensureDir(hooksDir);
   const target = join(hooksDir, CROSS_RUNTIME_HOOK_FILE);
-  if (existsSync(target) && filesEqual(CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE, target)) {
+  if (
+    existsSync(target) &&
+    filesEqual(CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE, target)
+  ) {
     ok(`Cross-runtime memory hook already up-to-date: ${target}`);
   } else {
     copyFileSync(CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE, target);
@@ -626,41 +676,51 @@ function registerCodexMemoryHook(hookPath) {
     (Array.isArray(settings.hooks[eventName]) ? settings.hooks[eventName] : [])
       .map((block) => {
         const hooks = (block?.hooks ?? []).filter(
-          (hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
+          (hook) =>
+            !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
         );
         return hooks.length > 0 ? { ...block, hooks } : null;
       })
       .filter(Boolean);
 
-  settings.hooks.SessionStart = [{
-    matcher: "startup|resume",
-    hooks: [
-      {
-        type: "command",
-        command: nodeHookCommand(hookPath, ["--event", "session-start"]),
-        timeout: 10,
-        statusMessage: "Loading Meta_Kim memory",
-      },
-    ],
-  }, ...withoutMemoryBlocks("SessionStart")];
-  settings.hooks.UserPromptSubmit = [{
-    hooks: [
-      {
-        type: "command",
-        command: nodeHookCommand(hookPath, ["--event", "user-prompt"]),
-        timeout: 10,
-      },
-    ],
-  }, ...withoutMemoryBlocks("UserPromptSubmit")];
-  settings.hooks.Stop = [{
-    hooks: [
-      {
-        type: "command",
-        command: nodeHookCommand(hookPath, ["--event", "stop"]),
-        timeout: 10,
-      },
-    ],
-  }, ...withoutMemoryBlocks("Stop")];
+  settings.hooks.SessionStart = [
+    {
+      matcher: "startup|resume",
+      hooks: [
+        {
+          type: "command",
+          command: nodeHookCommand(hookPath, ["--event", "session-start"]),
+          timeout: 10,
+          statusMessage: "Loading Meta_Kim memory",
+        },
+      ],
+    },
+    ...withoutMemoryBlocks("SessionStart"),
+  ];
+  settings.hooks.UserPromptSubmit = [
+    {
+      hooks: [
+        {
+          type: "command",
+          command: nodeHookCommand(hookPath, ["--event", "user-prompt"]),
+          timeout: 10,
+        },
+      ],
+    },
+    ...withoutMemoryBlocks("UserPromptSubmit"),
+  ];
+  settings.hooks.Stop = [
+    {
+      hooks: [
+        {
+          type: "command",
+          command: nodeHookCommand(hookPath, ["--event", "stop"]),
+          timeout: 10,
+        },
+      ],
+    },
+    ...withoutMemoryBlocks("Stop"),
+  ];
   writeFileSync(hooksJson, JSON.stringify(settings, null, 2) + "\n");
   ok(`Codex lifecycle memory hooks registered first in ${hooksJson}`);
   return true;
@@ -672,17 +732,27 @@ function registerCursorMemoryHook(hookPath) {
   if (!settings.hooks) settings.hooks = {};
 
   const withoutMemoryHooks = (eventName) =>
-    (Array.isArray(settings.hooks[eventName]) ? settings.hooks[eventName] : [])
-      .filter((hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE));
+    (Array.isArray(settings.hooks[eventName])
+      ? settings.hooks[eventName]
+      : []
+    ).filter(
+      (hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
+    );
 
-  settings.hooks.beforeSubmitPrompt = [{
-    command: nodeHookCommand(hookPath, ["--event", "user-prompt"]),
-    timeout: 10,
-  }, ...withoutMemoryHooks("beforeSubmitPrompt")];
-  settings.hooks.stop = [{
-    command: nodeHookCommand(hookPath, ["--event", "stop"]),
-    timeout: 10,
-  }, ...withoutMemoryHooks("stop")];
+  settings.hooks.beforeSubmitPrompt = [
+    {
+      command: nodeHookCommand(hookPath, ["--event", "user-prompt"]),
+      timeout: 10,
+    },
+    ...withoutMemoryHooks("beforeSubmitPrompt"),
+  ];
+  settings.hooks.stop = [
+    {
+      command: nodeHookCommand(hookPath, ["--event", "stop"]),
+      timeout: 10,
+    },
+    ...withoutMemoryHooks("stop"),
+  ];
   writeFileSync(hooksJson, JSON.stringify(settings, null, 2) + "\n");
   ok(`Cursor prompt/stop memory hooks registered first in ${hooksJson}`);
   return true;
@@ -690,7 +760,9 @@ function registerCursorMemoryHook(hookPath) {
 
 function installOpenClawMemoryHook() {
   if (!existsSync(CANONICAL_OPENCLAW_MEMORY_HOOK_DIR)) {
-    warn(`OpenClaw memory hook source missing: ${CANONICAL_OPENCLAW_MEMORY_HOOK_DIR}`);
+    warn(
+      `OpenClaw memory hook source missing: ${CANONICAL_OPENCLAW_MEMORY_HOOK_DIR}`,
+    );
     return false;
   }
   const targetDir = join(OPENCLAW_HOME, "hooks", "mcp-memory-service");
@@ -722,15 +794,19 @@ function removeCrossRuntimeMemoryHooks() {
       settings.hooks[eventName] = settings.hooks[eventName]
         .map((block) => {
           if (block?.command) {
-            return String(block.command).includes(CROSS_RUNTIME_HOOK_FILE) ? null : block;
+            return String(block.command).includes(CROSS_RUNTIME_HOOK_FILE)
+              ? null
+              : block;
           }
           const hooks = (block?.hooks ?? []).filter(
-            (hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
+            (hook) =>
+              !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
           );
           return hooks.length > 0 ? { ...block, hooks } : null;
         })
         .filter(Boolean);
-      if (settings.hooks[eventName].length === 0) delete settings.hooks[eventName];
+      if (settings.hooks[eventName].length === 0)
+        delete settings.hooks[eventName];
     }
     writeFileSync(hooksJson, JSON.stringify(settings, null, 2) + "\n");
   }
@@ -769,11 +845,14 @@ async function install() {
   if (health === "healthy") {
     ok("MCP Memory Service is running on http://localhost:8000");
   } else if (health === "unknown") {
-    warn("Could not verify http://localhost:8000 from this shell, but memory.exe is running");
+    warn(
+      "Could not verify http://localhost:8000 from this shell, but memory.exe is running",
+    );
   } else {
     warn("MCP Memory Service is NOT responding on http://localhost:8000");
-    info("Start it with: python -m mcp_memory_service");
-    info("Or:            uv run memory server -s hybrid");
+    info(
+      "Start the HTTP service with: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
+    );
   }
 
   if (!sessionStartOk || !stopOk || !crossRuntimeOk) {
@@ -834,7 +913,12 @@ function check() {
   }
 
   for (const [label, runtimeHome, hooksFile, eventNames] of [
-    ["Codex", CODEX_HOME, "hooks.json", ["SessionStart", "UserPromptSubmit", "Stop"]],
+    [
+      "Codex",
+      CODEX_HOME,
+      "hooks.json",
+      ["SessionStart", "UserPromptSubmit", "Stop"],
+    ],
     ["Cursor", CURSOR_HOME, "hooks.json", ["beforeSubmitPrompt", "stop"]],
   ]) {
     const hookFile = join(runtimeHome, "hooks", CROSS_RUNTIME_HOOK_FILE);
@@ -870,7 +954,9 @@ function check() {
   if (health === "healthy") {
     ok("MCP Memory Service responding on :8000");
   } else if (health === "unknown") {
-    warn("MCP Memory Service health could not be verified from this shell, but memory.exe is running");
+    warn(
+      "MCP Memory Service health could not be verified from this shell, but memory.exe is running",
+    );
   } else {
     warn("MCP Memory Service NOT responding on :8000");
   }
@@ -890,7 +976,9 @@ function remove() {
   info(
     `Stop hook files retained (manual delete: rm "${STOP_HOOK_TARGET}" "${MEMORY_SAVE_HOOK_TARGET}")`,
   );
-  info("Cross-runtime hook files retained in ~/.codex/hooks, ~/.cursor/hooks, and ~/.openclaw/hooks");
+  info(
+    "Cross-runtime hook files retained in ~/.codex/hooks, ~/.cursor/hooks, and ~/.openclaw/hooks",
+  );
   info(`Config retained (manual delete: rm "${CONFIG_TARGET}")`);
   ok("Done.\n");
 }

@@ -91,6 +91,30 @@ function installGraphify({ upgrade = false } = {}) {
   }
 }
 
+function runRebuild() {
+  const direct = spawnSync("graphify", ["update", "."], {
+    stdio: "inherit",
+    shell: false,
+  });
+  if (!direct.error) {
+    process.exitCode = direct.status || 0;
+    return;
+  }
+
+  const python = ensurePython({ requirePip: true });
+  if (!python) {
+    return;
+  }
+
+  const result = runPythonModule(
+    python,
+    ["-m", "graphify", "update", "."],
+    undefined,
+    { stdio: "inherit" },
+  );
+  process.exitCode = result.status || 0;
+}
+
 switch (command) {
   case "check":
     runCheck();
@@ -100,6 +124,9 @@ switch (command) {
     break;
   case "update":
     installGraphify({ upgrade: true });
+    break;
+  case "rebuild":
+    runRebuild();
     break;
   default:
     fail(`Unknown graphify command: ${command}`);

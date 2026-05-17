@@ -320,7 +320,7 @@ ${r ? `Raw error: ${r}` : ""}
     layer2Note: "automatic after graphify install (pip install graphifyy)",
     layer3Label: "Layer 3 (SQL / MCP Memory Service)",
     layer3Note:
-      "requires server startup: python -m mcp_memory_service (then http://localhost:8000)",
+      "requires server startup: memory server --http (then http://localhost:8000)",
     installLocationsHeading: "Installation locations:",
     installLocationsProject: "Project-level (this directory)",
     installLocationsGlobal: "Global-level (shared across projects)",
@@ -470,7 +470,7 @@ Possible causes:
       "Install MCP Memory Service (Layer 3)? Provides vector-level session memory with sqlite-vec.",
     mcpMemorySkipped: "MCP Memory Service skipped",
     mcpMemoryServerStartHint:
-      "MCP Memory Service installed — start with: python -m mcp_memory_service  (or: uv run memory server -s hybrid)",
+      "MCP Memory Service installed — HTTP service starts with: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryHookInstalling:
       "Installing MCP Memory hooks for Claude Code, Codex, Cursor, and OpenClaw...",
     mcpMemoryHookInstalled: "MCP Memory runtime hooks installed",
@@ -481,11 +481,12 @@ Possible causes:
     mcpMemoryAutoStartUnverified:
       "MCP Memory Service process is running; continuing",
     mcpMemoryAutoStartFailed: "Auto-start failed — start manually:",
-    mcpMemoryAutoStartManual: "  memory server --http",
+    mcpMemoryAutoStartManual:
+      "  MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryAutoStartBoot: "Boot auto-start configured",
     mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
     mcpMemoryAutoStartFailureMessage:
-      "Meta_Kim MCP Memory Service failed to start or did not become healthy at http://127.0.0.1:8000. Cross-session memory may be unavailable. Please start it manually: python -m mcp_memory_service",
+      "Meta_Kim MCP Memory Service failed to start or did not become healthy at http://127.0.0.1:8000. Cross-session memory may be unavailable. Please start it manually: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     updateHeading: "Update Mode",
     updateNpm: "Reinstalling npm dependencies...",
     updateSkills: "Updating all skills...",
@@ -783,7 +784,7 @@ ${r ? `原始错误：${r}` : ""}
     layer2Note: "安装 graphifyy 后自动激活（pip install graphifyy）",
     layer3Label: "第三层（SQL / MCP Memory Service）",
     layer3Note:
-      "需手动启动服务器：python -m mcp_memory_service（然后访问 http://localhost:8000）",
+      "需手动启动服务器：memory server --http（然后访问 http://localhost:8000）",
     installLocationsHeading: "安装位置：",
     installLocationsProject: "项目级（当前目录）",
     installLocationsGlobal: "全局级（跨项目共享）",
@@ -920,7 +921,7 @@ ${r ? `原始错误：${r}` : ""}
       "安装 MCP Memory Service（第三层）？提供向量级会话记忆（sqlite-vec）",
     mcpMemorySkipped: "MCP Memory Service 已跳过",
     mcpMemoryServerStartHint:
-      "MCP Memory Service 已安装——启动方式：python -m mcp_memory_service  （或：uv run memory server -s hybrid）",
+      "MCP Memory Service 已安装——HTTP 服务启动方式：MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryHookInstalling:
       "正在安装 Claude Code、Codex、Cursor、OpenClaw 的 MCP Memory 钩子...",
     mcpMemoryHookInstalled: "MCP Memory 运行时钩子已安装",
@@ -931,11 +932,12 @@ ${r ? `原始错误：${r}` : ""}
     mcpMemoryAutoStartUnverified:
       "MCP Memory Service 进程正在运行，继续安装",
     mcpMemoryAutoStartFailed: "自动启动失败——请手动启动：",
-    mcpMemoryAutoStartManual: "  memory server --http",
+    mcpMemoryAutoStartManual:
+      "  MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryAutoStartBoot: "已配置开机自启",
     mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
     mcpMemoryAutoStartFailureMessage:
-      "Meta_Kim MCP Memory Service 启动失败，或未在 http://127.0.0.1:8000 变为 healthy。跨会话记忆可能不可用。请手动启动：python -m mcp_memory_service",
+      "Meta_Kim MCP Memory Service 启动失败，或未在 http://127.0.0.1:8000 变为 healthy。跨会话记忆可能不可用。请手动启动：MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     updateHeading: "更新模式",
     updateNpm: "正在重新安装 npm 依赖...",
     updateSkills: "正在更新所有技能...",
@@ -1234,7 +1236,7 @@ ${r ? `生エラー：${r}` : ""}
     layer2Note: "graphifyy インストール後は自動有効（pip install graphifyy）",
     layer3Label: "第3層（SQL / MCP Memory Service）",
     layer3Note:
-      "サーバー手動起動が必要：python -m mcp_memory_service（次に http://localhost:8000 にアクセス）",
+      "サーバー手動起動が必要：memory server --http（次に http://localhost:8000 にアクセス）",
     installLocationsHeading: "インストール先：",
     installLocationsProject: "プロジェクトレベル（このディレクトリ）",
     installLocationsGlobal: "グローバルレベル（プロジェクト間で共有）",
@@ -1388,7 +1390,7 @@ ${r ? `生エラー：${r}` : ""}
       "MCP Memory Service（第三層）をインストールしますか？sqlite-vec によるベクトル級セッション記憶を提供します。",
     mcpMemorySkipped: "MCP Memory Service をスキップしました",
     mcpMemoryServerStartHint:
-      "MCP Memory Service がインストールされました——起動方法：python -m mcp_memory_service  （または：uv run memory server -s hybrid）",
+      "MCP Memory Service がインストールされました——HTTP サービスの起動方法：MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryHookInstalling:
       "Claude Code、Codex、Cursor、OpenClaw の MCP Memory フックをインストール中...",
     mcpMemoryHookInstalled: "MCP Memory ランタイムフックをインストールしました",
@@ -1401,11 +1403,12 @@ ${r ? `生エラー：${r}` : ""}
     mcpMemoryAutoStartUnverified:
       "MCP Memory Service プロセスは実行中です。インストールを続行します",
     mcpMemoryAutoStartFailed: "自動起動に失敗——手動で起動してください：",
-    mcpMemoryAutoStartManual: "  memory server --http",
+    mcpMemoryAutoStartManual:
+      "  MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryAutoStartBoot: "起動時自動開始を設定しました",
     mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
     mcpMemoryAutoStartFailureMessage:
-      "Meta_Kim MCP Memory Service の起動に失敗したか、http://127.0.0.1:8000 が healthy になりませんでした。クロスセッションメモリが利用できない可能性があります。手動で起動してください: python -m mcp_memory_service",
+      "Meta_Kim MCP Memory Service の起動に失敗したか、http://127.0.0.1:8000 が healthy になりませんでした。クロスセッションメモリが利用できない可能性があります。手動で起動してください: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     updateHeading: "アップデートモード",
     updateNpm: "npm依存関係を再インストール中...",
     updateSkills: "すべてのスキルを更新中...",
@@ -1713,7 +1716,7 @@ ${r ? `원본 오류：${r}` : ""}
     layer2Note: "graphifyy 설치 후 자동 활성화 (pip install graphifyy)",
     layer3Label: "제3층 (SQL / MCP Memory Service)",
     layer3Note:
-      "서버 수동 시작 필요: python -m mcp_memory_service (그러면 http://localhost:8000 에 접속)",
+      "서버 수동 시작 필요: memory server --http (그러면 http://localhost:8000 에 접속)",
     installLocationsHeading: "설치 위치:",
     installLocationsProject: "프로젝트 레벨 (현재 디렉터리)",
     installLocationsGlobal: "전역 레벨 (프로젝트 간 공유)",
@@ -1857,7 +1860,7 @@ ${r ? `원본 오류：${r}` : ""}
       "MCP Memory Service（3층）를 설치하시겠습니까? sqlite-vec 로 벡터 수준 세션 기억을 제공합니다.",
     mcpMemorySkipped: "MCP Memory Service 건너뜀",
     mcpMemoryServerStartHint:
-      "MCP Memory Service 설치 완료——시작 방법: python -m mcp_memory_service  (또는: uv run memory server -s hybrid)",
+      "MCP Memory Service 설치 완료——HTTP 서비스 시작 방법: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryHookInstalling:
       "Claude Code, Codex, Cursor, OpenClaw용 MCP Memory 훅 설치 중...",
     mcpMemoryHookInstalled: "MCP Memory 런타임 훅 설치 완료",
@@ -1869,11 +1872,12 @@ ${r ? `원본 오류：${r}` : ""}
     mcpMemoryAutoStartUnverified:
       "MCP Memory Service 프로세스가 실행 중이므로 설치를 계속합니다",
     mcpMemoryAutoStartFailed: "자동 시작 실패 — 수동으로 시작하세요:",
-    mcpMemoryAutoStartManual: "  memory server --http",
+    mcpMemoryAutoStartManual:
+      "  MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryAutoStartBoot: "부팅 시 자동 시작 구성 완료",
     mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
     mcpMemoryAutoStartFailureMessage:
-      "Meta_Kim MCP Memory Service를 시작하지 못했거나 http://127.0.0.1:8000 이 healthy 상태가 되지 않았습니다. 세션 간 메모리를 사용할 수 없을 수 있습니다. 수동으로 시작하세요: python -m mcp_memory_service",
+      "Meta_Kim MCP Memory Service를 시작하지 못했거나 http://127.0.0.1:8000 이 healthy 상태가 되지 않았습니다. 세션 간 메모리를 사용할 수 없을 수 있습니다. 수동으로 시작하세요: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     updateHeading: "업데이트 모드",
     updateNpm: "npm 의존성 재설치 중...",
     updateSkills: "모든 스킬 업데이트 중...",
@@ -4020,6 +4024,29 @@ function findMemoryBinPath(resolved) {
   return null;
 }
 
+function buildMcpMemoryServerConfig(resolved) {
+  const memoryBin = findMemoryBinPath(resolved);
+  if (memoryBin) {
+    return {
+      command: memoryBin,
+      args: ["server"],
+    };
+  }
+  const python = resolved.python;
+  return {
+    command: python.command,
+    args: [...python.args, "-m", "mcp_memory_service.server"],
+  };
+}
+
+function isLegacyMcpMemoryServerConfig(config) {
+  return (
+    Array.isArray(config?.args) &&
+    config.args.includes("-m") &&
+    config.args.includes("mcp_memory_service")
+  );
+}
+
 function stopMcpMemoryService() {
   const plat = platform();
   try {
@@ -4396,16 +4423,27 @@ async function installMcpMemoryServiceStep(inUpdateMode = false) {
   // Register in project .mcp.json. When running inside a venv we write the
   // absolute python path so Claude Code can launch it without shell PATH setup.
   // `python` here is a launcher descriptor { command, args, version, ... }.
-  const memoryServerConfig = {
-    command: python.command,
-    args: [...python.args, "-m", "mcp_memory_service"],
-  };
+  const memoryServerConfig = buildMcpMemoryServerConfig(resolved);
 
   const mcpPath = join(PROJECT_DIR, ".mcp.json");
   if (existsSync(mcpPath)) {
     try {
       const mcpConfig = JSON.parse(readFileSync(mcpPath, "utf8"));
-      if (mcpConfig.mcpServers?.["mcp-memory-service"]) {
+      if (
+        isLegacyMcpMemoryServerConfig(
+          mcpConfig.mcpServers?.["mcp-memory-service"],
+        )
+      ) {
+        const nextConfig = {
+          ...mcpConfig,
+          mcpServers: {
+            ...(mcpConfig.mcpServers ?? {}),
+            "mcp-memory-service": memoryServerConfig,
+          },
+        };
+        writeFileSync(mcpPath, JSON.stringify(nextConfig, null, 2) + "\n");
+        ok(t.mcpMemoryServerRegistered);
+      } else if (mcpConfig.mcpServers?.["mcp-memory-service"]) {
         ok(t.mcpMemoryServerExists);
       } else {
         const nextConfig = {

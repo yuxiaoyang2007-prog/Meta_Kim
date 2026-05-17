@@ -635,12 +635,13 @@ Meta_Kim은 단일 기억 레이어를 사용하지 않습니다. 세 가지 다
   - 세션 간 연속성 — 지난번 어디까지 했는지 이번에 이어서 가능
   - 벡터 수준 검색 — 키워드 매칭이 아닌 의미 이해
   - 정밀 리콜 — 과거 세션에서 가장 관련성 높은 문맥 검색
-- **활성화**: `node setup.mjs` 가 MCP Memory Service（3층）를 설치하고 설정합니다；설치 후 서버를 수동으로 시작해야 합니다.
+- **활성화**: `node setup.mjs`가 MCP Memory Service（3층）를 설치 및 설정하고, 각 runtime의 memory hooks를 등록한 뒤 HTTP 서비스를 백그라운드에서 시작하려고 시도합니다.
   - **Claude Code**: SessionStart Hook과 Stop 메모리 저장 Hook이 `node setup.mjs` 시 자동 등록；세션 시작 시 `mcp_memory_global.py --mode session`으로 프로젝트 상태를 기록합니다
-  - **기타 도구**: `mcp-memory-service/claude-hooks/` 참조하여 수동 설치
-- **서버 시작**: `npm start`（mcp-memory-service 디렉토리）또는 `python -m mcp_memory_service`，그 다음 `http://localhost:8000` 접속
+  - **Codex / Cursor / OpenClaw**: Codex와 Cursor는 native hooks JSON, OpenClaw는 managed hook을 자동 등록합니다.
+- **서버 시작**: `memory server --http`（macOS/Linux에서는 `MCP_ALLOW_ANONYMOUS_ACCESS=true`, Windows PowerShell에서는 `$env:MCP_ALLOW_ANONYMOUS_ACCESS="true"` 설정），그 다음 `http://localhost:8000` 접속.
 - **포트**: 서버와 Meta_Kim hooks는 `http://localhost:8000`을 사용합니다.
 - **Hook**: Claude Code 자동 등록（SessionStart로 프로젝트 상태 기록, Stop으로 세션 요약을 MCP Memory에 저장）；기타 도구는 mcp-memory-service 문서 참조
+- **MCP 등록과 쓰기 구분**: `.mcp.json`은 클라이언트 접근을 위해 MCP Memory server(`memory server`)를 등록합니다. 자동 세션 쓰기는 별도 lifecycle hooks가 수행합니다. Claude Code는 `stop-memory-save.mjs`, Codex/Cursor는 `meta-kim-memory-save.mjs`, OpenClaw는 managed `mcp-memory-service` hook을 사용합니다.
 - **쿼리**: `npm run meta:query:runs -- --owner <agent>`——agent별로 과거 run 검색，또는 `npm run meta:index:runs -- <artifact>`로 수동 인덱싱
 
 ### 3층 협업

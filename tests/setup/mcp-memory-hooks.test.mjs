@@ -51,6 +51,33 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.doesNotMatch(source, /memory_type:\s*"session-summary"/);
   });
 
+  test("Claude mjs hooks use ESM imports instead of CommonJS require", () => {
+    for (const hookName of [
+      "block-dangerous-bash.mjs",
+      "enforce-agent-dispatch.mjs",
+      "post-console-log-warn.mjs",
+      "post-format.mjs",
+      "post-typecheck.mjs",
+      "pre-git-push-confirm.mjs",
+      "stop-compaction.mjs",
+      "stop-completion-guard.mjs",
+      "stop-console-log-audit.mjs",
+      "stop-memory-save.mjs",
+      "stop-spine-cleanup.mjs",
+      "subagent-context.mjs",
+      "utils.mjs",
+    ]) {
+      const source = readRepoFile(
+        "canonical",
+        "runtime-assets",
+        "claude",
+        "hooks",
+        hookName,
+      );
+      assert.doesNotMatch(source, /require\(/, `${hookName} must not use require()`);
+    }
+  });
+
   test("installer registers Codex and Cursor lifecycle events", () => {
     const source = readRepoFile("scripts", "install-mcp-memory-hooks.mjs");
 
@@ -73,7 +100,8 @@ describe("MCP memory cross-runtime hooks", () => {
     const source = readRepoFile("scripts", "install-mcp-memory-hooks.mjs");
 
     assert.match(source, /WindowsApps\[\\\\\/\]\+python/);
-    assert.match(source, /AppData", "Local", "Programs", "Python"/);
+    assert.match(source, /join\(homedir\(\), "AppData", "Local", "Programs"\)/);
+    assert.match(source, /\^Python\\d\+\$/);
     assert.match(source, /return cmd\.replace/);
   });
 
@@ -146,5 +174,27 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.match(source, /xmessage -center/);
     assert.match(source, /Exec=\/bin\/sh "\$\{scriptPath\}"/);
     assert.match(source, /<string>\/bin\/sh<\/string><string>\$\{scriptPath\}<\/string>/);
+  });
+
+  test("setup registers MCP memory server with supported entrypoints", () => {
+    const source = readRepoFile("setup.mjs");
+
+    assert.match(source, /function buildMcpMemoryServerConfig/);
+    assert.match(source, /args:\s*\["server"\]/);
+    assert.match(source, /"mcp_memory_service\.server"/);
+    assert.match(source, /function isLegacyMcpMemoryServerConfig/);
+    assert.doesNotMatch(source, /args:\s*\[\.\.\.python\.args,\s*"-m",\s*"mcp_memory_service"\]/);
+  });
+
+  test("manual health hints use the HTTP memory server command", () => {
+    const setupSource = readRepoFile("setup.mjs");
+    const installerSource = readRepoFile("scripts", "install-mcp-memory-hooks.mjs");
+
+    assert.match(setupSource, /memory server --http/);
+    assert.match(installerSource, /memory server --http/);
+    assert.match(setupSource, /MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http/);
+    assert.match(installerSource, /MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http/);
+    assert.doesNotMatch(installerSource, /python -m mcp_memory_service/);
+    assert.doesNotMatch(installerSource, /uv run memory server -s hybrid/);
   });
 });

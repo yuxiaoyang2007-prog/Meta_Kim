@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "owner": "Meta_Kim",
   "businessWorkflow": {
     "id": "business",
@@ -293,6 +293,12 @@
         "summary",
         "silent_hold"
       ],
+      "choiceSurfaceEnum": [
+        "native_choice",
+        "native_mode_picker",
+        "native_hook_prompt",
+        "conversation_fallback"
+      ],
       "cardSourceEnum": [
         "meta-conductor",
         "meta-warden",
@@ -310,6 +316,35 @@
         "no_clear_intervention_gain"
       ],
       "defaultNoCardPolicy": "prefer_silence_without_clear_intervention_gain"
+    },
+    "userLanguagePolicy": {
+      "hardcodedSingleHumanLanguageForbidden": true,
+      "stageLabelsRemainCanonicalEnglish": true,
+      "userFacingTextLanguageSource": "latest_user_message_or_explicit_preference",
+      "fallbackLocale": "en",
+      "description": "Stage names such as Critical, Fetch, Thinking, and Review remain canonical protocol labels. Human-facing option labels, clarifying questions, explanations, and confirmation text must follow the user's latest language or explicit language preference instead of hardcoding Chinese, English, or any single locale."
+    },
+    "runtimeNativeChoiceSurfaces": {
+      "claude": {
+        "primarySurface": "native_hook_prompt",
+        "fallbackSurfaces": ["conversation_fallback"],
+        "triggerDescription": "Use Claude Code native prompt/hook surfaces when available for clarify, option_select, and confirm_execution cards."
+      },
+      "codex": {
+        "primarySurface": "native_choice",
+        "fallbackSurfaces": ["conversation_fallback"],
+        "triggerDescription": "Use Codex native choice input when the active runtime mode exposes it; otherwise pause with a localized confirmation card."
+      },
+      "openclaw": {
+        "primarySurface": "native_choice",
+        "fallbackSurfaces": ["conversation_fallback"],
+        "triggerDescription": "Use OpenClaw native agent/workspace choice mechanisms when available; otherwise emit a localized runtime card and wait for explicit user selection."
+      },
+      "cursor": {
+        "primarySurface": "native_mode_picker",
+        "fallbackSurfaces": ["conversation_fallback"],
+        "triggerDescription": "Use Cursor native custom modes/mode picker and project rules for Critical, Fetch, Thinking, and Review selection; dynamic popup support is runtime-dependent."
+      }
     },
     "silencePolicy": {
       "noInterventionPreferred": true,
@@ -655,6 +690,10 @@
         "ambiguitiesResolved",
         "requiresUserChoice",
         "defaultAssumptions",
+        "pendingUserChoices",
+        "userLanguage",
+        "languageSource",
+        "nativeChoiceSurface",
         "intentGatePacketVersion"
       ],
       "description": "Structured pre-execution gate: whether ambiguities are cleared, if the user must still choose, documented default assumptions, aligned with intentPacket fields."
@@ -770,7 +809,9 @@
         "cardSource",
         "cardSuppressed",
         "suppressionReason",
-        "deliveryShellId"
+        "deliveryShellId",
+        "choiceSurface",
+        "userLanguage"
       ]
     },
     "deliveryShell": {
@@ -781,7 +822,9 @@
         "exposureLevel",
         "interventionForm",
         "audience",
-        "contentBoundary"
+        "contentBoundary",
+        "userLanguage",
+        "languageSource"
       ]
     },
     "silenceDecision": {

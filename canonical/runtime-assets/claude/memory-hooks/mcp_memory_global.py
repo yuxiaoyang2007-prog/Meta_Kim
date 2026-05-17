@@ -29,6 +29,12 @@ from datetime import datetime, timezone
 
 os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1")
 
+# Force UTF-8 on stdout/stderr — Windows defaults to GBK which can't encode emoji
+if sys.stdout and sys.stdout.encoding != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr and sys.stderr.encoding != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 MEMORY_SERVICE_URL = os.environ.get("MCP_MEMORY_URL", "http://localhost:8000")
 MEMORY_LIMIT = int(os.environ.get("MCP_MEMORY_LIMIT", "10"))
 TIMEOUT = 3
