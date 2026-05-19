@@ -319,7 +319,7 @@ Warden is the **card recipient**, not the card dealer. Conductor designs the dec
 - `closeVerificationGate(packet)` → verification closure judgment
 - `checkDeliveryShellAdaptation(report, audience)` → shell adaptation check
 - `recordEvolutionBacklog(signals)` → evolution backlog / scars log
-- `maintainEvolutionLogSchema()` → owns the canonical evolution log schema (patterns → `memory/patterns/`, scars → `memory/scars/`, capability gaps → `memory/capability-gaps.md`)
+- `maintainEvolutionLogSchema()` → owns the canonical evolution target schema (agent lessons → `canonical/agents/{agent}.md`, reusable patterns → `canonical/skills/`, protocol/scar rules → `config/contracts/`, capability ownership → `config/capability-index/`)
 
 ## Decision Rules
 
@@ -333,7 +333,7 @@ Warden is the **card recipient**, not the card dealer. Conductor designs the dec
 7. **IF** exceptionState is not "normal" and not explicitly declared → require explicit declaration (accepted-risk or carry-forward) before synthesis
 8. **IF** quality rating is C or below → mandate root cause analysis before accepting the report
 9. **IF** CEO report shell adaptation fails (has code snippets, conclusions buried, no actionable recommendations) → require rewrite before synthesis
-10. **IF** evolution backlog signals capability gaps → record in memory/capability-gaps.md and notify Scout for gap resolution
+10. **IF** evolution backlog signals capability gaps → update `config/capability-index/` or the owning agent definition, then notify Scout for gap resolution
 
 ## Thinking Framework
 

@@ -28,6 +28,70 @@ function endpoint(): string {
   return process.env.MCP_MEMORY_URL || "http://localhost:8000";
 }
 
+const REMOTE_MEMORY_ALLOWED = process.env.META_KIM_ALLOW_REMOTE_MEMORY === "1";
+const SECRET_PATTERNS = [
+  /\bsk-(?:proj|live|test)?-[A-Za-z0-9_-]{10,}\b/gu,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}\b/gu,
+  /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/gu,
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/gu,
+  /\bAKIA[0-9A-Z]{16}\b/gu,
+  /\b(?:authorization\s*:\s*bearer\s+)[A-Za-z0-9._~+/=-]{8,}/giu,
+  /\b(?:api[_-]?key|token|secret|password|passwd|pwd)\s*[:=]\s*["']?[^"'\s,;]{6,}/giu,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gu,
+];
+
+function isPrivateIpv4(hostname: string): boolean {
+  const parts = hostname.split(".").map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
+    return false;
+  }
+  const [first, second] = parts;
+  return (
+    first === 10 ||
+    first === 127 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    (first === 169 && second === 254)
+  );
+}
+
+function isAllowedMemoryEndpoint(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol)) return false;
+    const hostname = url.hostname.replace(/^\[|\]$/gu, "").toLowerCase();
+    if (["localhost", "127.0.0.1", "::1"].includes(hostname)) return true;
+    if (isPrivateIpv4(hostname)) return true;
+    if (hostname.startsWith("fc") || hostname.startsWith("fd")) return true;
+    if (hostname.startsWith("fe80:")) return true;
+    return REMOTE_MEMORY_ALLOWED;
+  } catch {
+    return false;
+  }
+}
+
+function redactSecrets(text: string): string {
+  let redacted = String(text ?? "");
+  for (const pattern of SECRET_PATTERNS) {
+    redacted = redacted.replace(pattern, (match) => {
+      const label = /authorization/iu.test(match) ? "AUTHORIZATION" : "SECRET";
+      return `[REDACTED_${label}]`;
+    });
+  }
+  return redacted;
+}
+
+function redactValue<T>(value: T): T {
+  if (typeof value === "string") return redactSecrets(value) as T;
+  if (Array.isArray(value)) return value.map((item) => redactValue(item)) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, redactValue(item)]),
+    ) as T;
+  }
+  return value;
+}
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
@@ -81,7 +145,7 @@ function buildContent(event: OpenClawEvent): {
   if (plan) lines.push("\nTask plan tail:\n" + plan);
   if (progress) lines.push("\nProgress tail:\n" + progress);
 
-  const content = lines.join("\n").trim();
+  const content = redactSecrets(lines.join("\n").trim());
   return {
     content: content.length > 4000 ? content.slice(0, 3997) + "..." : content,
     project,
@@ -92,11 +156,13 @@ function buildContent(event: OpenClawEvent): {
 async function saveMemory(event: OpenClawEvent): Promise<void> {
   const { content, project, workspaceDir } = buildContent(event);
   if (content.length < 40) return;
+  const memoryEndpoint = endpoint();
+  if (!isAllowedMemoryEndpoint(memoryEndpoint)) return;
 
-  await fetch(new URL("/api/memories", endpoint()), {
+  await fetch(new URL("/api/memories", memoryEndpoint), {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Agent-ID": "openclaw" },
-    body: JSON.stringify({
+    body: JSON.stringify(redactValue({
       content,
       tags: ["openclaw", eventName(event), "meta_kim", project],
       memory_type: "observation",
@@ -107,10 +173,10 @@ async function saveMemory(event: OpenClawEvent): Promise<void> {
         event: eventName(event),
         project_dir: workspaceDir,
       },
-    }),
+    })),
   }).catch(() => undefined);
 }
 
 export default async function handler(event: OpenClawEvent): Promise<void> {
-  await saveMemory(event);
+  await saveMemory(event).catch(() => undefined);
 }

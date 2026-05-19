@@ -70,6 +70,73 @@ function normalizePathRef(value) {
     .toLowerCase();
 }
 
+function normalizeTargetPath(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "");
+}
+
+function containsPathTraversal(target) {
+  return normalizeTargetPath(target).split("/").includes("..");
+}
+
+function isForbiddenEvolutionWritebackTarget(target) {
+  const normalized = normalizeTargetPath(target).toLowerCase();
+  return (
+    normalized === "memory" ||
+    normalized.startsWith("memory/") ||
+    normalized.startsWith(".meta-kim/state/") ||
+    normalized.includes("/compaction/") ||
+    normalized === "compaction" ||
+    normalized.startsWith("compaction/") ||
+    normalized === "run-index" ||
+    normalized.startsWith("run-index/") ||
+    normalized.includes("run-index.sqlite")
+  );
+}
+
+function matchesEvolutionWritebackTarget(target, allowedTarget) {
+  const normalizedTarget = normalizeTargetPath(target);
+  const normalizedAllowed = normalizeTargetPath(allowedTarget);
+
+  if (!normalizedAllowed) return false;
+  if (normalizedAllowed.endsWith("/")) {
+    return normalizedTarget.startsWith(normalizedAllowed);
+  }
+
+  const escaped = normalizedAllowed
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\\\{[^/]+\\\}/g, "[^/]+");
+  return new RegExp(`^${escaped}$`).test(normalizedTarget);
+}
+
+function validateEvolutionWritebackTargets(contract, writebacks) {
+  const allowedTargets = contract.runDiscipline.evolutionWritebackTargets ?? [];
+  ensureArray(
+    allowedTargets,
+    "runDiscipline.evolutionWritebackTargets",
+  );
+
+  for (const [index, writeback] of writebacks.entries()) {
+    const target = writeback.target;
+    ensure(
+      !containsPathTraversal(target),
+      `evolutionWritebackPacket.writebacks[${index}].target must not contain path traversal: ${target}`,
+    );
+    ensure(
+      !isForbiddenEvolutionWritebackTarget(target),
+      `evolutionWritebackPacket.writebacks[${index}].target must not use memory, compaction, or run-index storage for Evolution writeback: ${target}`,
+    );
+    ensure(
+      allowedTargets.some((allowedTarget) =>
+        matchesEvolutionWritebackTarget(target, allowedTarget),
+      ),
+      `evolutionWritebackPacket.writebacks[${index}].target must match one of runDiscipline.evolutionWritebackTargets: ${target}`,
+    );
+  }
+}
+
 async function readJson(targetPath) {
   const raw = await fs.readFile(targetPath, "utf8");
   return JSON.parse(raw);
@@ -1264,6 +1331,9 @@ function validateSummaryAndEvolution(contract, artifact) {
       evolutionPacket.writebacks.length >= 1,
       "writebackDecision=writeback requires at least one writeback target.",
     );
+  }
+  if (evolutionPacket.writebacks.length > 0) {
+    validateEvolutionWritebackTargets(contract, evolutionPacket.writebacks);
   }
   ensure(
     evolutionPacket.retain.length +

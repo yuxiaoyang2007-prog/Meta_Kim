@@ -32,17 +32,19 @@ scar:
 ## Scar Lifecycle
 
 1. **Detect**: During Review/Meta-Review/Verification, Prism or Warden identifies a systemic failure
-2. **Record**: Write the scar to `memory/scars/{id}.md` following this schema
+2. **Record**: Record the scar in the governed run artifact and, when it changes future behavior, update this protocol with the new prevention rule
 3. **Classify**: Determine the `type` and `impact`
 4. **Trigger**: If `impact: recovered or critical`, update `contracts/scar-protocol.md` and trigger the `scarDetected` loop in `evolution-contract.json`
-5. **Audit**: During future Critical stages, scan `memory/scars/` for relevant patterns before proceeding
+5. **Audit**: During future Critical stages, scan validated run artifacts and this protocol for relevant scars before proceeding
 
 ## Storage
 
 ```
-memory/
-└── scars/
-    └── {YYYY-MM}-{type}-{short-desc}.md
+governed run artifact
+└── evolutionWritebackPacket.scarIds[]
+
+config/contracts/scar-protocol.md
+└── prevention rules that must affect future runs
 ```
 
 ## Examples

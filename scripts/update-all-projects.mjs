@@ -7,8 +7,8 @@
  *
  * 配置：在项目根目录创建 projects.json
  *   [
- *     "C:/Users/admin/Desktop/Project1",
- *     "C:/Users/admin/Desktop/Project2"
+ *     "~/projects/project-1",
+ *     "~/projects/project-2"
  *   ]
  */
 
@@ -23,8 +23,8 @@ const PROJECTS_FILE = join(PROJECT_ROOT, "projects.json");
 // 默认项目列表（可以自定义）
 const DEFAULT_PROJECTS = [
   // 在这里添加你的项目路径
-  // "C:/Users/admin/Desktop/MyProject1",
-  // "C:/Users/admin/Desktop/MyProject2",
+  // "~/projects/my-project-1",
+  // "~/projects/my-project-2",
 ];
 
 function loadProjects() {
@@ -45,7 +45,8 @@ function runInProject(projectDir, command, args) {
   const result = spawnSync(command, args, {
     cwd: projectDir,
     stdio: "inherit",
-    shell: true,
+    shell: false,
+    windowsHide: true,
   });
 
   return result.status === 0;
@@ -64,8 +65,8 @@ async function main() {
     console.log(`   ${PROJECTS_FILE}`);
     console.log("\n内容示例：");
     console.log(`   [`);
-    console.log(`     "C:/Users/admin/Desktop/Project1",`);
-    console.log(`     "C:/Users/admin/Desktop/Project2"`);
+    console.log(`     "~/projects/project-1",`);
+    console.log(`     "~/projects/project-2"`);
     console.log(`   ]`);
     process.exit(1);
   }
@@ -100,7 +101,8 @@ async function main() {
         pkg.scripts?.["meta:sync"] || pkg.scripts?.["sync:runtimes"];
       if (syncScript) {
         const cmd = pkg.scripts?.["meta:sync"] ? "meta:sync" : "sync:runtimes";
-        const ok = runInProject(project, "npm", ["run", cmd]);
+        const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+        const ok = runInProject(project, npmCommand, ["run", cmd]);
         if (ok) {
           console.log(`   ✅ 成功`);
           successCount++;

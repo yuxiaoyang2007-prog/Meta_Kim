@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-16T17:37:16.166Z",
+  "generatedAt": "2026-05-18T20:21:36.458Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -87,8 +87,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-warden.md",
-        "size": 28223,
-        "modified": "2026-04-30T05:01:35.710Z"
+        "size": 27939,
+        "modified": "2026-05-18T19:23:40.002Z"
       }
     },
     "skills": {
@@ -115,8 +115,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/dev-governance.md",
         "relativePath": "dev-governance.md",
-        "size": 62480,
-        "modified": "2026-05-16T17:37:04.686Z"
+        "size": 62526,
+        "modified": "2026-05-18T19:23:40.003Z"
       },
       "repo:canonical-reference:intent-amplification": {
         "id": "intent-amplification",
@@ -162,8 +162,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/shared/hooks/meta-kim-memory-save.mjs",
         "relativePath": "meta-kim-memory-save.mjs",
-        "size": 11954,
-        "modified": "2026-04-30T16:40:32.637Z"
+        "size": 15338,
+        "modified": "2026-05-18T20:17:07.760Z"
       },
       "repo:canonical-runtime-assets:block-dangerous-bash.mjs": {
         "id": "block-dangerous-bash.mjs",
@@ -198,8 +198,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/post-format.mjs",
         "relativePath": "post-format.mjs",
-        "size": 882,
-        "modified": "2026-04-18T14:43:51.077Z"
+        "size": 1020,
+        "modified": "2026-05-18T20:17:20.854Z"
       },
       "repo:canonical-runtime-assets:post-typecheck.mjs": {
         "id": "post-typecheck.mjs",
@@ -225,8 +225,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/spine-state.mjs",
         "relativePath": "spine-state.mjs",
-        "size": 6686,
-        "modified": "2026-05-14T14:13:16.469Z"
+        "size": 8306,
+        "modified": "2026-05-18T20:17:33.744Z"
       },
       "repo:canonical-runtime-assets:stop-compaction.mjs": {
         "id": "stop-compaction.mjs",
@@ -234,8 +234,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/stop-compaction.mjs",
         "relativePath": "stop-compaction.mjs",
-        "size": 8076,
-        "modified": "2026-04-17T04:13:20.514Z"
+        "size": 8292,
+        "modified": "2026-05-18T20:17:33.745Z"
       },
       "repo:canonical-runtime-assets:stop-completion-guard.mjs": {
         "id": "stop-completion-guard.mjs",
@@ -261,8 +261,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/stop-memory-save.mjs",
         "relativePath": "stop-memory-save.mjs",
-        "size": 7696,
-        "modified": "2026-05-14T08:56:34.380Z"
+        "size": 10190,
+        "modified": "2026-05-18T20:17:35.108Z"
       },
       "repo:canonical-runtime-assets:stop-save-progress.mjs": {
         "id": "stop-save-progress.mjs",
@@ -270,8 +270,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/stop-save-progress.mjs",
         "relativePath": "stop-save-progress.mjs",
-        "size": 6742,
-        "modified": "2026-04-20T11:25:58.732Z"
+        "size": 6721,
+        "modified": "2026-05-18T19:23:40.003Z"
       },
       "repo:canonical-runtime-assets:stop-spine-cleanup.mjs": {
         "id": "stop-spine-cleanup.mjs",

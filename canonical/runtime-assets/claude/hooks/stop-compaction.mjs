@@ -15,7 +15,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline";
-import { fileURLToPath } from "node:url";
+import { resolveProfileStateDir, sanitizeStateProfile } from "./spine-state.mjs";
 
 // ── Read stdin ONCE at top level before anything else ────────────────────────
 const STDIN_CHUNKS = [];
@@ -25,8 +25,7 @@ let INPUT = {};
 try { INPUT = JSON.parse(RAW_STDIN || "{}"); } catch { INPUT = {}; }
 
 // ── Constants ───────────────────────────────────────────────────────────────
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, "../..");
+const REPO_ROOT = path.resolve(INPUT.cwd || process.cwd());
 
 const STAGES = [
   "Critical", "Fetch", "Thinking", "Execution",
@@ -41,7 +40,7 @@ const STAGE_PATTERNS = {
   Review:       /\b(Review|审查|reviewPacket|findings|openFindings|CRITICAL|HIGH|MEDIUM|LOW)\b/gi,
   "Meta-Review": /\b(Meta-Review|元审查|review.*standard)\b/gi,
   Verification: /\b(Verification|验证|verified|verify.*gate|closeFindings)\b/gi,
-  Evolution:     /\b(Evolution|进化|writeback|evolutionWriteback|memory.*写回)\b/gi,
+  Evolution:     /\b(Evolution|进化|writeback|evolutionWriteback)\b/gi,
 };
 
 const FINDING_PATTERNS = [
@@ -125,8 +124,11 @@ function extractFindings(text) {
 }
 
 async function writeCompaction({ stage, completed, findings, runRef, profile }) {
-  const compactionDir = path.join(
-    REPO_ROOT, ".meta-kim", "state", profile, "compaction",
+  const safeProfile = sanitizeStateProfile(profile);
+  const compactionDir = resolveProfileStateDir(
+    REPO_ROOT,
+    safeProfile,
+    "compaction",
   );
   await fs.mkdir(compactionDir, { recursive: true });
 
@@ -136,8 +138,8 @@ async function writeCompaction({ stage, completed, findings, runRef, profile }) 
   const compaction = {
     packetVersion: "1.0",
     runRef,
-    profile,
-    profileKey: `${profile}-auto`,
+    profile: safeProfile,
+    profileKey: `${safeProfile}-auto`,
     createdAt: new Date().toISOString(),
     stageState: {
       current: stage,
@@ -161,12 +163,14 @@ async function writeCompaction({ stage, completed, findings, runRef, profile }) 
     singleDeliverableState: { currentDeliverable: "governed-run", closed: false },
     summaryDelta: { written: false, content: null },
     writebackDecision: {
-      decision: findings.length > 0 ? "writeback" : "none",
-      targets: findings.length > 0 ? ["memory"] : [],
+      decision: "none",
+      targets: [],
+      continuityOnly: true,
+      continuityTarget: "local-compaction",
       content:
         findings.length > 0
-          ? "Review findings captured from transcript. Verify and close findings in next session."
-          : null,
+          ? "Review findings captured from transcript for local continuity only. Verify and close findings in next session; this is not an Evolution writeback."
+          : "No open findings captured. Compaction packet is local continuity only and is not an Evolution writeback.",
     },
     accepted_risk: null,
     handoffNote:
@@ -206,7 +210,7 @@ async function main() {
   );
   if (!hasActivity) return; // no governance activity detected
 
-  const profile = process.env.META_KIM_PROFILE || "default";
+  const profile = sanitizeStateProfile(process.env.META_KIM_PROFILE);
   const runRef = `run-${Date.now()}`;
 
   try {

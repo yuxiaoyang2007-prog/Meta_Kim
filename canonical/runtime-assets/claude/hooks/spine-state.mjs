@@ -1,8 +1,8 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve, relative, isAbsolute } from "node:path";
 
-const SPINE_STATE_DIR =
-  process.env.META_KIM_SPINE_STATE_DIR || ".meta-kim/state/default/spine";
+const META_KIM_STATE_ROOT = ".meta-kim/state";
+const DEFAULT_SPINE_STATE_DIR = ".meta-kim/state/default/spine";
 const SPINE_STATE_FILE = "spine-state.json";
 
 export const STAGE_META_AGENT_MAP = {
@@ -18,6 +18,7 @@ export const STAGE_META_AGENT_MAP = {
   thinking: {
     required: ["meta-conductor"],
     label: "Thinking (Conductor dispatch board)",
+    requiresFetchRecord: true,
   },
   execution: { required: [], label: "Execution", requiresAgentDispatch: true },
   review: {
@@ -46,6 +47,50 @@ const META_AGENT_NAMES = [
   "meta-scout",
 ];
 
+function isWithin(parent, target) {
+  const rel = relative(parent, target);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+export function sanitizeStateProfile(input) {
+  const value =
+    typeof input === "string" && input.trim() ? input.trim() : "default";
+  if (value === "." || value === ".." || value.length > 80) return "default";
+  if (!/^[A-Za-z0-9._-]+$/.test(value)) return "default";
+  return value;
+}
+
+export function resolveMetaKimStateRoot(cwd) {
+  return resolve(cwd || process.cwd(), META_KIM_STATE_ROOT);
+}
+
+export function resolveRepoLocalStateDir(cwd, requestedPath, fallbackPath) {
+  const repoRoot = resolve(cwd || process.cwd());
+  const stateRoot = resolveMetaKimStateRoot(repoRoot);
+  const fallback = resolve(repoRoot, fallbackPath || DEFAULT_SPINE_STATE_DIR);
+  const raw =
+    typeof requestedPath === "string" && requestedPath.trim()
+      ? requestedPath.trim()
+      : "";
+
+  const candidate = raw
+    ? resolve(isAbsolute(raw) ? raw : join(repoRoot, raw))
+    : fallback;
+
+  if (isWithin(stateRoot, candidate)) return candidate;
+  return fallback;
+}
+
+export function resolveProfileStateDir(cwd, profile, ...segments) {
+  const safeProfile = sanitizeStateProfile(profile);
+  const stateRoot = resolveMetaKimStateRoot(cwd);
+  const candidate = resolve(stateRoot, safeProfile, ...segments);
+  if (!isWithin(stateRoot, candidate)) {
+    return resolve(stateRoot, "default", ...segments);
+  }
+  return candidate;
+}
+
 export function extractMetaAgentName(description, prompt) {
   const text = `${description || ""} ${prompt || ""}`.toLowerCase();
   for (const name of META_AGENT_NAMES) {
@@ -55,7 +100,14 @@ export function extractMetaAgentName(description, prompt) {
 }
 
 function spineStatePath(cwd) {
-  return join(cwd, SPINE_STATE_DIR, SPINE_STATE_FILE);
+  return join(
+    resolveRepoLocalStateDir(
+      cwd,
+      process.env.META_KIM_SPINE_STATE_DIR,
+      DEFAULT_SPINE_STATE_DIR,
+    ),
+    SPINE_STATE_FILE,
+  );
 }
 
 function ensureDir(filePath) {
@@ -211,6 +263,33 @@ export function checkStageRequirements(state) {
       met: false,
       missing: ["at least one agent via Agent tool"],
       reason: `Stage "${stage}" requires at least one agent dispatch before execution.`,
+    };
+  }
+
+  // Verify fetchRecord exists when stage requires it
+  if (req.requiresFetchRecord && !state.fetchRecord) {
+    return {
+      met: false,
+      missing: ["fetchRecord in spine state"],
+      reason:
+        "Fetch stage must produce a fetchRecord before advancing to Thinking. " +
+        "Complete capability search, write fetchRecord to spine state, then return to Thinking.",
+    };
+  }
+
+  // Verify research validation when fetchRecord declares research required
+  if (
+    state.fetchRecord &&
+    state.fetchRecord.researchRequired &&
+    !state.fetchRecord.researchValidationPerformed
+  ) {
+    return {
+      met: false,
+      missing: ["research validation in fetchRecord"],
+      reason:
+        "Task requires research validation but researchValidationPerformed=false. " +
+        "Discover web search tools via capability descriptors, search ≥5 source categories, " +
+        "record in fetchRecord, then return to Thinking.",
     };
   }
 

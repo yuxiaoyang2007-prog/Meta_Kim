@@ -265,7 +265,7 @@ Possible causes:
 ✗ Skill installation failed: ${n}
 
 Possible causes:
-1. Network timeout → Run: npm run meta:sync -- --skills
+1. Network timeout → Run: npm run meta:sync
 2. Permission denied → Run with sudo/administrator
 3. Repo not found → Check the skill repository URL
 
@@ -731,7 +731,7 @@ Possible causes:
 ✗ 技能安装失败：${n}
 
 可能原因：
-1. 网络超时 → 运行：npm run meta:sync -- --skills
+1. 网络超时 → 运行：npm run meta:sync
 2. 权限被拒绝 → 使用 sudo/管理员权限运行
 3. 仓库未找到 → 检查技能仓库 URL
 
@@ -1182,7 +1182,7 @@ ${r ? `原始错误：${r}` : ""}
 ✗ スキルインストール失敗：${n}
 
 考えられる原因：
-1. ネットワークタイムアウト → 実行：npm run meta:sync -- --skills
+1. ネットワークタイムアウト → 実行：npm run meta:sync
 2. 権限が拒否されました → sudo/管理者権限で実行
 3. リポジトリが見つかりません → スキルリポジトリの URL を確認
 
@@ -1662,7 +1662,7 @@ ${r ? `生エラー：${r}` : ""}
 ✗ 스킬 설치 실패：${n}
 
 가능한 원인：
-1. 네트워크 타임아웃 → 실행：npm run meta:sync -- --skills
+1. 네트워크 타임아웃 → 실행：npm run meta:sync
 2. 권한 거부 → sudo/관리자 권한으로 실행
 3. 리포지토리를 찾을 수 없음 → 스킬 리포지토리 URL 확인
 

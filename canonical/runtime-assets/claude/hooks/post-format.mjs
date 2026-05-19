@@ -7,7 +7,7 @@
  * Input: JSON on stdin (Claude Code hooks). See https://code.claude.com/docs/en/hooks
  */
 
-import { execSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import process from "node:process";
 import { readJsonFromStdin, extractFilePath } from "./utils.mjs";
 
@@ -19,11 +19,18 @@ if (!["Edit", "Write"].includes(toolName)) process.exit(0);
 if (!filePath.match(/\.(js|ts|jsx|tsx|mjs|cjs)$/)) process.exit(0);
 
 try {
-  execSync(`npx prettier --write "${filePath}"`, {
-    stdio: "ignore",
-    timeout: 10000,
-    cwd: input.cwd || process.cwd(),
-  });
+  const command = process.platform === "win32" ? "npx.cmd" : "npx";
+  execFile(
+    command,
+    ["prettier", "--write", filePath],
+    {
+      stdio: "ignore",
+      timeout: 10000,
+      cwd: input.cwd || process.cwd(),
+      windowsHide: true,
+    },
+    () => {},
+  );
 } catch {
   // prettier not available or failed — no big deal
 }

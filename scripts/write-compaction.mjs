@@ -93,10 +93,12 @@ async function writeCompaction({ runRef, profile }) {
       content: null,
     },
     writebackDecision: {
-      decision: "writeback",
-      targets: ["memory"],
+      decision: "none",
+      targets: [],
+      continuityOnly: true,
+      continuityTarget: "local-compaction",
       content:
-        "Add input sanitization pattern to memory/patterns/security/input-sanitization.md",
+        "Local compaction is continuity state only, not an Evolution writeback to memory.",
     },
     accepted_risk: null,
     handoffNote: `Compaction written at ${timestamp}. Session interrupted during Review stage (step 5/8). 2 open findings need revision before verification can proceed. Resume from Review stage.`,

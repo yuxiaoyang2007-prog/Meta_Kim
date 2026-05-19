@@ -148,7 +148,7 @@
     "expectedDispatchSequence": [
       { "step": 1, "agent": null, "description": "Fetch — exhaustive search finds no exact owner for payment module" },
       { "step": 2, "agent": "generalPurpose", "description": "Temporary fallback owner assigned with explicit justification documenting the gap" },
-      { "step": 3, "agent": null, "description": "Evolution — log capability gap to memory/capability-gaps.md for future owner creation" }
+      { "step": 3, "agent": null, "description": "Evolution — log capability gap to config/capability-index/ for future owner creation" }
     ],
     "forbiddenBehavior": "Temporary fallback used without explicit justification; capability gap not logged for evolution",
     "passFailCriteria": {
@@ -222,10 +222,10 @@
     "expectedType": "C",
     "expectedDispatchSequence": [
       { "step": 1, "agent": null, "description": "Evolution — run 5+1 evolution detection model" },
-      { "step": 2, "agent": null, "description": "Write reusable patterns to memory/patterns/" },
-      { "step": 3, "agent": null, "description": "Write scars to memory/scars/" },
-      { "step": 4, "agent": null, "description": "Update agent boundaries in canonical/agents/ if needed, then run npm run sync:runtimes" },
-      { "step": 5, "agent": null, "description": "Log capability gaps to memory/capability-gaps.md" }
+      { "step": 2, "agent": null, "description": "Write reusable patterns to canonical/skills/" },
+      { "step": 3, "agent": null, "description": "Record scars in evolutionWritebackPacket.scarIds and update config/contracts/scar-protocol.md when prevention rules change" },
+      { "step": 4, "agent": null, "description": "Update agent boundaries in canonical/agents/ if needed, then run npm run meta:sync" },
+      { "step": 5, "agent": null, "description": "Log capability gaps to config/capability-index/" }
     ],
     "forbiddenBehavior": "Evolution stage skipped entirely; structural lessons left floating in conversation context without writeback",
     "passFailCriteria": {

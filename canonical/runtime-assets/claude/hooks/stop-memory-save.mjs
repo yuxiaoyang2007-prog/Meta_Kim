@@ -11,10 +11,10 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { createServer } from "node:http";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import http from "node:http";
+import https from "node:https";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -32,6 +32,17 @@ try {
 // ── Config ──────────────────────────────────────────────
 const DEFAULT_ENDPOINT = process.env.MCP_MEMORY_URL || "http://localhost:8000";
 const TIMEOUT_MS = 4000;
+const REMOTE_MEMORY_ALLOWED = process.env.META_KIM_ALLOW_REMOTE_MEMORY === "1";
+const SECRET_PATTERNS = [
+  /\bsk-(?:proj|live|test)?-[A-Za-z0-9_-]{10,}\b/gu,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}\b/gu,
+  /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/gu,
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/gu,
+  /\bAKIA[0-9A-Z]{16}\b/gu,
+  /\b(?:authorization\s*:\s*bearer\s+)[A-Za-z0-9._~+/=-]{8,}/giu,
+  /\b(?:api[_-]?key|token|secret|password|passwd|pwd)\s*[:=]\s*["']?[^"'\s,;]{6,}/giu,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gu,
+];
 
 async function loadConfig() {
   const candidates = [
@@ -56,6 +67,58 @@ async function loadConfig() {
 
 function getEndpoint(cfg) {
   return cfg?.memoryService?.http?.endpoint || DEFAULT_ENDPOINT;
+}
+
+function isPrivateIpv4(hostname) {
+  const parts = hostname.split(".").map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
+    return false;
+  }
+  const [first, second] = parts;
+  return (
+    first === 10 ||
+    first === 127 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    (first === 169 && second === 254)
+  );
+}
+
+function isAllowedMemoryEndpoint(endpoint) {
+  try {
+    const url = new URL(endpoint);
+    if (!["http:", "https:"].includes(url.protocol)) return false;
+    const hostname = url.hostname.replace(/^\[|\]$/gu, "").toLowerCase();
+    if (["localhost", "127.0.0.1", "::1"].includes(hostname)) return true;
+    if (isPrivateIpv4(hostname)) return true;
+    if (hostname.startsWith("fc") || hostname.startsWith("fd")) return true;
+    if (hostname.startsWith("fe80:")) return true;
+    return REMOTE_MEMORY_ALLOWED;
+  } catch {
+    return false;
+  }
+}
+
+function redactSecrets(text) {
+  let redacted = String(text ?? "");
+  for (const pattern of SECRET_PATTERNS) {
+    redacted = redacted.replace(pattern, (match) => {
+      const label = /authorization/iu.test(match) ? "AUTHORIZATION" : "SECRET";
+      return `[REDACTED_${label}]`;
+    });
+  }
+  return redacted;
+}
+
+function redactValue(value) {
+  if (typeof value === "string") return redactSecrets(value);
+  if (Array.isArray(value)) return value.map((item) => redactValue(item));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, redactValue(item)]),
+    );
+  }
+  return value;
 }
 
 // ── Transcript reader ───────────────────────────────────
@@ -160,7 +223,7 @@ function buildContent(text, analysis, cwd) {
     parts.push("Key points: " + userLines.join(" | "));
   }
 
-  const content = parts.join("\n");
+  const content = redactSecrets(parts.join("\n"));
   if (content.length > 800) return content.slice(0, 797) + "...";
   return content;
 }
@@ -168,12 +231,23 @@ function buildContent(text, analysis, cwd) {
 // ── HTTP POST helper ────────────────────────────────────
 function postMemory(endpoint, payload) {
   return new Promise((resolve) => {
-    const data = JSON.stringify(payload);
-    const url = new URL("/api/memories", endpoint);
-    const req = http.request(
+    if (!isAllowedMemoryEndpoint(endpoint)) {
+      resolve({ success: false });
+      return;
+    }
+    const data = JSON.stringify(redactValue(payload));
+    let url;
+    try {
+      url = new URL("/api/memories", endpoint);
+    } catch {
+      resolve({ success: false });
+      return;
+    }
+    const transport = url.protocol === "https:" ? https : http;
+    const req = transport.request(
       {
         hostname: url.hostname,
-        port: url.port || 8000,
+        port: url.port || (url.protocol === "https:" ? 443 : 8000),
         path: url.pathname,
         method: "POST",
         headers: {

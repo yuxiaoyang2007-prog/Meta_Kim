@@ -470,6 +470,52 @@ IF globalProjectRegistry is available (~/.meta-kim/global/project-registry.sqlit
   → respect cross_project_readonly memory mode when using external project context
 ```
 
+**Step 2.5 — Research Validation (conditional — MANDATORY when triggered)**
+
+**Trigger condition** — activate when ANY of:
+- `taskClassification.governanceFlow` is `meta_analysis`, `proposal_review`, or `complex_dev` involving external claims
+- Task involves library/framework behavior, API compatibility, version-specific features, or deprecation notices
+- Task requires verifying best practices, security advisories, or factual accuracy against external sources
+- User explicitly requests research, verification, or fact-checking
+
+**Execution**:
+
+1. **Identify capability need**: Determine what information retrieval capabilities the task requires (e.g., "web search", "content fetch", "documentation lookup")
+
+2. **Discover available tools at runtime**: Search the current environment's tool registry for tools that match the identified capability descriptors. Tool availability differs across runtimes (Claude Code, Codex, OpenClaw, Cursor) and user configurations (MCP servers, plugins) — use capability descriptors, not hardcoded tool names. Available tools might include built-in search tools, MCP-based search services, or runtime-specific extensions.
+
+3. **Execute searches across ≥5 distinct source categories**:
+   - Official vendor/standard documentation
+   - Community knowledge bases (Q&A forums, discussion boards)
+   - Source code repositories and changelogs
+   - Technical articles, blogs, and tutorials
+   - Specification documents, RFCs, or standards bodies
+   - Additional categories as relevant to the domain
+
+4. **Cross-reference findings**: Verify key claims against ≥2 independent sources. Flag any contradictions explicitly.
+
+5. **Record in fetchPacket**:
+```json
+{
+  "researchSources": [
+    { "category": "official-docs", "summary": "...", "confidence": "high" },
+    { "category": "community-qa", "summary": "...", "confidence": "medium" },
+    { "category": "source-repos", "summary": "...", "confidence": "high" },
+    { "category": "technical-articles", "summary": "...", "confidence": "medium" },
+    { "category": "standards-specs", "summary": "...", "confidence": "high" }
+  ],
+  "researchCrossReferences": [
+    { "claim": "...", "sources": ["source-a", "source-b"], "consistent": true }
+  ]
+}
+```
+
+**Gate**: IF `researchSources` has entries from <5 distinct categories AND research is required → BLOCK advancement to Thinking. Complete research across ≥5 source categories first.
+
+**Skip condition**: NOT required when `governanceFlow = query`, task scope is entirely local to project files (no external claims to verify), or user explicitly says "skip research" / "local only". Record skip reason in `fetchRecord.researchSkipReason`.
+
+**Degradation path**: IF no web search tools are available in the current runtime, record `researchRequired: true, researchValidationPerformed: false, researchBlockReason: "no web search capability available"` in fetchRecord and inform the user. Do NOT silently proceed as if research was performed.
+
 **Step 3 — External skill discovery** (if the local + indexed baseline still has no perfect match):
 ```
 Invoke the **findskill** skill
@@ -1253,8 +1299,8 @@ scar:
   "writebackDecision": "writeback | none",
   "decisionReason": "why a writeback is required, or why none is acceptable for this run",
   "writebacks": [
-    { "target": ".claude/agents/<agent>.md", "reason": "boundary drift" },
-    { "target": ".claude/skills/<skill>/SKILL.md", "reason": "reusable execution pattern" },
+    { "target": "canonical/agents/<agent>.md", "reason": "boundary drift" },
+    { "target": "canonical/skills/<skill>/SKILL.md", "reason": "reusable execution pattern" },
     { "target": "config/contracts/workflow-contract.json", "reason": "protocol or gate refinement" }
   ],
   "scarIds": ["2026-04-02-overstep-example"],
@@ -1292,9 +1338,9 @@ Evolution outputs must be persisted to specific locations — not left floating 
 | Artifact Type | Storage Location | Lifecycle |
 |--------------|-----------------|-----------|
 | **Agent Boundary / CT / DR Adjustments** | `canonical/agents/{agent}.md` (direct edit) | Immediate; primary evolution target — triggers `npm run meta:sync` |
-| **New Skills** (extracted) | `.claude/skills/{skill-name}/SKILL.md` | Permanent; created via skill-creator, validated via Type D Review |
+| **New Skills** (extracted) | `canonical/skills/{skill-name}/SKILL.md` | Permanent; created via skill-creator, validated via Type D Review |
 | **Rhythm Optimizations** | Recorded in `config/contracts/workflow-contract.json` or Conductor's card-deck defaults | Immediate; affects next run's dispatch board |
-| **Capability Gap Records** | `canonical/capability-gaps.md` | Until resolved; Scout monitors and closes when filled |
+| **Capability Gap Records** | `config/capability-index/` or the owning `canonical/agents/{agent}.md` | Until resolved; Scout monitors and closes when filled |
 
 **Evolution Rule — Direct Over Indirect**: The agent definition IS the memory. When a gap is discovered, edit the specific agent's SOUL.md directly. Do NOT route through a middle abstraction layer. memory/ is Claude Code's session memory — not Meta_Kim's evolution mechanism.
 

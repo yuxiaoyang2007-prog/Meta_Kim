@@ -99,9 +99,9 @@
     "detectedDimension": "capabilityGap",
     "evidence": "Fetch returned 0 matches",
     "expectedAmplification": "queue-for-scout",
-    "expectedStorage": "memory/capability-gaps.md",
+    "expectedStorage": "config/capability-index/",
     "passFailCriteria": {
-      "PASS": "gap 记录到 memory/capability-gaps.md，队列给 Scout 后续处理",
+      "PASS": "gap 记录到 config/capability-index/，队列给 Scout 后续处理",
       "FAIL": "gap 没有记录，导致任务无人认领"
     }
   },

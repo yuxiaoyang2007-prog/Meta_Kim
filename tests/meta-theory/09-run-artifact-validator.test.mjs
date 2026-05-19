@@ -88,6 +88,121 @@ describe("validate-run-artifact.mjs", () => {
     );
   });
 
+  test("rejects Evolution writeback targets that use local memory or continuity storage", async (t) => {
+    for (const target of [
+      "memory/capability-gaps.md",
+      ".meta-kim/state/default/compaction/latest.json",
+      "compaction/latest.json",
+      "run-index.sqlite",
+    ]) {
+      const tempFixture = await writeTempFixture(t, (artifact) => {
+        artifact.evolutionWritebackPacket.writebacks = [
+          {
+            target,
+            reason: "invalid local continuity target for Evolution writeback",
+          },
+        ];
+      });
+      await assert.rejects(
+        execFileAsync(
+          "node",
+          ["scripts/validate-run-artifact.mjs", tempFixture],
+          { cwd: REPO_ROOT },
+        ),
+        /must not use memory, compaction, or run-index storage/,
+      );
+    }
+  });
+
+  test("rejects forbidden Evolution writeback targets even when writebackDecision is none", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.evolutionWritebackPacket.writebackDecision = "none";
+      artifact.evolutionWritebackPacket.writebacks = [
+        {
+          target: "memory/patterns/session.md",
+          reason: "invalid hidden writeback target",
+        },
+      ];
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /must not use memory, compaction, or run-index storage/,
+    );
+  });
+
+  test("rejects Evolution writeback targets that traverse out of allowed roots", async (t) => {
+    for (const target of [
+      "canonical/skills/../runtime-assets/codex/config.toml.example",
+      "config/contracts/../capability-index/meta-kim-capabilities.json",
+    ]) {
+      const tempFixture = await writeTempFixture(t, (artifact) => {
+        artifact.evolutionWritebackPacket.writebacks = [
+          {
+            target,
+            reason: "traversal must not bypass writeback target roots",
+          },
+        ];
+      });
+      await assert.rejects(
+        execFileAsync(
+          "node",
+          ["scripts/validate-run-artifact.mjs", tempFixture],
+          { cwd: REPO_ROOT },
+        ),
+        /must not contain path traversal/,
+      );
+    }
+  });
+
+  test("rejects Evolution writeback targets with Windows-style traversal", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.evolutionWritebackPacket.writebacks = [
+        {
+          target:
+            "canonical\\skills\\..\\runtime-assets\\codex\\config.toml.example",
+          reason: "backslash traversal must not bypass writeback target roots",
+        },
+      ];
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /must not contain path traversal/,
+    );
+  });
+
+  test("accepts canonical Evolution writeback targets from the workflow contract", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.evolutionWritebackPacket.writebacks = [
+        {
+          target: "canonical/agents/meta-warden.md",
+          reason: "agent boundary lesson belongs in the agent definition",
+        },
+        {
+          target: "canonical/skills/meta-theory/SKILL.md",
+          reason: "reusable governance rule belongs in the skill source",
+        },
+        {
+          target: "config/capability-index/meta-kim-capabilities.json",
+          reason: "capability ownership update belongs in the capability index",
+        },
+        {
+          target: "config/contracts/workflow-contract.json",
+          reason: "workflow gate updates belong in the workflow contract",
+        },
+      ];
+    });
+    const result = await validateFixture(tempFixture);
+    assert.equal(result.ok, true);
+  });
+
   test("rejects dispatch envelopes without ownerAgent", async (t) => {
     const tempFixture = await writeTempFixture(t, (artifact) => {
       artifact.dispatchEnvelopePacket.ownerAgent = "";

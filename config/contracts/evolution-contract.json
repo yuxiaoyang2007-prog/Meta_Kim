@@ -17,7 +17,7 @@
     },
     "rhythmBottleneck": {
       "target": "conductor-card-deck",
-      "storage": "contracts/workflow-contract.json",
+      "storage": "config/contracts/workflow-contract.json",
       "trigger": "update-card-priority-or-skip",
       "evidence": "≥3 consecutive high-cost card plays without pause"
     },
@@ -29,13 +29,13 @@
     },
     "processBottleneck": {
       "target": "conductor-orchestration",
-      "storage": "contracts/workflow-contract.json",
+      "storage": "config/contracts/workflow-contract.json",
       "trigger": "adjust-stage-priority",
       "evidence": "Review gate consistently fails at the same stage"
     },
     "scarDetected": {
       "target": "critical-checklist",
-      "storage": "contracts/scar-protocol.md",
+      "storage": "config/contracts/scar-protocol.md",
       "trigger": "update-prevention-rule",
       "evidence": "impact: recovered or critical"
     }

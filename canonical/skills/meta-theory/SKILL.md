@@ -188,6 +188,36 @@ Capability index layers: (1) repo canonical (2) runtime mirrors (3) local global
 
 **Skill ROI filter**: when several skills could apply, score them with `ROI = (Task Coverage x Usage Frequency) / (Context Cost + Learning Curve)`. Choose the highest useful ROI skill set, not the largest skill set. Low-ROI skills stay out of the prompt unless Fetch finds a specific capability gap they cover.
 
+### Fetch Record Gate (mandatory before advancing to Thinking)
+
+After completing Fetch Steps 1–3, update the spine state with a `fetchRecord` field:
+
+```json
+"fetchRecord": {
+  "capabilitySearchPerformed": true,
+  "capabilityMatches": [{ "name": "...", "score": 3, "matchReason": "..." }],
+  "researchRequired": true,
+  "researchValidationPerformed": true,
+  "researchSourceCount": 5,
+  "researchSources": [
+    { "category": "official-docs", "summary": "...", "confidence": "high" },
+    { "category": "community-qa", "summary": "...", "confidence": "medium" }
+  ]
+}
+```
+
+**Research Validation** — required when the task involves external claims, library behavior, best practices, or factual analysis requiring verification:
+
+1. Identify the capability needed (e.g., "web search", "content retrieval", "documentation lookup")
+2. Discover available tools in the current runtime that match these capability descriptors — tool names differ across runtimes and user configurations, so discover them dynamically rather than hardcoding specific tool names
+3. Search across ≥5 distinct source categories: official docs, community knowledge, source repos, technical articles, standards/specs
+4. Record evidence in `fetchRecord.researchSources` with category, summary, and confidence level
+5. Cross-reference key claims against ≥2 independent sources; flag contradictions
+
+**Gate**: The enforcement hook blocks Thinking stage execution if `fetchRecord` is missing, or if `researchRequired=true` but `researchValidationPerformed=false`.
+
+**Skip condition**: Research validation is NOT required when `governanceFlow = query`, task scope is entirely within local project files, or user explicitly says "skip research" / "local only".
+
 ## Available Agents
 
 ### Governance Meta Agents (8)

@@ -72,7 +72,7 @@ function extractUniqueItems(lines, patterns, maxItems = 5) {
   const seen = new Set();
   const items = [];
 
-  for (const line of lines.slice(-maxLines * 2)) {
+  for (const line of lines) {
     for (const pattern of patterns) {
       let match;
       const regex = new RegExp(pattern.source, pattern.flags);

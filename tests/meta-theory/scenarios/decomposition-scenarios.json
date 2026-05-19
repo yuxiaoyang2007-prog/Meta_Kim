@@ -161,7 +161,7 @@
       "Is the success reproducible or was it situational?",
       "Has the successful run been codified into reusable patterns or documentation?"
     ],
-    "recommendation": "Extract structural lessons from the successful run; write patterns to memory/patterns/; create handoff documentation; add Evolution stage to all future runs",
+    "recommendation": "Extract structural lessons from the successful run; write reusable patterns to canonical/skills/; create handoff documentation; add Evolution stage to all future runs",
     "passFailCriteria": {
       "PASS": "Result-Chasing pattern detected; recommendation to codify into repeatable structure; evolution writeback plan created",
       "FAIL": "Single run accepted as permanent solution; no reproducibility or handoff analysis"

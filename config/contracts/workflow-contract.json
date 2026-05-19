@@ -593,7 +593,9 @@
     },
 "evolutionWritebackTargets": [
       "canonical/agents/{agent}.md",
-      "canonical/skills/"
+      "canonical/skills/",
+      "config/contracts/",
+      "config/capability-index/"
     ],
     "publicDisplayRequires": [
       "verifyPassed",

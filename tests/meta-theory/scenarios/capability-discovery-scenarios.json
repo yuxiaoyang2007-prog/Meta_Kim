@@ -130,11 +130,11 @@
     "capabilityTypes": [],
     "expectedDiscovery": {
       "method": "exhaustive search -> no match -> gap logged",
-      "scoring": "gap recorded to memory/capability-gaps.md",
+      "scoring": "gap recorded to config/capability-index/",
       "expectedGap": "Kubernetes audit capability gap"
     },
     "passFailCriteria": {
-      "PASS": "All discovery steps exhausted; no match found; gap logged to memory/capability-gaps.md; Type B creation queued or temporary fallback assigned",
+      "PASS": "All discovery steps exhausted; no match found; gap logged to config/capability-index/; Type B creation queued or temporary fallback assigned",
       "FAIL": "Gap silently ignored; meta-theory self-executes; no evolution writeback"
     }
   },

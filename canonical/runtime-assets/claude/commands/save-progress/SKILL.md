@@ -24,13 +24,13 @@ python "$HOME/.claude/hooks/mcp_memory_global.py" \
   --remaining "Next task to do" "Another remaining task"
 ```
 
-Or use the Claude Code hooks path if HOME is not set:
+Or use the Claude Code hooks path from the user profile if `HOME` is not set:
 
-```bash
-python "C:/Users/admin/.claude/hooks/mcp_memory_global.py" \
-  --mode save \
-  --task "..." \
-  --done "..." \
+```cmd
+python "%USERPROFILE%/.claude/hooks/mcp_memory_global.py" ^
+  --mode save ^
+  --task "..." ^
+  --done "..." ^
   --remaining "..."
 ```
 
@@ -66,7 +66,7 @@ Show the user a brief summary after saving.
 User says: "保存一下进度"
 
 ```bash
-python "C:/Users/admin/.claude/hooks/mcp_memory_global.py" \
+python "$HOME/.claude/hooks/mcp_memory_global.py" \
   --mode save \
   --task "审计Meta_Kim依赖并更新4个README" \
   --done "审计npm依赖license" "审计GitHub skill repos" "写英文README依赖章节" \
