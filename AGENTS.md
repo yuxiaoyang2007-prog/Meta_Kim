@@ -38,11 +38,11 @@ A valid meta unit should:
 When this repository is opened in Codex:
 
 - `AGENTS.md` is the project guide you are reading now
-- `.codex/agents/*.toml` contains the 8 Codex custom-agent mirrors
+- `.codex/agents/*.toml` contains the 9 Codex custom-agent mirrors
 - `.codex/skills/meta-theory/` is the Codex project skill mirror (directory layout)
 - `codex/config.toml.example` is generated from `canonical/runtime-assets/codex/config.toml.example` and shows how user-global Codex can wire MCP and skills
 
-**Cursor parity (same repo, fourth runtime):** `.cursor/agents/*.md`, `.cursor/skills/meta-theory/`, `.cursor/mcp.json` — all refreshed by `npm run meta:sync` per `config/sync.json`.
+**Cursor parity (same repo, fourth runtime):** `.cursor/agents/*.md`, `.cursor/skills/meta-theory/`, `.cursor/hooks.json`, `.cursor/hooks/`, `.cursor/mcp.json` — all refreshed by `npm run meta:sync` per `config/sync.json`.
 
 Important maintenance rule:
 
@@ -246,7 +246,7 @@ You:
 - Evolution: keep the reusable pattern
 ```
 
-## The Eight Meta Agents
+## The Nine Meta Agents
 
 - `meta-warden`: coordination, arbitration, final synthesis
 - `meta-conductor`: workflow, sequencing, rhythm control
@@ -256,6 +256,7 @@ You:
 - `meta-librarian`: memory, continuity, context policy
 - `meta-prism`: quality review, drift detection, anti-slop review
 - `meta-scout`: external capability discovery and evaluation
+- `meta-chrysalis`: evolution writeback, scar capture, recursive-safety gatekeeping
 
 ## Canonical vs Derived Files
 
@@ -289,19 +290,19 @@ Files that should usually be treated as mirrors or adapters:
 
 ## Code graph (`graphify-out/`) — Platform Automation
 
-Cross-runtime parity for **how to use** a graph is the synced **meta-theory** reference `canonical/skills/meta-theory/references/dev-governance.md` (Fetch **Step 0.5**). There is **no** `SubagentStart` hook in the Codex / OpenClaw / Cursor projections (only `.claude/hooks/` carries `subagent-context.mjs`).
+Cross-runtime parity for **how to use** a graph is the synced **meta-theory** reference `canonical/skills/meta-theory/references/dev-governance.md` (Fetch **Step 0.5**). Codex has trusted project hooks through `.codex/hooks.json`, and Cursor has lowerCamel hooks through `.cursor/hooks.json`, but there is still no `SubagentStart` equivalent in Codex / OpenClaw / Cursor projections (only `.claude/hooks/` carries `subagent-context.mjs`).
 
 ### Platform Automation Comparison
 
 | Capability | Claude Code | Codex | OpenClaw | Cursor |
 |-----------|------------|-------|----------|--------|
-| PreToolUse hook (auto-prompt before Glob/Grep) | ✅ settings.json | ❌ | ❌ | ❌ |
+| PreToolUse hook (auto-prompt before Glob/Grep) | ✅ settings.json | ✅ trusted `.codex/hooks.json` | ❌ | ✅ `.cursor/hooks.json` `preToolUse` |
 | Slash command `/graphify` | ✅ | ✅ | ✅ | ✅ |
 | git hook auto-rebuild (post-commit/checkout) | ✅ | ✅ | ✅ | ✅ |
 | AGENTS.md resident rules | N/A | ✅ | ✅ | ✅ |
 | Multi-platform install via setup.mjs | ✅ claude | ✅ codex | ✅ claw | ✅ cursor |
 
-**Key insight**: Claude Code is the only platform with a **PreToolUse hook** that auto-prompts before searches. Other platforms (Codex, OpenClaw, Cursor) use **AGENTS.md** rules injected at startup — graph awareness is still present but triggers at session start rather than per-search. Both mechanisms are automatic once installed.
+**Key insight**: Claude Code, Codex, and Cursor all have hook configuration, but their event schemas and trust models differ. OpenClaw uses its own internal/plugin hook model. Graph awareness remains available through AGENTS.md / skill rules when no matching native hook exists.
 
 For multi-platform setups, run `node setup.mjs` — it loops through all selected platforms and runs `graphify <platform> install` for each one idempotently.
 

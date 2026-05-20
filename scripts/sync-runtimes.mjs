@@ -7,6 +7,12 @@ import {
   mergeRepoClaudeSettings,
 } from "./claude-settings-merge.mjs";
 import {
+  buildCodexHooksJson,
+  buildCursorHooksJson,
+  buildHookPromptAdapterSource,
+  nodeHookCommand,
+} from "./runtime-hook-mapping.mjs";
+import {
   canonicalAgentsDir,
   canonicalRuntimeAssetsDir,
   canonicalSkillPath,
@@ -17,6 +23,7 @@ import {
   assertHomeBound,
   resolveRuntimeProjection,
   resolveRuntimeAllowedRoots,
+  resolveRuntimeHomeDir,
 } from "./meta-kim-sync-config.mjs";
 import { t } from "./meta-kim-i18n.mjs";
 import { CATEGORIES, openRecorder } from "./install-manifest.mjs";
@@ -25,6 +32,9 @@ import { validateSkillFrontmatter } from "./install-skill-sanitizer.mjs";
 const cliArgs = process.argv.slice(2);
 const checkOnly = process.argv.includes("--check");
 const jsonMode = process.argv.includes("--json");
+const reverseMode = process.argv.includes("--reverse");
+const dryRun = process.argv.includes("--dry-run");
+const forceWrite = process.argv.includes("--force");
 
 // Captures "will be written" entries whenever writeGeneratedFile runs under
 // --check. Populated even when not in --json mode so callers get deterministic
@@ -53,7 +63,7 @@ function recordSafe(fn) {
  *
  * Category semantics (see install-manifest.mjs CATEGORY_LABELS):
  *   D = Project runtime skills   (.claude/skills, .codex/skills, ...)
- *   E = Project runtime hooks    (.claude/hooks/*.mjs)
+ *   E = Project runtime hooks    (.claude/hooks, .codex/hooks, .cursor/hooks, openclaw/hooks)
  *   F = Project runtime agents   (.claude/agents, .codex/agents, .cursor/agents)
  *   G = Project settings + MCP   (.claude/settings.json, .mcp.json, .codex/*.toml)
  */
@@ -137,6 +147,451 @@ async function tryReadCanonical(filePath) {
  */
 function getProjectionBase(scope, runtimeId) {
   return resolveRuntimeProjection(runtimeId, scope).baseDir;
+}
+
+// ── Reverse sync: Runtime -> Canonical signal collection ────────────────
+
+/**
+ * Compare two file contents and return diff information.
+ */
+function compareFileContents(canonicalContent, runtimeContent) {
+  if (canonicalContent === runtimeContent) {
+    return { hasChanges: false };
+  }
+  const canonicalLines = canonicalContent.split("\n");
+  const runtimeLines = runtimeContent.split("\n");
+  return {
+    hasChanges: true,
+    canonicalLines: canonicalLines.length,
+    runtimeLines: runtimeLines.length,
+  };
+}
+
+/**
+ * Detect local modifications in runtime agent files.
+ * Returns evolution signals: changes that should propagate to canonical.
+ */
+async function detectRuntimeAgentChanges(runtimeAgentsDir, displayPath) {
+  const signals = [];
+  try {
+    const files = await fs.readdir(runtimeAgentsDir);
+    const agentFiles = files.filter((f) => f.endsWith(".md") || f.endsWith(".toml"));
+
+    for (const file of agentFiles) {
+      const runtimePath = path.join(runtimeAgentsDir, file);
+      const runtimeContent = await fs.readFile(runtimePath, "utf8");
+
+      // Map runtime file back to canonical source
+      const canonicalPath = mapRuntimeToCanonicalAgent(runtimePath, file);
+      if (!canonicalPath) continue;
+
+      let canonicalContent = null;
+      try {
+        canonicalContent = await fs.readFile(canonicalPath, "utf8");
+      } catch {
+        // Canonical file missing - this is a new candidate
+        signals.push({
+          type: "new",
+          runtimePath,
+          canonicalPath,
+          displayPath: `${displayPath}/${file}`,
+          runtimeContent,
+        });
+        continue;
+      }
+
+      const diff = compareFileContents(canonicalContent, runtimeContent);
+      if (diff.hasChanges) {
+        signals.push({
+          type: "modified",
+          runtimePath,
+          canonicalPath,
+          displayPath: `${displayPath}/${file}`,
+          canonicalContent,
+          runtimeContent,
+          diff,
+        });
+      }
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.warn(`Warning: Could not read ${runtimeAgentsDir}: ${error.message}`);
+    }
+  }
+  return signals;
+}
+
+/**
+ * Detect local modifications in runtime skill files.
+ */
+async function detectRuntimeSkillChanges(runtimeSkillRoot, displayPath) {
+  const signals = [];
+  try {
+    const skillPath = path.join(runtimeSkillRoot, "SKILL.md");
+    const canonicalSkill = canonicalSkillPath;
+
+    let runtimeContent = null;
+    try {
+      runtimeContent = await fs.readFile(skillPath, "utf8");
+    } catch {
+      return signals;
+    }
+
+    let canonicalContent = null;
+    try {
+      canonicalContent = await fs.readFile(canonicalSkill, "utf8");
+    } catch {
+      signals.push({
+        type: "new",
+        runtimePath: skillPath,
+        canonicalPath: canonicalSkill,
+        displayPath: `${displayPath}/SKILL.md`,
+        runtimeContent,
+      });
+      return signals;
+    }
+
+    const diff = compareFileContents(canonicalContent, runtimeContent);
+    if (diff.hasChanges) {
+      signals.push({
+        type: "modified",
+        runtimePath: skillPath,
+        canonicalPath: canonicalSkill,
+        displayPath: `${displayPath}/SKILL.md`,
+        canonicalContent,
+        runtimeContent,
+        diff,
+      });
+    }
+
+    // Check references
+    const refsPath = path.join(runtimeSkillRoot, "references");
+    try {
+      const refFiles = await fs.readdir(refsPath);
+      for (const refFile of refFiles) {
+        const runtimeRefPath = path.join(refsPath, refFile);
+        const canonicalRefPath = path.join(canonicalSkillReferencesDir, refFile);
+
+        const runtimeRefContent = await fs.readFile(runtimeRefPath, "utf8");
+        let canonicalRefContent = null;
+        try {
+          canonicalRefContent = await fs.readFile(canonicalRefPath, "utf8");
+        } catch {
+          signals.push({
+            type: "new",
+            runtimePath: runtimeRefPath,
+            canonicalPath: canonicalRefPath,
+            displayPath: `${displayPath}/references/${refFile}`,
+            runtimeContent: runtimeRefContent,
+          });
+          continue;
+        }
+
+        const refDiff = compareFileContents(canonicalRefContent, runtimeRefContent);
+        if (refDiff.hasChanges) {
+          signals.push({
+            type: "modified",
+            runtimePath: runtimeRefPath,
+            canonicalPath: canonicalRefPath,
+            displayPath: `${displayPath}/references/${refFile}`,
+            canonicalContent: canonicalRefContent,
+            runtimeContent: runtimeRefContent,
+            diff: refDiff,
+          });
+        }
+      }
+    } catch {
+      // References directory might not exist
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.warn(`Warning: Could not read ${runtimeSkillRoot}: ${error.message}`);
+    }
+  }
+  return signals;
+}
+
+/**
+ * Map runtime agent file path to canonical source path.
+ */
+function mapRuntimeToCanonicalAgent(runtimePath, fileName) {
+  const ext = path.extname(fileName);
+  const baseName = path.basename(fileName, ext);
+
+  // Claude Code: .claude/agents/{id}.md -> canonical/agents/{id}.md
+  if (runtimePath.includes(".claude/agents/") || runtimePath.includes("\\.claude\\agents\\")) {
+    return path.join(canonicalAgentsDir, `${baseName}.md`);
+  }
+  // Codex: .codex/agents/{id}.toml -> canonical/agents/{id}.md
+  if (runtimePath.includes(".codex/agents/") || runtimePath.includes("\\.codex\\agents\\")) {
+    return path.join(canonicalAgentsDir, `${baseName}.md`);
+  }
+  // Cursor: .cursor/agents/{id}.md -> canonical/agents/{id}.md
+  if (runtimePath.includes(".cursor/agents/") || runtimePath.includes("\\.cursor\\agents\\")) {
+    return path.join(canonicalAgentsDir, `${baseName}.md`);
+  }
+  // OpenClaw: openclaw/workspaces/{id}/SOUL.md -> canonical/agents/{id}.md
+  if (runtimePath.includes("workspaces") && (runtimePath.endsWith("SOUL.md") || runtimePath.endsWith("BOOTSTRAP.md"))) {
+    const workspaceMatch = runtimePath.match(/workspaces[\/\\]([^\/\\]+)/);
+    if (workspaceMatch) {
+      return path.join(canonicalAgentsDir, `${workspaceMatch[1]}.md`);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Validate that proposed canonical changes comply with Five Criteria.
+ * Basic validation: frontmatter, structure, essential fields.
+ */
+function validateProposedChange(content, filePath) {
+  const errors = [];
+
+  if (filePath.endsWith(".md")) {
+    // Check for YAML frontmatter (skip if already has skill frontmatter with different format)
+    if (!content.startsWith("---")) {
+      errors.push("Missing YAML frontmatter");
+    }
+
+    // Check for essential frontmatter fields
+    const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (frontmatterMatch) {
+      const frontmatter = frontmatterMatch[1];
+      if (!frontmatter.includes("name:") && !frontmatter.includes("title:") && !frontmatter.includes("description:")) {
+        errors.push("Missing name, title, or description in frontmatter");
+      }
+    }
+
+    // Check agent files have required sections (only for actual agent files)
+    const lowerContent = content.toLowerCase();
+    const lowerPath = filePath.toLowerCase();
+
+    // Only check agent files (in canonical/agents/ or with agents in path)
+    const isAgentFile = lowerPath.includes("canonical/agents") ||
+                        lowerPath.includes(".claude/agents") ||
+                        lowerPath.includes(".codex/agents") ||
+                        lowerPath.includes(".cursor/agents") ||
+                        lowerPath.includes("/agents/");
+
+    if (isAgentFile) {
+      if (!lowerContent.includes("## boundary") &&
+          !lowerContent.includes("## responsibilities") &&
+          !lowerContent.includes("## role") &&
+          !lowerContent.includes("## ownership")) {
+        errors.push("Missing boundary, responsibilities, role, or ownership section");
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
+ * Check for conflicts between canonical and runtime versions.
+ * Returns true if there's a conflict that requires user attention.
+ */
+function detectConflict(signal) {
+  if (signal.type === "new") {
+    return false;
+  }
+
+  // Heuristic: if canonical has significantly more content, it may have
+  // received updates not yet synced to this runtime
+  const { canonicalLines, runtimeLines } = signal.diff;
+  const lineDiff = Math.abs(canonicalLines - runtimeLines);
+  const threshold = Math.max(20, Math.floor(canonicalLines * 0.1));
+
+  // If canonical is 10% or 20+ lines different, flag as potential conflict
+  return lineDiff > threshold && canonicalLines > runtimeLines;
+}
+
+/**
+ * Execute reverse sync: collect evolution signals and write back to canonical.
+ */
+async function executeReverseSync(dirs, selectedTargets) {
+  console.log("");
+  console.log("── meta:sync (reverse mode: runtime -> canonical) ──");
+  console.log(t.reverseModeIntro);
+  console.log("");
+
+  const allSignals = [];
+
+  // Collect signals from each runtime
+  for (const runtimeId of selectedTargets) {
+    const projection = resolveRuntimeProjection(runtimeId, "project");
+
+    // Check agents
+    if (projection.agentsDir) {
+      const agentSignals = await detectRuntimeAgentChanges(
+        projection.agentsDir,
+        projection.display.agentsDir || `${runtimeId}/agents`,
+      );
+      allSignals.push(...agentSignals.map((s) => ({ ...s, runtimeId })));
+    }
+
+    // Check skills
+    if (projection.skillRoot) {
+      const skillSignals = await detectRuntimeSkillChanges(
+        projection.skillRoot,
+        projection.display.skillRoot || `${runtimeId}/skills`,
+      );
+      allSignals.push(...skillSignals.map((s) => ({ ...s, runtimeId })));
+    }
+  }
+
+  if (allSignals.length === 0) {
+    console.log(t.reverseModeNoSignals);
+    return [];
+  }
+
+  console.log(t.reverseModeSignalsFound(allSignals.length));
+  console.log("");
+
+  // Import gate functions for validation
+  const {
+    processEvolutionPacket
+  } = await import("./evolution-writeback-gate.mjs");
+
+  // Build evolution packet from signals
+  const evolutionPacket = {
+    writebackDecision: "writeback",
+    writebacks: allSignals.map(s => s.canonicalPath),
+    retain: [],
+    upgrade: [],
+    retire: [],
+    scarIds: [],
+    syncRequired: true,
+    signalSummary: {
+      totalSignals: allSignals.length,
+      byType: allSignals.reduce((acc, s) => {
+        acc[s.type] = (acc[s.type] || 0) + 1;
+        return acc;
+      }, {}),
+      bySeverity: allSignals.reduce((acc, s) => {
+        acc[s.severity] = (acc[s.severity] || 0) + 1;
+        return acc;
+      }, {})
+    }
+  };
+
+  // Pass through Evolution Writeback Gate
+  console.log("[Gate] Passing signals through Evolution Writeback Gate...");
+  const gateResult = await processEvolutionPacket(evolutionPacket, {
+    force: forceWrite,
+    dryRun: dryRun
+  });
+
+  console.log(`[Gate] Decision: ${gateResult.decision}`);
+  console.log(`[Gate] Risk Level: ${gateResult.riskLevel}`);
+  console.log(`[Gate] Reason: ${gateResult.reason}`);
+
+  // If gate rejects, stop here
+  if (gateResult.decision === "reject") {
+    console.log("");
+    console.error(`[Gate] Rejected: ${gateResult.reason}`);
+    throw new Error(`Evolution writeback rejected: ${gateResult.reason}`);
+  }
+
+  // If gate defers (needs user confirmation), stop unless --force
+  if (gateResult.decision === "defer" && !forceWrite) {
+    console.log("");
+    console.log("[Gate] User confirmation required");
+    console.log("Use --force to proceed anyway.");
+    throw new Error("Evolution writeback deferred: user confirmation required");
+  }
+
+  console.log("");
+  console.log("[Gate] Approved - proceeding with writeback");
+  console.log("");
+
+  // Categorize signals
+  const conflicts = [];
+  const safeWrites = [];
+
+  for (const signal of allSignals) {
+    const validation = validateProposedChange(signal.runtimeContent, signal.canonicalPath);
+
+    if (!validation.valid) {
+      console.warn(t.reverseModeValidationFailed(signal.displayPath));
+      for (const error of validation.errors) {
+        console.warn(`  - ${error}`);
+      }
+      continue;
+    }
+
+    if (detectConflict(signal)) {
+      conflicts.push(signal);
+    } else {
+      safeWrites.push(signal);
+    }
+  }
+
+  // Handle conflicts
+  if (conflicts.length > 0) {
+    console.warn("");
+    console.warn(t.reverseModeConflictsDetected(conflicts.length));
+    for (const conflict of conflicts) {
+      console.warn(`  - ${conflict.displayPath}`);
+      console.warn(`    ${t.reverseModeConflictHint}`);
+    }
+
+    if (!forceWrite && !dryRun) {
+      console.warn("");
+      console.warn(t.reverseModeConflictPrompt);
+      // In non-interactive context, abort on conflict
+      console.error(t.reverseModeAborted);
+      process.exitCode = 1;
+      return allSignals;
+    }
+
+    if (forceWrite) {
+      console.warn("");
+      console.warn(t.reverseModeForceProceed);
+    }
+  }
+
+  // Show summary of safe writes
+  if (safeWrites.length > 0) {
+    console.log("");
+    console.log(t.reverseModeSafeWrites(safeWrites.length));
+    for (const signal of safeWrites) {
+      const icon = signal.type === "new" ? "+" : "~";
+      console.log(`  ${icon} ${signal.displayPath}`);
+    }
+  }
+
+  // Dry run: show what would be written
+  if (dryRun) {
+    console.log("");
+    console.log(t.reverseModeDryRun);
+    return allSignals;
+  }
+
+  // Perform writeback for safe writes and forced conflicts
+  const toWrite = forceWrite ? [...safeWrites, ...conflicts] : safeWrites;
+  const writtenFiles = [];
+
+  for (const signal of toWrite) {
+    try {
+      await ensureDir(path.dirname(signal.canonicalPath));
+      await fs.writeFile(signal.canonicalPath, signal.runtimeContent, "utf8");
+      console.log(`  [writeback] ${signal.displayPath} -> canonical/${path.relative(repoRoot, signal.canonicalPath)}`);
+      writtenFiles.push(signal.canonicalPath);
+    } catch (error) {
+      console.error(t.reverseModeWriteFailed(signal.displayPath, error.message));
+    }
+  }
+
+  if (writtenFiles.length > 0) {
+    console.log("");
+    console.log(t.reverseModeComplete(writtenFiles.length));
+  }
+
+  return allSignals;
 }
 
 /**
@@ -252,6 +707,12 @@ const canonicalSharedMemoryHookPath = path.join(
   "shared",
   "hooks",
   "meta-kim-memory-save.mjs",
+);
+const canonicalSharedSpineHookPath = path.join(
+  canonicalRuntimeAssetsDir,
+  "shared",
+  "hooks",
+  "activate-meta-theory-spine.mjs",
 );
 const canonicalOpenClawTemplatePath = path.join(
   canonicalRuntimeAssetsDir,
@@ -886,96 +1347,30 @@ export function buildCodexGraphifyContextHook() {
   ].join("\n");
 }
 
-function commandToken(value) {
-  return /[\s"]/u.test(value) ? JSON.stringify(value) : value;
-}
-
-function nodeHookCommand(scriptPath, args = []) {
-  // Hook command strings are interpreted by the host runtime's shell.
-  // A quoted absolute Windows Node path like
-  // "C:\Program Files\nodejs\node.exe" script.mjs works in cmd.exe but
-  // fails in PowerShell unless prefixed with `&`. The portable contract is:
-  // require `node` on PATH, and quote only arguments that need quoting.
-  const nodePath = "node";
-  return [nodePath, scriptPath, ...args].map(commandToken).join(" ");
-}
-
 export function buildCodexProjectHooksJson({
   graphifyHookPath = ".codex/hooks/graphify-context.mjs",
   memoryHookPath = ".codex/hooks/meta-kim-memory-save.mjs",
+  spineHookPath = ".codex/hooks/activate-meta-theory-spine.mjs",
+  hookPromptAdapterPath = null,
 } = {}) {
-  return {
-    hooks: {
-      SessionStart: [
-        {
-          matcher: "startup|resume",
-          hooks: [
-            {
-              type: "command",
-              command: nodeHookCommand(memoryHookPath, ["--event", "session-start"]),
-              timeout: 10,
-              statusMessage: "Loading Meta_Kim memory",
-            },
-          ],
-        },
-      ],
-      UserPromptSubmit: [
-        {
-          hooks: [
-            {
-              type: "command",
-              command: nodeHookCommand(memoryHookPath, ["--event", "user-prompt"]),
-              timeout: 10,
-            },
-          ],
-        },
-      ],
-      PreToolUse: [
-        {
-          matcher: "Bash",
-          hooks: [
-            {
-              type: "command",
-              command: nodeHookCommand(graphifyHookPath),
-            },
-          ],
-        },
-      ],
-      Stop: [
-        {
-          hooks: [
-            {
-              type: "command",
-              command: nodeHookCommand(memoryHookPath, ["--event", "stop"]),
-              timeout: 10,
-            },
-          ],
-        },
-      ],
-    },
-  };
+  return buildCodexHooksJson({
+    graphifyHookPath,
+    memoryHookPath,
+    spineHookPath,
+    hookPromptAdapterPath,
+  });
 }
 
 export function buildCursorProjectHooksJson({
+  graphifyHookPath = ".cursor/hooks/graphify-context.mjs",
   memoryHookPath = ".cursor/hooks/meta-kim-memory-save.mjs",
+  hookPromptAdapterPath = null,
 } = {}) {
-  return {
-    version: 1,
-    hooks: {
-      beforeSubmitPrompt: [
-        {
-          command: nodeHookCommand(memoryHookPath, ["--event", "user-prompt"]),
-          timeout: 10,
-        },
-      ],
-      stop: [
-        {
-          command: nodeHookCommand(memoryHookPath, ["--event", "stop"]),
-          timeout: 10,
-        },
-      ],
-    },
-  };
+  return buildCursorHooksJson({
+    graphifyHookPath,
+    memoryHookPath,
+    hookPromptAdapterPath,
+  });
 }
 
 async function syncClaudeProjection(
@@ -1053,6 +1448,24 @@ async function syncClaudeProjection(
       ).changed
     ) {
       changedFiles.push(`${displayPaths.claudeHooks}/${hookEntry.name}`);
+    }
+  }
+
+  const sharedClaudeHookDependencies = ["hook-i18n.mjs", "skip-reminder.mjs"];
+  for (const hookName of sharedClaudeHookDependencies) {
+    const hookContent = await tryReadCanonical(
+      path.join(canonicalRuntimeAssetsDir, "shared", "hooks", hookName),
+    );
+    if (
+      hookContent &&
+      (
+        await writeGeneratedFile(
+          path.join(claudeHooksProjectionDir, hookName),
+          hookContent,
+        )
+      ).changed
+    ) {
+      changedFiles.push(`${displayPaths.claudeHooks}/${hookName}`);
     }
   }
 
@@ -1137,9 +1550,12 @@ async function main() {
 
 Options:
   --scope <project|global|both>  Write projection to repo (default: project)
-  --targets <ids>                 Comma-separated runtime IDs (claude,codex,openclaw)
+  --targets <ids>                 Comma-separated runtime IDs (claude,codex,openclaw,cursor)
   --lang <code>                   Messages: en | zh-CN | ja-JP | ko-KR (aliases: zh, ja, ko)
   --check                        Show what would be synced without writing
+  --reverse                      Reverse sync: runtime -> canonical (collect evolution signals)
+  --dry-run                      Preview reverse sync changes without writing
+  --force                        Skip conflict warnings and overwrite canonical
   --help, -h                     Show this help
 
 Scopes:
@@ -1152,6 +1568,9 @@ Examples:
   node sync-runtimes.mjs --scope global        # write to ~/.claude, ~/.codex, ~/.openclaw
   node sync-runtimes.mjs --scope global --targets claude  # Claude Code only, global
   node sync-runtimes.mjs --check                # preview changes
+  node sync-runtimes.mjs --reverse              # collect evolution signals from runtime
+  node sync-runtimes.mjs --reverse --dry-run    # preview reverse sync
+  node sync-runtimes.mjs --reverse --force      # force writeback without prompts
 `);
     return;
   }
@@ -1186,6 +1605,21 @@ Examples:
       metaKimVersion: process.env.META_KIM_VERSION ?? null,
       replaceSources: ["sync-runtimes"],
     });
+  }
+
+  // ── Reverse Mode: Runtime -> Canonical signal propagation ─────────────
+  if (reverseMode) {
+    const signals = await executeReverseSync(dirs, selectedTargets);
+
+    // After reverse sync, optionally run forward sync to propagate updates
+    // to other runtimes (unless --dry-run)
+    if (!dryRun && signals.length > 0) {
+      console.log("");
+      console.log(t.reverseModePropagating);
+      // Continue to forward sync below
+    } else {
+      return signals;
+    }
   }
 
   if (selectedTargets.includes("claude")) {
@@ -1426,6 +1860,85 @@ Examples:
       ) {
         changedFiles.push(`${dp.codexHooks}/meta-kim-memory-save.mjs`);
       }
+      const spineHookContent = await tryReadCanonical(canonicalSharedSpineHookPath);
+      if (
+        spineHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexHooksDir, "activate-meta-theory-spine.mjs"),
+            spineHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexHooks}/activate-meta-theory-spine.mjs`);
+      }
+      // Sync shared hook dependencies (utils.mjs, spine-state.mjs, hook-i18n.mjs, skip-reminder.mjs)
+      const utilsHookContent = await tryReadCanonical(
+        path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "utils.mjs"),
+      );
+      if (
+        utilsHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexHooksDir, "utils.mjs"),
+            utilsHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexHooks}/utils.mjs`);
+      }
+      const spineStateHookContent = await tryReadCanonical(
+        path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "spine-state.mjs"),
+      );
+      if (
+        spineStateHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexHooksDir, "spine-state.mjs"),
+            spineStateHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexHooks}/spine-state.mjs`);
+      }
+      const skipReminderHookContent = await tryReadCanonical(
+        path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "skip-reminder.mjs"),
+      );
+      if (
+        skipReminderHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexHooksDir, "skip-reminder.mjs"),
+            skipReminderHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexHooks}/skip-reminder.mjs`);
+      }
+      const hookI18nContent = await tryReadCanonical(
+        path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "hook-i18n.mjs"),
+      );
+      if (
+        hookI18nContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexHooksDir, "hook-i18n.mjs"),
+            hookI18nContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexHooks}/hook-i18n.mjs`);
+      }
+      if (
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexHooksDir, "hookprompt-adapter.mjs"),
+            buildHookPromptAdapterSource("codex"),
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexHooks}/hookprompt-adapter.mjs`);
+      }
       const graphifyHookPath =
         scope === "global"
           ? path.join(dirs.codexHooksDir, "graphify-context.mjs")
@@ -1434,11 +1947,24 @@ Examples:
         scope === "global"
           ? path.join(dirs.codexHooksDir, "meta-kim-memory-save.mjs")
           : ".codex/hooks/meta-kim-memory-save.mjs";
+      const spineHookPath =
+        scope === "global"
+          ? path.join(dirs.codexHooksDir, "activate-meta-theory-spine.mjs")
+          : ".codex/hooks/activate-meta-theory-spine.mjs";
+      const hookPromptAdapterPath =
+        scope === "global"
+          ? path.join(dirs.codexHooksDir, "hookprompt-adapter.mjs")
+          : ".codex/hooks/hookprompt-adapter.mjs";
       if (
         (
           await writeGeneratedJson(
             dirs.codexHooksFile,
-            buildCodexProjectHooksJson({ graphifyHookPath, memoryHookPath }),
+            buildCodexProjectHooksJson({
+              graphifyHookPath,
+              memoryHookPath,
+              spineHookPath,
+              hookPromptAdapterPath,
+            }),
           )
         ).changed
       ) {
@@ -1515,15 +2041,47 @@ Examples:
       ) {
         changedFiles.push(`${dp.cursorHooks}/meta-kim-memory-save.mjs`);
       }
+      if (
+        (
+          await writeGeneratedFile(
+            path.join(dirs.cursorHooksDir, "graphify-context.mjs"),
+            buildCodexGraphifyContextHook(),
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.cursorHooks}/graphify-context.mjs`);
+      }
+      if (
+        (
+          await writeGeneratedFile(
+            path.join(dirs.cursorHooksDir, "hookprompt-adapter.mjs"),
+            buildHookPromptAdapterSource("cursor"),
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.cursorHooks}/hookprompt-adapter.mjs`);
+      }
+      const graphifyHookPath =
+        scope === "global"
+          ? path.join(dirs.cursorHooksDir, "graphify-context.mjs")
+          : ".cursor/hooks/graphify-context.mjs";
       const memoryHookPath =
         scope === "global"
           ? path.join(dirs.cursorHooksDir, "meta-kim-memory-save.mjs")
           : ".cursor/hooks/meta-kim-memory-save.mjs";
+      const hookPromptAdapterPath =
+        scope === "global"
+          ? path.join(dirs.cursorHooksDir, "hookprompt-adapter.mjs")
+          : ".cursor/hooks/hookprompt-adapter.mjs";
       if (
         (
           await writeGeneratedJson(
             dirs.cursorHooksFile,
-            buildCursorProjectHooksJson({ memoryHookPath }),
+            buildCursorProjectHooksJson({
+              graphifyHookPath,
+              memoryHookPath,
+              hookPromptAdapterPath,
+            }),
           )
         ).changed
       ) {

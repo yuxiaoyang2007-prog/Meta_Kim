@@ -637,6 +637,18 @@ async function scanPlatform(platformId, platform) {
 
           // Extract specific-type metadata
           if (type === "agents") {
+            // Determine agent layer (meta vs execution)
+            // Global agents from ~/.claude/agents/ are typically execution agents
+            // unless their ID explicitly indicates otherwise
+            if (item.id.startsWith("meta-") && platformId === "claudeCode") {
+              // Some users may have meta-agents in their global directory
+              capability.layer = "meta";
+              capability.executionBlock = true;
+            } else {
+              capability.layer = "execution";
+              capability.executionBlock = false;
+            }
+
             if (item.path.endsWith(".md")) {
               capability.metadata = {
                 ...capability.metadata,
@@ -690,15 +702,48 @@ async function collectRepoCanonicalCapabilities() {
     path.join(repoRoot, "canonical", "runtime-assets", "openclaw", "hooks"),
   );
 
-  const toRepoCapability = (item, type, namespace) => ({
-    id: item.id,
-    type,
-    namespace,
-    path: path.relative(repoRoot, item.path).replace(/\\/g, "/"),
-    relativePath: item.relativePath?.replace(/\\/g, "/"),
-    size: item.size,
-    modified: item.modified,
-  });
+  // Determine agent layer: meta (governance) vs execution (work)
+  function determineAgentLayer(id, namespace) {
+    // Meta_Kim canonical meta-agents are identified by "meta-" prefix
+    // These are governance layer and MUST NOT be used for direct execution
+    if (namespace === "canonical" && id.startsWith("meta-")) {
+      return {
+        layer: "meta",
+        executionBlock: true,
+        _reason: "Canonical meta-agent (governance layer)"
+      };
+    }
+    // All other agents are execution agents (work layer)
+    return {
+      layer: "execution",
+      executionBlock: false,
+      _reason: "Execution agent (work layer)"
+    };
+  }
+
+  const toRepoCapability = (item, type, namespace) => {
+    const base = {
+      id: item.id,
+      type,
+      namespace,
+      path: path.relative(repoRoot, item.path).replace(/\\/g, "/"),
+      relativePath: item.relativePath?.replace(/\\/g, "/"),
+      size: item.size,
+      modified: item.modified,
+    };
+
+    // Add layer field for agents
+    if (type === "agents") {
+      const layerInfo = determineAgentLayer(item.id, namespace);
+      return {
+        ...base,
+        layer: layerInfo.layer,
+        executionBlock: layerInfo.executionBlock,
+      };
+    }
+
+    return base;
+  };
 
   return {
     agents: agents.map((item) => toRepoCapability(item, "agents", "canonical")),
@@ -766,6 +811,13 @@ async function buildRepoCapabilityIndex() {
       plugins: {},
       commands: {},
     },
+  };
+
+  // Add governance rules to prevent meta-agent misuse
+  index.governanceRules = {
+    metaAgentDispatchRule: "Meta-agents (layer='meta') are for governance coordination only. They MUST NOT be used as execution workers. Use execution-agents (layer='execution') for task execution.",
+    fallbackBehavior: "Use general-purpose/default execution agent, NOT meta-agents. Record capability gap for future Type B agent creation.",
+    layerClassification: "Meta-agents: id starts with 'meta-' in canonical namespace. Execution-agents: all other agents.",
   };
 
   return index;
@@ -851,11 +903,29 @@ function formatTableOutput(index) {
       }
 
       output += `  ${key}`;
+
+      // Show layer info for agents
+      if (cap.layer) {
+        const layerIcon = cap.layer === "meta" ? "🔶" : "🔵";
+        const layerLabel = cap.layer === "meta" ? "[META-GOVERNANCE]" : "[EXECUTION]";
+        output += ` ${layerIcon} ${layerLabel}`;
+        if (cap.executionBlock) {
+          output += ` ⛔`;
+        }
+      }
+
       if (metaParts.length > 0) {
         output += `\n    → ${metaParts.join(" | ")}`;
       }
       output += "\n";
     }
+  }
+
+  // Add governance rules summary
+  if (index.governanceRules) {
+    output += "\n🛡️ Governance Rules\n\n";
+    output += `  ${index.governanceRules.metaAgentDispatchRule}\n`;
+    output += `  ${index.governanceRules.fallbackBehavior}\n`;
   }
 
   return output;

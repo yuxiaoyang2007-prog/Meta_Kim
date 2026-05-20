@@ -166,7 +166,7 @@ describe("validateWorkspaces()", () => {
     ];
     const result = validateWorkspaces(homeDir, META_AGENTS, allDirs);
     assert.strictEqual(result.complete, 1);
-    assert.strictEqual(result.total, 8);
+    assert.strictEqual(result.total, META_AGENTS.length);
     assert.ok(result.missing.includes("meta-conductor"));
   });
 });

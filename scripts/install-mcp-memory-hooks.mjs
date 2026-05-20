@@ -13,13 +13,17 @@
  *   4. Copy commands from canonical/runtime-assets/claude/commands/ to ~/.claude/commands/
  *      (e.g., save-progress command)
  *   5. Register the SessionStart hook in ~/.claude/settings.json
+ *      - Automatically detects and validates Python paths
+ *      - On Windows: skips WindowsApps shim, prefers explicit Python executable
+ *      - Auto-fixes invalid Python paths (e.g., bare "python" on Windows)
  *   6. Register the Stop hook in ~/.claude/settings.json (stop-save-progress.mjs + stop-memory-save.mjs)
  *   7. Install lifecycle memory bridges for Codex, Cursor, and OpenClaw
  *   8. Warn if MCP server not responding on http://localhost:8000
  *
  * Usage:
- *   node scripts/install-mcp-memory-hooks.mjs           # Install (idempotent)
+ *   node scripts/install-mcp-memory-hooks.mjs           # Install (idempotent, auto-fixes invalid paths)
  *   node scripts/install-mcp-memory-hooks.mjs --check   # Dry-run: verify only, no side effects
+ *   node scripts/install-mcp-memory-hooks.mjs --force   # Force-update Python paths even if current is valid
  *   node scripts/install-mcp-memory-hooks.mjs --remove  # Uninstall hooks (keeps files)
  *
  * Exit codes:
@@ -138,6 +142,9 @@ function fail(msg) {
 }
 
 // ── Core helpers ────────────────────────────────────────
+
+// Global flag for force-update mode
+let FORCE_UPDATE = false;
 
 function run(cmd, args, opts = {}) {
   return spawnSync(cmd, args, {
@@ -377,6 +384,35 @@ function seedConfigIfMissing() {
   }
 }
 
+function isValidPythonCommand(cmd) {
+  // Check if the Python command looks like a WindowsApps shim
+  // or is a bare "python" on Windows (which often points to the shim)
+  const isWin = process.platform === "win32";
+  const normalized = cmd?.trim().replace(/\\/g, "/").toLowerCase() || "";
+
+  // Bare "python" or "python3" on Windows is suspicious
+  if (isWin && /^(python|python3)$/i.test(normalized)) {
+    return false;
+  }
+
+  // WindowsApps paths are definitely shims
+  if (/windowsapps[\\/]+python/.test(normalized)) {
+    return false;
+  }
+
+  // Explicit absolute path is good
+  if (/^[a-z]:\/|^\/\//i.test(normalized)) {
+    return true;
+  }
+
+  // On non-Windows, "python3" is usually safe
+  if (!isWin && /^python3/.test(normalized)) {
+    return true;
+  }
+
+  return false;
+}
+
 function pickPythonCommand() {
   // Cross-platform Python resolver.
   // Windows: the Microsoft Store WindowsApps shim intercepts bare `python`
@@ -464,31 +500,80 @@ function registerSessionStartHook() {
     const pythonCmd = pickPythonCommand();
 
     const existingBlocks = settings.hooks?.SessionStart ?? [];
-    const alreadyRegistered = existingBlocks.some((b) =>
-      b?.hooks?.some((h) => h?.command?.includes("mcp_memory_global.py")),
-    );
+    let existingEntry = null;
+    let existingBlockIndex = -1;
+    let existingHookIndex = -1;
 
-    if (alreadyRegistered) {
-      ok("SessionStart hook already registered");
+    // Find existing MCP memory hook entry
+    for (let i = 0; i < existingBlocks.length; i++) {
+      const block = existingBlocks[i];
+      if (!block?.hooks) continue;
+      for (let j = 0; j < block.hooks.length; j++) {
+        const hook = block.hooks[j];
+        if (hook?.command?.includes("mcp_memory_global.py")) {
+          existingEntry = hook;
+          existingBlockIndex = i;
+          existingHookIndex = j;
+          break;
+        }
+      }
+      if (existingEntry) break;
+    }
+
+    // If no existing entry, add a new one
+    if (!existingEntry) {
+      const nextSettings = {
+        ...settings,
+        hooks: {
+          ...(settings.hooks ?? {}),
+          SessionStart: [
+            ...existingBlocks,
+            {
+              matcher: "*",
+              hooks: [
+                {
+                  type: "command",
+                  command: `${pythonCmd} "${HOOK_TARGET}"`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      writeFileSync(
+        CLAUDE_SETTINGS,
+        JSON.stringify(nextSettings, null, 2) + "\n",
+      );
+      ok("SessionStart hook registered in settings.json");
       return true;
     }
+
+    // Extract current Python command from existing entry
+    const currentCmd = existingEntry.command?.match(/^([^"\s]+)/)?.[1] || "";
+    const needsUpdate = FORCE_UPDATE || !isValidPythonCommand(currentCmd);
+
+    if (!needsUpdate) {
+      ok("SessionStart hook already registered with valid Python path");
+      return true;
+    }
+
+    // Need to update the existing entry
+    const updatedBlocks = [...existingBlocks];
+    updatedBlocks[existingBlockIndex] = {
+      ...updatedBlocks[existingBlockIndex],
+      hooks: [...updatedBlocks[existingBlockIndex].hooks],
+    };
+    updatedBlocks[existingBlockIndex].hooks[existingHookIndex] = {
+      type: "command",
+      command: `${pythonCmd} "${HOOK_TARGET}"`,
+    };
 
     const nextSettings = {
       ...settings,
       hooks: {
         ...(settings.hooks ?? {}),
-        SessionStart: [
-          ...existingBlocks,
-          {
-            matcher: "*",
-            hooks: [
-              {
-                type: "command",
-                command: `${pythonCmd} "${HOOK_TARGET}"`,
-              },
-            ],
-          },
-        ],
+        SessionStart: updatedBlocks,
       },
     };
 
@@ -496,7 +581,14 @@ function registerSessionStartHook() {
       CLAUDE_SETTINGS,
       JSON.stringify(nextSettings, null, 2) + "\n",
     );
-    ok("SessionStart hook registered in settings.json");
+
+    if (FORCE_UPDATE) {
+      ok("SessionStart hook Python path updated (force mode)");
+    } else {
+      warn("SessionStart hook had invalid Python path - auto-fixed");
+      info(`Old: ${currentCmd}`);
+      info(`New: ${pythonCmd}`);
+    }
     return true;
   } catch (err) {
     warn(`Failed to register hook: ${err.message}`);
@@ -986,6 +1078,14 @@ function remove() {
 // ── Main ────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
+
+// Handle --force flag (must be checked before other flags)
+if (args.includes("--force")) {
+  FORCE_UPDATE = true;
+  // Remove --force from args so it doesn't interfere with other checks
+  const forceIndex = args.indexOf("--force");
+  args.splice(forceIndex, 1);
+}
 
 if (args.includes("--check")) {
   check();

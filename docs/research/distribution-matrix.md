@@ -11,7 +11,7 @@ Cross-referencing platform capabilities with dependency requirements to determin
 | SKILL.md Format | Y | Y | Y | Y |
 | allowed-tools | Y | Y | Y | Y |
 | context:fork | Y | N | N | N |
-| Hooks System | Y (12 events) | Y (5 events, v0.117.0+) | Y (Plugin SDK 28 hooks) | Y (4 events, some bugs) |
+| Hooks System | Y | Y (`.codex/hooks.json`) | Y (Plugin SDK/internal hooks) | Y (`.cursor/hooks.json`, lowerCamel events) |
 | Marketplace Plugins | Y (11 plugins) | Limited (placeholder) | Limited (placeholder) | Y (reuses Claude marketplaces) |
 | Commands | Y (34 commands) | Y (15 commands) | N | N |
 | Global Agents Path | `~/.claude/agents/` | `~/.codex/agents/` | `~/.openclaw/` workspaces | N (project-level only) |
@@ -47,11 +47,11 @@ Notes: Private/restricted repo. `subdirMapping` selects `windows` on win32, `ori
 | Platform | Decision | Install Method | Rationale |
 |----------|----------|---------------|-----------|
 | Claude Code | DISTRIBUTE | `git clone --depth 1` | Uses `.claude/hooks/` + `.claude/settings.json` |
-| Codex | SKIP | N/A | hookprompt only implements Claude Code's hook format |
+| Codex | DISTRIBUTE | Codex adapter | HookPrompt output is adapted into Codex `UserPromptSubmit` |
 | OpenClaw | SKIP | N/A | hookprompt only implements Claude Code's hook format |
-| Cursor | SKIP | N/A | hookprompt only implements Claude Code's hook format |
+| Cursor | DISTRIBUTE | Cursor adapter | HookPrompt output is adapted into Cursor `beforeSubmitPrompt` |
 
-Notes: Claude-only by design — hookprompt's code targets Claude Code's specific hook configuration format. Codex and Cursor both have hooks systems, but hookprompt does not implement adapters for them.
+Notes: HookPrompt is native on Claude Code. Codex and Cursor require Meta_Kim adapters because they do not share Claude's `UserPromptSubmit` output contract. OpenClaw remains degraded.
 
 ### 4. superpowers
 

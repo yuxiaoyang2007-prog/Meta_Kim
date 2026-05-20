@@ -34,7 +34,7 @@ Note: `.agents/skills/` may exist as a portable AgentSkills mirror for other run
 | Basic SKILL.md | Y | Full AgentSkills support |
 | `allowed-tools` | Y | Tool restriction per skill |
 | `context: fork` | N | Not supported |
-| Hooks | Y | `.cursor/hooks.json` (userPromptSubmit, preToolUse, postToolUse, stop); some bugs reported |
+| Hooks | Y | `.cursor/hooks.json` / `~/.cursor/hooks.json` lowerCamel lifecycle events |
 | Plugins | Y | Reuses Claude Code marketplace infrastructure (`~/.cursor/plugins/`) |
 
 ### Agent Format
@@ -71,7 +71,7 @@ Cursor supports plugins via Claude Code marketplace infrastructure:
 
 ### Differences from Claude Code
 
-- Hooks system via `.cursor/hooks.json` (userPromptSubmit, preToolUse, postToolUse, stop)
+- Hooks use Cursor's lowerCamel schema (`beforeSubmitPrompt`, `preToolUse`, `postToolUse`, `sessionStart`, `stop`) and are not schema-compatible with Claude/Codex.
 - No context:fork capability
 - Plugin system reuses Claude Code marketplace (not a separate ecosystem)
 - Agent format is Markdown with YAML frontmatter

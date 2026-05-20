@@ -152,24 +152,63 @@ function deriveOpenFindingIds(artifact) {
 
 function deriveOwnerAgents(artifact) {
   const owners = new Set();
-  if (artifact.dispatchEnvelopePacket?.ownerAgent) {
-    owners.add(artifact.dispatchEnvelopePacket.ownerAgent);
+  const addOwner = (owner) => {
+    if (typeof owner === "string" && owner.trim().length > 0) {
+      owners.add(owner);
+    }
+  };
+
+  for (const field of [
+    "ownerAgent",
+    "businessRoleId",
+    "roleDisplayName",
+    "reviewOwner",
+    "verificationOwner",
+  ]) {
+    addOwner(artifact.dispatchEnvelopePacket?.[field]);
+  }
+  addOwner(artifact.cardPlanPacket?.dealerOwner);
+  for (const card of artifact.cardPlanPacket?.cards ?? []) {
+    addOwner(card.cardSource);
+  }
+  for (const decision of artifact.cardPlanPacket?.controlDecisions ?? []) {
+    addOwner(decision.insertedGovernanceOwner);
+  }
+  addOwner(artifact.orchestrationTaskBoardPacket?.synthesisOwner);
+  for (const task of artifact.orchestrationTaskBoardPacket?.tasks ?? []) {
+    addOwner(task.owner);
+    addOwner(task.businessRoleId);
+    addOwner(task.roleDisplayName);
   }
   for (const packet of artifact.workerTaskPackets ?? []) {
-    if (packet.owner) {
-      owners.add(packet.owner);
-    }
+    addOwner(packet.owner);
+    addOwner(packet.ownerAgent);
+    addOwner(packet.businessRoleId);
+    addOwner(packet.roleDisplayName);
+    addOwner(packet.mergeOwner);
+  }
+  for (const role of artifact.agentBlueprintPacket?.roles ?? []) {
+    addOwner(role.ownerAgent);
+    addOwner(role.businessRoleId);
+    addOwner(role.roleDisplayName);
+  }
+  for (const review of artifact.reviewPacket?.reviews ?? []) {
+    addOwner(review.agent);
   }
   for (const finding of artifact.reviewPacket?.findings ?? []) {
-    if (finding.owner) {
-      owners.add(finding.owner);
+    addOwner(finding.owner);
+    addOwner(finding.verifiedBy);
+  }
+  for (const response of artifact.verificationPacket?.revisionResponses ?? []) {
+    addOwner(response.owner);
+  }
+  for (const result of artifact.verificationPacket?.verificationResults ?? []) {
+    addOwner(result.verifiedBy);
+  }
+  for (const bucket of ["writebacks", "retain", "upgrade", "retire"]) {
+    for (const item of artifact.evolutionWritebackPacket?.[bucket] ?? []) {
+      addOwner(item.target);
     }
-  }
-  if (artifact.dispatchEnvelopePacket?.reviewOwner) {
-    owners.add(artifact.dispatchEnvelopePacket.reviewOwner);
-  }
-  if (artifact.dispatchEnvelopePacket?.verificationOwner) {
-    owners.add(artifact.dispatchEnvelopePacket.verificationOwner);
   }
   return [...owners].sort();
 }

@@ -300,6 +300,7 @@ ${r ? `Raw error: ${r}` : ""}
     cmdCheck: "Check environment",
     cmdDoctor: "Diagnose Meta_Kim health",
     cmdVerify: "Full verification",
+    cmdDiscover: "Scan global capabilities (agents/skills)",
     // Post-install notes
     postInstallNotesHeading: "Post-install notes:",
     postInstallNotesIntro:
@@ -384,18 +385,18 @@ ${r ? `Raw error: ${r}` : ""}
     depSummarySome: (ok, total) =>
       `Only ${ok}/${total} dependencies verified — re-run with --update`,
     syncHeading: "Cross-Runtime Sync Check",
-    syncClaudeAgents: (n) => `Claude Code agents: ${n}/8 .md files`,
+    syncClaudeAgents: (n) => `Claude Code agents: ${n}/${META_AGENTS.length} .md files`,
     syncClaudeSkills: "Claude Code skills/meta-theory/SKILL.md",
     syncClaudeHooks: (n) => `Claude Code hooks: ${n} scripts`,
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
-    syncCodexAgents: (n) => `Codex agents: ${n}/8 .toml files`,
+    syncCodexAgents: (n) => `Codex agents: ${n}/${META_AGENTS.length} .toml files`,
     syncCodexSkills: "Codex skills/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
-      `OpenClaw workspaces: ${n}/8 agents — each folder has the 9 required .md files (BOOT, SOUL, …)`,
+      `OpenClaw workspaces: ${n}/${META_AGENTS.length} agents — each folder has the 9 required .md files (BOOT, SOUL, …)`,
     syncOpenclawSkill: "OpenClaw shared meta-theory",
     syncSharedSkills: "Shared skills/meta-theory/SKILL.md",
-    syncCursorAgents: (n) => `Cursor agents: ${n}/8 .md files`,
+    syncCursorAgents: (n) => `Cursor agents: ${n}/${META_AGENTS.length} .md files`,
     syncCursorSkills: "Cursor skills/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
     mcpRuntimeProjectOnly: (p) =>
@@ -765,6 +766,7 @@ ${r ? `原始错误：${r}` : ""}
     cmdCheck: "检查环境",
     cmdDoctor: "诊断 Meta_Kim 健康状态",
     cmdVerify: "完整验证",
+    cmdDiscover: "扫描全局能力（agents/skills）",
     // 安装后注意事项
     postInstallNotesHeading: "安装后注意事项：",
     postInstallNotesIntro: "安装完成后，各层能力的使用方式如下：",
@@ -841,18 +843,18 @@ ${r ? `原始错误：${r}` : ""}
     depSummarySome: (ok, total) =>
       `仅 ${ok}/${total} 个依赖验证通过 — 请使用 --update 重新安装`,
     syncHeading: "同步状态检查",
-    syncClaudeAgents: (n) => `Claude Code 智能体: ${n}/8 .md 文件`,
+    syncClaudeAgents: (n) => `Claude Code 智能体: ${n}/${META_AGENTS.length} .md 文件`,
     syncClaudeSkills: "Claude Code 技能/meta-theory/SKILL.md",
     syncClaudeHooks: (n) => `Claude Code 钩子: ${n} 个脚本`,
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
-    syncCodexAgents: (n) => `Codex 智能体: ${n}/8 .toml 文件`,
+    syncCodexAgents: (n) => `Codex 智能体: ${n}/${META_AGENTS.length} .toml 文件`,
     syncCodexSkills: "Codex 技能/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
-      `OpenClaw 工作区：${n}/8 个智能体，各目录 9 个必备 Markdown 已齐（含 BOOT、SOUL 等；不含子文件夹里的额外文件）`,
+      `OpenClaw 工作区：${n}/${META_AGENTS.length} 个智能体，各目录 9 个必备 Markdown 已齐（含 BOOT、SOUL 等；不含子文件夹里的额外文件）`,
     syncOpenclawSkill: "OpenClaw 共享 meta-theory",
     syncSharedSkills: "共享技能/meta-theory/SKILL.md",
-    syncCursorAgents: (n) => `Cursor 智能体: ${n}/8 .md 文件`,
+    syncCursorAgents: (n) => `Cursor 智能体: ${n}/${META_AGENTS.length} .md 文件`,
     syncCursorSkills: "Cursor 技能/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
     mcpRuntimeProjectOnly: (p) =>
@@ -1217,6 +1219,7 @@ ${r ? `生エラー：${r}` : ""}
     cmdCheck: "環境をチェック",
     cmdDoctor: "Meta_Kim の健全性を診断",
     cmdVerify: "フル検証",
+    cmdDiscover: "グローバル機能をスキャン（agents/skills）",
     // インストール後の注意事項
     postInstallNotesHeading: "インストール後の注意事項：",
     postInstallNotesIntro: "インストール完了後、各層の使い方は以下の通りです：",
@@ -1300,18 +1303,18 @@ ${r ? `生エラー：${r}` : ""}
     depSummarySome: (ok, total) =>
       `${ok}/${total} の依存関係のみ検証 — --update で再インストールしてください`,
     syncHeading: "同期状態チェック",
-    syncClaudeAgents: (n) => `Claude Code エージェント: ${n}/8 .md ファイル`,
+    syncClaudeAgents: (n) => `Claude Code エージェント: ${n}/${META_AGENTS.length} .md ファイル`,
     syncClaudeSkills: "Claude Code スキル/meta-theory/SKILL.md",
     syncClaudeHooks: (n) => `Claude Code フック: ${n} スクリプト`,
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
-    syncCodexAgents: (n) => `Codex エージェント: ${n}/8 .toml ファイル`,
+    syncCodexAgents: (n) => `Codex エージェント: ${n}/${META_AGENTS.length} .toml ファイル`,
     syncCodexSkills: "Codex スキル/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
-      `OpenClaw ワークスペース: ${n}/8 エージェント — 各フォルダに必須の .md 9 件（BOOT、SOUL など）`,
+      `OpenClaw ワークスペース: ${n}/${META_AGENTS.length} エージェント — 各フォルダに必須の .md 9 件（BOOT、SOUL など）`,
     syncOpenclawSkill: "OpenClaw 共有 meta-theory",
     syncSharedSkills: "共有スキル/meta-theory/SKILL.md",
-    syncCursorAgents: (n) => `Cursor エージェント: ${n}/8 .md ファイル`,
+    syncCursorAgents: (n) => `Cursor エージェント: ${n}/${META_AGENTS.length} .md ファイル`,
     syncCursorSkills: "Cursor スキル/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
     mcpRuntimeProjectOnly: (p) =>
@@ -1697,6 +1700,7 @@ ${r ? `원본 오류：${r}` : ""}
     cmdCheck: "환경 확인",
     cmdDoctor: "Meta_Kim 상태 진단",
     cmdVerify: "전체 검증",
+    cmdDiscover: "전역 기능 스캔（agents/skills）",
     // 설치 후 주의사항
     postInstallNotesHeading: "설치 후 주의사항:",
     postInstallNotesIntro: "설치 완료 후 각 층의 사용 방식은 다음과 같습니다:",
@@ -1775,18 +1779,18 @@ ${r ? `원본 오류：${r}` : ""}
     depSummarySome: (ok, total) =>
       `${ok}/${total}개 의존성만 확인 — --update로 재설치하세요`,
     syncHeading: "동기화 상태 확인",
-    syncClaudeAgents: (n) => `Claude Code 에이전트: ${n}/8 .md 파일`,
+    syncClaudeAgents: (n) => `Claude Code 에이전트: ${n}/${META_AGENTS.length} .md 파일`,
     syncClaudeSkills: "Claude Code 스킬/meta-theory/SKILL.md",
     syncClaudeHooks: (n) => `Claude Code 훅: ${n} 스크립트`,
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
-    syncCodexAgents: (n) => `Codex 에이전트: ${n}/8 .toml 파일`,
+    syncCodexAgents: (n) => `Codex 에이전트: ${n}/${META_AGENTS.length} .toml 파일`,
     syncCodexSkills: "Codex 스킬/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
-      `OpenClaw 워크스페이스: ${n}/8 에이전트 — 각 폴더에 필수 .md 9개(BOOT, SOUL 등)`,
+      `OpenClaw 워크스페이스: ${n}/${META_AGENTS.length} 에이전트 — 각 폴더에 필수 .md 9개(BOOT, SOUL 등)`,
     syncOpenclawSkill: "OpenClaw 공유 meta-theory",
     syncSharedSkills: "공유 스킬/meta-theory/SKILL.md",
-    syncCursorAgents: (n) => `Cursor 에이전트: ${n}/8 .md 파일`,
+    syncCursorAgents: (n) => `Cursor 에이전트: ${n}/${META_AGENTS.length} .md 파일`,
     syncCursorSkills: "Cursor 스킬/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
     mcpRuntimeProjectOnly: (p) =>
@@ -4605,6 +4609,9 @@ function showNextSteps(runtimes) {
     );
     console.log(
       `${C.dim}node setup.mjs --check           # ${t.cmdCheck}${C.reset}`,
+    );
+    console.log(
+      `${C.dim}npm run discover:global          # ${t.cmdDiscover}${C.reset}`,
     );
     console.log(
       `${C.dim}npm run meta:doctor:governance    # ${t.cmdDoctor}${C.reset}`,

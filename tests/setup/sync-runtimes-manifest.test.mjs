@@ -192,6 +192,17 @@ describe("sync-runtimes / Codex project hooks", () => {
     );
   });
 
+  test("can wire HookPrompt through a Codex adapter", () => {
+    const config = buildCodexProjectHooksJson({
+      hookPromptAdapterPath: ".codex/hooks/hookprompt-adapter.mjs",
+    });
+
+    assert.match(
+      config.hooks.UserPromptSubmit[0].hooks[1].command,
+      /hookprompt-adapter\.mjs/,
+    );
+  });
+
   test("does not emit quoted absolute Node paths that fail in PowerShell", () => {
     const hookPath = "C:\\Users\\Kim\\Path With Spaces\\meta-kim-memory-save.mjs";
     const config = buildCodexProjectHooksJson({
@@ -233,13 +244,24 @@ describe("sync-runtimes / Cursor agents", () => {
 });
 
 describe("sync-runtimes / Cursor project hooks", () => {
-  test("wires MCP memory before prompt submit and stop", () => {
-    const config = buildCursorProjectHooksJson();
+  test("uses Cursor native lowerCamel lifecycle hooks", () => {
+    const config = buildCursorProjectHooksJson({
+      hookPromptAdapterPath: ".cursor/hooks/hookprompt-adapter.mjs",
+    });
 
+    assert.match(
+      config.hooks.sessionStart[0].command,
+      /meta-kim-memory-save\.mjs.*session-start/,
+    );
     assert.match(
       config.hooks.beforeSubmitPrompt[0].command,
       /meta-kim-memory-save\.mjs.*user-prompt/,
     );
+    assert.match(
+      config.hooks.beforeSubmitPrompt[1].command,
+      /hookprompt-adapter\.mjs/,
+    );
+    assert.match(config.hooks.preToolUse[0].command, /graphify-context\.mjs/);
     assert.match(
       config.hooks.stop[0].command,
       /meta-kim-memory-save\.mjs.*stop/,

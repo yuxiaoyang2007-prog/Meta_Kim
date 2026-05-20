@@ -6,6 +6,75 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.0.35] - 2026-05-20
+
+### 变更
+
+- **meta-theory 确认流程** — 明确 Critical 阶段只处理阻断 Fetch 的早期澄清；主要用户选择统一发生在 Fetch + Thinking 之后、Execution 之前。
+- **产品化决策卡** — 扩展 decision 模板，要求每个执行前问题都有 3-4 个选项，并用非技术语言说明预期结果、优势和劣势。
+- **9-agent 文档一致性** — 更新 Codex、README 和测试文案，把 `meta-chrysalis` 纳入完整 meta agent 阵列。
+
+### 修复
+
+- **Hook 分层** — 删除重复的 Claude 专用 `skip-reminder.mjs` 源文件，让 Claude 同步使用 shared hook 与 shared i18n 依赖。
+- **安装包内容** — 收紧 npm `files` 白名单，避免打包本地 `scripts/.meta-kim` 状态，并忽略已移除的 `package-lock.json`。
+- **Evolution contract 路径** — 将 scar 写回目标指向实际存在的 `config/contracts/scar-protocol.md`。
+- **Setup 计数** — 将硬编码 8-agent 安装提示改为使用 canonical agent 数量。
+
+## [2.0.34] - 2026-05-20
+
+### 新增
+
+- **meta-chrysalis 智能体** — 新增专家智能体，负责 Evolution writeback 编排，自动化从 spine evolution artifacts 到 canonical source updates 的流程，包含 Five Criteria 验证和递归防护。
+- **Evolution Writeback Gate** — 新增 `scripts/evolution-writeback-gate.mjs`，包含 Five Criteria 验证、PRIN-ST 合规检查、循环依赖检测和阈值游戏防护。
+- **Evolution 信号检测** — 新增 `scripts/detect-evolution-signals.mjs`，从提交历史和运行时行为中自动发现可复用模式和 agent 漂移。
+- **Meta-Kim 聚合** — 新增 `scripts/meta-kim-aggregate.mjs`，用于跨运行时情报收集和模式综合。
+- **Hook i18n 支持** — 新增 `canonical/runtime-assets/shared/hooks/hook-i18n.mjs`，支持 4 种语言（en、zh-CN、ja-JP、ko-KR）的用户消息。
+- **Skip reminder hook** — 新增 `canonical/runtime-assets/shared/hooks/skip-reminder.mjs` 和 `claude/hooks/skip-reminder.mjs`，实现跨运行时的统一 hook 跳过通知。
+- **用户交互模板** — 新增 `canonical/templates/user-interaction/` 目录，包含 decision、batch-decision 和 notice 模板，用于运行时无关的用户交互模式。
+- **postinstall 检查** — 新增 `scripts/postinstall-check.mjs`，在 npm install 后提供 i18n 能力索引发现提示。
+- **单元测试** — 新增 `tests/unit/skip-reminder.test.mjs`，包含 17 个测试用例。
+
+### 变更
+
+- **meta-theory Clarity Gate** — 从 Critical 阶段确认重新设计为 Fetch 后统一确认，包含 4+ 问题、每问题 3-4 选项，在保持质量的同时减少中断。
+- **全部 9 个 meta 智能体** — 更新 SOUL.md 文件，明确 evolution writeback 边界和职责范围。
+- **Workflow contract** — 增强 `config/contracts/workflow-contract.json`，添加 evolutionWritebackPacket 和 capabilityGapPacket schema。
+- **能力索引** — 扩展 `config/capability-index/meta-kim-capabilities.json`，添加 evolution 相关能力。
+- **Runtime sync** — 增强 `scripts/sync-runtimes.mjs`，添加 --reverse 模式用于 runtime-to-canonical evolution 反馈和改进的 hook 依赖管理。
+
+### 修复
+
+- **i18n 合规** — 修复 hooks 中的硬编码英文字符串，改用翻译函数。
+- **PRIN-ST 违规** — 用 SKIP_DECISION 常量和配置驱动值替换 magic strings。
+- **关键词检测** — 用正则词边界改进 SIMPLE_KEYWORDS，减少误报。
+
+## [2.0.32] - 2026-05-19
+
+### 新增
+
+- **运行时 hook 映射契约** — 新增 `scripts/runtime-hook-mapping.mjs`，集中管理 Claude/Codex/OpenClaw/Cursor 的 hook 能力映射、命令 quoting 与 HookPrompt adapter 生成。
+- **HookPrompt Codex/Cursor adapter 路径** — HookPrompt 现在声明运行时无关的 prompt 优化能力，并通过 Codex `UserPromptSubmit` adapter、Cursor `beforeSubmitPrompt` adapter 安装，而不是把 Claude hook 文件假装成直接可移植。
+- **Hook 映射校验** — `meta:validate` 现在会检查 Codex 和 Cursor hook 输出路径、HookPrompt 平台支持和跨平台 hook 命令 quoting。
+- **共享 hooks 源文件** — 新增 `canonical/runtime-assets/shared/hooks/` 目录，包含可移植源文件：
+  - `activate-meta-theory-spine.mjs`: spine 自动触发实现
+  - `spine-state.mjs`: spine 状态管理工具
+  - `utils.mjs`: 共享 hooks 工具函数
+- **Codex Skill hook 支持** — 更新 `scripts/sync-runtimes.mjs`，为 Codex 运行时配置 Skill hook，实现跨平台 spine 自动触发。
+- **SHARED_HOOK_FILES 别名** — 在 `scripts/runtime-sync-check.mjs` 新增 `SHARED_HOOK_FILES` 导出，`CLAUDE_HOOK_FILES` 作为向后兼容别名。
+- **MCP Memory hook 自动修复** — Hook 安装脚本现在会自动检测并修复无效的 Python 路径。使用 `scripts/install-mcp-memory-hooks.mjs --force` 可强制更新。
+
+### 变更
+
+- **Cursor hook 口径** — Cursor 作为 lowerCamel 原生 hook runtime 映射，使用 `.cursor/hooks.json` 和 `.cursor/hooks/` 承载 memory、graphify 与 HookPrompt adapter hooks。
+- **Codex hook 口径** — Codex 现在明确为受信任的项目/用户 hook runtime，使用 `.codex/hooks.json` 承载 graphify、memory、meta-theory spine 与 HookPrompt adapter hooks。
+- **settings.json Skill hook** — PreToolUse matcher 现在指向共享的 `activate-meta-theory-spine.mjs`，实现 meta-theory skill 激活时自动初始化 spine state。
+- **能力索引更新** — 在 `config/capability-index/meta-kim-capabilities.json` 添加 spine 相关能力。
+
+### 移除
+
+- **package-lock.json** — 删除（项目使用 pnpm，依赖 `pnpm-lock.yaml`）。
+
 ## [2.0.30] - 2026-05-15
 
 ### 变更

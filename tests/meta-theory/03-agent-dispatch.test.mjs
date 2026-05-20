@@ -26,7 +26,7 @@ const TYPE_AGENT_MAP = {
   },
   D: {
     mandatory: ["meta-prism", "meta-warden"],
-    optional: ["meta-scout", "meta-sentinel"],
+    optional: ["meta-scout", "meta-sentinel", "meta-chrysalis"],
   },
   E: { mandatory: ["meta-conductor", "meta-warden"], optional: [] },
 };
@@ -142,7 +142,7 @@ describe("Agent Dispatch — Part A: Dispatch Mapping", async () => {
 
   // --- 3 global tests ---
 
-  test("All 8 agents appear in at least one type dispatch map", async () => {
+  test("All expected agents appear in at least one type dispatch map", async () => {
     await ensureLoaded();
 
     const referencedAgents = new Set();
@@ -209,7 +209,7 @@ describe("Agent Dispatch — Part B: Dispatch Rule Verification", async () => {
     );
   });
 
-  test("8 agents listed in dispatch table", async () => {
+  test("all meta agents listed in dispatch table", async () => {
     await ensureLoaded();
     for (const agent of ALL_AGENTS) {
       assert.ok(

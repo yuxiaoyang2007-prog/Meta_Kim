@@ -303,13 +303,13 @@ Meta_Kim can leverage [graphify](https://github.com/safishamsi/graphify) (`pip i
 
 | Capability | Claude Code | Codex | OpenClaw | Cursor |
 |-----------|------------|-------|----------|--------|
-| PreToolUse hook (auto-prompt before Glob/Grep) | ✅ settings.json | ❌ | ❌ | ❌ |
+| PreToolUse hook (auto-prompt before Glob/Grep) | ✅ settings.json | ✅ trusted `.codex/hooks.json` | ❌ | ✅ `.cursor/hooks.json` `preToolUse` |
 | Slash command `/graphify` | ✅ | ✅ | ✅ | ✅ |
 | git hook auto-rebuild (post-commit/checkout) | ✅ | ✅ | ✅ | ✅ |
 | AGENTS.md resident rules | N/A | ✅ | ✅ | ✅ |
 | Multi-platform install via setup.mjs | ✅ claude | ✅ codex | ✅ claw | ✅ cursor |
 
-**Key insight**: Claude Code is the only platform with a **PreToolUse hook** that auto-prompts before searches. Other platforms (Codex, OpenClaw, Cursor) use **AGENTS.md** rules injected at startup — graph awareness is still present but triggers at session start rather than per-search. Both mechanisms are automatic once installed.
+**Key insight**: Claude Code, Codex, and Cursor all have native hook configuration, but they do not share one schema. OpenClaw uses internal/plugin hooks. Do not map `SubagentStart` outside Claude unless the target runtime adds and verifies that event.
 
 For multi-platform setups, run `node setup.mjs` — it loops through all selected platforms and runs `graphify <platform> install` for each one idempotently.
 

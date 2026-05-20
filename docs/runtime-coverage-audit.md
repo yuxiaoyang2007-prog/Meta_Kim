@@ -51,7 +51,7 @@
 | 项目级 Skill | `.claude/skills/` | `.agents/skills/` | workspace skill + installable skill | `.agents/skills/`（通用路径） | 已覆盖 |
 | 兼容 Skill 镜像 | 不需要 | `.codex/skills/` 兼容镜像 | `openclaw/skills/` 镜像 | `~/.cursor/skills/` 全局 | 已覆盖 |
 | MCP | `.mcp.json` | `config.toml` 例子 | 共享同一 MCP server | `.cursor/mcp.json` | 已覆盖 |
-| Hook / 守卫 | `.claude/settings.json` (12 events) | `.codex/hooks.json` (5 events) | Plugin SDK 28 hooks + bundled hooks | `.cursor/hooks.json` (4 events) | 已覆盖，但不是 1:1 同构 |
+| Hook / 守卫 | `.claude/settings.json` hooks | `.codex/hooks.json` trusted project/user hooks | Plugin SDK hooks + bundled/internal hooks | `.cursor/hooks.json` lowerCamel lifecycle hooks | 已覆盖，但不是 1:1 同构 |
 | 启动文件 | `CLAUDE.md` / agent prompt | `AGENTS.md` / custom agent prompt | `BOOT.md` / `BOOTSTRAP.md` / `IDENTITY.md` | `.cursorrules` / agent prompt | 已覆盖 |
 | 记忆入口 | SessionStart + Stop MCP Memory hooks | SessionStart / UserPromptSubmit / Stop MCP Memory hooks | `MEMORY.md` + `session-memory` + MCP Memory managed hook | beforeSubmitPrompt / stop MCP Memory hooks | 已覆盖 |
 | 多代理路由 | Claude 原生委派 | Codex subagents | OpenClaw agent-to-agent | Cursor 原生 agent 委派 | 已覆盖 |

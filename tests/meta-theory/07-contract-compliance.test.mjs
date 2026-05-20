@@ -134,7 +134,7 @@ describe("workflow-contract.json — schema compliance", async () => {
     );
   });
 
-  test("protocols has all 16 governed packet types", () => {
+  test("protocols has all 18 governed packet types", () => {
     const expected = [
       "runHeader",
       "taskClassification",
@@ -142,6 +142,8 @@ describe("workflow-contract.json — schema compliance", async () => {
       "cardPlanPacket",
       "dispatchEnvelopePacket",
       "orchestrationTaskBoardPacket",
+      "businessFlowBlueprintPacket",
+      "agentBlueprintPacket",
       "capabilityGapPacket",
       "executionAgentCard",
       "dispatchBoard",
@@ -157,7 +159,7 @@ describe("workflow-contract.json — schema compliance", async () => {
     for (const packet of expected) {
       assert.ok(keys.includes(packet), `missing protocol packet: ${packet}`);
     }
-    assert.equal(expected.length, 16);
+    assert.equal(expected.length, 18);
   });
 
   test("publicDisplayRequires has all 5 conditions", () => {

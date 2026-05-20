@@ -134,10 +134,10 @@ describe("SKILL.md structural integrity", async () => {
     });
   });
 
-  // ── 4. Eight agent dispatch targets (1 test) ───────────────────────
+  // ── 4. Meta agent dispatch targets (1 test) ───────────────────────
 
   describe("Agent dispatch targets", () => {
-    test("all 8 meta-agents are referenced in SKILL.md", () => {
+    test("all expected meta-agents are referenced in SKILL.md", () => {
       const missing = ALL_AGENTS.filter((agent) => !raw.includes(agent));
       assert.deepEqual(
         missing,

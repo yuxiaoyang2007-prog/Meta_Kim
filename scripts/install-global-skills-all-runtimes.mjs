@@ -52,6 +52,11 @@ import {
   resolveRuntimeHomeDir,
 } from "./meta-kim-sync-config.mjs";
 import { t } from "./meta-kim-i18n.mjs";
+import {
+  buildCodexHooksJson,
+  buildCursorHooksJson,
+  buildHookPromptAdapterSource,
+} from "./runtime-hook-mapping.mjs";
 
 // ── ANSI colors (matching setup.mjs) ─────────────────────────────────
 
@@ -1505,6 +1510,7 @@ async function installAllSkillsForRuntime(label, runtimeHome, runtimeId) {
     await deployHookExtraFiles(spec, runtimeHome, runtimeId);
     await patchPlanningWithFilesPhaseCounters(spec, runtimeHome, runtimeId);
     await patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId);
+    await patchCodexHookPromptForPlatform(spec, runtimeHome, runtimeId);
     await mergeHookSettings(spec, runtimeHome, runtimeId);
     await cleanupDisabledSkillResidue(runtimeHome, spec.id);
   }
@@ -1722,6 +1728,7 @@ async function installPluginBundlesForNonClaudeRuntimes(
       await deployHookExtraFiles(spec, runtimeHome, runtimeId);
       await patchPlanningWithFilesPhaseCounters(spec, runtimeHome, runtimeId);
       await patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId);
+      await patchCodexHookPromptForPlatform(spec, runtimeHome, runtimeId);
       await mergeHookSettings(spec, runtimeHome, runtimeId);
     }
   }
@@ -3688,6 +3695,90 @@ async function patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId) 
   );
   console.log(
     `${C.green}✓${C.reset} ${spec.id} Codex hooks patched for ${os.platform()}`,
+  );
+}
+
+async function patchCodexHookPromptForPlatform(spec, runtimeHome, runtimeId) {
+  if (!["codex", "cursor"].includes(runtimeId) || spec.id !== "hookprompt" || dryRun) {
+    return;
+  }
+
+  const hooksDir = path.join(runtimeHome, "hooks");
+  await fs.mkdir(hooksDir, { recursive: true });
+
+  const memoryHookPath = path.join(hooksDir, "meta-kim-memory-save.mjs");
+  const graphifyHookPath = path.join(hooksDir, "graphify-context.mjs");
+  const spineHookPath = path.join(hooksDir, "activate-meta-theory-spine.mjs");
+  const hookPromptAdapterPath = path.join(hooksDir, "hookprompt-adapter.mjs");
+
+  await fs.writeFile(
+    hookPromptAdapterPath,
+    buildHookPromptAdapterSource(runtimeId),
+    "utf8",
+  );
+
+  let existing = {};
+  const hooksJsonPath = path.join(runtimeHome, "hooks.json");
+  if (await pathExists(hooksJsonPath)) {
+    try {
+      existing = JSON.parse(await fs.readFile(hooksJsonPath, "utf8"));
+    } catch {
+      existing = {};
+    }
+  }
+  const hookBuilder = runtimeId === "codex" ? buildCodexHooksJson : buildCursorHooksJson;
+  const generated = hookBuilder({
+    graphifyHookPath:
+      (await pathExists(graphifyHookPath)) ? graphifyHookPath : "graphify-context.mjs",
+    memoryHookPath:
+      (await pathExists(memoryHookPath)) ? memoryHookPath : "meta-kim-memory-save.mjs",
+    ...(runtimeId === "codex" && {
+      spineHookPath:
+        (await pathExists(spineHookPath)) ? spineHookPath : "activate-meta-theory-spine.mjs",
+    }),
+    hookPromptAdapterPath,
+  });
+
+  const next = { ...existing, hooks: { ...(existing.hooks ?? {}) } };
+  const event = runtimeId === "codex" ? "UserPromptSubmit" : "beforeSubmitPrompt";
+  const existingBlocks = Array.isArray(next.hooks[event]) ? next.hooks[event] : [];
+  const alreadyRegistered = existingBlocks.some((block) =>
+    (block.hooks ?? [block]).some((hook) =>
+      String(hook.command ?? "").includes("hookprompt-adapter.mjs"),
+    ),
+  );
+  if (alreadyRegistered) {
+    return;
+  }
+  const generatedEventHooks =
+    runtimeId === "codex"
+      ? generated.hooks.UserPromptSubmit[0].hooks
+      : generated.hooks.beforeSubmitPrompt;
+  const adapterHook = generatedEventHooks.find((hook) =>
+    hook.command.includes("hookprompt-adapter.mjs"),
+  );
+  if (!adapterHook) {
+    return;
+  }
+  if (existingBlocks.length > 0 && runtimeId === "codex") {
+    existingBlocks[0].hooks = [...(existingBlocks[0].hooks ?? []), adapterHook];
+    next.hooks[event] = existingBlocks;
+  } else if (existingBlocks.length > 0) {
+    next.hooks[event] = [...existingBlocks, adapterHook];
+  } else {
+    next.hooks[event] =
+      runtimeId === "codex"
+        ? [
+            {
+              hooks: [adapterHook],
+            },
+          ]
+        : [adapterHook];
+  }
+
+  await fs.writeFile(hooksJsonPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  console.log(
+    `${C.green}✓${C.reset} ${spec.id} ${runtimeId} hook adapter registered`,
   );
 }
 

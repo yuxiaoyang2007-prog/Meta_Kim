@@ -24,6 +24,8 @@ export const PACKET_LOCATIONS = {
   cardPlanPacket: "cardPlanPacket",
   dispatchEnvelopePacket: "dispatchEnvelopePacket",
   orchestrationTaskBoardPacket: "orchestrationTaskBoardPacket",
+  businessFlowBlueprintPacket: "businessFlowBlueprintPacket",
+  agentBlueprintPacket: "agentBlueprintPacket",
   capabilityGapPacket: "capabilityGapPacket",
   executionAgentCard: "executionAgentCard",
   dispatchBoard: "dispatchBoard",
@@ -158,6 +160,31 @@ function ensureStringArray(value, context) {
   for (const [index, item] of value.entries()) {
     ensureString(item, `${context}[${index}]`);
   }
+}
+
+function ensureObject(value, context) {
+  ensure(value && typeof value === "object" && !Array.isArray(value), `${context} must be an object.`);
+}
+
+function ensureNonEmptyValue(value, context) {
+  if (Array.isArray(value)) {
+    ensure(value.length >= 1, `${context} must not be empty.`);
+    for (const [index, item] of value.entries()) {
+      ensureString(item, `${context}[${index}]`);
+    }
+    return;
+  }
+  ensureString(value, context);
+}
+
+function valuesAsStrings(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item));
+  }
+  if (value === undefined || value === null) {
+    return [];
+  }
+  return [String(value)];
 }
 
 function ensureDecisionItems(value, context) {
@@ -449,6 +476,9 @@ function validateDispatchEnvelope(contract, artifact) {
     "dispatchEnvelopePacket",
   );
   ensureString(packet.ownerAgent, "dispatchEnvelopePacket.ownerAgent");
+  ensureString(packet.businessRoleId, "dispatchEnvelopePacket.businessRoleId");
+  ensureString(packet.roleDisplayName, "dispatchEnvelopePacket.roleDisplayName");
+  ensureString(packet.roleInstanceId, "dispatchEnvelopePacket.roleInstanceId");
   ensureString(packet.taskRef, "dispatchEnvelopePacket.taskRef");
   ensureStringArray(
     packet.allowedCapabilities,
@@ -626,12 +656,237 @@ function validateOrchestrationTaskBoard(contract, artifact) {
   }
 }
 
-function validateCapabilityGapPacketWhenRequired(contract, artifact) {
+function validateBusinessFlowBlueprint(contract, artifact) {
+  const flow = artifact.businessFlowBlueprintPacket;
+  const policy = contract.protocols.businessFlowBlueprintPacket;
+  ensureFields(
+    flow,
+    policy.requiredFields,
+    "businessFlowBlueprintPacket",
+  );
+  ensureEnum(
+    flow.deliverableType,
+    policy.deliverableTypeEnum,
+    "businessFlowBlueprintPacket.deliverableType",
+  );
+  ensureArray(flow.requiredLanes, "businessFlowBlueprintPacket.requiredLanes");
+  ensureArray(flow.optionalLanes, "businessFlowBlueprintPacket.optionalLanes");
+  ensureArray(flow.omittedLanes, "businessFlowBlueprintPacket.omittedLanes");
+
+  const requiredLaneIds = new Set();
+  const optionalLaneIds = new Set();
+  const omittedLaneIds = new Set();
+
+  const validateLane = (lane, context, bucket) => {
+    ensureObject(lane, context);
+    ensureFields(lane, policy.laneRequiredFields, context);
+    for (const field of policy.laneRequiredFields) {
+      if (field === "candidateOwners" || field === "candidateSkills") {
+        ensureStringArray(lane[field], `${context}.${field}`);
+        ensure(
+          lane[field].length >= 1,
+          `${context}.${field} must include at least one global capability scan candidate.`,
+        );
+      } else {
+        ensureString(lane[field], `${context}.${field}`);
+      }
+    }
+    ensureEnum(
+      lane.coverageStatus,
+      policy.laneCoverageStatusEnum,
+      `${context}.coverageStatus`,
+    );
+    ensure(
+      lane.coverageStatus !== "omitted_with_reason",
+      `${context}.coverageStatus must not be omitted_with_reason; use omittedLanes for omitted lanes.`,
+    );
+    bucket.add(lane.laneId);
+  };
+
+  for (const [index, lane] of flow.requiredLanes.entries()) {
+    validateLane(
+      lane,
+      `businessFlowBlueprintPacket.requiredLanes[${index}]`,
+      requiredLaneIds,
+    );
+  }
+  for (const [index, lane] of flow.optionalLanes.entries()) {
+    validateLane(
+      lane,
+      `businessFlowBlueprintPacket.optionalLanes[${index}]`,
+      optionalLaneIds,
+    );
+  }
+
+  for (const [index, lane] of flow.omittedLanes.entries()) {
+    ensureObject(lane, `businessFlowBlueprintPacket.omittedLanes[${index}]`);
+    const laneId = lane.laneId ?? lane.lane;
+    ensureString(laneId, `businessFlowBlueprintPacket.omittedLanes[${index}].lane`);
+    ensureString(
+      lane.reason,
+      `businessFlowBlueprintPacket.omittedLanes[${index}].reason`,
+    );
+    ensure(
+      lane.coverageStatus === "omitted_with_reason",
+      `businessFlowBlueprintPacket.omittedLanes[${index}].coverageStatus must be omitted_with_reason.`,
+    );
+    omittedLaneIds.add(laneId);
+  }
+  ensureArray(flow.laneDependencies, "businessFlowBlueprintPacket.laneDependencies");
+  ensureEnum(
+    flow.coverageJudgment,
+    policy.coverageJudgmentEnum,
+    "businessFlowBlueprintPacket.coverageJudgment",
+  );
+
+  if (flow.coverageJudgment === "complete") {
+    for (const [index, lane] of flow.requiredLanes.entries()) {
+      ensure(
+        lane.coverageStatus === "covered",
+        `businessFlowBlueprintPacket.requiredLanes[${index}].coverageStatus must be covered when coverageJudgment=complete.`,
+      );
+    }
+  }
+
+  const webAppMinimumLanes = [
+    "product",
+    "ux",
+    "ui",
+    "frontend",
+    "backend",
+    "database",
+    "motion",
+    "accessibility",
+    "browser-qa",
+    "test",
+    "performance",
+    "release",
+  ];
+  if (flow.deliverableType === "web_app") {
+    for (const laneId of webAppMinimumLanes) {
+      ensure(
+        requiredLaneIds.has(laneId) || omittedLaneIds.has(laneId),
+        `web_app deliverable must cover lane "${laneId}" as required or omitted_with_reason.`,
+      );
+      if (flow.coverageJudgment === "complete") {
+        ensure(
+          !omittedLaneIds.has(laneId),
+          `businessFlowBlueprintPacket.coverageJudgment=complete cannot omit web_app lane "${laneId}".`,
+        );
+      }
+    }
+  }
+
+  return { requiredLaneIds, optionalLaneIds, omittedLaneIds };
+}
+
+function validateAgentBlueprint(contract, artifact) {
+  const packet = artifact.agentBlueprintPacket;
+  const policy = contract.protocols.agentBlueprintPacket;
+  ensureFields(
+    packet,
+    policy.requiredFields,
+    "agentBlueprintPacket",
+  );
+  ensureArray(packet.roles, "agentBlueprintPacket.roles");
+  ensure(packet.roles.length >= 1, "agentBlueprintPacket.roles must not be empty.");
+  const coveredLaneIds = new Set();
+  for (const [index, role] of packet.roles.entries()) {
+    ensureObject(role, `agentBlueprintPacket.roles[${index}]`);
+    ensureFields(
+      role,
+      policy.roleRequiredFields,
+      `agentBlueprintPacket.roles[${index}]`,
+    );
+    for (const field of policy.roleRequiredFields) {
+      ensureNonEmptyValue(role[field], `agentBlueprintPacket.roles[${index}].${field}`);
+    }
+    ensureString(role.businessRoleId, `agentBlueprintPacket.roles[${index}].businessRoleId`);
+    ensureString(role.roleDisplayName, `agentBlueprintPacket.roles[${index}].roleDisplayName`);
+    ensureString(role.ownerAgent, `agentBlueprintPacket.roles[${index}].ownerAgent`);
+    ensureEnum(
+      role.ownerResolution,
+      policy.ownerResolutionEnum,
+      `agentBlueprintPacket.roles[${index}].ownerResolution`,
+    );
+    ensure(
+      !/^[A-Z][a-z]+$/.test(role.roleDisplayName.trim()),
+      `agentBlueprintPacket.roles[${index}].roleDisplayName must be business-readable, not a runtime nickname.`,
+    );
+    for (const laneId of valuesAsStrings(role.assignedResponsibilitySlice)) {
+      coveredLaneIds.add(laneId);
+    }
+  }
+  ensureEnum(
+    packet.roleCoverageGate,
+    policy.roleCoverageGateEnum,
+    "agentBlueprintPacket.roleCoverageGate",
+  );
+  ensureArray(packet.missingRoles, "agentBlueprintPacket.missingRoles");
+  if (packet.roleCoverageGate === "pass") {
+    ensure(
+      packet.missingRoles.length === 0,
+      "agentBlueprintPacket.missingRoles must be empty when roleCoverageGate=pass.",
+    );
+  }
+  ensureEnum(
+    packet.duplicateRolePolicy,
+    policy.duplicateRolePolicyEnum,
+    "agentBlueprintPacket.duplicateRolePolicy",
+  );
+  ensureObject(packet.namingPolicy, "agentBlueprintPacket.namingPolicy");
+  for (const [field, expected] of Object.entries(policy.namingPolicy)) {
+    if (field === "description") continue;
+    ensure(
+      packet.namingPolicy[field] === expected,
+      `agentBlueprintPacket.namingPolicy.${field} must match workflow contract.`,
+    );
+  }
+
+  for (const lane of artifact.businessFlowBlueprintPacket.requiredLanes) {
+    ensure(
+      coveredLaneIds.has(lane.laneId),
+      `agentBlueprintPacket.roles must cover required businessFlowBlueprintPacket lane "${lane.laneId}".`,
+    );
+  }
+}
+
+function hasAgentBlueprintOwnerCreationOrUpgrade(contract, artifact) {
+  const ownerResolutionAnyOf =
+    contract.runDiscipline.protocolFirst
+      .executionAgentCardRequiredWhenOwnerResolutionAnyOf ?? [];
+  return (artifact.agentBlueprintPacket?.roles ?? []).some((role) =>
+    ownerResolutionAnyOf.includes(role.ownerResolution),
+  );
+}
+
+function isCapabilityGapRequired(contract, artifact) {
   const when =
     contract.runDiscipline.protocolFirst
       .capabilityGapPacketRequiredWhenUpgradeReasons ?? [];
   const upgradeReasons = artifact.taskClassification?.upgradeReasons ?? [];
-  const shouldRequire = upgradeReasons.some((reason) => when.includes(reason));
+  const roleCoveragePolicy =
+    contract.runDiscipline.protocolFirst
+      .capabilityGapPacketRequiredWhenRoleCoverage ?? {};
+  const missingRoles = artifact.agentBlueprintPacket?.missingRoles ?? [];
+  const roleCoverageRequiresGap =
+    artifact.agentBlueprintPacket?.roleCoverageGate ===
+      roleCoveragePolicy.roleCoverageGate ||
+    (roleCoveragePolicy.missingRolesNonEmpty === true &&
+      missingRoles.length > 0) ||
+    (artifact.agentBlueprintPacket?.roles ?? []).some((role) =>
+      (roleCoveragePolicy.ownerResolutionAnyOf ?? []).includes(
+        role.ownerResolution,
+      ),
+    );
+  return (
+    upgradeReasons.some((reason) => when.includes(reason)) ||
+    roleCoverageRequiresGap
+  );
+}
+
+function validateCapabilityGapPacketWhenRequired(contract, artifact) {
+  const shouldRequire = isCapabilityGapRequired(contract, artifact);
   if (!shouldRequire) {
     return;
   }
@@ -639,7 +894,7 @@ function validateCapabilityGapPacketWhenRequired(contract, artifact) {
   const packet = artifact.capabilityGapPacket;
   ensure(
     packet && typeof packet === "object",
-    "capabilityGapPacket is required when upgradeReasons include owner_creation_required.",
+    "capabilityGapPacket is required when upgradeReasons, missingRoles, roleCoverageGate, or ownerResolution require owner creation or upgrade.",
   );
   ensureFields(
     packet,
@@ -677,7 +932,11 @@ function validateExecutionAgentCardWhenRequired(contract, artifact) {
     contract.runDiscipline.protocolFirst
       .executionAgentCardRequiredWhenResolutionActions ?? [];
   const resolutionAction = artifact.capabilityGapPacket?.resolutionAction;
-  if (!when.includes(resolutionAction)) {
+  if (
+    !when.includes(resolutionAction) &&
+    !hasAgentBlueprintOwnerCreationOrUpgrade(contract, artifact) &&
+    !(artifact.agentBlueprintPacket?.missingRoles ?? []).length
+  ) {
     return;
   }
 
@@ -1009,6 +1268,14 @@ function validateWorkerPackets(contract, artifact) {
   ensureArray(resultPackets, "workerResultPackets");
 
   const taskById = new Map();
+  const packetsByOwnerAgent = new Map();
+  const workerPolicy = contract.protocols.workerTaskPacket.sameOwnerMultiInstancePolicy;
+  const validCollisionPolicies = workerPolicy.collisionPolicyEnum ?? [];
+  const validWorkspaceIsolation = new Set([
+    "same_workspace_readonly_overlap",
+    "isolated_worktree",
+    "file_lock_required",
+  ]);
   for (const [index, packet] of taskPackets.entries()) {
     ensureFields(
       packet,
@@ -1019,6 +1286,39 @@ function validateWorkerPackets(contract, artifact) {
       !taskById.has(packet.taskPacketId),
       `Duplicate workerTaskPacket taskPacketId: ${packet.taskPacketId}`,
     );
+    ensureString(packet.roleDisplayName, `workerTaskPackets[${index}].roleDisplayName`);
+    ensureString(packet.ownerAgent, `workerTaskPackets[${index}].ownerAgent`);
+    ensureString(packet.roleInstanceId, `workerTaskPackets[${index}].roleInstanceId`);
+    ensureString(packet.shardKey, `workerTaskPackets[${index}].shardKey`);
+    ensureArray(packet.shardScope, `workerTaskPackets[${index}].shardScope`);
+    ensure(
+      packet.shardScope.length >= 1,
+      `workerTaskPackets[${index}].shardScope must contain at least one shard.`,
+    );
+    ensureString(
+      packet.artifactNamespace,
+      `workerTaskPackets[${index}].artifactNamespace`,
+    );
+    ensureString(
+      packet.collisionPolicy,
+      `workerTaskPackets[${index}].collisionPolicy`,
+    );
+    ensureEnum(
+      packet.collisionPolicy,
+      validCollisionPolicies,
+      `workerTaskPackets[${index}].collisionPolicy`,
+    );
+    ensure(
+      validWorkspaceIsolation.has(packet.workspaceIsolation),
+      `workerTaskPackets[${index}].workspaceIsolation must be one of [${[...validWorkspaceIsolation].join(", ")}].`,
+    );
+    ensure(
+      !/^[A-Z][a-z]+$/.test(packet.roleDisplayName.trim()),
+      `workerTaskPacket ${packet.taskPacketId} roleDisplayName must be business-readable, not a runtime nickname.`,
+    );
+    const ownerPackets = packetsByOwnerAgent.get(packet.ownerAgent) ?? [];
+    ownerPackets.push({ ...packet, index });
+    packetsByOwnerAgent.set(packet.ownerAgent, ownerPackets);
     taskById.set(packet.taskPacketId, packet);
     if (
       contract.runDiscipline.runArtifactValidation
@@ -1030,6 +1330,45 @@ function validateWorkerPackets(contract, artifact) {
         ),
         `workerTaskPacket ${packet.taskPacketId} deliverableLink must reference primaryDeliverable ${primaryDeliverable}.`,
       );
+    }
+  }
+
+  for (const [ownerAgent, ownerPackets] of packetsByOwnerAgent.entries()) {
+    const roleInstanceIds = new Set();
+    const artifactNamespaces = new Set();
+    const scopes = new Map();
+    const mergeOwnerByParallelGroup = new Map();
+    for (const packet of ownerPackets) {
+      ensure(
+        !roleInstanceIds.has(packet.roleInstanceId),
+        `Duplicate roleInstanceId ${packet.roleInstanceId} for ownerAgent ${ownerAgent}.`,
+      );
+      roleInstanceIds.add(packet.roleInstanceId);
+      ensure(
+        !artifactNamespaces.has(packet.artifactNamespace),
+        `Duplicate artifactNamespace ${packet.artifactNamespace} for ownerAgent ${ownerAgent}.`,
+      );
+      artifactNamespaces.add(packet.artifactNamespace);
+      if (ownerPackets.length > 1) {
+        const group = packet.parallelGroup;
+        const groupMergeOwner = mergeOwnerByParallelGroup.get(group);
+        if (groupMergeOwner) {
+          ensure(
+            groupMergeOwner === packet.mergeOwner,
+            `same ownerAgent ${ownerAgent} in parallelGroup ${group} must use one mergeOwner.`,
+          );
+        } else {
+          mergeOwnerByParallelGroup.set(group, packet.mergeOwner);
+        }
+        for (const scope of packet.shardScope.map((item) => normalizePathRef(item))) {
+          const previous = scopes.get(scope);
+          ensure(
+            !previous,
+            `same ownerAgent ${ownerAgent} must not use overlapping shardScope "${scope}" across ${previous} and ${packet.taskPacketId}.`,
+          );
+          scopes.set(scope, packet.taskPacketId);
+        }
+      }
     }
   }
 
@@ -1482,6 +1821,8 @@ export function validateArtifact(contract, artifact) {
     "dispatchBoard",
   );
   validateOrchestrationTaskBoard(contract, artifact);
+  validateBusinessFlowBlueprint(contract, artifact);
+  validateAgentBlueprint(contract, artifact);
   validateCapabilityGapPacketWhenRequired(contract, artifact);
   validateExecutionAgentCardWhenRequired(contract, artifact);
   validateWorkerPackets(contract, artifact);

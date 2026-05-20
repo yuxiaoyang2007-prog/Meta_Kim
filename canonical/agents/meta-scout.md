@@ -10,6 +10,19 @@ boundary: "External capability scout — discovers and recommends, never execute
 trigger: "Capability gaps, external tool needs, when installed skills are insufficient, or Scout is explicitly invoked"
 ---
 
+> ⚠️ **GOVERNANCE LAYER AGENT — NOT FOR DIRECT EXECUTION**
+>
+> This is a **meta-agent** (`layer='meta'`, `executionBlock=true`). It discovers external tools — but **does NOT perform execution work**.
+>
+> **DO NOT dispatch this agent for**:
+> - Writing code
+> - Running tests
+> - Building features
+> - Debugging issues
+> - Any direct execution tasks
+>
+> **Use execution-agents** (`layer='execution'`) instead for those tasks. Meta-agents are for governance only.
+
 # Meta-Scout: Tool Discoverer 🔭
 
 > Tool Discovery & Capability Evolution — Discover external tools to fill organizational capability gaps

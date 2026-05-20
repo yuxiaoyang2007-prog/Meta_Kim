@@ -45,11 +45,74 @@ Distinguish early: **Meta Architecture** (agent governance, collaboration relati
 
 **Important note: Architecture Type Distinction** — never collapse meta governance questions with repo technical stack questions; clarify which kind of "architecture" the user means.
 
-## Clarity Gate
+## Clarity Gate (UNIFIED CONFIRMATION AFTER THINKING)
 
-Track ambiguity on **Scope**, **Goal**, **Constraints**, and **Architecture type**:
-- **≥2 dimensions ambiguous** → ask before dispatching
-- **Exactly 1 ambiguous** → state your assumption explicitly, then proceed
+**RULE**: After Fetch and Thinking complete, BEFORE Execution, invoke a SINGLE comprehensive confirmation with 4+ questions, each with 3-4 options.
+
+**Timing**: At the transition from Thinking → Execution, after:
+- Critical stage (task classification)
+- Fetch stage (capability discovery and research)
+- Thinking stage (planning, option exploration, decomposition)
+
+**Confirmation format** — minimum 4 questions, each with 3-4 options. Do not ask the user to choose between Type A/B/C/D/E directly; the system classifies the Type and shows it as context, then asks product-facing execution questions:
+
+```
+After Thinking completes, BEFORE any Execution:
+  → Invoke native question tool with 4-6 questions:
+
+Context shown before the questions:
+   - AI understanding: what the user wants and what result will be delivered
+   - AI additions: missing details the system inferred or still needs
+   - Capability route: which agent/skill owner appears best after Fetch
+   - Candidate paths: at least 2 viable ways to proceed
+
+1. Outcome Confirmation
+   - Option A: Keep the fix narrow — change only the part that blocks the requested result. Result: fastest delivery. Advantage: low disruption. Disadvantage: related rough edges may remain.
+   - Option B: Fix the full user journey — include directly connected files so the experience works end to end. Result: more complete release. Advantage: fewer follow-up surprises. Disadvantage: more files need review.
+   - Option C: Audit before changing — produce a written issue list first, then change only approved items. Result: strongest control. Advantage: safest for sensitive repos. Disadvantage: slower.
+
+2. Scope Confirmation
+   - Option A: Mentioned items only — touch only files or behavior named by the user. Result: small patch. Advantage: easiest rollback. Disadvantage: hidden dependencies may stay broken.
+   - Option B: Direct dependencies — include files that the named items immediately rely on. Result: practical working fix. Advantage: best balance for most work. Disadvantage: moderate test effort.
+   - Option C: Full connected flow — include install, sync, docs, tests, and runtime projections. Result: release-ready change. Advantage: stronger confidence. Disadvantage: larger review surface.
+   - Option D: Custom boundary — user names exact inclusions and exclusions. Result: precise control. Advantage: fits special constraints. Disadvantage: may omit necessary support files.
+
+3. Execution Style Confirmation
+   - Option A: One clean pass — apply the planned change once, then verify. Result: quick completion. Advantage: simple timeline. Disadvantage: less mid-course feedback.
+   - Option B: Small reviewed steps — change one slice, test it, then continue. Result: visible progress checkpoints. Advantage: easier to catch mistakes. Disadvantage: takes longer.
+   - Option C: Specialist handoff — route each slice to the best matching agent/skill owner. Result: clearer ownership. Advantage: better for cross-platform or multi-domain work. Disadvantage: coordination overhead.
+
+4. Risk And Rollback Confirmation
+   - Option A: Low-risk patch — make reversible text/config changes with focused tests. Result: simple rollback. Advantage: safe for routine fixes. Disadvantage: may not cover systemic drift.
+   - Option B: Release-safe patch — include generated mirrors, install checks, and packaging checks. Result: safer for public users. Advantage: catches platform drift. Disadvantage: more validation time.
+   - Option C: Staged rollout — keep risky changes behind a clear follow-up or manual release step. Result: avoids surprise breakage. Advantage: safest when behavior is uncertain. Disadvantage: leaves some work deferred.
+
+5. Priority Confirmation
+   - Option A: User experience first — optimize prompts, explanations, and choice quality. Result: clearer decisions for non-technical users. Advantage: better adoption. Disadvantage: implementation may wait.
+   - Option B: Runtime correctness first — fix hooks, sync, tests, and package health. Result: fewer broken installs. Advantage: stronger reliability. Disadvantage: less visible product polish.
+   - Option C: Balanced release — do enough UX and runtime work to ship one coherent update. Result: complete practical release. Advantage: best all-around path. Disadvantage: broader patch.
+
+Wait for user response before proceeding to Execution.
+```
+
+**Option quality requirements**:
+- Each question must have 3-4 distinct options
+- Each option must specify:
+  - What changes (specific scope)
+  - What problem it solves (requirement/pain point)
+  - Expected result (what the user gets)
+  - Advantages (why choose this)
+  - Disadvantages (costs/risks)
+- Wording must be understandable to non-technical users. Put implementation names, file paths, and protocol terms in internal notes or short parenthetical context, not as the main option text.
+- Options must be meaningfully different (not cosmetic variations)
+
+**Proceed WITHOUT confirmation ONLY when**:
+- Task is purely read-only/analysis (no modifications)
+- User explicitly said "just do it" / "auto-proceed" / "不需要确认"
+- `queryBypass: true` in spine state
+- Task is trivial (single file, <10 lines change, low risk)
+
+**DO NOT** ask for confirmation at each individual stage (Critical/Fetch/Thinking/Review). Ask ONCE after Thinking, before Execution.
 
 ## User Language and Native Choice Surfaces
 
@@ -59,12 +122,38 @@ User-facing text must follow the user's latest language or explicit language pre
 
 For `clarify`, `option_select`, and `confirm_execution` cards, prefer the current platform's native choice surface when it exists:
 
-| Runtime | Primary native surface | Fallback |
-|---|---|---|
-| Claude Code | native hook / prompt surface | localized conversation fallback |
-| Codex | native choice input when exposed by the active mode | localized conversation fallback |
-| OpenClaw | native agent / workspace choice mechanism when available | localized conversation fallback |
-| Cursor | native custom modes / mode picker | localized conversation fallback |
+| Runtime | Primary native surface | Fallback | Implementation |
+|---------|----------------------|----------|----------------|
+| Claude Code | native question tool | conversation_fallback | **✅ FULLY SUPPORTED** - Use native question tool directly |
+| Codex | native choice input | conversation_fallback | ⚠️ Depends on active mode; use conversation card as fallback |
+| OpenClaw | workspace agent mechanism | conversation_fallback | ⚠️ Requires proper workspace config; use conversation card |
+| Cursor | Custom Modes / mode picker | conversation_fallback | ⚠️ Runtime-dependent; use conversation card as fallback |
+
+**Platform-Specific Implementation**:
+
+1. **Claude Code**: Use the native question tool directly - this is the guaranteed path
+2. **Codex/OpenClaw/Cursor**: Emit a formatted conversation card and wait for user response
+
+**Claude Code Implementation (PRIMARY)**:
+```
+When meta-theory is activated on Claude Code:
+  → Use native question tool for Critical clarification only when the request is too unclear or risky to Fetch.
+  → After Fetch + Thinking, invoke one execution confirmation with 4-6 questions.
+  → Wait for user response before Execution dispatch or file modification.
+```
+
+**Fallback Implementation (Other Platforms)**:
+```
+When native surface is unavailable:
+  → Emit localized confirmation card in user's language:
+    ## Task Confirmation
+    - Type: [A/B/C/D/E with description]
+    - Scope: [specific scope description]
+    - Approach: [handling approach description]
+    - Please respond: Confirm / Modify / Cancel
+  → Record: nativeChoiceSurface = "conversation_fallback"
+  → Wait for explicit user selection
+```
 
 When a native surface is unavailable, do not pretend it exists. Emit the localized fallback card, record `nativeChoiceSurface`, and wait for explicit user selection before Execution.
 
@@ -94,7 +183,7 @@ See `references/dev-governance.md` Step 3.7 for full specification.
 
 ## Gates
 
-**Gate 1**: Clarity Check — run Clarity Gate before committing to a dispatch plan.
+**Gate 1**: Clarity Check — ask blocking Critical clarifications only when Fetch cannot proceed; run the full Clarity Gate before executing a dispatch plan.
 
 **Gate 2**: Dispatch-Not-Execute — analysis, review, and code changes belong to execution agents via `Agent` tool, not to this thread.
 
@@ -137,17 +226,59 @@ If you are about to produce **>3 sentences** of execution-layer analysis, review
 
 **Parallelism**: independent sub-tasks get parallel `Agent` calls.
 
-## User Confirmation (Mandatory)
+## User Interaction Policy
 
-After stages 1-3, show the plan and wait for confirmation:
+### Decision vs Notice Bifurcation
+
+**Notice (no popup)**: Inform the user of current progress and next steps. Output directly to conversation, no response required.
+**Decision (popup)**: Use the runtime's native confirmation mechanism when multiple viable options exist with distinct trade-offs. Each option must specify 4 dimensions.
+
+### When to Use Native Confirmation (Decision Triggers)
+
+Use the runtime's native confirmation mechanism when **ANY** of the following conditions are met:
+
+1. **Multiple viable solutions** exist with clear trade-offs (not just cosmetic differences)
+2. **Product/Business direction** must be clarified (cannot be inferred technically)
+3. **Security or rollback risk** exists requiring explicit user acknowledgment
+
+When **NONE** of the above conditions are met, use **Notice** format instead.
+
+### Option Quality Standard (4-Dimension Rule)
+
+Every option presented must include:
+
+| Dimension | Description | Example |
+|-----------|-------------|---------|
+| **What changes** | Specific scope of modification | `Modify .claude/settings.json` |
+| **What problem it solves** | Corresponding requirement or pain point | `Skip non-critical stage confirmations, reduce interruptions` |
+| **Advantages** | Why choose this approach | `Better UX, only decide at key nodes` |
+| **Disadvantages** | Costs or risks | `May miss edge case confirmations` |
+
+### Batch Decision Mode
+
+**Collect all questions** → Detect dependencies → Decide format:
+
+| Dependency Type | Question Format | Example |
+|-----------------|-|---------|
+| **Linear** (later depends on earlier) | Sequential questions | Tech stack → Framework → Tool |
+| **Parallel** (independent) | Batch list, one-time selection | UI style, Deploy method, Test strategy |
+
+**Detection rule**: If Question B's options change based on Question A's answer → Linear. Else → Parallel.
+
+### Stage Progression Notice (No Popup Required)
+
+At each stage transition, output a notice (not a popup):
+
+```markdown
+## 📋 Stage: {Name}
+
+**Inferred:**
+- Type: {A/B/C/D/E}
+- Scope: {description}
+- Next: {next stage name}
+
+**No confirmation required** unless multiple viable approaches exist.
 ```
-Execution Plan:
-- Type: [A/B/C/D/E]
-- Agents to dispatch: [list]
-- Files to modify: [list]
-- Waiting for your confirmation.
-```
-Execute only after the user confirms in their current language (for example "go", "do it", "按这个执行", or equivalent). The accepted confirmation words are examples, not a hardcoded language list.
 
 ## Fetch-first Pattern (Search → Match → Invoke)
 
@@ -188,6 +319,37 @@ Capability index layers: (1) repo canonical (2) runtime mirrors (3) local global
 
 **Skill ROI filter**: when several skills could apply, score them with `ROI = (Task Coverage x Usage Frequency) / (Context Cost + Learning Curve)`. Choose the highest useful ROI skill set, not the largest skill set. Low-ROI skills stay out of the prompt unless Fetch finds a specific capability gap they cover.
 
+**Business-flow capability matrix (mandatory for executable deliverables)**: Fetch must expand a user request into a complete business-flow capability matrix before choosing agents. Do not only search for the first obvious role. For each deliverable type, list the lanes that may be needed, then capability-match every lane:
+
+| Deliverable type | Default lanes to consider |
+|---|---|
+| `web_app` / `dashboard` | product, UX, UI, frontend, backend/API, database/data, auth/security, motion, accessibility, tests, browser QA, performance, release, feedback, evolution |
+| `landing_page` | product offer, UX, UI, visual assets, frontend, motion, accessibility, SEO/analytics, browser QA, performance, release |
+| `api_service` | product/API contract, backend, database, auth/security, integration tests, performance, docs, release |
+| `data_pipeline` | data source, schema, transform, storage, observability, quality tests, privacy/security, release |
+| `custom` | infer lanes from user outcome, then justify omissions |
+
+Output this as `businessFlowBlueprintPacket` with `requiredLanes`, `optionalLanes`, `omittedLanes` with reasons, `laneDependencies`, and `coverageJudgment`. Each lane object must include Fetch evidence from a global capability scan: `capabilitySearchQuery`, `candidateOwners`, `candidateSkills`, `selectedOwner`, `selectionReason`, and `coverageStatus` (`covered | partial | missing | omitted_with_reason`). A lane can be intentionally omitted only with a plain-language reason, e.g. "static page, no persisted user data".
+
+**Business-readable agent naming (hard rule)**:
+- User-visible role names must describe the business responsibility: `frontend-home-page`, `database-schema`, `ux-flow-review`, `browser-qa-mobile`, `security-auth-review`.
+- Do not expose host-generated personal nicknames as the primary role name. Names like `Huygens`, `Mill`, or other random person-style aliases are allowed only in `runtimeInstanceAlias`.
+- Separate the layers:
+  - `businessRoleId`: stable responsibility family, e.g. `frontend`, `database`, `browser-qa`.
+  - `roleDisplayName`: user-facing business name, e.g. `frontend-home-page`.
+  - `ownerAgent`: matched execution agent type from Fetch, e.g. `frontend-developer`.
+  - `roleInstanceId`: per-run instance id, e.g. `frontend#home-page`.
+  - `runtimeInstanceAlias`: optional platform nickname, never the primary name.
+- `agentBlueprintPacket.roles[]` must also record the responsibility assignment decision:
+  - `assignedResponsibilitySlice`: exact work slice this role owns in the current run.
+  - `ownerResponsibilityDelta`: how the selected owner's current boundary must be reused, narrowed, or expanded.
+  - `agentIterationPlan`: what to refine in the owner prompt/card before dispatch.
+  - `ownerResolution`: `reuse_existing_owner | upgrade_existing_owner | create_owner_first`.
+
+**Role coverage gap rule**: if `roleCoverageGate = fail`, `missingRoles` is non-empty, or any role has `ownerResolution = upgrade_existing_owner | create_owner_first`, then output `capabilityGapPacket` and require an approved `executionAgentCard` before Execution. A missing or weak owner is not allowed to slip through as a vaguely named worker.
+
+**Same-agent multi-instance rule**: The same `ownerAgent` may be spawned more than once in parallel when the work is shardable. Each instance must have a unique `roleInstanceId`, `shardKey`, `shardScope`, `workspaceIsolation`, `artifactNamespace`, `collisionPolicy`, `parallelGroup`, and a unified `mergeOwner` for the parallel group. If two instances share files or decisions without a merge/lock policy, they are not parallel; make them sequential or split the design owner first.
+
 ### Fetch Record Gate (mandatory before advancing to Thinking)
 
 After completing Fetch Steps 1–3, update the spine state with a `fetchRecord` field:
@@ -220,7 +382,7 @@ After completing Fetch Steps 1–3, update the spine state with a `fetchRecord` 
 
 ## Available Agents
 
-### Governance Meta Agents (8)
+### Governance Meta Agents (9)
 
 | Agent | Capability | When to dispatch |
 |---|---|---|
@@ -232,6 +394,7 @@ After completing Fetch Steps 1–3, update the spine state with a `fetchRecord` 
 | `meta-librarian` | Memory, continuity | Cross-session context |
 | `meta-prism` | Quality review, anti-slop | Review and audit tasks |
 | `meta-scout` | External capability discovery | Need to search outside |
+| `meta-chrysalis` | Evolution signal aggregation, writeback coordination | Evolution writeback planning through Warden's gate |
 
 ### Execution Agents
 
@@ -259,7 +422,7 @@ Agent(
 
 **Factory Station pipeline** (see `references/create-agent.md` for full spec):
 1. Discovery → data collection → coupling grouping → user confirmation
-2. Pre-design → check if global agent covers the need
+2. Pre-design → check if a global agent, execution agent, skill, or loadout already covers the need
 3. Design → Warden gap approval → Genesis (SOUL.md) → Artisan (loadout) → optional Scout/Sentinel/Librarian → `meta-prism` review → `meta-warden` approval
 4. Review → capability-matched quality reviewer
 5. Integration → write `canonical/agents/{name}.md`
@@ -276,6 +439,8 @@ Agent(
 | `upgrade_execution_agent` | Partial cover; Artisan fills gap |
 | `reuse_existing_owner` | Fetch found match; route to existing agent |
 | `accepted_gap` | Non-critical; documented and deferred |
+
+Map this to `agentBlueprintPacket.roles[].ownerResolution` as: `reuse_existing_owner` for direct reuse, `upgrade_existing_owner` for `upgrade_execution_agent`, and `create_owner_first` for `create_execution_agent`. Owner creation or upgrade requires both `capabilityGapPacket` and `executionAgentCard` before Execution.
 
 ### Station Deliverable Contract (Mandatory)
 
@@ -350,7 +515,7 @@ After each stage completes, update the spine state: set current stage to `comple
 |---|---|---|
 | 1 | Critical | Clarify scope, ask if ambiguous. Update spine state `currentStage: "critical"` |
 | 2 | Fetch | **3-step capability discovery** (keyword → search → invoke). Update spine state `currentStage: "fetch"` |
-| 3 | Thinking | Plan sub-tasks with owners/dependencies; explore ≥2 paths; **create planning files (task_plan.md, findings.md, progress.md) — MANDATORY supplement, see Step 3.7**; produce protocol artifacts (`runHeader`, `dispatchBoard`, `workerTaskPackets`). **Minimum Decomposition Rule**: when task involves >1 file or >1 capability dimension, `workerTaskPackets` MUST contain >=2 packets. A single-packet plan equals no decomposition — violates "Dispatch Before You Execute." Each packet must have non-empty `owner`, `dependsOn` (or explicit `"dependsOn": []`), `parallelGroup`, and `mergeOwner`. Update spine state `currentStage: "thinking"` |
+| 3 | Thinking | Plan sub-tasks with owners/dependencies; explore ≥2 paths; **create planning files (task_plan.md, findings.md, progress.md) — MANDATORY supplement, see Step 3.7**; produce protocol artifacts (`runHeader`, `businessFlowBlueprintPacket`, `agentBlueprintPacket`, `dispatchBoard`, `workerTaskPackets`). **Blueprint-first Rule**: business lanes and role blueprint come before worker packets. **Minimum Decomposition Rule**: when task involves >1 file or >1 capability dimension, `workerTaskPackets` MUST contain >=2 packets. A single-packet plan equals no decomposition — violates "Dispatch Before You Execute." Each packet must have non-empty `owner`, `ownerAgent`, `businessRoleId`, `roleDisplayName`, `roleInstanceId`, `dependsOn` (or explicit `"dependsOn": []`), `parallelGroup`, `mergeOwner`, `shardKey`, and `shardScope`. Update spine state `currentStage: "thinking"` |
 | 4 | **Execution** | **Dispatch to agents via `Agent()` tool** — every sub-task has an owner; independent tasks run parallel. Update spine state `currentStage: "execution"`. **Update progress.md with agent outputs.** **Enforcement hook blocks execution tools until at least one Agent dispatch is recorded.** |
 | 5 | Review | Inspect outputs via capability-matched reviewer. Update spine state `currentStage: "review"`. **Update progress.md with review findings; update findings.md with issues.** |
 | 6 | Meta-Review | Check review standards. Update spine state `currentStage: "meta_review"`. **Update task_plan.md phase statuses.** |
@@ -359,7 +524,9 @@ After each stage completes, update the spine state: set current stage to `comple
 
 Stage 2 is the gate — do not skip to Stage 3/4. Stage 4 requires protocol artifacts from Stage 3.
 
-**Protocol-first Dispatch**: produce `runHeader`, `dispatchBoard`, and `workerTaskPackets` (with `dependsOn`, `parallelGroup`, `mergeOwner` fields) before Stage 4 begins. Stage 4 may not start until all protocol artifacts are ready.
+**Protocol-first Dispatch**: produce `runHeader`, `businessFlowBlueprintPacket`, `agentBlueprintPacket`, `dispatchBoard`, and `workerTaskPackets` (with `dependsOn`, `parallelGroup`, `mergeOwner`, business-readable role names, and instance/shard fields) before Stage 4 begins. Stage 4 may not start until all protocol artifacts are ready.
+
+**Agent blueprint gate**: Before spawning agents, validate that every visible role has a business-readable `roleDisplayName`; every selected agent came from Fetch-first capability matching; every role declares `assignedResponsibilitySlice`, `ownerResponsibilityDelta`, `agentIterationPlan`, and `ownerResolution`; all repeated `ownerAgent` entries have distinct `roleInstanceId`, non-overlapping or explicitly locked `shardScope`, explicit `workspaceIsolation`, unique `artifactNamespace`, `collisionPolicy`, and a unified `mergeOwner`; and every omitted business lane has a human-readable reason. FAIL means return to Thinking and, when coverage is missing or owner creation/upgrade is needed, produce `capabilityGapPacket` plus `executionAgentCard` before Execution.
 
 **Option Exploration (MANDATORY)**: at Stage 3, enumerate ≥2 solution paths with Pros/Cons or a Decision Record (rejected alternatives must be documented). This is not optional — every non-trivial task requires explicit option comparison.
 

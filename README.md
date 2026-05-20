@@ -75,7 +75,7 @@ After global install (`node setup.mjs` or `npx`), what works where:
 | Any other project with Claude Code | Hooks (safety, format, memory save) + `/meta-theory` skill | Say "run meta theory" or type `/meta-theory` |
 | Codex | AGENTS.md rules + 8 custom agents + `/meta-theory` command | Type "run meta theory" or `/meta-theory` |
 | OpenClaw | Workspace agents + Plugin SDK hooks (28 events) | Requires `auth.json` configured |
-| Cursor | Agent projections + skill mirrors + hooks | Lightweight; mainly read + review |
+| Cursor | Agent projections + skill mirrors + hooks + MCP | Lightweight; mainly read + review |
 
 ---
 
@@ -412,7 +412,7 @@ flowchart TD
 
 ### Agent boundaries + skill integration
 
-The 8 meta roles each own a different domain:
+The 9 meta roles each own a different domain:
 
 | Role | Responsibility | What it does not own |
 | --- | --- | --- |
@@ -424,6 +424,7 @@ The 8 meta roles each own a different domain:
 | **meta-librarian** | Memory and continuity | Does not execute code |
 | **meta-prism** | Quality review and anti-slop | Does not search for capabilities |
 | **meta-scout** | External capability discovery | Does not coordinate internally |
+| **meta-chrysalis** | Evolution writeback, scar capture, recursive-safety gatekeeping | Does not evolve itself or bypass Warden gates |
 
 Each agent can load powerful **skills** and **commands** as needed. Meta_Kim ships with 9 community skills and supports custom extension.
 
@@ -436,6 +437,7 @@ flowchart TD
     WARDEN --> LIBRARIAN[meta-librarian<br/>Memory / continuity]
     WARDEN --> PRISM[meta-prism<br/>Quality review]
     WARDEN --> SCOUT[meta-scout<br/>External capability discovery]
+    WARDEN --> CHRYSALIS[meta-chrysalis<br/>Evolution writeback]
 
     GENESIS -.-> |SOUL.md| ARTISAN
     ARTISAN -.-> |Skill loadout| GENESIS
@@ -444,6 +446,7 @@ flowchart TD
     PRISM -.-> |Review report| WARDEN
     SCOUT -.-> |Capability candidates| ARTISAN
     LIBRARIAN -.-> |Context memory| WARDEN
+    CHRYSALIS -.-> |Scar / writeback proposal| WARDEN
 
     SKILLS[9 community skills<br/>+ custom extensions] --> ARTISAN
     HOOKS[Hook automation<br/>intercept / format / check] --> SENTINEL
@@ -456,6 +459,7 @@ flowchart TD
     style LIBRARIAN fill:#a78bfa,color:#fff
     style PRISM fill:#fb923c,color:#000
     style SCOUT fill:#2dd4bf,color:#000
+    style CHRYSALIS fill:#84cc16,color:#000
 ```
 
 ### Hook automation
@@ -515,7 +519,7 @@ But there is an important caveat: the four runtimes are not equal. Claude Code c
 | --- | --- | --- | --- | --- |
 | **Agents** | Native agents/subagents, mature at both project and user scope | Strong custom agents/subagents | Workspace-style agents, supports agent-to-agent | Lightweight agent projection |
 | **Skills / references** | Native skills, references, and a mature global ecosystem | `.codex/skills/` works well | Workspace skills and installable skills | Lighter skill/reference support |
-| **Hooks / automation** | Project hooks + settings.json + plugin ecosystem | No repo-level native hook file surface | Workspace boot/hook-style capabilities | Weakest native governance hooks |
+| **Hooks / automation** | Project hooks + settings.json + plugin ecosystem | Trusted `.codex/hooks.json` project/user hooks | Workspace boot/hook-style capabilities | `.cursor/hooks.json` lowerCamel lifecycle hooks |
 | **MCP / configuration** | Full native MCP and config surface | Can connect via runtime adapters and MCP | Clear workspace config | Can use MCP, but the surface is lighter |
 | **Governance loop capacity** | **Highest** | High, but below Claude Code | High, but different in form | Lightest |
 
@@ -629,13 +633,13 @@ Each layer has different activation requirements:
 
 | Capability | Claude Code | Codex | OpenClaw | Cursor |
 |-----------|------------|-------|----------|--------|
-| PreToolUse hook (auto-prompt before Glob/Grep) | ✅ settings.json | ❌ | ❌ | ❌ |
+| PreToolUse hook (auto-prompt before Glob/Grep) | ✅ settings.json | ✅ trusted `.codex/hooks.json` | ❌ | ✅ `.cursor/hooks.json` `preToolUse` |
 | Slash command `/graphify` | ✅ | ✅ | ✅ | ✅ |
 | git hook auto-rebuild (post-commit/checkout) | ✅ | ✅ | ✅ | ✅ |
 | AGENTS.md resident rules | N/A | ✅ | ✅ | ✅ |
 | Multi-platform install via setup.mjs | ✅ claude | ✅ codex | ✅ claw | ✅ cursor |
 
-**Key insight**: Claude Code is the only platform with a **PreToolUse hook** that auto-prompts before searches. Other platforms (Codex, OpenClaw, Cursor) use **AGENTS.md** rules injected at startup — graph awareness is still present but triggers at session start rather than per-search. Both mechanisms are automatic once installed.
+**Key insight**: Claude Code, Codex, and Cursor all have native hook configuration, but their schemas differ. OpenClaw uses its own internal/plugin hook model.
 
 For multi-platform setups, run `node setup.mjs` — it loops through all selected platforms and runs `graphify <platform> install` for each one idempotently.
 
@@ -655,9 +659,13 @@ For multi-platform setups, run `node setup.mjs` — it loops through all selecte
   - For **Cursor**: `~/.cursor/hooks.json` receives `beforeSubmitPrompt` and `stop` bridges to the shared memory hook.
 - **Start server**: `memory server --http` (with `MCP_ALLOW_ANONYMOUS_ACCESS=true` on macOS/Linux, or `$env:MCP_ALLOW_ANONYMOUS_ACCESS="true"` in Windows PowerShell), then access at `http://localhost:8000`.
 - **Port**: the server and Meta_Kim hooks use `http://localhost:8000`.
-- **Hooks**: auto-registered for Claude Code, Codex, OpenClaw, and Cursor; each runtime uses its native hook format while sharing the same MCP Memory HTTP endpoint.
+- **Hooks**: auto-registered for Claude Code, Codex, Cursor, and OpenClaw; each runtime uses its native hook format while sharing the same MCP Memory HTTP endpoint.
 - **MCP registration vs writes**: `.mcp.json` registers the MCP Memory server (`memory server`) for client access. Automatic session writes are separate lifecycle hooks: Claude Code uses `stop-memory-save.mjs`, Codex/Cursor use `meta-kim-memory-save.mjs`, and OpenClaw uses its managed `mcp-memory-service` hook.
 - **Query**: `npm run meta:query:runs -- --owner <agent>` — find past runs by agent, or `npm run meta:index:runs -- <artifact>` for manual indexing of validated run artifacts
+- **Troubleshooting**:
+  - **Python hook fails on Windows**: If the SessionStart hook fails with exit code 49 or shows no output, the Python command may point to the Windows Store shim. Run `node scripts/install-mcp-memory-hooks.mjs` to auto-detect and fix. The installer now skips WindowsApps shims and prefers explicit Python executables from `LOCALAPPDATA\Programs\Python*`. Use `--force` flag to re-register even if current path appears valid.
+  - **Check installation**: Run `node scripts/install-mcp-memory-hooks.mjs --check` to verify hook status and Python path validity.
+  - **Manual verification**: Test your Python command with `python --version` or the detected path with `"C:/Users/YOUR_USER/AppData/Local/Programs/Python/Python311/python.exe" --version`.
 
 ### How the three layers work together
 

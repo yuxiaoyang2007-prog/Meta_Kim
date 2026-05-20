@@ -47,5 +47,153 @@
     "capabilityGap": "queue-for-scout",
     "processBottleneck": "reorder-stages",
     "scarDetected": "append-to-protocol"
+  },
+
+  "thresholds": {
+    "patternReuse": {
+      "minOccurrences": 3,
+      "description": "Minimum pattern occurrences to trigger extraction as skill"
+    },
+    "soulSize": {
+      "warningLines": 200,
+      "maxLines": 300,
+      "description": "SOUL.md size thresholds for Stew-All risk detection"
+    },
+    "boundaryDrift": {
+      "maxUnrelatedDomains": 2,
+      "description": "Maximum unrelated domains before triggering Type B pipeline"
+    },
+    "rhythmBottleneck": {
+      "consecutiveHighCostCards": 3,
+      "description": "Consecutive high-cost cards triggering workflow optimization"
+    },
+    "gitAnalysis": {
+      "defaultCommitRange": "HEAD~10..HEAD",
+      "description": "Default git commit range for evolution signal detection"
+    },
+    "signalAggregation": {
+      "minPatternCount": 2,
+      "description": "Minimum pattern count for signal aggregation"
+    }
+  },
+
+  "gate": {
+    "riskLevels": {
+      "low": {
+        "description": "Pattern extraction with all validations passing",
+        "autoApproveConditions": [
+          "fiveCriteria.all === true",
+          "prinSt.all === true",
+          "recursiveRisk.detected === false"
+        ]
+      },
+      "medium": {
+        "description": "Boundary refinement with user confirmation required",
+        "requires": ["userConfirmation"],
+        "conditions": [
+          "fiveCriteria.all === true",
+          "prinSt.all === true",
+          "boundary.modification === true"
+        ]
+      },
+      "high": {
+        "description": "Boundary expansion/merger requiring Type B pipeline",
+        "requires": ["typeBPipeline", "userConfirmation"],
+        "conditions": [
+          "boundary.expansion === true",
+          "fiveCriteria.smallEnough === false"
+        ]
+      },
+      "critical": {
+        "description": "Core Truths modification requiring dual review",
+        "requires": ["wardenReview", "genesisReview", "userConfirmation"],
+        "conditions": [
+          "coreTruths.modification === true",
+          "identity.drift === true"
+        ]
+      }
+    },
+
+    "recursiveProtection": {
+      "selfEvolutionBlock": {
+        "target": "meta-chrysalis",
+        "action": "reject",
+        "reason": "Chrysalis cannot evolve itself - recursive loop risk"
+      },
+      "circularDependency": {
+        "detection": "dependencyGraphAnalysis",
+        "action": "reject",
+        "reason": "A needs B, B needs A - circular evolution risk"
+      },
+      "transitiveOverflow": {
+        "maxHops": 1,
+        "action": "reject",
+        "reason": "Multi-hop evolution may cascade uncontrollably"
+      },
+      "thresholdGaming": {
+        "detection": "aggregateSmallWritebacks",
+        "window": "7d",
+        "action": "merge",
+        "reason": "Multiple small writebacks to same agent should be reviewed as one"
+      },
+      "identityDrift": {
+        "detection": "coreTruthsConsistency",
+        "action": "reject",
+        "reason": "Proposed change violates Core Truths - identity drift risk"
+      }
+    }
+  },
+
+  "validation": {
+    "fiveCriteria": {
+      "independent": {
+        "check": "outputDoesNotRequireOtherMetaOutputs",
+        "description": "Agent produces output without requiring other meta agents' outputs"
+      },
+      "smallEnough": {
+        "check": "coversExactlyOneResponsibilityClass",
+        "description": "Agent covers exactly one responsibility class"
+      },
+      "clearBoundaries": {
+        "check": "ownAndDoNotTouchAreSpecific",
+        "description": "Own and Do Not Touch lists reference specific other agents"
+      },
+      "replaceable": {
+        "check": "otherAgentsContinueIfAbsent",
+        "description": "Other agents can continue operating if this agent is absent"
+      },
+      "reusable": {
+        "check": "triggeredByRecurringCondition",
+        "description": "Agent is triggered by a recurring condition"
+      }
+    },
+
+    "prinSt": {
+      "prinSt01": {
+        "name": "Configurable",
+        "check": "hasConfigReference",
+        "description": "Behavior driven through configuration, not hardcoded values"
+      },
+      "prinSt02": {
+        "name": "Single Source",
+        "check": "singleAuthoritativeSource",
+        "description": "Each piece of data or logic has exactly one authoritative source"
+      },
+      "prinSt03": {
+        "name": "Layering",
+        "check": "ownsOneLayerOnly",
+        "description": "Each layer owns one responsibility class"
+      },
+      "prinSt04": {
+        "name": "Decoupling",
+        "check": "communicatesThroughInterfaces",
+        "description": "Modules communicate through explicit interfaces, not implementation details"
+      },
+      "prinSt05": {
+        "name": "i18n",
+        "check": "noInlineHumanLanguage",
+        "description": "User-facing text externalized, not inline human-language strings"
+      }
+    }
   }
 }

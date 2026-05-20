@@ -19,6 +19,7 @@ const preferredOrder = [
   "meta-conductor",
   "meta-prism",
   "meta-scout",
+  "meta-chrysalis",
 ];
 const metaAgentFilePattern = /^meta-[\w-]+\.md$/i;
 
@@ -143,6 +144,7 @@ if (process.argv.includes("--self-test")) {
       {
         ok: true,
         agentCount: runtimeData.agents.length,
+        agentIds: runtimeData.agents.map((agent) => agent.id),
         resources: [
           "meta://theory",
           "meta://runtime-matrix",

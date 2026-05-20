@@ -41,11 +41,11 @@ const [
 ]);
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Stage 1: Critical — Clarity Gate
+// Stage 1: Critical — Blocking Clarification
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-describe("Stage 1: Critical — Clarity Gate", () => {
-  test("E2E-01: 模糊输入触发≥2个追问问题", () => {
+describe("Stage 1: Critical — Blocking Clarification", () => {
+  test("E2E-01: 模糊输入可触发早期澄清", () => {
     const scenario = clarityScenarios.find((s) => s.id === "CG-01");
     assert.ok(scenario, "CG-01 must exist");
     const dims = scenario.ambiguousDims || [];
@@ -58,7 +58,7 @@ describe("Stage 1: Critical — Clarity Gate", () => {
     assert.ok(
       scenario.expectedBehavior?.toLowerCase().includes("ask") ||
         scenario.expectedBehavior?.toLowerCase().includes("must"),
-      "Must ask, not suggest",
+      "Ambiguous input must support clarification",
     );
   });
 
@@ -74,7 +74,7 @@ describe("Stage 1: Critical — Clarity Gate", () => {
     );
   });
 
-  test("Critical阶段定义了4个澄清维度", () => {
+  test("Critical阶段保留澄清维度用于阻断性问题", () => {
     const allDims = new Set();
     for (const s of clarityScenarios) {
       for (const d of s.ambiguousDims || []) {
@@ -109,6 +109,30 @@ describe("Stage 1: Critical — Clarity Gate", () => {
         `Scenario ${s.id} must have PASS criteria`,
       );
     }
+  });
+});
+
+describe("Thinking → Execution: Unified Confirmation", () => {
+  test("Execution前一次性确认，且不是每个阶段都弹确认", () => {
+    assert.match(skillContent, /After Fetch and Thinking complete, BEFORE Execution/);
+    assert.match(skillContent, /After Thinking completes, BEFORE any Execution/);
+    assert.match(skillContent, /DO NOT.*Critical\/Fetch\/Thinking\/Review/s);
+  });
+
+  test("确认卡包含4+问题，每题3-4个产品化选项", () => {
+    const block = skillContent.slice(
+      skillContent.indexOf("1. Outcome Confirmation"),
+      skillContent.indexOf("Wait for user response before proceeding to Execution."),
+    );
+    const questions = [...block.matchAll(/^\d+\.\s+.+Confirmation$/gm)];
+    assert.ok(questions.length >= 4, `Need 4+ questions, got ${questions.length}`);
+    for (let i = 0; i < questions.length; i++) {
+      const start = questions[i].index ?? 0;
+      const end = i + 1 < questions.length ? (questions[i + 1].index ?? block.length) : block.length;
+      const options = [...block.slice(start, end).matchAll(/^\s+- Option [A-D]:/gm)];
+      assert.ok(options.length >= 3 && options.length <= 4);
+    }
+    assert.match(skillContent, /understandable to non-technical users/i);
   });
 });
 
@@ -593,6 +617,8 @@ describe("End-to-End: Complete 8-Stage Spine Integration", () => {
       "cardPlanPacket",
       "dispatchEnvelopePacket",
       "orchestrationTaskBoardPacket",
+      "businessFlowBlueprintPacket",
+      "agentBlueprintPacket",
       "workerTaskPackets",
       "reviewPacket",
       "verificationPacket",

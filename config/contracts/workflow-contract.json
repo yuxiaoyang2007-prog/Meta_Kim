@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 7,
+  "schemaVersion": 8,
   "owner": "Meta_Kim",
   "businessWorkflow": {
     "id": "business",
@@ -326,24 +326,28 @@
     },
     "runtimeNativeChoiceSurfaces": {
       "claude": {
-        "primarySurface": "native_hook_prompt",
+        "primarySurface": "AskUserQuestion_tool",
         "fallbackSurfaces": ["conversation_fallback"],
-        "triggerDescription": "Use Claude Code native prompt/hook surfaces when available for clarify, option_select, and confirm_execution cards."
+        "triggerDescription": "Use AskUserQuestion for blocking Critical clarification when Fetch cannot proceed, then use it once for Execution confirmation after Fetch and Thinking.",
+        "implementation": "Invoke AskUserQuestion with questions array; platform natively supports modal popup."
       },
       "codex": {
         "primarySurface": "native_choice",
         "fallbackSurfaces": ["conversation_fallback"],
-        "triggerDescription": "Use Codex native choice input when the active runtime mode exposes it; otherwise pause with a localized confirmation card."
+        "triggerDescription": "Use Codex native choice input when the active runtime mode exposes it; otherwise pause with a localized confirmation card.",
+        "implementation": "Emit markdown confirmation card; depends on active mode availability."
       },
       "openclaw": {
-        "primarySurface": "native_choice",
+        "primarySurface": "workspace_agent",
         "fallbackSurfaces": ["conversation_fallback"],
-        "triggerDescription": "Use OpenClaw native agent/workspace choice mechanisms when available; otherwise emit a localized runtime card and wait for explicit user selection."
+        "triggerDescription": "Use OpenClaw native agent/workspace choice mechanisms when available; otherwise emit a localized runtime card and wait for explicit user selection.",
+        "implementation": "Workspace-per-agent model; requires proper workspace configuration."
       },
       "cursor": {
         "primarySurface": "native_mode_picker",
         "fallbackSurfaces": ["conversation_fallback"],
-        "triggerDescription": "Use Cursor native custom modes/mode picker and project rules for Critical, Fetch, Thinking, and Review selection; dynamic popup support is runtime-dependent."
+        "triggerDescription": "Use Cursor native custom modes/mode picker and project rules for Critical, Fetch, Thinking, and Review selection; dynamic popup support is runtime-dependent.",
+        "implementation": "Custom Modes / mode picker UI; fallback to conversation card."
       }
     },
     "silencePolicy": {
@@ -362,6 +366,35 @@
       ],
       "requiresInterruptionJustification": true,
       "deferRequiresDeadline": true
+    },
+    "userInteractionPolicy": {
+      "description": "Policy for when to use AskUserQuestion (decision popup) vs notice (informational output)",
+      "decisionTriggerEnum": [
+        "multiple_viable_solutions",
+        "product_direction_required",
+        "security_or_rollback_risk"
+      ],
+      "defaultWhen": [
+        "multiple_options_with_tradeoffs",
+        "business_clarification_needed",
+        "risk_acknowledgment_required"
+      ],
+      "optionQualityStandard": {
+        "requiredDimensions": [
+          "what_changes",
+          "problem_solved",
+          "advantages",
+          "disadvantages"
+        ],
+        "description": "Every option must specify: what changes, what problem it solves, advantages, and disadvantages"
+      },
+      "batchDecisionMode": {
+        "enabled": true,
+        "dependencyDetection": "auto",
+        "linearFormat": "sequential_questions",
+        "parallelFormat": "batch_list",
+        "description": "When multiple independent questions exist, collect and present them in one interaction"
+      }
     },
     "controlIntervention": {
       "decisionTypeEnum": [
@@ -461,6 +494,8 @@
         "cardPlanPacket",
         "dispatchEnvelopePacket",
         "orchestrationTaskBoardPacket",
+        "businessFlowBlueprintPacket",
+        "agentBlueprintPacket",
         "dispatchBoard",
         "workerTaskPacket",
         "workerResultPacket",
@@ -490,6 +525,18 @@
         "create_execution_agent",
         "upgrade_execution_agent"
       ],
+      "capabilityGapPacketRequiredWhenRoleCoverage": {
+        "roleCoverageGate": "fail",
+        "missingRolesNonEmpty": true,
+        "ownerResolutionAnyOf": [
+          "upgrade_existing_owner",
+          "create_owner_first"
+        ]
+      },
+      "executionAgentCardRequiredWhenOwnerResolutionAnyOf": [
+        "upgrade_existing_owner",
+        "create_owner_first"
+      ],
       "intentPacketRequiredWhenGovernanceFlows": [
         "complex_dev",
         "meta_analysis"
@@ -498,7 +545,7 @@
         "complex_dev",
         "meta_analysis"
       ],
-      "description": "intentPacket is required in run artifacts when taskClassification.governanceFlow is listed in intentPacketRequiredWhenGovernanceFlows (IntentGate-style intent lock-in). intentGatePacket is required for the same flows (structured ambiguity / assumptions gate before Execution). dispatchEnvelopePacket is required for all non-pure-query flows so every executable run has an explicit owner, capability boundary, memory mode, and review / verification routing before dispatch. orchestrationTaskBoardPacket is the mandatory Conductor task board for the same executable flows. capabilityGapPacket is required when taskClassification.upgradeReasons records owner_creation_required. executionAgentCard is required when capabilityGapPacket resolves the gap through execution-agent creation or upgrade."
+      "description": "intentPacket is required in run artifacts when taskClassification.governanceFlow is listed in intentPacketRequiredWhenGovernanceFlows (IntentGate-style intent lock-in). intentGatePacket is required for the same flows (structured ambiguity / assumptions gate before Execution). dispatchEnvelopePacket is required for all non-pure-query flows so every executable run has an explicit owner, capability boundary, memory mode, and review / verification routing before dispatch. orchestrationTaskBoardPacket is the mandatory Conductor task board for the same executable flows. businessFlowBlueprintPacket and agentBlueprintPacket are required before workerTaskPacket so Conductor proves the full business flow was considered before dispatch. capabilityGapPacket is required when taskClassification.upgradeReasons records owner_creation_required, or when agentBlueprintPacket.roleCoverageGate fails with missing roles whose ownerResolution is upgrade_existing_owner or create_owner_first. executionAgentCard is required when capabilityGapPacket resolves the gap through execution-agent creation or upgrade, or when agentBlueprintPacket ownerResolution chooses upgrade_existing_owner or create_owner_first."
     },
     "localState": {
       "root": ".meta-kim/state",
@@ -576,9 +623,19 @@
       "visualOrAssetPlan",
       "owner",
       "ownerMode",
+      "ownerAgent",
+      "businessRoleId",
+      "roleDisplayName",
+      "roleInstanceId",
+      "runtimeInstanceAlias",
       "dependsOn",
       "parallelGroup",
       "mergeOwner",
+      "shardKey",
+      "shardScope",
+      "workspaceIsolation",
+      "artifactNamespace",
+      "collisionPolicy",
       "taskPacketId"
     ],
     "evolutionWritebackRequired": true,
@@ -714,6 +771,9 @@
     "dispatchEnvelopePacket": {
       "requiredFields": [
         "ownerAgent",
+        "businessRoleId",
+        "roleDisplayName",
+        "roleInstanceId",
         "taskRef",
         "allowedCapabilities",
         "blockedCapabilities",
@@ -736,7 +796,7 @@
         "project_only",
         "cross_project_readonly"
       ],
-      "description": "Mandatory execution shell for non-query flows: who owns the task, which capabilities are allowed/blocked, what memory policy the child gets, and which owners close review / verification."
+      "description": "Mandatory execution shell for non-query flows: who owns the task, which business-readable role is being dispatched, which capabilities are allowed/blocked, what memory policy the child gets, and which owners close review / verification. Runtime-assigned nicknames may be recorded as runtimeInstanceAlias only; they must never replace roleDisplayName."
     },
     "orchestrationTaskBoardPacket": {
       "requiredFields": [
@@ -751,11 +811,104 @@
       ],
       "description": "Conductor-owned task board for executable work. It says who does what, in what order, what each task must deliver, and who synthesizes the final result."
     },
+    "businessFlowBlueprintPacket": {
+      "requiredFields": [
+        "deliverableType",
+        "requiredLanes",
+        "optionalLanes",
+        "omittedLanes",
+        "laneDependencies",
+        "coverageJudgment",
+        "blueprintSource",
+        "blueprintVersion"
+      ],
+      "deliverableTypeEnum": [
+        "web_app",
+        "landing_page",
+        "dashboard",
+        "api_service",
+        "data_pipeline",
+        "article",
+        "custom"
+      ],
+      "coverageJudgmentEnum": [
+        "complete",
+        "incomplete",
+        "intentionally_reduced"
+      ],
+      "laneRequiredFields": [
+        "laneId",
+        "businessLane",
+        "capabilityNeed",
+        "capabilitySearchQuery",
+        "candidateOwners",
+        "candidateSkills",
+        "selectedOwner",
+        "selectionReason",
+        "coverageStatus"
+      ],
+      "laneCoverageStatusEnum": [
+        "covered",
+        "partial",
+        "missing",
+        "omitted_with_reason"
+      ],
+      "description": "Conductor-owned business-flow blueprint produced before worker tasks. It forces the system to consider product, UX, UI, frontend, backend, data, motion, test, QA, security, release, feedback, and evolution lanes where relevant. Every lane object in requiredLanes or optionalLanes must carry global capability scan evidence: capabilitySearchQuery, candidateOwners, candidateSkills, selectedOwner, selectionReason, and coverageStatus. Omitted lanes require explicit human-readable reasons."
+    },
+    "agentBlueprintPacket": {
+      "requiredFields": [
+        "roles",
+        "roleCoverageGate",
+        "missingRoles",
+        "duplicateRolePolicy",
+        "namingPolicy"
+      ],
+      "roleCoverageGateEnum": [
+        "pass",
+        "fail"
+      ],
+      "duplicateRolePolicyEnum": [
+        "allow_instances_when_sharded",
+        "reject_unsharded_duplicates"
+      ],
+      "roleRequiredFields": [
+        "businessRoleId",
+        "roleDisplayName",
+        "assignedResponsibilitySlice",
+        "ownerAgent",
+        "ownerResponsibilityDelta",
+        "agentIterationPlan",
+        "ownerResolution"
+      ],
+      "ownerResolutionEnum": [
+        "reuse_existing_owner",
+        "upgrade_existing_owner",
+        "create_owner_first"
+      ],
+      "roleCoverageFailureRule": {
+        "whenRoleCoverageGate": "fail",
+        "whenMissingRolesNonEmpty": true,
+        "createOrUpgradeRequires": [
+          "capabilityGapPacket",
+          "executionAgentCard"
+        ]
+      },
+      "namingPolicy": {
+        "roleDisplayNameRequired": true,
+        "businessSemanticNamesOnly": true,
+        "runtimeNicknamesAreAliasesOnly": true,
+        "forbiddenPrimaryNamePattern": "^[A-Z][a-z]+$",
+        "description": "User-visible agent names must describe business responsibility, e.g. frontend-home-page, database-schema, ux-flow-review. Host-generated personal nicknames such as Huygens or Mill may be recorded only as runtimeInstanceAlias."
+      },
+      "description": "Capability-first role blueprint. It separates businessRoleId, roleDisplayName, selected owner agent, assigned responsibility slice, owner responsibility delta, and per-run role instances so the same agent can run multiple named shards in parallel without confusing users. ownerResolution uses reuse_existing_owner, upgrade_existing_owner, or create_owner_first."
+    },
     "orchestrationTask": {
       "requiredFields": [
         "taskId",
         "taskKind",
         "owner",
+        "businessRoleId",
+        "roleDisplayName",
         "sequence",
         "dependsOn",
         "deliverable"
@@ -788,6 +941,8 @@
     "executionAgentCard": {
       "requiredFields": [
         "agentId",
+        "businessRoleId",
+        "roleDisplayName",
         "purpose",
         "capabilities",
         "nonCapabilities",
@@ -865,6 +1020,11 @@
         "taskPacketId",
         "owner",
         "ownerMode",
+        "ownerAgent",
+        "businessRoleId",
+        "roleDisplayName",
+        "roleInstanceId",
+        "runtimeInstanceAlias",
         "todayTask",
         "output",
         "deliverableLink",
@@ -876,9 +1036,14 @@
         "dependsOn",
         "parallelGroup",
         "mergeOwner",
+        "shardKey",
+        "shardScope",
+        "workspaceIsolation",
+        "artifactNamespace",
+        "collisionPolicy",
         "verifySteps"
       ],
-      "description": "派发给worker agent的执行任务包。三大编排核心字段：dependsOn（前置依赖，见dependencyContract）/ parallelGroup（并行分组）/ mergeOwner（合并负责人）。verifySteps 提供原子级完成标准，用于 Verification 阶段的逐条检查。",
+      "description": "派发给worker agent的执行任务包。三大编排核心字段：dependsOn（前置依赖，见dependencyContract）/ parallelGroup（并行分组）/ mergeOwner（合并负责人）。roleDisplayName 是用户可见业务角色名；runtimeInstanceAlias 只记录宿主临时昵称，不能替代业务名。verifySteps 提供原子级完成标准，用于 Verification 阶段的逐条检查。",
       "dependsOnField": {
         "type": "array",
         "items": {
@@ -929,6 +1094,27 @@
       "mergeOwnerField": {
         "type": "string",
         "description": "并行组的合并负责人，负责汇总同组所有worker的结果后再推进后续依赖链"
+      },
+      "sameOwnerMultiInstancePolicy": {
+        "allowed": true,
+        "roleInstanceIdUniqueWithinRun": true,
+        "requiredFields": [
+          "roleInstanceId",
+          "shardKey",
+          "shardScope",
+          "workspaceIsolation",
+          "artifactNamespace",
+          "collisionPolicy",
+          "mergeOwner"
+        ],
+        "collisionPolicyEnum": [
+          "no_overlap",
+          "merge_by_owner",
+          "lock_required",
+          "sequentialize"
+        ],
+        "sameOwnerParallelGroupRequiresUnifiedMergeOwner": true,
+        "description": "同一个 ownerAgent 可以并行启动多个实例，但每个实例必须有业务可读 roleDisplayName、唯一 roleInstanceId、明确 shardKey / shardScope、workspaceIsolation、artifactNamespace、collisionPolicy 和统一 mergeOwner。同一 ownerAgent 的并行实例如果共享 parallelGroup，必须指向同一个 mergeOwner；没有这些字段或合并规则的重复 ownerAgent 是伪并行。"
       },
       "verifyStepsField": {
         "type": "array",

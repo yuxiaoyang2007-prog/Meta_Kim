@@ -6,6 +6,95 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.0.36] - 2026-05-20
+
+### Added
+
+- **Business-flow blueprint gate** — Requires executable runs to plan product, UX, UI, frontend, backend, database, motion, QA, testing, release, feedback, and evolution lanes where relevant before dispatch.
+- **Business-readable agent roles** — Separates user-visible role names from runtime nicknames, and supports same-agent multi-instance sharding with explicit isolation, collision, and merge rules.
+- **Run artifact validation fixtures** — Added positive and negative fixtures for same-owner sharded execution and overlapping shard rejection.
+
+### Changed
+
+- **Capability-first orchestration** — Every business lane now records global agent/skill search evidence, selected owner, selection reason, and coverage status before worker packets are created.
+- **Owner gap handling** — Existing owner reuse, owner upgrade, and new owner creation are now explicit `agentBlueprintPacket` decisions with required gap/card follow-through when coverage is missing.
+- **Run index ownership** — Owner queries now cover governance owners, execution owner agents, and business role names.
+
+### Fixed
+
+- **MCP agent inventory** — `meta-runtime-server` self-test now exposes all 9 meta agents, including `meta-chrysalis`.
+- **Static contract drift** — Project validation now checks the new blueprint packets, role fields, dispatch envelope fields, and worker shard fields.
+- **Cross-runtime documentation** — Runtime capability matrix now documents blueprint and role-naming parity across Claude, Codex, OpenClaw, and Cursor.
+
+## [2.0.35] - 2026-05-20
+
+### Changed
+
+- **Meta-theory confirmation flow** — Clarified that blocking Critical questions only happen when Fetch cannot proceed, while the main user choice happens once after Fetch + Thinking and before Execution.
+- **Product-readable decision cards** — Expanded decision templates so every pre-execution choice includes 3-4 options with expected result, advantages, and disadvantages in non-technical language.
+- **9-agent documentation parity** — Updated Codex/README/test wording to include `meta-chrysalis` alongside the existing meta agents.
+
+### Fixed
+
+- **Hook layering** — Removed the duplicated Claude-only `skip-reminder.mjs` source and made Claude sync consume the shared hook plus its shared i18n dependency.
+- **Install package contents** — Narrowed the npm `files` whitelist so local `scripts/.meta-kim` state is not packed, and ignored the removed `package-lock.json`.
+- **Evolution contract path** — Pointed scar writeback storage to the existing `config/contracts/scar-protocol.md`.
+- **Setup counts** — Replaced hardcoded 8-agent setup labels with the canonical agent count.
+
+## [2.0.34] - 2026-05-20
+
+### Added
+
+- **meta-chrysalis agent** — New specialist for Evolution writeback orchestration, automating the flow from spine evolution artifacts to canonical source updates with Five Criteria validation and recursion prevention.
+- **Evolution Writeback Gate** — Added `scripts/evolution-writeback-gate.mjs` with Five Criteria validation, PRIN-ST compliance checks, circular dependency detection, and threshold gaming prevention.
+- **Evolution signal detection** — Added `scripts/detect-evolution-signals.mjs` for automatic discovery of reusable patterns and agent drift from commit history and runtime behavior.
+- **Meta-Kim aggregate** — Added `scripts/meta-kim-aggregate.mjs` for cross-runtime intelligence gathering and pattern synthesis.
+- **Hook i18n support** — Added `canonical/runtime-assets/shared/hooks/hook-i18n.mjs` with 4-language support (en, zh-CN, ja-JP, ko-KR) for user-facing hook messages.
+- **Skip reminder hook** — Added `canonical/runtime-assets/shared/hooks/skip-reminder.mjs` and `claude/hooks/skip-reminder.mjs` for consistent hook skip notifications across runtimes.
+- **User interaction templates** — Added `canonical/templates/user-interaction/` with decision, batch-decision, and notice templates for runtime-agnostic user interaction patterns.
+- **postinstall check** — Added `scripts/postinstall-check.mjs` for i18n capability index discovery prompts after npm install.
+- **Unit tests** — Added `tests/unit/skip-reminder.test.mjs` with 17 test cases for skip reminder functionality.
+
+### Changed
+
+- **meta-theory Clarity Gate** — Redesigned from Critical-stage confirmation to unified post-Thinking confirmation with 4+ questions, 3-4 options each, reducing interruptions while maintaining quality.
+- **All 9 meta agents** — Updated SOUL.md files with evolution writeback boundaries and clarified职责范围.
+- **Workflow contract** — Enhanced `config/contracts/workflow-contract.json` with evolutionWritebackPacket and capabilityGapPacket schemas.
+- **Capability index** — Expanded `config/capability-index/meta-kim-capabilities.json` with evolution-related capabilities.
+- **Runtime sync** — Enhanced `scripts/sync-runtimes.mjs` with --reverse mode for runtime-to-canonical evolution feedback and improved hook dependency management.
+
+### Fixed
+
+- **i18n compliance** — Fixed hardcoded English strings in hooks to use translation functions.
+- **PRIN-ST violations** — Replaced magic strings with SKIP_DECISION constants and configuration-driven values.
+- **Keyword detection** — Improved SIMPLE_KEYWORDS with regex word boundaries to reduce false positives.
+
+## [2.0.32] - 2026-05-19
+
+### Added
+
+- **Runtime hook mapping contract** — Added `scripts/runtime-hook-mapping.mjs` to centralize Claude/Codex/OpenClaw/Cursor hook capability mapping, command quoting, and HookPrompt adapter generation.
+- **HookPrompt Codex/Cursor adapter paths** — HookPrompt now declares runtime-neutral prompt optimization capability and installs to Codex through a `UserPromptSubmit` adapter and Cursor through a `beforeSubmitPrompt` adapter instead of pretending the Claude hook file is directly portable.
+- **Hook mapping validation** — `meta:validate` now checks Codex and Cursor hook output paths, HookPrompt platform support, and cross-platform hook command quoting.
+- **Shared hooks source files** — New `canonical/runtime-assets/shared/hooks/` directory with portable source files:
+  - `activate-meta-theory-spine.mjs`: spine auto-trigger implementation
+  - `spine-state.mjs`: spine state management utilities
+  - `utils.mjs`: shared hook utilities
+- **Codex Skill hook support** — Updated `scripts/sync-runtimes.mjs` to configure Skill hook for Codex runtime, enabling spine auto-trigger across platforms.
+- **SHARED_HOOK_FILES alias** — Added `SHARED_HOOK_FILES` export in `scripts/runtime-sync-check.mjs` with alias `CLAUDE_HOOK_FILES` for backwards compatibility.
+- **MCP Memory hook auto-fix** — Hook installer now detects and auto-fixes invalid Python paths in existing hook registrations. See `scripts/install-mcp-memory-hooks.mjs --force` for manual update.
+
+### Changed
+
+- **Cursor hook stance** — Cursor is mapped as a native lowerCamel hook runtime through `.cursor/hooks.json` and `.cursor/hooks/`, including memory, graphify, and HookPrompt adapter hooks.
+- **Codex hook stance** — Codex is documented as a trusted project/user hook runtime with `.codex/hooks.json`, including graphify, memory, meta-theory spine, and HookPrompt adapter hooks.
+- **settings.json Skill hook** — PreToolUse matcher now routes to shared `activate-meta-theory-spine.mjs` for automatic spine state initialization.
+- **Capability index update** — Added spine-related capabilities to `config/capability-index/meta-kim-capabilities.json`.
+
+### Removed
+
+- **package-lock.json** — Deleted (project uses pnpm with `pnpm-lock.yaml`).
+
 ## [2.0.30] - 2026-05-15
 
 ### Changed

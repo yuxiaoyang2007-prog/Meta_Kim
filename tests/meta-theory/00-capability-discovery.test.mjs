@@ -247,7 +247,7 @@ describe("Part B: Runtime MCP Integration", async () => {
     );
   });
 
-  test("list_meta_agents returns all 8 meta-agents", async () => {
+  test("list_meta_agents returns all expected meta-agents", async () => {
     const serverPath = path.join(
       REPO_ROOT,
       "scripts",
@@ -274,8 +274,8 @@ describe("Part B: Runtime MCP Integration", async () => {
       const result = JSON.parse(output);
       assert.ok(result.ok, "meta-runtime-server.mjs self-test must pass");
       assert.ok(
-        result.agentCount >= 8,
-        `Expected at least 8 agents, got ${result.agentCount}`,
+        result.agentCount >= ALL_AGENTS.length,
+        `Expected at least ${ALL_AGENTS.length} agents, got ${result.agentCount}`,
       );
       assert.ok(
         result.tools.includes("list_meta_agents"),
@@ -316,7 +316,7 @@ describe("Part B: Runtime MCP Integration", async () => {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 describe("Part C: Agent Discovery", async () => {
-  test("All 8 meta-agents have .md files in canonical/agents/", async () => {
+  test("All expected meta-agents have .md files in canonical/agents/", async () => {
     for (const agent of ALL_AGENTS) {
       const agentPath = path.join(
         REPO_ROOT,

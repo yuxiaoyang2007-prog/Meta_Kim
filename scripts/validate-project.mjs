@@ -14,6 +14,14 @@ import {
   loadRuntimeProfiles,
   loadSyncManifest,
 } from "./meta-kim-sync-config.mjs";
+import {
+  HOOKPROMPT_PLATFORM_SUPPORT,
+  RUNTIME_HOOK_CAPABILITIES,
+  buildCodexHooksJson,
+  buildCursorHooksJson,
+  buildHookPromptAdapterSource,
+  nodeHookCommand,
+} from "./runtime-hook-mapping.mjs";
 import { t } from "./meta-kim-i18n.mjs";
 import { validateSkillFrontmatter } from "./install-skill-sanitizer.mjs";
 
@@ -69,6 +77,7 @@ const EXPECTED_PUBLIC_DISPLAY_REQUIRES = [
 
 /** Documented in AGENTS.md / CLAUDE.md — project hook commands (Stop may list multiple). */
 const EXPECTED_CLAUDE_HOOK_COMMANDS = [
+  "node .claude/hooks/activate-meta-theory-spine.mjs",
   "node .claude/hooks/block-dangerous-bash.mjs",
   "node .claude/hooks/pre-git-push-confirm.mjs",
   "node .claude/hooks/enforce-agent-dispatch.mjs",
@@ -793,7 +802,10 @@ async function validateWorkflowContract() {
     "taskClassification",
     "fetchPacket",
     "cardPlanPacket",
+    "dispatchEnvelopePacket",
     "orchestrationTaskBoardPacket",
+    "businessFlowBlueprintPacket",
+    "agentBlueprintPacket",
     "dispatchBoard",
     "workerTaskPacket",
     "workerResultPacket",
@@ -953,6 +965,9 @@ async function validateWorkflowContract() {
       "dispatchEnvelopePacket",
       [
         "ownerAgent",
+        "businessRoleId",
+        "roleDisplayName",
+        "roleInstanceId",
         "taskRef",
         "allowedCapabilities",
         "blockedCapabilities",
@@ -971,7 +986,39 @@ async function validateWorkflowContract() {
     ],
     [
       "orchestrationTask",
-      ["taskId", "taskKind", "owner", "sequence", "dependsOn", "deliverable"],
+      [
+        "taskId",
+        "taskKind",
+        "owner",
+        "businessRoleId",
+        "roleDisplayName",
+        "sequence",
+        "dependsOn",
+        "deliverable",
+      ],
+    ],
+    [
+      "businessFlowBlueprintPacket",
+      [
+        "deliverableType",
+        "requiredLanes",
+        "optionalLanes",
+        "omittedLanes",
+        "laneDependencies",
+        "coverageJudgment",
+        "blueprintSource",
+        "blueprintVersion",
+      ],
+    ],
+    [
+      "agentBlueprintPacket",
+      [
+        "roles",
+        "roleCoverageGate",
+        "missingRoles",
+        "duplicateRolePolicy",
+        "namingPolicy",
+      ],
     ],
     [
       "capabilityGapPacket",
@@ -989,12 +1036,44 @@ async function validateWorkflowContract() {
       "executionAgentCard",
       [
         "agentId",
+        "businessRoleId",
+        "roleDisplayName",
         "purpose",
         "capabilities",
         "nonCapabilities",
         "dependencies",
         "inputs",
         "outputs",
+      ],
+    ],
+    [
+      "workerTaskPacket",
+      [
+        "taskPacketId",
+        "owner",
+        "ownerMode",
+        "ownerAgent",
+        "businessRoleId",
+        "roleDisplayName",
+        "roleInstanceId",
+        "runtimeInstanceAlias",
+        "todayTask",
+        "output",
+        "deliverableLink",
+        "qualityBar",
+        "referenceDirection",
+        "handoffTarget",
+        "lengthExpectation",
+        "visualOrAssetPlan",
+        "dependsOn",
+        "parallelGroup",
+        "mergeOwner",
+        "shardKey",
+        "shardScope",
+        "workspaceIsolation",
+        "artifactNamespace",
+        "collisionPolicy",
+        "verifySteps",
       ],
     ],
     [
@@ -1107,6 +1186,121 @@ async function validateWorkflowContract() {
         `workflow-contract.json protocol ${protocolName} must require ${field}.`,
       );
     }
+  }
+
+  const businessFlowProtocol =
+    contract.protocols?.businessFlowBlueprintPacket ?? {};
+  for (const field of [
+    "laneId",
+    "businessLane",
+    "capabilityNeed",
+    "capabilitySearchQuery",
+    "candidateOwners",
+    "candidateSkills",
+    "selectedOwner",
+    "selectionReason",
+    "coverageStatus",
+  ]) {
+    assert(
+      businessFlowProtocol.laneRequiredFields?.includes(field),
+      `workflow-contract.json businessFlowBlueprintPacket.laneRequiredFields must include ${field}.`,
+    );
+  }
+  for (const status of [
+    "covered",
+    "partial",
+    "missing",
+    "omitted_with_reason",
+  ]) {
+    assert(
+      businessFlowProtocol.laneCoverageStatusEnum?.includes(status),
+      `workflow-contract.json businessFlowBlueprintPacket.laneCoverageStatusEnum must include ${status}.`,
+    );
+  }
+
+  const agentBlueprintProtocol = contract.protocols?.agentBlueprintPacket ?? {};
+  for (const field of [
+    "businessRoleId",
+    "roleDisplayName",
+    "assignedResponsibilitySlice",
+    "ownerAgent",
+    "ownerResponsibilityDelta",
+    "agentIterationPlan",
+    "ownerResolution",
+  ]) {
+    assert(
+      agentBlueprintProtocol.roleRequiredFields?.includes(field),
+      `workflow-contract.json agentBlueprintPacket.roleRequiredFields must include ${field}.`,
+    );
+  }
+  assert(
+    agentBlueprintProtocol.namingPolicy?.businessSemanticNamesOnly === true &&
+      agentBlueprintProtocol.namingPolicy?.runtimeNicknamesAreAliasesOnly ===
+        true &&
+      agentBlueprintProtocol.namingPolicy?.roleDisplayNameRequired === true,
+    "workflow-contract.json agentBlueprintPacket.namingPolicy must be the contract object with business-readable name rules.",
+  );
+  for (const resolution of [
+    "reuse_existing_owner",
+    "upgrade_existing_owner",
+    "create_owner_first",
+  ]) {
+    assert(
+      agentBlueprintProtocol.ownerResolutionEnum?.includes(resolution),
+      `workflow-contract.json agentBlueprintPacket.ownerResolutionEnum must include ${resolution}.`,
+    );
+  }
+  const roleCoverageRule =
+    contract.runDiscipline?.protocolFirst
+      ?.capabilityGapPacketRequiredWhenRoleCoverage ?? {};
+  assert(
+    roleCoverageRule.roleCoverageGate === "fail" &&
+      roleCoverageRule.missingRolesNonEmpty === true &&
+      roleCoverageRule.ownerResolutionAnyOf?.includes("upgrade_existing_owner") &&
+      roleCoverageRule.ownerResolutionAnyOf?.includes("create_owner_first"),
+    "workflow-contract.json must require capabilityGapPacket for failed role coverage, missing roles, and owner creation or upgrade.",
+  );
+  for (const resolution of ["upgrade_existing_owner", "create_owner_first"]) {
+    assert(
+      contract.runDiscipline?.protocolFirst?.executionAgentCardRequiredWhenOwnerResolutionAnyOf?.includes(
+        resolution,
+      ),
+      `workflow-contract.json executionAgentCardRequiredWhenOwnerResolutionAnyOf must include ${resolution}.`,
+    );
+  }
+
+  const sameOwnerPolicy =
+    contract.protocols?.workerTaskPacket?.sameOwnerMultiInstancePolicy ?? {};
+  assert(
+    sameOwnerPolicy.allowed === true &&
+      sameOwnerPolicy.roleInstanceIdUniqueWithinRun === true &&
+      sameOwnerPolicy.sameOwnerParallelGroupRequiresUnifiedMergeOwner === true,
+    "workflow-contract.json workerTaskPacket.sameOwnerMultiInstancePolicy must allow only sharded same-owner instances with unified mergeOwner.",
+  );
+  for (const field of [
+    "roleInstanceId",
+    "shardKey",
+    "shardScope",
+    "workspaceIsolation",
+    "artifactNamespace",
+    "collisionPolicy",
+    "mergeOwner",
+  ]) {
+    assert(
+      sameOwnerPolicy.requiredFields?.includes(field),
+      `workflow-contract.json workerTaskPacket.sameOwnerMultiInstancePolicy.requiredFields must include ${field}.`,
+    );
+  }
+  for (const policy of [
+    "no_overlap",
+    "merge_by_owner",
+    "lock_required",
+    "sequentialize",
+  ]) {
+    assert(
+      sameOwnerPolicy.collisionPolicyEnum?.includes(policy),
+      `workflow-contract.json workerTaskPacket.sameOwnerMultiInstancePolicy.collisionPolicyEnum must include ${policy}.`,
+    );
   }
 
   const verificationPacketFields =
@@ -1236,6 +1430,68 @@ async function validateRuntimeParityMatrix() {
     assert(
       raw.includes(marker),
       `docs/runtime-capability-matrix.md must include ${marker}.`,
+    );
+  }
+}
+
+async function validateRuntimeHookMapping() {
+  assert(
+    RUNTIME_HOOK_CAPABILITIES.claude.events.promptSubmit === "UserPromptSubmit",
+    "Claude hook mapping must keep UserPromptSubmit.",
+  );
+  assert(
+    RUNTIME_HOOK_CAPABILITIES.codex.projectHooks === true &&
+      RUNTIME_HOOK_CAPABILITIES.codex.events.promptSubmit ===
+        "UserPromptSubmit",
+    "Codex hook mapping must model trusted project hooks and UserPromptSubmit.",
+  );
+  assert(
+    RUNTIME_HOOK_CAPABILITIES.cursor.projectHooks === true &&
+      RUNTIME_HOOK_CAPABILITIES.cursor.events.promptSubmit ===
+        "beforeSubmitPrompt",
+    "Cursor hook mapping must model native lowerCamel hook events.",
+  );
+  assert(
+    HOOKPROMPT_PLATFORM_SUPPORT.codex.status === "adapter-required" &&
+      HOOKPROMPT_PLATFORM_SUPPORT.cursor.status === "adapter-required",
+    "HookPrompt support must distinguish adapter support for Codex and Cursor.",
+  );
+
+  const codexHooks = buildCodexHooksJson({
+    hookPromptAdapterPath: ".codex/hooks/hookprompt-adapter.mjs",
+  });
+  assert(
+    codexHooks.hooks.UserPromptSubmit[0].hooks.some((hook) =>
+      hook.command.includes("hookprompt-adapter.mjs"),
+    ),
+    "Codex hooks.json must be able to include the HookPrompt adapter.",
+  );
+  const cursorHooks = buildCursorHooksJson({
+    hookPromptAdapterPath: ".cursor/hooks/hookprompt-adapter.mjs",
+  });
+  assert(
+    cursorHooks.hooks.beforeSubmitPrompt.some((hook) =>
+      hook.command.includes("hookprompt-adapter.mjs"),
+    ),
+    "Cursor hooks.json must be able to include the HookPrompt adapter.",
+  );
+  assert(
+    nodeHookCommand("C:/Path With Spaces/hook.mjs") ===
+      'node "C:/Path With Spaces/hook.mjs"',
+    "runtime hook command builder must quote arguments without quoting the node executable.",
+  );
+
+  const adapterSource = buildHookPromptAdapterSource("codex");
+  for (const marker of [
+    "user-prompt-submit.js",
+    "hookSpecificOutput",
+    "systemMessage",
+    "fileURLToPath",
+    "windowsHide",
+  ]) {
+    assert(
+      adapterSource.includes(marker),
+      `HookPrompt Codex adapter source must include ${marker}.`,
     );
   }
 }
@@ -1736,6 +1992,23 @@ async function validateSyncConfiguration() {
     canonicalRoots.capabilityIndex === "config/capability-index",
     "config/sync.json canonicalRoots.capabilityIndex must be config/capability-index.",
   );
+
+  assert(
+    profiles.codex.projection.outputPaths.hooksDir === ".codex/hooks" &&
+      profiles.codex.projection.outputPaths.hooksFile === ".codex/hooks.json",
+    "Codex runtime profile must declare hook output paths.",
+  );
+  assert(
+    profiles.cursor.projection.assetTypes.includes("hooks") &&
+      profiles.cursor.projection.outputPaths.hooksDir === ".cursor/hooks" &&
+      profiles.cursor.projection.outputPaths.hooksFile === ".cursor/hooks.json",
+    "Cursor runtime profile must declare hook output paths.",
+  );
+  assert(
+    (manifest.generatedTargets?.cursor ?? []).includes(".cursor/hooks") &&
+      (manifest.generatedTargets?.cursor ?? []).includes(".cursor/hooks.json"),
+    "config/sync.json must advertise generated Cursor lifecycle hook paths.",
+  );
 }
 
 async function validateCodexArtifacts() {
@@ -1772,6 +2045,38 @@ async function validateCodexArtifacts() {
       `canonical/runtime-assets/codex/commands/meta-theory.md is missing ${expected}`,
     );
   }
+}
+
+async function validateSkillsManifest() {
+  const manifest = JSON.parse(
+    await fs.readFile(path.join(repoRoot, "config", "skills.json"), "utf8"),
+  );
+  const hookprompt = manifest.skills?.find((skill) => skill.id === "hookprompt");
+  assert(hookprompt, "config/skills.json must declare hookprompt.");
+  assert(
+    hookprompt.capabilities?.includes("prompt-submission-optimization"),
+    "hookprompt must declare prompt-submission-optimization capability.",
+  );
+  assert(
+    hookprompt.targets?.includes("claude") &&
+      hookprompt.targets?.includes("codex") &&
+      hookprompt.targets?.includes("cursor"),
+    "hookprompt targets must install native Claude support plus Codex and Cursor adapter support.",
+  );
+  assert(
+    hookprompt.platformSupport?.claude?.status === "native" &&
+      hookprompt.platformSupport?.codex?.status === "adapter-required" &&
+      hookprompt.platformSupport?.cursor?.status === "adapter-required",
+    "hookprompt platformSupport must distinguish native, adapter-required, and degraded runtimes.",
+  );
+
+  const planning = manifest.skills?.find(
+    (skill) => skill.id === "planning-with-files",
+  );
+  assert(
+    planning?.hookSubdirs?.cursor && planning?.hookConfigFiles?.cursor,
+    "planning-with-files must install Cursor lifecycle hooks.",
+  );
 }
 
 async function validatePackageJson() {
@@ -2305,7 +2610,7 @@ function fail(msg) {
 }
 
 async function main() {
-  const TOTAL = 18;
+  const TOTAL = 20;
   let current = 1;
 
   console.log("\n========================================");
@@ -2352,52 +2657,62 @@ async function main() {
   await validateRuntimeParityMatrix();
   pass(t.val.step08Pass);
 
-  // 9. Canonical capability index
+  // 9. Runtime hook mapping
+  step(current++, TOTAL, "Runtime hook mapping");
+  await validateRuntimeHookMapping();
+  pass("runtime hook capabilities and adapters are explicit.");
+
+  // 10. Skills manifest
+  step(current++, TOTAL, "Skills manifest");
+  await validateSkillsManifest();
+  pass("skill capabilities and platform support are explicit.");
+
+  // 11. Canonical capability index
   step(current++, TOTAL, "Canonical capability index");
   await validateCapabilityIndex();
   pass("capability index source and mirrors are valid.");
 
-  // 10. Graphify governance gate
+  // 12. Graphify governance gate
   step(current++, TOTAL, "Graphify governance gate");
   await validateGraphifyGate();
   pass("graphify CLI, report, graph, and health gates are valid.");
 
-  // 11. Documentation fact checks
+  // 13. Documentation fact checks
   step(current++, TOTAL, "Documentation fact checks");
   await validateDocumentationFacts();
   pass("documentation references are aligned with repo facts.");
 
-  // 12. Run artifact fixtures
+  // 14. Run artifact fixtures
   step(current++, TOTAL, t.val.step09, t.val.step09Detail);
   await validateRunArtifactFixtures();
   pass(t.val.step09Pass);
 
-  // 13. npm scripts
+  // 15. npm scripts
   step(current++, TOTAL, t.val.step10, t.val.step10Detail);
   await validatePackageJson();
   pass(t.val.step10Pass);
 
-  // 14. .gitignore
+  // 16. .gitignore
   step(current++, TOTAL, t.val.step11, t.val.step11Detail);
   await validateGitignore();
   pass(t.val.step11Pass);
 
-  // 15. Canonical Claude settings
+  // 17. Canonical Claude settings
   step(current++, TOTAL, t.val.step12, t.val.step12Detail);
   await validateClaudeSettings();
   pass(t.val.step12Pass);
 
-  // 16. Canonical MCP config
+  // 18. Canonical MCP config
   step(current++, TOTAL, t.val.step13, t.val.step13Detail);
   await validateMcpConfig();
   pass(t.val.step13Pass);
 
-  // 17. MCP self-test
+  // 19. MCP self-test
   step(current++, TOTAL, t.val.step14, t.val.step14Detail);
   await validateMcpSelfTest();
   pass(t.val.step14Pass);
 
-  // 18. Factory release artifacts (skipped if factory/ not in public repo)
+  // 20. Factory release artifacts (skipped if factory/ not in public repo)
   step(current++, TOTAL, t.val.step15, t.val.step15Detail);
   await validateFactoryRelease();
   pass(t.val.step15Pass);

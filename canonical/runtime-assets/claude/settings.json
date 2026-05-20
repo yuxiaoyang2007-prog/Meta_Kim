@@ -31,6 +31,15 @@
             "command": "node .claude/hooks/enforce-agent-dispatch.mjs"
           }
         ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/activate-meta-theory-spine.mjs"
+          }
+        ]
       }
     ],
     "PostToolUse": [

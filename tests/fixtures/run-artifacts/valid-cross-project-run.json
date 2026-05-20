@@ -183,7 +183,7 @@
     "defaultShellId": "shell-structured-status"
   },
   "dispatchEnvelopePacket": {
-    "ownerAgent": "meta-conductor",
+    "ownerAgent": "auth-specialist",
     "taskRef": "task-cross-001",
     "allowedCapabilities": [
       "auth_pattern_extraction",
@@ -198,7 +198,10 @@
     "workspaceHint": "shared-auth-pattern",
     "resultSchemaRef": "config/contracts/workflow-contract.json#/protocols/workerResultPacket",
     "reviewOwner": "meta-prism",
-    "verificationOwner": "meta-warden"
+    "verificationOwner": "meta-warden",
+    "businessRoleId": "auth-refresh",
+    "roleDisplayName": "auth-refresh-implementation",
+    "roleInstanceId": "auth-refresh-implementation#1"
   },
   "orchestrationTaskBoardPacket": {
     "dispatchBoardId": "dispatch-cross-001",
@@ -207,10 +210,12 @@
       {
         "taskId": "task-cross-001",
         "taskKind": "execution",
-        "owner": "meta-conductor",
+        "owner": "auth-refresh-implementation",
         "sequence": 1,
         "dependsOn": [],
-        "deliverable": "shared-auth-pattern-extraction:pattern-module"
+        "deliverable": "shared-auth-pattern-extraction:pattern-module",
+        "businessRoleId": "auth-refresh",
+        "roleDisplayName": "auth-refresh-implementation"
       }
     ],
     "synthesisOwner": "meta-warden"
@@ -225,7 +230,7 @@
   "workerTaskPackets": [
     {
       "taskPacketId": "task-cross-001",
-      "owner": "meta-conductor",
+      "owner": "auth-refresh-implementation",
       "ownerMode": "existing-owner",
       "todayTask": "extract shared auth patterns from project auth implementations",
       "output": "shared pattern module + verification notes",
@@ -239,15 +244,33 @@
       "parallelGroup": "auth-pattern",
       "mergeOwner": "meta-warden",
       "verifySteps": [
-        { "step": "extract shared auth pattern module from source projects", "verify": "shared auth pattern module references both source projects correctly" },
-        { "step": "screen shared artifact for project-specific secrets", "verify": "no project-specific secrets found in shared artifact" }
-      ]
+        {
+          "step": "extract shared auth pattern module from source projects",
+          "verify": "shared auth pattern module references both source projects correctly"
+        },
+        {
+          "step": "screen shared artifact for project-specific secrets",
+          "verify": "no project-specific secrets found in shared artifact"
+        }
+      ],
+      "ownerAgent": "auth-specialist",
+      "businessRoleId": "auth-refresh",
+      "roleDisplayName": "auth-refresh-implementation",
+      "roleInstanceId": "auth-refresh-implementation#1",
+      "runtimeInstanceAlias": "",
+      "shardKey": "file-scope",
+      "shardScope": [
+        "shared-auth-pattern-extraction:pattern-module"
+      ],
+      "workspaceIsolation": "same_workspace_readonly_overlap",
+      "artifactNamespace": "auth-refresh-implementation",
+      "collisionPolicy": "no_overlap"
     }
   ],
   "workerResultPackets": [
     {
       "taskPacketId": "task-cross-001",
-      "owner": "meta-conductor",
+      "owner": "auth-refresh-implementation",
       "status": "completed",
       "producedArtifacts": [
         "src/shared/auth-patterns.ts",
@@ -347,5 +370,218 @@
     "retire": [],
     "scarIds": [],
     "syncRequired": true
+  },
+  "businessFlowBlueprintPacket": {
+    "deliverableType": "api_service",
+    "requiredLanes": [
+      {
+        "laneId": "product",
+        "businessLane": "product",
+        "capabilityNeed": "product capability coverage",
+        "capabilitySearchQuery": "product capability owner",
+        "candidateOwners": [
+          "meta-conductor"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-conductor",
+        "selectionReason": "meta-conductor matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "backend",
+        "businessLane": "backend",
+        "capabilityNeed": "backend capability coverage",
+        "capabilitySearchQuery": "backend capability owner",
+        "candidateOwners": [
+          "auth-specialist"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "auth-specialist",
+        "selectionReason": "auth-specialist matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "auth-security",
+        "businessLane": "auth-security",
+        "capabilityNeed": "auth-security capability coverage",
+        "capabilitySearchQuery": "auth-security capability owner",
+        "candidateOwners": [
+          "meta-sentinel"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-sentinel",
+        "selectionReason": "meta-sentinel matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "test",
+        "businessLane": "test",
+        "capabilityNeed": "test capability coverage",
+        "capabilitySearchQuery": "test capability owner",
+        "candidateOwners": [
+          "meta-prism"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-prism",
+        "selectionReason": "meta-prism matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "review",
+        "businessLane": "review",
+        "capabilityNeed": "review capability coverage",
+        "capabilitySearchQuery": "review capability owner",
+        "candidateOwners": [
+          "meta-prism"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-prism",
+        "selectionReason": "meta-prism matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "verify",
+        "businessLane": "verify",
+        "capabilityNeed": "verify capability coverage",
+        "capabilitySearchQuery": "verify capability owner",
+        "candidateOwners": [
+          "meta-warden"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-warden",
+        "selectionReason": "meta-warden matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      }
+    ],
+    "optionalLanes": [
+      {
+        "laneId": "database",
+        "businessLane": "database",
+        "capabilityNeed": "database capability coverage",
+        "capabilitySearchQuery": "database capability owner",
+        "candidateOwners": [
+          "meta-artisan"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-artisan",
+        "selectionReason": "meta-artisan matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "browser-qa",
+        "businessLane": "browser-qa",
+        "capabilityNeed": "browser-qa capability coverage",
+        "capabilitySearchQuery": "browser-qa capability owner",
+        "candidateOwners": [
+          "meta-prism"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-prism",
+        "selectionReason": "meta-prism matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "release",
+        "businessLane": "release",
+        "capabilityNeed": "release capability coverage",
+        "capabilitySearchQuery": "release capability owner",
+        "candidateOwners": [
+          "meta-warden"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-warden",
+        "selectionReason": "meta-warden matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      }
+    ],
+    "omittedLanes": [
+      {
+        "laneId": "frontend",
+        "lane": "frontend",
+        "reason": "token refresh hardening has no user-facing UI surface",
+        "coverageStatus": "omitted_with_reason"
+      },
+      {
+        "laneId": "motion",
+        "lane": "motion",
+        "reason": "no visual interaction or animation is involved",
+        "coverageStatus": "omitted_with_reason"
+      }
+    ],
+    "laneDependencies": [
+      {
+        "from": "auth-security",
+        "to": "backend",
+        "type": "constraint"
+      },
+      {
+        "from": "backend",
+        "to": "test",
+        "type": "verification"
+      }
+    ],
+    "coverageJudgment": "intentionally_reduced",
+    "blueprintSource": "inferred",
+    "blueprintVersion": "v1"
+  },
+  "agentBlueprintPacket": {
+    "roles": [
+      {
+        "businessRoleId": "auth-refresh",
+        "roleDisplayName": "auth-refresh-implementation",
+        "ownerAgent": "auth-specialist",
+        "capabilityNeed": "auth refresh implementation",
+        "ownerResolution": "reuse_existing_owner",
+        "minInstances": 1,
+        "maxInstances": 1,
+        "parallelizable": false,
+        "handoffInputs": [
+          "security finding",
+          "primary deliverable"
+        ],
+        "handoffOutputs": [
+          "code diff",
+          "verification notes"
+        ],
+        "assignedResponsibilitySlice": [
+          "product",
+          "backend",
+          "auth-security",
+          "test",
+          "review",
+          "verify"
+        ],
+        "ownerResponsibilityDelta": "selected owner covers the assigned business-flow lanes for this run",
+        "agentIterationPlan": "reuse existing owner capability and iterate only if verification finds a role gap"
+      }
+    ],
+    "roleCoverageGate": "pass",
+    "missingRoles": [],
+    "duplicateRolePolicy": "allow_instances_when_sharded",
+    "namingPolicy": {
+      "roleDisplayNameRequired": true,
+      "businessSemanticNamesOnly": true,
+      "runtimeNicknamesAreAliasesOnly": true,
+      "forbiddenPrimaryNamePattern": "^[A-Z][a-z]+$",
+      "description": "User-visible agent names must describe business responsibility, e.g. frontend-home-page, database-schema, ux-flow-review. Host-generated personal nicknames such as Huygens or Mill may be recorded only as runtimeInstanceAlias."
+    }
   }
 }

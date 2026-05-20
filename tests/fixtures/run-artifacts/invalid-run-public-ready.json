@@ -68,12 +68,33 @@
       "Scope is the existing auth refresh path only; no new identity providers.",
       "Secrets load from environment in test and CI as today."
     ],
+    "pendingUserChoices": [],
+    "userLanguage": "en",
+    "languageSource": "latest_user_message_or_explicit_preference",
+    "nativeChoiceSurface": "conversation_fallback",
     "intentGatePacketVersion": "v1"
   },
   "cardPlanPacket": {
     "dealerOwner": "meta-conductor",
     "dealerMode": "conductor-primary-warden-escalation",
     "cards": [
+      {
+        "cardId": "card-clarify",
+        "cardType": "info",
+        "cardIntent": "clarify",
+        "cardDecision": "deal",
+        "cardAudience": "user",
+        "cardTiming": "immediate",
+        "cardShell": "conversation",
+        "cardPriority": 9,
+        "cardReason": "scope must be explicit before cross-file auth changes",
+        "cardSource": "meta-conductor",
+        "cardSuppressed": false,
+        "suppressionReason": "",
+        "deliveryShellId": "shell-structured-status",
+        "choiceSurface": "conversation_fallback",
+        "userLanguage": "en"
+      },
       {
         "cardId": "card-risk",
         "cardType": "risk",
@@ -83,14 +104,44 @@
         "cardTiming": "on_risk",
         "cardShell": "summary",
         "cardPriority": 10,
-        "cardReason": "auth boundary",
+        "cardReason": "token refresh touches auth boundary",
         "cardSource": "meta-sentinel",
         "cardSuppressed": false,
         "suppressionReason": "",
-        "deliveryShellId": "shell-review-delta"
+        "deliveryShellId": "shell-review-delta",
+        "choiceSurface": "conversation_fallback",
+        "userLanguage": "en"
+      },
+      {
+        "cardId": "card-silence",
+        "cardType": "silence",
+        "cardIntent": "silence",
+        "cardDecision": "defer",
+        "cardAudience": "user",
+        "cardTiming": "after_dependency",
+        "cardShell": "silent_hold",
+        "cardPriority": 4,
+        "cardReason": "avoid pushing another intervention while verification is running",
+        "cardSource": "meta-conductor",
+        "cardSuppressed": true,
+        "suppressionReason": "verification_pending",
+        "deliveryShellId": "shell-quiet",
+        "choiceSurface": "conversation_fallback",
+        "userLanguage": "en"
       }
     ],
     "deliveryShells": [
+      {
+        "deliveryShellId": "shell-structured-status",
+        "shellType": "structured_status",
+        "presentationMode": "direct",
+        "exposureLevel": "internal",
+        "interventionForm": "conversation",
+        "audience": "developer",
+        "contentBoundary": "status + next action only",
+        "userLanguage": "en",
+        "languageSource": "latest_user_message_or_explicit_preference"
+      },
       {
         "deliveryShellId": "shell-review-delta",
         "shellType": "review_delta",
@@ -98,15 +149,28 @@
         "exposureLevel": "review",
         "interventionForm": "task_packet",
         "audience": "reviewer",
-        "contentBoundary": "finding + evidence + closure target"
+        "contentBoundary": "finding + evidence + closure target",
+        "userLanguage": "en",
+        "languageSource": "latest_user_message_or_explicit_preference"
+      },
+      {
+        "deliveryShellId": "shell-quiet",
+        "shellType": "one_line",
+        "presentationMode": "quiet",
+        "exposureLevel": "internal",
+        "interventionForm": "none",
+        "audience": "user",
+        "contentBoundary": "suppress until verification result",
+        "userLanguage": "en",
+        "languageSource": "latest_user_message_or_explicit_preference"
       }
     ],
     "silenceDecision": {
-      "silenceDecision": "none",
+      "silenceDecision": "defer",
       "noInterventionPreferred": true,
-      "interruptionJustified": true,
-      "deferUntil": "",
-      "reasonForSilence": ""
+      "interruptionJustified": false,
+      "deferUntil": "verification-complete",
+      "reasonForSilence": "no clear intervention gain while reviewer is verifying the fix"
     },
     "controlDecisions": [
       {
@@ -118,16 +182,17 @@
         "insertedGovernanceOwner": "meta-sentinel",
         "emergencyGovernanceTriggered": true,
         "returnsToStage": "verification",
-        "rejoinCondition": "security review completes"
+        "rejoinCondition": "security-sensitive auth diff has been reviewed"
       }
     ],
-    "defaultShellId": "shell-review-delta"
+    "defaultShellId": "shell-structured-status"
   },
   "dispatchEnvelopePacket": {
-    "ownerAgent": "meta-conductor",
+    "ownerAgent": "auth-specialist",
     "taskRef": "task-001",
     "allowedCapabilities": [
-      "auth_refresh_hardening"
+      "auth_refresh_hardening",
+      "verification_notes"
     ],
     "blockedCapabilities": [
       "security_policy_override"
@@ -138,7 +203,10 @@
     "workspaceHint": "auth-refresh-hardening",
     "resultSchemaRef": "config/contracts/workflow-contract.json#/protocols/workerResultPacket",
     "reviewOwner": "meta-prism",
-    "verificationOwner": "meta-warden"
+    "verificationOwner": "meta-warden",
+    "businessRoleId": "auth-refresh",
+    "roleDisplayName": "auth-refresh-implementation",
+    "roleInstanceId": "auth-refresh-implementation#1"
   },
   "orchestrationTaskBoardPacket": {
     "dispatchBoardId": "dispatch-001",
@@ -147,10 +215,12 @@
       {
         "taskId": "task-001",
         "taskKind": "execution",
-        "owner": "meta-conductor",
+        "owner": "auth-refresh-implementation",
         "sequence": 1,
         "dependsOn": [],
-        "deliverable": "auth-refresh-hardening:token-refresh"
+        "deliverable": "auth-refresh-hardening:token-refresh",
+        "businessRoleId": "auth-refresh",
+        "roleDisplayName": "auth-refresh-implementation"
       }
     ],
     "synthesisOwner": "meta-warden"
@@ -165,28 +235,51 @@
   "workerTaskPackets": [
     {
       "taskPacketId": "task-001",
-      "owner": "meta-conductor",
+      "owner": "auth-refresh-implementation",
       "ownerMode": "existing-owner",
-      "todayTask": "update refresh token path",
-      "output": "code diff",
+      "todayTask": "update refresh token path and document verification hooks",
+      "output": "code diff + verification notes",
       "deliverableLink": "auth-refresh-hardening:token-refresh",
-      "qualityBar": "close finding",
-      "referenceDirection": "auth boundary rules",
+      "qualityBar": "no hardcoded secret and review finding fully closable",
+      "referenceDirection": "follow auth boundary rules",
       "handoffTarget": "meta-prism",
-      "lengthExpectation": "targeted change",
+      "lengthExpectation": "targeted multi-file change",
       "visualOrAssetPlan": "none",
       "dependsOn": [],
       "parallelGroup": "auth-core",
-      "mergeOwner": "meta-warden"
+      "mergeOwner": "meta-warden",
+      "verifySteps": [
+        {
+          "step": "replace inline secret fallback with env lookup",
+          "verify": "no hardcoded secret in refresh.ts"
+        },
+        {
+          "step": "update refresh.test.ts for new env-based path",
+          "verify": "test suite passes"
+        }
+      ],
+      "ownerAgent": "auth-specialist",
+      "businessRoleId": "auth-refresh",
+      "roleDisplayName": "auth-refresh-implementation",
+      "roleInstanceId": "auth-refresh-implementation#1",
+      "runtimeInstanceAlias": "",
+      "shardKey": "file-scope",
+      "shardScope": [
+        "auth-refresh-hardening:token-refresh"
+      ],
+      "workspaceIsolation": "same_workspace_readonly_overlap",
+      "artifactNamespace": "auth-refresh-implementation",
+      "collisionPolicy": "no_overlap"
     }
   ],
   "workerResultPackets": [
     {
       "taskPacketId": "task-001",
-      "owner": "meta-conductor",
+      "owner": "auth-refresh-implementation",
       "status": "completed",
       "producedArtifacts": [
-        "src/auth/refresh.ts"
+        "src/auth/refresh.ts",
+        "tests/auth/refresh.test.ts"
       ],
       "handoffTarget": "meta-prism",
       "blockingIssues": []
@@ -255,7 +348,7 @@
         "evidence": [
           "inline fallback still present"
         ],
-        "closeState": "fixed_pending_verify"
+        "closeState": "verified_closed"
       }
     ],
     "closeFindings": []
@@ -290,5 +383,218 @@
     "retire": [],
     "scarIds": [],
     "syncRequired": false
+  },
+  "businessFlowBlueprintPacket": {
+    "deliverableType": "api_service",
+    "requiredLanes": [
+      {
+        "laneId": "product",
+        "businessLane": "product",
+        "capabilityNeed": "product capability coverage",
+        "capabilitySearchQuery": "product capability owner",
+        "candidateOwners": [
+          "meta-conductor"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-conductor",
+        "selectionReason": "meta-conductor matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "backend",
+        "businessLane": "backend",
+        "capabilityNeed": "backend capability coverage",
+        "capabilitySearchQuery": "backend capability owner",
+        "candidateOwners": [
+          "auth-specialist"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "auth-specialist",
+        "selectionReason": "auth-specialist matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "auth-security",
+        "businessLane": "auth-security",
+        "capabilityNeed": "auth-security capability coverage",
+        "capabilitySearchQuery": "auth-security capability owner",
+        "candidateOwners": [
+          "meta-sentinel"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-sentinel",
+        "selectionReason": "meta-sentinel matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "test",
+        "businessLane": "test",
+        "capabilityNeed": "test capability coverage",
+        "capabilitySearchQuery": "test capability owner",
+        "candidateOwners": [
+          "meta-prism"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-prism",
+        "selectionReason": "meta-prism matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "review",
+        "businessLane": "review",
+        "capabilityNeed": "review capability coverage",
+        "capabilitySearchQuery": "review capability owner",
+        "candidateOwners": [
+          "meta-prism"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-prism",
+        "selectionReason": "meta-prism matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "verify",
+        "businessLane": "verify",
+        "capabilityNeed": "verify capability coverage",
+        "capabilitySearchQuery": "verify capability owner",
+        "candidateOwners": [
+          "meta-warden"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-warden",
+        "selectionReason": "meta-warden matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      }
+    ],
+    "optionalLanes": [
+      {
+        "laneId": "database",
+        "businessLane": "database",
+        "capabilityNeed": "database capability coverage",
+        "capabilitySearchQuery": "database capability owner",
+        "candidateOwners": [
+          "meta-artisan"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-artisan",
+        "selectionReason": "meta-artisan matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "browser-qa",
+        "businessLane": "browser-qa",
+        "capabilityNeed": "browser-qa capability coverage",
+        "capabilitySearchQuery": "browser-qa capability owner",
+        "candidateOwners": [
+          "meta-prism"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-prism",
+        "selectionReason": "meta-prism matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      },
+      {
+        "laneId": "release",
+        "businessLane": "release",
+        "capabilityNeed": "release capability coverage",
+        "capabilitySearchQuery": "release capability owner",
+        "candidateOwners": [
+          "meta-warden"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-warden",
+        "selectionReason": "meta-warden matched by Fetch-first capability scan",
+        "coverageStatus": "covered"
+      }
+    ],
+    "omittedLanes": [
+      {
+        "laneId": "frontend",
+        "lane": "frontend",
+        "reason": "token refresh hardening has no user-facing UI surface",
+        "coverageStatus": "omitted_with_reason"
+      },
+      {
+        "laneId": "motion",
+        "lane": "motion",
+        "reason": "no visual interaction or animation is involved",
+        "coverageStatus": "omitted_with_reason"
+      }
+    ],
+    "laneDependencies": [
+      {
+        "from": "auth-security",
+        "to": "backend",
+        "type": "constraint"
+      },
+      {
+        "from": "backend",
+        "to": "test",
+        "type": "verification"
+      }
+    ],
+    "coverageJudgment": "intentionally_reduced",
+    "blueprintSource": "inferred",
+    "blueprintVersion": "v1"
+  },
+  "agentBlueprintPacket": {
+    "roles": [
+      {
+        "businessRoleId": "auth-refresh",
+        "roleDisplayName": "auth-refresh-implementation",
+        "ownerAgent": "auth-specialist",
+        "capabilityNeed": "auth refresh implementation",
+        "ownerResolution": "reuse_existing_owner",
+        "minInstances": 1,
+        "maxInstances": 1,
+        "parallelizable": false,
+        "handoffInputs": [
+          "security finding",
+          "primary deliverable"
+        ],
+        "handoffOutputs": [
+          "code diff",
+          "verification notes"
+        ],
+        "assignedResponsibilitySlice": [
+          "product",
+          "backend",
+          "auth-security",
+          "test",
+          "review",
+          "verify"
+        ],
+        "ownerResponsibilityDelta": "selected owner covers the assigned business-flow lanes for this run",
+        "agentIterationPlan": "reuse existing owner capability and iterate only if verification finds a role gap"
+      }
+    ],
+    "roleCoverageGate": "pass",
+    "missingRoles": [],
+    "duplicateRolePolicy": "allow_instances_when_sharded",
+    "namingPolicy": {
+      "roleDisplayNameRequired": true,
+      "businessSemanticNamesOnly": true,
+      "runtimeNicknamesAreAliasesOnly": true,
+      "forbiddenPrimaryNamePattern": "^[A-Z][a-z]+$",
+      "description": "User-visible agent names must describe business responsibility, e.g. frontend-home-page, database-schema, ux-flow-review. Host-generated personal nicknames such as Huygens or Mill may be recorded only as runtimeInstanceAlias."
+    }
   }
 }

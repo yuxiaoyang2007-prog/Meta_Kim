@@ -79,6 +79,8 @@ const runtimeProfileCatalog = {
       outputPaths: {
         agentsDir: ".codex/agents",
         skillRoot: ".codex/skills/meta-theory",
+        hooksDir: ".codex/hooks",
+        hooksFile: ".codex/hooks.json",
         commandsDir: ".codex/commands",
         configExampleFile: "codex/config.toml.example",
       },
@@ -124,6 +126,8 @@ const runtimeProfileCatalog = {
       outputPaths: {
         agentsDir: ".cursor/agents",
         skillRoot: ".cursor/skills/meta-theory",
+        hooksDir: ".cursor/hooks",
+        hooksFile: ".cursor/hooks.json",
         mcpFile: ".cursor/mcp.json",
       },
     },

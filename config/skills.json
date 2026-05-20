@@ -35,6 +35,35 @@
       "id": "hookprompt",
       "repo": "${skillOwner}/HookPrompt",
       "installMethod": "manual",
+      "capabilities": [
+        "prompt-submission-optimization"
+      ],
+      "platformSupport": {
+        "claude": {
+          "status": "native",
+          "events": ["UserPromptSubmit"],
+          "adapter": "claude-settings-hook"
+        },
+        "codex": {
+          "status": "adapter-required",
+          "events": ["UserPromptSubmit"],
+          "adapter": "codex-hookprompt-adapter"
+        },
+        "openclaw": {
+          "status": "degraded",
+          "events": ["command:new"],
+          "adapter": "openclaw-workspace-instruction"
+        },
+        "cursor": {
+          "status": "adapter-required",
+          "events": ["beforeSubmitPrompt"],
+          "adapter": "cursor-hookprompt-adapter"
+        }
+      },
+      "fallback": {
+        "openclaw": "Use workspace boot and agent instructions; no direct Claude hook execution.",
+        "cursor": "Use Cursor beforeSubmitPrompt through the Meta_Kim adapter; do not reuse Claude hook output directly."
+      },
       "hookSubdirs": {
         "claude": [".claude/hooks"]
       },
@@ -51,7 +80,9 @@
         }
       },
       "targets": [
-        "claude"
+        "claude",
+        "codex",
+        "cursor"
       ]
     },
     {

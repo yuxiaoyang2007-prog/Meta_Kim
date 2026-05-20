@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meta-kim.dev/contracts/capability-index.schema.json",
+  "title": "Meta_Kim Capability Index",
+  "description": "Schema for Meta_Kim capability index, which distinguishes meta-agents (governance layer) from execution-agents (work layer)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["generatedAt", "registryName", "scope", "fetchOrder", "byCapabilityType"],
+  "properties": {
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp when index was generated"
+    },
+    "registryName": {
+      "type": "string",
+      "description": "Name of this capability registry"
+    },
+    "scope": {
+      "type": "string",
+      "enum": ["repo-canonical", "local-global-inventory"],
+      "description": "Scope of this index"
+    },
+    "canonicalProjection": {
+      "type": "string",
+      "description": "Path to canonical projection within repo"
+    },
+    "localGlobalInventory": {
+      "type": "string",
+      "description": "Path template for local global inventory (uses {profile} placeholder)"
+    },
+    "fetchOrder": {
+      "type": "array",
+      "description": "Search order for capability discovery (CRITICAL: meta-agents must NOT be used for execution)",
+      "items": {
+        "type": "string",
+        "enum": [
+          "repo canonical capability index",
+          "runtime mirror",
+          "local global inventory",
+          "fallback general agent with capability gap record"
+        ]
+      }
+    },
+    "summary": {
+      "type": "object",
+      "description": "Summary statistics",
+      "properties": {
+        "totalAgents": { "type": "integer" },
+        "totalSkills": { "type": "integer" },
+        "totalHooks": { "type": "integer" },
+        "totalPlugins": { "type": "integer" },
+        "totalCommands": { "type": "integer" }
+      }
+    },
+    "byCapabilityType": {
+      "type": "object",
+      "description": "Capabilities grouped by type",
+      "properties": {
+        "agents": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["id", "type", "layer"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Agent identifier"
+              },
+              "type": {
+                "const": "agents",
+                "description": "Capability type"
+              },
+              "namespace": {
+                "type": "string",
+                "description": "Namespace (canonical, global, etc.)"
+              },
+              "path": {
+                "type": "string",
+                "description": "File path"
+              },
+              "size": {
+                "type": "integer",
+                "description": "File size in bytes"
+              },
+              "modified": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Last modified timestamp"
+              },
+              "layer": {
+                "type": "string",
+                "enum": ["meta", "execution"],
+                "description": "CRITICAL: 'meta' = governance layer (NOT for direct execution), 'execution' = work layer (performs tasks)"
+              },
+              "executionBlock": {
+                "type": "boolean",
+                "description": "If true, this agent MUST NOT be dispatched for execution work. Always true for layer='meta'"
+              },
+              "capabilities": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Capabilities this agent provides (for execution agents)"
+              },
+              "metadata": {
+                "type": "object",
+                "description": "Additional metadata (name, description, etc.)"
+              }
+            }
+          }
+        },
+        "skills": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["id", "type"],
+            "properties": {
+              "id": { "type": "string" },
+              "type": { "const": "skills" },
+              "namespace": { "type": "string" },
+              "path": { "type": "string" },
+              "size": { "type": "integer" },
+              "modified": { "type": "string", "format": "date-time" },
+              "metadata": { "type": "object" }
+            }
+          }
+        },
+        "hooks": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["id", "type"],
+            "properties": {
+              "id": { "type": "string" },
+              "type": { "const": "hooks" },
+              "namespace": { "type": "string" },
+              "path": { "type": "string" },
+              "size": { "type": "integer" },
+              "modified": { "type": "string", "format": "date-time" },
+              "metadata": { "type": "object" }
+            }
+          }
+        },
+        "plugins": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "type": { "const": "plugins" },
+              "metadata": { "type": "object" }
+            }
+          }
+        },
+        "commands": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "type": { "const": "commands" },
+              "metadata": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    "governanceRules": {
+      "type": "object",
+      "description": "Governance rules for agent dispatch",
+      "properties": {
+        "metaAgentDispatchRule": {
+          "type": "string",
+          "description": "Rule for when meta-agents can be dispatched",
+          "const": "Meta-agents (layer='meta') are for governance coordination only. They MUST NOT be used as execution workers. Use execution-agents (layer='execution') for task execution."
+        },
+        "fallbackBehavior": {
+          "type": "string",
+          "description": "Behavior when no execution agent is found",
+          "const": "Use general-purpose/default execution agent, NOT meta-agents. Record capability gap for future Type B agent creation."
+        }
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@
 node_modules/
 npm-debug.log*
 pnpm-lock.yaml
+package-lock.json
 
 # ========== Local-only Claude skills (not synced via sync:runtimes; optional personal overlay) ==========
 canonical/skills/commit-review/

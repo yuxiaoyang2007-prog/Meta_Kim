@@ -62,6 +62,36 @@
             "type": "string",
             "description": "Claude Code marketplace plugin identifier if this skill is also an official plugin"
           },
+          "capabilities": {
+            "type": "array",
+            "description": "Runtime-neutral capabilities provided by this skill.",
+            "items": { "type": "string" },
+            "uniqueItems": true
+          },
+          "platformSupport": {
+            "type": "object",
+            "description": "Per-runtime support status for the skill capability, distinct from install targets.",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["status"],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": ["native", "adapter-required", "degraded", "unsupported"]
+                },
+                "events": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "adapter": { "type": "string" }
+              }
+            }
+          },
+          "fallback": {
+            "type": "object",
+            "description": "Per-runtime fallback or degraded behavior notes.",
+            "additionalProperties": { "type": "string" }
+          },
           "defaultSelected": {
             "type": "boolean",
             "description": "If false, setup does not pre-select this repo in the dependency multi-select (default: true)"

@@ -48,6 +48,12 @@
         "default": false,
         "name": "Meta-Scout: Tool Discoverer 🔭",
         "workspace": "__REPO_ROOT__\\openclaw\\workspaces\\meta-scout"
+      },
+      {
+        "id": "meta-chrysalis",
+        "default": false,
+        "name": "Meta-Chrysalis: Evolution Meta (cididian)",
+        "workspace": "__REPO_ROOT__\\openclaw\\workspaces\\meta-chrysalis"
       }
     ]
   },
@@ -84,7 +90,8 @@
         "meta-librarian",
         "meta-conductor",
         "meta-prism",
-        "meta-scout"
+        "meta-scout",
+        "meta-chrysalis"
       ]
     }
   },

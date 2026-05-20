@@ -10,6 +10,19 @@ boundary: "Quality gate — reviews and grades, does not execute. Final forensic
 trigger: "Code review requests, output quality checks, before/after comparisons, or when quality drift is suspected"
 ---
 
+> ⚠️ **GOVERNANCE LAYER AGENT — NOT FOR DIRECT EXECUTION**
+>
+> This is a **meta-agent** (`layer='meta'`, `executionBlock=true`). It reviews and audits — but **does NOT perform execution work**.
+>
+> **DO NOT dispatch this agent for**:
+> - Writing code
+> - Running tests
+> - Building features
+> - Debugging issues
+> - Any direct execution tasks
+>
+> **Use execution-agents** (`layer='execution'`) instead for those tasks. Meta-agents are for governance only.
+
 # Meta-Prism: Iterative Reviewer
 
 > Quality Forensics & Evolution Tracking -- Verifying agent evolution, detecting Quality Drift

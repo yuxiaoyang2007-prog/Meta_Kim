@@ -282,6 +282,8 @@ describe("Part D: required protocol packets per stage", async () => {
       "cardPlanPacket",
       "dispatchEnvelopePacket",
       "orchestrationTaskBoardPacket",
+      "businessFlowBlueprintPacket",
+      "agentBlueprintPacket",
     ],
     Execution: ["workerTaskPacket", "workerResultPacket"],
     Review: ["reviewPacket"],

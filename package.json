@@ -1,6 +1,6 @@
 {
   "name": "meta-kim",
-  "version": "2.0.31",
+  "version": "2.0.36",
   "description": "Governance layer for AI coding: meta agents, workflow contract, meta-theory; canonical in canonical/, with generated Claude/Codex/OpenClaw/Cursor projections.",
   "private": true,
   "type": "module",
@@ -11,6 +11,7 @@
     "meta:check:global": "node scripts/sync-global-meta-theory.mjs --check",
     "meta:show:global:targets": "node scripts/sync-global-meta-theory.mjs --print-targets",
     "discover:global": "node scripts/discover-global-capabilities.mjs",
+    "postinstall": "node scripts/postinstall-check.mjs",
     "meta:index:runs": "node scripts/run-index.mjs index",
     "meta:query:runs": "node scripts/run-index.mjs query",
     "meta:rebuild:run-index": "node scripts/run-index.mjs rebuild",
@@ -62,7 +63,7 @@
   ],
   "files": [
     "canonical/",
-    "scripts/",
+    "scripts/**/*.mjs",
     "bin/",
     "config/",
     "docs/",

@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs";
+﻿import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,6 +20,7 @@ export const ALL_AGENTS = [
   "meta-librarian",
   "meta-prism",
   "meta-scout",
+  "meta-chrysalis",
 ];
 
 export const CLARITY_DIMENSIONS = ["Scope", "Goal", "Constraints", "Architecture type"];
