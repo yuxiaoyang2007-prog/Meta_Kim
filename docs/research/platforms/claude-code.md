@@ -58,7 +58,7 @@ Plugin specs follow the format: `name@registry`
 ## Unique Capabilities
 
 - **context: fork**: Only Claude Code supports running skills in a separate context
-- **Hooks**: Only Claude Code + Cline support hook scripts
+- **Hooks**: Claude Code has the richest native hook script surface; Codex, Cursor, and OpenClaw have different hook models documented in their platform notes and the distribution matrix
 - **Plugins**: Official marketplace for distributing skill bundles
 - **Multi-format support**: Both SKILL.md (directory) and standalone Markdown files
 

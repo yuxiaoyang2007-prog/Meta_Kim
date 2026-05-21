@@ -104,6 +104,37 @@ describe("sync-runtimes / inferProjectCategory", () => {
     );
   });
 
+  test("maps capability index mirrors to project settings category", () => {
+    assert.equal(
+      inferProjectCategory(
+        p(".claude/capability-index/meta-kim-capabilities.json"),
+        REPO,
+      ),
+      CATEGORIES.G,
+    );
+    assert.equal(
+      inferProjectCategory(
+        p(".codex/capability-index/meta-kim-capabilities.json"),
+        REPO,
+      ),
+      CATEGORIES.G,
+    );
+    assert.equal(
+      inferProjectCategory(
+        p("openclaw/capability-index/meta-kim-capabilities.json"),
+        REPO,
+      ),
+      CATEGORIES.G,
+    );
+    assert.equal(
+      inferProjectCategory(
+        p(".cursor/capability-index/meta-kim-capabilities.json"),
+        REPO,
+      ),
+      CATEGORIES.G,
+    );
+  });
+
   test("maps openclaw workspaces to category D", () => {
     assert.equal(
       inferProjectCategory(p("openclaw/workspaces/meta-warden/SOUL.md"), REPO),

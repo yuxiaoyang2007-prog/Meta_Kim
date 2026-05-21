@@ -85,7 +85,7 @@ Factory lane:
 1. **Warden** confirms that an existing owner is insufficient.
 2. **Conductor** emits the capability-gap decision and task board.
 3. **Genesis** defines the execution-agent identity.
-4. **Artisan** defines skill / tool / dependency loadout.
+4. **Artisan** defines abstract capability slots, provider compatibility, and Fetch-time skill / tool selection rules.
 5. **Scout** backfills external capability only when local coverage is missing.
 6. **Sentinel** validates safety boundaries.
 7. **Librarian** provisions memory / reuse strategy.
@@ -112,11 +112,23 @@ Required fields:
 - **Purpose** — what it is for
 - **Capabilities** — what it can do
 - **Non-Capabilities / Boundaries** — what it cannot do
-- **Dependencies** — skills, tools, MCPs, external packages, or other capability sources
+- **Dependencies** — abstract capability slots, meta-skill package providers, tools, MCPs, external packages, or other capability sources. Do not bind concrete sub-skills, commands, or plugin sub-capabilities into durable identity.
 - **Inputs** — what it accepts
 - **Outputs** — what it must deliver
 
 This card is the build contract for the factory and the dispatch contract for Conductor.
+
+### Skill Binding Rules For Created Or Iterated Agents
+
+Created or upgraded agents inherit durable capability shape, not a frozen tactic list.
+
+- Long-term identity may include abstract capability slots, such as `test generation`, `browser QA`, `security review`, or `planning discipline`.
+- Long-term identity may include meta-skill package providers, such as `superpowers` or `ecc`, as compatible capability providers.
+- Long-term identity must not include the concrete sub-skill, shell command, plugin sub-capability, or prompt tactic that happened to win one Fetch.
+- `findskill` is only a runtime-local capability search entrypoint. Its search result can justify a current-run `selectedSkill`, not a permanent agent binding.
+- Concrete choices belong in run artifacts: `capabilitySearchResult`, `selectedSkill`, `executionAgentCard`, `orchestrationTaskBoardPacket`, and `workerTaskPacket`.
+
+Genesis owns the durable boundary. Artisan owns provider compatibility and selection rules. Fetch owns the current-run concrete selection.
 
 ### Phase 4 — Review and Revision
 
@@ -150,6 +162,52 @@ echo "=== Components ===" && find src/visual/components -name "*.tsx" 2>/dev/nul
 echo "=== API routes ===" && find app/api -name "route.ts" 2>/dev/null | wc -l
 echo "=== Scripts ===" && find scripts -name "*.mjs" 2>/dev/null | wc -l
 echo "=== Tests ===" && find tests -name "*.test.*" 2>/dev/null | wc -l
+```
+
+Windows PowerShell equivalents:
+
+```powershell
+# Commit count (project scale)
+(git log --since="6 months ago" --oneline | Measure-Object -Line).Lines
+
+# Commit type distribution (feat/fix/refactor share)
+git log --since="6 months ago" --oneline |
+  ForEach-Object { ($_ -split '\s+', 3)[1] } |
+  ForEach-Object { ($_ -split ':', 2)[0] } |
+  Group-Object |
+  Sort-Object Count -Descending |
+  Select-Object Count, Name
+
+# Directory change heatmap (most active areas)
+git log --since="6 months ago" --name-only --pretty=format:"" |
+  Where-Object { $_ } |
+  ForEach-Object { Split-Path $_ -Parent } |
+  Where-Object { $_ } |
+  Group-Object |
+  Sort-Object Count -Descending |
+  Select-Object -First 20 Count, Name
+
+# Co-change analysis (dirs that often change together = high coupling)
+$commits = git log --since="6 months ago" --format="%H"
+$pairs = foreach ($commit in $commits) {
+  $dirs = git show --name-only --pretty=format:"" $commit |
+    Where-Object { $_ } |
+    ForEach-Object { Split-Path $_ -Parent } |
+    Where-Object { $_ } |
+    Sort-Object -Unique
+  for ($i = 0; $i -lt $dirs.Count; $i++) {
+    for ($j = $i + 1; $j -lt $dirs.Count; $j++) {
+      "$($dirs[$i]) $($dirs[$j])"
+    }
+  }
+}
+$pairs | Group-Object | Sort-Object Count -Descending | Select-Object -First 15 Count, Name
+
+# File category counts
+"=== Components ==="; (Get-ChildItem -LiteralPath "src/visual/components" -Filter "*.tsx" -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count
+"=== API routes ==="; (Get-ChildItem -LiteralPath "app/api" -Filter "route.ts" -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count
+"=== Scripts ==="; (Get-ChildItem -LiteralPath "scripts" -Filter "*.mjs" -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count
+"=== Tests ==="; (Get-ChildItem -LiteralPath "tests" -Filter "*.test.*" -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count
 ```
 
 ### Steps 1–2: Analysis & grouping
@@ -195,13 +253,15 @@ All factory questions No → only Genesis + Artisan. If the Conductor question i
 
 See references/meta-theory.md, module 8.
 
-### Step 4: Artisan — skill matching (required)
+### Step 4: Artisan — capability provider matching (required)
 
 **Read** `.claude/agents/meta-artisan.md`
 
-1. **Scan skills**: `ls .claude/skills/*/SKILL.md` + built-in skills
+1. **Scan capability providers and skills**: `ls .claude/skills/*/SKILL.md` + built-in skills + runtime capability index
 2. **ROI score**: `ROI = (task coverage × frequency) / (context cost + learning curve)`
-3. **Output**: per-agent skill shortlist (top 5–8) with ROI and rationale
+3. **Output**: per-agent abstract capability slots, compatible provider packages (`superpowers`, `ecc`, etc.), selection rules, and example run-scoped candidates with ROI and rationale
+
+Do not write the example candidates as durable bindings. They are examples of what Fetch may select into `selectedSkill` for a future run.
 
 ### Step 5: Sentinel — safety design (on demand)
 
@@ -295,10 +355,13 @@ Generate `.claude/agents/{name}.md` with this shape:
 ## Meta-Skills
 {≥2 self-improvement directions}
 
-## Skill loadout
-| Skill | ROI | Use |
-|-------|-----|-----|
+## Skill loadout / capability provider loadout
+| Capability slot | Provider | ROI | Selection rule |
+|-----------------|----------|-----|----------------|
 {table}
+
+## Run-scoped skill selection policy
+Concrete skills, commands, and plugin sub-capabilities are selected after Fetch and recorded in `capabilitySearchResult` / `selectedSkill` / `workerTaskPacket`, not in this agent's long-term identity.
 
 ## Safety rules (if any)
 {Permissions + hooks}

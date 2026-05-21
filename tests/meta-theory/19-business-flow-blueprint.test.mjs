@@ -15,11 +15,12 @@ import {
 const execFileAsync = promisify(execFile);
 
 const businessRoleExamples = [
-  "frontend-home-page",
-  "database-schema",
-  "ux-flow-review",
-  "browser-qa-mobile",
-  "security-auth-review",
+  "前端",
+  "后端",
+  "测试",
+  "frontend",
+  "backend",
+  "test",
 ];
 
 function lane(laneId, owner = "meta-conductor") {
@@ -96,14 +97,77 @@ describe("business-flow blueprint orchestration", async () => {
     assert.ok(contract.protocols?.agentBlueprintPacket);
   });
 
-  test("user-visible agent names must be business-readable, not runtime nicknames", () => {
+  test("business flow contract covers release/install and runtime package lanes", () => {
+    const protocol = contract.protocols?.businessFlowBlueprintPacket ?? {};
+
+    for (const deliverableType of ["runtime_package", "install_release"]) {
+      assert.ok(
+        protocol.deliverableTypeEnum?.includes(deliverableType),
+        `deliverableTypeEnum must include ${deliverableType}`,
+      );
+    }
+
+    for (const laneId of ["release", "install", "runtime_package"]) {
+      assert.ok(
+        protocol.releaseInstallLaneIds?.includes(laneId),
+        `releaseInstallLaneIds must include ${laneId}`,
+      );
+    }
+  });
+
+  test("agent blueprint contract forbids fixed concrete child skills in long-term identity", () => {
+    const policy =
+      contract.protocols?.agentBlueprintPacket?.longTermCapabilityPolicy ?? {};
+
+    assert.equal(policy.forbidConcreteSkillInLongTermAgentIdentity, true);
+    assert.equal(policy.selectedSkillScope, "run_only");
+    for (const provider of [
+      "agent-teams-playbook",
+      "superpowers",
+      "ecc",
+      "findskill",
+    ]) {
+      assert.ok(
+        policy.allowedMetaSkillProviders?.includes(provider),
+        `${provider} must remain allowed as a meta-skill package provider`,
+      );
+    }
+    assert.ok(Array.isArray(policy.forbiddenConcreteSkillPatterns));
+    assert.ok(policy.forbiddenConcreteSkillPatterns.length >= 1);
+  });
+
+  test("user-visible agent names must be short business role names, not runtime nicknames", () => {
     const namingPolicy = contract.protocols?.agentBlueprintPacket?.namingPolicy;
     assert.equal(namingPolicy?.businessSemanticNamesOnly, true);
+    assert.equal(namingPolicy?.shortRoleNamesRequired, true);
     assert.equal(namingPolicy?.runtimeNicknamesAreAliasesOnly, true);
     assert.match(combined, /runtimeInstanceAlias/i);
     assert.match(combined, /random personal aliases/i);
+    assert.match(combined, /short business role/i);
     for (const example of businessRoleExamples) {
       assert.match(combined, new RegExp(example, "i"), `missing ${example}`);
+    }
+    for (const overScopedExample of ["后端-登录", "测试-安装", "backend-login"]) {
+      assert.doesNotMatch(
+        combined,
+        new RegExp(overScopedExample, "i"),
+        `over-scoped roleDisplayName example should be removed: ${overScopedExample}`,
+      );
+    }
+  });
+
+  test("run artifact validation rejects scoped work items as visible role names", async () => {
+    const { dir, file } = await writeTempArtifact((artifact) => {
+      artifact.agentBlueprintPacket.roles[0].roleDisplayName = "backend-login";
+      artifact.workerTaskPackets[0].roleDisplayName = "backend-login";
+    });
+    try {
+      await assert.rejects(
+        validateRunArtifact(file),
+        /roleDisplayName must stay at role-family level/,
+      );
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
     }
   });
 
@@ -138,7 +202,7 @@ describe("business-flow blueprint orchestration", async () => {
     assert.match(combined, /fake parallelism|伪并行/i);
   });
 
-  test("run artifact validation rejects incomplete web_app lane coverage", async () => {
+  test("run artifact validation accepts scoped web_app lane coverage without fixed lane enumeration", async () => {
     const { dir, file } = await writeTempArtifact((artifact) => {
       artifact.businessFlowBlueprintPacket.deliverableType = "web_app";
       artifact.businessFlowBlueprintPacket.requiredLanes = [
@@ -146,18 +210,23 @@ describe("business-flow blueprint orchestration", async () => {
         lane("frontend", "auth-specialist"),
       ];
       artifact.businessFlowBlueprintPacket.optionalLanes = [];
-      artifact.businessFlowBlueprintPacket.omittedLanes = [];
-      artifact.businessFlowBlueprintPacket.coverageJudgment = "complete";
+      artifact.businessFlowBlueprintPacket.omittedLanes = [
+        {
+          laneId: "backend",
+          reason: "static web surface; no server behavior changes requested",
+          coverageStatus: "omitted_with_reason",
+        },
+      ];
+      artifact.businessFlowBlueprintPacket.coverageJudgment = "intentionally_reduced";
       artifact.agentBlueprintPacket.roles[0].assignedResponsibilitySlice = [
         "product",
         "frontend",
       ];
     });
     try {
-      await assert.rejects(
-        validateRunArtifact(file),
-        /web_app deliverable must cover lane "ux"/,
-      );
+      const { stdout } = await validateRunArtifact(file);
+      const result = JSON.parse(stdout);
+      assert.equal(result.ok, true);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }

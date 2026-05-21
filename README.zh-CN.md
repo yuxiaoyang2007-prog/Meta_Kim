@@ -718,7 +718,8 @@ flowchart TB
 | 命令 | 作用 |
 | --- | --- |
 | `node setup.mjs` | 交互式安装/更新/检查向导 |
-| `node setup.mjs --update` | 更新所有技能和依赖 |
+| `git pull --ff-only` | clone 安装用户先用它从 GitHub 拉取最新 Meta_Kim 源码 |
+| `node setup.mjs --update` | 刷新当前安装的投影、技能和依赖；不会拉取 Meta_Kim 源码 |
 | `node setup.mjs --check` | 环境检查（不写盘） |
 | `node setup.mjs --lang zh-CN` | 指定中文界面 |
 

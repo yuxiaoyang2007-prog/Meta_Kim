@@ -48,7 +48,7 @@ Full agent instructions here
 
 ### Differences from Claude Code
 
-- No hooks system
+- Hooks are available through `.codex/hooks.json`; event names and contracts are not schema-compatible with Claude Code hooks
 - No context:fork capability
 - No plugin marketplace
 - Uses TOML for agent config (Claude uses Markdown with frontmatter)

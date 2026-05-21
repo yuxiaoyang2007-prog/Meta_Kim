@@ -9,7 +9,7 @@
  * Can be safely skipped with: npm install --ignore-scripts
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -93,7 +93,7 @@ function checkCapabilityIndex() {
   }
 
   // Check if index is stale (older than 7 days)
-  const { mtime } = require("node:fs").statSync(CAPABILITY_INDEX_PATH);
+  const { mtime } = statSync(CAPABILITY_INDEX_PATH);
   const ageMs = Date.now() - mtime.getTime();
   const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
 

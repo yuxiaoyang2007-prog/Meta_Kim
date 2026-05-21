@@ -177,6 +177,18 @@ function ensureNonEmptyValue(value, context) {
   ensureString(value, context);
 }
 
+function validateRoleDisplayName(name, context) {
+  const trimmed = String(name ?? "").trim();
+  ensure(
+    !/^[A-Z][a-z]+$/.test(trimmed),
+    `${context} must be business-readable, not a runtime nickname.`,
+  );
+  ensure(
+    !/[-_/\\:]/.test(trimmed),
+    `${context} must stay at role-family level; put work-item scope in roleInstanceId, shardScope, assignedResponsibilitySlice, or task text.`,
+  );
+}
+
 function valuesAsStrings(value) {
   if (Array.isArray(value)) {
     return value.map((item) => String(item));
@@ -365,6 +377,135 @@ function validateFetchPacket(contract, artifact) {
   }
 }
 
+function validateContentEvidencePacket(contract, artifact) {
+  const packet = artifact.contentEvidencePacket;
+  const policy = contract.protocols.contentEvidencePacket;
+  ensureFields(packet, policy.requiredFields, "contentEvidencePacket");
+  ensureEnum(
+    packet.evidenceScope,
+    policy.evidenceScopeEnum,
+    "contentEvidencePacket.evidenceScope",
+  );
+  ensureEnum(
+    packet.researchSkipReason,
+    policy.researchSkipReasonEnum,
+    "contentEvidencePacket.researchSkipReason",
+  );
+  ensureString(
+    packet.evidenceLaneValidatedBy,
+    "contentEvidencePacket.evidenceLaneValidatedBy",
+  );
+
+  const discovery = packet.researchCapabilityDiscovery;
+  const discoveryPolicy = policy.researchCapabilityDiscovery;
+  ensureFields(
+    discovery,
+    discoveryPolicy.requiredFields,
+    "contentEvidencePacket.researchCapabilityDiscovery",
+  );
+
+  for (const field of discoveryPolicy.forbiddenFields ?? []) {
+    ensure(
+      !(field in discovery),
+      `contentEvidencePacket.researchCapabilityDiscovery must not include forbidden field "${field}".`,
+    );
+  }
+
+  ensureStringArray(
+    discovery.requiredCapabilities,
+    "contentEvidencePacket.researchCapabilityDiscovery.requiredCapabilities",
+  );
+  ensureFields(
+    discovery.runtimeContext,
+    discoveryPolicy.runtimeContextRequiredFields,
+    "contentEvidencePacket.researchCapabilityDiscovery.runtimeContext",
+  );
+  ensureString(
+    discovery.runtimeContext.os,
+    "contentEvidencePacket.researchCapabilityDiscovery.runtimeContext.os",
+  );
+  ensureString(
+    discovery.runtimeContext.runtimeFamily,
+    "contentEvidencePacket.researchCapabilityDiscovery.runtimeContext.runtimeFamily",
+  );
+
+  ensureArray(
+    discovery.toolInventorySources,
+    "contentEvidencePacket.researchCapabilityDiscovery.toolInventorySources",
+  );
+  for (const [index, source] of discovery.toolInventorySources.entries()) {
+    ensureEnum(
+      source,
+      discoveryPolicy.toolInventorySourceEnum,
+      `contentEvidencePacket.researchCapabilityDiscovery.toolInventorySources[${index}]`,
+    );
+  }
+
+  ensureArray(
+    discovery.availableRetrievalCapabilities,
+    "contentEvidencePacket.researchCapabilityDiscovery.availableRetrievalCapabilities",
+  );
+  for (const [index, capability] of discovery.availableRetrievalCapabilities.entries()) {
+    ensureObject(
+      capability,
+      `contentEvidencePacket.researchCapabilityDiscovery.availableRetrievalCapabilities[${index}]`,
+    );
+    ensureEnum(
+      capability.capability,
+      discoveryPolicy.retrievalCapabilityEnum,
+      `contentEvidencePacket.researchCapabilityDiscovery.availableRetrievalCapabilities[${index}].capability`,
+    );
+    ensureEnum(
+      capability.providerKind,
+      discoveryPolicy.providerKindEnum,
+      `contentEvidencePacket.researchCapabilityDiscovery.availableRetrievalCapabilities[${index}].providerKind`,
+    );
+    ensureEnum(
+      capability.status,
+      discoveryPolicy.statusEnum,
+      `contentEvidencePacket.researchCapabilityDiscovery.availableRetrievalCapabilities[${index}].status`,
+    );
+    ensureString(
+      capability.proof,
+      `contentEvidencePacket.researchCapabilityDiscovery.availableRetrievalCapabilities[${index}].proof`,
+    );
+    ensureStringArray(
+      capability.limitations,
+      `contentEvidencePacket.researchCapabilityDiscovery.availableRetrievalCapabilities[${index}].limitations`,
+    );
+  }
+
+  ensureFields(
+    discovery.selectedResearchPath,
+    ["mode", "reason"],
+    "contentEvidencePacket.researchCapabilityDiscovery.selectedResearchPath",
+  );
+  ensureEnum(
+    discovery.selectedResearchPath.mode,
+    discoveryPolicy.selectedResearchPathModeEnum,
+    "contentEvidencePacket.researchCapabilityDiscovery.selectedResearchPath.mode",
+  );
+  ensureString(
+    discovery.selectedResearchPath.reason,
+    "contentEvidencePacket.researchCapabilityDiscovery.selectedResearchPath.reason",
+  );
+
+  ensureArray(
+    discovery.capabilityGaps,
+    "contentEvidencePacket.researchCapabilityDiscovery.capabilityGaps",
+  );
+  for (const [index, gap] of discovery.capabilityGaps.entries()) {
+    ensureObject(gap, `contentEvidencePacket.researchCapabilityDiscovery.capabilityGaps[${index}]`);
+    ensureString(gap.gap, `contentEvidencePacket.researchCapabilityDiscovery.capabilityGaps[${index}].gap`);
+    ensureString(gap.impact, `contentEvidencePacket.researchCapabilityDiscovery.capabilityGaps[${index}].impact`);
+    ensureString(gap.handoff, `contentEvidencePacket.researchCapabilityDiscovery.capabilityGaps[${index}].handoff`);
+  }
+  ensureString(
+    discovery.validatedBy,
+    "contentEvidencePacket.researchCapabilityDiscovery.validatedBy",
+  );
+}
+
 function validateIntentPacketWhenRequired(contract, artifact) {
   const when =
     contract.runDiscipline.protocolFirst
@@ -478,6 +619,10 @@ function validateDispatchEnvelope(contract, artifact) {
   ensureString(packet.ownerAgent, "dispatchEnvelopePacket.ownerAgent");
   ensureString(packet.businessRoleId, "dispatchEnvelopePacket.businessRoleId");
   ensureString(packet.roleDisplayName, "dispatchEnvelopePacket.roleDisplayName");
+  validateRoleDisplayName(
+    packet.roleDisplayName,
+    "dispatchEnvelopePacket.roleDisplayName",
+  );
   ensureString(packet.roleInstanceId, "dispatchEnvelopePacket.roleInstanceId");
   ensureString(packet.taskRef, "dispatchEnvelopePacket.taskRef");
   ensureStringArray(
@@ -606,6 +751,18 @@ function validateOrchestrationTaskBoard(contract, artifact) {
     ensureString(
       task.owner,
       `orchestrationTaskBoardPacket.tasks[${index}].owner`,
+    );
+    ensureString(
+      task.businessRoleId,
+      `orchestrationTaskBoardPacket.tasks[${index}].businessRoleId`,
+    );
+    ensureString(
+      task.roleDisplayName,
+      `orchestrationTaskBoardPacket.tasks[${index}].roleDisplayName`,
+    );
+    validateRoleDisplayName(
+      task.roleDisplayName,
+      `orchestrationTaskBoardPacket.tasks[${index}].roleDisplayName`,
     );
     ensure(
       Number.isInteger(task.sequence) && task.sequence >= 1,
@@ -748,35 +905,6 @@ function validateBusinessFlowBlueprint(contract, artifact) {
     }
   }
 
-  const webAppMinimumLanes = [
-    "product",
-    "ux",
-    "ui",
-    "frontend",
-    "backend",
-    "database",
-    "motion",
-    "accessibility",
-    "browser-qa",
-    "test",
-    "performance",
-    "release",
-  ];
-  if (flow.deliverableType === "web_app") {
-    for (const laneId of webAppMinimumLanes) {
-      ensure(
-        requiredLaneIds.has(laneId) || omittedLaneIds.has(laneId),
-        `web_app deliverable must cover lane "${laneId}" as required or omitted_with_reason.`,
-      );
-      if (flow.coverageJudgment === "complete") {
-        ensure(
-          !omittedLaneIds.has(laneId),
-          `businessFlowBlueprintPacket.coverageJudgment=complete cannot omit web_app lane "${laneId}".`,
-        );
-      }
-    }
-  }
-
   return { requiredLaneIds, optionalLaneIds, omittedLaneIds };
 }
 
@@ -809,9 +937,9 @@ function validateAgentBlueprint(contract, artifact) {
       policy.ownerResolutionEnum,
       `agentBlueprintPacket.roles[${index}].ownerResolution`,
     );
-    ensure(
-      !/^[A-Z][a-z]+$/.test(role.roleDisplayName.trim()),
-      `agentBlueprintPacket.roles[${index}].roleDisplayName must be business-readable, not a runtime nickname.`,
+    validateRoleDisplayName(
+      role.roleDisplayName,
+      `agentBlueprintPacket.roles[${index}].roleDisplayName`,
     );
     for (const laneId of valuesAsStrings(role.assignedResponsibilitySlice)) {
       coveredLaneIds.add(laneId);
@@ -1312,9 +1440,9 @@ function validateWorkerPackets(contract, artifact) {
       validWorkspaceIsolation.has(packet.workspaceIsolation),
       `workerTaskPackets[${index}].workspaceIsolation must be one of [${[...validWorkspaceIsolation].join(", ")}].`,
     );
-    ensure(
-      !/^[A-Z][a-z]+$/.test(packet.roleDisplayName.trim()),
-      `workerTaskPacket ${packet.taskPacketId} roleDisplayName must be business-readable, not a runtime nickname.`,
+    validateRoleDisplayName(
+      packet.roleDisplayName,
+      `workerTaskPacket ${packet.taskPacketId} roleDisplayName`,
     );
     const ownerPackets = packetsByOwnerAgent.get(packet.ownerAgent) ?? [];
     ownerPackets.push({ ...packet, index });
@@ -1811,6 +1939,7 @@ export function validateArtifact(contract, artifact) {
   );
   validateTaskClassification(contract, artifact.taskClassification);
   validateFetchPacket(contract, artifact);
+  validateContentEvidencePacket(contract, artifact);
   validateIntentPacketWhenRequired(contract, artifact);
   validateIntentGatePacketWhenRequired(contract, artifact);
   validateCardPlan(contract, artifact);

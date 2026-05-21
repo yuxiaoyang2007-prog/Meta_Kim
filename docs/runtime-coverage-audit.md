@@ -48,8 +48,8 @@
 | 理论 / skill 入口 | `.claude/skills/meta-theory/` mirror | `.codex/skills/meta-theory/` mirror | `openclaw/skills/meta-theory/` + workspace mirror | `.cursor/skills/meta-theory/` mirror | 已覆盖，由项目治理层同步 |
 | 角色入口 | `CLAUDE.md` + `.claude/agents/` | `AGENTS.md` + `.codex/agents/` | `workspaces/<agent>/SOUL.md` 等 | `.cursor/agents/*.md`（项目级） | 已覆盖 |
 | 子代理 / 自定义代理 | 原生 subagents | 原生 custom agents / subagents | 原生多 agent workspace | Cursor 原生 agent rules | 已覆盖 |
-| 项目级 Skill | `.claude/skills/` | `.agents/skills/` | workspace skill + installable skill | `.agents/skills/`（通用路径） | 已覆盖 |
-| 兼容 Skill 镜像 | 不需要 | `.codex/skills/` 兼容镜像 | `openclaw/skills/` 镜像 | `~/.cursor/skills/` 全局 | 已覆盖 |
+| 项目级 Skill | `.claude/skills/` | `.codex/skills/` | workspace skill + installable skill | `.cursor/skills/` | 已覆盖 |
+| 兼容 Skill 镜像 | 不需要 | `.codex/skills/` runtime mirror | `openclaw/skills/` 镜像 | `.cursor/skills/` runtime mirror + `~/.cursor/skills/` 全局 | 已覆盖 |
 | MCP | `.mcp.json` | `config.toml` 例子 | 共享同一 MCP server | `.cursor/mcp.json` | 已覆盖 |
 | Hook / 守卫 | `.claude/settings.json` hooks | `.codex/hooks.json` trusted project/user hooks | Plugin SDK hooks + bundled/internal hooks | `.cursor/hooks.json` lowerCamel lifecycle hooks | 已覆盖，但不是 1:1 同构 |
 | 启动文件 | `CLAUDE.md` / agent prompt | `AGENTS.md` / custom agent prompt | `BOOT.md` / `BOOTSTRAP.md` / `IDENTITY.md` | `.cursorrules` / agent prompt | 已覆盖 |
@@ -77,8 +77,6 @@
 - Codex:
   - `AGENTS.md`
   - `.codex/agents/*.toml`
-  - `.agents/skills/meta-theory/SKILL.md`
-  - `.agents/skills/meta-theory/agents/openai.yaml`
   - `.codex/skills/meta-theory/SKILL.md`
   - `.codex/capability-index/`
   - `codex/config.toml.example`

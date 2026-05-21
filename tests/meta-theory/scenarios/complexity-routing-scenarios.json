@@ -20,8 +20,8 @@
     "expectedGovernanceFlow": "complex_dev",
     "expectedStages": 8,
     "passFailCriteria": {
-      "PASS": "完整8阶段 spine，无10阶段 business phases",
-      "FAIL": "为3文件修改升级到10阶段"
+      "PASS": "完整8阶段 spine，无11阶段业务工作流",
+      "FAIL": "为3文件修改升级到11阶段业务工作流"
     }
   },
   {
@@ -31,10 +31,10 @@
     "expectedComplexity": "Complex",
     "expectedGovernanceFlow": "complex_dev",
     "expectedUpgradeReasons": ["cross_system_scope", "business_workflow_upgrade"],
-    "expectedStages": 18,
+    "expectedStages": 19,
     "passFailCriteria": {
-      "PASS": "8阶段 spine + 10阶段 business phases 全部出现",
-      "FAIL": "只走了8阶段或只走了10阶段"
+      "PASS": "8阶段 spine + 11阶段业务工作流全部出现",
+      "FAIL": "只走了8阶段或只走了11阶段业务工作流"
     }
   },
   {
@@ -44,9 +44,9 @@
     "expectedComplexity": "Complex",
     "expectedGovernanceFlow": "complex_dev",
     "expectedUpgradeReasons": ["security_gate_required"],
-    "expectedStages": 18,
+    "expectedStages": 19,
     "passFailCriteria": {
-      "PASS": "触发 security_gate_required，升级到10阶段",
+      "PASS": "触发 security_gate_required，升级到11阶段业务工作流",
       "FAIL": "安全变更没有升级"
     }
   },
@@ -70,9 +70,9 @@
     "expectedComplexity": "Complex",
     "expectedGovernanceFlow": "complex_dev",
     "expectedUpgradeReasons": ["owner_creation_required"],
-    "expectedStages": 18,
+    "expectedStages": 19,
     "passFailCriteria": {
-      "PASS": "触发 owner_creation_required，升级到10阶段，需要 capabilityGapPacket",
+      "PASS": "触发 owner_creation_required，升级到11阶段业务工作流，需要 capabilityGapPacket",
       "FAIL": "没有创建 owner 就开始执行"
     }
   },
@@ -83,9 +83,9 @@
     "expectedComplexity": "Complex",
     "expectedGovernanceFlow": "complex_dev",
     "expectedUpgradeReasons": ["parallel_merge_required"],
-    "expectedStages": 18,
+    "expectedStages": 19,
     "passFailCriteria": {
-      "PASS": "触发 parallel_merge_required，升级到10阶段，需要 parallelGroup 和 mergeOwner",
+      "PASS": "触发 parallel_merge_required，升级到11阶段业务工作流，需要 parallelGroup 和 mergeOwner",
       "FAIL": "独立任务按顺序执行"
     }
   }

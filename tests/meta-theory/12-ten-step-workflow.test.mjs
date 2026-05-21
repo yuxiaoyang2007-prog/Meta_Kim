@@ -1,7 +1,8 @@
 /**
  * 12-ten-step-workflow.test.mjs
  *
- * Tests the 11-stage business workflow:
+ * Legacy file name kept for compatibility; this test covers the current
+ * 11-phase business workflow:
  * direction → planning → execution → review → meta_review → revision → verify → summary → feedback → evolve → mirror
  *
  * Validates:
@@ -10,11 +11,12 @@
  * - Terminal phases are correctly identified
  * - Labels (zh-CN and en-US) are complete for all 11 phases
  * - Summary preference order is correct
- * - The 11-stage workflow is distinct from the 8-stage spine
+ * - The 11-phase workflow is distinct from the 8-stage spine
+ * - Legacy ten-step file names are documented as compatibility aliases only
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { readJson } from "./_helpers.mjs";
+import { readFile, readJson } from "./_helpers.mjs";
 
 describe("Part A: 11-phase business workflow structure", async () => {
   const contract = await readJson("config/contracts/workflow-contract.json");
@@ -266,5 +268,17 @@ describe("Part G: business workflow vs 8-stage spine distinction", async () => {
         `runHeader.requiredFields must include "${f}"`,
       );
     }
+  });
+});
+
+describe("Part H: legacy ten-step compatibility naming", async () => {
+  const reference = await readFile(
+    "canonical/skills/meta-theory/references/ten-step-governance.md",
+  );
+
+  test("legacy file name is explicitly marked as compatibility-only", () => {
+    assert.match(reference, /legacy file name/i);
+    assert.match(reference, /compatibility alias/i);
+    assert.match(reference, /11-phase business workflow/i);
   });
 });

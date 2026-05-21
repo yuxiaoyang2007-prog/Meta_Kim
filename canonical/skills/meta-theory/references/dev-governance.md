@@ -90,7 +90,9 @@ When Step 2 is chosen, the governed run must explicitly record the factory lane:
 Before Stage 4 starts, Thinking must produce explicit protocol artifacts for the run:
 - `runHeader`
 - `taskClassification`
+- `contentEvidencePacket`
 - `fetchPacket`
+- `preDecisionOptionFrame`
 - `cardPlanPacket`
 - `dispatchEnvelopePacket`
 - `orchestrationTaskBoardPacket`
@@ -104,7 +106,13 @@ Before Stage 4 starts, Thinking must produce explicit protocol artifacts for the
 
 If these protocol artifacts do not exist, the run is not ready for Execution.
 
-For `governanceFlow` in `complex_dev` or `meta_analysis`, the machine-validated JSON artifact must also include **`intentPacket`** (`trueUserIntent`, `successCriteria`, `nonGoals`, `intentPacketVersion: v1`) and **`intentGatePacket`** (`ambiguitiesResolved`, `requiresUserChoice`, `defaultAssumptions`, `pendingUserChoices`, `userLanguage`, `languageSource`, `nativeChoiceSurface`, `intentGatePacketVersion: v1`; if `requiresUserChoice` is true, include non-empty `pendingUserChoices[]`) before Execution — see `config/contracts/workflow-contract.json` (`protocols.intentPacket`, `protocols.intentGatePacket`, `runDiscipline.protocolFirst.intentPacketRequiredWhenGovernanceFlows` / `intentGatePacketRequiredWhenGovernanceFlows`).
+Pre-decision artifacts are distinct from dispatch artifacts:
+
+- `contentEvidencePacket` is Fetch evidence: what content was read or verified before choices were offered.
+- `preDecisionOptionFrame` is Thinking evidence: candidate orchestration paths, candidate owners, trade-offs, recommended default, and whether user choice is required.
+- `dispatchEnvelopePacket`, `dispatchBoard`, and `workerTaskPackets` are post-decision artifacts. They may not be finalized until the user chooses through a runtime question tool / native choice / fallback, or an allowed skip is recorded.
+
+For `governanceFlow` in `complex_dev` or `meta_analysis`, the machine-validated JSON artifact must also include **`intentPacket`** (`trueUserIntent`, `successCriteria`, `nonGoals`, `intentPacketVersion: v1`) and **`intentGatePacket`** (`ambiguitiesResolved`, `requiresUserChoice`, `defaultAssumptions`, `pendingUserChoices`, `userLanguage`, `languageSource`, `nativeChoiceSurface`, `intentGatePacketVersion: v1`; if `requiresUserChoice` is true, include non-empty `pendingUserChoices[]`; if skipped, include the recorded skip reason from `preDecisionOptionFrame.choiceGateSkip`) before Execution — see `config/contracts/workflow-contract.json` (`protocols.intentPacket`, `protocols.intentGatePacket`, `runDiscipline.protocolFirst.intentPacketRequiredWhenGovernanceFlows` / `intentGatePacketRequiredWhenGovernanceFlows`).
 
 If `taskClassification.upgradeReasons` includes `owner_creation_required`, the artifact must also include **`capabilityGapPacket`** before Execution. If `capabilityGapPacket.resolutionAction` is `create_execution_agent` or `upgrade_execution_agent`, the artifact must include **`executionAgentCard`** before Conductor may dispatch the new owner.
 
@@ -173,11 +181,14 @@ Stage names remain canonical English protocol labels (`Critical`, `Fetch`, `Thin
 - **Notice (no popup)**: Informational updates, stage transitions, progress reports. Output directly to conversation, no response required. See `canonical/templates/user-interaction/notice-template.md`
 - **Decision (popup)**: Use the runtime's native confirmation mechanism when multiple viable options exist. Each option must include 4 dimensions. See `canonical/templates/user-interaction/decision-template.md`
 
+**Non-trivial execution rule**: For non-trivial executable work, Decision is the default after Fetch and pre-decision Thinking unless the user explicitly chose auto-proceed, the task is trivial, or `queryBypass: true` applies. Skips must be recorded as `choiceGateSkip`; silent skips fail Review.
+
 **Decision Triggers** (from `config/contracts/workflow-contract.json` → `userInteractionPolicy`):
 
-1. `multiple_viable_solutions`: ≥2 solutions with clear trade-offs
-2. `product_direction_required`: Business clarification needed
-3. `security_or_rollback_risk`: Explicit acknowledgment required
+1. `non_trivial_executable_decision`: executable work is not trivial and no explicit auto-proceed exists
+2. `multiple_viable_solutions`: ≥2 solutions with clear trade-offs
+3. `product_direction_required`: Business clarification needed
+4. `security_or_rollback_risk`: Explicit acknowledgment required
 
 **Option Quality Standard** (4-dimension rule):
 
@@ -187,6 +198,8 @@ Stage names remain canonical English protocol labels (`Critical`, `Fetch`, `Thin
 | `problem_solved` | ✅ Corresponding requirement or pain point |
 | `advantages` | ✅ Why choose this approach |
 | `disadvantages` | ✅ Costs or risks |
+
+The decision context must cite `contentEvidencePacket` and `preDecisionOptionFrame`: what was inspected or searched, what remains uncertain, which paths are viable, and why the recommended path is best.
 
 **Batch Decision Mode**:
 
@@ -401,6 +414,8 @@ On receiving an escalation signal: re-enter Fetch (Stage 2) to find a more capab
 | **Probed** | Needs scope or priority clarification | → Follow-up Probe (max 2 rounds) |
 | **Assumed** | Still vague after 2 rounds | Record assumptions, mark `clarity: "assumed"`, → Stage 2 |
 
+Blocking Critical clarification is allowed only when Fetch cannot proceed safely. For non-trivial non-query work, do not ask runtime question tool, native choice, or fallback option questions during Critical merely because multiple paths might exist. First collect Fetch/content evidence, then build the Thinking-stage `preDecisionOptionFrame`, then ask one consolidated choice before Execution.
+
 **Follow-up Probe Strategy**:
 - Round 1: Ask about **scope** — "Which scenarios need support? Which can be deferred?"
 - Round 2: Ask about **priorities** — "If time is tight, which parts can be cut?"
@@ -416,20 +431,20 @@ Before proceeding from Critical to Fetch, check:
 
 ### Complexity Routing
 
-| File Changes | Complexity | Executed Path | Upgrade to 10-Step? |
+| File Changes | Complexity | Executed Path | Upgrade to 11-phase business workflow? |
 |-------------|-----------|---------------|-------------------|
 | 1 file, pure logic/style/comments | Simple | Execution → Review → Verification → Evolution (4 stages, still owner-driven) | No — 8-stage is the minimum; even these 4 stages suffice |
 | 2-5 files, 1 module | Medium | Full 8-stage spine | No — 8-stage is the complete executable chain for medium complexity |
-| >5 files OR cross-system OR multi-team | Complex | Full 8-stage spine, with escalation gates | **Yes** — upgrade to full 10-step governance when: (a) >5 files, (b) cross-system dependencies detected, (c) multi-team handoff required, (d) security-sensitive changes, or (e) business-workflow revision/summary/feedback phases are needed per the run contract |
+| >5 files OR cross-system OR multi-team | Complex | Full 8-stage spine, with escalation gates | **Yes** — upgrade to the full 11-phase business workflow when: (a) >5 files, (b) cross-system dependencies detected, (c) multi-team handoff required, (d) security-sensitive changes, or (e) business-workflow revision/summary/feedback/mirror phases are needed per the run contract |
 
 **Upgrade Trigger Conditions** (any one is sufficient):
 - File scope > 5 files
 - Cross-system dependency detected (Stage 3 Thinking identifies shared components across module boundaries)
 - Multi-team handoff required (business department + meta department coordination)
 - Security-sensitive or permission-critical changes
-- Business run contract explicitly requires 11-step phases (direction/planning/execution/review/meta-review/revision/verification/summary/feedback/evolution/mirror)
+- Business run contract explicitly requires the 11-phase business workflow (direction/planning/execution/review/meta-review/revision/verification/summary/feedback/evolution/mirror)
 
-**Note**: The 8-stage spine is the **minimum executable chain** regardless of complexity. The 10-step governance is an **upgrade layer** for complex scenarios — the 8 stages still run, but extended with direction refinement, summary, and feedback phases before Evolution.
+**Note**: The 8-stage spine is the **minimum executable chain** regardless of complexity. The 11-phase business workflow is an **upgrade layer** for complex scenarios — the 8 stages still run, and the business workflow adds direction refinement, summary, feedback, evolution, and mirror phases around the executable spine.
 
 ### Critical Stage Output
 
@@ -505,21 +520,49 @@ IF capability not found in local scan:
 ```
 Using the SAME capability keywords from Step 1–1.5:
   Grep capability-search-index.tsv filtering for type=skills
-  Collect matching skill IDs and descriptions
-  Record in fetchPacket.recommendedSkills per sub-task:
-    { "subTaskId": "task-001", "skills": ["coding-standards", "code-security"], "source": "search-index" }
-  ALSO check matched agent's YAML frontmatter for recommended_skills field
-    (pre-populated by previous Evolution runs — gives faster lookup without re-searching)
-  Merge both sources: search-index discovery + agent's recommended_skills
+  Collect matching providers, package IDs, concrete skill IDs, commands, and descriptions
+  Record candidates in capabilitySearchResult per sub-task:
+    {
+      "subTaskId": "task-001",
+      "capabilitySlot": "code quality review",
+      "candidateProviders": ["superpowers", "ecc"],
+      "candidateSkills": ["coding-standards", "code-security"],
+      "candidateCommands": [],
+      "source": "search-index"
+    }
+  Select concrete run-scoped entries only after scoring:
+    { "subTaskId": "task-001", "selectedSkill": { "provider": "superpowers", "skillId": "coding-standards", "selectionScope": "run_scoped" } }
+  ALSO check matched agent's YAML frontmatter for abstract capability slots or provider compatibility
+    (pre-populated by previous Evolution runs — gives faster lookup without binding concrete skills)
+  Merge both sources: search-index discovery + agent's abstract slots/provider compatibility
 ```
 
 **Why Step 1.6 runs during Fetch, not Evolution**: The first run must already know which skills to use. Evolution only caches the discovery for faster future runs. Skill ignorance on first run = agent does worse work for no reason.
 
+### Skill Binding Model (Fetch-time only)
+
+Long-term agent identity may inherit only:
+
+- abstract capability slots, such as `test generation`, `browser QA`, `security review`, or `planning discipline`
+- meta-skill package providers, such as `superpowers` or `ecc`
+- provider compatibility rules, such as required runtime, permission class, or expected artifact shape
+
+Long-term agent identity must not inherit:
+
+- concrete sub-skill IDs selected for one run
+- shell commands selected for one run
+- plugin sub-capabilities selected for one run
+- prompts that force one provider's fixed tactic as the agent's permanent method
+
+`superpowers` and `ecc` are capability providers / meta-skill package providers, not fixed playbooks. `findskill` is a runtime-local capability search entrypoint during Fetch, not a durable skill binding. A concrete sub-skill, command, or plugin sub-capability is valid only when written as a run-scoped selection in `capabilitySearchResult`, `selectedSkill`, `businessFlowBlueprintPacket`, `agentBlueprintPacket`, `workerTaskPacket`, or another current-run artifact.
+
+Review and Evolution must reject any agent creation or agent iteration that copies a run-scoped `selectedSkill` into durable identity. Evolution may update an agent with a new abstract capability slot or provider compatibility rule, but not with the specific skill/command that happened to win one Fetch.
+
 **Step 1.7 — Business-flow capability matrix** (run before final owner selection):
 
-For executable deliverables, infer the likely `deliverableType` and expand it into business lanes before dispatching. The system must not only route the most obvious technical role.
+For executable deliverables, infer the likely `deliverableType` and expand it into business lanes before dispatching. The system must not only route the most obvious technical role; selected lanes should be justified by the current outcome, scope, and constraints.
 
-| Deliverable type | Lanes to consider before omission |
+| Deliverable type | Example dimensions to consider before omission |
 |---|---|
 | `web_app` / `dashboard` | product, UX, UI, frontend, backend/API, database/data, auth/security, motion, accessibility, test automation, browser QA, performance, release, feedback, evolution |
 | `landing_page` | product offer, UX, UI, visual assets, frontend, motion, accessibility, SEO/analytics, browser QA, performance, release |
@@ -535,22 +578,31 @@ Each lane becomes a capability slot with:
   "spineStage": "Fetch | Thinking | Execution | Review | Verification | Evolution",
   "capabilityNeed": "frontend implementation",
   "capabilitySearchQuery": "frontend implementation owner + relevant skills",
+  "capabilitySearchResult": {
+    "capabilitySlot": "frontend implementation",
+    "candidateProviders": ["superpowers", "ecc"],
+    "candidateSkills": [],
+    "candidateCommands": [],
+    "searchEntrypoints": ["capability-index", "findskill"],
+    "bindingPolicy": "run_scoped_selection_only"
+  },
   "ownerLayer": "execution",
   "candidateOwners": [],
   "candidateSkills": [],
+  "selectedSkill": null,
   "selectedOwner": null,
   "selectionReason": "why this owner best covers the lane",
   "coverageStatus": "covered | partial | missing | omitted_with_reason",
   "toolsOrMcp": [],
   "parallelPolicy": "single | shardable | same-agent-multi-instance | exclusive",
   "dependsOn": [],
-  "mergeOwner": "business-readable role name",
+  "mergeOwner": "short business role name",
   "gapAction": "reuse_existing_owner | upgrade_existing_owner | create_owner_first",
   "validation": []
 }
 ```
 
-The Fetch record must show which lanes were covered, which were omitted, and why. Each lane must preserve the global scan evidence (`capabilitySearchQuery`, `candidateOwners`, `candidateSkills`, `selectedOwner`, `selectionReason`, `coverageStatus`) so Review can tell whether the owner was selected capability-first. Omitted lanes without reasons fail the Review stage.
+The Fetch record must show which lanes were selected for this run, which lanes were explicitly omitted, and why. Each required or optional lane must preserve the global scan evidence (`capabilitySearchQuery`, `candidateOwners`, `candidateSkills`, `selectedOwner`, `selectionReason`, `coverageStatus`) so Review can tell whether the owner was selected capability-first. Omitted lanes without reasons fail the Review stage, but Review must not require every example dimension to appear in every run.
 
 **Step 2 — Capability index search** (if no perfect local match):
 ```
@@ -585,7 +637,28 @@ IF globalProjectRegistry is available (~/.meta-kim/global/project-registry.sqlit
 
 1. **Identify capability need**: Determine what information retrieval capabilities the task requires (e.g., "web search", "content fetch", "documentation lookup")
 
-2. **Discover available tools at runtime**: Search the current environment's tool registry for tools that match the identified capability descriptors. Tool availability differs across runtimes (Claude Code, Codex, OpenClaw, Cursor) and user configurations (MCP servers, plugins) — use capability descriptors, not hardcoded tool names. Available tools might include built-in search tools, MCP-based search services, or runtime-specific extensions.
+2. **Produce `researchCapabilityDiscovery`**: Search the current environment's actual tool inventory sources for tools that match the identified capability descriptors. Tool availability differs across runtimes (Claude Code, Codex, OpenClaw, Cursor) and user configurations (MCP servers, plugins) — use capability descriptors, not hardcoded tool names. Available tools might include built-in search tools, MCP-based search services, runtime-specific extensions, user-supplied sources, or only local project evidence. Record:
+   - `runtimeContext.os` and `runtimeContext.runtimeFamily` only when known from the current run
+   - `toolInventorySources` checked (`active_tools`, `deferred_tools`, `mcp`, `plugins`, `skills`, `commands`, `capability_index`, or `user_instruction`)
+   - `availableRetrievalCapabilities[]` with descriptor, provider kind, status, proof, and limitations
+   - `selectedResearchPath.mode` as `external_web`, `mixed`, `local_only`, `user_fallback`, or `blocked`
+   - `capabilityGaps[]` with impact and handoff owner when a required retrieval capability is absent
+   - `validatedBy: "meta-conductor"`
+
+Do not record host-form-factor guesses such as `platformSurface`; they are not reliable capability evidence. Research proceeds from observed retrieval capability proof, not from whether the host looks like a CLI, desktop, web, IDE, plugin, or remote environment.
+
+**Deep Research Requirement for the evidence owner**:
+
+The evidence owner is not a keyword searcher. They must produce decision-grade research that can change the option frame. Deep research means:
+
+- **Research plan**: state the core questions, source categories to inspect, and what evidence would change the recommendation.
+- **Source breadth**: inspect local project evidence first, then external sources when the task depends on current facts, public APIs, ecosystem best practices, security, or version behavior.
+- **Source quality**: prioritize primary sources, official docs, source repositories, changelogs, standards, issue trackers, and high-signal community evidence; mark weaker sources as lower confidence.
+- **Cross-checking**: verify important claims against at least 2 independent sources or explain why only one authoritative source exists.
+- **Contradictions and counterexamples**: record conflicting evidence, edge cases, and reasons a tempting option may fail.
+- **Assumption ledger**: separate verified facts from assumptions, defaults, and open uncertainties.
+- **Decision impact**: map each material finding to candidate options, user questions, risks, or rejected paths.
+- **Traceability**: every option in `preDecisionOptionFrame` must cite the `contentEvidencePacket` findings that support it.
 
 3. **Execute searches across ≥5 distinct source categories**:
    - Official vendor/standard documentation
@@ -600,6 +673,60 @@ IF globalProjectRegistry is available (~/.meta-kim/global/project-registry.sqlit
 5. **Record in fetchPacket**:
 ```json
 {
+  "contentEvidencePacket": {
+    "evidenceScope": "local_project | external_research | mixed",
+    "researchCapabilityDiscovery": {
+      "requiredCapabilities": ["web_search", "content_fetch", "documentation_lookup"],
+      "runtimeContext": {
+        "os": "windows | macos | linux | unknown",
+        "runtimeFamily": "claude-code | codex | openclaw | cursor | other | unknown"
+      },
+      "toolInventorySources": ["active_tools", "mcp", "plugins", "capability_index"],
+      "availableRetrievalCapabilities": [
+        {
+          "capability": "web_search | url_fetch | browser_open | docs_lookup | mcp_search | plugin_search | local_only | user_supplied_sources",
+          "providerKind": "native_tool | mcp | plugin | skill | command | capability_index | user_supplied | none",
+          "status": "available | partial | unavailable | blocked | unknown",
+          "proof": "observed runtime/tool inventory evidence",
+          "limitations": []
+        }
+      ],
+      "selectedResearchPath": {
+        "mode": "external_web | mixed | local_only | user_fallback | blocked",
+        "reason": "why this path is valid for this run"
+      },
+      "capabilityGaps": [
+        { "gap": "missing retrieval capability", "impact": "what cannot be verified", "handoff": "meta-scout | user | none" }
+      ],
+      "validatedBy": "meta-conductor"
+    },
+    "deepResearchPlan": {
+      "questions": ["what must be true to choose the best path"],
+      "sourceCategoriesPlanned": ["local-code", "official-docs", "source-repos"],
+      "decisionImpactCriteria": ["what evidence would change the recommendation"]
+    },
+    "localSourcesRead": ["local files, graph nodes, capability index entries, docs, or external sources"],
+    "contentFindings": [
+      { "claim": "constraint or uncertainty that shapes viable options", "evidence": "source pointer", "confidence": "high | medium | low" }
+    ],
+    "capabilityEvidence": ["owner/skill matches from Fetch"],
+    "sourceCategoryCoverage": ["local-code", "capability-index", "official-docs"],
+    "crossReferenceMatrix": [
+      { "claim": "material claim", "sources": ["source-a", "source-b"], "consistent": true }
+    ],
+    "contradictionLog": [
+      { "claim": "conflicting claim", "conflict": "what disagrees", "resolution": "accepted | rejected | unresolved" }
+    ],
+    "assumptionLedger": [
+      { "assumption": "default used when evidence is incomplete", "risk": "impact if false" }
+    ],
+    "decisionImpactMap": [
+      { "finding": "contentFindings[0]", "impacts": ["candidateOptions.A", "question.scope"] }
+    ],
+    "researchRequired": true,
+    "researchSkipReason": "none",
+    "evidenceLaneValidatedBy": "meta-conductor"
+  },
   "researchSources": [
     { "category": "official-docs", "summary": "...", "confidence": "high" },
     { "category": "community-qa", "summary": "...", "confidence": "medium" },
@@ -613,11 +740,78 @@ IF globalProjectRegistry is available (~/.meta-kim/global/project-registry.sqlit
 }
 ```
 
+**Research capability gate**: IF research is required and `contentEvidencePacket.researchCapabilityDiscovery` is missing, lacks checked inventory sources, lacks retrieval capability proof, uses `platformSurface`, or selects `external_web` / `mixed` without an available or partial external retrieval capability → BLOCK advancement to Thinking. If external verification is mandatory and `selectedResearchPath.mode` is `blocked`, surface the blocker or ask the user for a fallback source/path.
+
 **Gate**: IF `researchSources` has entries from <5 distinct categories AND research is required → BLOCK advancement to Thinking. Complete research across ≥5 source categories first.
+
+**Deep research gate**: IF research is required and the evidence owner does not provide `deepResearchPlan`, `sourceCategoryCoverage`, `crossReferenceMatrix`, `contradictionLog`, `assumptionLedger`, and `decisionImpactMap` → BLOCK advancement to `preDecisionOptionFrame`. A source list without decision impact is not deep research.
+
+**Pre-decision gate**: IF non-trivial executable work lacks a `contentEvidencePacket` with inspected sources, constraints, and uncertainties → BLOCK advancement to runtime question surfaces and finalized orchestration. Build evidence first.
 
 **Skip condition**: NOT required when `governanceFlow = query`, task scope is entirely local to project files (no external claims to verify), or user explicitly says "skip research" / "local only". Record skip reason in `fetchRecord.researchSkipReason`.
 
-**Degradation path**: IF no web search tools are available in the current runtime, record `researchRequired: true, researchValidationPerformed: false, researchBlockReason: "no web search capability available"` in fetchRecord and inform the user. Do NOT silently proceed as if research was performed.
+**Degradation path**: IF no required retrieval capability is available in the current runtime, record `researchRequired: true`, `researchValidationPerformed: false`, `selectedResearchPath.mode: "blocked"` or `"user_fallback"`, and a concrete capability gap / block reason. Inform the user or request user-supplied sources when external verification is mandatory. Do NOT silently proceed as if research was performed.
+
+**Step 2.6 — Content Evidence Packet (mandatory before user choice for non-trivial non-query work)**
+
+Before any runtime question tool, native choice, or conversation fallback that asks the user to choose an execution path, Fetch must emit:
+
+```json
+{
+  "contentEvidencePacket": {
+    "evidenceScope": "local_project | external_research | mixed",
+    "researchCapabilityDiscovery": {
+      "requiredCapabilities": ["local_only"],
+      "runtimeContext": {
+        "os": "windows | macos | linux | unknown",
+        "runtimeFamily": "claude-code | codex | openclaw | cursor | other | unknown"
+      },
+      "toolInventorySources": ["capability_index", "user_instruction"],
+      "availableRetrievalCapabilities": [
+        {
+          "capability": "local_only",
+          "providerKind": "capability_index",
+          "status": "available",
+          "proof": "task is local-project only or user explicitly requested local-only",
+          "limitations": ["no external freshness validation"]
+        }
+      ],
+      "selectedResearchPath": {
+        "mode": "local_only",
+        "reason": "external research is not required for this run"
+      },
+      "capabilityGaps": [],
+      "validatedBy": "meta-conductor"
+    },
+    "deepResearchPlan": {
+      "questions": ["what must be true to choose the best path"],
+      "sourceCategoriesPlanned": ["local files, graph nodes, capability indexes, or contracts"],
+      "decisionImpactCriteria": ["what evidence would change the recommendation"]
+    },
+    "localSourcesRead": ["files, graph nodes, capability indexes, or contracts read"],
+    "contentFindings": [
+      { "claim": "what the content shows", "evidence": "source pointer", "confidence": "high | medium | low" }
+    ],
+    "capabilityEvidence": ["owner/skill matches from Fetch"],
+    "sourceCategoryCoverage": ["local-code", "graph", "capability-index"],
+    "crossReferenceMatrix": [
+      { "claim": "material local claim", "sources": ["source-a", "source-b"], "consistent": true }
+    ],
+    "contradictionLog": [],
+    "assumptionLedger": [
+      { "assumption": "local-only evidence is sufficient", "risk": "external drift may be missed" }
+    ],
+    "decisionImpactMap": [
+      { "finding": "contentFindings[0]", "impacts": ["candidateOptions.A"] }
+    ],
+    "researchRequired": false,
+    "researchSkipReason": "local_project_only | pure_query | explicit_local_only | trivial",
+    "evidenceLaneValidatedBy": "meta-conductor"
+  }
+}
+```
+
+Skip is allowed only for `trivial`, `pure_query` / `queryBypass`, or explicit user auto-proceed / local-only instructions. The skip reason must be recorded here and copied into the later `preDecisionOptionFrame.choiceGateSkip`.
 
 **Step 3 — External skill discovery** (if the local + indexed baseline still has no perfect match):
 ```
@@ -773,6 +967,38 @@ Analyze at least 2 possible solution paths:
 | A | [approach description] | [reasons] | [reasons] |
 | B | [alternative approach] | [reasons] | [reasons] |
 
+### Step 1.5: Pre-decision Option Frame
+
+Before invoking a runtime question tool, native choice, or conversation fallback for a non-trivial non-query run, Thinking must package the options as candidate orchestration, not final dispatch:
+
+```json
+{
+  "preDecisionOptionFrame": {
+    "builtFromContentEvidence": true,
+    "contentEvidenceRefs": ["contentEvidencePacket.contentFindings[0]"],
+    "candidateOptions": [
+      {
+        "optionId": "A",
+        "whatChanges": "candidate scope",
+        "problemSolved": "requirement or pain point",
+        "expectedResult": "what the user gets",
+        "advantages": ["why choose it"],
+        "disadvantages": ["cost or risk"],
+        "candidateOwners": ["capability-matched owners from Fetch"],
+        "candidateTaskShape": ["candidate lanes or task packets, not finalized workerTaskPackets"]
+      }
+    ],
+    "recommendedDefault": "A",
+    "requiresUserChoice": true,
+    "nativeChoiceSurface": "runtime_question_tool | native_choice | conversation_fallback",
+    "choiceGateSkip": null,
+    "reviewOwner": "meta-prism"
+  }
+}
+```
+
+`candidateTaskShape` may describe likely lanes, dependencies, and owner candidates. It must not be treated as `dispatchEnvelopePacket`, `dispatchBoard`, or `workerTaskPackets`; those are finalized only after the user choice or a valid skip. Valid skips are limited to trivial work, pure read-only/queryBypass, or explicit auto-proceed, and must record `skipReason`, `skipSource`, and `skipSafetyRationale` in `choiceGateSkip`.
+
 ### Step 2: Risk Identification
 
 | Signal | Type | Mitigation |
@@ -782,7 +1008,17 @@ Analyze at least 2 possible solution paths:
 | >3 files affected | Cross-contamination risk | Mark for Review |
 | No matching agent found | Capability gap | Record + suggest Type B |
 
-### Step 3: Task Decomposition
+### Step 3: Decision Gate
+
+For non-trivial executable work, invoke a runtime question tool, native choice, or conversation fallback after `preDecisionOptionFrame` is complete. Proceed without that decision only when:
+
+- the user explicitly requested auto-proceed / "just do it" / "不需要确认"
+- the run is a pure query with `queryBypass: true`
+- the task is trivial and low risk
+
+When skipped, record `choiceGateSkip` in both `preDecisionOptionFrame.choiceGateSkip` and `intentGatePacket.defaultAssumptions`.
+
+### Step 4: Post-decision Task Decomposition
 
 Break Stage 1's task into independent sub-tasks:
 
@@ -792,10 +1028,10 @@ Break Stage 1's task into independent sub-tasks:
     {
       "id": 1,
       "description": "what specifically to do",
-      "owner": "business-readable role display name",
+      "owner": "short business role display name",
       "ownerAgent": "agent type from Stage 2",
       "businessRoleId": "frontend",
-      "roleDisplayName": "frontend-home-page",
+      "roleDisplayName": "frontend",
       "roleInstanceId": "frontend#home-page",
       "runtimeInstanceAlias": "optional host nickname only",
       "ownerMode": "reuse_existing_owner | upgrade_existing_owner | create_owner_first",
@@ -807,25 +1043,41 @@ Break Stage 1's task into independent sub-tasks:
       "shardKey": "route | component-area | file-scope | test-suite | data-domain",
       "shardScope": ["specific files, routes, modules, or test suite"],
       "workspaceIsolation": "same_workspace_readonly_overlap | isolated_worktree | file_lock_required",
-      "artifactNamespace": "frontend-home-page",
+      "artifactNamespace": "frontend",
       "collisionPolicy": "no_overlap | merge_by_owner | lock_required",
       "fileScope": ["file-or-module-a", "file-or-module-b"],
       "constraints": ["boundary1", "dependency1"],
-      "recommendedSkills": ["skill-id-1", "skill-id-2"]
+      "capabilitySearchResult": {
+        "capabilitySlot": "frontend implementation",
+        "candidateProviders": ["superpowers", "ecc"],
+        "candidateSkills": ["skill-id-1", "skill-id-2"],
+        "candidateCommands": [],
+        "searchEntrypoints": ["capability-index", "findskill"],
+        "bindingPolicy": "run_scoped_selection_only"
+      },
+      "selectedSkill": {
+        "provider": "superpowers",
+        "skillId": "skill-id-1",
+        "command": null,
+        "selectionReason": "best ROI for this task after Fetch",
+        "selectionScope": "run_scoped"
+      }
     }
   ]
 }
 ```
 
-`recommendedSkills` comes from Fetch Step 1.6 — skills discovered via search index + agent's own `recommended_skills` YAML field (cached by previous Evolution runs). During Execution, include these skill references in the agent's dispatch prompt so the agent invokes them during work.
+`capabilitySearchResult` and `selectedSkill` come from Fetch Step 1.6. They are run-scoped and may be included in the dispatch prompt for this execution only. Do not copy `selectedSkill.skillId`, `selectedSkill.command`, or any plugin sub-capability into the agent's durable SOUL, identity, boundary, or permanent recommended skill list. Durable agent updates may mention only abstract capability slots and provider compatibility.
 
-**Business-readable naming rule**: The user-facing `owner` / `roleDisplayName` must explain the work, not the platform nickname. Use names such as `ux-flow-review`, `frontend-dashboard-table`, `database-migration`, `browser-qa-mobile`. Random personal aliases assigned by the host runtime are stored only in `runtimeInstanceAlias`; they must not appear as the primary role name in the task board or final summary.
+`dispatchEnvelopePacket`, `dispatchBoard`, and `workerTaskPackets` are finalized only after the user decision or allowed skip is recorded. If these artifacts are finalized before `preDecisionOptionFrame` and `userDecisionPacket` / `choiceGateSkip`, Review must fail the run.
+
+**Short business role naming rule**: The user-facing `owner` / `roleDisplayName` must name the coarse role family, not the platform nickname, a long task sentence, or a concrete work item. Use names such as `前端`, `后端`, `测试`, `frontend`, `backend`, `test`, `database`, or `security`. Put feature, page, installation, shard, or work-item scope in `roleInstanceId`, `shardScope`, `assignedResponsibilitySlice`, or the worker task text. Random personal aliases assigned by the host runtime are stored only in `runtimeInstanceAlias`; they must not appear as the primary role name in the task board or final summary.
 
 **Same-agent multi-instance rule**: The same `ownerAgent` can appear in multiple packets when the work is shardable. This is valid only when each packet has a distinct `roleInstanceId`, `shardKey`, non-overlapping or locked `shardScope`, explicit `workspaceIsolation`, a unique `artifactNamespace`, an explicit `collisionPolicy`, and one unified `mergeOwner` for the parallel group. Without those fields, repeated ownerAgent entries are treated as fake parallelism and fail the decomposition gate.
 
-### Step 3.5: Protocol-First Dispatch Artifacts
+### Step 4.5: Protocol-First Dispatch Artifacts
 
-Thinking must lock down the execution protocol before any `Agent` tool invocation begins:
+After the decision gate closes, Thinking must lock down the execution protocol before any `Agent` tool invocation begins:
 
 ```json
 {
@@ -843,6 +1095,23 @@ Thinking must lock down the execution protocol before any `Agent` tool invocatio
     "ownerRequired": true,
     "decisionSource": "classifier-v2",
     "classifierVersion": "v2"
+  },
+  "contentEvidencePacket": {
+    "evidenceScope": "local_project",
+    "localSourcesRead": [],
+    "contentFindings": [],
+    "capabilityEvidence": [],
+    "researchRequired": false,
+    "researchSkipReason": "local_project_only",
+    "evidenceLaneValidatedBy": "meta-conductor"
+  },
+  "preDecisionOptionFrame": {
+    "builtFromContentEvidence": true,
+    "candidateOptions": [],
+    "requiresUserChoice": true,
+    "nativeChoiceSurface": "conversation_fallback",
+    "choiceGateSkip": null,
+    "reviewOwner": "meta-prism"
   },
   "runHeader": {
     "department": "team or department",
@@ -952,13 +1221,16 @@ Thinking must lock down the execution protocol before any `Agent` tool invocatio
     "roles": [
       {
         "businessRoleId": "frontend",
-        "roleDisplayName": "frontend-home-page",
+        "roleDisplayName": "frontend",
         "ownerAgent": "frontend-developer",
         "capabilityNeed": "frontend implementation",
         "assignedResponsibilitySlice": "Implement the home route UI from the UX and UI handoff",
         "ownerResponsibilityDelta": "Reuse existing frontend implementation boundary; narrow it to home route files",
-        "agentIterationPlan": "Dispatch with exact route scope, approved skills, shard rules, and verification steps",
+        "agentIterationPlan": "Dispatch with exact route scope, run-scoped selectedSkill entries, shard rules, and verification steps",
         "ownerResolution": "reuse_existing_owner",
+        "abstractCapabilitySlots": ["frontend implementation", "browser QA handoff"],
+        "providerCompatibility": ["superpowers", "ecc"],
+        "durableSkillBindingPolicy": "abstract_slots_and_providers_only",
         "minInstances": 1,
         "maxInstances": 3,
         "parallelizable": true,
@@ -969,15 +1241,20 @@ Thinking must lock down the execution protocol before any `Agent` tool invocatio
     "roleCoverageGate": "pass | fail",
     "missingRoles": [],
     "duplicateRolePolicy": "allow_instances_when_sharded",
-    "namingPolicy": "business-readable names required; runtime nicknames are aliases only"
+    "namingPolicy": {
+      "roleDisplayNameRequired": true,
+      "businessSemanticNamesOnly": true,
+      "shortRoleNamesRequired": true,
+      "runtimeNicknamesAreAliasesOnly": true
+    }
   },
   "workerTaskPackets": [
     {
       "packetId": "task-001",
-      "owner": "frontend-home-page",
+      "owner": "frontend",
       "ownerAgent": "frontend-developer",
       "businessRoleId": "frontend",
-      "roleDisplayName": "frontend-home-page",
+      "roleDisplayName": "frontend",
       "roleInstanceId": "frontend#home-page",
       "runtimeInstanceAlias": "optional host nickname only",
       "ownerMode": "reuse_existing_owner",
@@ -987,10 +1264,24 @@ Thinking must lock down the execution protocol before any `Agent` tool invocatio
       "shardKey": "route",
       "shardScope": ["home"],
       "workspaceIsolation": "same_workspace_readonly_overlap",
-      "artifactNamespace": "frontend-home-page",
+      "artifactNamespace": "frontend",
       "collisionPolicy": "no_overlap",
       "deliverableLink": "how this packet connects back to the primary deliverable",
-      "recommendedSkills": ["skill-id-1", "skill-id-2"]
+      "capabilitySearchResult": {
+        "capabilitySlot": "frontend implementation",
+        "candidateProviders": ["superpowers", "ecc"],
+        "candidateSkills": ["skill-id-1", "skill-id-2"],
+        "candidateCommands": [],
+        "searchEntrypoints": ["capability-index", "findskill"],
+        "bindingPolicy": "run_scoped_selection_only"
+      },
+      "selectedSkill": {
+        "provider": "superpowers",
+        "skillId": "skill-id-1",
+        "command": null,
+        "selectionReason": "best ROI for this task after Fetch",
+        "selectionScope": "run_scoped"
+      }
     }
   ],
   "resultMergePlan": {
@@ -1013,7 +1304,7 @@ Before proceeding to Step 4, the plan must pass this gate:
 | **Multi-file / multi-capability** | Task spans >1 file OR >1 capability dimension | MUST produce >= 2 `workerTaskPackets` |
 | **Single-Packet Anti-Pattern** | Only 1 packet produced for a multi-file / multi-capability task | REJECT — re-decompose or justify why a single packet is genuinely sufficient (single-file, single-capability, pure logic change) |
 | **Business-flow coverage** | `businessFlowBlueprintPacket` covers expected lanes or documents omitted lanes with reasons | REJECT — add missing lanes or omission reasons |
-| **Business-readable role names** | `roleDisplayName` describes the responsibility; runtime nicknames are aliases only | REJECT — replace personal/random names with business role names |
+| **Short business role names** | `roleDisplayName` uses a coarse role-family form (`前端`, `后端`, `测试`, `frontend`, `backend`, `test`); runtime nicknames and scoped work items are aliases or instance scope only | REJECT — replace personal/random names, scoped work items, or long task descriptions with coarse business role names |
 | **Role responsibility assignment** | Every `agentBlueprintPacket.roles[]` entry declares `assignedResponsibilitySlice`, `ownerResponsibilityDelta`, `agentIterationPlan`, and `ownerResolution` | REJECT — fill the role iteration fields before worker packets |
 | **Role coverage gap** | Failed `roleCoverageGate`, non-empty `missingRoles`, or `ownerResolution = upgrade_existing_owner | create_owner_first` has `capabilityGapPacket` and approved `executionAgentCard` | REJECT — create or upgrade the owner first |
 | **Same-agent multi-instance** | Repeated `ownerAgent` entries have unique `roleInstanceId`, shard scope, artifact namespace, isolation/collision policy, and one merge owner | REJECT — add shard/merge rules or make the work sequential |
@@ -1094,7 +1385,7 @@ Thinking must translate the plan into a **`cardDeck`** — the canonical Stage 3
 }
 ```
 
-### Step 5: Decision Record
+### Step 6: Decision Record
 
 ```json
 {
@@ -1109,6 +1400,10 @@ Thinking must translate the plan into a **`cardDeck`** — the canonical Stage 3
 
 ```json
 {
+  "contentEvidencePacket": {},
+  "preDecisionOptionFrame": {},
+  "userDecisionPacket": {},
+  "choiceGateSkip": null,
   "subTasks": [],
   "taskClassification": {},
   "runHeader": {},
@@ -1205,6 +1500,10 @@ IF Skip-Level detected → Record Scar → Assess impact → IF impact occurred 
 ### Step 1.5: Owner Coverage + Protocol Compliance Review
 
 Before content quality review begins, check the execution contract itself:
+- [ ] For non-trivial non-query work, did `contentEvidencePacket` exist before runtime question tool / native choice / fallback?
+- [ ] Did `preDecisionOptionFrame` present evidence-backed options before user choice?
+- [ ] If the choice gate was skipped, was `choiceGateSkip` limited to trivial, pure read-only/queryBypass, or explicit auto-proceed with rationale?
+- [ ] Were `dispatchEnvelopePacket`, `dispatchBoard`, and `workerTaskPackets` finalized only after user choice or valid skip?
 - [ ] Did every executable sub-task have an explicit owner?
 - [ ] If temporary fallback owner was used, is the justification explicit?
 - [ ] Do all `WorkerResultPackets` map back to the `dispatchBoard` and primary deliverable?

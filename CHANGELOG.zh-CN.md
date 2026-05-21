@@ -6,6 +6,73 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.0.39] - 2026-05-20
+
+### 新增
+
+- **研究能力预检** — `contentEvidencePacket` 现在要求 `researchCapabilityDiscovery`，证据 owner 必须先证明当前 runtime 实际可用的检索能力，再进入深度研究或用户选项框架。
+- **Run artifact 研究发现校验** — `validate-run-artifact` 现在会校验研究能力预检，并拒绝缺少发现证据的 artifact。
+
+### 变更
+
+- **基于能力证据的研究路由** — Conductor、Artisan、Scout、Prism 现在按实际检索能力（`web_search`、`url_fetch`、`docs_lookup`、MCP/plugin/search/用户提供来源）路由研究，而不是按宿主外形猜测。
+- **运行时研究 fixtures** — 有效和无效 run artifact 现在都包含明确的检索能力发现证据。
+
+### 修复
+
+- **platformSurface 漂移** — 明确拒绝 `platformSurface` 作为研究能力信号，避免用 `desktop/cli/web/ide` 这类猜测驱动跨运行时搜索决策。
+
+## [2.0.38] - 2026-05-20
+
+### 新增
+
+- **抽象元技能包合同** — 元 Agent 可以长期固定拥有 `meta-theory`、`agent-teams-playbook`、`findskill`、`superpowers`、`ecc` 这些元技能包，但具体子技能只允许在每次运行时按需求选择。
+- **能力索引继承测试** — 新增 setup 测试，锁定 canonical 能力索引、schema、validator 和运行时镜像中的元技能包合同。
+- **发布/安装业务流** — 在业务流合同中补充 runtime package、install、release 相关执行通道。
+
+### 变更
+
+- **元 Agent 能力槽** — 更新 9 个 canonical 元 Agent，让长期身份记录抽象能力槽，而不是永久绑定具体子技能。
+- **运行时能力发现** — `discover:global` 现在会稳定生成抽象能力槽、元技能包、run-only 技能选择和长期身份策略，不会在刷新时丢字段。
+- **Graphify 治理** — 强化 graphify wiring 检查，让代码图谱新鲜度继续进入发布验证链路。
+
+### 修复
+
+- **具体技能持久化** — 防止把 provider 子技能等具体运行时选择写入长期元 Agent 身份。
+- **全局同步漂移** — 刷新 Claude Code、Codex、OpenClaw、Cursor 的全局目录版 meta-theory skill，让安装和更新能拿到当前多文件技能布局。
+
+## [2.0.37] - 2026-05-20
+
+### 变更
+
+- **角色族显示名** — 统一用户可见的 worker 标签粒度，并将单次运行的具体范围记录到实例和分片元数据。
+- **Run artifact fixtures** — 对齐示例 artifact 与角色族命名策略。
+
+### 修复
+
+- **Node ESM postinstall** — 修复 `scripts/postinstall-check.mjs`，避免 npm install 因 `ReferenceError: require is not defined in ES module scope` 失败。
+- **Postinstall 覆盖** — 新增 setup 测试，在 Node 下运行 postinstall checker，防止 ESM/CommonJS 回归。
+
+## [2.0.36] - 2026-05-20
+
+### 新增
+
+- **业务流蓝图门禁** — 增加派发前蓝图步骤，根据请求目标推导本次任务的业务通道，并记录覆盖决策。
+- **业务可读 Agent 角色** — 分离用户可见角色名和运行时昵称，并支持同一 Agent 多实例分片执行，要求明确隔离、冲突和合并规则。
+- **Run artifact 验证 fixtures** — 增加同 owner 分片执行、重叠分片拒绝等正反例。
+
+### 变更
+
+- **能力优先编排** — 每个业务通道都必须记录全局 agent/skill 搜索证据、选定 owner、选择理由和覆盖状态，再创建 worker packet。
+- **Owner 缺口处理** — 现有 owner 复用、owner 升级和新 owner 创建现在都必须成为显式 `agentBlueprintPacket` 决策。
+- **Run index ownership** — owner 查询覆盖治理 owner、执行 owner agent 和业务角色名。
+
+### 修复
+
+- **MCP agent 清单** — `meta-runtime-server` self-test 现在暴露全部 9 个元 Agent，包括 `meta-chrysalis`。
+- **静态合同漂移** — 项目验证现在检查 blueprint packets、角色字段、dispatch envelope 字段和 worker shard 字段。
+- **跨运行时文档** — 运行时能力矩阵记录 Claude、Codex、OpenClaw、Cursor 的蓝图和角色命名一致性。
+
 ## [2.0.35] - 2026-05-20
 
 ### 变更

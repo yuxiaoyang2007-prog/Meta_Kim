@@ -5,7 +5,17 @@
   "description": "Schema for Meta_Kim capability index, which distinguishes meta-agents (governance layer) from execution-agents (work layer)",
   "type": "object",
   "additionalProperties": false,
-  "required": ["generatedAt", "registryName", "scope", "fetchOrder", "byCapabilityType"],
+  "required": [
+    "generatedAt",
+    "registryName",
+    "scope",
+    "fetchOrder",
+    "abstractCapabilitySlots",
+    "metaSkillProviders",
+    "runtimeSelectedSkills",
+    "longTermAgentIdentityPolicy",
+    "byCapabilityType"
+  ],
   "properties": {
     "generatedAt": {
       "type": "string",
@@ -24,6 +34,15 @@
     "canonicalProjection": {
       "type": "string",
       "description": "Path to canonical projection within repo"
+    },
+    "canonicalSource": {
+      "type": "string",
+      "description": "Canonical source file for repo-local capability index content"
+    },
+    "mirroredTo": {
+      "type": "array",
+      "description": "Runtime mirror paths that must stay byte-for-byte aligned with canonicalProjection",
+      "items": { "type": "string" }
     },
     "localGlobalInventory": {
       "type": "string",
@@ -51,6 +70,94 @@
         "totalHooks": { "type": "integer" },
         "totalPlugins": { "type": "integer" },
         "totalCommands": { "type": "integer" }
+      }
+    },
+    "abstractCapabilitySlots": {
+      "type": "array",
+      "description": "Long-term abstract capability slots. These describe capability needs without binding a concrete runtime sub-skill into a meta-agent identity.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "slotId",
+          "description",
+          "allowedProviderIds",
+          "selectedSkillScope"
+        ],
+        "properties": {
+          "slotId": { "type": "string" },
+          "description": { "type": "string" },
+          "allowedProviderIds": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "selectedSkillScope": {
+            "type": "string",
+            "enum": ["run_only"]
+          }
+        }
+      }
+    },
+    "metaSkillProviders": {
+      "type": "object",
+      "description": "Meta-skill packages that may appear in long-term identity as providers, not as fixed concrete child skill bindings.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "providerKind",
+          "allowedForLongTermAgentIdentity",
+          "concreteSubSkillBindingForbidden"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "providerKind": {
+            "type": "string",
+            "enum": ["meta-skill-package"]
+          },
+          "allowedForLongTermAgentIdentity": { "type": "boolean" },
+          "concreteSubSkillBindingForbidden": { "type": "boolean" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "runtimeSelectedSkills": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selectedSkillScope",
+        "persistencePolicy"
+      ],
+      "properties": {
+        "selectedSkillScope": {
+          "type": "string",
+          "enum": ["run_only"]
+        },
+        "persistencePolicy": { "type": "string" }
+      }
+    },
+    "longTermAgentIdentityPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "forbidConcreteSkillInLongTermAgentIdentity",
+        "allowedMetaSkillProviderIds",
+        "forbiddenConcreteSkillPatterns"
+      ],
+      "properties": {
+        "forbidConcreteSkillInLongTermAgentIdentity": {
+          "type": "boolean",
+          "const": true
+        },
+        "allowedMetaSkillProviderIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "forbiddenConcreteSkillPatterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
       }
     },
     "byCapabilityType": {

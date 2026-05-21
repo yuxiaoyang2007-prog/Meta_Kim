@@ -107,7 +107,8 @@
     "userLanguage": "en",
     "languageSource": "latest_user_message_or_explicit_preference",
     "nativeChoiceSurface": "conversation_fallback",
-    "intentGatePacketVersion": "v1"
+    "intentGatePacketVersion": "v1",
+    "choiceGateSkip": "explicit_auto_proceed"
   },
   "cardPlanPacket": {
     "dealerOwner": "meta-conductor",
@@ -199,9 +200,12 @@
     "resultSchemaRef": "config/contracts/workflow-contract.json#/protocols/workerResultPacket",
     "reviewOwner": "meta-prism",
     "verificationOwner": "meta-warden",
-    "businessRoleId": "auth-refresh",
-    "roleDisplayName": "auth-refresh-implementation",
-    "roleInstanceId": "auth-refresh-implementation#1"
+    "businessRoleId": "backend",
+    "roleDisplayName": "backend",
+    "roleInstanceId": "auth-refresh#1",
+    "preDecisionOptionFrameRef": "preDecisionOptionFrame",
+    "userChoiceState": "explicit_auto_proceed",
+    "finalizationGate": "after_user_choice_or_explicit_auto_proceed"
   },
   "orchestrationTaskBoardPacket": {
     "dispatchBoardId": "dispatch-cross-001",
@@ -210,12 +214,12 @@
       {
         "taskId": "task-cross-001",
         "taskKind": "execution",
-        "owner": "auth-refresh-implementation",
+        "owner": "backend",
         "sequence": 1,
         "dependsOn": [],
         "deliverable": "shared-auth-pattern-extraction:pattern-module",
-        "businessRoleId": "auth-refresh",
-        "roleDisplayName": "auth-refresh-implementation"
+        "businessRoleId": "backend",
+        "roleDisplayName": "backend"
       }
     ],
     "synthesisOwner": "meta-warden"
@@ -230,7 +234,7 @@
   "workerTaskPackets": [
     {
       "taskPacketId": "task-cross-001",
-      "owner": "auth-refresh-implementation",
+      "owner": "backend",
       "ownerMode": "existing-owner",
       "todayTask": "extract shared auth patterns from project auth implementations",
       "output": "shared pattern module + verification notes",
@@ -254,23 +258,26 @@
         }
       ],
       "ownerAgent": "auth-specialist",
-      "businessRoleId": "auth-refresh",
-      "roleDisplayName": "auth-refresh-implementation",
-      "roleInstanceId": "auth-refresh-implementation#1",
+      "businessRoleId": "backend",
+      "roleDisplayName": "backend",
+      "roleInstanceId": "auth-refresh#1",
       "runtimeInstanceAlias": "",
       "shardKey": "file-scope",
       "shardScope": [
         "shared-auth-pattern-extraction:pattern-module"
       ],
       "workspaceIsolation": "same_workspace_readonly_overlap",
-      "artifactNamespace": "auth-refresh-implementation",
-      "collisionPolicy": "no_overlap"
+      "artifactNamespace": "auth-refresh",
+      "collisionPolicy": "no_overlap",
+      "preDecisionOptionFrameRef": "preDecisionOptionFrame",
+      "userChoiceState": "explicit_auto_proceed",
+      "finalizationGate": "after_user_choice_or_explicit_auto_proceed"
     }
   ],
   "workerResultPackets": [
     {
       "taskPacketId": "task-cross-001",
-      "owner": "auth-refresh-implementation",
+      "owner": "backend",
       "status": "completed",
       "producedArtifacts": [
         "src/shared/auth-patterns.ts",
@@ -298,7 +305,18 @@
         "issues": []
       }
     ],
-    "findings": []
+    "findings": [],
+    "triggerVsSkipReasonCheck": {
+      "status": "pass",
+      "triggerReasons": [
+        "multi_file",
+        "cross_module",
+        "durable_artifact",
+        "verification_required"
+      ],
+      "skipReason": "explicit_auto_proceed",
+      "evidence": "fixture records explicit_auto_proceed for pre-decision gate"
+    }
   },
   "verificationPacket": {
     "verified": true,
@@ -545,8 +563,8 @@
   "agentBlueprintPacket": {
     "roles": [
       {
-        "businessRoleId": "auth-refresh",
-        "roleDisplayName": "auth-refresh-implementation",
+        "businessRoleId": "backend",
+        "roleDisplayName": "backend",
         "ownerAgent": "auth-specialist",
         "capabilityNeed": "auth refresh implementation",
         "ownerResolution": "reuse_existing_owner",
@@ -579,9 +597,189 @@
     "namingPolicy": {
       "roleDisplayNameRequired": true,
       "businessSemanticNamesOnly": true,
+      "shortRoleNamesRequired": true,
       "runtimeNicknamesAreAliasesOnly": true,
       "forbiddenPrimaryNamePattern": "^[A-Z][a-z]+$",
-      "description": "User-visible agent names must describe business responsibility, e.g. frontend-home-page, database-schema, ux-flow-review. Host-generated personal nicknames such as Huygens or Mill may be recorded only as runtimeInstanceAlias."
+      "forbiddenScopedNamePattern": "[-_/\\\\:]",
+      "scopeDetailsBelongInInstanceFields": true,
+      "description": "User-visible agent names must be coarse business role-family names such as 前端, 后端, 测试, frontend, backend, test. Do not use scoped work-item names as roleDisplayName; put feature, page, installation, shard, or task detail in roleInstanceId, shardScope, assignedResponsibilitySlice, or task text. Host-generated personal nicknames such as Huygens or Mill may be recorded only as runtimeInstanceAlias."
     }
+  },
+  "contentEvidencePacket": {
+    "evidenceScope": "mixed",
+    "researchCapabilityDiscovery": {
+      "requiredCapabilities": [
+        "web_search",
+        "url_fetch",
+        "docs_lookup"
+      ],
+      "runtimeContext": {
+        "os": "unknown",
+        "runtimeFamily": "unknown"
+      },
+      "toolInventorySources": [
+        "capability_index",
+        "active_tools"
+      ],
+      "availableRetrievalCapabilities": [
+        {
+          "capability": "web_search",
+          "providerKind": "native_tool",
+          "status": "available",
+          "proof": "fetch stage recorded external research capability for fixture",
+          "limitations": []
+        },
+        {
+          "capability": "url_fetch",
+          "providerKind": "native_tool",
+          "status": "available",
+          "proof": "fetch stage recorded content fetch capability for fixture",
+          "limitations": []
+        }
+      ],
+      "selectedResearchPath": {
+        "mode": "mixed",
+        "reason": "fixture includes external or mixed evidence validation"
+      },
+      "capabilityGaps": [],
+      "validatedBy": "meta-conductor"
+    },
+    "localSourcesRead": [
+      {
+        "projectRef": "project-shared-auth-pattern",
+        "sourceType": "run_index",
+        "sourceRef": ".meta-kim/state/default/run-index.sqlite"
+      }
+    ],
+    "contentFindings": [
+      {
+        "findingId": "evidence-001",
+        "summary": "Fetch evidence collected for complex_dev",
+        "sourceRefs": [
+          "docs/auth-patterns.md",
+          "docs/auth-refresh.md"
+        ]
+      }
+    ],
+    "capabilityEvidence": [
+      {
+        "capability": "auth_pattern_extraction",
+        "owner": "meta-conductor",
+        "sourceProject": "project-shared-auth-pattern"
+      },
+      {
+        "capability": "auth_refresh_hardening",
+        "owner": "meta-conductor",
+        "sourceProject": "project-auth-refresh-hardening"
+      }
+    ],
+    "researchRequired": false,
+    "researchSkipReason": "local_project_only",
+    "evidenceLaneValidatedBy": "meta-conductor",
+    "triggerReasons": [
+      "multi_file",
+      "cross_module",
+      "durable_artifact",
+      "verification_required"
+    ],
+    "deepResearchPlan": {
+      "questions": [
+        "Which evidence changes the recommended path?",
+        "Which risks or uncertainties must become user choices?",
+        "Which owners and lanes are justified by Fetch evidence?"
+      ],
+      "sourceCategoriesPlanned": [
+        "local-code",
+        "graph",
+        "capability-index"
+      ],
+      "decisionImpactCriteria": [
+        "candidate option viability",
+        "risk severity",
+        "owner selection confidence"
+      ]
+    },
+    "sourceCategoryCoverage": [
+      "local-code",
+      "graph",
+      "capability-index"
+    ],
+    "crossReferenceMatrix": [
+      {
+        "claim": "fixture has enough local evidence to support post-choice dispatch",
+        "sources": [
+          ".meta-kim/state/default/run-index.sqlite",
+          "docs/auth-patterns.md"
+        ],
+        "consistent": true
+      }
+    ],
+    "contradictionLog": [],
+    "assumptionLedger": [
+      {
+        "assumption": "fixture evidence is static and local-only",
+        "risk": "live external drift is outside fixture scope"
+      }
+    ],
+    "decisionImpactMap": [
+      {
+        "finding": "contentEvidencePacket.contentFindings[0]",
+        "impacts": [
+          "preDecisionOptionFrame.candidateOptions[0]",
+          "dispatchEnvelopePacket.ownerSelection"
+        ]
+      }
+    ]
+  },
+  "preDecisionOptionFrame": {
+    "decisionTrigger": "non_trivial_executable_decision",
+    "contentEvidence": "contentEvidencePacket",
+    "optionFrame": "pre-decision candidate orchestration",
+    "presentedBeforeDecision": true,
+    "userChoiceState": "explicit_auto_proceed",
+    "builtFromContentEvidence": true,
+    "contentEvidenceRefs": [
+      "contentEvidencePacket"
+    ],
+    "candidateOptions": [
+      {
+        "optionId": "A",
+        "whatChanges": "Apply the governed run plan recorded in this fixture.",
+        "problemSolved": "Keeps executable work tied to Fetch evidence before dispatch.",
+        "expectedResult": "shared-auth-pattern-extraction",
+        "advantages": [
+          "Preserves the existing fixture intent."
+        ],
+        "disadvantages": [
+          "Uses fixture-level evidence rather than live runtime evidence."
+        ],
+        "candidateOwners": [
+          "meta-conductor",
+          "meta-prism"
+        ],
+        "candidateTaskShape": "post-decision dispatch packets"
+      },
+      {
+        "optionId": "B",
+        "whatChanges": "Audit only before dispatch.",
+        "problemSolved": "Allows a more conservative path when evidence is incomplete.",
+        "expectedResult": "written audit before execution",
+        "advantages": [
+          "Lower execution risk."
+        ],
+        "disadvantages": [
+          "Slower delivery."
+        ],
+        "candidateOwners": [
+          "meta-prism"
+        ],
+        "candidateTaskShape": "review-first packet"
+      }
+    ],
+    "recommendedDefault": "A",
+    "requiresUserChoice": false,
+    "nativeChoiceSurface": "conversation_fallback",
+    "choiceGateSkip": "explicit_auto_proceed",
+    "reviewOwner": "meta-prism"
   }
 }

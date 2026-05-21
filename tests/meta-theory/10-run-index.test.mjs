@@ -52,7 +52,7 @@ describe("run-index.mjs", () => {
     for (const owner of [
       "meta-conductor",
       "auth-specialist",
-      "auth-refresh-implementation",
+      "backend",
     ]) {
       const result = await runRunIndex([
         "query",

@@ -2,12 +2,12 @@
  * 13-complexity-routing.test.mjs
  *
  * Tests the complexity routing logic: when does the 8-stage spine
- * upgrade to the 10-stage business workflow.
+ * upgrade to the 11-phase business workflow.
  *
  * Validates:
  * - Simple (1 file, pure logic) → 4 stages (Execution → Review → Verification → Evolution)
  * - Medium (2-5 files, 1 module) → full 8-stage spine
- * - Complex (>5 files / cross-system / multi-team / security) → 8-stage + 10-stage
+ * - Complex (>5 files / cross-system / multi-team / security) → 8-stage + 11-phase
  * - Governance flow enum (query/simple_exec/complex_dev/meta_analysis/proposal_review/rhythm)
  * - Upgrade reasons and bypass reasons are correctly defined
  */
@@ -147,17 +147,17 @@ describe("Part C: complexity routing in dev-governance.md", async () => {
     );
   });
 
-  test("complex complexity routing is documented (8-stage + 10-step)", () => {
+  test("complex complexity routing is documented (8-stage + 11-phase)", () => {
     // Complex: >5 files OR cross-system OR multi-team
     const patterns = [
-      /Complex.*8.*stage.*10/i,
-      />5 files.*upgrade.*10/i,
-      /cross.system.*10.*phase/i,
+      /Complex.*8.*stage.*11.*phase/i,
+      />5 files.*upgrade.*11/i,
+      /cross.system.*11.*phase/i,
       /multi.team.*upgrade/i,
     ];
     assert.ok(
       patterns.some((p) => p.test(devGov)),
-      "Complex routing (8-stage + 10-step) must be documented",
+      "Complex routing (8-stage + 11-phase) must be documented",
     );
   });
 
@@ -172,7 +172,7 @@ describe("Part C: complexity routing in dev-governance.md", async () => {
   test("cross-system dependency triggers upgrade", () => {
     const patterns = [
       /cross.system.*upgrade/i,
-      /cross.system.*10/i,
+      /cross.system.*11/i,
       /system.*dependency.*upgrade/i,
     ];
     assert.ok(
@@ -182,10 +182,24 @@ describe("Part C: complexity routing in dev-governance.md", async () => {
   });
 
   test("security-sensitive changes trigger upgrade", () => {
-    const patterns = [/security.*upgrade/i, /security.*10/i, /security.gate/i];
+    const patterns = [/security.*upgrade/i, /security.*11/i, /security.gate/i];
     assert.ok(
       patterns.some((p) => p.test(devGov)),
       "Security-sensitive changes must trigger upgrade",
+    );
+  });
+
+  test("legacy 10-stage wording is not documented as the current routing model", () => {
+    const forbiddenCurrentModelPatterns = [
+      /upgrade to (?:full )?10[- ](?:step|stage)/i,
+      /10[- ]stage business workflow/i,
+      /10阶段/,
+      /Full 1[–-]10/i,
+      /All 10\b/i,
+    ];
+    assert.ok(
+      forbiddenCurrentModelPatterns.every((p) => !p.test(devGov)),
+      "current complexity routing must not preserve the old 10-step/10-stage model",
     );
   });
 });

@@ -260,6 +260,39 @@ describe("validate-run-artifact.mjs", () => {
     );
   });
 
+  test("rejects content evidence without research capability discovery", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      delete artifact.contentEvidencePacket.researchCapabilityDiscovery;
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        {
+          cwd: REPO_ROOT,
+        },
+      ),
+      /researchCapabilityDiscovery/,
+    );
+  });
+
+  test("rejects platformSurface as a research capability signal", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.contentEvidencePacket.researchCapabilityDiscovery.platformSurface =
+        "desktop";
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        {
+          cwd: REPO_ROOT,
+        },
+      ),
+      /platformSurface/,
+    );
+  });
+
   test("rejects current-project fetch packets that check other projects", async (t) => {
     const tempFixture = await writeTempFixture(t, (artifact) => {
       artifact.fetchPacket.projectsChecked = [

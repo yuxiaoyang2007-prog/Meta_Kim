@@ -1,7 +1,9 @@
-# Ten-step governance — full reference
+# 11-phase business workflow — full reference
 
+> This file keeps the legacy file name `ten-step-governance.md` as a compatibility alias for older links and test paths.
+> Current terminology is **11-phase business workflow / 11 阶段业务工作流**.
 > Distilled into the canonical meta-theory reference set; aligns with the Meta_Kim methodology.
-> **Steps 1–3 = “it moves.” Steps 4–10 = “it matures.”**
+> **Phases 1–3 = “it moves.” Phases 4–11 = “it matures.”**
 
 ## Core proposition
 
@@ -13,18 +15,18 @@ A first output only proves motion. Motion ≠ reliability ≠ reusability ≠ ev
 
 ---
 
-## Ten-step map
+## 11-phase map
 
 ```
-Direction(1) → Plan(2) → Execute(3) → Review(4) → Meta-review(5) → Revise(6) → Verify(7) → Summary(8) → Feedback(9) → Evolve(10)
+Direction(1) → Plan(2) → Execute(3) → Review(4) → Meta-review(5) → Revise(6) → Verify(7) → Summary(8) → Feedback(9) → Evolve(10) → Mirror(11)
 ├────── moves ──────┤├──────────────────── matures ─────────────────────────────────────────┤
 ```
 
 ---
 
-## Step by step
+## Phase by phase
 
-### Step 1: Direction
+### Phase 1: Direction
 
 | Attribute | Content |
 |-----------|---------|
@@ -40,7 +42,7 @@ Direction(1) → Plan(2) → Execute(3) → Review(4) → Meta-review(5) → Rev
 - Still fuzzy after 2 → conservative assumptions, mark assumptions
 - Do not guess intent forever
 
-### Step 2: Planning
+### Phase 2: Planning
 
 | Attribute | Content |
 |-----------|---------|
@@ -50,13 +52,15 @@ Direction(1) → Plan(2) → Execute(3) → Review(4) → Meta-review(5) → Rev
 | **Output** | Task plan + deck config + parallel/serial flags |
 | **Gate** | Every subtask maps to a concrete meta; if not → creation pipeline |
 
+**Skill binding rule**: Planning may assign abstract capability slots and compatible providers, but it must not bind concrete sub-skills, commands, or plugin sub-capabilities into long-term agent identity. Concrete choices are selected after Fetch and recorded as run-scoped `capabilitySearchResult` / `selectedSkill` entries.
+
 **Complexity routing here**:
 
 - Simple (<2 files) → skip heavy planning, execute
 - Medium (2–5) → light plan
 - Complex (>5) → full plan + dependency picture
 
-### Step 3: Execute
+### Phase 3: Execute
 
 | Attribute | Content |
 |-----------|---------|
@@ -71,13 +75,16 @@ Direction(1) → Plan(2) → Execute(3) → Review(4) → Meta-review(5) → Rev
 - No overlapping files → safe parallel
 - Overlap → serial; second waits
 - No owning meta → Type B creation pipeline
+- `superpowers` and `ecc` are capability providers / meta-skill package providers, not fixed tactics
+- `findskill` is a runtime-local search entrypoint, not a durable skill binding
+- Concrete skill / command / plugin choices live in this run's `workerTaskPacket.selectedSkill`, not in the agent's SOUL
 
-### Step 4: Review
+### Phase 4: Review
 
 | Attribute | Content |
 |-----------|---------|
 | **Owner** | Prism |
-| **Input** | Step 3 artifacts |
+| **Input** | Phase 3 artifacts |
 | **Core work** | Slop scan → assertion review → declared checks → depth → grade |
 | **Output** | Prism report: assertions PASS/FAIL + grade S/A/B/C/D |
 | **Gate** | A/S pass; B revise; C/D redo |
@@ -88,7 +95,7 @@ Direction(1) → Plan(2) → Execute(3) → Review(4) → Meta-review(5) → Rev
 - Hidden assumptions must be surfaced and tested
 - No evidence → FAIL
 
-### Step 5: Meta-review
+### Phase 5: Meta-review
 
 > **Who reviews the reviewer?**
 
@@ -125,7 +132,7 @@ IF standard differs >30% from last similar review
 
 > **Weak PASS is worse than FAIL — it breeds false confidence.**
 
-### Step 6: Revision
+### Phase 6: Revision
 
 | Attribute | Content |
 |-----------|---------|
@@ -141,7 +148,7 @@ IF standard differs >30% from last similar review
 - C → replace generic text with real data
 - D → re-execute from scratch
 
-### Step 7: Verify
+### Phase 7: Verify
 
 | Attribute | Content |
 |-----------|---------|
@@ -153,7 +160,7 @@ IF standard differs >30% from last similar review
 
 > **Verification is not self-congratulation. Changed ≠ fixed. Re-run assertions.**
 
-### Step 8: Summary
+### Phase 8: Summary
 
 | Attribute | Content |
 |-----------|---------|
@@ -163,9 +170,9 @@ IF standard differs >30% from last similar review
 | **Output** | Exec memo (shell-matched) + learning log |
 | **Gate** | Pass intent-amplification checks on the memo |
 
-**Summary ≠ paste** — reconcile conflicts, extract learning for Step 10.
+**Summary ≠ paste** — reconcile conflicts, extract learning for Phase 10.
 
-### Step 9: Feedback
+### Phase 9: Feedback
 
 | Attribute | Content |
 |-----------|---------|
@@ -175,7 +182,7 @@ IF standard differs >30% from last similar review
 | **Output** | Confirmed / changes requested |
 | **Gate** | Explicit confirmation; vague (“fine I guess”) → ask what failed |
 
-### Step 10: Evolution
+### Phase 10: Evolution
 
 | Attribute | Content |
 |-----------|---------|
@@ -187,17 +194,27 @@ IF standard differs >30% from last similar review
 
 Detail: `references/intent-amplification.md`.
 
+### Phase 11: Mirror
+
+| Attribute | Content |
+|-----------|---------|
+| **Owners** | Conductor + runtime projection owners |
+| **Input** | Verified canonical changes + sync requirements |
+| **Core work** | Sync or verify runtime mirrors, compatibility aliases, and release-facing surfaces |
+| **Output** | Mirror status: projected / not needed / blocked with reason |
+| **Gate** | Canonical behavior is not silently forked from runtime-facing copies |
+
 ---
 
 ## Complexity routing
 
-Not every task runs all eleven steps.
+Not every task runs all eleven phases.
 
 ### Simple (<2 files)
 
 ```
 Direction(1) → Execute(3) → Review(4) → Verify(7) → Feedback(9)
-Skip: Plan(2), Meta-review(5), Revise(6), Summary(8), Evolve(10)
+Skip: Plan(2), Meta-review(5), Revise(6), Summary(8), Evolve(10), Mirror(11)
 ```
 
 Small change: review + verify suffice; no meta-review or full evolution.
@@ -206,7 +223,7 @@ Small change: review + verify suffice; no meta-review or full evolution.
 
 ```
 Direction(1) → Plan(2) → Execute(3) → Review(4) → Meta-review(5) → Revise(6) → Verify(7) → Feedback(9)
-Skip: Summary(8), Evolve(10)
+Skip: Summary(8), Evolve(10), Mirror(11)
 ```
 
 Planning + meta-review matter; evolution optional at this scale.
@@ -214,10 +231,10 @@ Planning + meta-review matter; evolution optional at this scale.
 ### Complex (>5 files / multi-module)
 
 ```
-Full 1–10
+Full 1–11
 ```
 
-Large change: meta-review against blind spots, summary, evolution.
+Large change: meta-review against blind spots, summary, evolution, and mirror verification.
 
 ### Escalation matrix
 
@@ -246,7 +263,8 @@ Verify(7) ──pass──→ Summary(8)
 Summary(8) ──exec memo──→ Feedback(9)
 Feedback(9) ──confirm──→ Evolve(10)
          ──changes──→ Revise(6)
-Evolve(10) ──actions──→ [stronger next run]
+Evolve(10) ──actions──→ Mirror(11)
+Mirror(11) ──projection evidence──→ [stronger next run]
 ```
 
 ---

@@ -1,6 +1,6 @@
 {
   "name": "meta-kim",
-  "version": "2.0.36",
+  "version": "2.0.39",
   "description": "Governance layer for AI coding: meta agents, workflow contract, meta-theory; canonical in canonical/, with generated Claude/Codex/OpenClaw/Cursor projections.",
   "private": true,
   "type": "module",
@@ -48,8 +48,8 @@
     "meta:graphify:rebuild": "node scripts/graphify-cli.mjs rebuild",
     "meta:validate": "node scripts/validate-project.mjs",
     "meta:check": "npm run meta:check:runtimes && npm run meta:validate",
-    "meta:verify:all": "npm run meta:check && npm run meta:graphify:check && npm run meta:check:global && node scripts/eval-meta-agents.mjs --require-all-runtimes && npm run meta:test:setup && npm run meta:test:meta-theory",
-    "meta:verify:all:live": "npm run meta:check && npm run meta:graphify:check && npm run meta:check:global && node scripts/eval-meta-agents.mjs --require-all-runtimes --live && npm run meta:test:setup && npm run meta:test:meta-theory",
+    "meta:verify:all": "npm run discover:global && npm run meta:check && npm run meta:graphify:check && npm run meta:check:global && node scripts/eval-meta-agents.mjs --require-all-runtimes && npm run meta:test:setup && npm run meta:test:meta-theory",
+    "meta:verify:all:live": "npm run discover:global && npm run meta:check && npm run meta:graphify:check && npm run meta:check:global && node scripts/eval-meta-agents.mjs --require-all-runtimes --live && npm run meta:test:setup && npm run meta:test:meta-theory",
     "meta:setup:install": "node setup.mjs",
     "meta:setup:update": "node setup.mjs --update",
     "meta:setup:check": "node setup.mjs --check"

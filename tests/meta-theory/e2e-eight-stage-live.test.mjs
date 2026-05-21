@@ -114,7 +114,7 @@ describe("Stage 1: Critical — Blocking Clarification", () => {
 
 describe("Thinking → Execution: Unified Confirmation", () => {
   test("Execution前一次性确认，且不是每个阶段都弹确认", () => {
-    assert.match(skillContent, /After Fetch and Thinking complete, BEFORE Execution/);
+    assert.match(skillContent, /Fetch\/content evidence.*Thinking\/pre-decision option framing/s);
     assert.match(skillContent, /After Thinking completes, BEFORE any Execution/);
     assert.match(skillContent, /DO NOT.*Critical\/Fetch\/Thinking\/Review/s);
   });
@@ -206,6 +206,22 @@ describe("Stage 2: Fetch — Capability Discovery", () => {
       ),
       "fetchPacket must have capability matching fields",
     );
+  });
+
+  test("Fetch阶段要求研究能力发现基于实际工具证据", () => {
+    const packet = contract.protocols?.contentEvidencePacket;
+    assert.ok(packet?.requiredFields?.includes("researchCapabilityDiscovery"));
+
+    const discovery = packet.researchCapabilityDiscovery;
+    assert.ok(discovery?.requiredFields?.includes("toolInventorySources"));
+    assert.ok(discovery?.requiredFields?.includes("availableRetrievalCapabilities"));
+    assert.ok(discovery?.requiredFields?.includes("selectedResearchPath"));
+    assert.ok(discovery?.forbiddenFields?.includes("platformSurface"));
+
+    const policyText = JSON.stringify(discovery);
+    assert.match(policyText, /proof/i);
+    assert.match(policyText, /active_tools|deferred_tools|mcp|plugins|skills|commands/);
+    assert.doesNotMatch(policyText, /desktop \| cli \| web \| ide/i);
   });
 });
 

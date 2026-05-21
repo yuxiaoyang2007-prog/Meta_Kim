@@ -110,7 +110,7 @@ Meta_Kim の方法論は、本プロジェクトのメンテナ（KimYx0207）�
 | --- | --- | --- |
 | **隠れた骨格** | 表層の流れの下にある、バックエンドの実行骨格 | 最初から固定された職務一覧 |
 | **8 大フロー** | 隠れた骨格が実行層に現れた、人が読める主鎖 | 統治ロジックそのもの全部 |
-| **10 大フロー** | 複雑な run に重ねる、より段階的な業務フロー | 8 大フローの置き換え |
+| **11 段階業務ワークフロー** | 複雑な run に重ねる、より段階的な業務フロー | 8 大フローの置き換え |
 | **配牌** | 8 大フローと agent 単位に対する動的な介入 | 単純なタスク割り当て |
 | **門** | 次に進めるかどうかの放行条件 | 段階そのもの |
 | **契約** | 各ノードが必ず差し出す構造化成果物 | スローガンや抽象的価値観 |
@@ -183,18 +183,18 @@ flowchart LR
 
 なぜ「相対的に」固定なのか。簡単な場面では一部を省略できるからです。ただし、省略するなら必ず理由を記録し、黙って飛ばしません。
 
-### 10 大フロー = 骨格の上にある段階的ワークフロー
+### 11 段階業務ワークフロー = 骨格の上にある段階的ワークフロー
 
-8 大フローが骨格なら、10 大フローはその上に乗る **より複雑な業務フロー** です。
+8 大フローが骨格なら、11 段階業務ワークフローはその上に乗る **より複雑な run 包装の進行方式** です。
 
 ```
-direction → planning → execution → review → meta_review → revision → verify → summary → feedback → evolve
+direction → planning → execution → review → meta_review → revision → verify → summary → feedback → evolve → mirror
 ```
 
 これは別物を追加しているのではなく、8 大フローから **派生** しています。違いは次のとおりです。
 
 - **8 大フロー** は実行ロジック寄りで、「どの順で動くか」を定義します
-- **10 大フロー** は業務統治寄りで、「各段階で何を出し、どう完了とみなすか」を定義します
+- **11 段階業務ワークフロー** は業務統治寄りで、「各段階で何を出し、どう完了とみなし、いつ runtime mirror を更新するか」を定義します
 
 ```mermaid
 flowchart TB
@@ -203,9 +203,9 @@ flowchart TB
         C1[要件明確化] --> F1[能力探索] --> T1[計画設計] --> E1[実行分担] --> R1[レビュー] --> MR1[メタレビュー] --> V1[検証] --> EV1[進化]
     end
 
-    subgraph workflow["10 大フロー（段階的ワークフロー）"]
+    subgraph workflow["11 段階業務ワークフロー"]
         direction LR
-        D2[方向付け] --> P2[計画] --> EX2[実行] --> RE2[レビュー] --> MET2[メタレビュー] --> REV2[修正] --> VER2[検証] --> SUM2[要約] --> FB2[フィードバック] --> EVO2[進化]
+        D2[方向付け] --> P2[計画] --> EX2[実行] --> RE2[レビュー] --> MET2[メタレビュー] --> REV2[修正] --> VER2[検証] --> SUM2[要約] --> FB2[フィードバック] --> EVO2[進化] --> MIR2[ミラー更新]
     end
 
     C1 -.-> D2
@@ -221,7 +221,7 @@ flowchart TB
     style workflow fill:#14532d,stroke:#22c55e,color:#dcfce7
 ```
 
-10 大フローには `revision`、`summary`、`feedback` といった段階が加わり、単に「終わる」だけでなく、「よく終わる」「正しく終わる」ことを支えます。
+11 段階業務ワークフローには `revision`、`summary`、`feedback`、`mirror` といった段階が加わり、単に「終わる」だけでなく、「よく終わる」「正しく終わる」、そして runtime projection を同期した状態で閉じることを支えます。
 
 ### 契約 = 各ノードが必ず差し出すもの
 
@@ -395,7 +395,7 @@ flowchart TD
 
 ### Agent 境界 + skill の統合
 
-8 つのメタ役割はそれぞれ担当範囲が分かれています。
+9 つのメタ役割はそれぞれ担当範囲が分かれています。
 
 | 役割 | 職責 | やらないこと |
 | --- | --- | --- |
@@ -407,6 +407,7 @@ flowchart TD
 | **meta-librarian** | 記憶、連続性 | コードを実行しない |
 | **meta-prism** | 品質レビュー、反スロップ | 能力探索をしない |
 | **meta-scout** | 外部能力の発見 | 内部調整をしない |
+| **meta-chrysalis** | 進化書き戻し、scar 記録、再帰安全ゲート | 自分自身を進化させず、Warden gate を迂回しない |
 
 各 agent は必要に応じて、さまざまな **skill** や **command** を読み込みます。Meta_Kim には 9 個のコミュニティ skill が同梱されており、独自拡張も可能です。
 
@@ -419,6 +420,7 @@ flowchart TD
     WARDEN --> LIBRARIAN[meta-librarian<br/>記憶/連続性]
     WARDEN --> PRISM[meta-prism<br/>品質レビュー]
     WARDEN --> SCOUT[meta-scout<br/>外部能力の発見]
+    WARDEN --> CHRYSALIS[meta-chrysalis<br/>進化書き戻し]
 
     GENESIS -.-> |SOUL.md| ARTISAN
     ARTISAN -.-> |skill 負荷| GENESIS
@@ -497,7 +499,7 @@ flowchart TB
 | 能力面 | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
 | **agent** | native agents/subagents、プロジェクト級とユーザー級が成熟 | custom agents/subagents が強力 | workspace 型 agent、agent-to-agent 対応 | agent 投影は使えるが軽量 |
-| **skill / references** | native skill、references、グローバル skill エコシステムが充実 | `.agents/skills/` と相性が良い | workspace skill + installable skill | skill / references は軽量接続 |
+| **skill / references** | native skill、references、グローバル skill エコシステムが充実 | `.codex/skills/` と相性が良い | workspace skill + installable skill | `.cursor/skills/` による軽量接続 |
 | **hook / 自動化** | project hooks + settings.json + 拡張エコシステム | リポジトリ級の native hook 面はない | workspace boot / hook 的な能力あり | 統治 hook は最も軽い |
 | **MCP / 設定** | native MCP と設定面が充実 | runtime adapter と MCP を接続可能 | workspace config が明確 | MCP は接続可能だが全体は軽量 |
 | **統治閉ループの受け皿** | **最も高い** | 高いが Claude Code よりは下 | 高いが形態が異なる | 最も軽い |
@@ -509,7 +511,7 @@ flowchart TB
 | 層 | 位置 | 役割 |
 | --- | --- | --- |
 | **canonical の正典層** | `canonical/`、`config/contracts/workflow-contract.json` | 長期保守ではまずここを編集 |
-| **ランタイム投影層** | `.claude/`、`.codex/`、`.agents/skills/`、`openclaw/`、`.cursor/` | 同じ能力を別ランタイムへ投影 |
+| **ランタイム投影層** | `.claude/`、`.codex/`、`openclaw/`、`.cursor/` | 同じ能力を別ランタイムへ投影 |
 | **ローカル状態層** | `.meta-kim/state/{profile}/`、`.meta-kim/local.overrides.json` | profile 単位の状態、run index、継続性 |
 | **スクリプトと検証層** | `scripts/`、`npm run *` | 同期、検証、発見、受け入れ |
 
@@ -579,10 +581,10 @@ Meta_Kim の門とプロトコルは 4 層の実行保障があります。グ�
 
 Meta_Kim の記憶は一枚岩ではありません。3 層に分かれ、各層が役割分担しながら、agent が継続的に学び、プロジェクトに馴染んでいきます。
 
-各層の活性化方式是それぞれ異なります：
+各層の有効化方式はそれぞれ異なります。
 - **第一層** は Claude Code に組み込み——Claude Code ランタイムが必要（`~/.claude/projects/*/memory/` で自動読み書き）
 - **第二層** は `node setup.mjs` が自動インストール
-- **第三層** は `node setup.mjs` がインストールするが、サーバーの手動起動が必要（下部第三層活性化を参照）
+- **第三層** は `node setup.mjs` がインストールしますが、サーバーの手動起動が必要です（下の第三層の有効化説明を参照）
 
 ### 第一層: 記憶（Agent 更新記憶）
 
@@ -590,8 +592,8 @@ Meta_Kim の記憶は一枚岩ではありません。3 層に分かれ、各層
 - **保存先**: `.claude/projects/*/memory/`
 - **動き**: 各 run の終了前に memory を読み、agent を更新するか、境界を調整するかを判断します
 - **価値**: 使うほど賢くなり、毎回ゼロから始めなくて済みます
-- **激活**: 自動——AI が各セッションで memory を自動的に読み書きします
-- **查询**: AI に直接聞く——「前回のセッションで、このプロジェクトについて何を学びましたか？」
+- **有効化**: 自動。AI が各セッションで memory を自動的に読み書きします
+- **問い合わせ**: AI に直接聞きます。「前回のセッションで、このプロジェクトについて何を学びましたか？」
 
 ### 第二層: Graphify（プロジェクト級 LLM Wiki）
 
@@ -607,22 +609,22 @@ Meta_Kim の記憶は一枚岩ではありません。3 層に分かれ、各層
   - あいまいノードが 30% 超 → 低品質グラフとして扱い、直接ファイル読み込みへ戻す
   - 総ノード数が 10 未満 → グラフが疎すぎるので Glob/Grep へ戻す
   - 「神ノード」（入次数が高すぎる）→ 直列ボトルネックとして扱う
-- **激活**: オプション Python 手順の `node setup.mjs` または `npm run meta:graphify:install`——インストール/確認、networkx、Claude 側登録、**当該リポジトリ**の git hook。初回グラフ生成は hook 実行または手動ビルドに依存
-- **查询**: `python -m graphify query "あなたの質問"`——自然言語でコードグラフにクエリ
+- **有効化**: オプション Python 手順の `node setup.mjs` または `npm run meta:graphify:install`。インストール/確認、networkx、Claude 側登録、**対象リポジトリ**の git hook を扱います。初回グラフ生成は hook 実行または手動ビルドに依存します
+- **問い合わせ**: `python -m graphify query "あなたの質問"`。自然言語でコードグラフにクエリします
 
 ### プラットフォーム自動化比較
 
 | 機能 | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
-| PreToolUse hook（Glob/Grep 前の自動プロンプト） | ✅ settings.json | ❌ | ❌ | ❌ |
+| PreToolUse hook（Glob/Grep 前の自動プロンプト） | ✅ settings.json | ✅ trusted `.codex/hooks.json` | ❌ | ✅ `.cursor/hooks.json` `preToolUse` |
 | スラッシュコマンド `/graphify` | ✅ | ✅ | ✅ | ✅ |
 | git hook 自動再構築（post-commit/checkout） | ✅ | ✅ | ✅ | ✅ |
 | AGENTS.md 常駐ルール | N/A | ✅ | ✅ | ✅ |
 | setup.mjs マルチプラットフォーム導入 | ✅ claude | ✅ codex | ✅ claw | ✅ cursor |
 
-** 핵심**: Claude Codeは唯一つの **PreToolUse hook** を持つプラットフォームであり、Glob/Grep の前に自動プロンプトが表示されます。其他プラットフォーム（Codex、OpenClaw、Cursor）はセッション起動時に注入される **AGENTS.md** ルールを使用します——グラフ認知は依然として存在しますが、トリガータイミングはセッション開始時であり毎回検索時ではありません。両方のメカニズムは導入後に自動化されています。
+**要点**: Claude Code、Codex、Cursor はいずれも native hook 設定を持ちますが、schema は同じではありません。OpenClaw は独自の internal/plugin hook model を使います。graph awareness は `AGENTS.md` と synced `meta-theory` reference でも維持されるため、native hook がない場面では明示的に低下モードとして扱います。
 
-マルチプラットフォーム導入は `node setup.mjs` を実行してください——選択した全プラットフォームをループし、各プラットフォームに対して `graphify <platform> install` を幂等実行します。
+マルチプラットフォーム導入は `node setup.mjs` を実行してください。選択した全プラットフォームを巡回し、各プラットフォームに対して `graphify <platform> install` を冪等に実行します。
 
 ### 第三層: SQL（ベクトル級セッション検索）
 
@@ -694,7 +696,8 @@ flowchart TB
 | コマンド | 役割 |
 | --- | --- |
 | `node setup.mjs` | 対話式のインストール / 更新 / 検証ウィザード |
-| `node setup.mjs --update` | すべての skill と依存関係を更新 |
+| `git pull --ff-only` | clone した利用者が GitHub から最新の Meta_Kim ソースを取得する |
+| `node setup.mjs --update` | 現在のインストール済み投影、skill、依存関係を更新する。Meta_Kim ソースは取得しない |
 | `node setup.mjs --check` | 環境チェック（書き込みなし） |
 | `node setup.mjs --lang zh-CN` | 中国語 UI を指定 |
 
@@ -767,9 +770,9 @@ Meta_Kim は 3 ヶ所に書き込みます：
 
 **必要ありません。** Meta_Kim が解くのは、複数ファイル、複数モジュール、複数能力の協調が必要な複雑タスクです。1 つの関数を 1 つ直すだけなら、通常の Claude Code で十分です。大砲で蚊を撃つ必要はありません。
 
-### Q: 8 大フローと 10 大フローの関係は何ですか?
+### Q: 8 大フローと 11 段階業務ワークフローの関係は何ですか?
 
-8 大フローは **実行の骨格** です。`Critical → Fetch → Thinking → Execution → Review → Meta-Review → Verification → Evolution` という固定に近い流れです。10 大フローは、その骨格から派生した **業務ワークフロー** で、`direction → planning → execution → review → meta_review → revision → verify → summary → feedback → evolve` のように、成果物の流れや完了判定をより細かく扱います。10 大フローは 8 大フローを置き換えません。
+8 大フローは **実行の骨格** です。`Critical → Fetch → Thinking → Execution → Review → Meta-Review → Verification → Evolution` という固定に近い流れです。11 段階業務ワークフローは、その骨格から派生した **run 包装ワークフロー** で、`direction → planning → execution → review → meta_review → revision → verify → summary → feedback → evolve → mirror` のように、成果物の流れ、完了判定、runtime mirror の更新をより細かく扱います。11 段階業務ワークフローは 8 大フローを置き換えません。
 
 ### Q: 動的配牌とは何ですか?
 

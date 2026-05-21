@@ -14,7 +14,9 @@ import {
 } from "./runtime-hook-mapping.mjs";
 import {
   canonicalAgentsDir,
+  canonicalCapabilityIndexDir,
   canonicalRuntimeAssetsDir,
+  canonicalSkillsDir,
   canonicalSkillPath,
   canonicalSkillReferencesDir,
   repoRoot,
@@ -72,6 +74,14 @@ export function inferProjectCategory(filePath, rootDir = repoRoot) {
   const rel = path.relative(rootDir, filePath).replace(/\\/g, "/");
   if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
   if (rel === ".claude/settings.json" || rel === ".mcp.json") {
+    return CATEGORIES.G;
+  }
+  if (
+    rel.startsWith(".claude/capability-index/") ||
+    rel.startsWith(".codex/capability-index/") ||
+    rel.startsWith(".cursor/capability-index/") ||
+    rel.startsWith("openclaw/capability-index/")
+  ) {
     return CATEGORIES.G;
   }
   if (
@@ -608,12 +618,15 @@ function resolveProjectionDirs(scope) {
   return {
     // Claude Code
     claudeAgentsProjectionDir: claude.agentsDir,
+    claudeSkillsProjectionDir: claude.skillsDir,
     claudeSkillProjectionRoot: claude.skillRoot,
     claudeHooksProjectionDir: claude.hooksDir,
     claudeSettingsProjectionPath: claude.settingsFile,
     claudeMcpProjectionPath: claude.mcpFile,
+    claudeCapabilityIndexDir: claude.capabilityIndexDir,
 
     // Codex
+    codexSkillsDir: codex.skillsDir,
     codexSkillRoot: codex.skillRoot,
     codexLegacySkillFile: globalScope ? null : codex.legacySkillFile,
     codexLegacySkillReferencesDir: globalScope
@@ -625,10 +638,12 @@ function resolveProjectionDirs(scope) {
     codexHooksFile: globalScope ? null : codex.hooksFile,
     codexCommandsDir: codex.commandsDir,
     codexConfigExamplePath: codex.configExampleFile,
+    codexCapabilityIndexDir: codex.capabilityIndexDir,
 
     // OpenClaw
     openclawWorkspaceDir: openclaw.workspaceDir,
     openclawDisplayWorkspaceDir: openclaw.displayWorkspaceDir,
+    openclawSkillsDir: openclaw.skillsDir,
     openclawSkillRoot: openclaw.skillRoot,
     openclawLegacySkillFile: globalScope ? null : openclaw.legacySkillFile,
     openclawLegacySkillReferencesDir: globalScope
@@ -636,40 +651,51 @@ function resolveProjectionDirs(scope) {
       : openclaw.legacySkillReferencesDir,
     openclawHooksDir: openclaw.hooksDir,
     openclawTemplateConfigPath: openclaw.templateConfigFile,
+    openclawCapabilityIndexDir: openclaw.capabilityIndexDir,
 
     // Cursor
     cursorAgentsDir: cursor.agentsDir,
+    cursorSkillsDir: cursor.skillsDir,
     cursorSkillRoot: cursor.skillRoot,
     cursorHooksDir: cursor.hooksDir,
     cursorHooksFile: cursor.hooksFile,
     cursorMcpPath: cursor.mcpFile,
+    cursorCapabilityIndexDir: cursor.capabilityIndexDir,
 
     // Allowed roots for safety assertion
     allowedRoots: resolveRuntimeAllowedRoots(scope),
 
     displayPaths: {
       claudeAgents: claude.display.agentsDir,
+      claudeSkills: claude.display.skillsDir,
       claudeSkill: claude.display.skillRoot,
       claudeHooks: claude.display.hooksDir,
       claudeSettings: claude.display.settingsFile,
       claudeMcp: claude.display.mcpFile,
+      claudeCapabilityIndex: claude.display.capabilityIndexDir,
       codexAgents: codex.display.agentsDir,
+      codexSkillsRoot: codex.display.skillsDir,
       codexSkills: codex.display.skillRoot,
       codexHooks: globalScope ? null : codex.display.hooksDir,
       codexHooksFile: globalScope ? null : codex.display.hooksFile,
       codexCommands: codex.display.commandsDir,
       codexConfig: codex.display.configExampleFile,
+      codexCapabilityIndex: codex.display.capabilityIndexDir,
       openclawWorkspaces: globalScope
         ? openclaw.baseDir
         : "openclaw/workspaces",
       openclawTemplate: openclaw.display.templateConfigFile,
+      openclawCapabilityIndex: openclaw.display.capabilityIndexDir,
+      openclawSkillsRoot: openclaw.display.skillsDir,
       openclawSkills: openclaw.display.skillRoot,
       openclawHooks: openclaw.display.hooksDir,
       cursorAgents: cursor.display.agentsDir,
+      cursorSkillsRoot: cursor.display.skillsDir,
       cursorSkill: cursor.display.skillRoot,
       cursorHooks: cursor.display.hooksDir,
       cursorHooksFile: cursor.display.hooksFile,
       cursorMcp: cursor.display.mcpFile,
+      cursorCapabilityIndex: cursor.display.capabilityIndexDir,
     },
   };
 }
@@ -1040,6 +1066,57 @@ async function loadSkillReferences() {
   );
 }
 
+async function collectSkillFiles(rootDir, currentDir = rootDir, bucket = []) {
+  const entries = await fs.readdir(currentDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = path.join(currentDir, entry.name);
+    if (entry.isDirectory()) {
+      await collectSkillFiles(rootDir, entryPath, bucket);
+    } else if (entry.isFile()) {
+      bucket.push({
+        relativePath: path.relative(rootDir, entryPath).replace(/\\/g, "/"),
+        content: await fs.readFile(entryPath, "utf8"),
+      });
+    }
+  }
+  return bucket.sort((left, right) =>
+    left.relativePath.localeCompare(right.relativePath),
+  );
+}
+
+async function loadCanonicalSkills() {
+  const entries = await fs.readdir(canonicalSkillsDir, { withFileTypes: true });
+  const skills = [];
+
+  for (const entry of entries.filter((item) => item.isDirectory())) {
+    const skillRoot = path.join(canonicalSkillsDir, entry.name);
+    const skillPath = path.join(skillRoot, "SKILL.md");
+    let raw = null;
+    try {
+      raw = await fs.readFile(skillPath, "utf8");
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+
+    assertPortableSkillFrontmatter(raw, skillPath);
+    skills.push({
+      id: entry.name,
+      root: skillRoot,
+      skillPath,
+      files: await collectSkillFiles(skillRoot),
+    });
+  }
+
+  if (skills.length === 0) {
+    throw new Error("No canonical skills found under canonical/skills/*/SKILL.md.");
+  }
+
+  return skills.sort((left, right) => left.id.localeCompare(right.id));
+}
+
 function assertPortableSkillFrontmatter(raw, filePath) {
   const validation = validateSkillFrontmatter(raw);
   if (!validation.ok) {
@@ -1196,6 +1273,47 @@ async function removeGeneratedPath(filePath) {
 
   await fs.rm(filePath, { recursive: true, force: true });
   return { changed: true };
+}
+
+async function syncCapabilityIndexMirrors(dirs, selectedTargets, changedFiles) {
+  const canonicalContent = await tryReadCanonical(
+    path.join(canonicalCapabilityIndexDir, "meta-kim-capabilities.json"),
+  );
+  if (!canonicalContent) return;
+
+  const targets = {
+    claude: {
+      dir: dirs.claudeCapabilityIndexDir,
+      display: dirs.displayPaths.claudeCapabilityIndex,
+    },
+    codex: {
+      dir: dirs.codexCapabilityIndexDir,
+      display: dirs.displayPaths.codexCapabilityIndex,
+    },
+    openclaw: {
+      dir: dirs.openclawCapabilityIndexDir,
+      display: dirs.displayPaths.openclawCapabilityIndex,
+    },
+    cursor: {
+      dir: dirs.cursorCapabilityIndexDir,
+      display: dirs.displayPaths.cursorCapabilityIndex,
+    },
+  };
+
+  for (const targetId of selectedTargets) {
+    const target = targets[targetId];
+    if (!target?.dir) continue;
+
+    const mirrorPath = path.join(target.dir, "meta-kim-capabilities.json");
+    if ((await writeGeneratedFile(mirrorPath, canonicalContent)).changed) {
+      changedFiles.push(`${target.display}/meta-kim-capabilities.json`);
+    }
+
+    const localInventoryPath = path.join(target.dir, "global-capabilities.json");
+    if ((await removeGeneratedPath(localInventoryPath)).changed) {
+      changedFiles.push(`${target.display}/global-capabilities.json`);
+    }
+  }
 }
 
 // ── Runtime skill path substitution ─────────────────────────────────────
@@ -1373,16 +1491,45 @@ export function buildCursorProjectHooksJson({
   });
 }
 
+async function syncRuntimeSkills(
+  runtimeId,
+  runtimeSkillsDir,
+  displaySkillsDir,
+  canonicalSkills,
+  changedFiles,
+) {
+  for (const skill of canonicalSkills) {
+    for (const file of skill.files) {
+      const targetPath = path.join(
+        runtimeSkillsDir,
+        skill.id,
+        ...file.relativePath.split("/"),
+      );
+      if (
+        (
+          await writeGeneratedFile(
+            targetPath,
+            applyRuntimePaths(file.content, runtimeId),
+          )
+        ).changed
+      ) {
+        changedFiles.push(
+          `${displaySkillsDir}/${skill.id}/${file.relativePath}`,
+        );
+      }
+    }
+  }
+}
+
 async function syncClaudeProjection(
   dirs,
   agents,
-  portableSkill,
-  skillReferences,
+  canonicalSkills,
   changedFiles,
 ) {
   const {
     claudeAgentsProjectionDir,
-    claudeSkillProjectionRoot,
+    claudeSkillsProjectionDir,
     claudeHooksProjectionDir,
     claudeSettingsProjectionPath,
     claudeMcpProjectionPath,
@@ -1402,31 +1549,13 @@ async function syncClaudeProjection(
     }
   }
 
-  if (
-    (
-      await writeGeneratedFile(
-        path.join(claudeSkillProjectionRoot, "SKILL.md"),
-        applyRuntimePaths(portableSkill, "claude"),
-      )
-    ).changed
-  ) {
-    changedFiles.push(`${displayPaths.claudeSkill}/SKILL.md`);
-  }
-
-  for (const reference of skillReferences) {
-    if (
-      (
-        await writeGeneratedFile(
-          path.join(claudeSkillProjectionRoot, "references", reference.name),
-          reference.content,
-        )
-      ).changed
-    ) {
-      changedFiles.push(
-        `${displayPaths.claudeSkill}/references/${reference.name}`,
-      );
-    }
-  }
+  await syncRuntimeSkills(
+    "claude",
+    claudeSkillsProjectionDir,
+    displayPaths.claudeSkills,
+    canonicalSkills,
+    changedFiles,
+  );
 
   const hookEntries = (
     await fs.readdir(canonicalClaudeHooksDir, { withFileTypes: true })
@@ -1581,10 +1710,7 @@ Examples:
   const dirs = resolveProjectionDirs(scope);
   const agents = await loadAgents();
   const teamDirectory = buildWorkspaceDirectory(agents);
-  const portableSkill = await tryReadCanonical(canonicalSkillPath);
-  if (!portableSkill) return [];
-  assertPortableSkillFrontmatter(portableSkill, canonicalSkillPath);
-  const skillReferences = await loadSkillReferences();
+  const canonicalSkills = await loadCanonicalSkills();
   const changedFiles = [];
 
   // Safety assertion: all writes must stay within allowedRoots
@@ -1622,12 +1748,13 @@ Examples:
     }
   }
 
+  await syncCapabilityIndexMirrors(dirs, selectedTargets, changedFiles);
+
   if (selectedTargets.includes("claude")) {
     await syncClaudeProjection(
       dirs,
       agents,
-      portableSkill,
-      skillReferences,
+      canonicalSkills,
       changedFiles,
     );
   }
@@ -1739,28 +1866,13 @@ Examples:
     ) {
       changedFiles.push("openclaw/skills/references");
     }
-    if (
-      (
-        await writeGeneratedFile(
-          path.join(dirs.openclawSkillRoot, "SKILL.md"),
-          applyRuntimePaths(portableSkill, "openclaw"),
-        )
-      ).changed
-    ) {
-      changedFiles.push(`${dp.openclawSkills}/SKILL.md`);
-    }
-    for (const reference of skillReferences) {
-      if (
-        (
-          await writeGeneratedFile(
-            path.join(dirs.openclawSkillRoot, "references", reference.name),
-            applyRuntimePaths(reference.content, "openclaw"),
-          )
-        ).changed
-      ) {
-        changedFiles.push(`${dp.openclawSkills}/references/${reference.name}`);
-      }
-    }
+    await syncRuntimeSkills(
+      "openclaw",
+      dirs.openclawSkillsDir,
+      dp.openclawSkillsRoot,
+      canonicalSkills,
+      changedFiles,
+    );
   }
 
   if (selectedTargets.includes("codex")) {
@@ -1775,28 +1887,13 @@ Examples:
       changedFiles.push(".codex/skills/references");
     }
 
-    if (
-      (
-        await writeGeneratedFile(
-          path.join(dirs.codexSkillRoot, "SKILL.md"),
-          applyRuntimePaths(portableSkill, "codex"),
-        )
-      ).changed
-    ) {
-      changedFiles.push(`${dp.codexSkills}/SKILL.md`);
-    }
-    for (const reference of skillReferences) {
-      if (
-        (
-          await writeGeneratedFile(
-            path.join(dirs.codexSkillRoot, "references", reference.name),
-            applyRuntimePaths(reference.content, "codex"),
-          )
-        ).changed
-      ) {
-        changedFiles.push(`${dp.codexSkills}/references/${reference.name}`);
-      }
-    }
+    await syncRuntimeSkills(
+      "codex",
+      dirs.codexSkillsDir,
+      dp.codexSkillsRoot,
+      canonicalSkills,
+      changedFiles,
+    );
     if (
       scope !== "global" &&
       (
@@ -2005,28 +2102,13 @@ Examples:
     }
 
     // Skill projections (.cursor/skills/meta-theory/)
-    if (
-      (
-        await writeGeneratedFile(
-          path.join(dirs.cursorSkillRoot, "SKILL.md"),
-          applyRuntimePaths(portableSkill, "cursor"),
-        )
-      ).changed
-    ) {
-      changedFiles.push(`${dp.cursorSkill}/SKILL.md`);
-    }
-    for (const reference of skillReferences) {
-      if (
-        (
-          await writeGeneratedFile(
-            path.join(dirs.cursorSkillRoot, "references", reference.name),
-            applyRuntimePaths(reference.content, "cursor"),
-          )
-        ).changed
-      ) {
-        changedFiles.push(`${dp.cursorSkill}/references/${reference.name}`);
-      }
-    }
+    await syncRuntimeSkills(
+      "cursor",
+      dirs.cursorSkillsDir,
+      dp.cursorSkillsRoot,
+      canonicalSkills,
+      changedFiles,
+    );
 
     if (dirs.cursorHooksDir && dirs.cursorHooksFile) {
       const memoryHookContent = await tryReadCanonical(canonicalSharedMemoryHookPath);
@@ -2172,7 +2254,7 @@ Examples:
       hasDisplayPrefix(f, dirs.displayPaths.claudeAgents),
     ).length,
     claudeSkill: changedFiles.filter((f) =>
-      hasDisplayPrefix(f, dirs.displayPaths.claudeSkill),
+      hasDisplayPrefix(f, dirs.displayPaths.claudeSkills),
     ).length,
     claudeHooks: changedFiles.filter((f) =>
       hasDisplayPrefix(f, dirs.displayPaths.claudeHooks),
@@ -2192,7 +2274,7 @@ Examples:
       hasDisplayPrefix(f, dirs.displayPaths.codexAgents),
     ).length,
     codexSkill: changedFiles.filter((f) =>
-      hasDisplayPrefix(f, dirs.displayPaths.codexSkills),
+      hasDisplayPrefix(f, dirs.displayPaths.codexSkillsRoot),
     ).length,
     codexHooks: changedFiles.filter((f) =>
       hasDisplayPrefix(f, dirs.displayPaths.codexHooks),
@@ -2211,7 +2293,7 @@ Examples:
       normalizeDisplayPath(f).startsWith(openclawWorkspacePrefix),
     ).length,
     openclawSkill: changedFiles.filter((f) =>
-      hasDisplayPrefix(f, dirs.displayPaths.openclawSkills),
+      hasDisplayPrefix(f, dirs.displayPaths.openclawSkillsRoot),
     ).length,
     openclawHooks: changedFiles.filter((f) =>
       hasDisplayPrefix(f, dirs.displayPaths.openclawHooks),
@@ -2225,7 +2307,7 @@ Examples:
       hasDisplayPrefix(f, dirs.displayPaths.cursorAgents),
     ).length,
     cursorSkill: changedFiles.filter((f) =>
-      hasDisplayPrefix(f, dirs.displayPaths.cursorSkill),
+      hasDisplayPrefix(f, dirs.displayPaths.cursorSkillsRoot),
     ).length,
     cursorHooks: changedFiles.filter((f) =>
       hasDisplayPrefix(f, dirs.displayPaths.cursorHooks),
@@ -2253,7 +2335,7 @@ Examples:
           summaryKind: "agents",
         },
         {
-          label: dirs.displayPaths.claudeSkill,
+          label: dirs.displayPaths.claudeSkills,
           count: layerCounts.claudeSkill,
           summaryKind: "files",
         },
@@ -2283,7 +2365,7 @@ Examples:
           summaryKind: "agents",
         },
         {
-          label: dirs.displayPaths.codexSkills,
+          label: dirs.displayPaths.codexSkillsRoot,
           count: layerCounts.codexSkill,
           summaryKind: "files",
         },
@@ -2313,7 +2395,7 @@ Examples:
           summaryKind: "workspaces",
         },
         {
-          label: dirs.displayPaths.openclawSkills,
+          label: dirs.displayPaths.openclawSkillsRoot,
           count: layerCounts.openclawSkill,
           summaryKind: "files",
         },
@@ -2338,7 +2420,7 @@ Examples:
           summaryKind: "agents",
         },
         {
-          label: dirs.displayPaths.cursorSkill,
+          label: dirs.displayPaths.cursorSkillsRoot,
           count: layerCounts.cursorSkill,
           summaryKind: "files",
         },

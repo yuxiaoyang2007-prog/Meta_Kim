@@ -33,6 +33,8 @@ const TYPE_AGENT_MAP = {
 
 let skillContent;
 let scenarios;
+let workflowContract;
+let prismContent;
 
 async function ensureLoaded() {
   if (!skillContent) {
@@ -41,6 +43,12 @@ async function ensureLoaded() {
   if (!scenarios) {
     const raw = await readJsonFile(SCENARIOS_PATH, "utf-8");
     scenarios = JSON.parse(raw);
+  }
+  if (!workflowContract) {
+    workflowContract = JSON.parse(await readFile("config/contracts/workflow-contract.json"));
+  }
+  if (!prismContent) {
+    prismContent = await readFile("canonical/agents/meta-prism.md");
   }
 }
 
@@ -378,6 +386,61 @@ describe("Agent Dispatch — Part B: Dispatch Rule Verification", async () => {
       skillContent.includes("mergeOwner"),
       "workerTaskPackets must include mergeOwner field"
     );
+  });
+
+  test("dispatch and worker packets cannot finalize before user choice except explicit auto-proceed or skip reason", async () => {
+    await ensureLoaded();
+
+    const protocols = workflowContract.protocols ?? {};
+    const dispatchFields = protocols.dispatchEnvelopePacket?.requiredFields ?? [];
+    const workerFields = protocols.workerTaskPacket?.requiredFields ?? [];
+
+    for (const field of [
+      "preDecisionOptionFrameRef",
+      "userChoiceState",
+      "finalizationGate",
+    ]) {
+      assert.ok(
+        dispatchFields.includes(field),
+        `dispatchEnvelopePacket missing pre-decision finalization field "${field}"`
+      );
+      assert.ok(
+        workerFields.includes(field),
+        `workerTaskPacket missing pre-decision finalization field "${field}"`
+      );
+    }
+
+    const finalizationPolicy = JSON.stringify({
+      dispatchEnvelopePacket: protocols.dispatchEnvelopePacket,
+      workerTaskPacket: protocols.workerTaskPacket,
+      preDecisionOptionFrame: protocols.preDecisionOptionFrame,
+      controlIntervention: workflowContract.runDiscipline?.controlIntervention,
+    });
+    assert.match(finalizationPolicy, /finali[sz].*before.*userChoice|userChoice.*before.*finali[sz]/i);
+    assert.match(finalizationPolicy, /auto[-_ ]?proceed/i);
+    assert.match(finalizationPolicy, /skipReason|skip reason/i);
+    assert.match(finalizationPolicy, /explicit/i);
+  });
+
+  test("Review and Prism check trigger reasons against skip reasons", async () => {
+    await ensureLoaded();
+
+    const reviewFields =
+      workflowContract.protocols?.reviewPacket?.requiredFields ?? [];
+    assert.ok(
+      reviewFields.some((field) => /trigger.*skip|skip.*trigger/i.test(field)),
+      "reviewPacket must require a trigger-vs-skip reason check field"
+    );
+
+    const reviewPolicy = JSON.stringify({
+      reviewPacket: workflowContract.protocols?.reviewPacket,
+      taskClassification: workflowContract.protocols?.taskClassification,
+      controlDecision: workflowContract.protocols?.controlDecision,
+    });
+    assert.match(reviewPolicy, /triggerReasons/i);
+    assert.match(reviewPolicy, /skipReason/i);
+    assert.match(reviewPolicy, /trigger.*skip|skip.*trigger/i);
+    assert.match(prismContent, /trigger.*skip|skip.*trigger/i);
   });
 
   test("Evolution writeback plan documented", async () => {

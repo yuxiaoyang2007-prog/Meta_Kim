@@ -8,9 +8,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(__dirname, "..");
 export const canonicalRoot = path.join(repoRoot, "canonical");
 export const canonicalAgentsDir = path.join(canonicalRoot, "agents");
+export const canonicalSkillsDir = path.join(canonicalRoot, "skills");
 export const canonicalSkillRoot = path.join(
-  canonicalRoot,
-  "skills",
+  canonicalSkillsDir,
   "meta-theory",
 );
 export const canonicalSkillPath = path.join(canonicalSkillRoot, "SKILL.md");
@@ -53,6 +53,7 @@ const runtimeProfileCatalog = {
       ],
       outputPaths: {
         agentsDir: ".claude/agents",
+        skillsDir: ".claude/skills",
         skillRoot: ".claude/skills/meta-theory",
         hooksDir: ".claude/hooks",
         settingsFile: ".claude/settings.json",
@@ -75,14 +76,24 @@ const runtimeProfileCatalog = {
     projection: {
       supportsRepoProjection: true,
       supportsLocalActivation: true,
-      assetTypes: ["agents", "skills", "hooks", "commands", "config", "mcp"],
+      assetTypes: [
+        "agents",
+        "skills",
+        "hooks",
+        "commands",
+        "config",
+        "mcp",
+        "capabilityIndex",
+      ],
       outputPaths: {
         agentsDir: ".codex/agents",
+        skillsDir: ".codex/skills",
         skillRoot: ".codex/skills/meta-theory",
         hooksDir: ".codex/hooks",
         hooksFile: ".codex/hooks.json",
         commandsDir: ".codex/commands",
         configExampleFile: "codex/config.toml.example",
+        capabilityIndexDir: ".codex/capability-index",
       },
     },
     activation: {
@@ -100,11 +111,20 @@ const runtimeProfileCatalog = {
     projection: {
       supportsRepoProjection: true,
       supportsLocalActivation: true,
-      assetTypes: ["workspaces", "skills", "hooks", "config", "mcp"],
+      assetTypes: [
+        "workspaces",
+        "skills",
+        "hooks",
+        "config",
+        "mcp",
+        "capabilityIndex",
+      ],
       outputPaths: {
         workspacesDir: "openclaw/workspaces",
+        skillsDir: "openclaw/skills",
         skillRoot: "openclaw/skills/meta-theory",
         templateConfigFile: "openclaw/openclaw.template.json",
+        capabilityIndexDir: "openclaw/capability-index",
       },
     },
     activation: {
@@ -122,13 +142,15 @@ const runtimeProfileCatalog = {
     projection: {
       supportsRepoProjection: true,
       supportsLocalActivation: true,
-      assetTypes: ["agents", "skills", "hooks", "mcp"],
+      assetTypes: ["agents", "skills", "hooks", "mcp", "capabilityIndex"],
       outputPaths: {
         agentsDir: ".cursor/agents",
+        skillsDir: ".cursor/skills",
         skillRoot: ".cursor/skills/meta-theory",
         hooksDir: ".cursor/hooks",
         hooksFile: ".cursor/hooks.json",
         mcpFile: ".cursor/mcp.json",
+        capabilityIndexDir: ".cursor/capability-index",
       },
     },
     activation: {
@@ -363,22 +385,27 @@ const runtimeProjectionLayouts = {
   claude: {
     project: {
       agentsDir: [".claude", "agents"],
+      skillsDir: [".claude", "skills"],
       skillRoot: [".claude", "skills", "meta-theory"],
       hooksDir: [".claude", "hooks"],
       settingsFile: [".claude", "settings.json"],
       mcpFile: [".mcp.json"],
+      capabilityIndexDir: [".claude", "capability-index"],
     },
     global: {
       agentsDir: ["agents"],
+      skillsDir: ["skills"],
       skillRoot: ["skills", "meta-theory"],
       hooksDir: ["hooks", "meta-kim"],
       settingsFile: ["settings.json"],
       mcpFile: null,
+      capabilityIndexDir: ["capability-index"],
     },
   },
   codex: {
     project: {
       agentsDir: [".codex", "agents"],
+      skillsDir: [".codex", "skills"],
       skillRoot: [".codex", "skills", "meta-theory"],
       legacySkillFile: [".codex", "skills", "meta-theory.md"],
       legacySkillReferencesDir: [".codex", "skills", "references"],
@@ -386,46 +413,57 @@ const runtimeProjectionLayouts = {
       hooksFile: [".codex", "hooks.json"],
       commandsDir: [".codex", "commands"],
       configExampleFile: ["codex", "config.toml.example"],
+      capabilityIndexDir: [".codex", "capability-index"],
     },
     global: {
       agentsDir: ["agents"],
+      skillsDir: ["skills"],
       skillRoot: ["skills", "meta-theory"],
       hooksDir: ["hooks"],
       hooksFile: ["hooks.json"],
       commandsDir: ["commands"],
       configExampleFile: ["config.toml.example"],
+      capabilityIndexDir: ["capability-index"],
     },
   },
   openclaw: {
     project: {
       workspacesRoot: ["openclaw", "workspaces"],
+      skillsDir: ["openclaw", "skills"],
       skillRoot: ["openclaw", "skills", "meta-theory"],
       legacySkillFile: ["openclaw", "skills", "meta-theory.md"],
       legacySkillReferencesDir: ["openclaw", "skills", "references"],
       hooksDir: ["openclaw", "hooks"],
       templateConfigFile: ["openclaw", "openclaw.template.json"],
+      capabilityIndexDir: ["openclaw", "capability-index"],
     },
     global: {
       workspacesRoot: [],
+      skillsDir: ["skills"],
       skillRoot: ["skills", "meta-theory"],
       hooksDir: ["hooks"],
       templateConfigFile: ["openclaw.template.json"],
+      capabilityIndexDir: ["capability-index"],
     },
   },
   cursor: {
     project: {
       agentsDir: [".cursor", "agents"],
+      skillsDir: [".cursor", "skills"],
       skillRoot: [".cursor", "skills", "meta-theory"],
       hooksDir: [".cursor", "hooks"],
       hooksFile: [".cursor", "hooks.json"],
       mcpFile: [".cursor", "mcp.json"],
+      capabilityIndexDir: [".cursor", "capability-index"],
     },
     global: {
       agentsDir: ["agents"],
+      skillsDir: ["skills"],
       skillRoot: ["skills", "meta-theory"],
       hooksDir: ["hooks"],
       hooksFile: ["hooks.json"],
       mcpFile: ["mcp.json"],
+      capabilityIndexDir: ["capability-index"],
     },
   },
 };
@@ -631,6 +669,9 @@ export function validateSyncManifest(manifest) {
         `sync manifest canonicalRoots.${key} must be a non-empty string`,
       );
     }
+  }
+  if (manifest.canonicalRoots.skills !== "canonical/skills") {
+    throw new Error("sync manifest canonicalRoots.skills must be canonical/skills");
   }
 }
 

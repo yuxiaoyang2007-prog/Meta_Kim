@@ -21,6 +21,56 @@ const CANONICAL_CAPABILITY_INDEX =
   "config/capability-index/meta-kim-capabilities.json";
 const LOCAL_GLOBAL_INVENTORY =
   ".meta-kim/state/{profile}/capability-index/global-capabilities.json";
+const LONG_TERM_META_SKILL_PROVIDER_IDS = [
+  "meta-theory",
+  "agent-teams-playbook",
+  "superpowers",
+  "ecc",
+  "findskill",
+];
+
+function buildMetaSkillProviderContract() {
+  const metaSkillProviders = Object.fromEntries(
+    LONG_TERM_META_SKILL_PROVIDER_IDS.map((id) => [
+      id,
+      {
+        id,
+        providerKind: "meta-skill-package",
+        allowedForLongTermAgentIdentity: true,
+        concreteSubSkillBindingForbidden: true,
+        notes:
+          "May be referenced as a long-term provider package; concrete child skills are selected per run during Fetch.",
+      },
+    ]),
+  );
+
+  return {
+    abstractCapabilitySlots: [
+      {
+        slotId: "run-scoped-meta-skill-selection",
+        description:
+          "Abstract slot for selecting concrete child skills at runtime Fetch without binding them into long-term meta-agent identity.",
+        allowedProviderIds: LONG_TERM_META_SKILL_PROVIDER_IDS,
+        selectedSkillScope: "run_only",
+      },
+    ],
+    metaSkillProviders,
+    runtimeSelectedSkills: {
+      selectedSkillScope: "run_only",
+      persistencePolicy:
+        "Runtime-selected concrete skills are scoped to the current run and must not be persisted into long-term agent identity.",
+    },
+    longTermAgentIdentityPolicy: {
+      forbidConcreteSkillInLongTermAgentIdentity: true,
+      allowedMetaSkillProviderIds: LONG_TERM_META_SKILL_PROVIDER_IDS,
+      forbiddenConcreteSkillPatterns: [
+        "provider/*",
+        "provider:child-skill",
+        "runtime-specific child skill id",
+      ],
+    },
+  };
+}
 
 // ========== 平台定义 ==========
 
@@ -763,6 +813,7 @@ async function collectRepoCanonicalCapabilities() {
 
 async function buildRepoCapabilityIndex() {
   const capabilities = await collectRepoCanonicalCapabilities();
+  const metaSkillProviderContract = buildMetaSkillProviderContract();
   const index = {
     generatedAt: new Date().toISOString(),
     registryName: "meta-kim-capabilities",
@@ -789,6 +840,7 @@ async function buildRepoCapabilityIndex() {
       totalPlugins: 0,
       totalCommands: 0,
     },
+    ...metaSkillProviderContract,
     byCapabilityType: {
       agents: Object.fromEntries(
         capabilities.agents.map((cap) => [

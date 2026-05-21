@@ -25,9 +25,11 @@ describe("Clarity Gate unified execution confirmation", async () => {
     "canonical/templates/user-interaction/batch-decision-template.md",
   );
   const workflowContract = await readFile("config/contracts/workflow-contract.json");
+  const workflowContractJson = JSON.parse(workflowContract);
 
   test("confirmation happens after Fetch and Thinking, before Execution", () => {
-    assert.match(skillContent, /After Fetch and Thinking complete, BEFORE Execution/);
+    assert.match(skillContent, /Fetch\/content evidence.*Thinking\/pre-decision option framing/s);
+    assert.match(skillContent, /At the transition from Thinking.*Execution/s);
     assert.match(skillContent, /After Thinking completes, BEFORE any Execution/);
     assert.match(skillContent, /DO NOT.*Critical\/Fetch\/Thinking\/Review/s);
   });
@@ -97,6 +99,119 @@ describe("Clarity Gate unified execution confirmation", async () => {
       workflowContract,
       /Critical\/Fetch\/Thinking\/Review confirmation/,
     );
+  });
+
+  test("non-trivial executable work requires preDecisionOptionFrame content evidence before decision", () => {
+    const preDecisionOptionFrame =
+      workflowContractJson.protocols?.preDecisionOptionFrame;
+    assert.ok(
+      preDecisionOptionFrame,
+      "workflow contract must define protocols.preDecisionOptionFrame",
+    );
+
+    const requiredFields = preDecisionOptionFrame.requiredFields ?? [];
+    for (const field of [
+      "decisionTrigger",
+      "contentEvidence",
+      "optionFrame",
+      "presentedBeforeDecision",
+      "userChoiceState",
+      "nativeChoiceSurface",
+    ]) {
+      assert.ok(
+        requiredFields.includes(field),
+        `preDecisionOptionFrame missing required field "${field}"`,
+      );
+    }
+
+    const policyText = JSON.stringify(preDecisionOptionFrame);
+    assert.match(policyText, /non[-_ ]trivial/i);
+    assert.match(policyText, /executable/i);
+    assert.match(policyText, /contentEvidence|content evidence/i);
+    assert.match(policyText, /before.*decision|decision.*before/i);
+  });
+
+  test("contentEvidencePacket defines deep research requirements for evidence owner", () => {
+    const packet = workflowContractJson.protocols?.contentEvidencePacket;
+    assert.ok(packet, "workflow contract must define protocols.contentEvidencePacket");
+
+    const requiredFields = packet.requiredFields ?? [];
+    for (const field of [
+      "researchCapabilityDiscovery",
+      "deepResearchPlan",
+      "sourceCategoryCoverage",
+      "crossReferenceMatrix",
+      "contradictionLog",
+      "assumptionLedger",
+      "decisionImpactMap",
+    ]) {
+      assert.ok(
+        requiredFields.includes(field),
+        `contentEvidencePacket missing deep research field "${field}"`,
+      );
+    }
+
+    const policyText = JSON.stringify(packet);
+    assert.match(policyText, /deep research/i);
+    assert.match(policyText, /decision impact/i);
+    assert.match(policyText, /evidence owner|Conductor/i);
+  });
+
+  test("contentEvidencePacket requires capability-proof research discovery without platformSurface", () => {
+    const packet = workflowContractJson.protocols?.contentEvidencePacket;
+    assert.ok(packet, "workflow contract must define protocols.contentEvidencePacket");
+
+    const requiredFields = packet.requiredFields ?? [];
+    assert.ok(
+      requiredFields.includes("researchCapabilityDiscovery"),
+      "contentEvidencePacket must require researchCapabilityDiscovery",
+    );
+
+    const discovery = packet.researchCapabilityDiscovery;
+    assert.ok(discovery, "contentEvidencePacket must define researchCapabilityDiscovery");
+
+    for (const field of [
+      "requiredCapabilities",
+      "runtimeContext",
+      "toolInventorySources",
+      "availableRetrievalCapabilities",
+      "selectedResearchPath",
+      "capabilityGaps",
+      "validatedBy",
+    ]) {
+      assert.ok(
+        discovery.requiredFields?.includes(field),
+        `researchCapabilityDiscovery missing required field "${field}"`,
+      );
+    }
+
+    const policyText = JSON.stringify(discovery);
+    assert.match(policyText, /toolInventorySources/);
+    assert.match(policyText, /web_search|url_fetch|docs_lookup|mcp_search|plugin_search/);
+    assert.match(policyText, /proof/);
+    assert.match(policyText, /selectedResearchPath/);
+    assert.match(policyText, /host-form-factor|capability proof|capability evidence/i);
+    assert.doesNotMatch(policyText, /desktop \| cli \| web \| ide/i);
+    assert.ok(
+      discovery.forbiddenFields?.includes("platformSurface"),
+      "platformSurface must be explicitly forbidden as a research capability signal",
+    );
+  });
+
+  test("Codex fallback pauses with localized confirmation card when native choice is unavailable", () => {
+    const codexSurface =
+      workflowContractJson.runDiscipline?.runtimeNativeChoiceSurfaces?.codex;
+    assert.ok(codexSurface, "Codex native choice surface policy must exist");
+    assert.equal(codexSurface.primarySurface, "native_choice");
+    assert.ok(
+      codexSurface.fallbackSurfaces?.includes("conversation_fallback"),
+      "Codex must allow conversation_fallback",
+    );
+
+    const codexPolicyText = `${codexSurface.triggerDescription} ${codexSurface.implementation}`;
+    assert.match(codexPolicyText, /pause/i);
+    assert.match(codexPolicyText, /localized confirmation card/i);
+    assert.match(codexPolicyText, /native choice.*exposes it|native.*unavailable/i);
   });
 });
 

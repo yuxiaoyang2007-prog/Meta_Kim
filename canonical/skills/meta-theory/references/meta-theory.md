@@ -33,7 +33,7 @@ Intent amplification (deliver) ← Output: structured outcomes under rhythm cont
 
 - Rhythm → `references/rhythm-orchestration.md`
 - Intent amplification → `references/intent-amplification.md`
-- Ten-step governance → `references/ten-step-governance.md`
+- 11-phase business workflow → `references/ten-step-governance.md` (legacy file name kept as a compatibility alias)
 
 ---
 
@@ -117,6 +117,27 @@ Heuristics:
 > **Some metas do not “do tasks”; they build capability.**
 
 Execution metas fight on the front line. Orchestration metas run the battle map. Infrastructure metas build airfields, roads, ammo, and rules.
+
+### Skill binding model
+
+Skill capability follows the same meta rule: durable identity owns a responsibility class; runtime selection owns the concrete method.
+
+Long-term agent identity may inherit only:
+
+- abstract capability slots, for example `planning discipline`, `test generation`, `browser QA`, or `security review`
+- meta-skill package providers, for example `superpowers` or `ecc`
+- provider compatibility constraints, such as runtime, permission class, or artifact format
+
+Long-term agent identity must not inherit:
+
+- concrete sub-skill IDs selected for one run
+- shell commands selected for one run
+- plugin sub-capabilities selected for one run
+- a provider's tactic as the agent's permanent way of thinking
+
+`superpowers` and `ecc` are capability providers / meta-skill package providers, not fixed playbooks. `findskill` is a runtime-local search entrypoint for Fetch, not a durable binding. The concrete choice belongs in current-run artifacts such as `capabilitySearchResult`, `selectedSkill`, and `workerTaskPacket`.
+
+Agent creation and iteration must obey this split: Genesis writes the durable responsibility boundary; Artisan writes abstract capability slots and provider compatibility; Fetch writes the concrete run-scoped selection.
 
 ---
 
@@ -318,9 +339,9 @@ Four dimensions for shell choice:
 
 ---
 
-## Ten-step governance (summary)
+## 11-phase business workflow (summary)
 
-| Step | Meaning | Owner | Key question |
+| Phase | Meaning | Owner | Key question |
 |------|---------|-------|--------------|
 | 1. Direction | Requirements | Warden / user | What is the intent? |
 | 2. Planning | Decomposition | Conductor | How do metas split? |
@@ -332,19 +353,20 @@ Four dimensions for shell choice:
 | 8. Summary | Synthesize | Warden | What did we learn? |
 | 9. Feedback | User sign-off | User / exec | Satisfied? |
 | 10. Evolution | Five dimensions | Everyone | How to be stronger next time? |
+| 11. Mirror | Projection / release mirror | Conductor / runtime owners | Did canonical changes reach the right runtime surfaces? |
 
-> Steps 1–3 = “it moves.” 4–10 = “it matures.”
+> Phases 1–3 = “it moves.” 4–11 = “it matures.”
 > No review → blind rush. No verification → theater. No evolution → repeat mistakes.
 
 ### Complexity routing
 
-| Complexity | Rule | Steps |
+| Complexity | Rule | Business phases |
 |------------|------|-------|
 | Simple | <2 files | 1→3→4→7→9 (skip meta-review) |
 | Medium | 2–5 files | 1→2→3→4→5→6→7→9 |
-| Complex | >5 files / multi-module | All 10 |
+| Complex | >5 files / multi-module | All 11 |
 
-> Detail: `references/ten-step-governance.md`
+> Detail: `references/ten-step-governance.md` (legacy file name, current 11-phase content)
 
 ---
 

@@ -74,6 +74,7 @@ export const REFERENCE_FILES = [
   "dev-governance.md",
   "rhythm-orchestration.md",
   "intent-amplification.md",
+  // Legacy file name kept as a compatibility alias for the 11-phase workflow reference.
   "ten-step-governance.md",
   "create-agent.md",
 ];

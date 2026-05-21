@@ -1,437 +1,348 @@
 # Meta_Kim for Claude Code
 
-Claude Code is one runtime projection of Meta_Kim, not the canonical source layer.
+Claude Code is one runtime projection of Meta_Kim. It is important, but it is not the canonical source layer by itself.
 
-## Human Summary
+## Fast Read
 
-If you only remember three things:
+If you only keep five rules in mind:
 
-- `meta-warden` is the default public front door.
-- `canonical/agents/`, `canonical/skills/meta-theory/`, `config/contracts/`, and `config/capability-index/` are the long-term source of truth.
-- After editing canonical files, resync and validate before trusting the result.
+- `meta-warden` is the public front door; the other meta agents are backstage specialists.
+- `canonical/agents/`, `canonical/skills/meta-theory/`, `canonical/runtime-assets/`, `config/contracts/`, and `config/capability-index/` are the durable sources of truth.
+- `.claude/` is a runtime projection generated from canonical assets. Sync it instead of hand-forking it.
+- When `meta-theory` is active, the main Claude thread dispatches; it does not execute complex work directly.
+- User-visible worker names must be coarse business role-family names such as `前端`, `后端`, `测试`, `frontend`, `backend`, or `test`, not scoped work items or host-generated personal nicknames.
 
-## Meta-Theory Dispatch is Non-Negotiable
-
-When the `meta-theory` skill is activated (by `/meta-theory`, skill auto-detection, or any trigger), the 8-stage spine dispatch protocol is **mandatory, not advisory**.
-
-**Hard rules:**
-
-1. The main thread is the dispatcher, never the executor. Analysis, review, and code changes belong to dispatched agents.
-2. The PreToolUse hook (`enforce-agent-dispatch.mjs`) will **block** execution tools (Write/Edit/Bash) if spine state is active and no agents have been dispatched. This is enforced at the system level — you cannot bypass it.
-3. When in doubt, dispatch. The cost of an unnecessary dispatch is far lower than the cost of a governance bypass.
-4. If the hook blocks you, do not work around it. Follow the dispatch protocol instead.
-
-**What "dispatch" means in practice:**
-
-- For Type A (Analysis): dispatch `meta-prism` for quality audit, `meta-warden` for synthesis
-- For Type B (Agent Creation): dispatch `meta-genesis` for SOUL design, `meta-artisan` for loadout
-- For Type C (Development): dispatch capability-matched execution agents for all code work
-- For Type D (Review): dispatch `meta-prism` for quality audit, `meta-warden` for synthesis
-- For Type E (Rhythm): dispatch `meta-conductor` for card deck design, `meta-warden` for synthesis
-
-**This applies to all Meta_Kim runtimes** (Claude Code, Codex, OpenClaw, Cursor). Runtimes without hook support must follow the same protocol via their agent rules files (AGENTS.md, GEMINI.md, etc.).
-
-## Third-party meta-skills (canonical install)
-
-Packs such as **findskill** are installed by **`node setup.mjs`** from **`KimYx0207/*`** repos declared in `setup.mjs`. These are **maintained and optimized for Meta_Kim** on top of public-ecosystem baselines.
-
-**Install path:** install and document through **this repository** — do not parallel-install duplicate marketplace copies under different folder names unless you explicitly need both. **In this repo, call it `findskill` everywhere** (agents, skills, mirrors) so it matches `~/.claude/skills/findskill/` and `setup.mjs`.
-
-## Read This Repository Correctly
+## What This Repository Is
 
 Meta_Kim is not Claude-only logic.
 
 It is:
 
-**one intent-amplification system projected into Claude Code, Codex, OpenClaw, and Cursor, with `canonical/` as the neutral source layer.**
+**a cross-runtime intent-amplification system projected into Claude Code, Codex, OpenClaw, and Cursor, with `canonical/` as the neutral source layer.**
 
-## What “Meta” Means
+In Meta_Kim, `meta` means the smallest governable unit that supports intent amplification. A valid meta unit:
 
-In Meta_Kim:
+- owns one responsibility class
+- defines its refusal boundary
+- can be reviewed independently
+- can be replaced or rolled back
+- does not silently absorb unrelated work
 
-**meta = the smallest governable unit that exists to support intent amplification**
+## Claude Code's Role
 
-A valid meta unit must:
+Claude Code is the most hook-rich runtime projection. It contributes:
 
-- own one clear responsibility class
-- define its refusal boundary
-- be independently reviewable
-- be replaceable
-- be safe to roll back
+- project entry rules through `CLAUDE.md`
+- custom-agent mirrors under `.claude/agents/`
+- the portable `meta-theory` skill under `.claude/skills/meta-theory/`
+- hook enforcement under `.claude/hooks/`
+- MCP wiring through `.mcp.json`
+- capability-index mirrors under `.claude/capability-index/`
 
-## Claude Code’s Role In The Project
+Claude-specific details matter, but they should still be derived from the shared architecture whenever possible.
 
-Claude Code is a first-class projection. Separate **what sync generates** from **what you edit long-term**:
+## Canonical Vs Runtime Files
 
-**Generated / runtime wiring (from `canonical/` + `canonical/runtime-assets/claude/` via `npm run meta:sync`):**
+Edit these for long-term behavior:
+
+- `canonical/agents/*.md`
+- `canonical/skills/meta-theory/SKILL.md`
+- `canonical/skills/meta-theory/references/*.md`
+- `canonical/runtime-assets/claude/*`
+- `canonical/runtime-assets/shared/*`
+- `config/contracts/`
+- `config/capability-index/`
+
+Treat these as generated or runtime-local unless the task explicitly targets Claude wiring:
 
 - `.claude/agents/*.md`
-- `.claude/skills/meta-theory/` (portable `meta-theory` + `references/`)
+- `.claude/skills/meta-theory/`
 - `.claude/hooks/*.mjs`
 - `.claude/settings.json`
 - `.mcp.json`
-- `.claude/capability-index/` (runtime mirror for `meta-kim-capabilities.json`; local global inventory is stored under `.meta-kim/state/{profile}/capability-index/`)
+- `.claude/capability-index/`
 
-**Canonical sources you edit for behavior and contracts:**
+Other runtime mirrors are also projections of the same canonical layer:
 
-- `canonical/agents/*.md`
-- `canonical/skills/meta-theory/SKILL.md` and `canonical/skills/meta-theory/references/*.md`
-- `canonical/runtime-assets/claude/*`
-- `config/contracts/` (run discipline and gates; not overwritten by agent/skill sync)
-- `config/capability-index/` (canonical repository capability-index source; runtime indexes mirror it)
+- `.codex/`
+- `.cursor/`
+- `openclaw/`
 
-Cursor, Codex, and OpenClaw get their own projections from the same neutral layer; see `config/sync.json` → `generatedTargets`.
+When trees disagree, update the canonical source and run sync. Do not maintain parallel prompt forks.
 
-## Capability-First Rule
+## Meta-Theory Dispatch Is Mandatory
 
-Meta_Kim’s canonical orchestration method is capability-first, not name-first.
+When `meta-theory` is activated by `/meta-theory`, skill auto-detection, or an equivalent trigger, the 8-stage spine is mandatory.
 
-That means:
+The main Claude thread is the dispatcher:
 
-- do not begin from a hardcoded agent name
-- define the capability needed first
-- search in order: repo canonical `config/capability-index/`, runtime capability-index mirrors, local runtime inventory, then explicit fallback
-- dispatch the best ownership match
+- it scopes the request
+- it performs capability discovery
+- it maps lanes, owners, dependencies, and merge strategy
+- it dispatches execution with the `Agent` tool
+- it reviews, verifies, and synthesizes
 
-The intended pattern is:
+The main thread is not the all-in-one executor for complex work.
 
-```text
-Need capability X
--> Search who declares ownership of X
--> Match the best fit
--> Dispatch
-```
+Hard rules:
 
-Hardcoded named dispatch without a search step is not the canonical design.
+1. Analysis, code changes, design work, review, and verification should be owned by dispatched agents when the task is non-trivial.
+2. The PreToolUse hook `enforce-agent-dispatch.mjs` can block execution tools when spine state is active and no agent has been dispatched.
+3. If a hook blocks you, follow the dispatch protocol. Do not work around it.
+4. A "simple task" is not an excuse to bypass governance when the task touches multiple files, multiple capabilities, or cross-runtime behavior.
 
-## Critical Rule: Dispatch Before You Execute
+## Dispatch Flow
 
-For complex development work, Claude Code should behave as the dispatcher first, not the all-in-one executor.
-
-This applies to **all meta-theory Type flows**, not just development tasks:
-
-- **Type A (Analysis)**: meta-theory gathers information (Steps 1-2), then dispatches via Fetch-first capability matching (quality audit → capability="code quality review" / synthesis → capability="coordination and synthesis")
-- **Type B (Agent Creation)**: meta-theory plans (Phases 1-2), then dispatches station agents via capability matching (identity → capability="agent SOUL design" / loadout → capability="skill/tool matching") via the `Agent` tool for design work
-- **Type C (Development)**: meta-theory handles Stages 1-3 (Critical/Fetch/Thinking with mandatory 3-STEP capability discovery), then dispatches specialists via capability-matched `Agent` tool for Stages 4-8
-- **Type D (Review)**: meta-theory reads the proposal, then dispatches via Fetch-first capability matching (quality audit → capability="code quality review" / external claims → capability="external capability discovery" / synthesis → capability="coordination and synthesis")
-- **Type E (Rhythm)**: meta-theory diagnoses issues (Steps 1-3), then dispatches via capability matching (card deck → capability="workflow sequencing and rhythm control" / synthesis → capability="coordination and synthesis")
-
-The core principle is: **meta-theory thinks, agents do.**
-
-Treat these as complex tasks:
-
-- multi-file work
-- cross-module changes
-- tasks that need multiple capabilities or ownership domains
-
-For those tasks:
-
-1. use the `meta-theory` skill
-2. follow the 8-stage spine
-3. in `Execution`, spawn sub-agents via the `Agent` tool
-4. keep the main thread focused on scope, delegation, review, and synthesis
-
-The 8-stage spine is:
-
-1. `Critical`
-2. `Fetch`
-3. `Thinking`
-4. `Execution`
-5. `Review`
-6. `Meta-Review`
-7. `Verification`
-8. `Evolution`
-
-## The 8-Stage Spine vs. The 11-Phase Business Workflow Contract
-
-Meta_Kim uses two workflow layers that should not be collapsed into one.
-
-The execution backbone is the 8-stage spine:
+For governed work, Claude Code should follow:
 
 ```text
 Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verification -> Evolution
 ```
 
-The department-run contract is defined separately in `config/contracts/workflow-contract.json`:
+Practical meaning:
+
+1. `Critical`: clarify the actual request and blockers.
+2. `Fetch`: discover existing agents, skills, MCP tools, commands, memory, and graph context.
+3. `Thinking`: map business lanes, owners, dependencies, parallel groups, merge owner, review owner, and verification owner.
+4. `Execution`: dispatch bounded work through `Agent`.
+5. `Review`: inspect outputs against quality and boundary rules.
+6. `Meta-Review`: check whether the review standard itself was adequate when risk is high.
+7. `Verification`: run fresh checks against the final state.
+8. `Evolution`: write back reusable patterns through Warden-gated evolution, or explicitly choose no writeback.
+
+## Capability-First Rule
+
+Do not start by hardcoding an agent name. Start by defining the needed capability.
+
+Use this search order:
+
+```text
+Need capability
+-> Search config/capability-index/
+-> Search runtime capability-index mirrors
+-> Search local runtime inventory
+-> Search available skills, MCP tools, commands, and graph context
+-> Choose best owner by boundary fit
+-> Dispatch with explicit scope and verification evidence
+```
+
+Named dispatch without a discovery step is a design shortcut, not the canonical method.
+
+## Business Flow Before Execution
+
+Before execution, create a business-flow blueprint for executable work. For a web product, for example, the blueprint may include:
+
+- product direction
+- UX flow
+- UI system
+- frontend
+- backend
+- database
+- auth / security
+- motion / interaction polish
+- tests / QA
+- release / install path
+- feedback and evolution
+
+The blueprint does not need every lane for every task, but omissions should be deliberate. It should state:
+
+- what capability is required
+- which existing agent / skill / tool was found
+- whether the owner is reused, upgraded, or newly created
+- what can run in parallel
+- who owns merge and conflict resolution
+- what evidence will prove the result is done
+
+## Agent Display Names
+
+Keep three names separate:
+
+- `ownerAgent`: real governance or execution owner, for example `meta-conductor` or `frontend-developer`
+- `roleDisplayName`: short user-visible business role family, for example `前端`, `后端`, `测试`, `frontend`, `backend`, or `test`
+- `runtimeInstanceAlias`: incidental runtime nickname, if Claude or another host assigns one
+
+Rules:
+
+- Do not expose random personal nicknames as the primary agent name.
+- Prefer short role names over long task sentences.
+- Do not put concrete work items into `roleDisplayName`; when the same role has parallel shards, keep the same coarse role name and put shard scope in `roleInstanceId` / `shardScope`.
+- If one owner runs multiple parallel instances, record shard boundaries, dependencies, `parallelGroup`, `mergeOwner`, and collision rules.
+
+## The Business Workflow Contract
+
+The 8-stage spine is not the same thing as the department workflow contract.
+
+The department workflow is:
 
 ```text
 direction -> planning -> execution -> review -> meta_review -> revision -> verify -> summary -> feedback -> evolve -> mirror
 ```
 
-The relationship is:
+Use the spine to govern execution. Use the department workflow to package the run, close deliverables, and decide whether a result is display-ready.
 
-- the 8-stage spine governs execution logic
-- the business workflow governs run contract, deliverable closure, and display discipline
-- business phases do not rename or replace the underlying execution stages
+Do not claim public-ready status until all of these are true:
 
-## Hidden Skeleton And Public-Display Discipline
+- verification passed
+- summary is closed
+- a single primary deliverable was maintained
+- the deliverable chain is closed
+- consolidated deliverable evidence exists
 
-Under the readable stage flow, Meta_Kim also depends on a hidden governance skeleton.
+## Hidden Governance Packets
 
-Typical state layers include:
+A governed run should leave audit-ready structure. Important packets include:
 
-- `stageState`
-- `controlState`
-- `gateState`
-- `surfaceState`
-- `capabilityState`
-- `agentInvocationState`
+- `taskClassification`
+- `cardPlanPacket`
+- `businessFlowBlueprintPacket`
+- `agentBlueprintPacket`
+- `dispatchEnvelopePacket`
+- `workerTaskPacket`
+- `reviewPacket`
+- `revisionResponses`
+- `verificationResults`
+- `summaryPacket`
+- `evolutionWritebackPacket`
 
-This skeleton is not a second front-end. It exists so the system can manage skips, interrupts, gates, verification closure, and evolution logging without inventing ad hoc rules each run.
+These packets are not UI decoration. They are how the system avoids pretending unfinished work is complete.
 
-Claude-side synthesis should also respect public-display discipline. A run is not truly display-ready just because it has content. The workflow contract now hardens this with:
+## Planning Files
 
-- explicit `taskClassification` before execution
-- explicit `cardPlanPacket` so dealing / silence / skip / interrupt decisions are auditable
-- explicit `dispatchEnvelopePacket` before every non-query execution so owner, capability boundary, memory mode, and review / verification owners are fixed before work starts
-- finding-level closure across `reviewPacket -> revisionResponses -> verificationResults -> closeFindings`
-- explicit `summaryPacket` before any public-ready claim
-- explicit `writebackDecision = writeback | none`
-- local-only `compactionPacket` handoff state under `.meta-kim/state/{profile}/compaction/` when continuity has to survive a session break
-- hard public-display blocking until verification, summary, and deliverable closure all pass
+When `planning-with-files` is installed and the task is not a pure query, create persistent planning state during Thinking:
 
-### Anti-Pattern
+- `task_plan.md`
+- `findings.md`
+- `progress.md`
 
-```text
-User: build a notification system
-You: start editing many files directly without delegation
-```
+These files supplement protocol packets. They do not replace dispatch envelopes, review findings, or verification evidence.
 
-### Correct Pattern
+## The Nine Meta Agents
 
-```text
-User: build a notification system
-You:
-- Critical: clarify scope
-- Fetch: search existing capabilities
-- Thinking: define ownership and deliverables
-- Execution: use the `Agent` tool to dispatch the right specialists
-- Review: inspect outputs
-- Verification: confirm the applied state
-- Evolution: capture the reusable pattern
-```
-
-## The Eight Meta Agents
-
-- `meta-warden`: coordination, arbitration, final synthesis
-- `meta-conductor`: workflow, sequencing, rhythm control
-- `meta-genesis`: `SOUL.md`, persona, prompt architecture
-- `meta-artisan`: skills, MCP, tool fit, capability loadout
-- `meta-sentinel`: safety, permissions, hooks, rollback
+- `meta-warden`: coordination, arbitration, final synthesis, Warden gate
+- `meta-conductor`: workflow, stage sequencing, business-flow blueprint, rhythm control
+- `meta-genesis`: `SOUL.md`, identity, persona, prompt architecture
+- `meta-artisan`: skill / MCP / tool fit, capability loadout
+- `meta-sentinel`: safety boundaries, permissions, hooks, rollback
 - `meta-librarian`: memory, continuity, context policy
 - `meta-prism`: quality review, drift detection, anti-slop review
 - `meta-scout`: external capability discovery and evaluation
+- `meta-chrysalis`: evolution signal aggregation and writeback coordination through Warden's gate
 
-## Project Hooks In Claude Code
+Meta agents govern. They do not become generic implementation workers when a better execution specialist exists.
 
-Claude Code has 10 hook scripts wired from `.claude/settings.json` (the `Stop` event runs four commands in order):
+## Claude Code Hooks
 
-- `block-dangerous-bash.mjs`
-- `pre-git-push-confirm.mjs`
-- `post-format.mjs`
-- `post-typecheck.mjs`
-- `post-console-log-warn.mjs`
-- `subagent-context.mjs`
-- `stop-memory-save.mjs`
-- `stop-compaction.mjs`
-- `stop-console-log-audit.mjs`
-- `stop-completion-guard.mjs` (optional premature-completion guard; off unless `META_KIM_STOP_COMPLETION_GUARD` is set)
+Claude Code has project hooks generated from canonical runtime assets. The expected hook commands are:
 
-These cover:
+- `node .claude/hooks/activate-meta-theory-spine.mjs`
+- `node .claude/hooks/block-dangerous-bash.mjs`
+- `node .claude/hooks/pre-git-push-confirm.mjs`
+- `node .claude/hooks/enforce-agent-dispatch.mjs`
+- `node .claude/hooks/post-format.mjs`
+- `node .claude/hooks/post-typecheck.mjs`
+- `node .claude/hooks/post-console-log-warn.mjs`
+- `node .claude/hooks/subagent-context.mjs`
+- `node .claude/hooks/stop-memory-save.mjs`
+- `node .claude/hooks/stop-compaction.mjs`
+- `node .claude/hooks/stop-console-log-audit.mjs`
+- `node .claude/hooks/stop-completion-guard.mjs`
+- `node .claude/hooks/stop-spine-cleanup.mjs`
 
+They cover:
+
+- meta-theory spine activation
 - dangerous command blocking
 - git-push reminder
-- formatting
-- type checking
+- dispatch enforcement
+- formatting and typecheck follow-ups
 - console logging warnings
-- subagent context injection
-- session-end MCP Memory save
-- session-end compaction packet
+- subagent graph/context hints
+- session-end memory save
+- session-end compaction
 - session-end console audit
-- optional session-end completion heuristic (`hint` or `block`)
+- optional premature-completion guard
+- spine-state cleanup
 
-## Canonical vs Derived Assets
+Hook behavior differs across runtimes. Do not assume Claude's `SubagentStart`-style behavior exists in Codex, OpenClaw, or Cursor unless the runtime adapter explicitly verifies it.
 
-Preferred long-term edit targets:
+## Third-Party Meta Skills
 
-- `canonical/agents/*.md`
-- `canonical/skills/meta-theory/SKILL.md`
-- `canonical/skills/meta-theory/references/*.md`
-- `canonical/runtime-assets/*`
-- `config/contracts/`
-- `config/capability-index/`
+Packs such as `findskill`, `gstack`, `superpowers`, `planning-with-files`, and `cli-anything` are installed by `node setup.mjs` and supporting dependency commands.
 
-Files that should usually remain derived or runtime-specific:
+Repository policy:
 
-- `.claude/agents/*.md`
-- `.claude/skills/meta-theory/`
-- `.claude/hooks/`
-- `.claude/settings.json`
-- `.mcp.json`
-- `.claude/capability-index/`
-- `.codex/agents/*.toml`
-- `.agents/skills/meta-theory/`
-- `.codex/skills/meta-theory/SKILL.md` and `.codex/skills/meta-theory/references/*`
-- `.codex/capability-index/`
-- `openclaw/skills/meta-theory/SKILL.md` and `openclaw/skills/meta-theory/references/*`
-- `openclaw/workspaces/*`
-- `openclaw/capability-index/`
-- `.cursor/agents/*.md`
-- `.cursor/skills/meta-theory/`
-- `.cursor/mcp.json`
-- `.cursor/capability-index/`
+- document canonical installs through this repo
+- avoid duplicate marketplace copies under different names unless explicitly required
+- use stable names consistently across agents, skills, mirrors, and setup scripts
+- prefer capability discovery over hardcoded skill assumptions
 
-`npm run meta:sync` writes the **same** portable `meta-theory` skill (main file + `references/`) into `.claude/skills/meta-theory/`, `openclaw/skills/meta-theory/`, `.codex/skills/meta-theory/`, `.agents/skills/meta-theory/`, and **`.cursor/skills/meta-theory/`**. It also refreshes agents, hooks, settings, MCP templates, and the Codex `/meta-theory` command per target (including **`.cursor/agents/`** and **`.cursor/mcp.json`**). Default targets are `config/sync.json` → `supportedTargets`; machine overrides live in `.meta-kim/local.overrides.json` → `activeTargets`. If trees disagree, re-run sync from the source tree — do not hand-edit projections as independent truth.
+## Graphify
 
-### meta-theory reference language
+This repo keeps a knowledge graph under `graphify-out/`.
 
-- **`canonical/skills/meta-theory/SKILL.md` and `canonical/skills/meta-theory/references/*.md`**: canonical, model-facing theory and operating references.
-- Runtime copies under `.claude/`, `.codex/`, `.cursor/`, and `openclaw/` are mirrors/projections; do not treat docs narrative files as theory sources.
-- **Evolution writeback:** when persistence is configured, gaps and patterns may be recorded under `memory/` per canonical `meta-theory` `SKILL.md`.
+Use it as compressed codebase context, not as an infallible truth source:
 
-## Code Knowledge Graph Support (graphify)
+- for broad architecture review, start with `graphify-out/GRAPH_REPORT.md`
+- if `graphify-out/wiki/index.md` exists, use it for broad navigation
+- for focused questions, prefer graph queries or subgraph extraction when available
+- treat ambiguous graph nodes as uncertain dependencies requiring manual verification
+- `npm run meta:graphify:check` and `npm run meta:validate` compare the graph's built commit with current `git rev-parse HEAD` and fail when `GRAPH_REPORT.md` is stale
+- after modifying code files, run `npm run meta:graphify:rebuild`
 
-Meta_Kim can leverage [graphify](https://github.com/safishamsi/graphify) (`pip install graphifyy`) to generate compressed code knowledge graphs for **target projects** (not Meta_Kim itself). This provides up to 71x token compression via subgraph extraction instead of raw file reading.
+Graphify installation and runtime wiring are handled by setup and helper scripts:
 
-### Three different things (do not confuse them)
+- `npm run meta:graphify:check`
+- `npm run meta:graphify:install`
+- `npm run meta:graphify:update`
+- `npm run meta:graphify:rebuild`
 
-1. **Refreshing `graphify-out/` (data)** — `python -m graphify hook install` registers **per-repo** git hooks (post-commit / post-checkout) so the graph rebuilds when you commit or checkout. `npm run meta:graphify:install` / `node setup.mjs` runs pip install + `hook install` + `graphify <platform> install` **idempotently** for all selected platforms — pip success no longer skips skill registration.
-2. **Using the graph in governance (behavior)** — `canonical/skills/meta-theory/references/dev-governance.md` Fetch **Step 0.5** tells the model to check `graphify-out/graph.json` and quality gates; this is **not** a background daemon — the skill must be followed.
-3. **Claude Code subagents (hint only)** — `subagent-context.mjs` injects a short rule to prefer `GRAPH_REPORT.md` then `graph.json`; it does **not** embed those files into context automatically.
+## Maintenance Loop
 
-### Platform Automation Comparison
+After changing canonical prompts, skills, hooks, contracts, or runtime-facing docs:
 
-| Capability | Claude Code | Codex | OpenClaw | Cursor |
-|-----------|------------|-------|----------|--------|
-| PreToolUse hook (auto-prompt before Glob/Grep) | ✅ settings.json | ✅ trusted `.codex/hooks.json` | ❌ | ✅ `.cursor/hooks.json` `preToolUse` |
-| Slash command `/graphify` | ✅ | ✅ | ✅ | ✅ |
-| git hook auto-rebuild (post-commit/checkout) | ✅ | ✅ | ✅ | ✅ |
-| AGENTS.md resident rules | N/A | ✅ | ✅ | ✅ |
-| Multi-platform install via setup.mjs | ✅ claude | ✅ codex | ✅ claw | ✅ cursor |
+1. `npm run meta:sync`
+2. `npm run discover:global`
+3. `npm run meta:check`
+4. `npm run meta:check:global`
+5. `npm run meta:verify:all` before release or after larger changes
 
-**Key insight**: Claude Code, Codex, and Cursor all have native hook configuration, but they do not share one schema. OpenClaw uses internal/plugin hooks. Do not map `SubagentStart` outside Claude unless the target runtime adds and verifies that event.
+Use supporting commands as needed:
 
-For multi-platform setups, run `node setup.mjs` — it loops through all selected platforms and runs `graphify <platform> install` for each one idempotently.
-
-### How It Works
-
-1. **graphify** generates `graphify-out/graph.json` in the target project root (NetworkX node-link JSON with nodes, edges, and confidence scores)
-2. Meta_Kim’s Fetch stage (Step 0.5 in `dev-governance.md`) describes auto-detection and refresh rules for the model — not an IDE-managed pipeline
-3. **Claude Code** dispatched subagents get the graph **hint** via `subagent-context.mjs` (see above)
-4. For complex projects (>50 graph nodes), a **project-level conductor** can be auto-created via Type B pipeline
-
-### Auto-Trigger Conditions
-
-Graph context is used automatically when ALL conditions are met:
-- Source files > 20 (excluding node_modules/, .git/, dist/)
-- Python 3.10+ installed
-- graphify installed (`pip install graphifyy`)
-
-### Installation
-
-```bash
-# Via setup.mjs (interactive — installs pip package + hook + all selected platforms' graphify skill)
-node setup.mjs
-
-# Via install-deps.sh
-bash install-deps.sh
-
-# Repo helper (pip install graphifyy + claude install + hook install for cwd)
-npm run meta:graphify:install
-
-# Manual
-pip install graphifyy && python -m graphify claude install && python -m graphify hook install
-
-# Check status
-npm run meta:graphify:check
-```
-
-### Quality Gate
-
-- AMBIGUOUS nodes > 30% → graph marked low-quality, agents use direct Read as primary
-- Total nodes < 10 → graph too sparse, fall back to Glob/Grep
-- God nodes (high in-degree) → flagged as serial bottlenecks for Conductor
-
-### Working inside this repository (graphify)
-
-This repo keeps a graph under `graphify-out/`. Before deep architecture questions, read `graphify-out/GRAPH_REPORT.md` (and prefer `graphify-out/wiki/index.md` when present). After you change code here, refresh the graph with:
-
-```bash
-python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"
-```
-
-## Required Maintenance Loop
-
-After changing canonical prompts, skills, hooks, or runtime-facing contracts:
-
-1. run `npm run meta:sync`
-2. run `npm run discover:global`
-3. run `npm run meta:validate` (or `npm run meta:check`, which runs `meta:check:runtimes` then `meta:validate`)
-4. run `npm run meta:validate:run -- <artifact.json>` when you want to verify a recorded governed run
-5. run `npm run meta:index:runs -- <artifact-dir-or-file>` when validated governed runs should become queryable from the local run index
-6. use `npm run meta:query:runs -- --owner <agent>` when continuity should consult the local run index before memory/files
-7. run `npm run meta:doctor:governance` when mirrors, hooks, local profiles, or run-index health may have drifted
-8. run `npm run migrate:meta-kim -- <source-dir> --apply` when importing an older prompt pack or single-agent repo into local migration state
-9. run `npm run meta:eval:agents` when smoke-level runtime acceptance matters
-10. run `npm run meta:eval:agents:live` only when you explicitly need slower prompt-backed runtime acceptance
-11. run `npm run meta:verify:all` before release or after larger changes
-12. run `npm run meta:verify:all:live` only before runtime-sensitive releases that need the live acceptance layer
-13. check `docs/runtime-capability-matrix.md` when changing behavior that must stay parity-aligned across Claude / Codex / OpenClaw / Cursor
-
-`npm run meta:verify:all` runs, in order: `meta:check` (runtime mirror + project validate), `meta:check:global`, `eval-meta-agents --require-all-runtimes`, `meta:test:setup`, and `meta:test:meta-theory`.
-
-Useful supporting commands:
-
-- `npm run meta:check` — `meta:check:runtimes` + `meta:validate`
+- `npm run meta:validate`
 - `npm run meta:check:runtimes`
-- `npm run meta:check:global` — verify user-level runtime merge targets for `meta:sync:global`
-- `npm run meta:show:global:targets` — print where global sync will write
 - `npm run meta:doctor:governance`
+- `npm run meta:eval:agents`
+- `npm run meta:eval:agents:live`
+- `npm run meta:validate:run -- <artifact.json>`
 - `npm run meta:index:runs -- <artifact-dir-or-file>`
 - `npm run meta:query:runs -- --owner <agent>`
-- `npm run meta:rebuild:run-index -- <artifact-dir-or-file>`
 - `npm run migrate:meta-kim -- <source-dir> --apply`
-- `npm run meta:probe:clis`
-- `npm run meta:test:mcp`
-- `npm run meta:graphify:install` / `npm run meta:graphify:update` — helper wrappers around graphify setup
-- `node scripts/agent-health-report.mjs`
-- `npm run meta:deps:install` or `npm run meta:deps:install:all-runtimes` — install third-party skill repos into global runtime skill dirs (`all-runtimes` includes Codex/OpenClaw/Cursor where applicable; see README)
-- `npm run meta:deps:update` / `npm run meta:deps:update:all-runtimes` — same with `--update`
-- `npm run meta:deps:install:claude-plugins` — optional Claude Code marketplace plugins (e.g. full Superpowers bundle)
-- `npm run meta:sync:global` — sync portable `meta-theory` + merge Meta_Kim hooks into user-level Claude settings
-- `npm run prompt:next-iteration` — maintainer helper for structured next-step prompts after a governed run
+- `npm run meta:deps:install`
+- `npm run meta:deps:install:all-runtimes`
+- `npm run meta:deps:update`
+- `npm run meta:deps:update:all-runtimes`
+- `npm run meta:deps:install:claude-plugins`
+- `npm run meta:sync:global`
+- `npm run prompt:next-iteration`
 
-`meta:eval:agents` is the lightweight runtime smoke layer: it checks CLI availability, runtime wiring, hooks, and registry/config scaffolding without opening live prompt sessions. Use the `:live` variants only when you actually need real Claude / Codex / OpenClaw prompt-backed acceptance.
+`npm run meta:verify:all` runs runtime sync checks, project validation, graphify health, global sync checks, smoke-level runtime acceptance, setup tests, and meta-theory tests.
 
-**Tooling:** Node `>=22.13.0` (see `package.json` `engines`). CLI entry: `npx --yes github:KimYx0207/Meta_Kim meta-kim` / `bin/meta-kim.mjs`.
+## Install And Packaging Notes
 
-**Packaging & runtime notes (post-2.0.12 Unreleased):**
+- Node must satisfy the `package.json` engine requirement.
+- CLI entry is `npx --yes github:KimYx0207/Meta_Kim meta-kim` or `bin/meta-kim.mjs`.
+- `package.json` uses a `files` whitelist so install tarballs contain the full `canonical/` tree.
+- `node setup.mjs` installs selected runtime projections and graphify wiring idempotently.
+- Runtime target selection has two layers: repo defaults in `config/sync.json`, machine-active targets in `.meta-kim/local.overrides.json`.
+- MCP Memory Service uses port `8000`.
+- `stop-memory-save.mjs` saves session summaries to the MCP Memory Service on session end.
 
-- `package.json` now has an explicit `files` whitelist so every `npx` tarball contains the full `canonical/` tree (older publications relied on default npm ignore rules and occasionally dropped `canonical/runtime-assets/openclaw/openclaw.template.json` / `canonical/runtime-assets/codex/config.toml.example`). If `npx` reports `[sync-runtimes] Skipping missing canonical file: …`, clear the local npx cache (`npm cache clean --force`) and re-run — the current tarball ships everything.
-- All installer user-facing strings are localized through `scripts/meta-kim-i18n.mjs` (en / zh-CN / ja-JP / ko-KR). `sync-runtimes.mjs` `tryReadCanonical` warnings and `setup.mjs` `runMcpMemoryHookInstaller` progress / success / warning messages now respect `META_KIM_LANG` / `--lang`.
-- `runMcpMemoryHookInstaller` uses `withProgress` + `stdio: pipe` so child-process output is captured silently and only surfaces (as dimmed `stderr`) on non-zero exit, restoring the consistent step-label UX on slow hook installs.
-- MCP Memory Service port is **8000**.
-- `stop-memory-save.mjs` (Stop hook) writes session summaries to MCP Memory Service on session end, enabling cross-session continuity without manual intervention.
+## Reading Order
 
-## Reading Notes
+For maintainers:
 
-For human readers:
-
-- start with `README.md` or `README.zh-CN.md`
-- read this file to understand Claude Code’s role
-- read `AGENTS.md` if you also care about Codex (and Cursor-oriented mirrors)
-- use the repository tree section in `README.md` for the directory map
-- read `.claude/skills/meta-theory/references/` only when you want the long-form theory
-
-## One-Line Summary
-
-Claude Code is not a separate product logic here. It is one runtime projection of the Meta_Kim governance system.
-
-## graphify
-
-This project has a graphify knowledge graph at graphify-out/.
-
-Rules:
-- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
-- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
-- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"` to keep the graph current
+1. `README.md` or `README.zh-CN.md`
+2. `AGENTS.md` for cross-runtime and Codex-facing rules
+3. `CLAUDE.md` for Claude Code hook and Agent-tool behavior
+4. `docs/runtime-capability-matrix.md` when changing trigger, hook, review, verification, stop, or writeback behavior
+5. `canonical/skills/meta-theory/references/dev-governance.md` for the long-form governed execution contract

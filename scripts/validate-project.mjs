@@ -9,6 +9,7 @@ import {
   canonicalAgentsDir,
   canonicalCapabilityIndexDir,
   canonicalRuntimeAssetsDir,
+  canonicalSkillsDir,
   canonicalSkillPath,
   canonicalSkillReferencesDir,
   loadRuntimeProfiles,
@@ -28,6 +29,21 @@ import { validateSkillFrontmatter } from "./install-skill-sanitizer.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const execFileAsync = promisify(execFile);
+function parseValidationContext(argv = process.argv.slice(2)) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--context" && argv[index + 1]) return argv[index + 1];
+    if (arg.startsWith("--context=")) return arg.slice("--context=".length);
+  }
+  return null;
+}
+
+const validationContext = parseValidationContext();
+const graphifyOptionalContexts = new Set(["setup", "install", "update"]);
+const skipGraphifyGate =
+  process.env.META_KIM_VALIDATE_SKIP_GRAPHIFY === "1" ||
+  graphifyOptionalContexts.has(validationContext) ||
+  process.argv.includes("--skip-graphify");
 const canonicalClaudeSettingsPath = path.join(
   canonicalRuntimeAssetsDir,
   "claude",
@@ -288,6 +304,24 @@ async function listCanonicalSkillReferences() {
     .filter((entry) => entry.isFile())
     .map((entry) => entry.name)
     .sort();
+}
+
+async function listCanonicalSkillManifests() {
+  const entries = await fs.readdir(canonicalSkillsDir, { withFileTypes: true });
+  const manifests = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    const skillPath = path.join(canonicalSkillsDir, entry.name, "SKILL.md");
+    if (await exists(skillPath)) {
+      manifests.push({
+        id: entry.name,
+        path: toRepoRelative(skillPath),
+      });
+    }
+  }
+  return manifests.sort((left, right) => left.id.localeCompare(right.id));
 }
 
 function assertNoForbiddenMarkers(
@@ -1217,6 +1251,18 @@ async function validateWorkflowContract() {
       `workflow-contract.json businessFlowBlueprintPacket.laneCoverageStatusEnum must include ${status}.`,
     );
   }
+  for (const deliverableType of ["runtime_package", "install_release"]) {
+    assert(
+      businessFlowProtocol.deliverableTypeEnum?.includes(deliverableType),
+      `workflow-contract.json businessFlowBlueprintPacket.deliverableTypeEnum must include ${deliverableType}.`,
+    );
+  }
+  for (const laneId of ["release", "install", "runtime_package"]) {
+    assert(
+      businessFlowProtocol.releaseInstallLaneIds?.includes(laneId),
+      `workflow-contract.json businessFlowBlueprintPacket.releaseInstallLaneIds must include ${laneId}.`,
+    );
+  }
 
   const agentBlueprintProtocol = contract.protocols?.agentBlueprintPacket ?? {};
   for (const field of [
@@ -1235,10 +1281,45 @@ async function validateWorkflowContract() {
   }
   assert(
     agentBlueprintProtocol.namingPolicy?.businessSemanticNamesOnly === true &&
+      agentBlueprintProtocol.namingPolicy?.shortRoleNamesRequired === true &&
       agentBlueprintProtocol.namingPolicy?.runtimeNicknamesAreAliasesOnly ===
         true &&
-      agentBlueprintProtocol.namingPolicy?.roleDisplayNameRequired === true,
-    "workflow-contract.json agentBlueprintPacket.namingPolicy must be the contract object with business-readable name rules.",
+      agentBlueprintProtocol.namingPolicy?.roleDisplayNameRequired === true &&
+      agentBlueprintProtocol.namingPolicy?.scopeDetailsBelongInInstanceFields ===
+        true,
+    "workflow-contract.json agentBlueprintPacket.namingPolicy must be the contract object with short business role name rules.",
+  );
+  const longTermCapabilityPolicy =
+    agentBlueprintProtocol.longTermCapabilityPolicy ?? {};
+  assert(
+    longTermCapabilityPolicy.abstractCapabilitySlotsRequired === true &&
+      longTermCapabilityPolicy.forbidConcreteSkillInLongTermAgentIdentity ===
+        true &&
+      longTermCapabilityPolicy.selectedSkillScope === "run_only",
+    "workflow-contract.json agentBlueprintPacket.longTermCapabilityPolicy must require abstract slots, run-only concrete skill selection, and no fixed concrete child skills in long-term identity.",
+  );
+  for (const provider of [
+    "agent-teams-playbook",
+    "superpowers",
+    "ecc",
+    "findskill",
+  ]) {
+    assert(
+      longTermCapabilityPolicy.allowedMetaSkillProviders?.includes(provider),
+      `workflow-contract.json agentBlueprintPacket.longTermCapabilityPolicy.allowedMetaSkillProviders must include ${provider}.`,
+    );
+  }
+  assert(
+    Array.isArray(longTermCapabilityPolicy.forbiddenConcreteSkillPatterns) &&
+      longTermCapabilityPolicy.forbiddenConcreteSkillPatterns.length >= 1,
+    "workflow-contract.json agentBlueprintPacket.longTermCapabilityPolicy must declare forbidden concrete child-skill binding patterns.",
+  );
+  assert(
+    longTermCapabilityPolicy.oversizedGovernanceAgentPolicy
+      ?.exceptionRequiresReason === true &&
+      longTermCapabilityPolicy.oversizedGovernanceAgentPolicy
+        ?.splitDocumentationAllowed === true,
+    "workflow-contract.json agentBlueprintPacket.longTermCapabilityPolicy must document oversized governance agent exception and split-documentation policy.",
   );
   for (const resolution of [
     "reuse_existing_owner",
@@ -1496,12 +1577,181 @@ async function validateRuntimeHookMapping() {
   }
 }
 
+function assertSchemaRequired(schemaNode, value, label) {
+  for (const field of schemaNode.required ?? []) {
+    assert(
+      Object.prototype.hasOwnProperty.call(value ?? {}, field),
+      `${label} must include schema-required field ${field}.`,
+    );
+  }
+}
+
+function assertSchemaEnum(schemaNode, value, label) {
+  if (!schemaNode?.enum) {
+    return;
+  }
+  assert(
+    schemaNode.enum.includes(value),
+    `${label} must be one of ${schemaNode.enum.join(", ")}.`,
+  );
+}
+
+function assertSchemaConst(schemaNode, value, label) {
+  if (!Object.prototype.hasOwnProperty.call(schemaNode ?? {}, "const")) {
+    return;
+  }
+  assert(value === schemaNode.const, `${label} must equal ${schemaNode.const}.`);
+}
+
+function assertNoAdditionalSchemaProperties(schemaNode, value, label) {
+  if (schemaNode.additionalProperties !== false) {
+    return;
+  }
+  const allowed = new Set(Object.keys(schemaNode.properties ?? {}));
+  const extras = Object.keys(value ?? {}).filter((key) => !allowed.has(key));
+  assert(
+    extras.length === 0,
+    `${label} has fields not declared in capability-index.schema.json: ${extras.join(", ")}.`,
+  );
+}
+
+async function validateCapabilityIndexSchema(index) {
+  const schemaPath = path.join(
+    repoRoot,
+    "config",
+    "contracts",
+    "capability-index.schema.json",
+  );
+  const schema = JSON.parse(await fs.readFile(schemaPath, "utf8"));
+
+  assert(schema.type === "object", "capability-index.schema.json root must be an object schema.");
+  assertSchemaRequired(schema, index, "capability index");
+  assertNoAdditionalSchemaProperties(schema, index, "capability index");
+  assertSchemaEnum(schema.properties.scope, index.scope, "capability index scope");
+  for (const field of [
+    "abstractCapabilitySlots",
+    "metaSkillProviders",
+    "runtimeSelectedSkills",
+    "longTermAgentIdentityPolicy",
+  ]) {
+    assert(
+      Object.prototype.hasOwnProperty.call(schema.properties, field),
+      `capability-index.schema.json must define ${field}.`,
+    );
+  }
+
+  const fetchOrderSchema = schema.properties.fetchOrder;
+  assert(Array.isArray(index.fetchOrder), "capability index fetchOrder must be an array.");
+  for (const [position, item] of index.fetchOrder.entries()) {
+    assertSchemaEnum(
+      fetchOrderSchema.items,
+      item,
+      `capability index fetchOrder[${position}]`,
+    );
+  }
+
+  const groupsSchema = schema.properties.byCapabilityType.properties;
+  assert(index.byCapabilityType && typeof index.byCapabilityType === "object", "capability index byCapabilityType must be an object.");
+
+  assert(
+    Array.isArray(index.abstractCapabilitySlots) &&
+      index.abstractCapabilitySlots.length >= 1,
+    "capability index must declare at least one abstractCapabilitySlots entry.",
+  );
+  for (const [position, slot] of index.abstractCapabilitySlots.entries()) {
+    assertSchemaRequired(
+      schema.properties.abstractCapabilitySlots.items,
+      slot,
+      `capability index abstractCapabilitySlots[${position}]`,
+    );
+    assert(
+      slot.selectedSkillScope === "run_only",
+      `capability index abstractCapabilitySlots[${position}].selectedSkillScope must be run_only.`,
+    );
+    assert(
+      Array.isArray(slot.allowedProviderIds) &&
+        slot.allowedProviderIds.length >= 1,
+      `capability index abstractCapabilitySlots[${position}] must list allowedProviderIds.`,
+    );
+  }
+  assert(
+    index.runtimeSelectedSkills?.selectedSkillScope === "run_only",
+    "capability index runtimeSelectedSkills.selectedSkillScope must be run_only.",
+  );
+  assert(
+    index.longTermAgentIdentityPolicy
+      ?.forbidConcreteSkillInLongTermAgentIdentity === true,
+    "capability index longTermAgentIdentityPolicy must forbid concrete skills in long-term agent identity.",
+  );
+  for (const provider of [
+    "agent-teams-playbook",
+    "superpowers",
+    "ecc",
+    "findskill",
+  ]) {
+    const providerEntry = index.metaSkillProviders?.[provider];
+    assert(
+      providerEntry?.providerKind === "meta-skill-package" &&
+        providerEntry?.allowedForLongTermAgentIdentity === true &&
+        providerEntry?.concreteSubSkillBindingForbidden === true,
+      `capability index metaSkillProviders.${provider} must be an allowed meta-skill package provider with concrete child-skill binding forbidden.`,
+    );
+    assert(
+      index.longTermAgentIdentityPolicy?.allowedMetaSkillProviderIds?.includes(
+        provider,
+      ),
+      `capability index longTermAgentIdentityPolicy.allowedMetaSkillProviderIds must include ${provider}.`,
+    );
+  }
+  assert(
+    Array.isArray(
+      index.longTermAgentIdentityPolicy?.forbiddenConcreteSkillPatterns,
+    ) &&
+      index.longTermAgentIdentityPolicy.forbiddenConcreteSkillPatterns.length >=
+        1,
+    "capability index longTermAgentIdentityPolicy must declare forbidden concrete child-skill binding patterns.",
+  );
+
+  const agentSchema = groupsSchema.agents.additionalProperties;
+  for (const [key, entry] of Object.entries(index.byCapabilityType.agents ?? {})) {
+    assertSchemaRequired(agentSchema, entry, `capability index agent ${key}`);
+    assertSchemaConst(agentSchema.properties.type, entry.type, `capability index agent ${key}.type`);
+    assertSchemaEnum(agentSchema.properties.layer, entry.layer, `capability index agent ${key}.layer`);
+    if (entry.layer === "meta") {
+      assert(
+        entry.executionBlock === true,
+        `capability index agent ${key} must set executionBlock=true for meta layer.`,
+      );
+    }
+  }
+
+  const skillSchema = groupsSchema.skills.additionalProperties;
+  for (const [key, entry] of Object.entries(index.byCapabilityType.skills ?? {})) {
+    assertSchemaRequired(skillSchema, entry, `capability index skill ${key}`);
+    assertSchemaConst(skillSchema.properties.type, entry.type, `capability index skill ${key}.type`);
+  }
+
+  const governanceRules = index.governanceRules ?? {};
+  const governanceSchema = schema.properties.governanceRules?.properties ?? {};
+  assertSchemaConst(
+    governanceSchema.metaAgentDispatchRule,
+    governanceRules.metaAgentDispatchRule,
+    "capability index governanceRules.metaAgentDispatchRule",
+  );
+  assertSchemaConst(
+    governanceSchema.fallbackBehavior,
+    governanceRules.fallbackBehavior,
+    "capability index governanceRules.fallbackBehavior",
+  );
+}
+
 async function validateCapabilityIndex() {
   const indexPath = path.join(
     canonicalCapabilityIndexDir,
     "meta-kim-capabilities.json",
   );
   const index = JSON.parse(await fs.readFile(indexPath, "utf8"));
+  await validateCapabilityIndexSchema(index);
   assert(
     index.scope === "repo-canonical",
     "config/capability-index/meta-kim-capabilities.json must be a repo-canonical index.",
@@ -1528,15 +1778,42 @@ async function validateCapabilityIndex() {
     "repo-canonical capability index must not contain machine-specific home paths.",
   );
 
+  const indexedAgentPaths = new Set(
+    Object.values(index.byCapabilityType?.agents ?? {}).map((entry) => entry.path),
+  );
+  const canonicalAgentFiles = (await fs.readdir(canonicalAgentsDir))
+    .filter((file) => file.endsWith(".md"))
+    .map((file) => `canonical/agents/${file}`)
+    .sort();
+  const missingAgents = canonicalAgentFiles.filter(
+    (agentPath) => !indexedAgentPaths.has(agentPath),
+  );
+  assert(
+    missingAgents.length === 0,
+    `capability index is missing canonical agents: ${missingAgents.join(", ")}.`,
+  );
+
+  const indexedSkillPaths = new Set(
+    Object.values(index.byCapabilityType?.skills ?? {}).map((entry) => entry.path),
+  );
+  const canonicalSkillManifests = await listCanonicalSkillManifests();
+  const missingSkills = canonicalSkillManifests
+    .map((skill) => skill.path)
+    .filter((skillPath) => !indexedSkillPaths.has(skillPath));
+  assert(
+    missingSkills.length === 0,
+    `capability index is missing canonical skills: ${missingSkills.join(", ")}.`,
+  );
+
+  const canonicalContent = await fs.readFile(indexPath, "utf8");
   for (const mirror of index.mirroredTo ?? []) {
     const mirrorPath = path.join(repoRoot, mirror);
-    if (await exists(mirrorPath)) {
-      const mirrored = JSON.parse(await fs.readFile(mirrorPath, "utf8"));
-      assert(
-        mirrored.canonicalProjection === CANONICAL_CAPABILITY_INDEX_RELATIVE,
-        `${mirror} must point back to ${CANONICAL_CAPABILITY_INDEX_RELATIVE}.`,
-      );
-    }
+    assert(await exists(mirrorPath), `Missing capability index mirror: ${mirror}.`);
+    const mirroredContent = await fs.readFile(mirrorPath, "utf8");
+    assert(
+      mirroredContent === canonicalContent,
+      `${mirror} must be byte-for-byte identical to ${CANONICAL_CAPABILITY_INDEX_RELATIVE}.`,
+    );
   }
 }
 
@@ -1985,6 +2262,10 @@ async function validateSyncConfiguration() {
     "config/sync.json must declare generatedTargets for every supported target.",
   );
   assert(
+    canonicalRoots.skills === "canonical/skills",
+    "config/sync.json canonicalRoots.skills must be canonical/skills.",
+  );
+  assert(
     canonicalRoots.contracts === "config/contracts",
     "config/sync.json canonicalRoots.contracts must be config/contracts.",
   );
@@ -1993,6 +2274,18 @@ async function validateSyncConfiguration() {
     "config/sync.json canonicalRoots.capabilityIndex must be config/capability-index.",
   );
 
+  assert(
+    profiles.codex.projection.outputPaths.skillsDir === ".codex/skills" &&
+      profiles.codex.projection.outputPaths.skillRoot ===
+        ".codex/skills/meta-theory",
+    "Codex runtime profile must declare both the skills root and the meta-theory compatibility root.",
+  );
+  assert(
+    profiles.claude.projection.outputPaths.skillsDir === ".claude/skills" &&
+      profiles.openclaw.projection.outputPaths.skillsDir === "openclaw/skills" &&
+      profiles.cursor.projection.outputPaths.skillsDir === ".cursor/skills",
+    "Runtime profiles must declare skillsDir for full canonical/skills projection.",
+  );
   assert(
     profiles.codex.projection.outputPaths.hooksDir === ".codex/hooks" &&
       profiles.codex.projection.outputPaths.hooksFile === ".codex/hooks.json",
@@ -2129,12 +2422,24 @@ async function validatePackageJson() {
     "package.json meta:verify:all must include npm run meta:test:setup.",
   );
   assert(
+    pkg.scripts?.["meta:verify:all"]?.includes("npm run discover:global") &&
+      pkg.scripts["meta:verify:all"].indexOf("npm run discover:global") <
+        pkg.scripts["meta:verify:all"].indexOf("npm run meta:check"),
+    "package.json meta:verify:all must run npm run discover:global before npm run meta:check.",
+  );
+  assert(
     pkg.scripts?.["meta:verify:all"]?.includes("npm run meta:graphify:check"),
     "package.json meta:verify:all must include npm run meta:graphify:check.",
   );
   assert(
     pkg.scripts?.["meta:verify:all:live"]?.includes("npm run meta:test:setup"),
     "package.json meta:verify:all:live must include npm run meta:test:setup.",
+  );
+  assert(
+    pkg.scripts?.["meta:verify:all:live"]?.includes("npm run discover:global") &&
+      pkg.scripts["meta:verify:all:live"].indexOf("npm run discover:global") <
+        pkg.scripts["meta:verify:all:live"].indexOf("npm run meta:check"),
+    "package.json meta:verify:all:live must run npm run discover:global before npm run meta:check.",
   );
   assert(
     pkg.scripts?.["meta:verify:all:live"]?.includes(
@@ -2674,8 +2979,14 @@ async function main() {
 
   // 12. Graphify governance gate
   step(current++, TOTAL, "Graphify governance gate");
-  await validateGraphifyGate();
-  pass("graphify CLI, report, graph, and health gates are valid.");
+  if (skipGraphifyGate) {
+    pass(
+      "graphify gate skipped for install/update validation; run npm run meta:graphify:rebuild before release validation.",
+    );
+  } else {
+    await validateGraphifyGate();
+    pass("graphify CLI, report, graph, and health gates are valid.");
+  }
 
   // 13. Documentation fact checks
   step(current++, TOTAL, "Documentation fact checks");

@@ -328,7 +328,7 @@
       "claude": {
         "primarySurface": "AskUserQuestion_tool",
         "fallbackSurfaces": ["conversation_fallback"],
-        "triggerDescription": "Use AskUserQuestion for blocking Critical clarification when Fetch cannot proceed, then use it once for Execution confirmation after Fetch and Thinking.",
+        "triggerDescription": "Use AskUserQuestion for blocking Critical clarification only when Fetch cannot proceed, then use it once for Execution confirmation after contentEvidencePacket and preDecisionOptionFrame are complete.",
         "implementation": "Invoke AskUserQuestion with questions array; platform natively supports modal popup."
       },
       "codex": {
@@ -368,13 +368,15 @@
       "deferRequiresDeadline": true
     },
     "userInteractionPolicy": {
-      "description": "Policy for when to use AskUserQuestion (decision popup) vs notice (informational output)",
+      "description": "Policy for when to use AskUserQuestion / native choice / fallback decision surfaces versus notice. Non-trivial non-query decisions require Fetch content evidence and Thinking option framing before interruption.",
       "decisionTriggerEnum": [
+        "non_trivial_executable_decision",
         "multiple_viable_solutions",
         "product_direction_required",
         "security_or_rollback_risk"
       ],
       "defaultWhen": [
+        "non_trivial_executable_work",
         "multiple_options_with_tradeoffs",
         "business_clarification_needed",
         "risk_acknowledgment_required"
@@ -490,7 +492,9 @@
       "requiredPackets": [
         "runHeader",
         "taskClassification",
+        "contentEvidencePacket",
         "fetchPacket",
+        "preDecisionOptionFrame",
         "cardPlanPacket",
         "dispatchEnvelopePacket",
         "orchestrationTaskBoardPacket",
@@ -517,6 +521,26 @@
         "meta_analysis",
         "proposal_review",
         "rhythm"
+      ],
+      "contentEvidencePacketRequiredBeforeUserChoiceWhenGovernanceFlows": [
+        "simple_exec",
+        "complex_dev",
+        "meta_analysis",
+        "proposal_review",
+        "rhythm"
+      ],
+      "preDecisionOptionFrameRequiredBeforeUserChoiceWhenGovernanceFlows": [
+        "simple_exec",
+        "complex_dev",
+        "meta_analysis",
+        "proposal_review",
+        "rhythm"
+      ],
+      "dispatchArtifactsFinalizedAfterChoice": true,
+      "choiceGateSkipAllowedWhen": [
+        "trivial",
+        "pure_read_only_queryBypass",
+        "explicit_auto_proceed"
       ],
       "capabilityGapPacketRequiredWhenUpgradeReasons": [
         "owner_creation_required"
@@ -545,7 +569,7 @@
         "complex_dev",
         "meta_analysis"
       ],
-      "description": "intentPacket is required in run artifacts when taskClassification.governanceFlow is listed in intentPacketRequiredWhenGovernanceFlows (IntentGate-style intent lock-in). intentGatePacket is required for the same flows (structured ambiguity / assumptions gate before Execution). dispatchEnvelopePacket is required for all non-pure-query flows so every executable run has an explicit owner, capability boundary, memory mode, and review / verification routing before dispatch. orchestrationTaskBoardPacket is the mandatory Conductor task board for the same executable flows. businessFlowBlueprintPacket and agentBlueprintPacket are required before workerTaskPacket so Conductor proves the full business flow was considered before dispatch. capabilityGapPacket is required when taskClassification.upgradeReasons records owner_creation_required, or when agentBlueprintPacket.roleCoverageGate fails with missing roles whose ownerResolution is upgrade_existing_owner or create_owner_first. executionAgentCard is required when capabilityGapPacket resolves the gap through execution-agent creation or upgrade, or when agentBlueprintPacket ownerResolution chooses upgrade_existing_owner or create_owner_first."
+      "description": "intentPacket is required in run artifacts when taskClassification.governanceFlow is listed in intentPacketRequiredWhenGovernanceFlows (IntentGate-style intent lock-in). intentGatePacket is required for the same flows (structured ambiguity / assumptions gate before Execution). contentEvidencePacket and preDecisionOptionFrame are required before AskUserQuestion / native choice / conversation fallback for non-trivial non-query work; they prove Fetch evidence and Thinking option framing happened before interruption. dispatchEnvelopePacket, dispatchBoard, and workerTaskPacket are finalized only after user choice or an allowed recorded skip. dispatchEnvelopePacket is required for all non-pure-query flows so every executable run has an explicit owner, capability boundary, memory mode, and review / verification routing before dispatch. orchestrationTaskBoardPacket is the mandatory Conductor task board for the same executable flows. businessFlowBlueprintPacket and agentBlueprintPacket are required before workerTaskPacket so Conductor proves the full business flow was considered before dispatch. capabilityGapPacket is required when taskClassification.upgradeReasons records owner_creation_required, or when agentBlueprintPacket.roleCoverageGate fails with missing roles whose ownerResolution is upgrade_existing_owner or create_owner_first. executionAgentCard is required when capabilityGapPacket resolves the gap through execution-agent creation or upgrade, or when agentBlueprintPacket ownerResolution chooses upgrade_existing_owner or create_owner_first."
     },
     "localState": {
       "root": ".meta-kim/state",
@@ -723,6 +747,111 @@
         "complexity"
       ]
     },
+    "contentEvidencePacket": {
+      "requiredFields": [
+        "evidenceScope",
+        "researchCapabilityDiscovery",
+        "deepResearchPlan",
+        "localSourcesRead",
+        "contentFindings",
+        "capabilityEvidence",
+        "sourceCategoryCoverage",
+        "crossReferenceMatrix",
+        "contradictionLog",
+        "assumptionLedger",
+        "decisionImpactMap",
+        "researchRequired",
+        "researchSkipReason",
+        "evidenceLaneValidatedBy"
+      ],
+      "evidenceScopeEnum": [
+        "local_project",
+        "external_research",
+        "mixed"
+      ],
+      "researchSkipReasonEnum": [
+        "none",
+        "local_project_only",
+        "pure_query",
+        "queryBypass",
+        "explicit_local_only",
+        "explicit_auto_proceed",
+        "trivial"
+      ],
+      "deepResearchRequiredFields": [
+        "researchCapabilityDiscovery",
+        "deepResearchPlan",
+        "sourceCategoryCoverage",
+        "crossReferenceMatrix",
+        "contradictionLog",
+        "assumptionLedger",
+        "decisionImpactMap"
+      ],
+      "researchCapabilityDiscovery": {
+        "requiredFields": [
+          "requiredCapabilities",
+          "runtimeContext",
+          "toolInventorySources",
+          "availableRetrievalCapabilities",
+          "selectedResearchPath",
+          "capabilityGaps",
+          "validatedBy"
+        ],
+        "runtimeContextRequiredFields": [
+          "os",
+          "runtimeFamily"
+        ],
+        "toolInventorySourceEnum": [
+          "active_tools",
+          "deferred_tools",
+          "mcp",
+          "plugins",
+          "skills",
+          "commands",
+          "capability_index",
+          "user_instruction"
+        ],
+        "retrievalCapabilityEnum": [
+          "web_search",
+          "url_fetch",
+          "browser_open",
+          "docs_lookup",
+          "mcp_search",
+          "plugin_search",
+          "local_only",
+          "user_supplied_sources"
+        ],
+        "providerKindEnum": [
+          "native_tool",
+          "mcp",
+          "plugin",
+          "skill",
+          "command",
+          "capability_index",
+          "user_supplied",
+          "none"
+        ],
+        "statusEnum": [
+          "available",
+          "partial",
+          "unavailable",
+          "blocked",
+          "unknown"
+        ],
+        "selectedResearchPathModeEnum": [
+          "external_web",
+          "mixed",
+          "local_only",
+          "user_fallback",
+          "blocked"
+        ],
+        "forbiddenFields": [
+          "platformSurface"
+        ],
+        "description": "Fetch-stage preflight for research-capability discovery. The evidence owner must identify the current runtime and actual tool inventory sources, then select a research path from observed retrieval capabilities. Do not use host-form-factor enums such as platformSurface; decide from capability proof, limitations, and selectedResearchPath."
+      },
+      "description": "Fetch-stage evidence required before any user choice surface for non-trivial non-query work. It records what content was read or verified, which research/retrieval capabilities were actually available in the current runtime, how the evidence owner performed deep research, how findings map to decision impact, and how Conductor validated the evidence lane."
+    },
     "fetchPacket": {
       "requiredFields": [
         "projectsChecked",
@@ -734,6 +863,39 @@
         "knowledgeSources"
       ],
       "description": "Explicit Fetch-stage packet: which projects were checked, which local/global sources were consulted, which capabilities matched, which gaps remain, and which graph/knowledge sources influenced the run."
+    },
+    "preDecisionOptionFrame": {
+      "requiredFields": [
+        "decisionTrigger",
+        "contentEvidence",
+        "optionFrame",
+        "presentedBeforeDecision",
+        "userChoiceState",
+        "builtFromContentEvidence",
+        "contentEvidenceRefs",
+        "candidateOptions",
+        "recommendedDefault",
+        "requiresUserChoice",
+        "nativeChoiceSurface",
+        "choiceGateSkip",
+        "reviewOwner"
+      ],
+      "candidateOptionRequiredFields": [
+        "optionId",
+        "whatChanges",
+        "problemSolved",
+        "expectedResult",
+        "advantages",
+        "disadvantages",
+        "candidateOwners",
+        "candidateTaskShape"
+      ],
+      "choiceGateSkipAllowedWhen": [
+        "trivial",
+        "pure_read_only_queryBypass",
+        "explicit_auto_proceed"
+      ],
+      "description": "Thinking-stage pre-decision frame for non-trivial executable work before AskUserQuestion, native choice, or fallback. It contains contentEvidence-backed candidate orchestration paths and trade-offs only; it is not a finalized dispatchEnvelopePacket, dispatchBoard, or workerTaskPacket."
     },
     "intentPacket": {
       "requiredFields": [
@@ -753,9 +915,10 @@
         "userLanguage",
         "languageSource",
         "nativeChoiceSurface",
+        "choiceGateSkip",
         "intentGatePacketVersion"
       ],
-      "description": "Structured pre-execution gate: whether ambiguities are cleared, if the user must still choose, documented default assumptions, aligned with intentPacket fields."
+      "description": "Structured pre-execution gate: whether ambiguities are cleared, if the user must still choose, documented default assumptions, native/fallback choice surface, and the recorded skip reason when the choice gate is allowed to be skipped."
     },
     "cardPlanPacket": {
       "requiredFields": [
@@ -783,7 +946,10 @@
         "workspaceHint",
         "resultSchemaRef",
         "reviewOwner",
-        "verificationOwner"
+        "verificationOwner",
+        "preDecisionOptionFrameRef",
+        "userChoiceState",
+        "finalizationGate"
       ],
       "routeEnum": [
         "project_only",
@@ -796,7 +962,7 @@
         "project_only",
         "cross_project_readonly"
       ],
-      "description": "Mandatory execution shell for non-query flows: who owns the task, which business-readable role is being dispatched, which capabilities are allowed/blocked, what memory policy the child gets, and which owners close review / verification. Runtime-assigned nicknames may be recorded as runtimeInstanceAlias only; they must never replace roleDisplayName."
+      "description": "Mandatory execution shell for non-query flows: who owns the task, which short business role is being dispatched, which capabilities are allowed/blocked, what memory policy the child gets, and which owners close review / verification. This packet may not finalize before userChoiceState records a user choice or an explicit auto-proceed / choiceGateSkip allowed by preDecisionOptionFrame. Runtime-assigned nicknames may be recorded as runtimeInstanceAlias only; they must never replace roleDisplayName."
     },
     "orchestrationTaskBoardPacket": {
       "requiredFields": [
@@ -828,8 +994,15 @@
         "dashboard",
         "api_service",
         "data_pipeline",
+        "runtime_package",
+        "install_release",
         "article",
         "custom"
+      ],
+      "releaseInstallLaneIds": [
+        "release",
+        "install",
+        "runtime_package"
       ],
       "coverageJudgmentEnum": [
         "complete",
@@ -853,7 +1026,7 @@
         "missing",
         "omitted_with_reason"
       ],
-      "description": "Conductor-owned business-flow blueprint produced before worker tasks. It forces the system to consider product, UX, UI, frontend, backend, data, motion, test, QA, security, release, feedback, and evolution lanes where relevant. Every lane object in requiredLanes or optionalLanes must carry global capability scan evidence: capabilitySearchQuery, candidateOwners, candidateSkills, selectedOwner, selectionReason, and coverageStatus. Omitted lanes require explicit human-readable reasons."
+      "description": "Conductor-owned business-flow blueprint produced before worker tasks. It requires the system to infer task-specific business lanes from the requested outcome, scope, and deliverable type; planning dimensions may include product, UX, UI, frontend, backend, data, motion, test, QA, security, release, feedback, and evolution when relevant. Every lane object in requiredLanes or optionalLanes must carry global capability scan evidence: capabilitySearchQuery, candidateOwners, candidateSkills, selectedOwner, selectionReason, and coverageStatus. Omitted lanes require explicit human-readable reasons."
     },
     "agentBlueprintPacket": {
       "requiredFields": [
@@ -896,9 +1069,36 @@
       "namingPolicy": {
         "roleDisplayNameRequired": true,
         "businessSemanticNamesOnly": true,
+        "shortRoleNamesRequired": true,
         "runtimeNicknamesAreAliasesOnly": true,
         "forbiddenPrimaryNamePattern": "^[A-Z][a-z]+$",
-        "description": "User-visible agent names must describe business responsibility, e.g. frontend-home-page, database-schema, ux-flow-review. Host-generated personal nicknames such as Huygens or Mill may be recorded only as runtimeInstanceAlias."
+        "forbiddenScopedNamePattern": "[-_/\\\\:]",
+        "scopeDetailsBelongInInstanceFields": true,
+        "description": "User-visible agent names must be coarse business role-family names such as 前端, 后端, 测试, frontend, backend, test. Do not use scoped work-item names as roleDisplayName; put feature, page, installation, shard, or task detail in roleInstanceId, shardScope, assignedResponsibilitySlice, or task text. Host-generated personal nicknames such as Huygens or Mill may be recorded only as runtimeInstanceAlias."
+      },
+      "longTermCapabilityPolicy": {
+        "abstractCapabilitySlotsRequired": true,
+        "allowedMetaSkillProviders": [
+          "agent-teams-playbook",
+          "superpowers",
+          "ecc",
+          "findskill",
+          "meta-theory"
+        ],
+        "selectedSkillScope": "run_only",
+        "forbidConcreteSkillInLongTermAgentIdentity": true,
+        "forbiddenConcreteSkillPatterns": [
+          "superpowers/<concrete-skill>",
+          "gstack/<concrete-skill>",
+          "everything-claude-code:<concrete-skill>",
+          "fixed dependency child skill lists"
+        ],
+        "oversizedGovernanceAgentPolicy": {
+          "exceptionAllowed": true,
+          "exceptionRequiresReason": true,
+          "splitDocumentationAllowed": true,
+          "description": "A large governance agent may stay intact only when it owns a coherent governance boundary; otherwise split supporting detail into references while preserving the agent identity boundary."
+        }
       },
       "description": "Capability-first role blueprint. It separates businessRoleId, roleDisplayName, selected owner agent, assigned responsibility slice, owner responsibility delta, and per-run role instances so the same agent can run multiple named shards in parallel without confusing users. ownerResolution uses reuse_existing_owner, upgrade_existing_owner, or create_owner_first."
     },
@@ -1041,9 +1241,12 @@
         "workspaceIsolation",
         "artifactNamespace",
         "collisionPolicy",
-        "verifySteps"
+        "verifySteps",
+        "preDecisionOptionFrameRef",
+        "userChoiceState",
+        "finalizationGate"
       ],
-      "description": "派发给worker agent的执行任务包。三大编排核心字段：dependsOn（前置依赖，见dependencyContract）/ parallelGroup（并行分组）/ mergeOwner（合并负责人）。roleDisplayName 是用户可见业务角色名；runtimeInstanceAlias 只记录宿主临时昵称，不能替代业务名。verifySteps 提供原子级完成标准，用于 Verification 阶段的逐条检查。",
+      "description": "派发给worker agent的执行任务包。三大编排核心字段：dependsOn（前置依赖，见dependencyContract）/ parallelGroup（并行分组）/ mergeOwner（合并负责人）。roleDisplayName 是用户可见的短业务岗位名；runtimeInstanceAlias 只记录宿主临时昵称，不能替代业务名。verifySteps 提供原子级完成标准，用于 Verification 阶段的逐条检查。This packet may not finalize before userChoiceState records a user choice or an explicit auto-proceed / choiceGateSkip allowed by preDecisionOptionFrame.",
       "dependsOnField": {
         "type": "array",
         "items": {
@@ -1114,7 +1317,7 @@
           "sequentialize"
         ],
         "sameOwnerParallelGroupRequiresUnifiedMergeOwner": true,
-        "description": "同一个 ownerAgent 可以并行启动多个实例，但每个实例必须有业务可读 roleDisplayName、唯一 roleInstanceId、明确 shardKey / shardScope、workspaceIsolation、artifactNamespace、collisionPolicy 和统一 mergeOwner。同一 ownerAgent 的并行实例如果共享 parallelGroup，必须指向同一个 mergeOwner；没有这些字段或合并规则的重复 ownerAgent 是伪并行。"
+        "description": "同一个 ownerAgent 可以并行启动多个实例，但每个实例必须有短业务岗位 roleDisplayName、唯一 roleInstanceId、明确 shardKey / shardScope、workspaceIsolation、artifactNamespace、collisionPolicy 和统一 mergeOwner。同一 ownerAgent 的并行实例如果共享 parallelGroup，必须指向同一个 mergeOwner；没有这些字段或合并规则的重复 ownerAgent 是伪并行。"
       },
       "verifyStepsField": {
         "type": "array",
@@ -1147,9 +1350,13 @@
         "revisionNeeded",
         "sourceProjects",
         "crossProjectContaminationCheck",
+        "triggerVsSkipReasonCheck",
         "reviews",
         "findings"
       ],
+      "triggerVsSkipReasonCheck": {
+        "description": "Review must compare taskClassification.triggerReasons with any skipReason / choiceGateSkip. If decision triggers existed and no valid skip reason was recorded, Review fails."
+      },
       "crossProjectContaminationCheckEnum": [
         "pass",
         "fail"

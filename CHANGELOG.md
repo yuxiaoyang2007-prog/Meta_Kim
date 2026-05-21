@@ -6,11 +6,58 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.0.39] - 2026-05-20
+
+### Added
+
+- **Research capability preflight** — `contentEvidencePacket` now requires `researchCapabilityDiscovery` so evidence owners must prove current-runtime retrieval capabilities before deep research or user-facing option framing.
+- **Run artifact validation for research discovery** — `validate-run-artifact` now validates the research capability preflight and rejects missing discovery evidence.
+
+### Changed
+
+- **Capability-proof research routing** — Conductor, Artisan, Scout, and Prism now route research from observed retrieval capabilities (`web_search`, `url_fetch`, `docs_lookup`, MCP/plugin/search/user-supplied sources) instead of host form-factor assumptions.
+- **Runtime research fixtures** — Valid and invalid run artifacts now include explicit retrieval capability discovery evidence.
+
+### Fixed
+
+- **Platform-surface drift** — `platformSurface` is explicitly rejected as a research capability signal, preventing `desktop/cli/web/ide` guesses from driving cross-runtime search decisions.
+
+## [2.0.38] - 2026-05-20
+
+### Added
+
+- **Abstract meta-skill provider contract** — Meta agents now keep long-term access to `meta-theory`, `agent-teams-playbook`, `findskill`, `superpowers`, and `ecc` as fixed meta-skill provider packages while selecting concrete child skills only at runtime.
+- **Capability index inheritance tests** — Added setup coverage that locks the provider-package contract across the canonical capability index, schema, validator, and runtime mirrors.
+- **Release/install workflow lanes** — Added business-flow contract coverage for runtime package, install, and release lanes.
+
+### Changed
+
+- **Meta-agent capability slots** — Updated all 9 canonical meta agents to declare abstract long-term capability slots instead of permanent concrete child skill dependencies.
+- **Runtime capability discovery** — `discover:global` now regenerates the abstract slot, meta-skill provider, run-only skill selection, and long-term identity policy fields instead of dropping them on refresh.
+- **Graphify governance** — Strengthened graphify wiring checks so code graph freshness remains part of the verified release path.
+
+### Fixed
+
+- **Concrete skill persistence** — Prevents concrete selections such as provider child skills from being written into long-term meta-agent identity.
+- **Global sync drift** — Refreshed global meta-theory directory skills for Claude Code, Codex, OpenClaw, and Cursor so updated installs receive the current multi-file skill layout.
+
+## [2.0.37] - 2026-05-20
+
+### Changed
+
+- **Role-family display names** — Standardized user-visible worker labels at the role-family level and moved run-specific scope into structured instance and shard metadata.
+- **Run artifact fixtures** — Aligned sample artifacts with the role-family naming policy.
+
+### Fixed
+
+- **Postinstall on Node ESM** — Fixed `scripts/postinstall-check.mjs` so npm install no longer fails with `ReferenceError: require is not defined in ES module scope`.
+- **Postinstall coverage** — Added a setup test that runs the postinstall checker under Node to catch ESM/CommonJS regressions.
+
 ## [2.0.36] - 2026-05-20
 
 ### Added
 
-- **Business-flow blueprint gate** — Requires executable runs to plan product, UX, UI, frontend, backend, database, motion, QA, testing, release, feedback, and evolution lanes where relevant before dispatch.
+- **Business-flow blueprint gate** — Adds a pre-dispatch blueprint step that derives task-specific business lanes from the requested outcome and records coverage decisions.
 - **Business-readable agent roles** — Separates user-visible role names from runtime nicknames, and supports same-agent multi-instance sharding with explicit isolation, collision, and merge rules.
 - **Run artifact validation fixtures** — Added positive and negative fixtures for same-owner sharded execution and overlapping shard rejection.
 

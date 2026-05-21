@@ -21,9 +21,9 @@ Claude Code Hook system optimization tool. Enhances prompt quality and behavior 
 | Platform | Compatible | Notes |
 |----------|-----------|-------|
 | Claude Code | **Y** | Uses `.claude/hooks/` + `.claude/settings.json` |
-| Codex | **N** | No hooks system |
-| OpenClaw | **N** | No hooks system |
-| Cursor | **N** | No hooks system |
+| Codex | **Y, via adapter** | Meta_Kim adapts HookPrompt output into Codex `UserPromptSubmit` hooks |
+| OpenClaw | **N / degraded** | HookPrompt itself only implements Claude Code hook format; OpenClaw is skipped |
+| Cursor | **Y, via adapter** | Meta_Kim adapts HookPrompt output into Cursor `beforeSubmitPrompt` hooks |
 
 ## Distribution Configuration
 
@@ -35,20 +35,21 @@ Claude Code Hook system optimization tool. Enhances prompt quality and behavior 
 }
 ```
 
-**This is the only claude-only dependency** - correctly isolated via `targets: ["claude"]`.
+HookPrompt is native to Claude Code. Codex and Cursor are distributed through Meta_Kim adapters; OpenClaw remains skipped because HookPrompt does not publish an OpenClaw hook format.
 
 ## Install Method
 
-- **Claude Code only**: `git clone --depth 1`
-- Other platforms: automatically skipped by install script (target not in list)
-- Install log shows: `hookprompt - not applicable codex/openclaw/cursor`
+- **Claude Code**: native hook install through `git clone --depth 1`
+- **Codex**: adapter install into Codex `UserPromptSubmit`
+- **Cursor**: adapter install into Cursor `beforeSubmitPrompt`
+- **OpenClaw**: automatically skipped / degraded
 
 ## Special Notes
 
-- Depends on Claude Code's hook system (`PreToolUse`, `PostToolUse`, `Stop`)
+- Depends on Claude Code's hook system (`PreToolUse`, `PostToolUse`, `Stop`) for native use
 - Writes to `.claude/hooks/` directory and modifies `.claude/settings.json`
 - Part of the KimYx0207 skill ecosystem (same owner as Meta_Kim)
-- The `targets: ["claude"]` isolation is the correct pattern for platform-specific dependencies
+- Cross-runtime support is adapter-based for Codex and Cursor, not schema-compatible native reuse
 
 ## Data Source
 

@@ -2,6 +2,8 @@
 
 import process from "node:process";
 import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import {
   detectPython310,
   extractPipShowVersion,
@@ -29,6 +31,77 @@ function ensurePython({ requirePip = false } = {}) {
   return python;
 }
 
+function extractReportCommit(reportRaw) {
+  const match = reportRaw.match(/Built from commit:\s*`?([0-9a-f]{7,40})`?/i);
+  return match?.[1] ?? null;
+}
+
+function commitsMatch(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+  const a = left.toLowerCase();
+  const b = right.toLowerCase();
+  return a === b || a.startsWith(b) || b.startsWith(a);
+}
+
+function readCurrentHead(cwd) {
+  const result = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd,
+    encoding: "utf8",
+    shell: false,
+  });
+  if (result.status !== 0 || result.error) {
+    return null;
+  }
+  return readProcessText(result).split(/\r?\n/u)[0]?.trim() || null;
+}
+
+function checkGraphFreshness(cwd = process.cwd()) {
+  const reportPath = path.join(cwd, "graphify-out", "GRAPH_REPORT.md");
+  const graphPath = path.join(cwd, "graphify-out", "graph.json");
+
+  if (!existsSync(reportPath) || !existsSync(graphPath)) {
+    fail(
+      "graphify-out/GRAPH_REPORT.md and graphify-out/graph.json are required; run npm run meta:graphify:rebuild",
+    );
+    return false;
+  }
+
+  let graph;
+  try {
+    graph = JSON.parse(readFileSync(graphPath, "utf8"));
+  } catch (error) {
+    fail(`graphify-out/graph.json is not valid JSON: ${error.message}`);
+    return false;
+  }
+
+  const reportRaw = readFileSync(reportPath, "utf8");
+  const builtCommit = graph.built_at_commit ?? extractReportCommit(reportRaw);
+  if (!builtCommit) {
+    fail(
+      "GRAPH_REPORT.md is missing graph freshness commit metadata; run npm run meta:graphify:rebuild",
+    );
+    return false;
+  }
+
+  const currentHead = readCurrentHead(cwd);
+  if (!currentHead) {
+    fail("Unable to read current git HEAD for graphify freshness check");
+    return false;
+  }
+
+  if (!commitsMatch(String(builtCommit), currentHead)) {
+    fail(
+      `GRAPH_REPORT.md is stale: built from ${String(builtCommit).slice(0, 12)}, current HEAD is ${currentHead.slice(0, 12)}. Run npm run meta:graphify:rebuild.`,
+    );
+    return false;
+  }
+
+  console.log(`graphify graph matches HEAD ${currentHead.slice(0, 8)}`);
+  return true;
+}
+
 function runCheck() {
   const python = ensurePython({ requirePip: true });
   if (!python) {
@@ -45,6 +118,7 @@ function runCheck() {
 
   const version = extractPipShowVersion(readProcessText(pipShow)) ?? "unknown";
   console.log(`graphify ${version}`);
+  checkGraphFreshness();
 }
 
 function installGraphify({ upgrade = false } = {}) {

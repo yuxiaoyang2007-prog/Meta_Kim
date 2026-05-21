@@ -73,7 +73,7 @@ After global install (`node setup.mjs` or `npx`), what works where:
 |---|---|---|
 | Meta_Kim repo with Claude Code | Full governance via CLAUDE.md (8-stage spine, gates, dispatch rules) | — |
 | Any other project with Claude Code | Hooks (safety, format, memory save) + `/meta-theory` skill | Say "run meta theory" or type `/meta-theory` |
-| Codex | AGENTS.md rules + 8 custom agents + `/meta-theory` command | Type "run meta theory" or `/meta-theory` |
+| Codex | AGENTS.md rules + 9 custom agents + `/meta-theory` command | Type "run meta theory" or `/meta-theory` |
 | OpenClaw | Workspace agents + Plugin SDK hooks (28 events) | Requires `auth.json` configured |
 | Cursor | Agent projections + skill mirrors + hooks + MCP | Lightweight; mainly read + review |
 
@@ -719,7 +719,8 @@ The three memory layers work together toward two core goals:
 | Command | Purpose |
 | --- | --- |
 | `node setup.mjs` | Interactive install / update / check wizard |
-| `node setup.mjs --update` | Update all skills and dependencies |
+| `git pull --ff-only` | For clone installs, pull the latest Meta_Kim source from GitHub |
+| `node setup.mjs --update` | Refresh the current installation projections, skills, and dependencies; it does not pull Meta_Kim source code |
 | `node setup.mjs --check` | Environment check without writing |
 | `node setup.mjs --lang zh-CN` | Force the Chinese UI |
 

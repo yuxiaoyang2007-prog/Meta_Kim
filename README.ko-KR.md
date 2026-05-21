@@ -110,7 +110,7 @@ Meta_Kim의 방법론은 본 프로젝트 메인테이너(KimYx0207)가 작성�
 | --- | --- | --- |
 | **보이지 않는 골격** | 표면 아래 항상 존재하는 백엔드 프레임워크 노드 | 미리 정해진 책임 목록 |
 | **8단계 흐름** | 골격이 실행 단계에서 드러나는 읽기 쉬운 주 체인 | 거버넌스 논리 전체 |
-| **10단계 흐름** | 8단계 위에 덧붙는 더 복잡한 진행 방식 | 8단계의 대체물 |
+| **11단계 비즈니스 워크플로** | 8단계 위에 덧붙는 더 복잡한 run 포장 진행 방식 | 8단계의 대체물 |
 | **카드 발행** | 8단계와 agent 단위를 중심으로 한 동적 제어 | 단순 작업 배분 |
 | **문(Gate)** | 통과/실패 조건 | 단계 자체 |
 | **계약(Contract)** | 각 노드가 반드시 생성해야 하는 구조화된 산출물 | 구호나 추상적 가치 |
@@ -183,18 +183,18 @@ flowchart LR
 
 왜 "상대적으로" 고정되어 있을까요? 간단한 경우에는 일부 단계를 건너뛸 수 있지만, 시스템은 건너뛴 이유를 명시적으로 기록해야 합니다. 아무것도 조용히 건너뛰지 않습니다.
 
-### 10단계 = 골격 위에 구축된 진행 워크플로
+### 11단계 비즈니스 워크플로 = 골격 위에 구축된 진행 워크플로
 
-8단계가 골격이라면, 10단계는 그 위에 자라난 **더 복잡한 진행 방식**입니다:
+8단계가 골격이라면, 11단계 비즈니스 워크플로는 그 위에 자라난 **더 복잡한 run 포장 진행 방식**입니다:
 
 ```text
-direction → planning → execution → review → meta_review → revision → verify → summary → feedback → evolve
+direction → planning → execution → review → meta_review → revision → verify → summary → feedback → evolve → mirror
 ```
 
 별도의 시스템이 아닙니다. 8단계 골격에서 파생되었습니다. 차이점은:
 
 - **8단계**는 실행 논리에 집중 — "작업을 어떤 순서로 할 것인가"
-- **10단계**는 거버넌스에 집중 — "각 단계가 무엇을 전달해야 하고 완료는 어떻게 정의되는가"
+- **11단계**는 비즈니스 거버넌스에 집중 — "각 단계가 무엇을 전달해야 하고, 완료는 어떻게 정의되며, 언제 runtime mirror를 갱신해야 하는가"
 
 ```mermaid
 flowchart TB
@@ -203,9 +203,9 @@ flowchart TB
         C1[Critical] --> F1[Fetch] --> T1[Thinking] --> E1[Execution] --> R1[Review] --> MR1[Meta-Review] --> V1[Verification] --> EV1[Evolution]
     end
 
-    subgraph workflow["10단계 흐름 (진행 워크플로)"]
+    subgraph workflow["11단계 비즈니스 워크플로"]
         direction LR
-        D2[direction] --> P2[planning] --> EX2[execution] --> RE2[review] --> MET2[meta_review] --> REV2[revision] --> VER2[verify] --> SUM2[summary] --> FB2[feedback] --> EVO2[evolve]
+        D2[direction] --> P2[planning] --> EX2[execution] --> RE2[review] --> MET2[meta_review] --> REV2[revision] --> VER2[verify] --> SUM2[summary] --> FB2[feedback] --> EVO2[evolve] --> MIR2[mirror]
     end
 
     C1 -.-> D2
@@ -221,7 +221,7 @@ flowchart TB
     style workflow fill:#14532d,stroke:#22c55e,color:#dcfce7
 ```
 
-10단계는 `revision`, `summary`, `feedback`을 추가하여, 단순히 "끝내는 것"을 넘어 제대로 끝내고 루프를 올바르게 닫도록 합니다.
+11단계 비즈니스 워크플로는 `revision`, `summary`, `feedback`, `mirror`를 추가하여, 단순히 "끝내는 것"을 넘어 제대로 끝내고 루프를 닫으며 runtime projection을 최신 상태로 맞추도록 합니다.
 
 ### 계약 = 각 노드가 전달해야 하는 것
 
@@ -399,7 +399,7 @@ flowchart TD
 
 ### Agent 경계 + 스킬 통합
 
-8개 메타 역할은 각각 다른 도메인을 담당합니다:
+9개 메타 역할은 각각 다른 도메인을 담당합니다:
 
 | 역할 | 책임 | 담당하지 않는 것 |
 | --- | --- | --- |
@@ -411,6 +411,7 @@ flowchart TD
 | **meta-librarian** | 기억 및 연속성 | 코드를 실행하지 않음 |
 | **meta-prism** | 품질 검토 및 안티슬롭 | 역량을 검색하지 않음 |
 | **meta-scout** | 외부 역량 발견 | 내부 조정을 하지 않음 |
+| **meta-chrysalis** | 진화 쓰기, scar 기록, 재귀 안전 게이트 | 자기 자신을 진화시키거나 Warden gate를 우회하지 않음 |
 
 각 agent는 필요에 따라 강력한 **스킬**과 **명령**을 로드할 수 있습니다. Meta_Kim은 9개의 커뮤니티 스킬을 기본 제공하며 사용자 정의 확장을 지원합니다.
 
@@ -423,6 +424,7 @@ flowchart TD
     WARDEN --> LIBRARIAN[meta-librarian<br/>기억 / 연속성]
     WARDEN --> PRISM[meta-prism<br/>품질 검토]
     WARDEN --> SCOUT[meta-scout<br/>외부 역량 발견]
+    WARDEN --> CHRYSALIS[meta-chrysalis<br/>진화 쓰기]
 
     GENESIS -.-> |SOUL.md| ARTISAN
     ARTISAN -.-> |스킬 로드아웃| GENESIS
@@ -501,7 +503,7 @@ flowchart TB
 | 역량 표면 | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
 | **Agent** | 네이티브 agents/subagents, 프로젝트 및 사용자 범위 모두 성숙 | 강력한 custom agents/subagents | 워크스페이스형 agent, agent-to-agent 지원 | 경량 agent 투영 |
-| **스킬 / 참조** | 네이티브 스킬, 참조, 성숙한 글로벌 생태계 | `.agents/skills/` 잘 작동 | 워크스페이스 스킬 + 설치 가능 스킬 | 가벼운 스킬/참조 지원 |
+| **스킬 / 참조** | 네이티브 스킬, 참조, 성숙한 글로벌 생태계 | `.codex/skills/` 잘 작동 | 워크스페이스 스킬 + 설치 가능 스킬 | `.cursor/skills/` 기반의 가벼운 스킬/참조 지원 |
 | **Hook / 자동화** | 프로젝트 hook + settings.json + 플러그인 생태계 | 저장소 수준 네이티브 hook 파일 표면 없음 | 워크스페이스 boot/hook 스타일 역량 | 가장 약한 네이티브 거버넌스 hook |
 | **MCP / 설정** | 완전한 네이티브 MCP 및 설정 표면 | 런타임 어댑터와 MCP로 연결 가능 | 명확한 워크스페이스 설정 | MCP 사용 가능하지만 표면이 가벼움 |
 | **거버넌스 루프 수용력** | **가장 높음** | 높지만 Claude Code보다는 낮음 | 높지만 형태가 다름 | 가장 가벼움 |
@@ -513,7 +515,7 @@ flowchart TB
 | 레이어 | 위치 | 목적 |
 | --- | --- | --- |
 | **Canonical 소스** | `canonical/`, `config/contracts/workflow-contract.json` | 장기 편집 우선 위치 |
-| **런타임 투영** | `.claude/`, `.codex/`, `.agents/skills/`, `openclaw/`, `.cursor/` | 같은 역량을 다른 런타임에 투영 |
+| **런타임 투영** | `.claude/`, `.codex/`, `openclaw/`, `.cursor/` | 같은 역량을 다른 런타임에 투영 |
 | **로컬 상태** | `.meta-kim/state/{profile}/`, `.meta-kim/local.overrides.json` | 프로필 수준 상태, run 인덱스, 연속성 |
 | **스크립트 및 검사** | `scripts/`, `npm run *` | 동기화, 검증, 발견, 수락 |
 
@@ -616,13 +618,13 @@ Meta_Kim은 단일 기억 레이어를 사용하지 않습니다. 세 가지 다
 
 | 기능 | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
-| PreToolUse hook（Glob/Grep 전 자동 프롬프트） | ✅ settings.json | ❌ | ❌ | ❌ |
+| PreToolUse hook (Glob/Grep 전 자동 프롬프트) | ✅ settings.json | ✅ trusted `.codex/hooks.json` | ❌ | ✅ `.cursor/hooks.json` `preToolUse` |
 | 슬래시 명령 `/graphify` | ✅ | ✅ | ✅ | ✅ |
 | git hook 자동 재구축（post-commit/checkout） | ✅ | ✅ | ✅ | ✅ |
 | AGENTS.md 상주 규칙 | N/A | ✅ | ✅ | ✅ |
 | setup.mjs 멀티플랫폼 설치 | ✅ claude | ✅ codex | ✅ claw | ✅ cursor |
 
-**핵심 인사이트**: Claude Code는 **PreToolUse hook**을 갖춘 유일한 플랫폼으로, Glob/Grep 검색 전에 자동으로 프롬프트를 표시합니다. 다른 플랫폼(Codex, OpenClaw, Cursor)은 세션 시작 시 주입되는 **AGENTS.md** 규칙을 사용합니다 — 그래프 인식은 여전히 존재하지만 트리거 시점은 검색 시가 아닌 세션 시작 시입니다. 두 메커니즘 모두 설치 후 자동화됩니다.
+**핵심 인사이트**: Claude Code, Codex, Cursor는 모두 native hook 설정을 갖지만 schema가 서로 다릅니다. OpenClaw는 자체 internal/plugin hook model을 사용합니다. graph awareness는 `AGENTS.md`와 synced `meta-theory` reference로도 유지되므로, native hook이 없는 경우에는 명시적으로 degraded mode로 다룹니다.
 
 멀티플랫폼 설치는 `node setup.mjs`를 실행하세요 — 선택한 모든 플랫폼을 순회하며 각 플랫폼에 대해 `graphify <platform> install`을 멱등 실행합니다.
 
@@ -696,7 +698,8 @@ flowchart TB
 | 명령 | 목적 |
 | --- | --- |
 | `node setup.mjs` | 대화형 설치/업데이트/점검 마법사 |
-| `node setup.mjs --update` | 모든 스킬과 의존성 업데이트 |
+| `git pull --ff-only` | clone 설치 사용자가 GitHub에서 최신 Meta_Kim 소스 코드를 가져옴 |
+| `node setup.mjs --update` | 현재 설치된 투영, 스킬, 의존성을 새로 고침. Meta_Kim 소스 코드는 가져오지 않음 |
 | `node setup.mjs --check` | 환경 점검 (디스크에 쓰지 않음) |
 | `node setup.mjs --lang ko-KR` | 한국어 인터페이스 지정 |
 
@@ -769,9 +772,9 @@ Meta_Kim은 3 곳에 기록합니다:
 
 **아닙니다.** Meta_Kim은 다중 파일, 다중 모듈, 다양한 역량 협업이 필요한 복잡한 작업을 해결합니다. 하나의 파일에서 하나의 함수만 수정한다면 Claude Code만으로 충분합니다.
 
-### 8단계와 10단계의 관계는 무엇인가요?
+### 8단계와 11단계 비즈니스 워크플로의 관계는 무엇인가요?
 
-8단계는 **실행 골격**(Critical → Fetch → Thinking → Execution → Review → Meta-Review → Verification → Evolution)으로 상대적으로 고정되어 있습니다. 10단계는 골격에서 **파생된 비즈니스 워크플로**(direction → planning → execution → review → meta_review → revision → verify → summary → feedback → evolve)로, 산출물 전달과 루프 닫기에 더 중점을 둡니다. 10단계는 8단계를 대체하는 것이 아니라 그 위에 진행 거버넌스의 복잡성을 추가합니다.
+8단계는 **실행 골격**(Critical → Fetch → Thinking → Execution → Review → Meta-Review → Verification → Evolution)으로 상대적으로 고정되어 있습니다. 11단계는 골격에서 **파생된 비즈니스 워크플로**(direction → planning → execution → review → meta_review → revision → verify → summary → feedback → evolve → mirror)로, 산출물 전달, 루프 닫기, runtime mirror 갱신에 더 중점을 둡니다. 11단계는 8단계를 대체하는 것이 아니라 그 위에 진행 거버넌스의 복잡성을 추가합니다.
 
 ### 동적 카드 발행은 무슨 뜻인가요?
 

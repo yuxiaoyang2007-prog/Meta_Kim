@@ -49,7 +49,7 @@
 
 | 路径 | 作用 |
 | --- | --- |
-| `canonical/agents/*.md` | 8 个 meta agent 的长期主源 |
+| `canonical/agents/*.md` | 9 个 meta agent 的长期主源 |
 | `canonical/skills/meta-theory/SKILL.md` | `meta-theory` skill 的长期主源 |
 | `canonical/skills/meta-theory/references/*.md` | meta-theory 的模型可读参考材料主源 |
 | `canonical/runtime-assets/*` | 各运行时配置、hook、命令、模板的主源素材 |
@@ -72,7 +72,7 @@
 
 | 路径 | 作用 |
 | --- | --- |
-| `.codex/agents/*.toml` | Codex custom-agent 投影，和 8 个 meta agent 对应 |
+| `.codex/agents/*.toml` | Codex custom-agent 投影，和 9 个 meta agent 对应 |
 | `.codex/skills/meta-theory/SKILL.md` | Codex 兼容 skill 镜像 |
 | `.codex/skills/meta-theory/references/*` | Codex 兼容 reference 镜像 |
 | `.codex/commands/meta-theory.md` | Codex slash command 投影 |
@@ -96,7 +96,7 @@
 | `openclaw/openclaw.template.json` | OpenClaw 通用配置模板，来自 canonical runtime assets |
 | `openclaw/openclaw.local.json` | 当前机器的本地 OpenClaw 配置；不要当作跨机器主源 |
 | `openclaw/skills/meta-theory/` | OpenClaw installable skill 镜像 |
-| `openclaw/workspaces/*` | 8 个 meta agent 的 OpenClaw workspace 投影 |
+| `openclaw/workspaces/*` | 9 个 meta agent 的 OpenClaw workspace 投影 |
 | `openclaw/capability-index/` | OpenClaw 能力索引镜像 |
 
 每个 `openclaw/workspaces/<agent>/` 通常包含：

@@ -2,9 +2,11 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   SKILL_PATH,
+  AGENTS_DIR,
   REFERENCE_DIR,
   ALL_AGENTS,
   ALL_TYPES,
+  EIGHT_STAGES,
   REFERENCE_FILES,
   parseFrontmatter,
   readFile,
@@ -34,6 +36,21 @@ function parseScalarFrontmatter(raw) {
     }
   }
   return data;
+}
+
+function extractSecondLevelSection(markdown, heading) {
+  const startToken = `## ${heading}`;
+  const start = markdown.indexOf(startToken);
+  if (start === -1) return null;
+
+  const bodyStart = markdown.indexOf("\n", start);
+  if (bodyStart === -1) return "";
+
+  const rest = markdown.slice(bodyStart + 1);
+  const nextHeading = rest.search(/\r?\n##[ \t]+/);
+  const section =
+    nextHeading === -1 ? rest : rest.slice(0, nextHeading);
+  return section.trim();
 }
 
 let raw;
@@ -195,5 +212,155 @@ describe("SKILL.md structural integrity", async () => {
       const exists = await fileExists("config/contracts/scar-protocol.md");
       assert.ok(exists, "config/contracts/scar-protocol.md must exist");
     });
+  });
+});
+
+describe("Canonical meta-agent boundary structure", () => {
+  const longTermProviders = [
+    "meta-theory",
+    "agent-teams-playbook",
+    "findskill",
+    "superpowers",
+    "ecc",
+  ];
+
+  for (const agent of ALL_AGENTS) {
+    test(`${agent} declares the unified 8-stage position matrix`, async () => {
+      const rawAgent = await readFile(`canonical/agents/${agent}.md`);
+      const matrix = extractSecondLevelSection(
+        rawAgent,
+        "8-Stage Position Matrix",
+      );
+
+      assert.ok(matrix, `${agent} must contain ## 8-Stage Position Matrix`);
+
+      for (const field of [
+        "Primary stage",
+        "Conditional stages",
+        "Must not execute in",
+        "Handoff owner",
+      ]) {
+        assert.ok(matrix.includes(field), `${agent} matrix missing ${field}`);
+      }
+
+      assert.ok(
+        EIGHT_STAGES.some((stage) => matrix.includes(stage)),
+        `${agent} matrix must reference at least one canonical 8-stage label`,
+      );
+    });
+
+  }
+
+  test("Long-term capability policy uses abstract slots and run-only concrete skill selection", async () => {
+    const contract = await readJson("config/contracts/workflow-contract.json");
+    const index = await readJson("config/capability-index/meta-kim-capabilities.json");
+    const policy =
+      contract.protocols?.agentBlueprintPacket?.longTermCapabilityPolicy ?? {};
+
+    assert.equal(policy.abstractCapabilitySlotsRequired, true);
+    assert.equal(policy.forbidConcreteSkillInLongTermAgentIdentity, true);
+    assert.equal(policy.selectedSkillScope, "run_only");
+    assert.equal(index.runtimeSelectedSkills?.selectedSkillScope, "run_only");
+    assert.ok(Array.isArray(index.abstractCapabilitySlots));
+    assert.ok(index.abstractCapabilitySlots.length >= 1);
+
+    for (const provider of longTermProviders) {
+      assert.ok(
+        policy.allowedMetaSkillProviders?.includes(provider),
+        `workflow contract must allow provider package ${provider}`,
+      );
+      assert.equal(
+        index.metaSkillProviders?.[provider]?.allowedForLongTermAgentIdentity,
+        true,
+        `capability index must allow provider package ${provider}`,
+      );
+    }
+  });
+
+  test("Long-term identity policy rejects concrete child skills while allowing provider packages", async () => {
+    const index = await readJson("config/capability-index/meta-kim-capabilities.json");
+    const forbiddenConcreteBindings = [
+      /superpowers\/[a-z0-9_-]+/i,
+      /gstack\/[a-z0-9_-]+/i,
+      /everything-claude-code:[a-z0-9_-]+/i,
+    ];
+    const allowedProviderIdentity =
+      "Allowed meta-skill package providers: meta-theory, agent-teams-playbook, findskill, superpowers, ecc";
+    const fixedConcreteIdentity =
+      "Dependency Skill Invocations: superpowers/test-driven-development, gstack/qa, everything-claude-code:code-reviewer";
+
+    for (const provider of longTermProviders) {
+      assert.ok(
+        allowedProviderIdentity.includes(provider),
+        `provider package ${provider} should be allowed in long-term identity`,
+      );
+    }
+    for (const pattern of forbiddenConcreteBindings) {
+      assert.ok(
+        !pattern.test(allowedProviderIdentity),
+        `provider-only identity must not match concrete child-skill pattern ${pattern}`,
+      );
+      assert.ok(
+        pattern.test(fixedConcreteIdentity),
+        `concrete child-skill identity must be rejected by ${pattern}`,
+      );
+    }
+    assert.equal(
+      index.longTermAgentIdentityPolicy?.forbidConcreteSkillInLongTermAgentIdentity,
+      true,
+    );
+  });
+
+  test("Warden boundary uses decision/arbitration language, not Prism review language", async () => {
+    const warden = await readFile("canonical/agents/meta-warden.md");
+    assert.ok(
+      warden.includes("Quality Gate decision / arbitration"),
+      "meta-warden must own Quality Gate decision / arbitration",
+    );
+    assert.ok(
+      !warden.includes("Quality Gate review"),
+      "meta-warden must not claim Quality Gate review",
+    );
+  });
+
+  test("Conductor assigns dispatch board schema validation without taking Stage 7 ownership", async () => {
+    const conductor = await readFile("canonical/agents/meta-conductor.md");
+    assert.ok(
+      conductor.includes("dispatch board schema validation"),
+      "meta-conductor must assign dispatch board schema validation",
+    );
+    assert.ok(
+      conductor.includes("Stage 7 Verification owner remains `meta-warden + meta-prism`"),
+      "meta-conductor must preserve Warden + Prism as Stage 7 Verification owner",
+    );
+    assert.ok(
+      !conductor.includes("| **Verification Owner** | `npm run meta:validate` |"),
+      "meta-conductor must not name npm run meta:validate as the Verification Owner",
+    );
+  });
+
+  test("Evolution writeback authority is uniform across canonical agents", async () => {
+    const files = await fs.readdir(AGENTS_DIR);
+    const agentFiles = files.filter((file) => file.endsWith(".md"));
+    const bad = [];
+
+    for (const file of agentFiles) {
+      const rawAgent = await readFile(`canonical/agents/${file}`);
+      if (
+        rawAgent.includes("write back directly to this agent") ||
+        rawAgent.includes("directly to canonical") ||
+        rawAgent.includes("直接写back")
+      ) {
+        bad.push(file);
+      }
+      assert.ok(
+        rawAgent.includes(
+          "Warden approves; Chrysalis coordinates; target specialist performs writeback",
+        ),
+        `${file} must state the uniform evolution writeback authority`,
+      );
+    }
+
+    assert.deepEqual(bad, [], `Direct-writeback wording remains in: ${bad.join(", ")}`);
   });
 });

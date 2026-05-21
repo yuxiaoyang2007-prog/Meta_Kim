@@ -20,7 +20,7 @@
   ],
   "canonicalRoots": {
     "agents": "canonical/agents",
-    "skills": "canonical/skills/meta-theory",
+    "skills": "canonical/skills",
     "runtimeAssets": "canonical/runtime-assets",
     "contracts": "config/contracts",
     "capabilityIndex": "config/capability-index"

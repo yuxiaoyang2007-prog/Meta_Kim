@@ -3769,6 +3769,22 @@ async function installPythonTools(activeTargets, inUpdateMode = false) {
       warn(t.graphifySkillFailed(platform));
     }
   }
+
+  const rebuildResult = runPythonModule(
+    python,
+    ["-m", "graphify", "update", "."],
+    undefined,
+    { cwd: PROJECT_DIR, stdio: "pipe" },
+  );
+  if (rebuildResult.status === 0) {
+    ok("graphify code graph generated");
+  } else {
+    warn("graphify code graph generation failed (non-blocking)");
+    const rebuildOutput = readProcessText(rebuildResult);
+    if (rebuildOutput) {
+      console.log(`${C.dim}${rebuildOutput}${C.reset}`);
+    }
+  }
 }
 
 // ── Step 4.6: Optional MCP Memory Service (Layer 3) ─────
@@ -4538,6 +4554,7 @@ async function validate() {
     process.execPath,
     PROJECT_DIR,
     "scripts/validate-project.mjs",
+    ["--context", "install"],
   );
   const validateResult = spawnSync(
     validateSpawn.command,

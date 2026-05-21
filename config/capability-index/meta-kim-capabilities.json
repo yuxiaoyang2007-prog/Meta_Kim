@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-19T23:22:23.882Z",
+  "generatedAt": "2026-05-20T14:46:12.591Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -24,6 +24,76 @@
     "totalPlugins": 0,
     "totalCommands": 0
   },
+  "abstractCapabilitySlots": [
+    {
+      "slotId": "run-scoped-meta-skill-selection",
+      "description": "Abstract slot for selecting concrete child skills at runtime Fetch without binding them into long-term meta-agent identity.",
+      "allowedProviderIds": [
+        "meta-theory",
+        "agent-teams-playbook",
+        "superpowers",
+        "ecc",
+        "findskill"
+      ],
+      "selectedSkillScope": "run_only"
+    }
+  ],
+  "metaSkillProviders": {
+    "meta-theory": {
+      "id": "meta-theory",
+      "providerKind": "meta-skill-package",
+      "allowedForLongTermAgentIdentity": true,
+      "concreteSubSkillBindingForbidden": true,
+      "notes": "May be referenced as a long-term provider package; concrete child skills are selected per run during Fetch."
+    },
+    "agent-teams-playbook": {
+      "id": "agent-teams-playbook",
+      "providerKind": "meta-skill-package",
+      "allowedForLongTermAgentIdentity": true,
+      "concreteSubSkillBindingForbidden": true,
+      "notes": "May be referenced as a long-term provider package; concrete child skills are selected per run during Fetch."
+    },
+    "superpowers": {
+      "id": "superpowers",
+      "providerKind": "meta-skill-package",
+      "allowedForLongTermAgentIdentity": true,
+      "concreteSubSkillBindingForbidden": true,
+      "notes": "May be referenced as a long-term provider package; concrete child skills are selected per run during Fetch."
+    },
+    "ecc": {
+      "id": "ecc",
+      "providerKind": "meta-skill-package",
+      "allowedForLongTermAgentIdentity": true,
+      "concreteSubSkillBindingForbidden": true,
+      "notes": "May be referenced as a long-term provider package; concrete child skills are selected per run during Fetch."
+    },
+    "findskill": {
+      "id": "findskill",
+      "providerKind": "meta-skill-package",
+      "allowedForLongTermAgentIdentity": true,
+      "concreteSubSkillBindingForbidden": true,
+      "notes": "May be referenced as a long-term provider package; concrete child skills are selected per run during Fetch."
+    }
+  },
+  "runtimeSelectedSkills": {
+    "selectedSkillScope": "run_only",
+    "persistencePolicy": "Runtime-selected concrete skills are scoped to the current run and must not be persisted into long-term agent identity."
+  },
+  "longTermAgentIdentityPolicy": {
+    "forbidConcreteSkillInLongTermAgentIdentity": true,
+    "allowedMetaSkillProviderIds": [
+      "meta-theory",
+      "agent-teams-playbook",
+      "superpowers",
+      "ecc",
+      "findskill"
+    ],
+    "forbiddenConcreteSkillPatterns": [
+      "provider/*",
+      "provider:child-skill",
+      "runtime-specific child skill id"
+    ]
+  },
   "byCapabilityType": {
     "agents": {
       "repo:canonical:meta-artisan": {
@@ -31,8 +101,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-artisan.md",
-        "size": 14608,
-        "modified": "2026-05-19T17:56:29.934Z",
+        "size": 15473,
+        "modified": "2026-05-20T14:34:14.560Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -41,8 +111,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-chrysalis.md",
-        "size": 25733,
-        "modified": "2026-05-19T17:56:31.652Z",
+        "size": 27439,
+        "modified": "2026-05-20T07:45:32.891Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -51,8 +121,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-conductor.md",
-        "size": 44805,
-        "modified": "2026-05-19T22:57:32.199Z",
+        "size": 49293,
+        "modified": "2026-05-20T14:33:45.456Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -61,8 +131,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-genesis.md",
-        "size": 17984,
-        "modified": "2026-05-19T17:56:29.533Z",
+        "size": 19035,
+        "modified": "2026-05-20T07:39:30.778Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -71,8 +141,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-librarian.md",
-        "size": 18851,
-        "modified": "2026-05-19T17:56:30.781Z",
+        "size": 19143,
+        "modified": "2026-05-20T07:45:32.890Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -81,8 +151,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-prism.md",
-        "size": 24490,
-        "modified": "2026-05-19T17:56:11.443Z",
+        "size": 27035,
+        "modified": "2026-05-20T14:34:03.221Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -91,8 +161,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-scout.md",
-        "size": 16549,
-        "modified": "2026-05-19T17:56:31.220Z",
+        "size": 16867,
+        "modified": "2026-05-20T14:34:25.193Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -101,8 +171,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-sentinel.md",
-        "size": 16464,
-        "modified": "2026-05-19T17:56:30.332Z",
+        "size": 17777,
+        "modified": "2026-05-20T07:42:32.382Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -111,8 +181,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-warden.md",
-        "size": 30094,
-        "modified": "2026-05-19T17:56:11.050Z",
+        "size": 31594,
+        "modified": "2026-05-20T07:38:45.962Z",
         "layer": "meta",
         "executionBlock": true
       }
@@ -123,8 +193,8 @@
         "type": "skills",
         "namespace": "canonical",
         "path": "canonical/skills/meta-theory/SKILL.md",
-        "size": 41943,
-        "modified": "2026-05-19T22:58:25.638Z"
+        "size": 46105,
+        "modified": "2026-05-20T14:34:42.954Z"
       },
       "repo:canonical-reference:create-agent": {
         "id": "create-agent",
@@ -132,8 +202,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/create-agent.md",
         "relativePath": "create-agent.md",
-        "size": 13282,
-        "modified": "2026-04-13T13:35:56.023Z"
+        "size": 16716,
+        "modified": "2026-05-20T07:37:50.939Z"
       },
       "repo:canonical-reference:dev-governance": {
         "id": "dev-governance",
@@ -141,8 +211,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/dev-governance.md",
         "relativePath": "dev-governance.md",
-        "size": 78470,
-        "modified": "2026-05-19T23:03:36.978Z"
+        "size": 96880,
+        "modified": "2026-05-20T14:35:25.424Z"
       },
       "repo:canonical-reference:intent-amplification": {
         "id": "intent-amplification",
@@ -159,8 +229,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/meta-theory.md",
         "relativePath": "meta-theory.md",
-        "size": 16458,
-        "modified": "2026-04-13T13:35:56.024Z"
+        "size": 17586,
+        "modified": "2026-05-20T07:36:52.209Z"
       },
       "repo:canonical-reference:rhythm-orchestration": {
         "id": "rhythm-orchestration",
@@ -177,8 +247,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/ten-step-governance.md",
         "relativePath": "ten-step-governance.md",
-        "size": 9212,
-        "modified": "2026-04-30T04:49:35.460Z"
+        "size": 10359,
+        "modified": "2026-05-20T07:37:03.841Z"
       }
     },
     "hooks": {
