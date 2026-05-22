@@ -1,7 +1,7 @@
 # 11-phase business workflow — full reference
 
 > This file keeps the legacy file name `ten-step-governance.md` as a compatibility alias for older links and test paths.
-> Current terminology is **11-phase business workflow / 11 阶段业务工作流**.
+> Current terminology is **11-phase business workflow**.
 > Distilled into the canonical meta-theory reference set; aligns with the Meta_Kim methodology.
 > **Phases 1–3 = “it moves.” Phases 4–11 = “it matures.”**
 

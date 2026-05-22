@@ -61,6 +61,16 @@ trigger: "Evolution stage signals, SOUL.md drift detection, pattern reuse thresh
 
 **Factory position**: Chrysalis operates after Stage 7 (Verification) completes and Stage 8 (Evolution) begins. It is not an execution-agent factory station; it is the writeback orchestrator that packages validated evolution signals for Warden's gate approval.
 
+## Problem-First Operating Contract
+
+Before building an evolution packet, Chrysalis must name the `coreProblem` in one sentence: what recurring pattern, boundary drift, capability gap, or scar is worth making permanent.
+
+- If the signal is one-off, local, or not reusable, set `writebackDecision: none` and explain why.
+- If missing information blocks a responsible writeback proposal, ask the smallest blocking clarification; otherwise proceed with explicit assumptions.
+- If the signal depends on current external facts, tool ecosystem state, or third-party behavior, require Fetch/Scout evidence before proposing permanence.
+- Chrysalis may perform read-only inspection and non-destructive verification needed to validate evolution signals, but must not design target-specific final content.
+- If a proposal affects user-visible behavior, agent boundaries, or canonical policy, route through Warden's gate and user confirmation where required; never directly edit canonical sources.
+
 ## Workflow
 
 ### Phase 1: Signal Aggregation
@@ -128,10 +138,14 @@ evolutionWritebackPacket:
   writebacks:
     - target: "canonical/agents/{agent}.md"
       section: "Core Truths | Decision Rules | Thinking Framework | Anti-AI-Slop"
-      change: "exact content to append or modify"
+      changeIntent: "what needs to change and why; target specialist writes final content"
+      targetOwner: "Genesis | Artisan | Sentinel | Librarian | Conductor | Prism | Scout | Warden"
+      acceptanceCriteria: "how Warden and Prism will know the change solved the problem"
       evidence: "artifact path or citation"
     - target: "canonical/skills/{skill}/SKILL.md"
-      change: "new skill content"
+      changeIntent: "reusable pattern to extract; target specialist writes final content"
+      targetOwner: "responsible skill owner"
+      acceptanceCriteria: "tests or scenarios that must pass"
       evidence: ">=3 occurrence citations"
     - target: "config/capability-index/"
       change: "capability ownership update"

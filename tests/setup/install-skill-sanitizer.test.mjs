@@ -7,6 +7,7 @@ import { promises as fs } from "node:fs";
 import {
   CODEX_SKILL_DESCRIPTION_MAX_CHARS,
   detectLegacySubdirInstall,
+  detectPluginBundleSkillResidue,
   getSkillDescriptionLength,
   sanitizeInstalledSkillTree,
   shouldSkipBundledRuntimePath,
@@ -129,6 +130,47 @@ describe("legacy subdir detection", () => {
     });
 
     assert.equal(await detectLegacySubdirInstall(targetDir, "skills"), false);
+  });
+});
+
+describe("plugin bundle residue detection", () => {
+  test("detects full cross-runtime plugin repos in a skills target", async () => {
+    const root = await makeTempDir();
+    const targetDir = path.join(root, "everything-claude-code");
+    await fs.mkdir(path.join(targetDir, ".claude-plugin"), { recursive: true });
+    await fs.mkdir(path.join(targetDir, ".codex"), { recursive: true });
+    await fs.mkdir(path.join(targetDir, ".cursor"), { recursive: true });
+    await fs.mkdir(path.join(targetDir, ".agents", "skills", "demo"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(targetDir, ".agents", "skills", "demo", "SKILL.md"),
+      `---
+name: demo
+description: Demo skill
+---
+`,
+      "utf8",
+    );
+
+    assert.equal(await detectPluginBundleSkillResidue(targetDir), true);
+  });
+
+  test("does not flag a normal single skill directory", async () => {
+    const root = await makeTempDir();
+    const targetDir = path.join(root, "my-skill");
+    await fs.mkdir(targetDir, { recursive: true });
+    await fs.writeFile(
+      path.join(targetDir, "SKILL.md"),
+      `---
+name: my-skill
+description: Normal user skill
+---
+`,
+      "utf8",
+    );
+
+    assert.equal(await detectPluginBundleSkillResidue(targetDir), false);
   });
 });
 

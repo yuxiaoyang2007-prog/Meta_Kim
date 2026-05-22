@@ -33,11 +33,77 @@ When running inside Codex, this skill is an execution protocol, not just a discu
 
 - `Agent(...)` maps to Codex `spawn_agent`. A user invocation of `/meta-theory`, `meta-theory`, `meta theory`, `元理论`, or a `[$meta-theory](...)` skill mention is itself an explicit user request for subagents/delegation/parallel agent work; do not require the user to additionally say "use subagents" or "allow spawn_agent".
 - Apply `agent-teams-playbook` from the first available skill root before substantive work; convert its blueprint into capability-matched `spawn_agent` calls
-- Output a **Preflight block** before analysis: loaded skills, Type, scenario/mode, read/write scope, authorization tier, capability lookup path, planned agents or blocked reason
+- Build an internal Preflight packet before analysis: loaded skills, Type, scenario/mode, read/write scope, authorization tier, capability lookup path, planned agents or blocked reason. Do not show this packet to normal users. Show it only when the user explicitly asks for debug, audit, protocol, or governance trace output.
 - Keep main Codex thread limited to clarification, routing, verification, and synthesis
 - If `agent-teams-playbook` cannot load or `spawn_agent` is unavailable, record the blocked reason and follow the degraded path — do not silently continue as main-thread analysis
 
-**Read-only is still delegable.** Phrases like `仅分析`, `只读`, `analysis only` restrict writes but do not revoke `/meta-theory` authorization for agent dispatch. Only skip subagents when the user explicitly says `不要调用 agent`, `no subagents`, or equivalent.
+### Codex Honest Subagent Contract
+
+In Codex, only claim that subagents were dispatched when a real callable subagent mechanism is present and was invoked successfully.
+
+If `spawn_agent` / Agent-equivalent tooling is not available:
+- Do not pretend parallel agents ran.
+- Record `subagentStatus = "unavailable"` with the exact blocked reason.
+- Use degraded mode: the main thread may perform read-only inspection, routing analysis, and synthesis, but must label it as degraded single-thread execution.
+- For executable multi-file work, ask for permission to continue degraded or stop with a dispatch-blocked plan.
+- For read-only review, continue if useful, but state that recommendations are conductor/editor analysis, not independent subagent findings.
+
+Never cite imaginary agent outputs, reviews, or consensus.
+
+### Codex Multi-Option Choice Surface Rule
+
+Every user-visible Codex confirmation or decision surface produced under this skill must contain multi-option choice content. This is a Codex delivery rule, not a replacement for the Thinking-stage `preDecisionOptionFrame` or the formal confirmation gate.
+
+When Codex exposes the `request_user_input` tool, use it for Decision surfaces. In Default mode, Meta_Kim's Codex config should enable Codex's official `[features] default_mode_request_user_input = true` flag so that this native interaction path is available when the active host supports it.
+
+**Choice Surface Gate (mandatory before `request_user_input`, native question tools, native choices, or `conversation_fallback`)**:
+
+Before any visible choice surface, set or infer `choiceSurfaceState`:
+
+| `choiceSurfaceState` | Allowed timing | Allowed content | Forbidden content |
+|---|---|---|---|
+| `not_allowed` | Default state before Critical classification | No choice surface | Any popup/card/question asking the user to choose an execution path |
+| `critical_clarification_allowed` | Critical only, and only when Fetch cannot proceed safely | Blocking clarification needed to understand intent, scope, write permission, safety, or language | Execution options, implementation plan choices, "which option" confirmation, or popup capability tests |
+| `execution_confirmation_allowed` | After Fetch content evidence and Thinking `preDecisionOptionFrame` exist, before Execution | Consolidated execution confirmation with evidence-backed candidate paths and recommended default | New discovery questions that should have happened in Critical/Fetch |
+| `completed` | After the user answered or an allowed skip was recorded | No repeat confirmation unless scope materially changed | Stage-by-stage confirmation spam |
+
+**FORBIDDEN: premature choice surface**. Do not invoke `request_user_input`, a native question tool, or a fallback choice card just because the user asks to "test a popup", "see whether the interactive box appears", or similar. Treat that as a task requirement, not permission to bypass Critical -> Fetch -> Thinking. If information is incomplete but Fetch can still proceed, continue Fetch instead of interrupting. If information is incomplete and Fetch cannot proceed safely, ask only blocking Critical clarification, not an execution-plan confirmation.
+
+**Human check**: no candidate paths means no execution confirmation; no Fetch evidence means Thinking is not complete; no Thinking result means no pre-Execution confirmation.
+
+Normal user-facing output must be a clean choice card, not a protocol dump. Do not show a `Preflight` block, `nativeChoiceSurface`, `conversation_fallback`, `Multi-Option Snapshot`, or other internal packet fields unless the user explicitly asks for debug, audit, protocol, or governance trace output. If a fallback matters to the user's expectation, say it in plain language, for example: "This is a chat confirmation card, not a popup."
+
+The choice card must be short and must show at least two viable options for the current decision. It must follow the runtime/tool selected output language first, then the user's explicit output-language choice, then the user's latest input language when no stronger language source exists. Keep only protocol identifiers such as `Critical`, `Fetch`, `Thinking`, and `Execution` in their canonical form when they are truly needed. Example labels such as `Option A` are placeholders; localize them in the actual response, for example `方案 A` when the selected or inferred language is Chinese.
+
+Do not describe a Codex fallback card as a popup. In Codex, `conversation_fallback` means a chat card in the conversation. Call it a native popup only when `request_user_input` is available and has actually been invoked.
+
+Normal public shape:
+
+```text
+This is an execution confirmation card. No files will be modified yet.
+
+1. [choice dimension]
+A. [plain-language path]. Result: [what the user gets]. Trade-off: [main cost or risk].
+B. [plain-language path]. Result: [what the user gets]. Trade-off: [main cost or risk].
+
+Default: [chosen or recommended path] because [evidence-based reason].
+```
+
+If only one practical path exists, still show the rejected alternative so the user can see the decision boundary:
+
+```text
+This is an execution confirmation card. No files will be modified yet.
+
+1. [choice dimension]
+A. [practical path]. Result: [what the user gets]. Trade-off: [main cost or risk].
+B. [rejected path]. Result: [what would happen]. Trade-off: Rejected because [specific reason].
+
+Default: A because [specific reason].
+```
+
+This Codex rule does not alter Claude Code behavior. Claude Code native question tool remains unchanged: when available, it remains the primary surface for blocking clarification and execution confirmation.
+
+**Read-only is still delegable when real subagent tooling exists.** Phrases like `仅分析`, `只读`, `analysis only` restrict writes but do not revoke `/meta-theory` authorization for agent dispatch. If the user explicitly asks for read-only output and the runtime lacks real subagent tooling, proceed in honest degraded mode and do not fabricate delegation.
 
 ## Architecture Type Pre-judgment
 
@@ -124,21 +190,22 @@ Conductor owns evidence-lane validation and may not finalize dispatch until the 
 
 Protocol stage labels stay canonical English: `Critical`, `Fetch`, `Thinking`, `Execution`, `Review`, `Meta-Review`, `Verification`, `Evolution`.
 
-User-facing text must follow the user's latest language or explicit language preference. Do not hardcode Chinese, English, or any single human language for clarification prompts, option labels, confirmation text, or explanations. If the user changes language mid-run, subsequent user-visible cards and summaries follow the newer preference while preserving canonical stage labels.
+User-facing text must follow this language priority: first the runtime/tool selected output language when the host has already chosen one, then the user's explicit output-language choice, then the user's latest input language when no stronger language source exists. Do not hardcode Chinese, English, or any single human language for clarification prompts, option labels, confirmation text, or explanations. If the user changes language mid-run without a runtime/tool or explicit output-language override, subsequent user-visible cards and summaries follow the newer input language while preserving canonical stage labels.
 
 For `clarify`, `option_select`, and `confirm_execution` cards, prefer the current platform's native choice surface when it exists:
 
 | Runtime | Primary native surface | Fallback | Implementation |
 |---------|----------------------|----------|----------------|
 | Claude Code | native question tool | conversation_fallback | **✅ FULLY SUPPORTED** - Use native question tool directly |
-| Codex | native choice input | conversation_fallback | ⚠️ Depends on active mode; use conversation card as fallback |
+| Codex | `request_user_input` when exposed by the active host | conversation_fallback | ✅ Enable `[features] default_mode_request_user_input = true` for Default mode; use native only when the tool is actually listed |
 | OpenClaw | workspace agent mechanism | conversation_fallback | ⚠️ Requires proper workspace config; use conversation card |
 | Cursor | Custom Modes / mode picker | conversation_fallback | ⚠️ Runtime-dependent; use conversation card as fallback |
 
 **Platform-Specific Implementation**:
 
 1. **Claude Code**: Use the native question tool directly - this is the guaranteed path
-2. **Codex/OpenClaw/Cursor**: Emit a formatted conversation card and wait for user response
+2. **Codex**: Use `request_user_input` when it is listed in the active tool set. If unavailable, emit a formatted conversation card and wait for user response
+3. **OpenClaw/Cursor**: Use a real native surface only when the active host exposes one; otherwise emit a formatted conversation card and wait for user response
 
 **Claude Code Implementation (PRIMARY)**:
 ```
@@ -158,6 +225,7 @@ When native surface is unavailable:
     - Approach: [handling approach description]
     - Please respond: Confirm / Modify / Cancel
   → Record: nativeChoiceSurface = "conversation_fallback"
+  → State clearly: this is a chat confirmation card, not a popup
   → Wait for explicit user selection
 ```
 
@@ -187,9 +255,61 @@ All Types share a **Universal Entry Chain**: `trigger → classify → capabilit
 
 See `references/dev-governance.md` Step 3.7 for full specification.
 
+## Problem-First Gate
+
+Meta-theory exists to clarify and solve the user's core problem. Protocol artifacts, stages, agents, and confirmations are supporting machinery, not the deliverable.
+
+Before expanding workflow, write a one-sentence `coreProblem` internally:
+- What decision, defect, design gap, or deliverable is the user actually asking for?
+- What evidence is needed to answer it responsibly?
+- What is the smallest useful output that would move the user forward?
+
+If a protocol step does not improve `coreProblem` resolution, evidence quality, safety, or writeback quality, compress it into an internal note. Do not expose process unless the user asks for governance/debug trace.
+
+For read-only analysis, prefer a direct answer with evidence and patchable recommendations over full orchestration ceremony.
+
+## Complexity Path Selection
+
+Choose the smallest path that can responsibly close `coreProblem`:
+
+| Path | Use when | Required shape |
+|---|---|---|
+| `fast_path` | Read-only/local analysis, single narrow decision, no writes, no external current facts | Minimal evidence notes, direct answer, optional `writebackSuggestion` |
+| `standard_path` | Small or medium executable work, limited files, clear owner, moderate risk | Critical -> Fetch -> Thinking -> Execution -> Review -> Verification, compressed artifacts |
+| `regulated_path` | Multi-agent, cross-module, security-sensitive, release/public-facing, durable policy, or high uncertainty | Full 8-stage spine, complete packets, confirmation gate, Review + Meta-Review + Evolution |
+
+Escalate path level when evidence shows more risk. De-escalate only with a recorded skip reason. Do not force `regulated_path` just because the skill is active.
+
+## Deadlock Breaker
+
+When Warden, Conductor, Prism, or Chrysalis bounce the same run more than twice without new evidence, stop the loop:
+
+1. Record `deadlockBreaker.triggered = true`, the repeated blockers, and the last new evidence.
+2. Warden owns the final arbitration format: `proceed_with_assumption | narrow_scope | ask_user | stop_blocked`.
+3. Conductor may revise the board once after arbitration; Prism may mark findings `not_closable` but does not keep re-opening the same standard without new evidence; Chrysalis sets `writebackDecision: none` when permanence cannot be justified.
+4. If user input is needed, ask one focused question that would break the loop.
+
+## Fetch Ownership Boundary
+
+All meta agents may declare a `fetchNeed`, but ownership is split:
+
+- Conductor decides whether evidence is needed and where it belongs in the run.
+- Scout performs external broad discovery and current/source-backed capability research.
+- Artisan maps named tools/skills to one agent after evidence exists.
+- Prism reviews evidence sufficiency and claim quality, but does not perform broad discovery.
+- Warden arbitrates whether the evidence is enough to pass a gate.
+
 ## Gates
 
 **Gate 1**: Clarity Check — ask blocking Critical clarifications only when Fetch cannot proceed; run the full Clarity Gate before executing a dispatch plan.
+
+**Clarification Ladder**:
+1. If missing information blocks safe progress, ask one focused blocking question before Fetch.
+2. If missing information can be reasonably inferred, proceed with explicit assumptions and mark them as assumptions.
+3. If multiple interpretations are viable and lead to different outputs, present 2-3 concrete interpretations and recommend a default.
+4. If the request is read-only and evidence can be gathered locally, do not interrupt; inspect first, then ask only if the evidence still leaves a material fork.
+
+A clarification is blocking only when proceeding could modify the wrong files, violate user constraints, choose the wrong deliverable, or create misleading advice.
 
 **Gate 2**: Dispatch-Not-Execute — analysis, review, and code changes belong to execution agents via `Agent` tool, not to this thread.
 
@@ -218,7 +338,7 @@ Gate 3 FAIL override is a **governance violation**. If the task genuinely needs 
 - "Write code first, review later" / "Skip protocol artifacts"
 - "Warden said FAIL but proceeding anyway"
 
-**If unsure → DISPATCH.** Cost of unnecessary dispatch < cost of bypassing the dispatcher.
+**If unsure on executable or high-risk work → DISPATCH.** For read-only analysis, first preserve answer quality: gather enough evidence, state assumptions, and use degraded single-thread review if real subagents are unavailable.
 
 **Self-check before every output** — if any answer is YES, STOP and dispatch instead:
 1. Skip-level? Writing analysis/code/reviews myself?
@@ -277,15 +397,28 @@ Every option presented must include:
 At each stage transition, output a notice (not a popup):
 
 ```markdown
-## 📋 Stage: {Name}
+{localizedActiveLabel}: {Current Stage} ({stageIndex}/{stageTotal}, {percent}%)
 
-**Inferred:**
-- Type: {A/B/C/D/E}
-- Scope: {description}
-- Next: {next stage name}
-
-**No confirmation required** unless multiple viable approaches exist.
+{localizedCompletedLabel}: {completed stages or localized none}
+{localizedCurrentLabel}: {plain-language work happening now}
+{localizedNextLabel}: {next stage name or localized none}
+{localizedBlockedLabel}: {blocker or localized none}
 ```
+
+This notice is the public view of the `runStatusEnvelope`, not the internal protocol trace. It must answer: whether meta-theory governance is active, where it is now, how far it has progressed, what is next, and whether it is blocked. Keep the language aligned with the runtime/tool selected output language first, then explicit output-language choice, then latest input language. Keep only protocol stage labels canonical.
+
+The envelope may carry runtime-provided `publicLabels` and a resolved `stagePurpose`. Runtime adapters must render status labels using the already-selected output language when available; the user's latest input language is only the fallback. Do not hardcode Chinese, English, or any single human language as the default notice shell.
+
+The runtime must also maintain a cross-platform public status file:
+
+```text
+.meta-kim/state/{profile}/active-run.json
+.meta-kim/state/{profile}/runs/{runId}/status.json
+```
+
+These files use the shared `runStatusEnvelope` contract so Claude Code, Codex, Cursor, and OpenClaw can all answer "where is meta now?" without exposing `Preflight`, `nativeChoiceSurface`, `conversation_fallback`, packet ids, or protocol traces to normal users.
+
+Do not use this Notice as a Decision surface. If the user must choose among multiple viable paths, use the normal native choice tool or clean conversation choice card after Fetch and Thinking.
 
 ## Fetch-first Pattern (Search → Match → Invoke)
 
@@ -293,14 +426,14 @@ At each stage transition, output a notice (not a popup):
 
 **Step 1 — Keyword scan** (run FIRST):
 ```
-tdd/test/测试 → "TDD workflow, red-green-refactor, test coverage"
-review/audit/审计/quality → "code quality review, AI-slop detection"
-security/auth/权限/安全 → "security analysis, vulnerability detection"
-debug/报错/error/修复 → "debugging, error analysis, test failure investigation"
-architecture/design/架构 → "system architecture design, technical architecture review"
-frontend/ui/界面/react → "frontend development, UI implementation"
-backend/api/后端/server → "backend development, API design"
-database/db/sql/数据库 → "database design, SQL optimization"
+tdd/test → "TDD workflow, red-green-refactor, test coverage"
+review/audit/quality → "code quality review, AI-slop detection"
+security/auth → "security analysis, vulnerability detection"
+debug/error → "debugging, error analysis, test failure investigation"
+architecture/design → "system architecture design, technical architecture review"
+frontend/ui/react → "frontend development, UI implementation"
+backend/api/server → "backend development, API design"
+database/db/sql → "database design, SQL optimization"
 DEFAULT → state the core capability need explicitly
 ```
 
@@ -345,13 +478,13 @@ Capability index layers: (1) repo canonical (2) runtime mirrors (3) local global
 Output this as `businessFlowBlueprintPacket` with `requiredLanes`, `optionalLanes`, `omittedLanes` with reasons, `laneDependencies`, and `coverageJudgment`. Each required or optional lane object must include Fetch evidence from a global capability scan: `capabilitySearchQuery`, `candidateOwners`, `candidateSkills`, `selectedOwner`, `selectionReason`, and `coverageStatus` (`covered | partial | missing | omitted_with_reason`). A lane can be intentionally omitted only with a plain-language reason, e.g. "static page, no persisted user data". Do not fail a run only because it did not enumerate every example dimension.
 
 **Business-readable agent naming (hard rule)**:
-- User-visible role names must be coarse business role-family names: `前端`, `后端`, `测试`, `frontend`, `backend`, `test`.
+- User-visible role names must be coarse business role-family names: `frontend`, `backend`, `test`.
 - Do not put concrete work items into `roleDisplayName`. Prefer the role family over any role-plus-feature, role-plus-page, or role-plus-installation label.
 - Put concrete scope in `roleInstanceId`, `shardScope`, `assignedResponsibilitySlice`, or the worker task text instead of creating a new visible role name.
 - Do not expose host-generated personal nicknames as the primary role name. Names like `Huygens`, `Mill`, or other random person-style aliases are allowed only in `runtimeInstanceAlias`.
 - Separate the layers:
   - `businessRoleId`: stable responsibility family, e.g. `frontend`, `database`, `browser-qa`.
-  - `roleDisplayName`: user-facing short business name, e.g. `前端` or `frontend`.
+  - `roleDisplayName`: user-facing short business name, e.g. `frontend` or `backend`.
   - `ownerAgent`: matched execution agent type from Fetch, e.g. `frontend-developer`.
   - `roleInstanceId`: per-run instance id, e.g. `frontend#home-page`.
   - `runtimeInstanceAlias`: optional platform nickname, never the primary name.
@@ -383,7 +516,20 @@ After completing Fetch Steps 1–3, update the spine state with a `fetchRecord` 
 }
 ```
 
-**Research Validation** — required when the task involves external claims, library behavior, best practices, or factual analysis requiring verification:
+**Research Validation / Web Search Boundary** — use local evidence first for repo-internal facts, but external research is mandatory when the answer depends on facts that may have changed, are outside the local workspace, or require source-backed verification.
+
+Mandatory external research triggers:
+- Current or recent facts: versions, APIs, docs, regulations, prices, schedules, security advisories, release status, company/person/project state.
+- External technical behavior: third-party library semantics, framework best practices, platform limits, plugin/tool capabilities, protocol standards.
+- Claims that will be quoted, cited, compared, or used to justify a durable design decision.
+- User explicitly asks to search, browse, verify, cite sources, or find the latest information.
+
+Skip external research only when:
+- The task is entirely about local files already inspected.
+- The user explicitly says local-only / no internet / skip research.
+- The claim is stable background knowledge and not central to the answer.
+
+When skipping, record `researchSkipReason` in `contentEvidencePacket` and state any uncertainty in the final answer when it matters.
 
 1. Identify the capability needed (e.g., "web search", "content retrieval", "documentation lookup")
 2. Produce `contentEvidencePacket.researchCapabilityDiscovery` by discovering current-runtime retrieval capabilities from actual tool inventory sources (`active_tools`, `deferred_tools`, MCP, plugins, skills, commands, capability indexes, or explicit user instruction). Record descriptor, provider kind, status, proof, limitations, selected research path, gaps, and Conductor validation. Do not use host-form-factor guesses such as `platformSurface`.
@@ -488,6 +634,7 @@ Every station must leave explicit deliverables:
 {
   "active": true,
   "version": 2,
+  "runId": "<stable run id>",
   "triggeredAt": "<ISO timestamp>",
   "currentStage": "critical",
   "stages": {
@@ -507,6 +654,8 @@ Every station must leave explicit deliverables:
   "queryBypass": false
 }
 ```
+
+Writing this spine state also writes the public run status envelope to `.meta-kim/state/{profile}/active-run.json` and `.meta-kim/state/{profile}/runs/{runId}/status.json`. The public envelope is for user status notices and "what stage are we in?" queries; the spine state remains the internal execution gate.
 
 **Dispatch chain enforcement (mandatory)**: The enforcement hook checks that each stage dispatches the required meta-agent. The Agent tool's `description` field **must contain the meta-agent name** (e.g., "meta-warden coordinate") for the hook to record it in `dispatchChain`.
 
@@ -564,6 +713,21 @@ Stage 2 is the gate — do not skip to Stage 3/4. Stage 4 requires protocol arti
 **Exit**: synthesize into actionable orchestration plan.
 
 ## Evolution Rules
+
+**Project Writeback Root**: Durable Meta_Kim improvements live under `D:/KimProject/Meta_Kim` unless the user names another repo. Do not write evolution learnings into the current incidental working directory merely because the run started there.
+
+Before any writeback:
+1. Classify the finding: agent boundary, reusable skill, capability index, contract/gate, scar/process violation, or documentation.
+2. Map it to the canonical target under `D:/KimProject/Meta_Kim`:
+   - agent boundary or SOUL issue → `canonical/agents/`
+   - reusable operating pattern → `canonical/skills/`
+   - capability coverage → `config/capability-index/`
+   - protocol/gate rule → `config/contracts/` or the relevant skill source
+   - process violation/scar → the project's scar/process log location
+3. Ask for write permission unless the user already authorized modifications.
+4. After canonical changes, run the project sync command only when available and appropriate.
+
+If the current task is read-only, output a `writebackSuggestion` with target path and rationale instead of editing.
 
 **Direct over indirect**: directly edit the specific agent definition that revealed the gap — NOT a memory file, NOT a pattern directory. The agent definition IS the memory.
 

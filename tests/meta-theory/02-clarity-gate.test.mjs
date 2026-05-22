@@ -26,6 +26,9 @@ describe("Clarity Gate unified execution confirmation", async () => {
   );
   const workflowContract = await readFile("config/contracts/workflow-contract.json");
   const workflowContractJson = JSON.parse(workflowContract);
+  const devGov = await readFile(
+    "canonical/skills/meta-theory/references/dev-governance.md",
+  );
 
   test("confirmation happens after Fetch and Thinking, before Execution", () => {
     assert.match(skillContent, /Fetch\/content evidence.*Thinking\/pre-decision option framing/s);
@@ -198,11 +201,16 @@ describe("Clarity Gate unified execution confirmation", async () => {
     );
   });
 
-  test("Codex fallback pauses with localized confirmation card when native choice is unavailable", () => {
+  test("Codex uses request_user_input when available and falls back to localized card", () => {
     const codexSurface =
       workflowContractJson.runDiscipline?.runtimeNativeChoiceSurfaces?.codex;
     assert.ok(codexSurface, "Codex native choice surface policy must exist");
-    assert.equal(codexSurface.primarySurface, "native_choice");
+    assert.equal(codexSurface.primarySurface, "request_user_input");
+    assert.equal(codexSurface.featureFlag, "default_mode_request_user_input");
+    assert.equal(
+      codexSurface.recommendedConfig,
+      "[features].default_mode_request_user_input = true",
+    );
     assert.ok(
       codexSurface.fallbackSurfaces?.includes("conversation_fallback"),
       "Codex must allow conversation_fallback",
@@ -211,7 +219,83 @@ describe("Clarity Gate unified execution confirmation", async () => {
     const codexPolicyText = `${codexSurface.triggerDescription} ${codexSurface.implementation}`;
     assert.match(codexPolicyText, /pause/i);
     assert.match(codexPolicyText, /localized confirmation card/i);
-    assert.match(codexPolicyText, /native choice.*exposes it|native.*unavailable/i);
+    assert.match(codexPolicyText, /request_user_input/i);
+    assert.match(codexPolicyText, /default_mode_request_user_input/i);
+    assert.match(codexPolicyText, /exec|hook adapters/i);
+    assert.match(codexPolicyText, /chat card.*popup|popup.*chat card/i);
+  });
+
+  test("Codex meta-theory choice surfaces embed options without exposing protocol logs", () => {
+    assert.match(skillContent, /Codex Multi-Option Choice Surface Rule/);
+    assert.match(skillContent, /default_mode_request_user_input/);
+    assert.match(skillContent, /request_user_input/);
+    assert.match(skillContent, /confirmation or decision surface/s);
+    assert.match(skillContent, /clean choice card/i);
+    assert.match(skillContent, /Do not show a `Preflight` block/i);
+    assert.match(skillContent, /unless the user explicitly asks for debug, audit, protocol, or governance trace output/i);
+    assert.match(skillContent, /at least two viable options/i);
+    assert.match(skillContent, /explicit output-language choice/i);
+    assert.match(skillContent, /latest input/i);
+    assert.match(skillContent, /Option A.*placeholders|placeholders.*Option A/s);
+    assert.match(skillContent, /方案 A/);
+    assert.match(skillContent, /当前以聊天确认卡展示，不是弹窗/);
+    assert.match(skillContent, /Claude Code native question tool remains unchanged/i);
+
+    const codexPolicy =
+      workflowContractJson.runDiscipline?.userInteractionPolicy
+        ?.codexVisibleMultiOptionOutput;
+    assert.ok(codexPolicy, "workflow contract must define Codex visible multi-option policy");
+    assert.equal(codexPolicy.required, true);
+    assert.equal(codexPolicy.minimumOptions, 2);
+    assert.equal(
+      codexPolicy.appliesTo,
+      "every_user_visible_codex_meta_theory_confirmation_or_decision_surface",
+    );
+    assert.equal(codexPolicy.normalPresentation, "embedded_clean_choice_card");
+    assert.equal(codexPolicy.debugLabel, "Multi-Option Snapshot");
+    assert.equal(codexPolicy.visibleLabelRequired, false);
+    assert.equal(codexPolicy.internalPreflightHiddenByDefault, true);
+    assert.ok(codexPolicy.internalFieldsHiddenByDefault?.includes("Preflight"));
+    assert.ok(codexPolicy.internalFieldsHiddenByDefault?.includes("nativeChoiceSurface"));
+    assert.ok(codexPolicy.internalFieldsHiddenByDefault?.includes("conversation_fallback"));
+    assert.equal(codexPolicy.debugVisibilityRequiresExplicitUserRequest, true);
+    assert.equal(
+      codexPolicy.languagePolicy,
+      "runtime_tool_selected_output_language_else_explicit_output_language_choice_else_latest_user_input_language",
+    );
+    assert.equal(codexPolicy.protocolIdentifiersRemainCanonical, true);
+    assert.equal(codexPolicy.fallbackMustDeclareNotPopup, true);
+    assert.equal(codexPolicy.claudeNativeChoiceSurfaceUnchanged, true);
+  });
+
+  test("Choice Surface Gate forbids premature popup or execution confirmation", () => {
+    const combined = `${skillContent}\n${workflowContract}\n${devGov}`;
+    const gate =
+      workflowContractJson.runDiscipline?.userInteractionPolicy
+        ?.choiceSurfaceGate;
+
+    assert.ok(gate, "workflow contract must define choiceSurfaceGate");
+    assert.equal(gate.required, true);
+    assert.equal(gate.stateField, "choiceSurfaceState");
+    for (const state of [
+      "not_allowed",
+      "critical_clarification_allowed",
+      "execution_confirmation_allowed",
+      "completed",
+    ]) {
+      assert.ok(gate.stateEnum?.includes(state), `missing state ${state}`);
+      assert.match(combined, new RegExp(state));
+    }
+
+    assert.match(combined, /FORBIDDEN: premature choice surface/i);
+    assert.match(combined, /test a popup|interactive box|popup_test_request/i);
+    assert.match(combined, /Critical[\s\S]*Fetch[\s\S]*Thinking/);
+    assert.match(combined, /Fetch cannot proceed safely/i);
+    assert.match(combined, /must not present execution options/i);
+    assert.match(combined, /contentEvidencePacket[\s\S]*preDecisionOptionFrame/);
+    assert.match(combined, /No candidate paths means no execution confirmation/i);
+    assert.match(combined, /no Fetch evidence means Thinking is not complete/i);
+    assert.match(combined, /no Thinking result means no pre-Execution confirmation/i);
   });
 });
 

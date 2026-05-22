@@ -1,6 +1,6 @@
 {
   "name": "meta-kim",
-  "version": "2.0.39",
+  "version": "2.0.42",
   "description": "Governance layer for AI coding: meta agents, workflow contract, meta-theory; canonical in canonical/, with generated Claude/Codex/OpenClaw/Cursor projections.",
   "private": true,
   "type": "module",
@@ -33,6 +33,7 @@
     "meta:status": "node scripts/footprint.mjs",
     "meta:status:json": "node scripts/footprint.mjs --json",
     "meta:status:diff": "node scripts/footprint.mjs --diff",
+    "meta:run-status": "node scripts/meta-run-status.mjs",
     "meta:uninstall": "node scripts/uninstall.mjs",
     "meta:uninstall:yes": "node scripts/uninstall.mjs --yes",
     "meta:uninstall:deep": "node scripts/uninstall.mjs --yes --deep",

@@ -198,6 +198,48 @@ export async function detectLegacySubdirInstall(targetDir, subdirPath) {
   );
 }
 
+export async function detectPluginBundleSkillResidue(targetDir) {
+  if (!(await pathExists(targetDir))) {
+    return false;
+  }
+
+  const markerNames = [
+    ".claude-plugin",
+    ".codex-plugin",
+    ".cursor-plugin",
+    "plugin.json",
+    "marketplace.json",
+  ];
+  const runtimeAdapterNames = [
+    ".agents",
+    ".claude",
+    ".codex",
+    ".cursor",
+    ".opencode",
+    "openclaw",
+  ];
+
+  let hasMarker = false;
+  for (const name of markerNames) {
+    if (await pathExists(path.join(targetDir, name))) {
+      hasMarker = true;
+      break;
+    }
+  }
+  if (!hasMarker) {
+    return false;
+  }
+
+  let adapterCount = 0;
+  for (const name of runtimeAdapterNames) {
+    if (await pathExists(path.join(targetDir, name))) {
+      adapterCount += 1;
+    }
+  }
+
+  return adapterCount >= 2;
+}
+
 /**
  * Bundled copies of other runtimes (OpenClaw/Codex/Cursor) ship nested SKILL.md files
  * that are not required to match Claude Code frontmatter. Match case-insensitively and

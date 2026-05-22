@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
@@ -29,6 +30,7 @@ function endpoint(): string {
 }
 
 const REMOTE_MEMORY_ALLOWED = process.env.META_KIM_ALLOW_REMOTE_MEMORY === "1";
+const MEMORY_AUTOSTART_DISABLED = process.env.META_KIM_DISABLE_MEMORY_AUTOSTART === "1";
 const SECRET_PATTERNS = [
   /\bsk-(?:proj|live|test)?-[A-Za-z0-9_-]{10,}\b/gu,
   /\bgithub_pat_[A-Za-z0-9_]{20,}\b/gu,
@@ -68,6 +70,68 @@ function isAllowedMemoryEndpoint(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isLoopbackMemoryEndpoint(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.replace(/^\[|\]$/gu, "").toLowerCase();
+    return ["localhost", "127.0.0.1", "::1"].includes(hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function isMemoryServiceHealthy(value: string): Promise<boolean> {
+  if (!isAllowedMemoryEndpoint(value)) return false;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 500);
+    const response = await fetch(new URL("/api/health", value), {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!response.ok) return false;
+    const body = await response.json().catch(() => ({}));
+    return body?.status === "healthy";
+  } catch {
+    return false;
+  }
+}
+
+function startMemoryServiceBackground(value: string): boolean {
+  if (MEMORY_AUTOSTART_DISABLED || !isLoopbackMemoryEndpoint(value)) return false;
+  const memoryBin = process.env.MCP_MEMORY_BIN || "memory";
+  try {
+    const child = spawn(memoryBin, ["server", "--http"], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+      env: {
+        ...process.env,
+        MCP_ALLOW_ANONYMOUS_ACCESS: "true",
+        HF_HUB_OFFLINE: "1",
+        TRANSFORMERS_OFFLINE: "1",
+      },
+    });
+    child.on("error", () => undefined);
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureMemoryService(value: string): Promise<boolean> {
+  if (await isMemoryServiceHealthy(value)) return true;
+  const started = startMemoryServiceBackground(value);
+  if (!started) return false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    if (await isMemoryServiceHealthy(value)) return true;
+  }
+  return false;
 }
 
 function redactSecrets(text: string): string {
@@ -158,6 +222,7 @@ async function saveMemory(event: OpenClawEvent): Promise<void> {
   if (content.length < 40) return;
   const memoryEndpoint = endpoint();
   if (!isAllowedMemoryEndpoint(memoryEndpoint)) return;
+  if (!(await ensureMemoryService(memoryEndpoint))) return;
 
   await fetch(new URL("/api/memories", memoryEndpoint), {
     method: "POST",

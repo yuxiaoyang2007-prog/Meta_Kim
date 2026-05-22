@@ -106,6 +106,7 @@ const REPO_META_KIM_HOOK_FILES = [
   "activate-meta-theory-spine.mjs",
   "block-dangerous-bash.mjs",
   "enforce-agent-dispatch.mjs",
+  "meta-kim-memory-save.mjs",
   "pre-git-push-confirm.mjs",
   "post-format.mjs",
   "post-typecheck.mjs",
@@ -259,12 +260,12 @@ export function mergeRepoClaudeSettings(base, canonical, repoRoot = null) {
  * Mutates `settings.hooks` in place.
  */
 export function rewriteRepoHookCommandsToAbsolute(settings, repoRoot) {
-  const relHookRe = /^node \.claude\/hooks\/(.+)\.mjs$/;
+  const relHookRe = /^node \.claude\/hooks\/([^"'\s]+\.mjs)(.*)$/;
   for (const hookType of Object.keys(settings.hooks ?? {})) {
     for (const block of settings.hooks[hookType] ?? []) {
       for (const h of block.hooks ?? []) {
         if (h.type === "command" && relHookRe.test(h.command)) {
-          const hookName = h.command.match(relHookRe)[1];
+          const [, hookFile, suffix] = h.command.match(relHookRe);
           const absPath =
             repoRoot.replace(/\//g, path.sep) +
             path.sep +
@@ -272,9 +273,8 @@ export function rewriteRepoHookCommandsToAbsolute(settings, repoRoot) {
             path.sep +
             "hooks" +
             path.sep +
-            hookName +
-            ".mjs";
-          h.command = hookCommandNode(absPath);
+            hookFile;
+          h.command = `${hookCommandNode(absPath)}${suffix || ""}`;
         }
       }
     }

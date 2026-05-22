@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-20T14:46:12.591Z",
+  "generatedAt": "2026-05-21T18:34:32.207Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -101,8 +101,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-artisan.md",
-        "size": 15473,
-        "modified": "2026-05-20T14:34:14.560Z",
+        "size": 16469,
+        "modified": "2026-05-21T18:23:25.394Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -111,8 +111,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-chrysalis.md",
-        "size": 27439,
-        "modified": "2026-05-20T07:45:32.891Z",
+        "size": 28818,
+        "modified": "2026-05-21T18:26:44.906Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -121,8 +121,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-conductor.md",
-        "size": 49293,
-        "modified": "2026-05-20T14:33:45.456Z",
+        "size": 50985,
+        "modified": "2026-05-21T18:26:14.200Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -131,8 +131,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-genesis.md",
-        "size": 19035,
-        "modified": "2026-05-20T07:39:30.778Z",
+        "size": 20004,
+        "modified": "2026-05-21T18:24:02.925Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -141,8 +141,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-librarian.md",
-        "size": 19143,
-        "modified": "2026-05-20T07:45:32.890Z",
+        "size": 20105,
+        "modified": "2026-05-21T18:24:13.227Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -151,8 +151,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-prism.md",
-        "size": 27035,
-        "modified": "2026-05-20T14:34:03.221Z",
+        "size": 28140,
+        "modified": "2026-05-21T18:26:22.140Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -161,8 +161,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-scout.md",
-        "size": 16867,
-        "modified": "2026-05-20T14:34:25.193Z",
+        "size": 17754,
+        "modified": "2026-05-21T18:24:35.683Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -171,8 +171,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-sentinel.md",
-        "size": 17777,
-        "modified": "2026-05-20T07:42:32.382Z",
+        "size": 18751,
+        "modified": "2026-05-21T18:24:44.595Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -181,8 +181,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-warden.md",
-        "size": 31594,
-        "modified": "2026-05-20T07:38:45.962Z",
+        "size": 33323,
+        "modified": "2026-05-21T18:26:02.245Z",
         "layer": "meta",
         "executionBlock": true
       }
@@ -193,8 +193,8 @@
         "type": "skills",
         "namespace": "canonical",
         "path": "canonical/skills/meta-theory/SKILL.md",
-        "size": 46105,
-        "modified": "2026-05-20T14:34:42.954Z"
+        "size": 60269,
+        "modified": "2026-05-21T18:25:13.483Z"
       },
       "repo:canonical-reference:create-agent": {
         "id": "create-agent",
@@ -211,8 +211,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/dev-governance.md",
         "relativePath": "dev-governance.md",
-        "size": 96880,
-        "modified": "2026-05-20T14:35:25.424Z"
+        "size": 101941,
+        "modified": "2026-05-21T13:51:29.878Z"
       },
       "repo:canonical-reference:intent-amplification": {
         "id": "intent-amplification",
@@ -276,8 +276,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/shared/hooks/meta-kim-memory-save.mjs",
         "relativePath": "meta-kim-memory-save.mjs",
-        "size": 15338,
-        "modified": "2026-05-18T20:17:07.760Z"
+        "size": 29635,
+        "modified": "2026-05-21T16:20:41.950Z"
       },
       "repo:canonical-runtime-assets:skip-reminder.mjs": {
         "id": "skip-reminder.mjs",
@@ -294,8 +294,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/spine-state.mjs",
         "relativePath": "spine-state.mjs",
-        "size": 10721,
-        "modified": "2026-05-19T17:32:02.463Z"
+        "size": 19286,
+        "modified": "2026-05-21T13:56:31.262Z"
       },
       "repo:canonical-runtime-assets:utils.mjs": {
         "id": "utils.mjs",
@@ -321,8 +321,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
         "relativePath": "enforce-agent-dispatch.mjs",
-        "size": 9328,
-        "modified": "2026-05-19T17:56:55.035Z"
+        "size": 9575,
+        "modified": "2026-05-21T13:57:18.191Z"
       },
       "repo:canonical-runtime-assets:post-console-log-warn.mjs": {
         "id": "post-console-log-warn.mjs",
@@ -393,8 +393,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/stop-memory-save.mjs",
         "relativePath": "stop-memory-save.mjs",
-        "size": 10190,
-        "modified": "2026-05-18T20:17:35.108Z"
+        "size": 13406,
+        "modified": "2026-05-21T15:35:33.810Z"
       },
       "repo:canonical-runtime-assets:stop-save-progress.mjs": {
         "id": "stop-save-progress.mjs",

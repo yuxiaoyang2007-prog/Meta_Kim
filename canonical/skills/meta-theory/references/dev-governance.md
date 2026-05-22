@@ -172,7 +172,7 @@ The 8-stage spine is the **human-readable orchestration surface**. Underneath it
 
 ### User Language Rule
 
-Stage names remain canonical English protocol labels (`Critical`, `Fetch`, `Thinking`, `Review`, etc.). All user-facing text around those labels follows the user's latest language or explicit language preference. Do not hardcode Chinese, English, or any single language into option labels, clarifying questions, confirmation cards, or summaries. Record the language decision in `intentGatePacket.userLanguage`, `intentGatePacket.languageSource`, `cardDecision.userLanguage`, and `deliveryShell.languageSource`.
+Stage names remain canonical English protocol labels (`Critical`, `Fetch`, `Thinking`, `Review`, etc.). All user-facing text around those labels follows this priority: first the runtime/tool selected output language when the host has already chosen one, then the user's explicit output-language choice, then the user's latest input language when no stronger language source exists. Do not hardcode Chinese, English, or any single language into option labels, clarifying questions, confirmation cards, or summaries. Record the language decision in `intentGatePacket.userLanguage`, `intentGatePacket.languageSource`, `cardDecision.userLanguage`, and `deliveryShell.languageSource`.
 
 ### User Interaction Policy
 
@@ -181,7 +181,37 @@ Stage names remain canonical English protocol labels (`Critical`, `Fetch`, `Thin
 - **Notice (no popup)**: Informational updates, stage transitions, progress reports. Output directly to conversation, no response required. See `canonical/templates/user-interaction/notice-template.md`
 - **Decision (popup)**: Use the runtime's native confirmation mechanism when multiple viable options exist. Each option must include 4 dimensions. See `canonical/templates/user-interaction/decision-template.md`
 
+**Run status envelope**: every governed run must maintain a public status envelope in `.meta-kim/state/{profile}/active-run.json` and `.meta-kim/state/{profile}/runs/{runId}/status.json`. This envelope is the cross-runtime answer to "has meta started, how far is it, which stage is current, what is next, and is it blocked?" It is written by the runtime spine-state adapter using Node path APIs so Windows, macOS, Linux, Claude Code, Codex, Cursor, and OpenClaw all share the same state shape. The public notice reads from this envelope and must not expose `Preflight`, `nativeChoiceSurface`, `conversation_fallback`, packet ids, or protocol traces unless the user explicitly asks for debug/audit/protocol output.
+
+The public status renderer follows the same language rule as all other user-facing meta-theory text: runtime/tool selected output language first, explicit output-language choice second, and latest user input language only as fallback. The envelope may carry runtime-provided `publicLabels` and a resolved `stagePurpose`; canonical stage names remain English. Fixed labels in any single human language are forbidden as the default public notice shell.
+
+Default public notice shape:
+
+```text
+{localizedActiveLabel}: {Current Stage} ({stageIndex}/{stageTotal}, {percent}%)
+
+{localizedCompletedLabel}: {completed stages or localized none}
+{localizedCurrentLabel}: {plain-language stage purpose}
+{localizedNextLabel}: {next stage or localized none}
+{localizedBlockedLabel}: {blocker or localized none}
+```
+
 **Non-trivial execution rule**: For non-trivial executable work, Decision is the default after Fetch and pre-decision Thinking unless the user explicitly chose auto-proceed, the task is trivial, or `queryBypass: true` applies. Skips must be recorded as `choiceGateSkip`; silent skips fail Review.
+
+**Codex visible multi-option choice rule**: In Codex, every user-visible `meta-theory` confirmation or decision surface must include a short multi-option choice card with at least two options and a recommended default. This applies to user-facing Decisions; Notices and summaries may stay concise unless they ask the user to choose. It is a presentation rule only: it does not turn every Notice into a popup, does not override `queryBypass`, and does not replace `preDecisionOptionFrame` or the formal Decision gate. The choice card must follow the runtime/tool selected output language first, then the user's explicit output-language choice, then the user's latest input language when no stronger language source exists, while required protocol identifiers such as `Critical` and `Fetch` stay canonical. If only one practical path exists, include the rejected alternative and the reason it was rejected. Claude Code native question tool behavior remains unchanged.
+
+**Public/debug surface boundary**: Normal users should see the clean choice card, not the audit packet. Hide `Preflight`, `nativeChoiceSurface`, `conversation_fallback`, `Multi-Option Snapshot`, packet ids, and runtime plumbing by default. Show those fields only when the user explicitly asks for debug, audit, protocol, or governance trace output. If fallback behavior is relevant to expectation setting, explain it in plain language, for example: "This is a chat confirmation card, not a popup."
+
+**Codex native surface boundary**: Codex's official `default_mode_request_user_input` feature flag enables `request_user_input` in Default mode; Meta_Kim's Codex config should set `[features] default_mode_request_user_input = true` so Codex can expose the native interaction surface when the active host supports it. Do not claim Codex produced a popup unless `request_user_input` was available and actually invoked. Codex exec and repository hook adapters cannot create native UI by themselves; they must use a localized `conversation_fallback` chat card and label it as a chat card, not a popup.
+
+**Choice Surface Gate**: Before any runtime question tool, native choice, `request_user_input`, or `conversation_fallback`, record `choiceSurfaceState` as one of `not_allowed`, `critical_clarification_allowed`, `execution_confirmation_allowed`, or `completed`.
+
+- `not_allowed` is the default before Critical classification. No visible choice surface may appear.
+- `critical_clarification_allowed` applies only during Critical and only when Fetch cannot proceed safely. The question may clarify intent, scope, permission, safety, or language. It must not present execution options.
+- `execution_confirmation_allowed` applies only after Fetch has produced `contentEvidencePacket` and Thinking has produced `preDecisionOptionFrame`, and before Execution begins. This is the normal consolidated execution confirmation.
+- `completed` means the user has answered or an allowed skip has been recorded; do not ask again unless scope materially changes.
+
+Popup or interaction testing is a requirement to route through the normal flow, not permission to skip to a native choice surface. If no evidence-backed candidate paths exist, the execution confirmation is premature. If Fetch evidence is missing, Thinking is incomplete. If Thinking is incomplete, pre-Execution confirmation is forbidden.
 
 **Decision Triggers** (from `config/contracts/workflow-contract.json` → `userInteractionPolicy`):
 
@@ -990,7 +1020,7 @@ Before invoking a runtime question tool, native choice, or conversation fallback
     ],
     "recommendedDefault": "A",
     "requiresUserChoice": true,
-    "nativeChoiceSurface": "runtime_question_tool | native_choice | conversation_fallback",
+    "nativeChoiceSurface": "runtime_question_tool | request_user_input | native_choice | conversation_fallback",
     "choiceGateSkip": null,
     "reviewOwner": "meta-prism"
   }
@@ -1071,7 +1101,7 @@ Break Stage 1's task into independent sub-tasks:
 
 `dispatchEnvelopePacket`, `dispatchBoard`, and `workerTaskPackets` are finalized only after the user decision or allowed skip is recorded. If these artifacts are finalized before `preDecisionOptionFrame` and `userDecisionPacket` / `choiceGateSkip`, Review must fail the run.
 
-**Short business role naming rule**: The user-facing `owner` / `roleDisplayName` must name the coarse role family, not the platform nickname, a long task sentence, or a concrete work item. Use names such as `前端`, `后端`, `测试`, `frontend`, `backend`, `test`, `database`, or `security`. Put feature, page, installation, shard, or work-item scope in `roleInstanceId`, `shardScope`, `assignedResponsibilitySlice`, or the worker task text. Random personal aliases assigned by the host runtime are stored only in `runtimeInstanceAlias`; they must not appear as the primary role name in the task board or final summary.
+**Short business role naming rule**: The user-facing `owner` / `roleDisplayName` must name the coarse role family, not the platform nickname, a long task sentence, or a concrete work item. Use names such as `frontend`, `backend`, `test`, `database`, or `security`. Put feature, page, installation, shard, or work-item scope in `roleInstanceId`, `shardScope`, `assignedResponsibilitySlice`, or the worker task text. Random personal aliases assigned by the host runtime are stored only in `runtimeInstanceAlias`; they must not appear as the primary role name in the task board or final summary.
 
 **Same-agent multi-instance rule**: The same `ownerAgent` can appear in multiple packets when the work is shardable. This is valid only when each packet has a distinct `roleInstanceId`, `shardKey`, non-overlapping or locked `shardScope`, explicit `workspaceIsolation`, a unique `artifactNamespace`, an explicit `collisionPolicy`, and one unified `mergeOwner` for the parallel group. Without those fields, repeated ownerAgent entries are treated as fake parallelism and fail the decomposition gate.
 
@@ -1304,7 +1334,7 @@ Before proceeding to Step 4, the plan must pass this gate:
 | **Multi-file / multi-capability** | Task spans >1 file OR >1 capability dimension | MUST produce >= 2 `workerTaskPackets` |
 | **Single-Packet Anti-Pattern** | Only 1 packet produced for a multi-file / multi-capability task | REJECT — re-decompose or justify why a single packet is genuinely sufficient (single-file, single-capability, pure logic change) |
 | **Business-flow coverage** | `businessFlowBlueprintPacket` covers expected lanes or documents omitted lanes with reasons | REJECT — add missing lanes or omission reasons |
-| **Short business role names** | `roleDisplayName` uses a coarse role-family form (`前端`, `后端`, `测试`, `frontend`, `backend`, `test`); runtime nicknames and scoped work items are aliases or instance scope only | REJECT — replace personal/random names, scoped work items, or long task descriptions with coarse business role names |
+| **Short business role names** | `roleDisplayName` uses a coarse role-family form (`frontend`, `backend`, `test`); runtime nicknames and scoped work items are aliases or instance scope only | REJECT — replace personal/random names, scoped work items, or long task descriptions with coarse business role names |
 | **Role responsibility assignment** | Every `agentBlueprintPacket.roles[]` entry declares `assignedResponsibilitySlice`, `ownerResponsibilityDelta`, `agentIterationPlan`, and `ownerResolution` | REJECT — fill the role iteration fields before worker packets |
 | **Role coverage gap** | Failed `roleCoverageGate`, non-empty `missingRoles`, or `ownerResolution = upgrade_existing_owner | create_owner_first` has `capabilityGapPacket` and approved `executionAgentCard` | REJECT — create or upgrade the owner first |
 | **Same-agent multi-instance** | Repeated `ownerAgent` entries have unique `roleInstanceId`, shard scope, artifact namespace, isolation/collision policy, and one merge owner | REJECT — add shard/merge rules or make the work sequential |

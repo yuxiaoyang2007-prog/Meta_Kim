@@ -9,6 +9,12 @@
 # model and model_reasoning_effort are inherited from your Codex CLI configuration
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[features]
+# Enables Codex's native request_user_input surface in Default mode.
+# Actual rendering is owned by the active Codex host.
+default_mode_request_user_input = true
 
 [agents]
 max_threads = 6

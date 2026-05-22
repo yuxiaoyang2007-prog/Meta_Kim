@@ -4,6 +4,48 @@ import { join, dirname, resolve, relative, isAbsolute } from "node:path";
 const META_KIM_STATE_ROOT = ".meta-kim/state";
 const DEFAULT_SPINE_STATE_DIR = ".meta-kim/state/default/spine";
 const SPINE_STATE_FILE = "spine-state.json";
+const ACTIVE_RUN_STATUS_FILE = "active-run.json";
+const RUN_STATUS_FILE = "status.json";
+
+export const STAGE_ORDER = [
+  "critical",
+  "fetch",
+  "thinking",
+  "execution",
+  "review",
+  "meta_review",
+  "verification",
+  "evolution",
+];
+
+export const STAGE_PUBLIC_LABELS = {
+  critical: "Critical",
+  fetch: "Fetch",
+  thinking: "Thinking",
+  execution: "Execution",
+  review: "Review",
+  meta_review: "Meta-Review",
+  verification: "Verification",
+  evolution: "Evolution",
+};
+
+export const CHOICE_SURFACE_STATES = [
+  "not_allowed",
+  "critical_clarification_allowed",
+  "execution_confirmation_allowed",
+  "completed",
+];
+
+const STAGE_PROGRESS_PERCENT = {
+  critical: 12,
+  fetch: 25,
+  thinking: 38,
+  execution: 50,
+  review: 63,
+  meta_review: 75,
+  verification: 88,
+  evolution: 100,
+};
 
 export const STAGE_META_AGENT_MAP = {
   critical: {
@@ -46,6 +88,10 @@ const META_AGENT_NAMES = [
   "meta-prism",
   "meta-scout",
 ];
+
+function createRunId(timestamp = new Date().toISOString()) {
+  return `meta-${timestamp.replace(/[:.]/g, "-")}`;
+}
 
 function isWithin(parent, target) {
   const rel = relative(parent, target);
@@ -114,6 +160,49 @@ function ensureDir(filePath) {
   return mkdir(dirname(filePath), { recursive: true });
 }
 
+function normalizeStage(stageName) {
+  if (typeof stageName !== "string") return "critical";
+  const normalized = stageName.trim().toLowerCase().replace(/-/g, "_");
+  return STAGE_ORDER.includes(normalized) ? normalized : "critical";
+}
+
+function profileFromState(state) {
+  return sanitizeStateProfile(
+    state?.profile || state?.stateProfile || process.env.META_KIM_STATE_PROFILE,
+  );
+}
+
+function cleanLanguageTag(input) {
+  return typeof input === "string" && input.trim() ? input.trim() : null;
+}
+
+function resolveOutputLanguage(state, options = {}) {
+  const candidates = [
+    ["tool_selected", options.toolSelectedLanguage || state?.toolSelectedLanguage],
+    ["explicit_output_choice", options.outputLanguage || state?.outputLanguage],
+    ["intent_gate", state?.intentGatePacket?.userLanguage],
+    ["card_decision", state?.cardDecision?.userLanguage],
+    ["delivery_shell", state?.deliveryShell?.userLanguage],
+    ["latest_user_input", state?.latestUserInputLanguage],
+    ["environment", process.env.META_KIM_OUTPUT_LANGUAGE || process.env.LANG],
+  ];
+
+  for (const [source, value] of candidates) {
+    const language = cleanLanguageTag(value);
+    if (language) return { language, source };
+  }
+
+  return { language: "undetermined", source: "not_resolved" };
+}
+
+function runStatusPaths(cwd, profile, runId) {
+  const profileDir = resolveProfileStateDir(cwd, profile);
+  return {
+    activeRun: join(profileDir, ACTIVE_RUN_STATUS_FILE),
+    runStatus: join(profileDir, "runs", runId, RUN_STATUS_FILE),
+  };
+}
+
 export async function readSpineState(cwd) {
   const filePath = spineStatePath(cwd);
   try {
@@ -128,13 +217,16 @@ export async function writeSpineState(cwd, state) {
   const filePath = spineStatePath(cwd);
   await ensureDir(filePath);
   await writeFile(filePath, JSON.stringify(state, null, 2), "utf-8");
+  await writeMetaRunStatus(cwd, state);
 }
 
 export function createInitialState({ taskClassification, triggerReason }) {
+  const triggeredAt = new Date().toISOString();
   return {
     active: true,
     version: 2,
-    triggeredAt: new Date().toISOString(),
+    runId: createRunId(triggeredAt),
+    triggeredAt,
     currentStage: "critical",
     stages: {
       critical: { status: "in_progress", completedAt: null },
@@ -150,6 +242,7 @@ export function createInitialState({ taskClassification, triggerReason }) {
     triggerReason: triggerReason || "user_invocation",
     dispatchedAgents: [],
     dispatchChain: {},
+    choiceSurfaceState: "not_allowed",
     queryBypass: false,
     executionStarted: false,
     // Simple mode: allows hook skipping for lightweight tasks
@@ -159,17 +252,94 @@ export function createInitialState({ taskClassification, triggerReason }) {
   };
 }
 
+export function createMetaRunStatusEnvelope(state, options = {}) {
+  const currentStage = normalizeStage(
+    options.currentStage || state?.currentStage || "critical",
+  );
+  const stageIndex = STAGE_ORDER.indexOf(currentStage) + 1;
+  const stageTotal = STAGE_ORDER.length;
+  const stages = state?.stages || {};
+  const completed = STAGE_ORDER.filter(
+    (stage) => stages?.[stage]?.status === "completed",
+  ).map((stage) => STAGE_PUBLIC_LABELS[stage]);
+  const nextStage =
+    stageIndex < stageTotal ? STAGE_ORDER[stageIndex] : null;
+  const startedAt =
+    state?.triggeredAt || state?.startedAt || new Date().toISOString();
+  const updatedAt = new Date().toISOString();
+  const runId = state?.runId || createRunId(startedAt);
+  const languageResolution = resolveOutputLanguage(state, options);
+  const stagePurpose =
+    state?.stagePurpose ||
+    state?.stagePurposes?.[languageResolution.language] ||
+    null;
+
+  return {
+    schemaVersion: 1,
+    active: state?.active !== false,
+    runId,
+    triggeredBy:
+      state?.triggerReason || state?.triggeredBy || "meta-theory",
+    currentStage: STAGE_PUBLIC_LABELS[currentStage],
+    currentStageKey: currentStage,
+    stageIndex,
+    stageTotal,
+    percent: STAGE_PROGRESS_PERCENT[currentStage],
+    completed,
+    next: nextStage ? STAGE_PUBLIC_LABELS[nextStage] : null,
+    blockedOn: state?.blockedOn || null,
+    startedAt,
+    updatedAt,
+    lastUserVisibleNotice: state?.lastUserVisibleNotice || null,
+    surfaceMode: "public",
+    resolvedOutputLanguage: languageResolution.language,
+    languageResolution,
+    publicSurface: {
+      primaryDisplay: "conversation_notice",
+      nativeEnhancementAllowed: true,
+      popupRequired: false,
+      hiddenInternalFields: [
+        "Preflight",
+        "nativeChoiceSurface",
+        "conversation_fallback",
+        "packet_id",
+        "protocol_trace",
+      ],
+    },
+    publicLabels: state?.publicLabels || null,
+    stagePurpose,
+    stagePurposeKey: currentStage,
+  };
+}
+
+export async function writeMetaRunStatus(cwd, state, options = {}) {
+  if (!state || typeof state !== "object") return null;
+  const envelope = createMetaRunStatusEnvelope(state, options);
+  const profile = profileFromState(state);
+  const paths = runStatusPaths(cwd, profile, envelope.runId);
+  await ensureDir(paths.activeRun);
+  await ensureDir(paths.runStatus);
+  const serialized = JSON.stringify(envelope, null, 2);
+  await Promise.all([
+    writeFile(paths.activeRun, serialized, "utf-8"),
+    writeFile(paths.runStatus, serialized, "utf-8"),
+  ]);
+  return envelope;
+}
+
+export async function readMetaRunStatus(cwd, profile) {
+  const filePath = runStatusPaths(cwd, sanitizeStateProfile(profile), "latest")
+    .activeRun;
+  try {
+    const raw = await readFile(filePath, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 export function advanceStage(state, stageName) {
-  const stageOrder = [
-    "critical",
-    "fetch",
-    "thinking",
-    "execution",
-    "review",
-    "meta_review",
-    "verification",
-    "evolution",
-  ];
+  const stageOrder = STAGE_ORDER;
 
   const idx = stageOrder.indexOf(stageName);
   if (idx === -1) return state;
@@ -210,16 +380,7 @@ export function completeStage(state, stageName) {
     completedAt: new Date().toISOString(),
   };
 
-  const stageOrder = [
-    "critical",
-    "fetch",
-    "thinking",
-    "execution",
-    "review",
-    "meta_review",
-    "verification",
-    "evolution",
-  ];
+  const stageOrder = STAGE_ORDER;
   const idx = stageOrder.indexOf(stageName);
   if (idx < stageOrder.length - 1) {
     const nextStage = stageOrder[idx + 1];
@@ -297,6 +458,11 @@ export function checkStageRequirements(state) {
     };
   }
 
+  const choiceSurfaceGate = checkChoiceSurfaceGate(state);
+  if (!choiceSurfaceGate.met) {
+    return choiceSurfaceGate;
+  }
+
   return {
     met: missing.length === 0,
     missing,
@@ -305,6 +471,116 @@ export function checkStageRequirements(state) {
         ? `Stage "${stage}" requires meta-agent(s): ${missing.join(", ")}. Dispatch them via Agent tool first.`
         : "requirements met",
   };
+}
+
+function normalizeChoiceSurfaceState(value) {
+  return CHOICE_SURFACE_STATES.includes(value) ? value : "not_allowed";
+}
+
+function hasFetchEvidence(state) {
+  return !!(
+    state?.fetchRecord ||
+    state?.fetchPacket ||
+    state?.contentEvidencePacket ||
+    state?.capabilityEvidencePacket
+  );
+}
+
+function hasCandidateOptions(frame) {
+  if (!frame || typeof frame !== "object") return false;
+  const optionFields = [
+    frame.candidatePaths,
+    frame.solutionPaths,
+    frame.options,
+    frame.candidates,
+    frame.cards,
+  ];
+  return optionFields.some((value) => Array.isArray(value) && value.length > 0);
+}
+
+function getPreDecisionOptionFrame(state) {
+  return (
+    state?.preDecisionOptionFrame ||
+    state?.cardPlanPacket ||
+    state?.businessFlowBlueprintPacket ||
+    null
+  );
+}
+
+function hasChoiceGateSkip(state) {
+  const frame = getPreDecisionOptionFrame(state);
+  return !!(
+    state?.choiceGateSkip ||
+    frame?.choiceGateSkip ||
+    state?.intentGatePacket?.choiceGateSkip
+  );
+}
+
+export function checkChoiceSurfaceGate(state) {
+  if (!state || state.queryBypass || state.simpleMode) {
+    return { met: true, missing: [], reason: "choice surface gate bypassed" };
+  }
+
+  const stage = normalizeStage(state.currentStage);
+  const stageIdx = STAGE_ORDER.indexOf(stage);
+  const thinkingIdx = STAGE_ORDER.indexOf("thinking");
+  const executionIdx = STAGE_ORDER.indexOf("execution");
+  const choiceState = normalizeChoiceSurfaceState(state.choiceSurfaceState);
+  const fetchEvidencePresent = hasFetchEvidence(state);
+  const preDecisionFrame = getPreDecisionOptionFrame(state);
+  const candidateOptionsPresent = hasCandidateOptions(preDecisionFrame);
+  const skipRecorded = hasChoiceGateSkip(state);
+  const decisionBasisPresent =
+    fetchEvidencePresent && (candidateOptionsPresent || skipRecorded);
+
+  if (
+    stageIdx < thinkingIdx &&
+    (choiceState === "execution_confirmation_allowed" ||
+      choiceState === "completed")
+  ) {
+    return {
+      met: false,
+      missing: ["Fetch evidence", "Thinking candidate options"],
+      reason:
+        "Choice Surface Gate violation: execution confirmation appeared before Fetch and Thinking completed.",
+    };
+  }
+
+  if (
+    stage === "thinking" &&
+    (choiceState === "execution_confirmation_allowed" ||
+      choiceState === "completed") &&
+    !decisionBasisPresent
+  ) {
+    return {
+      met: false,
+      missing: ["Fetch evidence", "preDecisionOptionFrame"],
+      reason:
+        "Choice Surface Gate violation: execution confirmation requires Fetch evidence and a Thinking option frame.",
+    };
+  }
+
+  if (stageIdx >= executionIdx) {
+    if (!decisionBasisPresent) {
+      return {
+        met: false,
+        missing: ["Fetch evidence", "preDecisionOptionFrame"],
+        reason:
+          "Execution cannot start before Fetch evidence and Thinking candidate options are recorded.",
+      };
+    }
+
+    if (choiceState !== "completed" && !skipRecorded) {
+      return {
+        met: false,
+        missing: ["choiceSurfaceState=completed"],
+        reason:
+          "Execution cannot start before execution confirmation is completed or an explicit choiceGateSkip is recorded.",
+      };
+    }
+  }
+
+  return { met: true, missing: [], reason: "choice surface gate met" };
 }
 
 export function setQueryBypass(state, bypass) {

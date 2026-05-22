@@ -6,6 +6,49 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.0.42] - 2026-05-22
+
+### Added
+
+- **Chinese architecture map** — Added a detailed Chinese-first architecture document covering canonical sources, runtime projections, the 8-stage spine, the 11-phase business workflow, hidden governance packets, memory layers, Graphify, install/update flow, and runtime capability boundaries.
+- **MCP memory recall regression tests** — Added setup coverage for generic prompts that must still recall recent high-signal project memory, including buried MCP Memory Service details inside long checkpoint records.
+
+### Changed
+
+- **Layer 3 memory recall strategy** — Codex, Cursor, OpenClaw, and Claude hooks now use multi-query recall, recent-project fallback, high-signal memory prioritization, topic-level dedupe, and keyword-centered excerpts instead of relying on a single project-name search.
+- **MCP memory health handling** — Runtime hooks now check `/api/health`, attempt local `memory server --http` autostart when safe, and emit a throttled status notice instead of silently losing cross-session recall when the local service is down.
+- **Release notes for recent fixes** — This release rolls up the recent pushed fixes for Codex request-user-input defaults, Codex warning suppression, cross-runtime memory hook output, meta-theory choice surfaces, Claude plugin skill residue cleanup, and Graphify usage docs.
+
+### Fixed
+
+- **Healthy service but weak recall** — Fixes the case where `http://localhost:8000` is healthy but the agent only recalls Layer 3 memory when the prompt explicitly mentions the port or MCP Memory Service.
+- **Long checkpoint truncation** — Recalled memories now excerpt around high-signal terms such as `8000`, `MCP Memory Service`, `third layer`, and cross-session recall instead of truncating only from the beginning.
+- **Repeated checkpoint noise** — Similar stop/session checkpoint records are deduped at the topic level so old repeated MCP startup notes do not drown out current project memory.
+
+## [2.0.41] - 2026-05-21
+
+### Fixed
+
+- **Language-source status notices** — Run status notices now resolve language from the runtime/tool selected output language first, then explicit output-language choice, then latest user input language as fallback.
+- **No fixed-language notice shell** — Removed fixed Chinese/English examples from the default notice template and added tests that reject any single-language default status shell.
+
+## [2.0.40] - 2026-05-21
+
+### Added
+
+- **Public meta run status envelope** — Meta-theory runs now write a cross-runtime `active-run.json` and per-run `status.json` so users can see whether governance is active, which stage is current, progress, next stage, and blockers.
+- **Run status CLI** — Added `npm run meta:run-status` for reading the current public meta-governance status, including localized inactive output.
+- **Run status tests** — Added coverage for the status envelope contract, cross-platform status-file writes, localized status text, and notice-template rules.
+
+### Changed
+
+- **Stage notices** — Replaced protocol-heavy stage examples with concise public notices that hide `Preflight`, fallback surface names, packet ids, and protocol traces by default.
+- **Runtime mirrors** — Synced project and global Claude Code, Codex, OpenClaw, and Cursor meta-theory mirrors with the status-envelope behavior.
+
+### Fixed
+
+- **Status language matching** — Public status labels and stage purpose text now follow the user's selected or inferred language while keeping canonical stage labels such as `Critical` and `Fetch` in English.
+
 ## [2.0.39] - 2026-05-20
 
 ### Added

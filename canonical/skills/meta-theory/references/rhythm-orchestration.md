@@ -68,16 +68,16 @@ card:
 
 | Card | Original name | Trigger | Action | Attention | Philosophy |
 |------|---------------|---------|--------|-----------|------------|
-| **Clarify** | 澄清 | Ambiguous need | ≤2 rounds of questions | low | Gather before act |
-| **Shrink scope** | 范围收缩 | Repo too large / many files / clashes | Narrow boundary | low | Complexity → reckless edits |
-| **Options** | 方案 | Clear need, many paths | Routes + tradeoffs + pick | mid | Map before code |
-| **Execute** | 执行 | Plan done, risk OK | Assign metas, change code | high | Plan before code |
-| **Verify** | 校验 | Execution done | Build / types / deps / reqs | mid | First pass ≠ correct |
-| **Fix** | 修复 | Verify fails | Repair until pass | mid | Cap iterations |
-| **Rollback** | 回滚 | Risk or blast radius grows | Last stable state | high | Retreat = maturity |
-| **Risk** | 风险 | Shared parts / auth / global / multi-party | Surface risk; preempt | high | Safety / global first |
-| **Nudge** | 建议 | User stuck, light touch | Low-cost next step | low | Helpful, not loud |
-| **Pause** | 留白 | Streak done / digest / ≥3 high-cost | Stop pushing; short status | zero | Designed silence |
+| **Clarify** | Clarify | Ambiguous need | ≤2 rounds of questions | low | Gather before act |
+| **Shrink scope** | Scope shrink | Repo too large / many files / clashes | Narrow boundary | low | Complexity → reckless edits |
+| **Options** | Options | Clear need, many paths | Routes + tradeoffs + pick | mid | Map before code |
+| **Execute** | Execute | Plan done, risk OK | Assign metas, change code | high | Plan before code |
+| **Verify** | Verify | Execution done | Build / types / deps / reqs | mid | First pass ≠ correct |
+| **Fix** | Fix | Verify fails | Repair until pass | mid | Cap iterations |
+| **Rollback** | Rollback | Risk or blast radius grows | Last stable state | high | Retreat = maturity |
+| **Risk** | Risk | Shared parts / auth / global / multi-party | Surface risk; preempt | high | Safety / global first |
+| **Nudge** | Nudge | User stuck, light touch | Low-cost next step | low | Helpful, not loud |
+| **Pause** | Pause | Streak done / digest / ≥3 high-cost | Stop pushing; short status | zero | Designed silence |
 
 ### Dealing rules (priority order)
 

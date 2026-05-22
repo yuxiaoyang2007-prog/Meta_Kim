@@ -69,3 +69,6 @@ pwsh.*.omp.cache
 lib/
 */lib/
 */node_modules/
+
+# ========== Ignored docs ==========
+docs/architecture.zh-CN.md

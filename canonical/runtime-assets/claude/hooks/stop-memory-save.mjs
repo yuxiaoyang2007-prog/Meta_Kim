@@ -13,6 +13,7 @@
 import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
 import http from "node:http";
 import https from "node:https";
 
@@ -32,7 +33,9 @@ try {
 // ── Config ──────────────────────────────────────────────
 const DEFAULT_ENDPOINT = process.env.MCP_MEMORY_URL || "http://localhost:8000";
 const TIMEOUT_MS = 4000;
+const HEALTH_TIMEOUT_MS = 500;
 const REMOTE_MEMORY_ALLOWED = process.env.META_KIM_ALLOW_REMOTE_MEMORY === "1";
+const MEMORY_AUTOSTART_DISABLED = process.env.META_KIM_DISABLE_MEMORY_AUTOSTART === "1";
 const SECRET_PATTERNS = [
   /\bsk-(?:proj|live|test)?-[A-Za-z0-9_-]{10,}\b/gu,
   /\bgithub_pat_[A-Za-z0-9_]{20,}\b/gu,
@@ -97,6 +100,104 @@ function isAllowedMemoryEndpoint(endpoint) {
   } catch {
     return false;
   }
+}
+
+function isLoopbackMemoryEndpoint(endpoint) {
+  try {
+    const url = new URL(endpoint);
+    const hostname = url.hostname.replace(/^\[|\]$/gu, "").toLowerCase();
+    return ["localhost", "127.0.0.1", "::1"].includes(hostname);
+  } catch {
+    return false;
+  }
+}
+
+function getJson(endpoint, apiPath, timeoutMs = HEALTH_TIMEOUT_MS) {
+  return new Promise((resolve) => {
+    if (!isAllowedMemoryEndpoint(endpoint)) {
+      resolve({ ok: false, body: {} });
+      return;
+    }
+    let url;
+    try {
+      url = new URL(apiPath, endpoint);
+    } catch {
+      resolve({ ok: false, body: {} });
+      return;
+    }
+    const transport = url.protocol === "https:" ? https : http;
+    const req = transport.request(
+      {
+        hostname: url.hostname,
+        port: url.port || (url.protocol === "https:" ? 443 : 80),
+        path: `${url.pathname}${url.search}`,
+        method: "GET",
+        headers: { Accept: "application/json" },
+        timeout: timeoutMs,
+      },
+      (res) => {
+        let response = "";
+        res.on("data", (chunk) => {
+          response += chunk;
+        });
+        res.on("end", () => {
+          try {
+            resolve({
+              ok: res.statusCode >= 200 && res.statusCode < 300,
+              body: JSON.parse(response || "{}"),
+            });
+          } catch {
+            resolve({ ok: false, body: {} });
+          }
+        });
+      },
+    );
+    req.on("error", () => resolve({ ok: false, body: {} }));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve({ ok: false, body: {} });
+    });
+    req.end();
+  });
+}
+
+async function isMemoryServiceHealthy(endpoint) {
+  const result = await getJson(endpoint, "/api/health");
+  return result.ok && result.body?.status === "healthy";
+}
+
+function startMemoryServiceBackground(endpoint) {
+  if (MEMORY_AUTOSTART_DISABLED || !isLoopbackMemoryEndpoint(endpoint)) return false;
+  const memoryBin = process.env.MCP_MEMORY_BIN || "memory";
+  try {
+    const child = spawn(memoryBin, ["server", "--http"], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+      env: {
+        ...process.env,
+        MCP_ALLOW_ANONYMOUS_ACCESS: "true",
+        HF_HUB_OFFLINE: "1",
+        TRANSFORMERS_OFFLINE: "1",
+      },
+    });
+    child.on("error", () => undefined);
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureMemoryService(endpoint) {
+  if (await isMemoryServiceHealthy(endpoint)) return true;
+  const started = startMemoryServiceBackground(endpoint);
+  if (!started) return false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    if (await isMemoryServiceHealthy(endpoint)) return true;
+  }
+  return false;
 }
 
 function redactSecrets(text) {
@@ -282,6 +383,13 @@ function postMemory(endpoint, payload) {
 async function main() {
   const cfg = await loadConfig();
   const endpoint = getEndpoint(cfg);
+  const serviceReady = await ensureMemoryService(endpoint);
+  if (!serviceReady) {
+    process.stderr.write(
+      `[meta-kim] MCP Memory Service not healthy at ${endpoint}; session memory was not saved. Tried background start with memory server --http for local endpoints.\n`,
+    );
+    return;
+  }
 
   const transcriptPath = INPUT.transcript_path || INPUT.transcriptPath;
   const cwd = INPUT.cwd || process.cwd();

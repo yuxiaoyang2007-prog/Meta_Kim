@@ -15,6 +15,11 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  checkChoiceSurfaceGate,
+  checkStageRequirements,
+  createInitialState,
+} from "../../canonical/runtime-assets/claude/hooks/spine-state.mjs";
+import {
   REPO_ROOT,
   EIGHT_STAGES,
   readFile,
@@ -522,6 +527,105 @@ describe("Part F: gate state enforcement", async () => {
       gate.blockCompletionWithoutClosedDeliverableChain,
       "must block without deliverable chain",
     );
+  });
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Part F2: Choice Surface Runtime Gate
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+describe("Part F2: choice surface runtime gate", async () => {
+  test("initial Critical state does not allow execution confirmation", () => {
+    const state = createInitialState({
+      taskClassification: "meta_theory_auto",
+      triggerReason: "test",
+    });
+
+    const result = checkChoiceSurfaceGate(state);
+    assert.equal(state.choiceSurfaceState, "not_allowed");
+    assert.equal(result.met, true);
+  });
+
+  test("blocks execution confirmation before Fetch and Thinking evidence", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      currentStage: "fetch",
+      choiceSurfaceState: "completed",
+    };
+
+    const result = checkChoiceSurfaceGate(state);
+    assert.equal(result.met, false);
+    assert.match(result.reason, /before Fetch and Thinking completed/);
+  });
+
+  test("blocks Execution when confirmation was offered but not completed", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      currentStage: "execution",
+      dispatchedAgents: ["frontend"],
+      fetchRecord: { capabilityMatches: ["frontend"] },
+      preDecisionOptionFrame: {
+        candidatePaths: ["direct hook enforcement", "contract-only guard"],
+      },
+      choiceSurfaceState: "execution_confirmation_allowed",
+    };
+
+    const result = checkStageRequirements(state);
+    assert.equal(result.met, false);
+    assert.deepEqual(result.missing, ["choiceSurfaceState=completed"]);
+  });
+
+  test("allows Execution after Fetch evidence, Thinking options, and completed confirmation", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      currentStage: "execution",
+      dispatchedAgents: ["frontend"],
+      fetchRecord: { capabilityMatches: ["frontend"] },
+      preDecisionOptionFrame: {
+        candidatePaths: ["direct hook enforcement", "contract-only guard"],
+      },
+      choiceSurfaceState: "completed",
+    };
+
+    const result = checkStageRequirements(state);
+    assert.equal(result.met, true);
+  });
+
+  test("allows explicit choiceGateSkip as an auditable non-interactive path", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      currentStage: "execution",
+      fetchRecord: { capabilityMatches: ["frontend"] },
+      preDecisionOptionFrame: {
+        choiceGateSkip: {
+          reason: "non-interactive runtime fallback",
+        },
+      },
+      choiceSurfaceState: "not_allowed",
+    };
+
+    const result = checkChoiceSurfaceGate(state);
+    assert.equal(result.met, true);
+  });
+
+  test("execution hook imports and applies the choice surface gate", async () => {
+    const hook = await readFile(
+      "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
+    );
+    assert.match(hook, /checkChoiceSurfaceGate/);
+    assert.match(hook, /choiceSurfaceGate\.met/);
   });
 });
 

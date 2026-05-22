@@ -40,17 +40,17 @@
 
 ## Test Prompts
 
-1. **Type A test**: "审查一下 meta-conductor 的定义是否符合 Five Criteria"
+1. **Type A test**: "Review whether meta-conductor's definition complies with Five Criteria"
    - Expected: classify Type A, Fetch-first search quality review capability, dispatch quality audit agent
 
-2. **Type C test**: "给 stop-memory-save hook 添加重试机制"
+2. **Type C test**: "Add retry mechanism to stop-memory-save hook"
    - Expected: classify Type C, measurable trigger (file modification), dispatch execution agent
 
-3. **Ambiguity test**: "优化一下项目"
+3. **Ambiguity test**: "Optimize the project"
    - Expected: Clarity Gate fires (≥2 dimensions ambiguous), ask before proceeding
 
-4. **Simple task test**: "这个文件第10行什么意思"
+4. **Simple task test**: "What does line 10 in this file mean"
    - Expected: no dispatch needed, answer directly (single file, single question, no modification)
 
-5. **Type B test**: "创建一个新的 meta-auditor agent 专门做运行时健康审计"
+5. **Type B test**: "Create a new meta-auditor agent for runtime health audit"
    - Expected: classify Type B, Factory Station activates, Genesis→Artisan sequential pipeline

@@ -6,6 +6,49 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.0.42] - 2026-05-22
+
+### 新增
+
+- **中文完整架构图** — 新增中文为主的详细架构文档，覆盖 canonical 源、运行时投影、8 阶段主干、11 阶段业务流、隐藏治理包、三层记忆、Graphify、安装/更新流程和各运行时能力边界。
+- **MCP 记忆召回回归测试** — 新增 setup 测试，确保泛提示也能召回最近的高信号项目记忆，并覆盖长 checkpoint 中被埋住的 MCP Memory Service 细节。
+
+### 变更
+
+- **第三层记忆召回策略** — Codex、Cursor、OpenClaw 和 Claude hooks 现在使用多路查询、最近项目兜底、高信号记忆优先、主题级去重和关键词居中摘录，不再只依赖一次项目名搜索。
+- **MCP 记忆健康处理** — Runtime hooks 现在会检查 `/api/health`，在本地端点安全时尝试后台启动 `memory server --http`，失败时注入节流状态提示，避免跨会话召回静默失效。
+- **近期修复汇总** — 本版本汇总近期已推送修复：Codex request-user-input 默认启用、Codex warning suppression、跨运行时 memory hook 输出、meta-theory choice surface、Claude 插件 skill 残留清理，以及 Graphify 使用说明。
+
+### 修复
+
+- **服务健康但召回弱** — 修复 `http://localhost:8000` 健康时，agent 仍然只有在 prompt 明确写端口或 MCP Memory Service 才能想起第三层记忆的问题。
+- **长 checkpoint 截断** — 召回内容现在围绕 `8000`、`MCP Memory Service`、`third layer`、跨会话召回等高信号词摘录，不再只截取开头。
+- **重复 checkpoint 噪声** — stop/session checkpoint 会按主题级去重，避免旧的重复 MCP 启动记录淹没当前项目记忆。
+
+## [2.0.41] - 2026-05-21
+
+### 修复
+
+- **按语言来源渲染状态通知** — 运行状态通知现在优先使用 runtime/tool 已选择的输出语言，其次使用用户明确选择的输出语言，最后才用用户最新输入语言兜底。
+- **去除固定语言通知外壳** — 默认 notice 模板不再放固定中文或英文示例，并新增测试拒绝任何单一语言默认状态壳。
+
+## [2.0.40] - 2026-05-21
+
+### 新增
+
+- **公开元运行状态 envelope** — meta-theory 运行现在会写入跨运行时的 `active-run.json` 和每轮 `status.json`，用户可以看到元治理是否已触发、当前阶段、进度、下一步和阻塞。
+- **运行状态 CLI** — 新增 `npm run meta:run-status`，用于读取当前公开元治理状态，并支持本地化的未运行输出。
+- **运行状态测试** — 新增状态 envelope 合同、跨平台状态文件写入、本地化状态文本和 notice 模板规则测试。
+
+### 变更
+
+- **阶段通知** — 将偏协议的阶段示例改为简短公开状态提示，默认隐藏 `Preflight`、fallback surface 名称、packet id 和 protocol trace。
+- **运行时镜像** — 已同步项目和全局 Claude Code、Codex、OpenClaw、Cursor 的 meta-theory mirror，带上状态 envelope 行为。
+
+### 修复
+
+- **状态语言匹配** — 公开状态标签和阶段说明现在会跟随用户选择或推断出的语言，同时保留 `Critical`、`Fetch` 等 canonical 阶段名为英文。
+
 ## [2.0.39] - 2026-05-20
 
 ### 新增

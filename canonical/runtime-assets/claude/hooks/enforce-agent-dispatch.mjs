@@ -8,6 +8,7 @@ import {
   recordDispatch,
   writeSpineState,
   checkStageRequirements,
+  checkChoiceSurfaceGate,
   STAGE_META_AGENT_MAP,
   extractMetaAgentName,
   setSimpleMode,
@@ -247,6 +248,14 @@ if (state.queryBypass) {
 // Execution tools: enforce dispatch chain
 if (isExecutionTool(toolName)) {
   if (isSpineStateWrite() || isPlanningFile()) {
+    process.exit(0);
+  }
+
+  const choiceSurfaceGate = checkChoiceSurfaceGate(state);
+  if (!choiceSurfaceGate.met) {
+    deny(
+      `${choiceSurfaceGate.reason} Missing: ${choiceSurfaceGate.missing.join(", ")}.`,
+    );
     process.exit(0);
   }
 

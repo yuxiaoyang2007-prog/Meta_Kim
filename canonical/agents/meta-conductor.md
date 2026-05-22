@@ -66,6 +66,16 @@ trigger: "Multi-step tasks, Type C execution, rhythm optimization, or when workf
 **Key Distinction**: Conductor binds **stage cards** to **execution lanes and sequencing**; Artisan maps **named skills/tools** to **one agent** from SOUL.md. No shared `matchSkillsToPhase`-style surface — lane specs stay abstract; skill lists stay in Artisan.
 **Dispatch Rule**: Conductor is the sole card dealer / dispatcher. Warden approves, denies, or re-requests the dispatch board, but does not own card play.
 
+## Problem-First Operating Contract
+
+Before dealing cards or expanding a board, Conductor must name the `coreProblem` in one sentence: what decision, defect, design gap, or deliverable the run must close.
+
+- If a stage, card, or worker packet does not improve the core problem, evidence quality, safety, or writeback quality, compress it into an internal note.
+- If missing information blocks safe routing, ask the smallest blocking clarification; otherwise proceed with explicit assumptions and mark remaining uncertainty.
+- If the route depends on current external facts, third-party behavior, or platform capability claims, require Fetch/Scout evidence before finalizing options.
+- Conductor may perform read-only inspection and non-destructive verification needed for routing evidence, but must not implement worker deliverables.
+- If the issue is read-only and locally inspectable, gather evidence before interrupting the user with broad choice surfaces.
+
 ### Four dealer questions (compact, aligned with the theory reference)
 
 | # | Question | Resolves |
@@ -74,6 +84,18 @@ trigger: "Multi-step tasks, Type C execution, rhythm optimization, or when workf
 | 2 | **When to deal?** | Preconditions, rhythm, skip/silence/interrupt — not “everything at once” |
 | 3 | **Who receives?** | Which meta or worker owns the boundary under the **organizational mirror** division of labor |
 | 4 | **Why deal now?** | Ties to sole primary deliverable and **intent amplification** (next concrete move), not showmanship |
+
+### Path Tiering
+
+Conductor chooses the smallest responsible path before expanding a dispatch board:
+
+| Path | Use when | Board shape |
+|---|---|---|
+| `fast_path` | Read-only/local analysis, one narrow decision, no write risk | Minimal evidence notes and direct synthesis owner |
+| `standard_path` | Bounded executable work with clear owner and moderate risk | Compressed Critical/Fetch/Thinking/Execution/Review/Verification board |
+| `regulated_path` | Cross-module, multi-agent, security-sensitive, release-facing, or durable policy work | Full 8-stage board with complete packets and gates |
+
+If Warden rejects the same board twice without new evidence, Conductor must trigger `deadlockBreaker` instead of reformatting the same plan.
 
 ## Workflow
 

@@ -1272,10 +1272,18 @@ async function runClaudeDiscovery(agentIds) {
       },
     ));
   } catch (error) {
-    if (String(error.message).includes("'claude agents' is not available")) {
+    const message = String(error.message);
+    if (message.includes("'claude agents' is not available")) {
       return discoverFromProjectFiles({
         cliSupportsAgentsCommand: true,
         fallbackReason: "claude-agents-command-unavailable",
+        fallbackError: error.message,
+      });
+    }
+    if (message.includes("requires an interactive terminal")) {
+      return discoverFromProjectFiles({
+        cliSupportsAgentsCommand: true,
+        fallbackReason: "claude-agents-command-non-tty",
         fallbackError: error.message,
       });
     }
@@ -1445,6 +1453,12 @@ async function runCodexSmoke() {
     mcp_supported: configExample.includes("[mcp_servers.meta_kim_runtime]"),
     sandbox_configurable: configExample.includes("sandbox_mode"),
     approvals_configurable: configExample.includes("approval_policy"),
+    suppresses_unstable_feature_warning: configExample.includes(
+      "suppress_unstable_features_warning = true",
+    ),
+    request_user_input_default_mode:
+      configExample.includes("[features]") &&
+      configExample.includes("default_mode_request_user_input = true"),
   };
 
   const structuralOk =
@@ -1455,7 +1469,9 @@ async function runCodexSmoke() {
     payload.custom_agents.includes("meta-warden") &&
     payload.mcp_supported === true &&
     payload.sandbox_configurable === true &&
-    payload.approvals_configurable === true;
+    payload.approvals_configurable === true &&
+    payload.suppresses_unstable_feature_warning === true &&
+    payload.request_user_input_default_mode === true;
 
   return {
     status: structuralOk ? "passed" : "failed",
@@ -1509,6 +1525,12 @@ async function runCodexLive() {
     mcp_supported: configExample.includes("[mcp_servers.meta_kim_runtime]"),
     sandbox_configurable: configExample.includes("sandbox_mode"),
     approvals_configurable: configExample.includes("approval_policy"),
+    suppresses_unstable_feature_warning: configExample.includes(
+      "suppress_unstable_features_warning = true",
+    ),
+    request_user_input_default_mode:
+      configExample.includes("[features]") &&
+      configExample.includes("default_mode_request_user_input = true"),
   };
 
   const structuralOk =
@@ -1519,7 +1541,9 @@ async function runCodexLive() {
     payload.custom_agents.includes("meta-warden") &&
     payload.mcp_supported === true &&
     payload.sandbox_configurable === true &&
-    payload.approvals_configurable === true;
+    payload.approvals_configurable === true &&
+    payload.suppresses_unstable_feature_warning === true &&
+    payload.request_user_input_default_mode === true;
 
   const schemaDir = await fs.mkdtemp(path.join(os.tmpdir(), "meta-kim-codex-"));
   const schemaPath = path.join(schemaDir, "codex-smoke.schema.json");

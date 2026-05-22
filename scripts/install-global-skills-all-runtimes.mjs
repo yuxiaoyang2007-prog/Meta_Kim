@@ -43,6 +43,7 @@ import {
 } from "./install-error-classifier.mjs";
 import {
   detectLegacySubdirInstall,
+  detectPluginBundleSkillResidue,
   sanitizeInstalledSkillTree,
 } from "./install-skill-sanitizer.mjs";
 import { fileURLToPath } from "node:url";
@@ -1736,7 +1737,7 @@ async function installPluginBundlesForNonClaudeRuntimes(
 
 async function installClaudePlugins() {
   if (skipPlugins || CLAUDE_PLUGIN_SPECS.length === 0) {
-    return;
+    return false;
   }
   console.log(`\n${C.bold}${AMBER}${t.pluginsHeader}${C.reset}`);
 
@@ -1770,7 +1771,7 @@ async function installClaudePlugins() {
     for (const spec of CLAUDE_PLUGIN_SPECS) {
       console.log(t.dryRun(`claude plugin install ${spec}`));
     }
-    return;
+    return true;
   }
 
   // Probe which claude invocation method works.
@@ -1804,7 +1805,7 @@ async function installClaudePlugins() {
 
   if (!claudeFound) {
     console.warn(`${C.yellow}⚠${C.reset} ${t.warnClaNotFound}`);
-    return;
+    return false;
   }
 
   // Collect marketplace IDs needed by CLAUDE_PLUGIN_SPECS (spec format: "name@marketplace")
@@ -2077,6 +2078,7 @@ async function installClaudePlugins() {
       }
     }
   }
+  return true;
 }
 
 // ── Legacy artifact cleanup ──────────────────────────────────
@@ -2232,6 +2234,40 @@ async function cleanupStaleStagingDirs(homes) {
     console.log(
       `${C.green}✓${C.reset} ${t.okRemovedStagingResidual(cleaned.length)}`,
     );
+  }
+}
+
+async function cleanupClaudeNativePluginSkillResidue(homes, activeTargets) {
+  if (!activeTargets.includes("claude") || !homes.claude) {
+    return;
+  }
+
+  const specs = SKILL_REPOS.filter((spec) => spec.claudePlugin);
+  for (const spec of specs) {
+    const targetDir = path.join(homes.claude, "skills", spec.id);
+    if (!(await detectPluginBundleSkillResidue(targetDir))) {
+      continue;
+    }
+
+    assertUnderHome(targetDir);
+    console.warn(
+      `${C.yellow}⚠${C.reset} ${spec.id}: removing legacy Claude plugin bundle residue from skills discovery path`,
+    );
+    console.warn(`${C.dim}  ${targetDir}${C.reset}`);
+    if (dryRun) {
+      console.log(t.dryRun(`remove legacy plugin residue: ${targetDir}`));
+      continue;
+    }
+
+    try {
+      await rmDirWithRetry(targetDir);
+    } catch (error) {
+      if (isWindowsLockError(error)) {
+        console.warn(`${C.yellow}⚠${C.reset} ${t.warnStagingLocked(targetDir)}`);
+        continue;
+      }
+      throw error;
+    }
   }
 }
 
@@ -2805,7 +2841,10 @@ async function main() {
   }
 
   if (activeTargets.includes("claude")) {
-    await installClaudePlugins();
+    const claudePluginsReady = await installClaudePlugins();
+    if (claudePluginsReady) {
+      await cleanupClaudeNativePluginSkillResidue(homes, activeTargets);
+    }
   }
   await installPluginBundlesForNonClaudeRuntimes(homes, activeTargets);
 

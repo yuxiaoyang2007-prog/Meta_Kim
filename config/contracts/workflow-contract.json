@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "owner": "Meta_Kim",
   "businessWorkflow": {
     "id": "business",
@@ -294,6 +294,7 @@
         "silent_hold"
       ],
       "choiceSurfaceEnum": [
+        "request_user_input",
         "native_choice",
         "native_mode_picker",
         "native_hook_prompt",
@@ -320,9 +321,9 @@
     "userLanguagePolicy": {
       "hardcodedSingleHumanLanguageForbidden": true,
       "stageLabelsRemainCanonicalEnglish": true,
-      "userFacingTextLanguageSource": "latest_user_message_or_explicit_preference",
-      "fallbackLocale": "en",
-      "description": "Stage names such as Critical, Fetch, Thinking, and Review remain canonical protocol labels. Human-facing option labels, clarifying questions, explanations, and confirmation text must follow the user's latest language or explicit language preference instead of hardcoding Chinese, English, or any single locale."
+      "userFacingTextLanguageSource": "runtime_tool_selected_output_language_else_explicit_output_language_choice_else_latest_user_input_language",
+      "fallbackLocale": "undetermined",
+      "description": "Stage names such as Critical, Fetch, Thinking, and Review remain canonical protocol labels. Human-facing option labels, clarifying questions, explanations, and confirmation text must first follow the runtime/tool selected output language when the host has already chosen one; when none exists, use the user's explicit output-language choice; when neither exists, infer the language from the user's latest input instead of hardcoding Chinese, English, or any single locale."
     },
     "runtimeNativeChoiceSurfaces": {
       "claude": {
@@ -332,10 +333,12 @@
         "implementation": "Invoke AskUserQuestion with questions array; platform natively supports modal popup."
       },
       "codex": {
-        "primarySurface": "native_choice",
+        "primarySurface": "request_user_input",
         "fallbackSurfaces": ["conversation_fallback"],
-        "triggerDescription": "Use Codex native choice input when the active runtime mode exposes it; otherwise pause with a localized confirmation card.",
-        "implementation": "Emit markdown confirmation card; depends on active mode availability."
+        "featureFlag": "default_mode_request_user_input",
+        "recommendedConfig": "[features].default_mode_request_user_input = true",
+        "triggerDescription": "Use Codex request_user_input only when it is listed in the active tool set. The official default_mode_request_user_input feature flag enables this tool in Default mode when the host supports it; otherwise pause with a localized confirmation card. Codex exec and repository hook adapters must not claim a popup.",
+        "implementation": "Invoke request_user_input when available; otherwise emit a localized markdown confirmation card, record conversation_fallback, and state that it is a chat card rather than a popup."
       },
       "openclaw": {
         "primarySurface": "workspace_agent",
@@ -396,6 +399,134 @@
         "linearFormat": "sequential_questions",
         "parallelFormat": "batch_list",
         "description": "When multiple independent questions exist, collect and present them in one interaction"
+      },
+      "codexVisibleMultiOptionOutput": {
+        "required": true,
+        "minimumOptions": 2,
+        "appliesTo": "every_user_visible_codex_meta_theory_confirmation_or_decision_surface",
+        "normalPresentation": "embedded_clean_choice_card",
+        "debugLabel": "Multi-Option Snapshot",
+        "visibleLabelRequired": false,
+        "internalPreflightHiddenByDefault": true,
+        "internalFieldsHiddenByDefault": [
+          "Preflight",
+          "nativeChoiceSurface",
+          "conversation_fallback",
+          "packet_id",
+          "protocol_trace"
+        ],
+        "debugVisibilityRequiresExplicitUserRequest": true,
+        "languagePolicy": "runtime_tool_selected_output_language_else_explicit_output_language_choice_else_latest_user_input_language",
+        "protocolIdentifiersRemainCanonical": true,
+        "requiresRecommendedDefault": true,
+        "requiresRejectedAlternativeWhenOnlyOnePracticalPathExists": true,
+        "fallbackMustDeclareNotPopup": true,
+        "claudeNativeChoiceSurfaceUnchanged": true,
+        "description": "Codex meta-theory confirmation and decision surfaces must show short multi-option content embedded in a clean user-facing choice card, written according to the runtime/tool selected output language first when Codex or the host has already chosen one, then the user's explicit output-language choice, then the user's latest input language when no stronger language source exists, while keeping protocol identifiers canonical. This is a Codex presentation rule and does not replace preDecisionOptionFrame, formal confirmation gates, or Claude Code native AskUserQuestion behavior. Normal users should not see Preflight, nativeChoiceSurface, conversation_fallback, Multi-Option Snapshot, packet ids, or protocol plumbing unless they explicitly ask for debug, audit, protocol, or governance trace output. When Codex falls back to conversation_fallback and this matters to the user's expectation, it must be described in plain language as a chat card rather than a popup."
+      },
+      "choiceSurfaceGate": {
+        "required": true,
+        "stateField": "choiceSurfaceState",
+        "stateEnum": [
+          "not_allowed",
+          "critical_clarification_allowed",
+          "execution_confirmation_allowed",
+          "completed"
+        ],
+        "defaultState": "not_allowed",
+        "criticalClarificationRule": "Allowed only during Critical when Fetch cannot proceed safely; may clarify intent, scope, permissions, safety, or language; must not present execution options.",
+        "executionConfirmationRule": "Allowed only after contentEvidencePacket and preDecisionOptionFrame exist, before Execution; must present evidence-backed candidate paths and a recommended default.",
+        "forbiddenPrematureTriggers": [
+          "popup_test_request",
+          "interactive_box_test_request",
+          "multiple_options_without_fetch_evidence",
+          "execution_confirmation_before_preDecisionOptionFrame"
+        ],
+        "humanCheck": "No candidate paths means no execution confirmation; no Fetch evidence means Thinking is not complete; no Thinking result means no pre-Execution confirmation.",
+        "description": "Visible choice surfaces are gated by stage and evidence. A user request to test a popup is treated as a task requirement to route through Critical -> Fetch -> Thinking, not permission to call request_user_input before evidence-backed options exist."
+      }
+    },
+    "runStatusEnvelope": {
+      "enabled": true,
+      "schemaVersion": 1,
+      "purpose": "Give users a stable answer to whether meta-theory governance is active, how far it has progressed, and which stage is current without exposing hidden protocol packets.",
+      "stateFiles": {
+        "activeRun": ".meta-kim/state/{profile}/active-run.json",
+        "perRunStatus": ".meta-kim/state/{profile}/runs/{runId}/status.json"
+      },
+      "writer": "runtime_spine_state_adapter",
+      "pathPolicy": {
+        "crossPlatform": true,
+        "useNodePathJoin": true,
+        "mustStayWithin": ".meta-kim/state",
+        "profileSanitization": "A-Za-z0-9._- only, fallback default"
+      },
+      "requiredFields": [
+        "schemaVersion",
+        "active",
+        "runId",
+        "triggeredBy",
+        "currentStage",
+        "currentStageKey",
+        "stageIndex",
+        "stageTotal",
+        "percent",
+        "completed",
+        "next",
+        "blockedOn",
+        "startedAt",
+        "updatedAt",
+        "lastUserVisibleNotice",
+        "surfaceMode",
+        "resolvedOutputLanguage",
+        "languageResolution",
+        "publicSurface",
+        "publicLabels",
+        "stagePurpose",
+        "stagePurposeKey"
+      ],
+      "stageOrder": [
+        "Critical",
+        "Fetch",
+        "Thinking",
+        "Execution",
+        "Review",
+        "Meta-Review",
+        "Verification",
+        "Evolution"
+      ],
+      "progressPercentByStage": {
+        "Critical": 12,
+        "Fetch": 25,
+        "Thinking": 38,
+        "Execution": 50,
+        "Review": 63,
+        "Meta-Review": 75,
+        "Verification": 88,
+        "Evolution": 100
+      },
+      "publicDisplayPolicy": {
+        "primaryDisplay": "conversation_notice",
+        "showAtActivation": true,
+        "showAtStageTransition": true,
+        "showWhenUserAsksStatus": true,
+        "nativeEnhancementAllowed": true,
+        "popupRequired": false,
+        "doNotExposeInternalPacketFieldsByDefault": true,
+        "hiddenInternalFields": [
+          "Preflight",
+          "nativeChoiceSurface",
+          "conversation_fallback",
+          "packet_id",
+          "protocol_trace"
+        ]
+      },
+      "languagePolicy": "User-facing run status labels and stage purpose text must follow the runtime/tool selected output language first, explicit output-language choice second, and latest user input language only as fallback. The envelope may carry runtime-provided publicLabels and a resolved stagePurpose; canonical stage labels stay English. Fixed labels in any single human language are forbidden as the default public notice shell.",
+      "runtimeAdapters": {
+        "claude": "Write the envelope from spine-state hooks and optionally surface it through native status/question UI when available.",
+        "codex": "Write/read the same envelope; surface status as a localized chat notice unless a real host-native choice/status surface is exposed.",
+        "cursor": "Write/read the same envelope; surface status through custom mode/project-rule notices when available, otherwise chat notice.",
+        "openclaw": "Write/read the same envelope from workspace agent state and expose it through workspace status or chat notice."
       }
     },
     "controlIntervention": {

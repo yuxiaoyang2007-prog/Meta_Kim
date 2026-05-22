@@ -93,6 +93,8 @@ const EXPECTED_PUBLIC_DISPLAY_REQUIRES = [
 
 /** Documented in AGENTS.md / CLAUDE.md — project hook commands (Stop may list multiple). */
 const EXPECTED_CLAUDE_HOOK_COMMANDS = [
+  "node .claude/hooks/meta-kim-memory-save.mjs --event session-start",
+  "node .claude/hooks/meta-kim-memory-save.mjs --event user-prompt",
   "node .claude/hooks/activate-meta-theory-spine.mjs",
   "node .claude/hooks/block-dangerous-bash.mjs",
   "node .claude/hooks/pre-git-push-confirm.mjs",
@@ -697,8 +699,8 @@ async function validateWorkflowContract() {
   );
   assert(
     userLanguagePolicy?.userFacingTextLanguageSource ===
-      "latest_user_message_or_explicit_preference",
-    "workflow-contract.json userLanguagePolicy must follow latest user language or explicit preference.",
+      "runtime_tool_selected_output_language_else_explicit_output_language_choice_else_latest_user_input_language",
+    "workflow-contract.json userLanguagePolicy must follow runtime/tool selected output language first, explicit output-language choice second, then latest user input language.",
   );
   assert(
     typeof userLanguagePolicy?.fallbackLocale === "string" &&
@@ -2312,6 +2314,9 @@ async function validateCodexArtifacts() {
   for (const expected of [
     "approval_policy",
     "sandbox_mode",
+    "suppress_unstable_features_warning = true",
+    "[features]",
+    "default_mode_request_user_input = true",
     "[agents]",
     "[mcp_servers.meta_kim_runtime]",
     ".codex/skills/",
@@ -2503,6 +2508,14 @@ async function validateClaudeSettings() {
     "canonical Claude settings are missing PreToolUse hooks.",
   );
   assert(
+    hooks?.SessionStart?.length >= 1,
+    "canonical Claude settings are missing SessionStart hooks.",
+  );
+  assert(
+    hooks?.UserPromptSubmit?.length >= 1,
+    "canonical Claude settings are missing UserPromptSubmit hooks.",
+  );
+  assert(
     hooks?.PostToolUse?.length >= 1,
     "canonical Claude settings are missing PostToolUse hooks.",
   );
@@ -2515,6 +2528,14 @@ async function validateClaudeSettings() {
     "canonical Claude settings are missing Stop hooks.",
   );
 
+  assert(
+    hooks.SessionStart[0]?.matcher === "startup|resume",
+    "canonical Claude settings SessionStart must target startup|resume.",
+  );
+  assert(
+    hooks.UserPromptSubmit[0]?.hooks?.length >= 1,
+    "canonical Claude settings UserPromptSubmit must include memory recall hooks.",
+  );
   assert(
     hooks.PreToolUse[0]?.matcher === "Bash",
     "canonical Claude settings PreToolUse[0] must target Bash.",

@@ -38,6 +38,7 @@ describe("eval-meta-agents Claude smoke", () => {
     assert.match(discovery, /source: "project-files"/);
     assert.match(discovery, /source: "claude-agents-command"/);
     assert.match(discovery, /claude-agents-command-unavailable/);
+    assert.match(discovery, /claude-agents-command-non-tty/);
   });
 
   test("OpenClaw smoke can structurally validate without local auth secrets", () => {

@@ -26,6 +26,17 @@ describe("Claude settings hook command rendering", () => {
   test("repo hook rewrite keeps Windows absolute paths shell portable", () => {
     const settings = {
       hooks: {
+        SessionStart: [
+          {
+            matcher: "startup|resume",
+            hooks: [
+              {
+                type: "command",
+                command: "node .claude/hooks/meta-kim-memory-save.mjs --event session-start",
+              },
+            ],
+          },
+        ],
         Stop: [
           {
             hooks: [
@@ -41,6 +52,10 @@ describe("Claude settings hook command rendering", () => {
 
     rewriteRepoHookCommandsToAbsolute(settings, "D:\\KimProject\\Meta_Kim");
 
+    assert.equal(
+      settings.hooks.SessionStart[0].hooks[0].command,
+      'node "D:/KimProject/Meta_Kim/.claude/hooks/meta-kim-memory-save.mjs" --event session-start',
+    );
     assert.equal(
       settings.hooks.Stop[0].hooks[0].command,
       'node "D:/KimProject/Meta_Kim/.claude/hooks/stop-memory-save.mjs"',

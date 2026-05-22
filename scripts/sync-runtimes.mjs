@@ -1580,7 +1580,11 @@ async function syncClaudeProjection(
     }
   }
 
-  const sharedClaudeHookDependencies = ["hook-i18n.mjs", "skip-reminder.mjs"];
+  const sharedClaudeHookDependencies = [
+    "hook-i18n.mjs",
+    "meta-kim-memory-save.mjs",
+    "skip-reminder.mjs",
+  ];
   for (const hookName of sharedClaudeHookDependencies) {
     const hookContent = await tryReadCanonical(
       path.join(canonicalRuntimeAssetsDir, "shared", "hooks", hookName),
