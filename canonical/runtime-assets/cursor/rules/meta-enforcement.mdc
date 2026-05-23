@@ -1,0 +1,74 @@
+---
+description: Meta-agent execution boundary enforcement — meta-* agents must not perform direct execution work in Cursor
+globs:
+alwaysApply: true
+---
+
+<!-- Canonical source: canonical/runtime-assets/cursor/rules/meta-enforcement.mdc
+     Synced to .cursor/rules/meta-enforcement.mdc by `npm run meta:sync`.
+     Cursor cannot mechanically deny tool calls; this rule provides the
+     strongest declarative constraint available on this runtime. -->
+
+# Meta-Agent Execution Boundary (Cursor Declarative Enforcement)
+
+Cursor does **not** expose a tool-call deny protocol equivalent to Claude Code's
+`hookSpecificOutput.permissionDecision: "deny"`. This rule is the canonical
+declarative substitute. It applies on every prompt (`alwaysApply: true`).
+
+## Hard rules (apply at every turn)
+
+1. **The nine meta-agents are governance-only.** Names: `meta-warden`,
+   `meta-conductor`, `meta-genesis`, `meta-artisan`, `meta-sentinel`,
+   `meta-librarian`, `meta-prism`, `meta-scout`, `meta-chrysalis`. Each one
+   carries `executionBlock=true` in its canonical definition.
+
+2. **Meta-agents do NOT touch execution tools.** If the user requests a
+   meta-agent to write code, run tests, edit files, debug, build, or perform
+   any direct execution task, **refuse** and instead:
+   - state which meta-agent boundary the request violates
+   - recommend the correct execution-layer agent (or open a
+     `capabilityGapPacket` if no owner exists)
+   - hand the actual work to that agent via Cursor's native agent invocation
+
+3. **The dispatcher (main thread) is also not the executor.** When the
+   `meta-theory` skill is active, the main thread plans, dispatches, reviews,
+   and synthesises only. It does not perform >3 sentences of execution-layer
+   analysis, code generation, or fixes on its own.
+
+4. **"Simple task" is not an excuse.** Cost of unnecessary dispatch
+   < cost of governance bypass. When in doubt, dispatch.
+
+## Why this rule exists
+
+Other runtimes (Claude Code) can mechanically block meta-agent self-execution
+via PreToolUse hook deny. **Cursor cannot.** This rule keeps the four-runtime
+governance behavior aligned at the strongest level Cursor permits.
+
+If Cursor later publishes a tool-deny protocol, replace the declarative section
+with a real `preToolUse` hook and downgrade this rule to a backup. Until then,
+this rule is the front line.
+
+## Self-check (before any execution-layer tool call)
+
+Ask:
+
+- Is the active owner a `meta-*` agent? → If yes, STOP. Refuse and dispatch.
+- Am I the main thread and is `meta-theory` active? → If yes, STOP. Plan and
+  dispatch through Cursor's native agent surface.
+- Has a capability-matched execution-layer agent been chosen? → If no, STOP.
+  Discover or create one before touching execution tools.
+
+If any answer is "no" but the work continues, that is a recorded governance
+violation under `cross-runtime-meta-enforcement.md` and a Stage 6 Meta-Review
+finding.
+
+## Cross-reference
+
+- `canonical/agents/meta-*.md` — canonical meta-agent definitions
+  (each with `executionBlock: true`)
+- `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` —
+  the equivalent mechanical enforcement on Claude Code
+- `docs/cross-runtime-meta-enforcement.md` — full capability matrix and
+  user-expectation management
+- `.cursor/rules/meta-theory-dispatch.mdc` — companion rule for the
+  general dispatch protocol (this rule narrows it to meta-agent boundary)

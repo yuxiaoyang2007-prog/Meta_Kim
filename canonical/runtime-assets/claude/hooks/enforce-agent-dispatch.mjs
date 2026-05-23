@@ -1,6 +1,40 @@
+/**
+ * enforce-agent-dispatch.mjs — Meta_Kim Spine PreToolUse guard.
+ *
+ * Responsibilities:
+ *   1. Spine-active runs: gate execution tools until the right meta-agents have
+ *      been dispatched per stage requirements.
+ *   2. Meta-agent readonly enforcement: even when spine is inactive (or skipped),
+ *      a caller identified as a meta-* agent must not directly mutate the
+ *      workspace via Edit / Write / MultiEdit / NotebookEdit / Bash. They must
+ *      dispatch down to an execution worker instead.
+ *
+ * Environment knobs:
+ *   META_KIM_HOOK_SKIP
+ *     Truthy ("1", "true", any non-empty non-"empty"/"0"/"false") -> skip hook.
+ *
+ *   META_KIM_META_ENFORCEMENT_MODE  (controls meta-* readonly enforcement)
+ *     "warn"
+ *         Log to stderr and allow the tool call. Use for soft rollout.
+ *     "block"
+ *         Deny outright when a meta-* caller attempts mutation. Final state.
+ *     "progressive" (default)
+ *         For the first META_KIM_META_ENFORCEMENT_GRACE_DAYS (default 7) days
+ *         since the run started, behave as "warn"; afterwards behave as
+ *         "block". Lets teams adopt the new contract without breakage.
+ *
+ *   META_KIM_META_ENFORCEMENT_GRACE_DAYS
+ *     Integer day count for the progressive grace window. Default 7.
+ *
+ *   CLAUDE_SUBAGENT_TYPE
+ *     Runtime-injected hint for the current subagent's type. When this starts
+ *     with "meta-" we treat the caller as a meta-agent without further parsing.
+ */
+
 import process from "node:process";
-import { join } from "node:path";
+import { join, normalize } from "node:path";
 import { readJsonFromStdin, extractFilePath } from "./utils.mjs";
+import { isReadOnlyBash, classifyBashCommand } from "./bash-readonly-whitelist.mjs";
 import {
   readSpineState,
   isExecutionTool,
@@ -34,9 +68,15 @@ const SPINE_STATE_DIR =
 const targetPath = extractFilePath(payload) || "";
 
 function isSpineStateWrite() {
-  return (
-    targetPath.includes("spine-state.json") || targetPath.includes("spine")
-  );
+  // Windows paths are case-insensitive: comparing the lowercased, normalized
+  // suffix prevents a meta-agent from sneaking writes via mixed case such as
+  // "Spine-State.JSON".
+  const normalized = normalize(targetPath || "").toLowerCase();
+  const spineFile = normalize("spine-state.json").toLowerCase();
+  if (normalized.endsWith(spineFile)) return true;
+  // Also reject anything under a ".../spine/..." segment so adjacent ledger
+  // files do not become a back door.
+  return /[\\/]spine[\\/]/.test(normalized);
 }
 
 function isPlanningFile() {
@@ -94,10 +134,168 @@ function warnMetaAgentExecution(agentName, stage) {
   const warning = `\n⚠️  [Meta_Kim] WARNING: Meta-agent "${agentName}" may be used for execution work in stage "${stage}"\n` +
     `Meta-agents (layer='meta') are for governance coordination only.\n` +
     `They should NOT perform direct execution tasks like writing code or running tests.\n` +
-    `Use execution-agents (layer='execution') for execution work.\n` +
+    `Use governance meta owners plus run-scoped matchedSkills/tools for public Meta_Kim execution capability.\n` +
     `If this is governance work (coordination, review, synthesis), you may ignore this warning.\n`;
 
   process.stderr.write(warning);
+}
+
+/**
+ * Infer the caller's identity (which agent is making the current tool call).
+ * Priority order:
+ *   1. CLAUDE_SUBAGENT_TYPE environment variable (runtime-injected).
+ *   2. Latest entry in spine state's dispatchChain (most recently dispatched
+ *      owner for the current stage).
+ *   3. Conservative fallback: null. The caller treats null as "unknown" and
+ *      degrades to warn-mode so that legitimate user activity is not blocked
+ *      by a parsing miss.
+ *
+ * @param {object|null} state
+ * @returns {{ name: string|null, source: string }}
+ */
+function inferCallerIdentity(state) {
+  const envHint = process.env.CLAUDE_SUBAGENT_TYPE;
+  if (envHint && typeof envHint === "string" && envHint.trim()) {
+    return { name: envHint.trim(), source: "env" };
+  }
+
+  const chain = state?.dispatchChain;
+  const stage = state?.currentStage;
+  if (chain && stage && Array.isArray(chain[stage]) && chain[stage].length) {
+    // The most recently appended entry is the active owner for this stage.
+    const latest = chain[stage][chain[stage].length - 1];
+    if (latest) return { name: latest, source: "spine_chain" };
+  }
+
+  // Walk back through all stages, newest first, as a secondary signal.
+  if (chain && typeof chain === "object") {
+    const stages = Object.keys(chain);
+    for (let i = stages.length - 1; i >= 0; i--) {
+      const list = chain[stages[i]];
+      if (Array.isArray(list) && list.length) {
+        return { name: list[list.length - 1], source: "spine_chain_walk" };
+      }
+    }
+  }
+
+  return { name: null, source: "unknown" };
+}
+
+/**
+ * Decide which enforcement mode is active right now.
+ *
+ *   warn        -> log + allow
+ *   block       -> deny
+ *   progressive -> warn during grace window, block after
+ *
+ * Returns the resolved mode string: "warn" or "block".
+ */
+function resolveEnforcementMode(state) {
+  const raw = (process.env.META_KIM_META_ENFORCEMENT_MODE || "progressive")
+    .toLowerCase()
+    .trim();
+
+  if (raw === "warn") return "warn";
+  if (raw === "block") return "block";
+
+  // progressive (default)
+  const graceDaysRaw = parseInt(
+    process.env.META_KIM_META_ENFORCEMENT_GRACE_DAYS || "7",
+    10,
+  );
+  const graceDays = Number.isFinite(graceDaysRaw) && graceDaysRaw >= 0 ? graceDaysRaw : 7;
+  const startedAt =
+    state?.runStartTimestamp || state?.triggeredAt || state?.startedAt || null;
+  if (!startedAt) {
+    // No anchor: be conservative and warn.
+    return "warn";
+  }
+  const startedMs = Date.parse(startedAt);
+  if (!Number.isFinite(startedMs)) return "warn";
+  const elapsedDays = (Date.now() - startedMs) / (1000 * 60 * 60 * 24);
+  return elapsedDays < graceDays ? "warn" : "block";
+}
+
+/**
+ * Enforce meta-* readonly contract for execution tools.
+ *
+ * Edit / Write / MultiEdit / NotebookEdit / MCP-write → deny (meta cannot
+ *   directly mutate the workspace; it must dispatch downward).
+ * Bash → allow if isReadOnlyBash(command) is true; otherwise apply mode.
+ *
+ * Calls process.exit(0) after writing a deny payload. Returns true if the
+ * caller should stop processing (because we already emitted output and exited),
+ * false otherwise.
+ *
+ * @param {string} toolName
+ * @param {object} input
+ * @param {object|null} state
+ * @param {{ name: string|null, source: string }} caller
+ */
+function enforceMetaReadonly(toolName, input, state, caller) {
+  const callerLabel = caller.name || "unknown-meta-caller";
+
+  // Bash: classify first; read-only commands pass through silently.
+  if (toolName === "Bash") {
+    const command = input?.command || "";
+    const verdict = classifyBashCommand(command);
+    if (verdict.readOnly) return false; // safe, fall through
+
+    const mode = resolveEnforcementMode(state);
+    const reasonText =
+      `Meta-agent "${callerLabel}" attempted to run a non-read-only Bash command. ` +
+      `Reason: ${verdict.reason}. Offending segment: ${verdict.segment || command}. ` +
+      `Meta-agents must dispatch to an execution worker (e.g. Agent tool) instead of running mutating commands directly.`;
+
+    if (mode === "warn") {
+      process.stderr.write(`\n⚠️  [Meta_Kim meta-readonly:warn] ${reasonText}\n`);
+      return false; // allow
+    }
+    deny(reasonText);
+    process.exit(0);
+  }
+
+  // Any direct file-mutation tool is denied for meta-* callers.
+  const mutationTools = new Set([
+    "Edit",
+    "Write",
+    "MultiEdit",
+    "NotebookEdit",
+  ]);
+  if (mutationTools.has(toolName)) {
+    const mode = resolveEnforcementMode(state);
+    const reasonText =
+      `Meta-agent "${callerLabel}" attempted to use ${toolName} directly. ` +
+      `Meta-agents must dispatch this work to an execution worker via the Agent tool ` +
+      `(e.g. dispatch to a frontend/backend/test specialist) instead of editing files themselves.`;
+    if (mode === "warn") {
+      process.stderr.write(`\n⚠️  [Meta_Kim meta-readonly:warn] ${reasonText}\n`);
+      return false;
+    }
+    deny(reasonText);
+    process.exit(0);
+  }
+
+  // MCP write-like operations: best-effort heuristic — anything with create/update/
+  // delete/write/push in the tool name from MCP namespaces.
+  if (
+    typeof toolName === "string" &&
+    /(create|update|delete|write|push|publish|merge|patch|put)/i.test(toolName) &&
+    /^mcp__/i.test(toolName)
+  ) {
+    const mode = resolveEnforcementMode(state);
+    const reasonText =
+      `Meta-agent "${callerLabel}" attempted MCP mutation via ${toolName}. ` +
+      `Dispatch to an execution agent instead.`;
+    if (mode === "warn") {
+      process.stderr.write(`\n⚠️  [Meta_Kim meta-readonly:warn] ${reasonText}\n`);
+      return false;
+    }
+    deny(reasonText);
+    process.exit(0);
+  }
+
+  return false;
 }
 
 /**
@@ -187,7 +385,21 @@ if (state && state.active) {
   }
 }
 
+// Even when spine is inactive or unset, the meta-* readonly contract still
+// applies: a meta agent must never directly mutate the workspace, regardless
+// of spine state. We attempt to identify the caller and, if it is a meta-*
+// agent invoking an execution tool, route through enforceMetaReadonly().
+//
+// This is the fix for the "spine-inactive escape hatch" — without it, every
+// restriction would evaporate as soon as the spine deactivated.
 if (!state || !state.active) {
+  if (isExecutionTool(toolName)) {
+    const caller = inferCallerIdentity(state);
+    if (caller.name && isMetaAgent(caller.name)) {
+      enforceMetaReadonly(toolName, toolInput, state, caller);
+      // If enforceMetaReadonly chose warn-mode, fall through to exit(0) below.
+    }
+  }
   process.exit(0);
 }
 
@@ -247,6 +459,17 @@ if (state.queryBypass) {
 
 // Execution tools: enforce dispatch chain
 if (isExecutionTool(toolName)) {
+  // Meta-agent readonly enforcement (covers Bash/Edit/Write/MultiEdit/NotebookEdit).
+  // This runs BEFORE the spine-state-write / planning-file exemptions so that a
+  // meta-* caller cannot, for example, push hand-crafted Bash through the
+  // planning-file shortcut. Spine-state writes themselves are still exempt
+  // only for non-meta callers (they fall through this guard untouched).
+  const caller = inferCallerIdentity(state);
+  if (caller.name && isMetaAgent(caller.name)) {
+    enforceMetaReadonly(toolName, toolInput, state, caller);
+    // warn-mode falls through; block-mode already exited.
+  }
+
   if (isSpineStateWrite() || isPlanningFile()) {
     process.exit(0);
   }

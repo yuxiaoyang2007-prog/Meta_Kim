@@ -213,7 +213,7 @@
     "defaultShellId": "shell-structured-status"
   },
   "dispatchEnvelopePacket": {
-    "ownerAgent": "auth-specialist",
+    "ownerAgent": "meta-conductor",
     "taskRef": "task-001",
     "allowedCapabilities": [
       "auth_refresh_hardening",
@@ -243,7 +243,7 @@
       {
         "taskId": "task-001",
         "taskKind": "execution",
-        "owner": "backend",
+        "owner": "meta-conductor",
         "sequence": 1,
         "dependsOn": [],
         "deliverable": "auth-refresh-hardening:token-refresh",
@@ -263,7 +263,7 @@
   "workerTaskPackets": [
     {
       "taskPacketId": "task-001",
-      "owner": "backend",
+      "owner": "meta-conductor",
       "ownerMode": "existing-owner",
       "todayTask": "update refresh token path and document verification hooks",
       "output": "code diff + verification notes",
@@ -286,7 +286,7 @@
           "verify": "test suite passes"
         }
       ],
-      "ownerAgent": "auth-specialist",
+      "ownerAgent": "meta-conductor",
       "businessRoleId": "backend",
       "roleDisplayName": "backend",
       "roleInstanceId": "auth-refresh#1",
@@ -306,7 +306,7 @@
   "workerResultPackets": [
     {
       "taskPacketId": "task-001",
-      "owner": "backend",
+      "owner": "meta-conductor",
       "status": "completed",
       "producedArtifacts": [
         "src/auth/refresh.ts",
@@ -466,7 +466,8 @@
         "capabilityNeed": "product capability coverage",
         "capabilitySearchQuery": "product capability owner",
         "candidateOwners": [
-          "meta-conductor"
+          "meta-conductor",
+          "meta-artisan"
         ],
         "candidateSkills": [
           "meta-theory"
@@ -481,13 +482,14 @@
         "capabilityNeed": "backend capability coverage",
         "capabilitySearchQuery": "backend capability owner",
         "candidateOwners": [
-          "auth-specialist"
+          "meta-conductor",
+          "meta-artisan"
         ],
         "candidateSkills": [
           "meta-theory"
         ],
-        "selectedOwner": "auth-specialist",
-        "selectionReason": "auth-specialist matched by Fetch-first capability scan",
+        "selectedOwner": "meta-conductor",
+        "selectionReason": "meta-conductor matched by Fetch-first capability scan",
         "coverageStatus": "covered"
       },
       {
@@ -496,7 +498,8 @@
         "capabilityNeed": "auth-security capability coverage",
         "capabilitySearchQuery": "auth-security capability owner",
         "candidateOwners": [
-          "meta-sentinel"
+          "meta-sentinel",
+          "meta-artisan"
         ],
         "candidateSkills": [
           "meta-theory"
@@ -511,7 +514,8 @@
         "capabilityNeed": "test capability coverage",
         "capabilitySearchQuery": "test capability owner",
         "candidateOwners": [
-          "meta-prism"
+          "meta-prism",
+          "meta-artisan"
         ],
         "candidateSkills": [
           "meta-theory"
@@ -526,7 +530,8 @@
         "capabilityNeed": "review capability coverage",
         "capabilitySearchQuery": "review capability owner",
         "candidateOwners": [
-          "meta-prism"
+          "meta-prism",
+          "meta-artisan"
         ],
         "candidateSkills": [
           "meta-theory"
@@ -541,7 +546,8 @@
         "capabilityNeed": "verify capability coverage",
         "capabilitySearchQuery": "verify capability owner",
         "candidateOwners": [
-          "meta-warden"
+          "meta-warden",
+          "meta-artisan"
         ],
         "candidateSkills": [
           "meta-theory"
@@ -573,7 +579,8 @@
         "capabilityNeed": "browser-qa capability coverage",
         "capabilitySearchQuery": "browser-qa capability owner",
         "candidateOwners": [
-          "meta-prism"
+          "meta-prism",
+          "meta-artisan"
         ],
         "candidateSkills": [
           "meta-theory"
@@ -588,7 +595,8 @@
         "capabilityNeed": "release capability coverage",
         "capabilitySearchQuery": "release capability owner",
         "candidateOwners": [
-          "meta-warden"
+          "meta-warden",
+          "meta-artisan"
         ],
         "candidateSkills": [
           "meta-theory"
@@ -633,7 +641,7 @@
       {
         "businessRoleId": "backend",
         "roleDisplayName": "backend",
-        "ownerAgent": "auth-specialist",
+        "ownerAgent": "meta-conductor",
         "capabilityNeed": "auth refresh implementation",
         "ownerResolution": "reuse_existing_owner",
         "minInstances": 1,
@@ -656,7 +664,47 @@
           "verify"
         ],
         "ownerResponsibilityDelta": "selected owner covers the assigned business-flow lanes for this run",
-        "agentIterationPlan": "reuse existing owner capability and iterate only if verification finds a role gap"
+        "agentIterationPlan": "reuse existing owner capability and iterate only if verification finds a role gap",
+        "matchedSkills": [
+          {
+            "matchId": "skill-match-auth-refresh-001",
+            "capabilitySlot": "auth refresh implementation discipline",
+            "providerId": "meta-theory",
+            "skillId": "local-project-code-change",
+            "toolOrCommand": null,
+            "source": "capability-index",
+            "roiScore": 4,
+            "selectionReason": "Represents implementation capability as run-scoped evidence while durable ownership stays with governance meta agents.",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "Block with capabilityGapPacket if no governance owner can supervise the run-scoped capability."
+          }
+        ],
+        "skillSelectionScope": "run_scoped",
+        "governanceStageNodes": [
+          {
+            "stage": "Critical",
+            "ownerAgent": "meta-warden",
+            "responsibility": "classify run and enforce governance boundary"
+          },
+          {
+            "stage": "Fetch",
+            "ownerAgent": "meta-artisan",
+            "responsibility": "match run-scoped skills and capability providers"
+          },
+          {
+            "stage": "Thinking",
+            "ownerAgent": "meta-conductor",
+            "responsibility": "sequence lanes and build dispatch packets"
+          },
+          {
+            "stage": "Review",
+            "ownerAgent": "meta-prism",
+            "responsibility": "verify governance-only owner and quality coverage"
+          }
+        ],
+        "ownerSource": "meta_kim_canonical",
+        "agentCopyPolicy": "meta_kim_governance_only"
       }
     ],
     "roleCoverageGate": "pass",
@@ -671,6 +719,30 @@
       "forbiddenScopedNamePattern": "[-_/\\\\:]",
       "scopeDetailsBelongInInstanceFields": true,
       "description": "User-visible agent names must be coarse business role-family names such as 前端, 后端, 测试, frontend, backend, test. Do not use scoped work-item names as roleDisplayName; put feature, page, installation, shard, or task detail in roleInstanceId, shardScope, assignedResponsibilitySlice, or task text. Host-generated personal nicknames such as Huygens or Mill may be recorded only as runtimeInstanceAlias."
+    },
+    "governanceStageCoverage": {
+      "Critical": [
+        "meta-warden",
+        "meta-conductor"
+      ],
+      "Fetch": [
+        "meta-conductor",
+        "meta-scout",
+        "meta-artisan",
+        "meta-librarian",
+        "meta-genesis"
+      ],
+      "Thinking": [
+        "meta-conductor",
+        "meta-genesis",
+        "meta-artisan",
+        "meta-sentinel",
+        "meta-warden"
+      ],
+      "Review": [
+        "meta-prism",
+        "meta-warden"
+      ]
     }
   },
   "contentEvidencePacket": {
@@ -819,7 +891,8 @@
         ],
         "candidateOwners": [
           "meta-conductor",
-          "meta-prism"
+          "meta-prism",
+          "meta-artisan"
         ],
         "candidateTaskShape": "post-decision dispatch packets"
       },
@@ -835,7 +908,8 @@
           "Slower delivery."
         ],
         "candidateOwners": [
-          "meta-prism"
+          "meta-prism",
+          "meta-artisan"
         ],
         "candidateTaskShape": "review-first packet"
       }

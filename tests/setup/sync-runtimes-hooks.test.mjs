@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
@@ -38,6 +38,27 @@ describe("runtime hook sync contract", () => {
       output.includes(".claude/hooks/hook-i18n.mjs") ||
         existsSync(hookI18nPath),
       "expected Claude hook sync to include or already generate shared hook-i18n.mjs",
+    );
+  });
+
+  test("Claude sync includes the meta-theory spine activation hook", () => {
+    const source = readFileSync(
+      join(repoRoot, "scripts/sync-runtimes.mjs"),
+      "utf8",
+    );
+
+    assert.match(
+      source,
+      /const sharedClaudeHookDependencies = \[[\s\S]*"activate-meta-theory-spine\.mjs"/,
+    );
+    assert.equal(
+      existsSync(
+        join(
+          repoRoot,
+          "canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs",
+        ),
+      ),
+      true,
     );
   });
 

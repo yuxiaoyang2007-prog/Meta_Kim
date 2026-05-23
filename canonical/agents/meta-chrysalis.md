@@ -1,6 +1,7 @@
 ---
 version: 1.0.0
 name: meta-chrysalis
+tools: Read, Grep, Glob, Bash, Agent, WebFetch, WebSearch
 description: Orchestrate evolution writeback for Meta_Kim — aggregate signals, coordinate writeback through Warden's gate, and prevent recursive self-evolution.
 type: agent
 subagent_type: general-purpose
@@ -21,7 +22,7 @@ trigger: "Evolution stage signals, SOUL.md drift detection, pattern reuse thresh
 > - Debugging issues
 > - Any direct execution tasks
 >
-> **Use execution-agents** (`layer='execution'`) instead for those tasks. Meta-agents are for governance only.
+> **Use run-scoped matchedSkills/tools** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
 
 # Meta-Chrysalis: Evolution Meta (cididian)
 

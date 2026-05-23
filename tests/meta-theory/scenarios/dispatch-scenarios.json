@@ -4,8 +4,16 @@
     "input": "评估 meta-genesis 的质量",
     "expectedType": "A",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": "meta-prism", "description": "Five Criteria verification + Four Death Patterns detection on meta-genesis" },
-      { "step": 2, "agent": "meta-warden", "description": "Aggregate prism findings into actionable synthesis report" }
+      {
+        "step": 1,
+        "agent": "meta-prism",
+        "description": "Five Criteria verification + Four Death Patterns detection on meta-genesis"
+      },
+      {
+        "step": 2,
+        "agent": "meta-warden",
+        "description": "Aggregate prism findings into actionable synthesis report"
+      }
     ],
     "forbiddenBehavior": "meta-theory must NOT perform the quality audit itself; all analysis belongs to dispatched agents",
     "passFailCriteria": {
@@ -18,8 +26,16 @@
     "input": "Review this agent definition for quality issues",
     "expectedType": "D",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": "meta-prism", "description": "Quality audit dispatched via Agent tool" },
-      { "step": 2, "agent": "meta-warden", "description": "Synthesis dispatched via Agent tool" }
+      {
+        "step": 1,
+        "agent": "meta-prism",
+        "description": "Quality audit dispatched via Agent tool"
+      },
+      {
+        "step": 2,
+        "agent": "meta-warden",
+        "description": "Synthesis dispatched via Agent tool"
+      }
     ],
     "forbiddenBehavior": "meta-theory writes >3 sentences of substantive analysis, review findings, or synthesis directly",
     "passFailCriteria": {
@@ -32,14 +48,46 @@
     "input": "实现用户认证系统，包括登录、注册、token 刷新、权限验证",
     "expectedType": "C",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": null, "description": "Critical — clarify scope, confirm auth requirements" },
-      { "step": 2, "agent": null, "description": "Fetch — search existing agents/skills for auth capabilities" },
-      { "step": 3, "agent": null, "description": "Thinking — produce runHeader, dispatchBoard, workerTaskPackets, and all Stage 3 artifacts" },
-      { "step": 4, "agent": "dynamic", "description": "Execution — spawn sub-agents via Agent tool based on Fetch results" },
-      { "step": 5, "agent": "meta-prism", "description": "Review — quality audit of execution outputs" },
-      { "step": 6, "agent": "meta-prism", "description": "Meta-Review — review the review standards themselves" },
-      { "step": 7, "agent": null, "description": "Verification — confirm fixes close review findings" },
-      { "step": 8, "agent": null, "description": "Evolution — extract structural learning, write back durable changes" }
+      {
+        "step": 1,
+        "agent": null,
+        "description": "Critical — clarify scope, confirm auth requirements"
+      },
+      {
+        "step": 2,
+        "agent": null,
+        "description": "Fetch — search existing agents/skills for auth capabilities"
+      },
+      {
+        "step": 3,
+        "agent": null,
+        "description": "Thinking — produce runHeader, dispatchBoard, workerTaskPackets, and all Stage 3 artifacts"
+      },
+      {
+        "step": 4,
+        "agent": "meta-conductor",
+        "description": "Execution — coordinate governed dispatch using Fetch-selected run-scoped matchedSkills"
+      },
+      {
+        "step": 5,
+        "agent": "meta-prism",
+        "description": "Review — quality audit of execution outputs"
+      },
+      {
+        "step": 6,
+        "agent": "meta-prism",
+        "description": "Meta-Review — review the review standards themselves"
+      },
+      {
+        "step": 7,
+        "agent": null,
+        "description": "Verification — confirm fixes close review findings"
+      },
+      {
+        "step": 8,
+        "agent": null,
+        "description": "Evolution — extract structural learning, write back durable changes"
+      }
     ],
     "forbiddenBehavior": "meta-theory writes code directly without Agent tool invocations in Stage 4; Stage 4 starts before Stage 3 artifacts are complete",
     "passFailCriteria": {
@@ -52,9 +100,21 @@
     "input": "I need someone to check code quality on my new module",
     "expectedType": "C",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": null, "description": "Fetch — search who declares ownership of code quality review" },
-      { "step": 2, "agent": "dynamic", "description": "Match — score capability fit 0-3, select best owner" },
-      { "step": 3, "agent": "dynamic", "description": "Invoke — dispatch matched agent without hardcoding name" }
+      {
+        "step": 1,
+        "agent": null,
+        "description": "Fetch — search who declares ownership of code quality review"
+      },
+      {
+        "step": 2,
+        "agent": "meta-conductor",
+        "description": "Match — score capability fit 0-3, select governance owner and run-scoped capability evidence"
+      },
+      {
+        "step": 3,
+        "agent": "meta-conductor",
+        "description": "Invoke — dispatch governance owner without hardcoding non-meta agent names"
+      }
     ],
     "forbiddenBehavior": "Hardcoding an agent name without a prior Fetch search step; skipping capability matching",
     "passFailCriteria": {
@@ -67,9 +127,21 @@
     "input": "Track the lifecycle of agent dispatches during a Type A review",
     "expectedType": "A",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": "meta-prism", "description": "agentInvocationState transitions: idle → discovered → matched → dispatched" },
-      { "step": 2, "agent": "meta-prism", "description": "agentInvocationState transitions: dispatched → returned (on success) or escalated (on failure)" },
-      { "step": 3, "agent": "meta-warden", "description": "agentInvocationState transitions: idle → discovered → matched → dispatched → returned" }
+      {
+        "step": 1,
+        "agent": "meta-prism",
+        "description": "agentInvocationState transitions: idle → discovered → matched → dispatched"
+      },
+      {
+        "step": 2,
+        "agent": "meta-prism",
+        "description": "agentInvocationState transitions: dispatched → returned (on success) or escalated (on failure)"
+      },
+      {
+        "step": 3,
+        "agent": "meta-warden",
+        "description": "agentInvocationState transitions: idle → discovered → matched → dispatched → returned"
+      }
     ],
     "forbiddenBehavior": "agentInvocationState not tracked; state jumps from idle directly to dispatched without discovery and matching",
     "passFailCriteria": {
@@ -82,13 +154,41 @@
     "input": "创建一个数据分析 agent",
     "expectedType": "B",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": "meta-genesis", "description": "Phase 3 Step 3 — SOUL.md design with 8 mandatory modules" },
-      { "step": 2, "agent": "meta-artisan", "description": "Phase 3 Step 4 — Skill matching and ROI scoring" },
-      { "step": 3, "agent": "meta-sentinel", "description": "Phase 3 Step 5 — Security design (on demand)" },
-      { "step": 4, "agent": "meta-librarian", "description": "Phase 3 Step 6 — Memory design (on demand)" },
-      { "step": 5, "agent": "meta-conductor", "description": "Phase 3 Step 7 — Orchestration design (on demand)" },
-      { "step": 6, "agent": "meta-prism", "description": "Phase 4 Step 8 — Critical review of complete design" },
-      { "step": 7, "agent": "meta-warden", "description": "Phase 5 Step 10 — Integration and final synthesis" }
+      {
+        "step": 1,
+        "agent": "meta-genesis",
+        "description": "Phase 3 Step 3 — SOUL.md design with 8 mandatory modules"
+      },
+      {
+        "step": 2,
+        "agent": "meta-artisan",
+        "description": "Phase 3 Step 4 — Skill matching and ROI scoring"
+      },
+      {
+        "step": 3,
+        "agent": "meta-sentinel",
+        "description": "Phase 3 Step 5 — Security design (on demand)"
+      },
+      {
+        "step": 4,
+        "agent": "meta-librarian",
+        "description": "Phase 3 Step 6 — Memory design (on demand)"
+      },
+      {
+        "step": 5,
+        "agent": "meta-conductor",
+        "description": "Phase 3 Step 7 — Orchestration design (on demand)"
+      },
+      {
+        "step": 6,
+        "agent": "meta-prism",
+        "description": "Phase 4 Step 8 — Critical review of complete design"
+      },
+      {
+        "step": 7,
+        "agent": "meta-warden",
+        "description": "Phase 5 Step 10 — Integration and final synthesis"
+      }
     ],
     "forbiddenBehavior": "meta-theory performs SOUL.md design or skill matching itself instead of dispatching to genesis/artisan stations",
     "passFailCriteria": {
@@ -101,9 +201,21 @@
     "input": "Help me review whether this agent definition is reasonable",
     "expectedType": "D",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": "meta-prism", "description": "Quality audit: Five Criteria, Death Patterns, AI-Slop density" },
-      { "step": 2, "agent": "meta-scout", "description": "External source verification (if external claims cited)" },
-      { "step": 3, "agent": "meta-warden", "description": "Aggregate findings from prism + scout, produce final rating" }
+      {
+        "step": 1,
+        "agent": "meta-prism",
+        "description": "Quality audit: Five Criteria, Death Patterns, AI-Slop density"
+      },
+      {
+        "step": 2,
+        "agent": "meta-scout",
+        "description": "External source verification (if external claims cited)"
+      },
+      {
+        "step": 3,
+        "agent": "meta-warden",
+        "description": "Aggregate findings from prism + scout, produce final rating"
+      }
     ],
     "forbiddenBehavior": "meta-theory executes the review checklist itself; meta-scout skipped when external sources are cited",
     "passFailCriteria": {
@@ -116,9 +228,21 @@
     "input": "我的系统推送太多消息，用户快淹没了，怎么设计出牌策略？",
     "expectedType": "E",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": null, "description": "Steps 1-2: Read rhythm methodology and diagnose current issues" },
-      { "step": 2, "agent": "meta-conductor", "description": "Steps 4-5: Design Event Card Deck and select Delivery Shells" },
-      { "step": 3, "agent": "meta-warden", "description": "Step 6: Aggregate conductor output into actionable orchestration plan" }
+      {
+        "step": 1,
+        "agent": null,
+        "description": "Steps 1-2: Read rhythm methodology and diagnose current issues"
+      },
+      {
+        "step": 2,
+        "agent": "meta-conductor",
+        "description": "Steps 4-5: Design Event Card Deck and select Delivery Shells"
+      },
+      {
+        "step": 3,
+        "agent": "meta-warden",
+        "description": "Step 6: Aggregate conductor output into actionable orchestration plan"
+      }
     ],
     "forbiddenBehavior": "meta-theory designs the Card Deck configuration or selects Delivery Shells itself",
     "passFailCriteria": {
@@ -131,9 +255,21 @@
     "input": "I need an agent to handle blockchain smart contract auditing",
     "expectedType": "C",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": null, "description": "Fetch — search local agents, capability index, external ecosystems" },
-      { "step": 2, "agent": null, "description": "No match found — enter owner-resolution branch" },
-      { "step": 3, "agent": null, "description": "Decision: recurring gap → trigger Type B pipeline; one-off → temporary fallback owner with justification" }
+      {
+        "step": 1,
+        "agent": null,
+        "description": "Fetch — search local agents, capability index, external ecosystems"
+      },
+      {
+        "step": 2,
+        "agent": null,
+        "description": "No match found — enter owner-resolution branch"
+      },
+      {
+        "step": 3,
+        "agent": null,
+        "description": "Decision: recurring gap → trigger Type B pipeline; one-off → temporary fallback owner with justification"
+      }
     ],
     "forbiddenBehavior": "meta-theory self-executes the audit; gap left unresolved with no owner-resolution",
     "passFailCriteria": {
@@ -146,14 +282,26 @@
     "input": "Emergency: fix a critical production bug in the payment module, no matching agent available",
     "expectedType": "C",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": null, "description": "Fetch — exhaustive search finds no exact owner for payment module" },
-      { "step": 2, "agent": "generalPurpose", "description": "Temporary fallback owner assigned with explicit justification documenting the gap" },
-      { "step": 3, "agent": null, "description": "Evolution — log capability gap to config/capability-index/ for future owner creation" }
+      {
+        "step": 1,
+        "agent": null,
+        "description": "Fetch — exhaustive search finds no exact owner for payment module"
+      },
+      {
+        "step": 2,
+        "agent": "meta-conductor",
+        "description": "Governance owner retained; missing implementation capability recorded as run-scoped matchedSkills gap"
+      },
+      {
+        "step": 3,
+        "agent": null,
+        "description": "Evolution — log capability gap to config/capability-index/ for future owner creation"
+      }
     ],
-    "forbiddenBehavior": "Temporary fallback used without explicit justification; capability gap not logged for evolution",
+    "forbiddenBehavior": "Temporary non-meta fallback persisted as owner; capability gap not logged for evolution",
     "passFailCriteria": {
-      "PASS": "Temporary fallback owner dispatched with documented justification; Evolution stage logs the gap for future Type B creation",
-      "FAIL": "Fallback used silently without justification; no evolution writeback of the capability gap"
+      "PASS": "Governance owner retained with documented capabilityGapPacket; Evolution stage logs the gap for future governance owner or skill-provider iteration",
+      "FAIL": "Fallback used silently as durable owner; no evolution writeback of the capability gap"
     }
   },
   {
@@ -161,10 +309,26 @@
     "input": "meta-prism reports that quality review cannot proceed because the agent definition references external APIs it cannot verify",
     "expectedType": "D",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": "meta-prism", "description": "Dispatched for quality audit; encounters unverifiable external claims" },
-      { "step": 2, "agent": "meta-prism", "description": "agentInvocationState transitions to escalated; signals need for external verification" },
-      { "step": 3, "agent": "meta-scout", "description": "Dispatched to handle escalation: verify external API claims" },
-      { "step": 4, "agent": "meta-warden", "description": "Synthesize combined prism + scout findings" }
+      {
+        "step": 1,
+        "agent": "meta-prism",
+        "description": "Dispatched for quality audit; encounters unverifiable external claims"
+      },
+      {
+        "step": 2,
+        "agent": "meta-prism",
+        "description": "agentInvocationState transitions to escalated; signals need for external verification"
+      },
+      {
+        "step": 3,
+        "agent": "meta-scout",
+        "description": "Dispatched to handle escalation: verify external API claims"
+      },
+      {
+        "step": 4,
+        "agent": "meta-warden",
+        "description": "Synthesize combined prism + scout findings"
+      }
     ],
     "forbiddenBehavior": "Escalation signal ignored; meta-theory tries to verify external APIs itself",
     "passFailCriteria": {
@@ -177,9 +341,21 @@
     "input": "Refactor auth, logging, and caching modules — they are independent of each other",
     "expectedType": "C",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": null, "description": "Thinking — identify 3 independent sub-tasks with parallel markers" },
-      { "step": 2, "agent": "dynamic", "description": "Execution — dispatch 3 agents in parallel (one per module), each with own workerTaskPacket" },
-      { "step": 3, "agent": null, "description": "Merge — declared merge owner consolidates parallel outputs" }
+      {
+        "step": 1,
+        "agent": null,
+        "description": "Thinking — identify 3 independent sub-tasks with parallel markers"
+      },
+      {
+        "step": 2,
+        "agent": "meta-conductor",
+        "description": "Execution — dispatch governance-owned parallel shards, each with own workerTaskPacket and matchedSkills"
+      },
+      {
+        "step": 3,
+        "agent": null,
+        "description": "Merge — declared merge owner consolidates parallel outputs"
+      }
     ],
     "forbiddenBehavior": "Sequential dispatch of independent sub-tasks; no parallelGroup or mergeOwner declared",
     "passFailCriteria": {
@@ -192,8 +368,16 @@
     "input": "Implement a notification service with email, SMS, and push channels",
     "expectedType": "C",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": null, "description": "Thinking — produce workerTaskPackets with owner, dependsOn, parallelGroup, and mergeOwner for each channel" },
-      { "step": 2, "agent": "dynamic", "description": "Execution — dispatch only after all workerTaskPackets are defined" }
+      {
+        "step": 1,
+        "agent": null,
+        "description": "Thinking — produce workerTaskPackets with owner, dependsOn, parallelGroup, and mergeOwner for each channel"
+      },
+      {
+        "step": 2,
+        "agent": "meta-conductor",
+        "description": "Execution — dispatch governance owner only after all workerTaskPackets and matchedSkills are defined"
+      }
     ],
     "forbiddenBehavior": "Stage 4 dispatch begins before workerTaskPackets are complete; agents dispatched without task packets",
     "passFailCriteria": {
@@ -206,9 +390,21 @@
     "input": "Review stage: check that every sub-task from the execution has an identified owner",
     "expectedType": "C",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": "meta-prism", "description": "Review — verify owner coverage: every executable sub-task must have an explicit owner" },
-      { "step": 2, "agent": "meta-prism", "description": "Review — verify protocol compliance: all Stage 3 artifacts were used correctly" },
-      { "step": 3, "agent": "meta-warden", "description": "Meta-Review or synthesis of review findings" }
+      {
+        "step": 1,
+        "agent": "meta-prism",
+        "description": "Review — verify owner coverage: every executable sub-task must have an explicit owner"
+      },
+      {
+        "step": 2,
+        "agent": "meta-prism",
+        "description": "Review — verify protocol compliance: all Stage 3 artifacts were used correctly"
+      },
+      {
+        "step": 3,
+        "agent": "meta-warden",
+        "description": "Meta-Review or synthesis of review findings"
+      }
     ],
     "forbiddenBehavior": "Review stage skipped; owner coverage not verified; anonymous execution accepted",
     "passFailCriteria": {
@@ -221,11 +417,31 @@
     "input": "After completing a major refactoring run, write back structural lessons learned",
     "expectedType": "C",
     "expectedDispatchSequence": [
-      { "step": 1, "agent": null, "description": "Evolution — run 5+1 evolution detection model" },
-      { "step": 2, "agent": null, "description": "Write reusable patterns to canonical/skills/" },
-      { "step": 3, "agent": null, "description": "Record scars in evolutionWritebackPacket.scarIds and update config/contracts/scar-protocol.md when prevention rules change" },
-      { "step": 4, "agent": null, "description": "Update agent boundaries in canonical/agents/ if needed, then run npm run meta:sync" },
-      { "step": 5, "agent": null, "description": "Log capability gaps to config/capability-index/" }
+      {
+        "step": 1,
+        "agent": null,
+        "description": "Evolution — run 5+1 evolution detection model"
+      },
+      {
+        "step": 2,
+        "agent": null,
+        "description": "Write reusable patterns to canonical/skills/"
+      },
+      {
+        "step": 3,
+        "agent": null,
+        "description": "Record scars in evolutionWritebackPacket.scarIds and update config/contracts/scar-protocol.md when prevention rules change"
+      },
+      {
+        "step": 4,
+        "agent": null,
+        "description": "Update agent boundaries in canonical/agents/ if needed, then run npm run meta:sync"
+      },
+      {
+        "step": 5,
+        "agent": null,
+        "description": "Log capability gaps to config/capability-index/"
+      }
     ],
     "forbiddenBehavior": "Evolution stage skipped entirely; structural lessons left floating in conversation context without writeback",
     "passFailCriteria": {

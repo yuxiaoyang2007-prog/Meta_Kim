@@ -279,12 +279,12 @@
         "metaAgentDispatchRule": {
           "type": "string",
           "description": "Rule for when meta-agents can be dispatched",
-          "const": "Meta-agents (layer='meta') are for governance coordination only. They MUST NOT be used as execution workers. Use execution-agents (layer='execution') for task execution."
+          "const": "Meta-agents (layer='meta') are the only durable public Meta_Kim owners for Critical, Fetch, Thinking, and Review. They MUST NOT perform implementation work directly; concrete implementation capability is recorded as run-scoped matchedSkills/tools."
         },
         "fallbackBehavior": {
           "type": "string",
-          "description": "Behavior when no execution agent is found",
-          "const": "Use general-purpose/default execution agent, NOT meta-agents. Record capability gap for future Type B agent creation."
+          "description": "Behavior when no open-source governance owner or run-scoped capability evidence is found",
+          "const": "Use a governance meta owner plus run-scoped matchedSkills, or block with capabilityGapPacket. Do not persist non-governance execution agents in the public repo."
         }
       }
     }

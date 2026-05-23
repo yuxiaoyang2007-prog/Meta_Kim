@@ -29,21 +29,24 @@ Meta_Kim distinguishes between two agent layers. **Confusing these layers is a g
 
 | Layer | Purpose | Examples | When to Use |
 |-------|---------|----------|-------------|
-| **Meta-Agents** (`layer='meta'`) | Governance: coordination, orchestration, review, synthesis | `meta-warden`, `meta-prism`, `meta-conductor`, `meta-genesis`, `meta-artisan`, `meta-sentinel`, `meta-librarian`, `meta-scout`, `meta-chrysalis` | **Governance work only**: planning, reviewing, coordinating, synthesizing. NEVER for writing code, running tests, or building features. |
-| **Execution-Agents** (`layer='execution'`) | Work: performs actual tasks (coding, testing, debugging, etc.) | `code-reviewer`, `architect`, `test-automator`, `frontend-developer`, `python-pro`, etc. | **Execution work**: writing code, running tests, debugging issues, building features. |
+| **Meta-Agents** (`layer='meta'`) | Governance: coordination, orchestration, review, synthesis | `meta-warden`, `meta-prism`, `meta-conductor`, `meta-genesis`, `meta-artisan`, `meta-sentinel`, `meta-librarian`, `meta-scout`, `meta-chrysalis` | **Open-source Meta_Kim durable owners** for Critical, Fetch, Thinking, and Review. They own orchestration, owner resolution, run-scoped skill matching, review, synthesis, and evolution gates. |
+| **Execution agents / capabilities** | Global agents, project-local agents, skills, tools, and commands discovered for the current run | `frontend-developer`, `code-reviewer`, `matchedSkills`, `candidateSkills`, tool names, command evidence | In the Meta_Kim repository itself they are **not** durable public-repo owners. In user projects they may be used directly from the global registry, or copied into the project only when modification is required. |
 
 **⛔ FORBIDDEN PATTERNS**:
-- ❌ Dispatching `meta-prism` to write code → Use `frontend-developer` or language-specific agent instead
-- ❌ Dispatching `meta-conductor` to implement features → Use execution agents; `meta-conductor` only orchestrates workflow
-- ❌ Dispatching `meta-warden` to do analysis → `meta-warden` coordinates and synthesizes; use specialist for analysis
+- ❌ Persisting `frontend-developer`, `auth-specialist`, `backend-developer`, or similar non-meta names as `ownerAgent` in public Meta_Kim artifacts
+- ❌ Treating "ignored execution agents" as silently accepted owners. They must be converted to run-scoped capability evidence or rejected with `capabilityGapPacket`
+- ❌ Binding concrete skills or commands into long-term meta-agent identity instead of recording them in `matchedSkills`
+- ❌ Copying a usable global agent into a user project without modification need. Direct global reuse must stay direct.
+- "I'm a meta-* agent in sub-agent context, so I can run Bash/Edit/Write freely" — **NO**. The dispatch model restricts meta-* identity everywhere.
+- "Review needs me to run typecheck/test, that's not 'execution'" — **only via the L2 read-only Bash whitelist**. Anything that mutates the working tree is execution.
 
 **How to identify layers**:
 - Meta-agents: `id` starts with `meta-` in `config/capability-index/meta-kim-capabilities.json`, OR agent's SOUL.md has `⚠️ GOVERNANCE LAYER AGENT` warning box
-- Execution-agents: All other agents in `~/.claude/agents/`, `.codex/agents/`, or global inventory
+- Execution-like capabilities: global agents, project-local agents, tools, commands, and skills found during Fetch. In the Meta_Kim repo they are capability evidence, not durable owners. In user projects they may become execution owners under the global-reuse/project-local-copy rules.
 
 **Fetch-first discipline**:
 1. Search `config/capability-index/meta-kim-capabilities.json` → check `layer` field
-2. Search runtime mirrors → check `layer` field  
+2. Search runtime mirrors → check `layer` field
 3. Search `.meta-kim/state/{profile}/capability-index/global-capabilities.json` → check `layer` field
 4. If no `layer` field, assume `execution` for non-`meta-` prefixed agents, `meta` for `meta-` prefixed
 
@@ -73,17 +76,18 @@ Anything executable / handoff-able → must have an agent owner
 
 When Fetch does not find a clean owner, resolve the gap in this order:
 
-1. **Existing owner found** → dispatch to that owner
-2. **Durable / recurring / project-specific gap** → trigger Type B, create or compose the owner first, then dispatch
-3. **Emergency or one-off gap** → use a temporary `generalPurpose` owner with explicit justification, then review it again in Evolution
+1. **Existing global or project-local execution owner fully fits** → use it directly. If it is global, set `ownerSource = global_reuse` and `agentCopyPolicy = use_global_directly`; do not copy it into the project.
+2. **Existing global owner partially fits but needs project-specific change** → copy it into the user project first, set `ownerSource = project_local`, `agentCopyPolicy = copy_to_project_for_modification`, and `ownerResolution = upgrade_existing_owner`, then upgrade it under Genesis/Artisan/Sentinel/Prism review.
+3. **No execution owner exists for a recurring user-project need** → create a project-local owner after Warden approves the `capabilityGapPacket`; set `ownerSource = project_local`, `agentCopyPolicy = create_project_local_agent`, and `ownerResolution = create_owner_first`.
+4. **Meta_Kim repository governance gap** → upgrade/create only governance meta ownership; do not persist a non-meta execution agent in Meta_Kim itself.
 
-**No-owner execution is illegal.** Even a temporary fallback must be named and tracked as an owner, not treated as anonymous direct execution.
+**No-owner execution is illegal.** In Meta_Kim repository maintenance, a temporary non-meta fallback is illegal as durable state. In user projects, execution owners may be direct global agents or project-local agents, but global agents are copied locally only when modification is required. A project-local role with `ownerResolution = reuse_existing_owner` must use `agentCopyPolicy = already_project_local`; `copy_to_project_for_modification` is reserved for upgrade work, and `create_project_local_agent` is reserved for new execution-agent creation.
 
 When Step 2 is chosen, the governed run must explicitly record the factory lane:
 
 - `capabilityGapPacket`
 - `orchestrationTaskBoardPacket`
-- `executionAgentCard` when the gap is resolved via execution-agent creation or upgrade
+- governance owner card for Meta_Kim repository governance gaps, or `executionAgentCard` only when a user-project execution agent must be created or upgraded
 
 ### Protocol-First Rule
 
@@ -114,7 +118,7 @@ Pre-decision artifacts are distinct from dispatch artifacts:
 
 For `governanceFlow` in `complex_dev` or `meta_analysis`, the machine-validated JSON artifact must also include **`intentPacket`** (`trueUserIntent`, `successCriteria`, `nonGoals`, `intentPacketVersion: v1`) and **`intentGatePacket`** (`ambiguitiesResolved`, `requiresUserChoice`, `defaultAssumptions`, `pendingUserChoices`, `userLanguage`, `languageSource`, `nativeChoiceSurface`, `intentGatePacketVersion: v1`; if `requiresUserChoice` is true, include non-empty `pendingUserChoices[]`; if skipped, include the recorded skip reason from `preDecisionOptionFrame.choiceGateSkip`) before Execution — see `config/contracts/workflow-contract.json` (`protocols.intentPacket`, `protocols.intentGatePacket`, `runDiscipline.protocolFirst.intentPacketRequiredWhenGovernanceFlows` / `intentGatePacketRequiredWhenGovernanceFlows`).
 
-If `taskClassification.upgradeReasons` includes `owner_creation_required`, the artifact must also include **`capabilityGapPacket`** before Execution. If `capabilityGapPacket.resolutionAction` is `create_execution_agent` or `upgrade_execution_agent`, the artifact must include **`executionAgentCard`** before Conductor may dispatch the new owner.
+If `taskClassification.upgradeReasons` includes `owner_creation_required`, the artifact must also include **`capabilityGapPacket`** before Execution. In Meta_Kim repository maintenance the resolution must upgrade or create governance ownership only. In user-project use, `create_execution_agent` / `upgrade_execution_agent` are valid only when direct global reuse is insufficient; a usable global agent must not be copied.
 
 ---
 
@@ -395,7 +399,7 @@ If any one of those conditions fails, the task must be treated as `A`, `P`, or `
 > Core question: **Should I be doing this, or should I dispatch it?**
 
 Self-check list:
-- [ ] Is the current role an "Execution Layer"? (Yes → Skip-Level suspicion, should dispatch to the corresponding execution agent)
+- [ ] Is the current role an implementation capability inside the Meta_Kim repository itself? (Yes → keep a governance meta owner and record the concrete capability as run-scoped `matchedSkills`; do not persist a non-meta owner in public Meta_Kim)
 - [ ] Does the task involve writing code / modifying files? (Yes → must delegate to Execution Layer; meta-theory does not execute directly)
 - [ ] Am I "conveniently" making decisions for the Execution Layer? (Yes → only provide constraints; let the Execution Layer judge implementation details autonomously)
 - [ ] Did the previous round also do a similar task? (Yes → check if a Skip-Level pattern is forming, record Scars)
@@ -596,7 +600,9 @@ For executable deliverables, infer the likely `deliverableType` and expand it in
 |---|---|
 | `web_app` / `dashboard` | product, UX, UI, frontend, backend/API, database/data, auth/security, motion, accessibility, test automation, browser QA, performance, release, feedback, evolution |
 | `landing_page` | product offer, UX, UI, visual assets, frontend, motion, accessibility, SEO/analytics, browser QA, performance, release |
-| `api_service` | API contract, backend, database, auth/security, integration tests, performance, docs, release |
+| `api_service` | internal interface contract, third-party integration contract, API contract, backend, database, auth/security, contract tests, observability/fallback, performance, docs, release |
+| `internal_api_integration` | producer, consumer, schema/version compatibility, request/response field ledger, error model, contract tests, rollout/rollback |
+| `third_party_integration` | provider facts, official docs/SDK/sandbox evidence, auth/signature, idempotency, callback/webhook, rate limits, timeout/retry, error model, observability/fallback, human approval |
 | `data_pipeline` | data source, schema, transform, storage, observability, quality tests, privacy/security, release |
 | `custom` | infer lanes from the user's outcome and justify omissions |
 
@@ -633,6 +639,29 @@ Each lane becomes a capability slot with:
 ```
 
 The Fetch record must show which lanes were selected for this run, which lanes were explicitly omitted, and why. Each required or optional lane must preserve the global scan evidence (`capabilitySearchQuery`, `candidateOwners`, `candidateSkills`, `selectedOwner`, `selectionReason`, `coverageStatus`) so Review can tell whether the owner was selected capability-first. Omitted lanes without reasons fail the Review stage, but Review must not require every example dimension to appear in every run.
+
+### Interface Integration Contract Layer
+
+If the run touches an internal service boundary or a third-party provider, Fetch and Thinking must treat the interface contract as a first-class deliverable, not as implementation detail. Add `internal_interface_boundary` or `third_party_integration` to `taskClassification.triggerReasons` and produce `interfaceIntegrationContractPacket` before Stage 4 Execution.
+
+Internal interface work must identify the producer, consumer, schema or contract artifact, versioning / breaking-change policy, request fields, response fields, error model, and consumer contract tests.
+
+Third-party integration work must identify the provider, official evidence sources, SDK/API version, auth or signature policy reference, sandbox/prod distinction, rate limits, timeout/retry behavior, idempotency key, callback/webhook semantics, error-code mapping, data retention, observability, fallback, and rollback plan.
+
+Field handling must use an evidence-backed field ledger:
+
+- internal canonical field
+- outbound provider field
+- inbound provider field
+- view binding field
+- transformation rule
+- error code
+- state transition
+- auth/signature parameter
+
+Unknowns are not "maybe missing" prose. Classify each item as `confirmed`, `needs_verification`, `blocking_unknown`, or `assumption_with_rollback`. A `blocking_unknown` cannot enter public-ready completion; if implementation discovers a new blocking unknown, return to Thinking instead of patching guesses into code.
+
+This layer does not parse OpenAPI automatically, store provider secrets, or make the model a source of truth. Facts must come from code, schema, official docs, SDK, Postman/curl samples, sandbox responses, production logs, provider confirmation, or human owner confirmation. Use references such as `authPolicyRef` or `secretRef`; never write real token values, API keys, passwords, or provider account credentials into a run artifact.
 
 **Step 2 — Capability index search** (if no perfect local match):
 ```
@@ -877,12 +906,12 @@ Search known specialist ecosystems already integrated by Meta_Kim:
 **Step 5b — User confirmation gate:**
 ```
 IF gap is durable / recurring / project-specific
-  → ASK user: "Capability gap detected: {gapCapability}. Trigger Type B creation pipeline? (yes/no)"
-  → IF user approves → trigger Type B creation pipeline before execution
-  → IF user declines → generalPurpose fallback + Evolution follow-up required
+  → route to Warden-approved governance owner upgrade or governance meta-agent creation
+  → Genesis/Artisan/Sentinel/Librarian/Prism participate as required
 ELSE (gap is one-off / emergency)
-  → invoke Agent(subagent_type="generalPurpose") or Codex default subagent as a TEMPORARY owner
-  → record justification + require Evolution follow-up
+  → keep the selected governance meta owner
+  → record missing or partial run-scoped matchedSkills
+  → block or defer with capabilityGapPacket; do not persist a generalPurpose owner
 ```
 
 **Step 5c — Record gap resolution in `fetchPacket`:**
@@ -891,7 +920,7 @@ ELSE (gap is one-off / emergency)
   "gapResolution": {
     "userAsked": true,
     "userResponse": "approved | declined | one-off-auto",
-    "resolutionPath": "type-b | generalPurpose-fallback",
+    "resolutionPath": "governance-owner-upgrade | governance-owner-create | run-scoped-skill-gap",
     "evolutionFollowUpRequired": true
   }
 }
@@ -910,12 +939,12 @@ ELSE (gap is one-off / emergency)
 
 | Situation | Resolution |
 |----------|------------|
-| Existing owner covers the work | `ownerResolution = reuse_existing_owner`; dispatch to that owner |
-| Existing owner partially covers the work but needs a durable boundary update | `ownerResolution = upgrade_existing_owner`; emit `capabilityGapPacket`, then require `executionAgentCard` before dispatch |
-| No owner, but gap is recurring / strategic / project-specific | `ownerResolution = create_owner_first`; create or compose the owner first (Type B), then require `executionAgentCard` |
-| No owner, gap is one-off and low-risk | Use a temporary `generalPurpose` owner and mark it for Evolution review |
+| Existing governance meta owner covers the orchestration node | `ownerResolution = reuse_existing_owner`; use that `meta-*` owner and record implementation capability in run-scoped `matchedSkills` |
+| Existing governance owner partially covers the work but needs a durable boundary update | `ownerResolution = upgrade_existing_owner`; emit `capabilityGapPacket`, then update the governance owner boundary / contract through Warden-approved writeback |
+| No governance owner covers a recurring public-repo governance need | `ownerResolution = create_owner_first`; create or compose a governance meta owner only after Warden approval |
+| Implementation capability exists only as a concrete skill/tool/external worker | Keep the governance owner; record concrete capability as `matchedSkills` with `skillSelectionScope = run_scoped` |
 
-Temporary fallback is a **transition state**, not a mature architecture state.
+Temporary non-meta ownership is **not allowed** in public Meta_Kim durable artifacts. In user projects, non-meta execution ownership is allowed only as direct global reuse or justified project-local creation/upgrade under governance review.
 
 ### Tier-Aware Routing
 
@@ -1028,6 +1057,19 @@ Before invoking a runtime question tool, native choice, or conversation fallback
 ```
 
 `candidateTaskShape` may describe likely lanes, dependencies, and owner candidates. It must not be treated as `dispatchEnvelopePacket`, `dispatchBoard`, or `workerTaskPackets`; those are finalized only after the user choice or a valid skip. Valid skips are limited to trivial work, pure read-only/queryBypass, or explicit auto-proceed, and must record `skipReason`, `skipSource`, and `skipSafetyRationale` in `choiceGateSkip`.
+
+### Respect user choices (after questioning)
+
+After a native question tool, `request_user_input`, native choice surface, or `conversation_fallback` collects user answers, the post-choice analysis must close around the user's actual selections:
+
+- Base the analysis on the user's actual selections, not on what the model "thinks is better".
+- If a user choice carries significant risk, identify it in `Thinking` with specific evidence and trade-off reasoning.
+- If the system wants to recommend a different direction, the next action must present exactly two clear paths:
+  - **Option A**: Execute based on the user's original choice.
+  - **Option B**: Execute based on the suggested adjustment.
+- Do not unilaterally override their selection, silently rewrite the dispatch direction, or treat the recommended default as more authoritative than the user's answer.
+
+This is an autonomy boundary: the system may inform, warn, and offer a safer adjustment, but the user owns the final path unless the selected path is blocked by safety, permissions, or impossible constraints.
 
 ### Step 2: Risk Identification
 
@@ -1221,10 +1263,10 @@ After the decision gate closes, Thinking must lock down the execution protocol b
         "businessLane": "frontend",
         "capabilityNeed": "frontend implementation",
         "capabilitySearchQuery": "frontend implementation owner + UI skills",
-        "candidateOwners": ["frontend-developer", "fullstack-engineer"],
+        "candidateOwners": ["meta-conductor", "meta-artisan"],
         "candidateSkills": ["browser", "react-best-practices"],
-        "selectedOwner": "frontend-developer",
-        "selectionReason": "Own boundary covers route and component implementation",
+        "selectedOwner": "meta-conductor",
+        "selectionReason": "Conductor owns orchestration while concrete frontend implementation is represented as run-scoped matchedSkills",
         "coverageStatus": "covered"
       }
     ],
@@ -1252,12 +1294,33 @@ After the decision gate closes, Thinking must lock down the execution protocol b
       {
         "businessRoleId": "frontend",
         "roleDisplayName": "frontend",
-        "ownerAgent": "frontend-developer",
+        "ownerAgent": "meta-conductor",
         "capabilityNeed": "frontend implementation",
         "assignedResponsibilitySlice": "Implement the home route UI from the UX and UI handoff",
         "ownerResponsibilityDelta": "Reuse existing frontend implementation boundary; narrow it to home route files",
         "agentIterationPlan": "Dispatch with exact route scope, run-scoped selectedSkill entries, shard rules, and verification steps",
         "ownerResolution": "reuse_existing_owner",
+        "matchedSkills": [
+          {
+            "matchId": "skill-match-frontend-001",
+            "capabilitySlot": "frontend implementation",
+            "providerId": "superpowers",
+            "skillId": "test-driven-development",
+            "toolOrCommand": null,
+            "source": "capability-index",
+            "roiScore": 4,
+            "selectionReason": "Best run-scoped implementation discipline; not persisted into durable identity",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "Return to Thinking and emit capabilityGapPacket"
+          }
+        ],
+        "skillSelectionScope": "run_scoped",
+        "governanceStageNodes": [
+          { "stage": "Fetch", "ownerAgent": "meta-artisan", "responsibility": "skill/tool matching" },
+          { "stage": "Thinking", "ownerAgent": "meta-conductor", "responsibility": "role sequencing" },
+          { "stage": "Review", "ownerAgent": "meta-prism", "responsibility": "quality and contract review" }
+        ],
         "abstractCapabilitySlots": ["frontend implementation", "browser QA handoff"],
         "providerCompatibility": ["superpowers", "ecc"],
         "durableSkillBindingPolicy": "abstract_slots_and_providers_only",
@@ -1281,8 +1344,8 @@ After the decision gate closes, Thinking must lock down the execution protocol b
   "workerTaskPackets": [
     {
       "packetId": "task-001",
-      "owner": "frontend",
-      "ownerAgent": "frontend-developer",
+      "owner": "meta-conductor",
+      "ownerAgent": "meta-conductor",
       "businessRoleId": "frontend",
       "roleDisplayName": "frontend",
       "roleInstanceId": "frontend#home-page",
@@ -1290,7 +1353,7 @@ After the decision gate closes, Thinking must lock down the execution protocol b
       "ownerMode": "reuse_existing_owner",
       "dependsOn": [],
       "parallelGroup": "group-a",
-      "mergeOwner": "agent name",
+      "mergeOwner": "meta-warden",
       "shardKey": "route",
       "shardScope": ["home"],
       "workspaceIsolation": "same_workspace_readonly_overlap",
@@ -1321,7 +1384,7 @@ After the decision gate closes, Thinking must lock down the execution protocol b
 }
 ```
 
-If `agentBlueprintPacket.roleCoverageGate` is `fail`, `missingRoles` is non-empty, or any role has `ownerResolution` of `upgrade_existing_owner` or `create_owner_first`, Thinking must emit a `capabilityGapPacket` and require an approved `executionAgentCard` before any Stage 4 dispatch. The role may not be replaced with a generic worker unless the gap is explicitly recorded and approved as an emergency fallback.
+If `agentBlueprintPacket.roleCoverageGate` is `fail`, `missingRoles` is non-empty, or any role has `ownerResolution` of `upgrade_existing_owner` or `create_owner_first`, Thinking must emit a `capabilityGapPacket` and require an approved governance-owner decision before any Stage 4 dispatch. The role may not be replaced with a generic or non-meta worker in public Meta_Kim.
 
 Independent work that can be parallelized must be marked with the same `parallelGroup`. Any task that has no declared `owner`, `ownerAgent`, `businessRoleId`, `roleDisplayName`, `roleInstanceId`, `dependsOn`, `shardKey`, `shardScope`, `workspaceIsolation`, `artifactNamespace`, `collisionPolicy`, and `mergeOwner` is not ready for Execution.
 
@@ -1335,8 +1398,8 @@ Before proceeding to Step 4, the plan must pass this gate:
 | **Single-Packet Anti-Pattern** | Only 1 packet produced for a multi-file / multi-capability task | REJECT — re-decompose or justify why a single packet is genuinely sufficient (single-file, single-capability, pure logic change) |
 | **Business-flow coverage** | `businessFlowBlueprintPacket` covers expected lanes or documents omitted lanes with reasons | REJECT — add missing lanes or omission reasons |
 | **Short business role names** | `roleDisplayName` uses a coarse role-family form (`frontend`, `backend`, `test`); runtime nicknames and scoped work items are aliases or instance scope only | REJECT — replace personal/random names, scoped work items, or long task descriptions with coarse business role names |
-| **Role responsibility assignment** | Every `agentBlueprintPacket.roles[]` entry declares `assignedResponsibilitySlice`, `ownerResponsibilityDelta`, `agentIterationPlan`, and `ownerResolution` | REJECT — fill the role iteration fields before worker packets |
-| **Role coverage gap** | Failed `roleCoverageGate`, non-empty `missingRoles`, or `ownerResolution = upgrade_existing_owner | create_owner_first` has `capabilityGapPacket` and approved `executionAgentCard` | REJECT — create or upgrade the owner first |
+| **Role responsibility assignment** | Every `agentBlueprintPacket.roles[]` entry declares `ownerSource`, `agentCopyPolicy`, `assignedResponsibilitySlice`, `ownerResponsibilityDelta`, `agentIterationPlan`, `ownerResolution`, `matchedSkills`, `skillSelectionScope`, and `governanceStageNodes`; direct global reuse is not copied, project-local copy requires upgrade intent, and new execution agents require `create_project_local_agent` | REJECT — fill the role source, copy policy, iteration, and skill-match fields before worker packets |
+| **Role coverage gap** | Failed `roleCoverageGate`, non-empty `missingRoles`, or `ownerResolution = upgrade_existing_owner | create_owner_first` has `capabilityGapPacket` and approved governance-owner decision | REJECT — upgrade/create governance owner or block the run |
 | **Same-agent multi-instance** | Repeated `ownerAgent` entries have unique `roleInstanceId`, shard scope, artifact namespace, isolation/collision policy, and one merge owner | REJECT — add shard/merge rules or make the work sequential |
 | **Packet completeness** | Every packet has non-empty `owner`, `ownerAgent`, `businessRoleId`, `roleDisplayName`, `roleInstanceId`, `dependsOn` (or explicit `[]`), `parallelGroup`, `mergeOwner`, `shardKey`, `shardScope` | REJECT — fill missing fields |
 
@@ -1461,7 +1524,7 @@ Thinking must translate the plan into a **`cardDeck`** — the canonical Stage 3
 
 **⚠️ Core Rule: meta-theory does NOT write code directly.**
 
-**Orchestration**: Conductor's task board drives execution. Sub-tasks are mapped to execution agent capabilities discovered via Fetch-first pattern (capability index), not hardcoded by name. Conductor orchestrates; execution agents execute — meta-agents do NOT self-execute business logic.
+**Orchestration**: Conductor's task board drives execution. In public Meta_Kim, sub-tasks are mapped to governance meta owners plus run-scoped skills/tools discovered via Fetch-first pattern, not hardcoded by non-meta agent name. Conductor orchestrates; concrete implementation capability is evidence in `matchedSkills`, not a durable public owner.
 
 ### Step 1: Invoke selected agents from Stage 2
 
@@ -1500,7 +1563,7 @@ Execution must respect the Stage 3 **`cardDeck`** (stage-card sequence / control
 
 ### Surgical Change Hygiene (Karpathy-inspired)
 
-Every execution agent must obey these constraints:
+Every public governed execution lane must obey these constraints:
 
 - **Touch only what you must.** Don't "improve" adjacent code, comments, or formatting. Don't refactor things that aren't broken. Match existing style, even if you'd do it differently.
 - **Clean up only your own mess.** If your changes make imports/variables/functions unused, remove them. Do NOT remove pre-existing dead code unless explicitly asked — mention it instead.
@@ -1541,6 +1604,28 @@ Before content quality review begins, check the execution contract itself:
 - [ ] Did the run maintain one consolidated deliverable rather than drifting into detached outputs?
 
 If any answer is no, the Review packet must record **protocol non-compliance** even if the implementation quality looks good.
+
+**Review 阶段的 meta-prism 边界**:
+- ✅ 允许：Read / Grep / Glob / WebFetch / WebSearch / Bash (只读白名单子集，如 `pnpm typecheck`、`cargo check --no-deps`、`git status`、`git log`、`ls`、`cat`、`find`)
+- ❌ 禁止：Edit / Write / NotebookEdit / MCP-write / Bash 中包含 `install / build / push / rm / curl POST / --force / npm publish` 等副作用命令
+- 如发现质量问题需修复代码 → 必须 dispatch 到执行 worker，meta-prism 不亲自 patch
+
+### Step 1.6: Interface Integration Contract Review
+
+When `interfaceIntegrationContractPacket` is present or required, Review must verify the interface gate before normal code quality:
+
+- **Source-of-truth gate**: every field, enum, error code, state transition, and auth/signature parameter cites evidence.
+- **Contract diff gate**: internal API changes declare before/after compatibility and consumer impact.
+- **Signature/auth gate**: signing order, encoding, timestamp/nonce, secret reference, replay protection, callback verification, and auth failure behavior are explicit.
+- **Idempotency gate**: idempotency key, duplicate request semantics, duplicate callback handling, timeout retry behavior, and storage/locking strategy are explicit.
+- **Callback/webhook gate**: verification, duplicate, out-of-order, delayed, rollback, ACK timing, retry, dead-letter, and compensation behavior are explicit.
+- **Error model gate**: third-party raw errors are mapped to internal standard errors, retry class, alerting severity, and user-facing boundary.
+- **State machine gate**: payment/order/logistics/auth flows reject illegal transitions and document final consistency or compensation paths.
+- **Sandbox/contract test gate**: success, auth failure, rate limit, timeout, missing field, provider 5xx, and duplicate request/callback scenarios are covered.
+- **Security/secrets gate**: secrets stay out of source, logs, frontend, fixtures, and artifacts; environment separation is explicit.
+- **Human owner approval gate**: business semantics, money/order state, SLA, and error-code mappings are approved by the responsible owner.
+
+Missing required gates or any remaining `blocking_unknown` fail Review even when the implementation compiles.
 
 ### Step 2: Quality Review (dynamic, Fetch-first)
 
@@ -1624,7 +1709,7 @@ Every non-pass issue must become a **review finding object**. Free-form issue li
 
 ```
 Round 1: Review agent reports issues
-  → Auto-dispatch fix to the original execution agent (with issue list as constraints)
+  → Auto-dispatch fix to the original governance owner with issue list and run-scoped matchedSkills as constraints
   → Re-run Review on the fixed output
 Round 2: If still FAIL → auto-fix again with accumulated context
   → Re-run Review
@@ -1632,7 +1717,7 @@ Round 3: If still FAIL → STOP, notify user for manual decision
   → Include: all 3 rounds of issues, what was tried, what remains unfixed
 ```
 
-Key difference from simple "max 2 rounds": the fix is **automatic** — the Review agent dispatches the fix back to the execution agent without waiting for user input. Only escalate to user after 3 failed auto-fix attempts.
+Key difference from simple "max 2 rounds": the fix is **automatic** — the Review agent dispatches the fix back to the responsible governance owner without waiting for user input. Only escalate to user after 3 failed auto-fix attempts.
 
 ---
 

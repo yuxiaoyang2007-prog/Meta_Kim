@@ -6,6 +6,70 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.1.0] - 2026-05-23
+
+### 新增
+
+- **Sub-agent 治理元边界** — meta-theory 的 `Dispatch-Not-Execute` 规则正式延伸到 sub-agent 上下文。`canonical/skills/meta-theory/SKILL.md` 新增第 6 条：禁止 meta-* sub-agent 执行业务逻辑（Fetch 只返回证据；Thinking 只产出 plan；Review 只验证不打补丁；Execution 编排者只 dispatch 不写代码）。`references/dev-governance.md` 列出 meta-prism 允许/禁止矩阵；`references/create-agent.md` 新增 `Sub-agent Identity Carry-over` 章节，写明 prompt + hook 双层 enforcement。
+- **9 份治理 agent 的 frontmatter 工具白名单** — 所有 `canonical/agents/meta-*.md` 现在统一声明 `tools: Read, Grep, Glob, Bash, Agent, WebFetch, WebSearch`。`Edit`、`Write`、`MultiEdit`、`NotebookEdit`、MCP 写类工具被刻意排除，Claude Code 原生即对治理 agent 屏蔽这些工具。
+- **L2 混合 Bash 只读白名单** — 新增 `canonical/runtime-assets/claude/hooks/bash-readonly-whitelist.mjs`：66 条只读命令白名单（如 `git status`、`git log`、`ls`、`cat`、`find`、`rg`、`pnpm typecheck`、`cargo check`）+ 60 条危险参数黑名单（如 `git push`、`--force`、`cargo build`、`npm install`、`| sh`、`; rm`）。基于 token 边界识别 `>` / `>>`；允许重定向到 `/dev/null`（Windows `nul`）和 `os.tmpdir()` 路径，拦截写入工作树；同时拦截命令替换（`$(...)`、反引号）。
+- **渐进式拦截模式** — `enforce-agent-dispatch.mjs` 暴露 `META_KIM_META_ENFORCEMENT_MODE`（`warn` | `block` | `progressive`，默认 `progressive`）和 `META_KIM_META_ENFORCEMENT_GRACE_DAYS`（默认 7）。宽限期内违规只 warn，之后转 block；测试/CI 可设 `MODE=block` 立即跳过宽限期。
+- **Cursor 声明性治理** — 新增 `canonical/runtime-assets/cursor/rules/meta-enforcement.mdc`（alwaysApply MDC 规则），在 Cursor 每轮对话注入 meta-* sub-agent 边界，弥补 Cursor 无 PreToolUse deny 能力。
+- **跨运行时能力矩阵** — 新增 `docs/cross-runtime-meta-enforcement.md`，记录 Claude Code、Codex、Cursor、OpenClaw 各自的 deny / 声明性能力差异，帮助用户按运行时管理合理预期。
+
+### 变更
+
+- **enforce-agent-dispatch.mjs 调用者识别** — `isMetaAgent()` 现在不只覆盖 Agent 工具，还覆盖 Bash、Edit、Write、MultiEdit、NotebookEdit。调用者身份推断顺序：`CLAUDE_SUBAGENT_TYPE` → 当前 stage `dispatchChain` 末项 → 之前 stage 回溯 → null（保守 warn）。原来的 `if (!state || !state.active) process.exit(0)` 逃生舱口改为最小化降级路径，仍会对 meta-* 调用者执行只读检查。
+- **spine-state.mjs 跨 OS 加固** — `isWithin()` 现在对 parent 和 target 都做 `normalize()`，Windows 平台额外 `toLowerCase()`，消除 `spine-state.json` 大小写绕过。`enforce-agent-dispatch.mjs` 的 `isSpineStateWrite()` 也加入了 `[\\/]spine[\\/]` 段匹配。
+- **版本元数据** — 包版本提升到 `2.1.0`。
+
+### 修复
+
+- **治理元 agent 直接执行** — 在此版本之前，`meta-prism` 和 `meta-conductor` 一旦被 dispatch 成 sub-agent，仍可自由调用 `Bash`、`Edit`、`Write`，因为：(a) meta-theory prompt 只约束主线程；(b) `canonical/agents/meta-*.md` 没有 `tools:` frontmatter；(c) `enforce-agent-dispatch.mjs` 对执行工具不检查调用者身份；(d) spine state 失活时 hook 直接 exit；(e) Codex / Cursor / OpenClaw 完全没有 PreToolUse hook。本次的路径 C 在 Claude Code 上机械化闭环了全部 5 层，在其他运行时上以声明性方式诚实标注覆盖度。
+- **Windows 路径绕过** — `targetPath.includes("spine-state.json")` 在 Windows 大小写变化时会失配，新归一化比较修复了这一点。
+- **重定向误伤** — 早期实现拦截所有含 `>` 的命令，会误伤 `grep ... > /dev/null` 等合法只读取证；新的 token 边界 + 目标白名单恢复了这些合法流程。
+
+### 已知限制
+
+- Codex 和 OpenClaw 仍只能依靠声明性 `executionBlock=true` + prompt 自律，因为两者都没有 PreToolUse deny 通道；这一限制在 `docs/cross-runtime-meta-enforcement.md` 中明文记录，不通过假 hook 粉饰。
+- `npm run meta:sync` 目前未投影 `canonical/runtime-assets/cursor/rules/`；该文件目前手动复制到 `.cursor/rules/`，等 sync 脚本扩展支持后会自动化。
+
+## [2.0.44] - 2026-05-23
+
+### 新增
+
+- **接口接入契约层** — 新增 `interfaceIntegrationContractPacket`，覆盖内部 API 边界和第三方供应商接入，包含接口清单、字段账本、未知项分类、证据引用、Review 门禁、契约测试矩阵和 owner 批准。
+- **接入 Review 门禁** — 新增事实来源、契约 diff、签名/鉴权、幂等、回调/webhook、错误模型、状态机、sandbox/契约测试、安全/密钥、人工 owner 批准等门禁。
+- **Run 校验覆盖** — 新增 validator 和测试，拒绝缺少接口契约包的接入 run，拒绝缺少第三方门禁的包，拒绝写入真实密钥值，并接受最小合法第三方接入包。
+
+### 变更
+
+- **业务流路由** — 新增 `internal_api_integration` 和 `third_party_integration` 交付类型，并加入接口契约、供应商 adapter、权限、契约测试、观测、上线/回滚等接入 lane。
+- **能力发现** — 新增抽象 `interface-integration-contract` 能力位，同时保持具体 provider 工具和 skill 只在当前 run 内选择。
+- **版本元数据** — 将 package 版本提升到 `2.0.44`。
+
+### 修复
+
+- **接口猜测缺口** — 当接口字段或第三方接入事实仍为 `blocking_unknown` 时，meta-theory 现在会阻断 public-ready 完成，避免实现从未证实的假设继续推进。
+
+## [2.0.43] - 2026-05-22
+
+### 新增
+
+- **项目本地执行 Agent 创建策略** — 新增 `create_project_local_agent`，用于用户项目中没有全局或现有项目本地 owner 能覆盖 recurring 编排节点的场景。
+- **治理参与强制校验** — 新增 Critical、Fetch、Thinking、Review 的必需参与者覆盖检查；当执行 Agent 被创建或升级时，Review 阶段必须包含 `meta-chrysalis`。
+- **Agent factory 验证覆盖** — 新增 run artifact 测试，覆盖全局直接复用、项目本地升级、项目本地创建、缺少 Chrysalis 审查、缺少 Fetch 治理参与等场景。
+
+### 变更
+
+- **开源仓库与用户项目边界** — 明确 Meta_Kim 仓库自身只保留 9 个治理元 Agent；下游用户项目可以在治理审查下复用、升级或创建执行 Agent。
+- **Factory 派发形态** — 新执行 Agent 创建现在必须使用 `factory_then_dispatch` 编排板，不能伪装成直接派发。
+
+### 修复
+
+- **纸面 Agent factory 缺口** — validator 现在会拒绝只声明 owner creation、但缺少项目本地创建策略、能力缺口包、执行 Agent 卡片或必需治理参与者的 run。
+- **治理覆盖漂移** — 项目校验现在锁定必需阶段参与者合同，避免后续改动静默删掉必须参与编排审查的元 Agent。
+
 ## [2.0.42] - 2026-05-22
 
 ### 新增

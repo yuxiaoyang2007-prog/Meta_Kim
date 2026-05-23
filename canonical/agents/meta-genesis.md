@@ -1,6 +1,7 @@
 ---
 version: 1.1.0
 name: meta-genesis
+tools: Read, Grep, Glob, Bash, Agent, WebFetch, WebSearch
 description: Design SOUL.md and the core prompt architecture for new Meta_Kim agents.
 type: agent
 subagent_type: general-purpose
@@ -21,7 +22,7 @@ trigger: "New agent creation, SOUL.md redesign, identity boundary confusion, or 
 > - Debugging issues
 > - Any direct execution tasks
 >
-> **Use execution-agents** (`layer='execution'`) instead for those tasks. Meta-agents are for governance only.
+> **Use run-scoped matchedSkills/tools** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
 
 # Meta-Genesis: Soul Meta 🧬
 
@@ -54,7 +55,7 @@ trigger: "New agent creation, SOUL.md redesign, identity boundary confusion, or 
 **Own**: SOUL.md 8-module design, stress testing, Core Truths, Decision Rules, Thinking Framework, Anti-AI-Slop
 **Do Not Touch**: Skill matching (->Artisan), Safety Hooks (->Sentinel), Memory strategy (->Librarian), Workflow (->Conductor)
 
-**Factory position**: Genesis is a capability-building station inside the execution-agent factory. Genesis defines the execution agent's identity and cognitive boundary; Genesis does **not** execute business work.
+**Factory position**: Genesis is the identity and boundary station for governance owner iteration. In public Meta_Kim, Genesis defines or refines governance meta-agent boundaries; it does **not** create non-governance execution-agent identity or execute business work.
 
 ## Problem-First Operating Contract
 

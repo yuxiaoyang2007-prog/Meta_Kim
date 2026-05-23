@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { join, dirname, resolve, relative, isAbsolute } from "node:path";
+import { join, dirname, resolve, relative, isAbsolute, normalize } from "node:path";
 
 const META_KIM_STATE_ROOT = ".meta-kim/state";
 const DEFAULT_SPINE_STATE_DIR = ".meta-kim/state/default/spine";
@@ -94,7 +94,15 @@ function createRunId(timestamp = new Date().toISOString()) {
 }
 
 function isWithin(parent, target) {
-  const rel = relative(parent, target);
+  // Windows file systems are case-insensitive: normalize and lowercase both
+  // sides so that a path like C:\KimProject vs c:\kimproject does not slip
+  // past the containment check.
+  const isWin = process.platform === "win32";
+  const norm = (p) => {
+    const n = normalize(p);
+    return isWin ? n.toLowerCase() : n;
+  };
+  const rel = relative(norm(parent), norm(target));
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 

@@ -207,7 +207,8 @@ export async function readSpineState(cwd) {
   const filePath = spineStatePath(cwd);
   try {
     const raw = await readFile(filePath, "utf-8");
-    return JSON.parse(raw);
+    const status = JSON.parse(raw);
+    return status?.active === false ? null : status;
   } catch {
     return null;
   }
@@ -332,7 +333,8 @@ export async function readMetaRunStatus(cwd, profile) {
     .activeRun;
   try {
     const raw = await readFile(filePath, "utf-8");
-    return JSON.parse(raw);
+    const status = JSON.parse(raw);
+    return status?.active === false ? null : status;
   } catch {
     return null;
   }

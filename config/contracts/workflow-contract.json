@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 9,
+  "schemaVersion": 10,
   "owner": "Meta_Kim",
   "businessWorkflow": {
     "id": "business",
@@ -203,6 +203,8 @@
         "cross_module",
         "external_side_effect",
         "durable_artifact",
+        "internal_interface_boundary",
+        "third_party_integration",
         "owner_missing",
         "cross_runtime_sync",
         "security_sensitive",
@@ -603,13 +605,14 @@
         "workflow_blocked_by_missing_declared_owner"
       ],
       "temporaryFallback": {
-        "allowed": true,
+        "allowed": false,
         "subagentType": "generalPurpose",
         "emergencyOnly": true,
         "oneOffPreferred": true,
         "requiresExplicitOwnerLabel": true,
         "requiresJustification": true,
-        "requiresEvolutionReview": true
+        "requiresEvolutionReview": true,
+        "publicRepoPolicy": "Forbidden as durable owner state. Public Meta_Kim must return to Thinking and choose a governance meta owner plus run-scoped matchedSkills, or emit capabilityGapPacket."
       }
     },
     "parallelism": {
@@ -617,6 +620,93 @@
       "requiresDependencyDeclaration": true,
       "requiresParallelGroup": true,
       "requiresMergeOwner": true
+    },
+    "integrationContractPolicy": {
+      "enabled": true,
+      "purpose": "Make internal API work and third-party provider integrations pass through an evidence-backed contract layer before implementation, review, or public-ready completion.",
+      "requiredWhenDeliverableTypes": [
+        "internal_api_integration",
+        "third_party_integration"
+      ],
+      "evidenceSourceEnum": [
+        "source_code",
+        "openapi",
+        "proto",
+        "database_schema",
+        "official_docs",
+        "sdk",
+        "postman_collection",
+        "curl_sample",
+        "sandbox_response",
+        "production_log",
+        "provider_confirmation",
+        "human_owner_confirmation"
+      ],
+      "fieldClassEnum": [
+        "internal_canonical_field",
+        "outbound_provider_field",
+        "inbound_provider_field",
+        "view_binding_field",
+        "transformation_rule",
+        "error_code",
+        "state_transition",
+        "auth_signature_parameter"
+      ],
+      "unknownStatusEnum": [
+        "confirmed",
+        "needs_verification",
+        "blocking_unknown",
+        "assumption_with_rollback"
+      ],
+      "blockingUnknownStatuses": [
+        "blocking_unknown"
+      ],
+      "requiredReviewGates": [
+        "source_of_truth",
+        "contract_diff",
+        "signature_auth",
+        "idempotency",
+        "callback_webhook",
+        "error_model",
+        "state_machine",
+        "sandbox_contract_test",
+        "security_secrets",
+        "human_owner_approval"
+      ],
+      "requiredReviewGatesByIntegrationKind": {
+        "internal": [
+          "source_of_truth",
+          "contract_diff",
+          "error_model",
+          "state_machine",
+          "sandbox_contract_test",
+          "human_owner_approval"
+        ],
+        "third_party": [
+          "source_of_truth",
+          "signature_auth",
+          "idempotency",
+          "callback_webhook",
+          "error_model",
+          "state_machine",
+          "sandbox_contract_test",
+          "security_secrets",
+          "human_owner_approval"
+        ],
+        "hybrid": [
+          "source_of_truth",
+          "contract_diff",
+          "signature_auth",
+          "idempotency",
+          "callback_webhook",
+          "error_model",
+          "state_machine",
+          "sandbox_contract_test",
+          "security_secrets",
+          "human_owner_approval"
+        ]
+      },
+      "publicReadyGate": "If summaryPacket.publicReady is true, interfaceIntegrationContractPacket must have no blocking_unknown entries and must include all review gates required for its integrationKind."
     },
     "protocolFirst": {
       "enabled": true,
@@ -688,9 +778,13 @@
           "create_owner_first"
         ]
       },
-      "executionAgentCardRequiredWhenOwnerResolutionAnyOf": [
+      "governanceOwnerDecisionRequiredWhenOwnerResolutionAnyOf": [
         "upgrade_existing_owner",
         "create_owner_first"
+      ],
+      "interfaceIntegrationContractPacketRequiredWhenTriggerReasons": [
+        "internal_interface_boundary",
+        "third_party_integration"
       ],
       "intentPacketRequiredWhenGovernanceFlows": [
         "complex_dev",
@@ -700,7 +794,7 @@
         "complex_dev",
         "meta_analysis"
       ],
-      "description": "intentPacket is required in run artifacts when taskClassification.governanceFlow is listed in intentPacketRequiredWhenGovernanceFlows (IntentGate-style intent lock-in). intentGatePacket is required for the same flows (structured ambiguity / assumptions gate before Execution). contentEvidencePacket and preDecisionOptionFrame are required before AskUserQuestion / native choice / conversation fallback for non-trivial non-query work; they prove Fetch evidence and Thinking option framing happened before interruption. dispatchEnvelopePacket, dispatchBoard, and workerTaskPacket are finalized only after user choice or an allowed recorded skip. dispatchEnvelopePacket is required for all non-pure-query flows so every executable run has an explicit owner, capability boundary, memory mode, and review / verification routing before dispatch. orchestrationTaskBoardPacket is the mandatory Conductor task board for the same executable flows. businessFlowBlueprintPacket and agentBlueprintPacket are required before workerTaskPacket so Conductor proves the full business flow was considered before dispatch. capabilityGapPacket is required when taskClassification.upgradeReasons records owner_creation_required, or when agentBlueprintPacket.roleCoverageGate fails with missing roles whose ownerResolution is upgrade_existing_owner or create_owner_first. executionAgentCard is required when capabilityGapPacket resolves the gap through execution-agent creation or upgrade, or when agentBlueprintPacket ownerResolution chooses upgrade_existing_owner or create_owner_first."
+      "description": "intentPacket is required in run artifacts when taskClassification.governanceFlow is listed in intentPacketRequiredWhenGovernanceFlows (IntentGate-style intent lock-in). intentGatePacket is required for the same flows (structured ambiguity / assumptions gate before Execution). contentEvidencePacket and preDecisionOptionFrame are required before AskUserQuestion / native choice / conversation fallback for non-trivial non-query work; they prove Fetch evidence and Thinking option framing happened before interruption. dispatchEnvelopePacket, dispatchBoard, and workerTaskPacket are finalized only after user choice or an allowed recorded skip. dispatchEnvelopePacket is required for all non-pure-query flows so every executable run has an explicit owner, capability boundary, memory mode, and review / verification routing before dispatch. orchestrationTaskBoardPacket is the mandatory Conductor task board for the same executable flows. businessFlowBlueprintPacket and agentBlueprintPacket are required before workerTaskPacket so Conductor proves the full business flow was considered before dispatch. interfaceIntegrationContractPacket is required when triggerReasons indicate internal interface boundary work or third-party integration, or when the business deliverable type is an interface integration. capabilityGapPacket is required when taskClassification.upgradeReasons records owner_creation_required, or when agentBlueprintPacket.roleCoverageGate fails with missing roles whose ownerResolution is upgrade_existing_owner or create_owner_first. In the Meta_Kim repository itself, owner creation or upgrade means a governance meta-owner decision plus run-scoped matchedSkills. In user projects, executionAgentCard is used only when a global agent must be copied/modified locally or a new project-local agent must be created."
     },
     "localState": {
       "root": ".meta-kim/state",
@@ -1124,6 +1218,8 @@
         "landing_page",
         "dashboard",
         "api_service",
+        "internal_api_integration",
+        "third_party_integration",
         "data_pipeline",
         "runtime_package",
         "install_release",
@@ -1134,6 +1230,14 @@
         "release",
         "install",
         "runtime_package"
+      ],
+      "interfaceIntegrationLaneIds": [
+        "interface_contract",
+        "provider_adapter",
+        "permission",
+        "contract_test",
+        "observability",
+        "rollout_rollback"
       ],
       "coverageJudgmentEnum": [
         "complete",
@@ -1159,13 +1263,76 @@
       ],
       "description": "Conductor-owned business-flow blueprint produced before worker tasks. It requires the system to infer task-specific business lanes from the requested outcome, scope, and deliverable type; planning dimensions may include product, UX, UI, frontend, backend, data, motion, test, QA, security, release, feedback, and evolution when relevant. Every lane object in requiredLanes or optionalLanes must carry global capability scan evidence: capabilitySearchQuery, candidateOwners, candidateSkills, selectedOwner, selectionReason, and coverageStatus. Omitted lanes require explicit human-readable reasons."
     },
+    "interfaceIntegrationContractPacket": {
+      "requiredFields": [
+        "integrationKind",
+        "interfaceInventory",
+        "fieldLedger",
+        "unknowns",
+        "evidence",
+        "reviewGates",
+        "testMatrix",
+        "ownerApprovals"
+      ],
+      "integrationKindEnum": [
+        "internal",
+        "third_party",
+        "hybrid"
+      ],
+      "fieldLedgerRequiredFields": [
+        "fieldName",
+        "fieldClass",
+        "sourceOfTruth",
+        "evidenceRef",
+        "owner",
+        "transformationRule",
+        "unknownStatus"
+      ],
+      "unknownRequiredFields": [
+        "itemId",
+        "question",
+        "status",
+        "blockingReason",
+        "owner",
+        "disposition"
+      ],
+      "evidenceRequiredFields": [
+        "evidenceId",
+        "sourceType",
+        "sourceRef",
+        "summary"
+      ],
+      "reviewGateEnum": [
+        "source_of_truth",
+        "contract_diff",
+        "signature_auth",
+        "idempotency",
+        "callback_webhook",
+        "error_model",
+        "state_machine",
+        "sandbox_contract_test",
+        "security_secrets",
+        "human_owner_approval"
+      ],
+      "testMatrixRequiredScenarios": [
+        "success",
+        "auth_failure",
+        "rate_limited",
+        "timeout",
+        "missing_field",
+        "provider_5xx",
+        "duplicate_request_or_callback"
+      ],
+      "description": "Evidence-backed contract packet for internal API and third-party provider integrations. It records the interface inventory, field ledger, unknowns, evidence sources, review gates, and contract/sandbox test matrix before implementation can be treated as complete."
+    },
     "agentBlueprintPacket": {
       "requiredFields": [
         "roles",
         "roleCoverageGate",
         "missingRoles",
         "duplicateRolePolicy",
-        "namingPolicy"
+        "namingPolicy",
+        "governanceStageCoverage"
       ],
       "roleCoverageGateEnum": [
         "pass",
@@ -1180,21 +1347,58 @@
         "roleDisplayName",
         "assignedResponsibilitySlice",
         "ownerAgent",
+        "ownerSource",
+        "agentCopyPolicy",
         "ownerResponsibilityDelta",
         "agentIterationPlan",
-        "ownerResolution"
+        "ownerResolution",
+        "matchedSkills",
+        "skillSelectionScope",
+        "governanceStageNodes"
       ],
       "ownerResolutionEnum": [
         "reuse_existing_owner",
         "upgrade_existing_owner",
         "create_owner_first"
       ],
+      "ownerSourceEnum": [
+        "meta_kim_canonical",
+        "global_reuse",
+        "project_local"
+      ],
+      "agentCopyPolicyEnum": [
+        "meta_kim_governance_only",
+        "use_global_directly",
+        "copy_to_project_for_modification",
+        "create_project_local_agent",
+        "already_project_local"
+      ],
+      "skillSelectionScopeEnum": [
+        "run_scoped"
+      ],
+      "matchedSkillRequiredFields": [
+        "matchId",
+        "capabilitySlot",
+        "providerId",
+        "skillId",
+        "source",
+        "roiScore",
+        "selectionReason",
+        "selectionScope",
+        "persistencePolicy",
+        "fallback"
+      ],
+      "governanceStageNodeRequiredFields": [
+        "stage",
+        "ownerAgent",
+        "responsibility"
+      ],
       "roleCoverageFailureRule": {
         "whenRoleCoverageGate": "fail",
         "whenMissingRolesNonEmpty": true,
         "createOrUpgradeRequires": [
           "capabilityGapPacket",
-          "executionAgentCard"
+          "governanceOwnerDecision"
         ]
       },
       "namingPolicy": {
@@ -1209,6 +1413,11 @@
       },
       "longTermCapabilityPolicy": {
         "abstractCapabilitySlotsRequired": true,
+        "openSourceProjectKeepsGovernanceMetaAgentsOnly": true,
+        "nonGovernanceExecutionAgentsIgnoredInPublicRepo": true,
+        "downstreamProjectsMayPersistExecutionAgents": true,
+        "globalAgentDirectReusePreferred": true,
+        "copyGlobalAgentOnlyWhenModified": true,
         "allowedMetaSkillProviders": [
           "agent-teams-playbook",
           "superpowers",
@@ -1231,7 +1440,130 @@
           "description": "A large governance agent may stay intact only when it owns a coherent governance boundary; otherwise split supporting detail into references while preserving the agent identity boundary."
         }
       },
-      "description": "Capability-first role blueprint. It separates businessRoleId, roleDisplayName, selected owner agent, assigned responsibility slice, owner responsibility delta, and per-run role instances so the same agent can run multiple named shards in parallel without confusing users. ownerResolution uses reuse_existing_owner, upgrade_existing_owner, or create_owner_first."
+      "globalAgentReusePolicy": {
+        "searchGlobalBeforeCopy": true,
+        "directUseDoesNotCopyToProject": true,
+        "copyToProjectOnlyWhen": [
+          "project_specific_knowledge_required",
+          "capability_boundary_must_change",
+          "skills_or_tools_must_be_persistently_added",
+          "global_agent_partial_fit_requires_iteration",
+          "recurring_project_pattern_requires_local_owner"
+        ],
+        "reviewStages": [
+          "Critical",
+          "Fetch",
+          "Thinking",
+          "Review"
+        ],
+        "description": "Fetch searches global agents, skills, tools, and capability indexes first. A global agent that already satisfies the orchestration node is used directly and is not copied into the user project. Only agents that need project-specific modification, persistent capability changes, or recurring local ownership are copied into the downstream project as project-local agents, under governance review. agentCopyPolicy=copy_to_project_for_modification is valid only with ownerSource=project_local and ownerResolution=upgrade_existing_owner; agentCopyPolicy=create_project_local_agent is valid only with ownerSource=project_local and ownerResolution=create_owner_first."
+      },
+      "ownerAgentPublicRepoRule": {
+        "allowedOwnerAgents": [
+          "meta-warden",
+          "meta-conductor",
+          "meta-genesis",
+          "meta-artisan",
+          "meta-sentinel",
+          "meta-librarian",
+          "meta-prism",
+          "meta-scout",
+          "meta-chrysalis"
+        ],
+        "forbidPersistedNonGovernanceExecutionAgents": true,
+        "fallbackBehavior": "Inside the Meta_Kim repository itself, use a governance meta owner plus run-scoped matchedSkills, or block with capabilityGapPacket. During user-project use, global execution agents may be reused directly without copying, and project-local execution agents may be created or upgraded only when the governance layer approves the gap."
+      },
+      "runScopedSkillPersistenceGate": {
+        "failWhenConcreteSkillCopiedToDurableIdentity": true,
+        "allowedDurableReferences": [
+          "abstractCapabilitySlots",
+          "providerCompatibility",
+          "longTermCapabilityPolicy"
+        ]
+      },
+      "governanceStageCoveragePolicy": {
+        "requiredStages": [
+          "Critical",
+          "Fetch",
+          "Thinking",
+          "Review"
+        ],
+        "allowedOwnerAgents": [
+          "meta-warden",
+          "meta-conductor",
+          "meta-genesis",
+          "meta-artisan",
+          "meta-sentinel",
+          "meta-librarian",
+          "meta-prism",
+          "meta-scout",
+          "meta-chrysalis"
+        ],
+        "stageAllowedAgents": {
+          "Critical": [
+            "meta-warden",
+            "meta-conductor",
+            "meta-sentinel",
+            "meta-librarian"
+          ],
+          "Fetch": [
+            "meta-conductor",
+            "meta-scout",
+            "meta-artisan",
+            "meta-librarian",
+            "meta-genesis"
+          ],
+          "Thinking": [
+            "meta-conductor",
+            "meta-genesis",
+            "meta-artisan",
+            "meta-sentinel",
+            "meta-warden"
+          ],
+          "Review": [
+            "meta-prism",
+            "meta-warden",
+            "meta-sentinel",
+            "meta-chrysalis"
+          ]
+        },
+        "stageRequiredAgents": {
+          "Critical": [
+            "meta-warden",
+            "meta-conductor"
+          ],
+          "Fetch": [
+            "meta-conductor",
+            "meta-scout",
+            "meta-artisan",
+            "meta-librarian",
+            "meta-genesis"
+          ],
+          "Thinking": [
+            "meta-conductor",
+            "meta-genesis",
+            "meta-artisan",
+            "meta-sentinel",
+            "meta-warden"
+          ],
+          "Review": [
+            "meta-prism",
+            "meta-warden"
+          ]
+        },
+        "factoryResolutionAdditionalRequiredAgents": {
+          "appliesWhenResolutionActionAnyOf": [
+            "create_execution_agent",
+            "upgrade_execution_agent"
+          ],
+          "Review": [
+            "meta-chrysalis"
+          ]
+        },
+        "skillSelectionScope": "run_scoped",
+        "description": "Open-source Meta_Kim ignores non-governance execution agents in durable Meta_Kim repository state. Critical, Fetch, Thinking, and Review governance nodes are owned only by governance meta agents and must include their required participants. During user-project use, those governance nodes inspect each orchestration node, allow direct global-agent reuse when it already fits, and approve copying/iterating or creating a project-local agent only when capability gaps require durable local change."
+      },
+      "description": "Capability-first role blueprint. In the open-source Meta_Kim project, ownerAgent is one of the governance meta agents, while concrete execution capability is expressed through run-scoped matchedSkills and governanceStageNodes. During user-project use, ownerAgent may be a directly reused global execution agent or a project-local execution agent created/upgraded after governance approval. ownerSource and agentCopyPolicy distinguish direct global reuse from project-local modification so usable global agents are not copied into the project; copying into the project must mean project-local upgrade work, not ordinary reuse. It separates businessRoleId, roleDisplayName, selected owner, assigned responsibility slice, owner responsibility delta, and per-run role instances so owners can run multiple named shards in parallel without confusing users. ownerResolution uses reuse_existing_owner, upgrade_existing_owner, or create_owner_first."
     },
     "orchestrationTask": {
       "requiredFields": [
@@ -1281,7 +1613,11 @@
         "inputs",
         "outputs"
       ],
-      "description": "Mandatory execution-agent role card whenever the factory creates or upgrades an execution agent. The card defines purpose, boundaries, dependencies, inputs, and outputs."
+      "registryScopeEnum": [
+        "external_private",
+        "project_local"
+      ],
+      "description": "Packet for execution-agent creation or upgrade in user projects and external/private registries. It is not used for direct global reuse. Public Meta_Kim does not use this as durable owner state; public owner creation or upgrade is represented by governance meta-owner decisions plus run-scoped matchedSkills."
     },
     "cardDecision": {
       "requiredFields": [

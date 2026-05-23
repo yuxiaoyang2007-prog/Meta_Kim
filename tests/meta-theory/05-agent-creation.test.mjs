@@ -193,8 +193,8 @@ describe("05 — Type B Agent Creation Pipeline", async () => {
       );
       assert.match(
         pipelineCorpus,
-        /Execution Agents?.*do the actual work|actual workers/i,
-        "Pipeline must state that execution agents do the actual work"
+        /run-scoped.*matchedSkills|Execution Capability Evidence/i,
+        "Pipeline must state that public Meta_Kim records implementation capability as run-scoped evidence"
       );
     });
 
@@ -271,11 +271,16 @@ describe("05 — Type B Agent Creation Pipeline", async () => {
       );
     });
 
-    test("A-14: Execution agent role card requires the 5 fixed fields", () => {
+    test("A-14: External execution agent role card remains compatibility-scoped", () => {
       assert.match(
         pipelineCorpus,
-        /Execution Agent Role Card/i,
-        "Missing execution agent role card section"
+        /executionAgentCard/i,
+        "Missing executionAgentCard compatibility reference"
+      );
+      assert.match(
+        pipelineCorpus,
+        /external\/private|outside the public governance-only boundary|compatibility/i,
+        "executionAgentCard must be scoped away from public durable owner state"
       );
       for (const field of [
         /what it is for|purpose/i,
@@ -296,7 +301,7 @@ describe("05 — Type B Agent Creation Pipeline", async () => {
     test("A-15: Four fixed artifacts are documented", () => {
       for (const artifact of [
         /Capability Gap Sheet|capabilityGapPacket/i,
-        /Execution Agent Role Card|executionAgentCard/i,
+        /governance owner|executionAgentCard/i,
         /Orchestration Task Board|orchestrationTaskBoardPacket/i,
         /Evolution Record|evolutionWritebackPacket/i,
       ]) {

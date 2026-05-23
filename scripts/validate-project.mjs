@@ -940,6 +940,64 @@ async function validateWorkflowContract() {
     ) === JSON.stringify(["pass", "fail"]),
     "workflow-contract.json reviewPacket crossProjectContaminationCheckEnum must be [pass, fail].",
   );
+
+  const integrationPolicy =
+    contract.runDiscipline?.integrationContractPolicy ?? {};
+  assert(
+    integrationPolicy.enabled === true,
+    "workflow-contract.json integrationContractPolicy must be enabled.",
+  );
+  for (const deliverableType of [
+    "internal_api_integration",
+    "third_party_integration",
+  ]) {
+    assert(
+      integrationPolicy.requiredWhenDeliverableTypes?.includes(deliverableType),
+      `workflow-contract.json integrationContractPolicy.requiredWhenDeliverableTypes must include ${deliverableType}.`,
+    );
+  }
+  for (const gate of [
+    "source_of_truth",
+    "contract_diff",
+    "signature_auth",
+    "idempotency",
+    "callback_webhook",
+    "error_model",
+    "state_machine",
+    "sandbox_contract_test",
+    "security_secrets",
+    "human_owner_approval",
+  ]) {
+    assert(
+      integrationPolicy.requiredReviewGates?.includes(gate),
+      `workflow-contract.json integrationContractPolicy.requiredReviewGates must include ${gate}.`,
+    );
+  }
+  assert(
+    integrationPolicy.unknownStatusEnum?.includes("blocking_unknown"),
+    "workflow-contract.json integrationContractPolicy.unknownStatusEnum must include blocking_unknown.",
+  );
+  assert(
+    integrationPolicy.blockingUnknownStatuses?.includes("blocking_unknown"),
+    "workflow-contract.json integrationContractPolicy.blockingUnknownStatuses must include blocking_unknown.",
+  );
+  for (const triggerReason of [
+    "internal_interface_boundary",
+    "third_party_integration",
+  ]) {
+    assert(
+      contract.runDiscipline?.taskClassification?.triggerReasonEnum?.includes(
+        triggerReason,
+      ),
+      `workflow-contract.json taskClassification.triggerReasonEnum must include ${triggerReason}.`,
+    );
+    assert(
+      contract.runDiscipline?.protocolFirst?.interfaceIntegrationContractPacketRequiredWhenTriggerReasons?.includes(
+        triggerReason,
+      ),
+      `workflow-contract.json interfaceIntegrationContractPacketRequiredWhenTriggerReasons must include ${triggerReason}.`,
+    );
+  }
   for (const [protocolName, expectedFields] of [
     [
       "taskClassification",
@@ -1259,10 +1317,70 @@ async function validateWorkflowContract() {
       `workflow-contract.json businessFlowBlueprintPacket.deliverableTypeEnum must include ${deliverableType}.`,
     );
   }
+  for (const deliverableType of [
+    "internal_api_integration",
+    "third_party_integration",
+  ]) {
+    assert(
+      businessFlowProtocol.deliverableTypeEnum?.includes(deliverableType),
+      `workflow-contract.json businessFlowBlueprintPacket.deliverableTypeEnum must include ${deliverableType}.`,
+    );
+  }
   for (const laneId of ["release", "install", "runtime_package"]) {
     assert(
       businessFlowProtocol.releaseInstallLaneIds?.includes(laneId),
       `workflow-contract.json businessFlowBlueprintPacket.releaseInstallLaneIds must include ${laneId}.`,
+    );
+  }
+  for (const laneId of [
+    "interface_contract",
+    "provider_adapter",
+    "permission",
+    "contract_test",
+    "observability",
+    "rollout_rollback",
+  ]) {
+    assert(
+      businessFlowProtocol.interfaceIntegrationLaneIds?.includes(laneId),
+      `workflow-contract.json businessFlowBlueprintPacket.interfaceIntegrationLaneIds must include ${laneId}.`,
+    );
+  }
+
+  const integrationProtocol =
+    contract.protocols?.interfaceIntegrationContractPacket ?? {};
+  for (const field of [
+    "integrationKind",
+    "interfaceInventory",
+    "fieldLedger",
+    "unknowns",
+    "evidence",
+    "reviewGates",
+    "testMatrix",
+    "ownerApprovals",
+  ]) {
+    assert(
+      integrationProtocol.requiredFields?.includes(field),
+      `workflow-contract.json interfaceIntegrationContractPacket.requiredFields must include ${field}.`,
+    );
+  }
+  for (const kind of ["internal", "third_party", "hybrid"]) {
+    assert(
+      integrationProtocol.integrationKindEnum?.includes(kind),
+      `workflow-contract.json interfaceIntegrationContractPacket.integrationKindEnum must include ${kind}.`,
+    );
+  }
+  for (const scenario of [
+    "success",
+    "auth_failure",
+    "rate_limited",
+    "timeout",
+    "missing_field",
+    "provider_5xx",
+    "duplicate_request_or_callback",
+  ]) {
+    assert(
+      integrationProtocol.testMatrixRequiredScenarios?.includes(scenario),
+      `workflow-contract.json interfaceIntegrationContractPacket.testMatrixRequiredScenarios must include ${scenario}.`,
     );
   }
 
@@ -1272,9 +1390,14 @@ async function validateWorkflowContract() {
     "roleDisplayName",
     "assignedResponsibilitySlice",
     "ownerAgent",
+    "ownerSource",
+    "agentCopyPolicy",
     "ownerResponsibilityDelta",
     "agentIterationPlan",
     "ownerResolution",
+    "matchedSkills",
+    "skillSelectionScope",
+    "governanceStageNodes",
   ]) {
     assert(
       agentBlueprintProtocol.roleRequiredFields?.includes(field),
@@ -1297,9 +1420,50 @@ async function validateWorkflowContract() {
     longTermCapabilityPolicy.abstractCapabilitySlotsRequired === true &&
       longTermCapabilityPolicy.forbidConcreteSkillInLongTermAgentIdentity ===
         true &&
-      longTermCapabilityPolicy.selectedSkillScope === "run_only",
-    "workflow-contract.json agentBlueprintPacket.longTermCapabilityPolicy must require abstract slots, run-only concrete skill selection, and no fixed concrete child skills in long-term identity.",
+      longTermCapabilityPolicy.selectedSkillScope === "run_only" &&
+      longTermCapabilityPolicy.openSourceProjectKeepsGovernanceMetaAgentsOnly ===
+        true &&
+      longTermCapabilityPolicy.nonGovernanceExecutionAgentsIgnoredInPublicRepo ===
+        true &&
+      longTermCapabilityPolicy.globalAgentDirectReusePreferred === true &&
+      longTermCapabilityPolicy.copyGlobalAgentOnlyWhenModified === true,
+    "workflow-contract.json agentBlueprintPacket.longTermCapabilityPolicy must require abstract slots, run-only concrete skill selection, open-source governance-only owners, direct global reuse, copy-only-when-modified, and no fixed concrete child skills in long-term identity.",
   );
+  const globalAgentReusePolicy =
+    agentBlueprintProtocol.globalAgentReusePolicy ?? {};
+  assert(
+    globalAgentReusePolicy.searchGlobalBeforeCopy === true &&
+      globalAgentReusePolicy.directUseDoesNotCopyToProject === true &&
+      globalAgentReusePolicy.copyToProjectOnlyWhen?.includes(
+        "project_specific_knowledge_required",
+      ) &&
+      globalAgentReusePolicy.copyToProjectOnlyWhen?.includes(
+        "capability_boundary_must_change",
+      ),
+    "workflow-contract.json agentBlueprintPacket.globalAgentReusePolicy must search global first, use matching global agents directly, and copy only when modification is required.",
+  );
+  for (const ownerSource of [
+    "meta_kim_canonical",
+    "global_reuse",
+    "project_local",
+  ]) {
+    assert(
+      agentBlueprintProtocol.ownerSourceEnum?.includes(ownerSource),
+      `workflow-contract.json agentBlueprintPacket.ownerSourceEnum must include ${ownerSource}.`,
+    );
+  }
+  for (const copyPolicy of [
+    "meta_kim_governance_only",
+    "use_global_directly",
+    "copy_to_project_for_modification",
+    "create_project_local_agent",
+    "already_project_local",
+  ]) {
+    assert(
+      agentBlueprintProtocol.agentCopyPolicyEnum?.includes(copyPolicy),
+      `workflow-contract.json agentBlueprintPacket.agentCopyPolicyEnum must include ${copyPolicy}.`,
+    );
+  }
   for (const provider of [
     "agent-teams-playbook",
     "superpowers",
@@ -1345,12 +1509,66 @@ async function validateWorkflowContract() {
   );
   for (const resolution of ["upgrade_existing_owner", "create_owner_first"]) {
     assert(
-      contract.runDiscipline?.protocolFirst?.executionAgentCardRequiredWhenOwnerResolutionAnyOf?.includes(
+      contract.runDiscipline?.protocolFirst?.governanceOwnerDecisionRequiredWhenOwnerResolutionAnyOf?.includes(
         resolution,
       ),
-      `workflow-contract.json executionAgentCardRequiredWhenOwnerResolutionAnyOf must include ${resolution}.`,
+      `workflow-contract.json governanceOwnerDecisionRequiredWhenOwnerResolutionAnyOf must include ${resolution}.`,
     );
   }
+
+  const governanceStagePolicy =
+    agentBlueprintProtocol.governanceStageCoveragePolicy ?? {};
+  for (const stage of ["Critical", "Fetch", "Thinking", "Review"]) {
+    assert(
+      governanceStagePolicy.requiredStages?.includes(stage),
+      `workflow-contract.json governanceStageCoveragePolicy.requiredStages must include ${stage}.`,
+    );
+    assert(
+      Array.isArray(governanceStagePolicy.stageAllowedAgents?.[stage]) &&
+        governanceStagePolicy.stageAllowedAgents[stage].every((agent) =>
+          governanceStagePolicy.allowedOwnerAgents?.includes(agent),
+        ),
+      `workflow-contract.json governanceStageCoveragePolicy.stageAllowedAgents.${stage} must contain only allowed governance meta agents.`,
+    );
+    assert(
+      Array.isArray(governanceStagePolicy.stageRequiredAgents?.[stage]) &&
+        governanceStagePolicy.stageRequiredAgents[stage].length >= 1 &&
+        governanceStagePolicy.stageRequiredAgents[stage].every((agent) =>
+          governanceStagePolicy.stageAllowedAgents[stage].includes(agent),
+        ),
+      `workflow-contract.json governanceStageCoveragePolicy.stageRequiredAgents.${stage} must contain required agents that are allowed for the stage.`,
+    );
+  }
+  for (const agentId of [
+    "meta-warden",
+    "meta-conductor",
+    "meta-genesis",
+    "meta-artisan",
+    "meta-sentinel",
+    "meta-librarian",
+    "meta-prism",
+    "meta-scout",
+    "meta-chrysalis",
+  ]) {
+    assert(
+      governanceStagePolicy.allowedOwnerAgents?.includes(agentId),
+      `workflow-contract.json governanceStageCoveragePolicy.allowedOwnerAgents must include ${agentId}.`,
+    );
+  }
+  assert(
+    governanceStagePolicy.skillSelectionScope === "run_scoped",
+    "workflow-contract.json governanceStageCoveragePolicy.skillSelectionScope must be run_scoped.",
+  );
+  assert(
+    governanceStagePolicy.factoryResolutionAdditionalRequiredAgents
+      ?.appliesWhenResolutionActionAnyOf?.includes("create_execution_agent") &&
+      governanceStagePolicy.factoryResolutionAdditionalRequiredAgents
+        ?.appliesWhenResolutionActionAnyOf?.includes("upgrade_execution_agent") &&
+      governanceStagePolicy.factoryResolutionAdditionalRequiredAgents?.Review?.includes(
+        "meta-chrysalis",
+      ),
+    "workflow-contract.json governanceStageCoveragePolicy must require Chrysalis review participation for execution-agent creation or upgrade.",
+  );
 
   const sameOwnerPolicy =
     contract.protocols?.workerTaskPacket?.sameOwnerMultiInstancePolicy ?? {};
@@ -2004,6 +2222,13 @@ async function validateRunArtifactFixtures() {
     "run-artifacts",
     "invalid-run-public-ready.json",
   );
+  const invalidNonMetaOwnerFixture = path.join(
+    repoRoot,
+    "tests",
+    "fixtures",
+    "run-artifacts",
+    "invalid-run-non-meta-owner.json",
+  );
 
   await execFileAsync(
     "node",
@@ -2032,6 +2257,26 @@ async function validateRunArtifactFixtures() {
   assert(
     invalidPassed === false,
     "scripts/validate-run-artifact.mjs must reject the invalid public-ready fixture.",
+  );
+
+  let invalidNonMetaOwnerPassed = false;
+  try {
+    await execFileAsync(
+      "node",
+      ["scripts/validate-run-artifact.mjs", invalidNonMetaOwnerFixture],
+      {
+        cwd: repoRoot,
+        timeout: 30_000,
+      },
+    );
+    invalidNonMetaOwnerPassed = true;
+  } catch {
+    invalidNonMetaOwnerPassed = false;
+  }
+
+  assert(
+    invalidNonMetaOwnerPassed === false,
+    "scripts/validate-run-artifact.mjs must reject non-meta ownerAgent when ownerSource=meta_kim_canonical.",
   );
 }
 

@@ -158,13 +158,7 @@ function deriveOwnerAgents(artifact) {
     }
   };
 
-  for (const field of [
-    "ownerAgent",
-    "businessRoleId",
-    "roleDisplayName",
-    "reviewOwner",
-    "verificationOwner",
-  ]) {
+  for (const field of ["ownerAgent", "reviewOwner", "verificationOwner"]) {
     addOwner(artifact.dispatchEnvelopePacket?.[field]);
   }
   addOwner(artifact.cardPlanPacket?.dealerOwner);
@@ -175,22 +169,12 @@ function deriveOwnerAgents(artifact) {
     addOwner(decision.insertedGovernanceOwner);
   }
   addOwner(artifact.orchestrationTaskBoardPacket?.synthesisOwner);
-  for (const task of artifact.orchestrationTaskBoardPacket?.tasks ?? []) {
-    addOwner(task.owner);
-    addOwner(task.businessRoleId);
-    addOwner(task.roleDisplayName);
-  }
   for (const packet of artifact.workerTaskPackets ?? []) {
-    addOwner(packet.owner);
     addOwner(packet.ownerAgent);
-    addOwner(packet.businessRoleId);
-    addOwner(packet.roleDisplayName);
     addOwner(packet.mergeOwner);
   }
   for (const role of artifact.agentBlueprintPacket?.roles ?? []) {
     addOwner(role.ownerAgent);
-    addOwner(role.businessRoleId);
-    addOwner(role.roleDisplayName);
   }
   for (const review of artifact.reviewPacket?.reviews ?? []) {
     addOwner(review.agent);
@@ -213,8 +197,53 @@ function deriveOwnerAgents(artifact) {
   return [...owners].sort();
 }
 
+function deriveBusinessRoles(artifact) {
+  const roles = new Set();
+  const addRole = (role) => {
+    if (typeof role === "string" && role.trim().length > 0) {
+      roles.add(role);
+    }
+  };
+  for (const field of ["businessRoleId", "roleDisplayName"]) {
+    addRole(artifact.dispatchEnvelopePacket?.[field]);
+  }
+  for (const lane of artifact.businessFlowBlueprintPacket?.requiredLanes ?? []) {
+    addRole(lane.businessLane);
+  }
+  for (const role of artifact.agentBlueprintPacket?.roles ?? []) {
+    addRole(role.businessRoleId);
+    addRole(role.roleDisplayName);
+  }
+  for (const packet of artifact.workerTaskPackets ?? []) {
+    addRole(packet.businessRoleId);
+    addRole(packet.roleDisplayName);
+  }
+  return [...roles].sort();
+}
+
+function deriveMatchedSkillSummary(artifact) {
+  const providers = new Set();
+  const skillIds = new Set();
+  for (const role of artifact.agentBlueprintPacket?.roles ?? []) {
+    for (const skill of role.matchedSkills ?? []) {
+      if (typeof skill.providerId === "string" && skill.providerId.trim()) {
+        providers.add(skill.providerId);
+      }
+      if (typeof skill.skillId === "string" && skill.skillId.trim()) {
+        skillIds.add(skill.skillId);
+      }
+    }
+  }
+  return {
+    providers: [...providers].sort(),
+    skillIds: [...skillIds].sort(),
+  };
+}
+
 function summarizeArtifact(artifact, artifactPath) {
   const owners = deriveOwnerAgents(artifact);
+  const businessRoles = deriveBusinessRoles(artifact);
+  const matchedSkills = deriveMatchedSkillSummary(artifact);
   const openFindingIds = deriveOpenFindingIds(artifact);
   return {
     artifactPath: toRepoRelative(artifactPath),
@@ -224,6 +253,9 @@ function summarizeArtifact(artifact, artifactPath) {
     requestClass: artifact.taskClassification.requestClass,
     primaryDeliverable: artifact.runHeader.primaryDeliverable,
     ownerAgents: owners,
+    businessRoles,
+    matchedSkillProviders: matchedSkills.providers,
+    matchedSkillIds: matchedSkills.skillIds,
     publicReady: artifact.summaryPacket.publicReady === true,
     verifyPassed: artifact.summaryPacket.verifyPassed === true,
     openFindingIds,
@@ -241,6 +273,9 @@ function summarizeArtifact(artifact, artifactPath) {
       summaryPacket: artifact.summaryPacket,
       writebackDecision: artifact.evolutionWritebackPacket.writebackDecision,
       dispatchEnvelopePacket: artifact.dispatchEnvelopePacket,
+      businessRoles,
+      matchedSkillProviders: matchedSkills.providers,
+      matchedSkillIds: matchedSkills.skillIds,
     },
   };
 }

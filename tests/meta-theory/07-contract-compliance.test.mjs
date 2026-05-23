@@ -134,7 +134,7 @@ describe("workflow-contract.json — schema compliance", async () => {
     );
   });
 
-  test("protocols has all 18 governed packet types", () => {
+  test("protocols has all 19 governed packet types", () => {
     const expected = [
       "runHeader",
       "taskClassification",
@@ -143,6 +143,7 @@ describe("workflow-contract.json — schema compliance", async () => {
       "dispatchEnvelopePacket",
       "orchestrationTaskBoardPacket",
       "businessFlowBlueprintPacket",
+      "interfaceIntegrationContractPacket",
       "agentBlueprintPacket",
       "capabilityGapPacket",
       "executionAgentCard",
@@ -159,7 +160,7 @@ describe("workflow-contract.json — schema compliance", async () => {
     for (const packet of expected) {
       assert.ok(keys.includes(packet), `missing protocol packet: ${packet}`);
     }
-    assert.equal(expected.length, 18);
+    assert.equal(expected.length, 19);
   });
 
   test("publicDisplayRequires has all 5 conditions", () => {
@@ -219,11 +220,65 @@ describe("workflow-contract.json — schema compliance", async () => {
     assert.ok(classification.triggerReasonEnum.includes("multi_file"));
     assert.ok(classification.triggerReasonEnum.includes("owner_missing"));
     assert.ok(
+      classification.triggerReasonEnum.includes("internal_interface_boundary"),
+    );
+    assert.ok(
+      classification.triggerReasonEnum.includes("third_party_integration"),
+    );
+    assert.ok(
       classification.upgradeReasonEnum.includes("owner_creation_required"),
     );
     assert.ok(classification.bypassReasonEnum.includes("pure_query"));
     assert.equal(classification.ownerRequiredByDefault, true);
     assert.equal(classification.onlyQueryMayBypassOwner, true);
+  });
+
+  test("interface integration contract policy is evidence-backed and gate-driven", () => {
+    const policy = contract.runDiscipline?.integrationContractPolicy ?? {};
+    const protocol =
+      contract.protocols?.interfaceIntegrationContractPacket ?? {};
+
+    assert.equal(policy.enabled, true);
+    assert.ok(
+      policy.requiredWhenDeliverableTypes?.includes("internal_api_integration"),
+    );
+    assert.ok(
+      policy.requiredWhenDeliverableTypes?.includes("third_party_integration"),
+    );
+    assert.ok(policy.blockingUnknownStatuses?.includes("blocking_unknown"));
+    assert.ok(policy.evidenceSourceEnum?.includes("official_docs"));
+    assert.ok(policy.evidenceSourceEnum?.includes("sandbox_response"));
+    assert.ok(policy.fieldClassEnum?.includes("outbound_provider_field"));
+    assert.ok(policy.fieldClassEnum?.includes("view_binding_field"));
+
+    for (const gate of [
+      "source_of_truth",
+      "contract_diff",
+      "signature_auth",
+      "idempotency",
+      "callback_webhook",
+      "error_model",
+      "state_machine",
+      "sandbox_contract_test",
+      "security_secrets",
+      "human_owner_approval",
+    ]) {
+      assert.ok(policy.requiredReviewGates?.includes(gate));
+      assert.ok(protocol.reviewGateEnum?.includes(gate));
+    }
+
+    for (const field of [
+      "integrationKind",
+      "interfaceInventory",
+      "fieldLedger",
+      "unknowns",
+      "evidence",
+      "reviewGates",
+      "testMatrix",
+      "ownerApprovals",
+    ]) {
+      assert.ok(protocol.requiredFields?.includes(field));
+    }
   });
 
   test("card governance model is explicit", () => {

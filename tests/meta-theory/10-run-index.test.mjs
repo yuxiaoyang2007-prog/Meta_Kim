@@ -51,8 +51,7 @@ describe("run-index.mjs", () => {
   test("query filters by governance flow, owner, publicReady, and open findings", async () => {
     for (const owner of [
       "meta-conductor",
-      "auth-specialist",
-      "backend",
+      "meta-warden",
     ]) {
       const result = await runRunIndex([
         "query",
@@ -77,11 +76,30 @@ describe("run-index.mjs", () => {
       assert.equal(result.rows[0].publicReady, true);
       assert.equal(result.rows[0].openFindingsCount, 0);
       assert.ok(result.rows[0].ownerAgents.includes(owner));
+      assert.ok(!result.rows[0].ownerAgents.includes("backend"));
+      assert.ok(result.rows[0].payload.businessRoles.includes("backend"));
+      assert.ok(result.rows[0].payload.matchedSkillProviders.includes("meta-theory"));
+      assert.ok(result.rows[0].payload.matchedSkillIds.includes("local-project-code-change"));
       assert.equal(result.rows[0].payload.taskClassification.queryScope, "current_project");
       assert.equal(result.rows[0].payload.fetchPacket.projectsChecked.length, 1);
       assert.deepEqual(result.rows[0].payload.summaryPacket.sourceProjects, [
         result.rows[0].payload.taskClassification.projectRef,
       ]);
     }
+  });
+
+  test("query does not treat business role labels as owners", async () => {
+    const result = await runRunIndex([
+      "query",
+      "--profile",
+      profile,
+      "--runtime-family",
+      "codex",
+      "--owner",
+      "backend",
+    ]);
+
+    assert.equal(result.ok, true);
+    assert.equal(result.count, 0);
   });
 });

@@ -1,6 +1,7 @@
 ---
 version: 1.1.0
 name: meta-librarian
+tools: Read, Grep, Glob, Bash, Agent, WebFetch, WebSearch
 description: Design memory, knowledge persistence, and continuity strategy for Meta_Kim agents.
 type: agent
 subagent_type: general-purpose
@@ -21,7 +22,7 @@ trigger: "Memory issues, session continuity problems, when an agent needs memory
 > - Debugging issues
 > - Any direct execution tasks
 >
-> **Use execution-agents** (`layer='execution'`) instead for those tasks. Meta-agents are for governance only.
+> **Use run-scoped matchedSkills/tools** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
 
 # Meta-Librarian: Archive Meta
 
@@ -54,7 +55,7 @@ trigger: "Memory issues, session continuity problems, when an agent needs memory
 **Own**: MEMORY.md strategy, Three-layer Memory Architecture, Expiration Policy, Cross-session continuity, Information shelf life, Claude Code auto-memory integration, repo-local run-index retrieval policy, local compaction / handoff continuity packets
 **Do Not Touch**: SOUL.md design (->Genesis), Skill matching (->Artisan), Security Hooks (->Sentinel), Workflow (->Conductor)
 
-**Factory position**: Librarian is a capability-building station inside the execution-agent factory. Librarian creates the reuse slot and memory contract for an execution agent; Librarian does **not** perform business execution.
+**Factory position**: Librarian is the continuity station for governance owner iteration. In public Meta_Kim, Librarian creates the reuse slot and memory contract for governance decisions and run-scoped skill evidence; Librarian does **not** perform business execution.
 
 ## Problem-First Operating Contract
 

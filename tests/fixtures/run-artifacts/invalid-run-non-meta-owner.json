@@ -17,10 +17,12 @@
     "governanceFlow": "complex_dev",
     "triggerReasons": [
       "multi_file",
-      "durable_artifact"
+      "durable_artifact",
+      "verification_required"
     ],
     "upgradeReasons": [
-      "review_or_verify_required"
+      "review_or_verify_required",
+      "parallel_merge_required"
     ],
     "bypassReasons": [],
     "ownerRequired": true,
@@ -41,6 +43,11 @@
         "projectRef": "project-auth-refresh-hardening",
         "sourceType": "run_index",
         "sourceRef": ".meta-kim/state/default/run-index.sqlite"
+      },
+      {
+        "projectRef": "project-auth-refresh-hardening",
+        "sourceType": "graph",
+        "sourceRef": "graphify-out/graph.json"
       }
     ],
     "globalRegistryHits": [],
@@ -49,11 +56,28 @@
         "capability": "auth_refresh_hardening",
         "owner": "meta-conductor",
         "sourceProject": "project-auth-refresh-hardening"
+      },
+      {
+        "capability": "verification_notes",
+        "owner": "meta-prism",
+        "sourceProject": "project-auth-refresh-hardening"
       }
     ],
     "capabilityGaps": [],
-    "graphSources": [],
-    "knowledgeSources": []
+    "graphSources": [
+      {
+        "projectRef": "project-auth-refresh-hardening",
+        "sourceType": "graph",
+        "sourceRef": "graphify-out/graph.json"
+      }
+    ],
+    "knowledgeSources": [
+      {
+        "projectRef": "project-auth-refresh-hardening",
+        "sourceType": "doc",
+        "sourceRef": "docs/auth-refresh.md"
+      }
+    ]
   },
   "intentPacket": {
     "trueUserIntent": "Harden refresh-token handling so secrets never live inline in source; one consolidated deliverable for the auth module.",
@@ -189,7 +213,7 @@
     "defaultShellId": "shell-structured-status"
   },
   "dispatchEnvelopePacket": {
-    "ownerAgent": "meta-conductor",
+    "ownerAgent": "auth-specialist",
     "taskRef": "task-001",
     "allowedCapabilities": [
       "auth_refresh_hardening",
@@ -262,7 +286,7 @@
           "verify": "test suite passes"
         }
       ],
-      "ownerAgent": "meta-conductor",
+      "ownerAgent": "auth-specialist",
       "businessRoleId": "backend",
       "roleDisplayName": "backend",
       "roleInstanceId": "auth-refresh#1",
@@ -307,7 +331,7 @@
         "agent": "meta-sentinel",
         "result": "FAIL",
         "issues": [
-          "inline secret fallback still present"
+          "refresh token fallback still accepted an inline secret"
         ]
       }
     ],
@@ -317,8 +341,8 @@
         "severity": "high",
         "owner": "meta-sentinel",
         "sourceProject": "project-auth-refresh-hardening",
-        "summary": "inline secret fallback still present",
-        "requiredAction": "remove inline secret fallback",
+        "summary": "refresh token fallback still accepted an inline secret",
+        "requiredAction": "remove inline secret fallback and require env-based secret resolution",
         "fixArtifact": "src/auth/refresh.ts",
         "verifiedBy": "meta-prism",
         "closeState": "open"
@@ -328,22 +352,21 @@
       "status": "pass",
       "triggerReasons": [
         "multi_file",
-        "durable_artifact"
+        "durable_artifact",
+        "verification_required"
       ],
       "skipReason": "explicit_auto_proceed",
       "evidence": "fixture records explicit_auto_proceed for pre-decision gate"
     }
   },
   "verificationPacket": {
-    "verified": false,
-    "remainingIssues": [
-      "finding-001 remains open"
-    ],
+    "verified": true,
+    "remainingIssues": [],
     "evidence": [
-      "inline fallback still present in src/auth/refresh.ts"
+      "tests/auth/refresh.test.ts passes with env-only secret flow"
     ],
     "fixEvidence": [
-      "attempted change incomplete"
+      "src/auth/refresh.ts removed inline secret fallback"
     ],
     "revisionResponses": [
       {
@@ -353,38 +376,40 @@
         "responseType": "code-change",
         "status": "applied",
         "fixArtifact": "src/auth/refresh.ts",
-        "responseSummary": "partial change only"
+        "responseSummary": "refresh path now resolves secrets from environment only"
       }
     ],
     "verificationResults": [
       {
         "findingId": "finding-001",
         "verifiedBy": "meta-prism",
-        "result": "fail",
+        "result": "pass",
         "evidence": [
-          "inline fallback still present"
+          "src/auth/refresh.ts no longer contains inline fallback secret"
         ],
         "closeState": "verified_closed"
       }
     ],
-    "closeFindings": []
+    "closeFindings": [
+      "finding-001"
+    ]
   },
   "summaryPacket": {
-    "verifyPassed": false,
-    "summaryClosed": false,
+    "verifyPassed": true,
+    "summaryClosed": true,
     "singleDeliverableMaintained": true,
-    "deliverableChainClosed": false,
+    "deliverableChainClosed": true,
     "consolidatedDeliverablePresent": true,
-    "publicReady": false,
+    "publicReady": true,
+    "commentReviewAcknowledged": true,
     "sourceProjects": [
       "project-auth-refresh-hardening"
     ],
     "deliveryShellsUsed": [
+      "shell-structured-status",
       "shell-review-delta"
     ],
-    "blockedBy": [
-      "verification_pending"
-    ]
+    "blockedBy": []
   },
   "compactionPacket": {
     "packetVersion": "v1",
@@ -393,36 +418,44 @@
     "profileKey": "shared-123456789abc",
     "openFindings": [],
     "pendingRevisions": [],
-    "verifyGateState": "pending_verify",
+    "verifyGateState": "verified",
     "singleDeliverableState": {
       "singleDeliverableMaintained": true,
-      "deliverableChainClosed": false
+      "deliverableChainClosed": true
     },
     "summaryDelta": {
-      "verifyPassed": false,
-      "summaryClosed": false,
-      "publicReady": false,
-      "blockedBy": [
-        "verification_pending"
-      ]
+      "verifyPassed": true,
+      "summaryClosed": true,
+      "publicReady": true,
+      "blockedBy": []
     },
-    "writebackDecision": "none"
+    "writebackDecision": "writeback"
   },
   "evolutionWritebackPacket": {
     "ownerAssessment": "keep-existing",
-    "writebackDecision": "none",
-    "decisionReason": "verification still failed",
-    "writebacks": [],
+    "writebackDecision": "writeback",
+    "decisionReason": "auth hardening pattern should be captured as a governance example",
+    "writebacks": [
+      {
+        "target": "config/contracts/workflow-contract.json",
+        "reason": "run artifact closure expectations tightened"
+      }
+    ],
     "retain": [
       {
         "target": "meta-conductor",
-        "reason": "Owner boundary remains valid."
+        "reason": "Existing owner boundary remains valid for this auth-hardening run."
       }
     ],
-    "upgrade": [],
+    "upgrade": [
+      {
+        "target": "config/contracts/workflow-contract.json",
+        "reason": "Execution-board discipline should be captured as reusable governance policy."
+      }
+    ],
     "retire": [],
     "scarIds": [],
-    "syncRequired": false
+    "syncRequired": true
   },
   "businessFlowBlueprintPacket": {
     "deliverableType": "api_service",
@@ -608,7 +641,7 @@
       {
         "businessRoleId": "backend",
         "roleDisplayName": "backend",
-        "ownerAgent": "meta-conductor",
+        "ownerAgent": "auth-specialist",
         "capabilityNeed": "auth refresh implementation",
         "ownerResolution": "reuse_existing_owner",
         "minInstances": 1,
@@ -749,19 +782,31 @@
         "projectRef": "project-auth-refresh-hardening",
         "sourceType": "run_index",
         "sourceRef": ".meta-kim/state/default/run-index.sqlite"
+      },
+      {
+        "projectRef": "project-auth-refresh-hardening",
+        "sourceType": "graph",
+        "sourceRef": "graphify-out/graph.json"
       }
     ],
     "contentFindings": [
       {
         "findingId": "evidence-001",
         "summary": "Fetch evidence collected for complex_dev",
-        "sourceRefs": []
+        "sourceRefs": [
+          "docs/auth-refresh.md"
+        ]
       }
     ],
     "capabilityEvidence": [
       {
         "capability": "auth_refresh_hardening",
         "owner": "meta-conductor",
+        "sourceProject": "project-auth-refresh-hardening"
+      },
+      {
+        "capability": "verification_notes",
+        "owner": "meta-prism",
         "sourceProject": "project-auth-refresh-hardening"
       }
     ],
@@ -770,7 +815,8 @@
     "evidenceLaneValidatedBy": "meta-conductor",
     "triggerReasons": [
       "multi_file",
-      "durable_artifact"
+      "durable_artifact",
+      "verification_required"
     ],
     "deepResearchPlan": {
       "questions": [
@@ -798,8 +844,8 @@
       {
         "claim": "fixture has enough local evidence to support post-choice dispatch",
         "sources": [
-          "fetchPacket",
-          "runHeader"
+          ".meta-kim/state/default/run-index.sqlite",
+          "graphify-out/graph.json"
         ],
         "consistent": true
       }

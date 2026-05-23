@@ -54,6 +54,101 @@ describe("validate-run-artifact.mjs", () => {
     return file;
   }
 
+  function routePrimaryExecutionOwner(artifact, ownerAgent) {
+    artifact.dispatchEnvelopePacket.ownerAgent = ownerAgent;
+    artifact.orchestrationTaskBoardPacket.tasks[0].owner = ownerAgent;
+    for (const lane of artifact.businessFlowBlueprintPacket.requiredLanes) {
+      lane.candidateOwners = [ownerAgent, "meta-conductor"];
+      lane.selectedOwner = ownerAgent;
+    }
+    const role = artifact.agentBlueprintPacket.roles[0];
+    role.ownerAgent = ownerAgent;
+    role.ownerResolution = "reuse_existing_owner";
+    role.ownerSource = "global_reuse";
+    role.agentCopyPolicy = "use_global_directly";
+    role.agentIterationPlan =
+      "Use the existing global owner directly; do not copy it into the project.";
+    artifact.workerTaskPackets[0].ownerAgent = ownerAgent;
+    artifact.workerTaskPackets[0].owner = ownerAgent;
+    artifact.workerResultPackets[0].owner = ownerAgent;
+    artifact.reviewPacket.findings[0].owner = ownerAgent;
+    artifact.verificationPacket.revisionResponses[0].owner = ownerAgent;
+  }
+
+  function addFactoryReviewParticipation(artifact) {
+    const reviewCoverage =
+      artifact.agentBlueprintPacket.governanceStageCoverage.Review;
+    if (!reviewCoverage.includes("meta-chrysalis")) {
+      reviewCoverage.push("meta-chrysalis");
+    }
+  }
+
+  function validInterfaceIntegrationPacket(kind = "third_party") {
+    return {
+      integrationKind: kind,
+      interfaceInventory: [
+        {
+          interfaceId: "provider-create-order",
+          producer: kind === "internal" ? "backend" : "third-party-provider",
+          consumer: "backend",
+          contractArtifactRef: "docs/provider/create-order.openapi.json",
+          schemaRef: "components.schemas.CreateOrderRequest",
+        },
+      ],
+      fieldLedger: [
+        {
+          fieldName: "orderAmount",
+          fieldClass: "outbound_provider_field",
+          sourceOfTruth: "provider official docs",
+          evidenceRef: "ev-provider-docs",
+          owner: "backend",
+          transformationRule: "Convert internal cents to provider minor unit.",
+          unknownStatus: "confirmed",
+        },
+      ],
+      unknowns: [],
+      evidence: [
+        {
+          evidenceId: "ev-provider-docs",
+          sourceType: "official_docs",
+          sourceRef: "https://provider.example/docs/orders",
+          summary: "Provider create-order fields and auth requirements.",
+        },
+      ],
+      reviewGates:
+        kind === "internal"
+          ? [
+              "source_of_truth",
+              "contract_diff",
+              "error_model",
+              "state_machine",
+              "sandbox_contract_test",
+              "human_owner_approval",
+            ]
+          : [
+              "source_of_truth",
+              "signature_auth",
+              "idempotency",
+              "callback_webhook",
+              "error_model",
+              "state_machine",
+              "sandbox_contract_test",
+              "security_secrets",
+              "human_owner_approval",
+            ],
+      testMatrix: [
+        { scenario: "success" },
+        { scenario: "auth_failure" },
+        { scenario: "rate_limited" },
+        { scenario: "timeout" },
+        { scenario: "missing_field" },
+        { scenario: "provider_5xx" },
+        { scenario: "duplicate_request_or_callback" },
+      ],
+      ownerApprovals: [{ owner: "backend", approvalRef: "ticket-123" }],
+    };
+  }
+
   test("accepts a valid run artifact with full finding lineage", async () => {
     const result = await validateFixture(validFixture);
     assert.equal(result.ok, true);
@@ -86,6 +181,77 @@ describe("validate-run-artifact.mjs", () => {
         },
       ),
     );
+  });
+
+  test("rejects interface integration runs without interfaceIntegrationContractPacket", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.taskClassification.triggerReasons.push("third_party_integration");
+      artifact.businessFlowBlueprintPacket.deliverableType =
+        "third_party_integration";
+      delete artifact.interfaceIntegrationContractPacket;
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /interfaceIntegrationContractPacket is required/,
+    );
+  });
+
+  test("rejects third-party interface integration packets that miss required gates", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.taskClassification.triggerReasons.push("third_party_integration");
+      artifact.businessFlowBlueprintPacket.deliverableType =
+        "third_party_integration";
+      artifact.interfaceIntegrationContractPacket =
+        validInterfaceIntegrationPacket("third_party");
+      artifact.interfaceIntegrationContractPacket.reviewGates =
+        artifact.interfaceIntegrationContractPacket.reviewGates.filter(
+          (gate) => gate !== "signature_auth",
+        );
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /must include signature_auth/,
+    );
+  });
+
+  test("rejects interface integration packets that store raw secret values", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.taskClassification.triggerReasons.push("third_party_integration");
+      artifact.businessFlowBlueprintPacket.deliverableType =
+        "third_party_integration";
+      artifact.interfaceIntegrationContractPacket =
+        validInterfaceIntegrationPacket("third_party");
+      artifact.interfaceIntegrationContractPacket.interfaceInventory[0].apiKeyValue =
+        "not-allowed";
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /must not store secret values/,
+    );
+  });
+
+  test("accepts a minimal valid third-party interface integration packet", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.taskClassification.triggerReasons.push("third_party_integration");
+      artifact.businessFlowBlueprintPacket.deliverableType =
+        "third_party_integration";
+      artifact.interfaceIntegrationContractPacket =
+        validInterfaceIntegrationPacket("third_party");
+    });
+    const result = await validateFixture(tempFixture);
+    assert.equal(result.ok, true);
   });
 
   test("rejects Evolution writeback targets that use local memory or continuity storage", async (t) => {
@@ -415,6 +581,304 @@ describe("validate-run-artifact.mjs", () => {
         inputs: ["growth goal", "candidate topics"],
         outputs: [],
       };
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        {
+          cwd: REPO_ROOT,
+        },
+      ),
+    );
+  });
+
+  test("rejects public executionAgentCard compatibility without external registry scope", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.capabilityGapPacket = {
+        gapId: "gap-public-exec-agent",
+        requestedCapability: "frontend implementation",
+        currentAgentsChecked: ["meta-conductor", "meta-artisan"],
+        insufficiencyReason:
+          "Public Meta_Kim must not persist frontend-developer as an owner.",
+        resolutionAction: "create_execution_agent",
+        requestedBy: "meta-conductor",
+        approvedBy: "meta-warden",
+      };
+      artifact.executionAgentCard = {
+        agentId: "frontend-developer",
+        businessRoleId: "frontend",
+        roleDisplayName: "frontend",
+        purpose: "External compatibility probe.",
+        capabilities: ["frontend implementation"],
+        nonCapabilities: ["governance ownership"],
+        dependencies: ["react-best-practices"],
+        inputs: ["task brief"],
+        outputs: ["patch"],
+      };
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        {
+          cwd: REPO_ROOT,
+        },
+      ),
+    );
+  });
+
+  test("accepts direct global agent reuse without copying into the project", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      routePrimaryExecutionOwner(artifact, "code-reviewer");
+    });
+    const { stdout } = await execFileAsync(
+      "node",
+      ["scripts/validate-run-artifact.mjs", tempFixture],
+      { cwd: REPO_ROOT },
+    );
+    assert.equal(JSON.parse(stdout).ok, true);
+  });
+
+  test("rejects copying a directly usable global agent into the project", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      routePrimaryExecutionOwner(artifact, "code-reviewer");
+      artifact.agentBlueprintPacket.roles[0].agentCopyPolicy =
+        "copy_to_project_for_modification";
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /use_global_directly/,
+    );
+  });
+
+  test("accepts project-local agent upgrade when global reuse is insufficient", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      routePrimaryExecutionOwner(artifact, "frontend-developer");
+      addFactoryReviewParticipation(artifact);
+      const role = artifact.agentBlueprintPacket.roles[0];
+      role.ownerSource = "project_local";
+      role.agentCopyPolicy = "copy_to_project_for_modification";
+      role.ownerResolution = "upgrade_existing_owner";
+      role.agentIterationPlan =
+        "Copy the global frontend agent into the user project before adding project-specific UI knowledge.";
+      artifact.capabilityGapPacket = {
+        gapId: "gap-project-local-frontend-upgrade",
+        requestedCapability: "project-specific frontend implementation",
+        currentAgentsChecked: ["frontend-developer", "meta-artisan"],
+        insufficiencyReason:
+          "The global frontend agent is a partial fit but needs project-specific UI conventions.",
+        resolutionAction: "upgrade_execution_agent",
+        executionAgentRegistryScope: "project_local",
+        requestedBy: "meta-conductor",
+        approvedBy: "meta-warden",
+      };
+      artifact.executionAgentCard = {
+        registryScope: "project_local",
+        agentId: "frontend-developer",
+        businessRoleId: "frontend",
+        roleDisplayName: "frontend",
+        purpose:
+          "Project-local frontend owner with persistent project UI conventions.",
+        capabilities: ["frontend implementation", "project UI conventions"],
+        nonCapabilities: ["governance arbitration"],
+        dependencies: ["global:frontend-developer"],
+        inputs: ["task brief", "project UI rules"],
+        outputs: ["project-local frontend patch"],
+      };
+    });
+    const { stdout } = await execFileAsync(
+      "node",
+      ["scripts/validate-run-artifact.mjs", tempFixture],
+      { cwd: REPO_ROOT },
+    );
+    assert.equal(JSON.parse(stdout).ok, true);
+  });
+
+  test("accepts project-local agent creation when no global owner fits", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      routePrimaryExecutionOwner(artifact, "topic-analyst");
+      addFactoryReviewParticipation(artifact);
+      artifact.taskClassification.upgradeReasons = [
+        ...artifact.taskClassification.upgradeReasons,
+        "owner_creation_required",
+      ];
+      artifact.orchestrationTaskBoardPacket.boardMode =
+        "factory_then_dispatch";
+      artifact.orchestrationTaskBoardPacket.tasks = [
+        {
+          taskId: "task-001",
+          taskKind: "factory_build",
+          owner: "meta-genesis",
+          sequence: 1,
+          dependsOn: [],
+          deliverable: "topic-analyst execution-agent card",
+          businessRoleId: "agent",
+          roleDisplayName: "agent",
+        },
+        {
+          taskId: "task-002",
+          taskKind: "execution",
+          owner: "topic-analyst",
+          sequence: 2,
+          dependsOn: ["task-001"],
+          deliverable: "ranked topic analysis",
+          businessRoleId: "analysis",
+          roleDisplayName: "analysis",
+        },
+      ];
+      const role = artifact.agentBlueprintPacket.roles[0];
+      role.ownerSource = "project_local";
+      role.agentCopyPolicy = "create_project_local_agent";
+      role.ownerResolution = "create_owner_first";
+      role.agentIterationPlan =
+        "Create a project-local topic analysis execution agent because global search found no reusable owner.";
+      artifact.capabilityGapPacket = {
+        gapId: "gap-project-local-topic-agent",
+        requestedCapability: "project-specific topic analysis",
+        currentAgentsChecked: [
+          "code-reviewer",
+          "frontend-developer",
+          "meta-scout",
+        ],
+        insufficiencyReason:
+          "Global and existing project-local owners do not cover recurring topic analysis.",
+        resolutionAction: "create_execution_agent",
+        executionAgentRegistryScope: "project_local",
+        requestedBy: "meta-conductor",
+        approvedBy: "meta-warden",
+      };
+      artifact.executionAgentCard = {
+        registryScope: "project_local",
+        agentId: "topic-analyst",
+        businessRoleId: "analysis",
+        roleDisplayName: "analysis",
+        purpose:
+          "Project-local execution owner for recurring topic analysis workflows.",
+        capabilities: ["topic analysis", "project taxonomy matching"],
+        nonCapabilities: ["governance arbitration", "code implementation"],
+        dependencies: ["meta-skill:research-analysis"],
+        inputs: ["project goals", "candidate topic list"],
+        outputs: ["ranked topic analysis"],
+      };
+    });
+    const { stdout } = await execFileAsync(
+      "node",
+      ["scripts/validate-run-artifact.mjs", tempFixture],
+      { cwd: REPO_ROOT },
+    );
+    assert.equal(JSON.parse(stdout).ok, true);
+  });
+
+  test("rejects execution-agent factory without Chrysalis review participation", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      routePrimaryExecutionOwner(artifact, "topic-analyst");
+      artifact.taskClassification.upgradeReasons = [
+        ...artifact.taskClassification.upgradeReasons,
+        "owner_creation_required",
+      ];
+      const role = artifact.agentBlueprintPacket.roles[0];
+      role.ownerSource = "project_local";
+      role.agentCopyPolicy = "create_project_local_agent";
+      role.ownerResolution = "create_owner_first";
+      artifact.capabilityGapPacket = {
+        gapId: "gap-project-local-topic-agent",
+        requestedCapability: "project-specific topic analysis",
+        currentAgentsChecked: ["meta-scout"],
+        insufficiencyReason:
+          "No existing owner covers recurring topic analysis.",
+        resolutionAction: "create_execution_agent",
+        executionAgentRegistryScope: "project_local",
+        requestedBy: "meta-conductor",
+        approvedBy: "meta-warden",
+      };
+      artifact.executionAgentCard = {
+        registryScope: "project_local",
+        agentId: "topic-analyst",
+        businessRoleId: "analysis",
+        roleDisplayName: "analysis",
+        purpose: "Project-local execution owner.",
+        capabilities: ["topic analysis"],
+        nonCapabilities: ["governance arbitration"],
+        dependencies: ["meta-skill:research-analysis"],
+        inputs: ["project goals"],
+        outputs: ["ranked topic analysis"],
+      };
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /meta-chrysalis/,
+    );
+  });
+
+  test("rejects role blueprints missing required Fetch governance participation", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.agentBlueprintPacket.governanceStageCoverage.Fetch =
+        artifact.agentBlueprintPacket.governanceStageCoverage.Fetch.filter(
+          (owner) => owner !== "meta-genesis",
+        );
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /meta-genesis/,
+    );
+  });
+
+  test("rejects project-local copy when no modification is planned", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      routePrimaryExecutionOwner(artifact, "frontend-developer");
+      const role = artifact.agentBlueprintPacket.roles[0];
+      role.ownerSource = "project_local";
+      role.agentCopyPolicy = "copy_to_project_for_modification";
+      role.ownerResolution = "reuse_existing_owner";
+      role.agentIterationPlan =
+        "Copy the agent locally even though no persistent modification is planned.";
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /only agents that need modification are copied/,
+    );
+  });
+
+  test("rejects unsupported run-scoped matched skill providers", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.agentBlueprintPacket.roles[0].matchedSkills[0].providerId =
+        "unsupported-provider";
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        {
+          cwd: REPO_ROOT,
+        },
+      ),
+    );
+  });
+
+  test("rejects matched skill providers outside role providerCompatibility", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.agentBlueprintPacket.roles[0].providerCompatibility = [
+        "superpowers",
+      ];
+      artifact.agentBlueprintPacket.roles[0].matchedSkills[0].providerId =
+        "meta-theory";
     });
     await assert.rejects(
       execFileAsync(

@@ -115,6 +115,40 @@ describe("business-flow blueprint orchestration", async () => {
     }
   });
 
+  test("business flow contract covers internal and third-party interface integration lanes", () => {
+    const protocol = contract.protocols?.businessFlowBlueprintPacket ?? {};
+
+    for (const deliverableType of [
+      "internal_api_integration",
+      "third_party_integration",
+    ]) {
+      assert.ok(
+        protocol.deliverableTypeEnum?.includes(deliverableType),
+        `deliverableTypeEnum must include ${deliverableType}`,
+      );
+    }
+
+    for (const laneId of [
+      "interface_contract",
+      "provider_adapter",
+      "permission",
+      "contract_test",
+      "observability",
+      "rollout_rollback",
+    ]) {
+      assert.ok(
+        protocol.interfaceIntegrationLaneIds?.includes(laneId),
+        `interfaceIntegrationLaneIds must include ${laneId}`,
+      );
+    }
+
+    assert.match(combined, /Interface Integration Contract Layer/i);
+    assert.match(combined, /interfaceIntegrationContractPacket/i);
+    assert.match(combined, /third_party_integration/i);
+    assert.match(combined, /blocking_unknown/i);
+    assert.match(combined, /auth\/signature/i);
+  });
+
   test("agent blueprint contract forbids fixed concrete child skills in long-term identity", () => {
     const policy =
       contract.protocols?.agentBlueprintPacket?.longTermCapabilityPolicy ?? {};
@@ -207,7 +241,7 @@ describe("business-flow blueprint orchestration", async () => {
       artifact.businessFlowBlueprintPacket.deliverableType = "web_app";
       artifact.businessFlowBlueprintPacket.requiredLanes = [
         lane("product"),
-        lane("frontend", "auth-specialist"),
+        lane("frontend", "meta-conductor"),
       ];
       artifact.businessFlowBlueprintPacket.optionalLanes = [];
       artifact.businessFlowBlueprintPacket.omittedLanes = [
@@ -260,7 +294,7 @@ describe("business-flow blueprint orchestration", async () => {
       validateRunArtifact(
         "tests/fixtures/run-artifacts/invalid-run-same-owner-overlap.json",
       ),
-      /same ownerAgent auth-specialist in parallelGroup auth-parallel must use one mergeOwner/,
+      /same ownerAgent meta-conductor in parallelGroup auth-parallel must use one mergeOwner/,
     );
   });
 

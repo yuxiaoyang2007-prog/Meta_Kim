@@ -137,6 +137,12 @@ describe("capability index inheritance chain", () => {
 
     assert.ok(Array.isArray(index.abstractCapabilitySlots));
     assert.ok(index.abstractCapabilitySlots.length >= 1);
+    assert.ok(
+      index.abstractCapabilitySlots.some(
+        (slot) => slot.slotId === "interface-integration-contract",
+      ),
+      "capability index must expose the abstract interface integration contract slot",
+    );
     assert.equal(
       index.longTermAgentIdentityPolicy?.forbidConcreteSkillInLongTermAgentIdentity,
       true,

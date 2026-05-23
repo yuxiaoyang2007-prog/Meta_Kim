@@ -514,14 +514,18 @@ describe("Part G: execution ownership — no anonymous execution", async () => {
     );
   });
 
-  test("temporary fallback requires explicit justification", () => {
+  test("temporary fallback is forbidden as public durable owner state", () => {
     const fallback =
       contract.runDiscipline?.executionOwnership?.temporaryFallback ?? {};
-    assert.equal(fallback.allowed, true);
+    assert.equal(fallback.allowed, false);
     assert.equal(fallback.emergencyOnly, true);
     assert.equal(fallback.requiresExplicitOwnerLabel, true);
     assert.equal(fallback.requiresJustification, true);
     assert.equal(fallback.requiresEvolutionReview, true);
+    assert.match(
+      fallback.publicRepoPolicy ?? "",
+      /Forbidden as durable owner state/i,
+    );
   });
 });
 

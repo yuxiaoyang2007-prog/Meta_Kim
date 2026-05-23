@@ -229,11 +229,11 @@
     "expectedDiscovery": {
       "method": "score 1-2 = partial match with gap note",
       "scoring": "partial match + explicit gap documentation",
-      "expectedAgents": ["generalPurpose (partial)"],
+      "expectedAgents": ["meta-artisan (partial skill match)", "meta-conductor (governance owner)"],
       "expectedGaps": ["data visualization capability gap"]
     },
     "passFailCriteria": {
-      "PASS": "Partial match found (score 1-2); generalPurpose fallback used with gap note; capability gap documented",
+      "PASS": "Partial match found (score 1-2); governance meta owner retained with run-scoped matchedSkills or capabilityGapPacket documented",
       "FAIL": "Perfect match claimed for imperfect capability; gap ignored; wrong agent selected"
     }
   }

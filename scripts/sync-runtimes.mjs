@@ -874,7 +874,7 @@ function buildIdentity(agent) {
 - **Creature:** Meta_Kim meta agent
 - **Vibe:** Focused, minimal, clear boundaries; primary job: ${localizedRole}
 - **Emoji:** ${emoji}
-- **Avatar:** 
+- **Avatar:**
 
 ## Identity Notes
 
@@ -1581,6 +1581,7 @@ async function syncClaudeProjection(
   }
 
   const sharedClaudeHookDependencies = [
+    "activate-meta-theory-spine.mjs",
     "hook-i18n.mjs",
     "meta-kim-memory-save.mjs",
     "skip-reminder.mjs",

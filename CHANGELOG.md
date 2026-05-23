@@ -6,6 +6,70 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.1.0] - 2026-05-23
+
+### Added
+
+- **Sub-agent meta governance boundary** — Meta-theory `Dispatch-Not-Execute` rule now explicitly extends into sub-agent context. `canonical/skills/meta-theory/SKILL.md` adds Rule 6 forbidding meta-* sub-agents from running execution-layer business logic (Fetch returns evidence only; Thinking produces plans; Review validates without patching; Execution orchestrators dispatch without coding). `references/dev-governance.md` documents the meta-prism allowed/forbidden matrix; `references/create-agent.md` adds a `Sub-agent Identity Carry-over` section codifying the prompt + hook double-layer enforcement.
+- **Frontmatter tool whitelist on 9 governance agents** — Every `canonical/agents/meta-*.md` now declares `tools: Read, Grep, Glob, Bash, Agent, WebFetch, WebSearch`. `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, and MCP write tools are intentionally excluded so Claude Code natively withholds them from governance agents.
+- **L2 hybrid Bash read-only whitelist** — New `canonical/runtime-assets/claude/hooks/bash-readonly-whitelist.mjs` ships 66 read-only command-name allowances (e.g. `git status`, `git log`, `ls`, `cat`, `find`, `rg`, `pnpm typecheck`, `cargo check`) plus 60 dangerous-argument denials (e.g. `git push`, `--force`, `cargo build`, `npm install`, `| sh`, `; rm`). Token-boundary identification recognises `>` / `>>`; redirects to `/dev/null` (and Windows `nul`) plus `os.tmpdir()` paths are allowed, while writes into the working tree are blocked. Command-substitution (`$(...)`, backticks) is also denied.
+- **Progressive enforcement mode** — `enforce-agent-dispatch.mjs` now exposes `META_KIM_META_ENFORCEMENT_MODE` (`warn` | `block` | `progressive`, default `progressive`) and `META_KIM_META_ENFORCEMENT_GRACE_DAYS` (default 7). Inside the grace window violations only warn; afterwards they block. Setting `MODE=block` skips the grace period for tests and CI.
+- **Cursor declarative governance** — New `canonical/runtime-assets/cursor/rules/meta-enforcement.mdc` (alwaysApply MDC rule) injects the meta-* sub-agent boundary into every Cursor turn, since Cursor lacks PreToolUse deny capability.
+- **Cross-runtime capability matrix** — New `docs/cross-runtime-meta-enforcement.md` documents the deny / declarative split across Claude Code, Codex, Cursor, and OpenClaw, so users can size expectations honestly per runtime.
+
+### Changed
+
+- **enforce-agent-dispatch.mjs caller identity** — `isMetaAgent()` now also covers Bash, Edit, Write, MultiEdit, and NotebookEdit (not only the Agent tool). Caller identity is inferred from `CLAUDE_SUBAGENT_TYPE`, then the active stage's `dispatchChain` tail, then prior stages, then null (conservative warn). The previous `if (!state || !state.active) process.exit(0)` escape hatch is replaced by a minimal degraded path that still applies the meta-* read-only check.
+- **spine-state.mjs cross-OS hardening** — `isWithin()` now normalises both parent and target paths and lower-cases them on Windows, eliminating case-sensitivity bypasses of `spine-state.json`. `isSpineStateWrite()` in `enforce-agent-dispatch.mjs` also gained `[\\/]spine[\\/]` segment matching.
+- **Version metadata** — Bumped the package version to `2.1.0`.
+
+### Fixed
+
+- **Governance meta-agents executing directly** — Until this release, `meta-prism` and `meta-conductor`, once dispatched as sub-agents, could still invoke `Bash`, `Edit`, and `Write` freely because (a) the meta-theory prompt only restricted the main thread, (b) `canonical/agents/meta-*.md` had no `tools:` frontmatter, (c) `enforce-agent-dispatch.mjs` did not inspect caller identity for execution tools, (d) the hook exited early when spine state was inactive, and (e) Codex / Cursor / OpenClaw shipped no PreToolUse hook at all. Path C in this release closes all five layers on Claude Code (mechanical) and documents declarative coverage on the other runtimes.
+- **Windows path bypass** — `targetPath.includes("spine-state.json")` previously failed against case-altered Windows paths; the new normalised compare resolves this.
+- **Redirection over-blocking** — Earlier drafts denied any `>` substring, breaking `grep ... > /dev/null` and similar legitimate read-only telemetry; the token-boundary plus target whitelist preserves these flows.
+
+### Known Limitations
+
+- Codex and OpenClaw still rely on declarative `executionBlock=true` + prompt self-discipline because neither exposes a PreToolUse deny channel; this is documented in `docs/cross-runtime-meta-enforcement.md` rather than papered over with fake hooks.
+- `npm run meta:sync` currently does not project `canonical/runtime-assets/cursor/rules/`; the file ships into `.cursor/rules/` manually until the sync script is extended.
+
+## [2.0.44] - 2026-05-23
+
+### Added
+
+- **Interface integration contract layer** — Added `interfaceIntegrationContractPacket` for internal API boundary work and third-party provider integrations, including interface inventory, field ledger, unknown classification, evidence references, review gates, contract test matrix, and owner approvals.
+- **Integration review gates** — Added explicit gates for source-of-truth evidence, contract diffs, signature/auth, idempotency, callbacks/webhooks, error models, state machines, sandbox/contract tests, security/secrets, and human owner approval.
+- **Run validation coverage** — Added validator checks and tests that reject interface integration runs without the contract packet, reject missing third-party gates, reject raw secret values, and accept a minimal valid third-party integration packet.
+
+### Changed
+
+- **Business-flow routing** — Added `internal_api_integration` and `third_party_integration` deliverable types plus integration lanes for interface contracts, provider adapters, permissions, contract tests, observability, and rollout/rollback.
+- **Capability discovery** — Added an abstract `interface-integration-contract` capability slot while keeping concrete provider tools and skills run-scoped.
+- **Version metadata** — Bumped the package version to `2.0.44`.
+
+### Fixed
+
+- **Interface guesswork gap** — Meta-theory now blocks public-ready completion when interface fields or third-party integration facts remain `blocking_unknown`, instead of letting implementation proceed from undocumented assumptions.
+
+## [2.0.43] - 2026-05-22
+
+### Added
+
+- **Project-local execution-agent creation policy** — Added `create_project_local_agent` for user-project runs where no global or existing project-local owner fits a recurring orchestration node.
+- **Required governance participation checks** — Added mandatory Critical, Fetch, Thinking, and Review participant coverage, including `meta-chrysalis` review participation when an execution agent is created or upgraded.
+- **Agent factory validation coverage** — Added run-artifact tests for direct global reuse, project-local upgrade, project-local creation, missing Chrysalis review, and missing Fetch governance participation.
+
+### Changed
+
+- **Open-source vs user-project boundary** — Clarified that the Meta_Kim repository itself keeps only the 9 governance meta agents, while downstream user projects may reuse, upgrade, or create execution agents under governance review.
+- **Factory dispatch shape** — New execution-agent creation now requires a `factory_then_dispatch` board instead of being treated as direct dispatch.
+
+### Fixed
+
+- **Paper-only agent factory gap** — The validator now rejects runs that claim owner creation without the matching project-local creation policy, capability gap packet, execution agent card, and required governance participants.
+- **Governance coverage drift** — Project validation now locks the required stage participant contract so future changes cannot silently drop the meta agents that must review orchestration nodes.
+
 ## [2.0.42] - 2026-05-22
 
 ### Added

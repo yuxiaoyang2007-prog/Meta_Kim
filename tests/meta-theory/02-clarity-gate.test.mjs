@@ -297,6 +297,19 @@ describe("Clarity Gate unified execution confirmation", async () => {
     assert.match(combined, /no Fetch evidence means Thinking is not complete/i);
     assert.match(combined, /no Thinking result means no pre-Execution confirmation/i);
   });
+
+  test("post-choice analysis must respect user selections instead of overriding direction", () => {
+    const combined = `${skillContent}\n${devGov}`;
+
+    assert.match(combined, /Respect user choices \(after questioning\)/i);
+    assert.match(combined, /Base the analysis on the user's actual selections/i);
+    assert.match(combined, /not on what the model "thinks is better"/i);
+    assert.match(combined, /significant risk/i);
+    assert.match(combined, /Thinking/i);
+    assert.match(combined, /Option A[\s\S]*user's original choice/i);
+    assert.match(combined, /Option B[\s\S]*suggested adjustment/i);
+    assert.match(combined, /Do not unilaterally override their selection/i);
+  });
 });
 
 describe("Clarity Gate scenario JSON remains valid", async () => {
