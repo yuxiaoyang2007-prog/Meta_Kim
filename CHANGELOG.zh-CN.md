@@ -6,6 +6,16 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.1.1] - 2026-05-23
+
+### 修复
+
+- **`spine-state.mjs` 缺字段时抛 TypeError** — hook 现在容忍运行时 spine-state 文件缺少 array/object 字段（如 `dispatchedAgents`、`dispatchChain`、`stages`、`skippedHooks`）。新增 `normalizeSpineState(state)` 辅助函数（行 177-210）浅拷贝并补齐这些字段，并在 `writeSpineState`、`advanceStage`、`completeStage`、`recordDispatch`、`checkStageRequirements` 入口处调用。之前观察到的 `PreToolUse:Agent hook error`（non-blocking，由 `newState.dispatchedAgents.includes(...)` 对 undefined 调用 .includes() 导致）现在不再发生。
+
+### 变更
+
+- **版本元数据** — 包版本提升到 `2.1.1`。
+
 ## [2.1.0] - 2026-05-23
 
 ### 新增

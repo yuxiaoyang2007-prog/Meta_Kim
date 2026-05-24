@@ -6,6 +6,16 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.1.1] - 2026-05-23
+
+### Fixed
+
+- **`spine-state.mjs` TypeError on missing `dispatchedAgents`** — Hooks now tolerate runtime spine-state files that omit array/object fields (e.g. `dispatchedAgents`, `dispatchChain`, `stages`, `skippedHooks`). A new `normalizeSpineState(state)` helper (lines 177-210) shallow-clones and defaults these fields, and is called at the entry of `writeSpineState`, `advanceStage`, `completeStage`, `recordDispatch`, and `checkStageRequirements`. The previously-observed `PreToolUse:Agent hook error` (non-blocking) caused by `newState.dispatchedAgents.includes(...)` on undefined is now silent.
+
+### Changed
+
+- **Version metadata** — Bumped the package version to `2.1.1`.
+
 ## [2.1.0] - 2026-05-23
 
 ### Added

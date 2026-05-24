@@ -174,6 +174,41 @@ function normalizeStage(stageName) {
   return STAGE_ORDER.includes(normalized) ? normalized : "critical";
 }
 
+/**
+ * Normalize a spine state object so downstream code can safely access
+ * required array/object fields without TypeError on undefined.
+ *
+ * Defensive default for spine states written by older versions or by code
+ * paths that constructed partial state. Existing valid fields are preserved.
+ *
+ * @param {object|null|undefined} state - Spine state (may be partial or null)
+ * @returns {object} - State with guaranteed default shape for required fields
+ */
+function normalizeSpineState(state) {
+  const base = state && typeof state === "object" ? state : {};
+  const normalized = { ...base };
+
+  normalized.dispatchedAgents = Array.isArray(normalized.dispatchedAgents)
+    ? [...normalized.dispatchedAgents]
+    : [];
+
+  normalized.dispatchChain =
+    normalized.dispatchChain && typeof normalized.dispatchChain === "object"
+      ? { ...normalized.dispatchChain }
+      : {};
+
+  normalized.stages =
+    normalized.stages && typeof normalized.stages === "object"
+      ? { ...normalized.stages }
+      : {};
+
+  normalized.skippedHooks = Array.isArray(normalized.skippedHooks)
+    ? [...normalized.skippedHooks]
+    : [];
+
+  return normalized;
+}
+
 function profileFromState(state) {
   return sanitizeStateProfile(
     state?.profile || state?.stateProfile || process.env.META_KIM_STATE_PROFILE,
@@ -224,8 +259,9 @@ export async function readSpineState(cwd) {
 export async function writeSpineState(cwd, state) {
   const filePath = spineStatePath(cwd);
   await ensureDir(filePath);
-  await writeFile(filePath, JSON.stringify(state, null, 2), "utf-8");
-  await writeMetaRunStatus(cwd, state);
+  const normalized = normalizeSpineState(state);
+  await writeFile(filePath, JSON.stringify(normalized, null, 2), "utf-8");
+  await writeMetaRunStatus(cwd, normalized);
 }
 
 export function createInitialState({ taskClassification, triggerReason }) {
@@ -352,11 +388,11 @@ export function advanceStage(state, stageName) {
   const idx = stageOrder.indexOf(stageName);
   if (idx === -1) return state;
 
-  const newState = { ...state };
+  const newState = normalizeSpineState(state);
 
   for (let i = 0; i < idx; i++) {
     const prev = stageOrder[i];
-    if (newState.stages[prev].status !== "completed") {
+    if (!newState.stages[prev] || newState.stages[prev].status !== "completed") {
       newState.stages[prev] = {
         status: "completed",
         completedAt: new Date().toISOString(),
@@ -381,8 +417,8 @@ export function advanceStage(state, stageName) {
 }
 
 export function completeStage(state, stageName) {
-  if (!state.stages[stageName]) return state;
-  const newState = { ...state };
+  const newState = normalizeSpineState(state);
+  if (!newState.stages[stageName]) return newState;
   newState.stages[stageName] = {
     status: "completed",
     completedAt: new Date().toISOString(),
@@ -403,7 +439,7 @@ export function completeStage(state, stageName) {
 }
 
 export function recordDispatch(state, agentName, metaAgentName) {
-  const newState = { ...state };
+  const newState = normalizeSpineState(state);
   if (!newState.dispatchedAgents.includes(agentName)) {
     newState.dispatchedAgents = [...newState.dispatchedAgents, agentName];
   }
@@ -422,16 +458,17 @@ export function recordDispatch(state, agentName, metaAgentName) {
 }
 
 export function checkStageRequirements(state) {
-  const stage = state.currentStage;
+  const normalized = normalizeSpineState(state);
+  const stage = normalized.currentStage;
   const req = STAGE_META_AGENT_MAP[stage];
   if (!req) return { met: true, missing: [], reason: "no requirements" };
 
-  const chain = state.dispatchChain || {};
+  const chain = normalized.dispatchChain;
   const dispatched = chain[stage] || [];
 
   const missing = req.required.filter((a) => !dispatched.includes(a));
 
-  if (req.requiresAgentDispatch && state.dispatchedAgents.length === 0) {
+  if (req.requiresAgentDispatch && normalized.dispatchedAgents.length === 0) {
     return {
       met: false,
       missing: ["at least one agent via Agent tool"],
@@ -440,7 +477,7 @@ export function checkStageRequirements(state) {
   }
 
   // Verify fetchRecord exists when stage requires it
-  if (req.requiresFetchRecord && !state.fetchRecord) {
+  if (req.requiresFetchRecord && !normalized.fetchRecord) {
     return {
       met: false,
       missing: ["fetchRecord in spine state"],
@@ -452,9 +489,9 @@ export function checkStageRequirements(state) {
 
   // Verify research validation when fetchRecord declares research required
   if (
-    state.fetchRecord &&
-    state.fetchRecord.researchRequired &&
-    !state.fetchRecord.researchValidationPerformed
+    normalized.fetchRecord &&
+    normalized.fetchRecord.researchRequired &&
+    !normalized.fetchRecord.researchValidationPerformed
   ) {
     return {
       met: false,
@@ -466,7 +503,7 @@ export function checkStageRequirements(state) {
     };
   }
 
-  const choiceSurfaceGate = checkChoiceSurfaceGate(state);
+  const choiceSurfaceGate = checkChoiceSurfaceGate(normalized);
   if (!choiceSurfaceGate.met) {
     return choiceSurfaceGate;
   }
