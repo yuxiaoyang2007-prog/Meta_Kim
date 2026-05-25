@@ -5,55 +5,55 @@
         "id": "meta-warden",
         "default": true,
         "name": "Meta-Warden: Meta Department Manager",
-        "workspace": "__REPO_ROOT__\\openclaw\\workspaces\\meta-warden"
+        "workspace": "__REPO_ROOT__/openclaw/workspaces/meta-warden"
       },
       {
         "id": "meta-genesis",
         "default": false,
         "name": "Meta-Genesis: Soul Meta 🧬",
-        "workspace": "__REPO_ROOT__\\openclaw\\workspaces\\meta-genesis"
+        "workspace": "__REPO_ROOT__/openclaw/workspaces/meta-genesis"
       },
       {
         "id": "meta-artisan",
         "default": false,
         "name": "Meta-Artisan: Craft Meta 🎨",
-        "workspace": "__REPO_ROOT__\\openclaw\\workspaces\\meta-artisan"
+        "workspace": "__REPO_ROOT__/openclaw/workspaces/meta-artisan"
       },
       {
         "id": "meta-sentinel",
         "default": false,
         "name": "Meta-Sentinel: Sentinel Meta",
-        "workspace": "__REPO_ROOT__\\openclaw\\workspaces\\meta-sentinel"
+        "workspace": "__REPO_ROOT__/openclaw/workspaces/meta-sentinel"
       },
       {
         "id": "meta-librarian",
         "default": false,
         "name": "Meta-Librarian: Archive Meta",
-        "workspace": "__REPO_ROOT__\\openclaw\\workspaces\\meta-librarian"
+        "workspace": "__REPO_ROOT__/openclaw/workspaces/meta-librarian"
       },
       {
         "id": "meta-conductor",
         "default": false,
         "name": "Meta-Conductor: Orchestration Meta",
-        "workspace": "__REPO_ROOT__\\openclaw\\workspaces\\meta-conductor"
+        "workspace": "__REPO_ROOT__/openclaw/workspaces/meta-conductor"
       },
       {
         "id": "meta-prism",
         "default": false,
         "name": "Meta-Prism: Iterative Reviewer",
-        "workspace": "__REPO_ROOT__\\openclaw\\workspaces\\meta-prism"
+        "workspace": "__REPO_ROOT__/openclaw/workspaces/meta-prism"
       },
       {
         "id": "meta-scout",
         "default": false,
         "name": "Meta-Scout: Tool Discoverer 🔭",
-        "workspace": "__REPO_ROOT__\\openclaw\\workspaces\\meta-scout"
+        "workspace": "__REPO_ROOT__/openclaw/workspaces/meta-scout"
       },
       {
         "id": "meta-chrysalis",
         "default": false,
         "name": "Meta-Chrysalis: Evolution Meta (cididian)",
-        "workspace": "__REPO_ROOT__\\openclaw\\workspaces\\meta-chrysalis"
+        "workspace": "__REPO_ROOT__/openclaw/workspaces/meta-chrysalis"
       }
     ]
   },
@@ -76,7 +76,7 @@
   },
   "skills": {
     "load": {
-      "extraDirs": ["__REPO_ROOT__\\openclaw\\skills"]
+      "extraDirs": ["__REPO_ROOT__/openclaw/skills"]
     }
   },
   "tools": {

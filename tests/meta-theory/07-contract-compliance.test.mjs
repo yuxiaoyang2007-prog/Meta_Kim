@@ -1,5 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { readFile as readFsFile } from "node:fs/promises";
 import {
   readJson,
   readFile,
@@ -134,7 +135,7 @@ describe("workflow-contract.json — schema compliance", async () => {
     );
   });
 
-  test("protocols has all 19 governed packet types", () => {
+  test("protocols has all 26 governed packet types", () => {
     const expected = [
       "runHeader",
       "taskClassification",
@@ -143,6 +144,13 @@ describe("workflow-contract.json — schema compliance", async () => {
       "dispatchEnvelopePacket",
       "orchestrationTaskBoardPacket",
       "businessFlowBlueprintPacket",
+      "productCompletenessPacket",
+      "experienceQualityPacket",
+      "testStrategyPacket",
+      "structureHygienePacket",
+      "permissionMatrixPacket",
+      "sideEffectLedgerPacket",
+      "rollbackPlanPacket",
       "interfaceIntegrationContractPacket",
       "agentBlueprintPacket",
       "capabilityGapPacket",
@@ -160,7 +168,7 @@ describe("workflow-contract.json — schema compliance", async () => {
     for (const packet of expected) {
       assert.ok(keys.includes(packet), `missing protocol packet: ${packet}`);
     }
-    assert.equal(expected.length, 19);
+    assert.equal(expected.length, 26);
   });
 
   test("publicDisplayRequires has all 5 conditions", () => {
@@ -281,6 +289,120 @@ describe("workflow-contract.json — schema compliance", async () => {
     }
   });
 
+  test("product design gates are contract-backed packets", () => {
+    const productGatePolicy =
+      contract.runDiscipline?.productDeliverableGatePolicy ?? {};
+    assert.equal(productGatePolicy.enabled, true);
+    assert.equal(productGatePolicy.requiredForNonQuery, true);
+    const validation = contract.runDiscipline?.runArtifactValidation ?? {};
+    const publicReadyPolicy =
+      validation.productGatePublicReadyStatusPolicy ?? {};
+    assert.equal(publicReadyPolicy.enabled, true);
+    assert.ok(
+      Array.isArray(publicReadyPolicy.packetStatusFields),
+      "product gate public-ready policy must list packet status fields",
+    );
+
+    for (const packet of [
+      "productCompletenessPacket",
+      "experienceQualityPacket",
+      "testStrategyPacket",
+      "structureHygienePacket",
+    ]) {
+      assert.ok(
+        productGatePolicy.requiredPackets?.includes(packet),
+        `product gate policy missing ${packet}`,
+      );
+      assert.ok(contract.protocols?.[packet], `missing protocol ${packet}`);
+      assert.ok(
+        contract.runDiscipline?.protocolFirst?.requiredPackets?.includes(
+          packet,
+        ),
+        `protocolFirst.requiredPackets missing ${packet}`,
+      );
+      assert.ok(
+        publicReadyPolicy.packetStatusFields.some(
+          (entry) => entry.packet === packet,
+        ),
+        `product gate public-ready policy missing ${packet}`,
+      );
+    }
+
+    for (const packet of [
+      "permissionMatrixPacket",
+      "sideEffectLedgerPacket",
+      "rollbackPlanPacket",
+    ]) {
+      assert.ok(
+        productGatePolicy.requiredSideEffectPackets?.includes(packet),
+        `side-effect gate policy missing ${packet}`,
+      );
+      assert.ok(contract.protocols?.[packet], `missing protocol ${packet}`);
+      assert.ok(
+        contract.runDiscipline?.protocolFirst?.requiredPackets?.includes(
+          packet,
+        ),
+        `protocolFirst.requiredPackets missing ${packet}`,
+      );
+      assert.ok(
+        publicReadyPolicy.packetStatusFields.some(
+          (entry) => entry.packet === packet,
+        ),
+        `product gate public-ready policy missing ${packet}`,
+      );
+    }
+  });
+
+  test("agent blueprint supports generalized capability bindings", () => {
+    const protocol = contract.protocols?.agentBlueprintPacket ?? {};
+    assert.ok(
+      protocol.compatibilityFields?.includes("matchedSkills"),
+      "matchedSkills must remain a compatibility field",
+    );
+    assert.ok(
+      protocol.capabilityMatchFields?.includes("matchedCapabilities"),
+      "matchedCapabilities must be a supported capability match field",
+    );
+    assert.ok(
+      protocol.capabilityMatchFields?.includes("capabilityBindings"),
+      "capabilityBindings must be a supported capability match field",
+    );
+
+    for (const bindingType of [
+      "agent",
+      "skill",
+      "command",
+      "mcp_tool",
+      "runtime_tool",
+      "file_set",
+      "capability_index_query",
+      "contract_ref",
+      "graph_node_set",
+    ]) {
+      assert.ok(
+        protocol.capabilityBindingTypeEnum?.includes(bindingType),
+        `capabilityBindingTypeEnum missing ${bindingType}`,
+      );
+    }
+  });
+
+  test("dependency contract is producer/consumer generic", () => {
+    const dependency = contract.protocols?.dependencyContract ?? {};
+    const integration = dependency.interfaceIntegrationContract ?? {};
+    assert.ok(integration.producerContract);
+    assert.ok(integration.consumerContract);
+    assert.ok(
+      integration.producerContract.requiredFields?.includes("producerRole"),
+    );
+    assert.ok(
+      integration.consumerContract.requiredFields?.includes("consumerRole"),
+    );
+    assert.equal(integration.producerContract.minInterfacePaths, "task_defined");
+    assert.doesNotMatch(JSON.stringify(integration), /frontend_agent/);
+    assert.doesNotMatch(JSON.stringify(integration), /backend_agent/);
+    assert.doesNotMatch(JSON.stringify(integration), /"minPaths":3/);
+  });
+
   test("card governance model is explicit", () => {
     const cardGovernance = contract.runDiscipline?.cardGovernance ?? {};
     assert.equal(cardGovernance.enabled, true);
@@ -360,6 +482,23 @@ describe("workflow-contract.json — schema compliance", async () => {
         `${runtime}.triggerDescription must be a string`,
       );
     }
+  });
+
+  test("OpenClaw remains declarative-only for tool-call enforcement", async () => {
+    const mapping = await readFsFile("scripts/runtime-hook-mapping.mjs", "utf8");
+    const template = await readJson(
+      "canonical/runtime-assets/openclaw/openclaw.template.json",
+    );
+    const docs = await readFile("docs/cross-runtime-meta-enforcement.md");
+
+    assert.match(mapping, /openclaw:[\s\S]*command:new/);
+    assert.doesNotMatch(mapping, /openclaw:[\s\S]*before_tool_call/);
+    assert.equal(
+      template.hooks?.tool?.before_tool_call,
+      undefined,
+      "OpenClaw template must not claim an installed before_tool_call gate",
+    );
+    assert.match(docs, /OpenClaw[\s\S]*declarative/i);
   });
 
   test("silence / skip / interrupt / shell policies are explicit", () => {

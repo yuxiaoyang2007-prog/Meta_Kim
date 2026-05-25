@@ -6,14 +6,35 @@ alwaysApply: true
 
 <!-- Canonical source: canonical/runtime-assets/cursor/rules/meta-enforcement.mdc
      Synced to .cursor/rules/meta-enforcement.mdc by `npm run meta:sync`.
-     Cursor cannot mechanically deny tool calls; this rule provides the
-     strongest declarative constraint available on this runtime. -->
+     Cursor v1.7+ supports real preToolUse hooks that can mechanically deny
+     tool calls (exit code 2 + stderr, or stdout JSON with
+     {"permission":"deny",...}, with failClosed:true for crash-default-deny).
+     The primary mechanical enforcement lives in
+     .cursor/hooks/enforce-agent-dispatch.mjs. This MDC rule is the
+     declarative backup that survives if the hook is misconfigured, disabled,
+     or running on an older Cursor build. -->
 
-# Meta-Agent Execution Boundary (Cursor Declarative Enforcement)
+# Meta-Agent Execution Boundary (Cursor Declarative Backup)
 
-Cursor does **not** expose a tool-call deny protocol equivalent to Claude Code's
-`hookSpecificOutput.permissionDecision: "deny"`. This rule is the canonical
-declarative substitute. It applies on every prompt (`alwaysApply: true`).
+Cursor v1.7+ **does** expose a real tool-call deny protocol via `preToolUse`
+hooks, equivalent in effect to Claude Code's
+`hookSpecificOutput.permissionDecision: "deny"`. A hook can deny a tool call
+by either:
+
+- exiting with code `2` and writing a deny reason to stderr, or
+- emitting stdout JSON
+  `{"permission": "deny", "user_message": "...", "agent_message": "..."}`
+
+When combined with `failClosed: true`, hook crashes default to deny rather
+than allow. The canonical mechanical enforcement now lives in
+`.cursor/hooks/enforce-agent-dispatch.mjs` (synced from
+`canonical/runtime-assets/cursor/hooks/`). See
+[Cursor Hooks docs](https://cursor.com/docs/hooks) for the wire protocol.
+
+**This MDC rule is the declarative backup.** It applies on every prompt
+(`alwaysApply: true`) and keeps the meta-agent boundary intact when the
+hook is misconfigured, disabled, on an older Cursor build, or otherwise
+unavailable. Hook-first, MDC-as-safety-net.
 
 ## Hard rules (apply at every turn)
 
@@ -40,13 +61,17 @@ declarative substitute. It applies on every prompt (`alwaysApply: true`).
 
 ## Why this rule exists
 
-Other runtimes (Claude Code) can mechanically block meta-agent self-execution
-via PreToolUse hook deny. **Cursor cannot.** This rule keeps the four-runtime
-governance behavior aligned at the strongest level Cursor permits.
+The mechanical enforcement layer (`.cursor/hooks/enforce-agent-dispatch.mjs`)
+is the primary line of defence and aligns Cursor with Claude Code's
+PreToolUse deny behaviour. This MDC rule remains because:
 
-If Cursor later publishes a tool-deny protocol, replace the declarative section
-with a real `preToolUse` hook and downgrade this rule to a backup. Until then,
-this rule is the front line.
+- hooks may be disabled, misconfigured, or unavailable on older Cursor builds;
+- a declarative rule that loads on every prompt cannot be bypassed by a
+  config edit;
+- defence-in-depth keeps the four-runtime governance behaviour aligned even
+  if one layer fails.
+
+Hook first, declarative rule second. Both layers enforce the same boundary.
 
 ## Self-check (before any execution-layer tool call)
 
@@ -66,9 +91,14 @@ finding.
 
 - `canonical/agents/meta-*.md` — canonical meta-agent definitions
   (each with `executionBlock: true`)
+- `.cursor/hooks/enforce-agent-dispatch.mjs` — **primary mechanical
+  enforcement** on Cursor v1.7+ (synced from
+  `canonical/runtime-assets/cursor/hooks/`)
 - `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` —
   the equivalent mechanical enforcement on Claude Code
 - `docs/cross-runtime-meta-enforcement.md` — full capability matrix and
   user-expectation management
 - `.cursor/rules/meta-theory-dispatch.mdc` — companion rule for the
   general dispatch protocol (this rule narrows it to meta-agent boundary)
+- [Cursor Hooks docs](https://cursor.com/docs/hooks) — official
+  `preToolUse` wire protocol reference

@@ -1,150 +1,152 @@
-# Meta_Kim 仓库地图
+# Meta_Kim Repository Map
 
-这份文档回答两个问题：
+This document answers two questions:
 
-1. 每个目录是干嘛的
-2. 哪些文件是主源，哪些文件只是运行时投影
+1. What each directory is for.
+2. Which files are source-of-truth files and which files are runtime projections.
 
-结论先说：
+Key points:
 
-- 理论与治理主源不再放在 `docs/` 叙事文档中。主源是 `canonical/agents/`、`canonical/skills/meta-theory/`、`config/contracts/`、`config/capability-index/`。
-- `.claude/`、`.codex/`、`.cursor/`、`openclaw/` 是运行时镜像 / 投影目录，不是第二套主源。
-- 能力索引 Fetch 顺序是：仓库 canonical `config/capability-index/` -> runtime mirror -> local inventory -> fallback。
-- 业务工作流是 11 阶段：`direction -> planning -> execution -> review -> meta_review -> revision -> verify -> summary -> feedback -> evolve -> mirror`。
+- Theory and governance sources no longer live in narrative docs under `docs/`. The source of truth is `canonical/agents/`, `canonical/skills/meta-theory/`, `config/contracts/`, and `config/capability-index/`.
+- `.claude/`, `.codex/`, `.cursor/`, and `openclaw/` are runtime mirror / projection directories, not second source trees.
+- Capability-index Fetch order is: repository canonical `config/capability-index/` -> runtime mirror -> local inventory -> fallback.
+- The business workflow has 11 phases: `direction -> planning -> execution -> review -> meta_review -> revision -> verify -> summary -> feedback -> evolve -> mirror`.
 
-## 一、根目录
+## 1. Root Directory
 
-### 目录
+### Directories
 
-| 路径 | 作用 |
+| Path | Purpose |
 | --- | --- |
-| `canonical/` | agent、skill、runtime assets 的长期主源 |
-| `config/contracts/` | 运行纪律、门禁、业务工作流契约主源 |
-| `config/capability-index/` | 仓库级能力索引主源；运行时 capability-index 目录应视为镜像 |
-| `.agents/` | Codex 兼容的项目级 skill 投影目录 |
-| `.claude/` | Claude Code 运行时投影目录，包含 agents、skills、hooks、MCP、capability-index mirror |
-| `.codex/` | Codex custom agents、skills、commands、capability-index mirror |
-| `.cursor/` | Cursor agents、skills、MCP、capability-index mirror |
-| `codex/` | Codex 配置示例目录，来自 canonical runtime assets |
-| `docs/` | 仓库说明、能力矩阵、覆盖审计；不承担理论主源职责 |
-| `openclaw/` | OpenClaw 运行时投影目录，包含 workspaces、skills、hooks、capability-index mirror |
-| `scripts/` | 同步、校验、验收、MCP、迁移、本地运行时准备脚本 |
-| `graphify-out/` | 代码知识图谱输出；复杂架构 / 代码问题优先读 `GRAPH_REPORT.md` |
+| `canonical/` | Long-term source for agents, skills, and runtime assets |
+| `config/contracts/` | Source of run discipline, gates, and business workflow contracts |
+| `config/capability-index/` | Repository-level capability-index source; runtime capability-index directories are mirrors |
+| `.agents/` | Codex-compatible project skill projection directory |
+| `.claude/` | Claude Code runtime projection with agents, skills, hooks, MCP, and capability-index mirror |
+| `.codex/` | Codex runtime projection with agents, hooks, commands, skills, and capability-index mirror |
+| `.cursor/` | Cursor runtime projection with agents, rules, hooks, MCP, and capability-index mirror |
+| `codex/` | Codex configuration example directory generated from canonical runtime assets |
+| `docs/` | Repository documentation, capability matrix, and coverage audit; not a theory source |
+| `openclaw/` | OpenClaw runtime projection with workspaces, skills, hooks, and capability-index mirror |
+| `scripts/` | Sync, validation, acceptance, MCP, migration, and runtime preparation scripts |
+| `graphify-out/` | Code knowledge graph output; broad architecture/codebase questions should start with `GRAPH_REPORT.md` |
 
-### 文件
+### Root Files
 
-| 路径 | 作用 |
+| Path | Purpose |
 | --- | --- |
-| `.gitignore` | Git 忽略规则，避免提交不该跟踪的本地文件 |
-| `.mcp.json` | Claude Code 项目级 MCP 配置投影 |
-| `AGENTS.md` | Codex / 跨运行时总入口说明 |
-| `CLAUDE.md` | Claude Code 仓库规则与使用说明 |
-| `LICENSE` | 项目许可证，当前为 MIT |
-| `package.json` | npm 脚本、依赖、项目元信息 |
-| `package-lock.json` | npm 精确依赖锁文件 |
-| `README.md` | 英文仓库总说明、快速开始、命令入口 |
-| `README.zh-CN.md` | 中文仓库总说明 |
+| `.gitignore` | Ignore rules for local and generated files |
+| `.mcp.json` | Claude Code project-level MCP config projection |
+| `AGENTS.md` | Codex / cross-runtime resident guide |
+| `CLAUDE.md` | Claude Code repository guide |
+| `LICENSE` | MIT license |
+| `package.json` | npm scripts, dependencies, and project metadata |
+| `package-lock.json` | npm dependency lockfile |
+| `README.md` | English repository overview, quickstart, and command entrypoint |
+| `README.zh-CN.md` | Localized Chinese repository overview |
 
-## 二、canonical 与 config 主源
+## 2. Canonical And Config Sources
 
-| 路径 | 作用 |
+| Path | Purpose |
 | --- | --- |
-| `canonical/agents/*.md` | 9 个 meta agent 的长期主源 |
-| `canonical/skills/meta-theory/SKILL.md` | `meta-theory` skill 的长期主源 |
-| `canonical/skills/meta-theory/references/*.md` | meta-theory 的模型可读参考材料主源 |
-| `canonical/runtime-assets/*` | 各运行时配置、hook、命令、模板的主源素材 |
-| `config/contracts/workflow-contract.json` | 11 阶段业务工作流、run discipline、gate contract 主源 |
-| `config/capability-index/` | 仓库能力索引主源；运行时 mirror 应从这里或发现器结果同步 |
+| `canonical/agents/*.md` | Long-term source for the 9 meta agents |
+| `canonical/skills/meta-theory/SKILL.md` | Long-term source for the `meta-theory` skill |
+| `canonical/skills/meta-theory/references/*.md` | Model-readable meta-theory references |
+| `canonical/runtime-assets/*` | Source assets for runtime configs, hooks, commands, and templates |
+| `config/contracts/workflow-contract.json` | Source for the 11-phase business workflow, run discipline, and gate contract |
+| `config/capability-index/` | Repository capability-index source; runtime mirrors derive from this or from discovery output |
 
-## 三、运行时投影目录
+## 3. Runtime Projection Directories
 
 ### `.claude/`
 
-| 路径 | 作用 |
+| Path | Purpose |
 | --- | --- |
-| `.claude/agents/` | Claude Code agent 投影，由同步脚本生成 |
-| `.claude/skills/meta-theory/` | Claude Code skill 投影，由同步脚本生成 |
-| `.claude/hooks/` | Claude Code hook 投影，来自 canonical runtime assets |
-| `.claude/settings.json` | Claude Code 权限与 hook 配置投影 |
-| `.claude/capability-index/` | Claude Code 能力索引镜像；包含 `meta-kim-capabilities.json` |
+| `.claude/agents/` | Claude Code agent projection generated by the sync script |
+| `.claude/skills/meta-theory/` | Claude Code skill projection generated by the sync script |
+| `.claude/hooks/` | Claude Code hook projection from canonical runtime assets |
+| `.claude/settings.json` | Claude Code permission and hook config projection |
+| `.claude/capability-index/` | Claude Code capability-index mirror containing `meta-kim-capabilities.json` |
 
-### `.codex/` 与 `.agents/`
+### `.codex/` And `.agents/`
 
-| 路径 | 作用 |
+| Path | Purpose |
 | --- | --- |
-| `.codex/agents/*.toml` | Codex custom-agent 投影，和 9 个 meta agent 对应 |
-| `.codex/skills/meta-theory/SKILL.md` | Codex 兼容 skill 镜像 |
-| `.codex/skills/meta-theory/references/*` | Codex 兼容 reference 镜像 |
-| `.codex/commands/meta-theory.md` | Codex slash command 投影 |
-| `.codex/capability-index/` | Codex 能力索引镜像 |
-| `.agents/skills/meta-theory/` | Codex / 兼容运行时项目级 skill 入口（存在时视为投影） |
-| `codex/config.toml.example` | Codex MCP、sandbox、approval、skills 配置示例 |
+| `.codex/agents/*.toml` | Codex custom-agent projections for the 9 meta agents and role adapters |
+| `.codex/skills/meta-theory/SKILL.md` | Codex compatibility skill mirror |
+| `.codex/skills/meta-theory/references/*` | Codex compatibility reference mirror |
+| `.codex/commands/meta-theory.md` | Codex slash command projection |
+| `.codex/capability-index/` | Codex capability-index mirror |
+| `.agents/skills/meta-theory/` | Codex / compatible-runtime project skill entrypoint, treated as a projection when present |
+| `codex/config.toml.example` | Codex MCP, sandbox, approval, and skill config example |
 
 ### `.cursor/`
 
-| 路径 | 作用 |
+| Path | Purpose |
 | --- | --- |
-| `.cursor/agents/*.md` | Cursor agent 投影 |
-| `.cursor/skills/meta-theory/` | Cursor skill 投影 |
-| `.cursor/mcp.json` | Cursor MCP 配置投影 |
-| `.cursor/capability-index/` | Cursor 能力索引镜像 |
+| `.cursor/agents/*.md` | Cursor agent projection |
+| `.cursor/skills/meta-theory/` | Cursor skill projection |
+| `.cursor/mcp.json` | Cursor MCP config projection |
+| `.cursor/capability-index/` | Cursor capability-index mirror |
 
 ### `openclaw/`
 
-| 路径 | 作用 |
+| Path | Purpose |
 | --- | --- |
-| `openclaw/openclaw.template.json` | OpenClaw 通用配置模板，来自 canonical runtime assets |
-| `openclaw/openclaw.local.json` | 当前机器的本地 OpenClaw 配置；不要当作跨机器主源 |
-| `openclaw/skills/meta-theory/` | OpenClaw installable skill 镜像 |
-| `openclaw/workspaces/*` | 9 个 meta agent 的 OpenClaw workspace 投影 |
-| `openclaw/capability-index/` | OpenClaw 能力索引镜像 |
+| `openclaw/openclaw.template.json` | OpenClaw shared config template from canonical runtime assets |
+| `openclaw/openclaw.local.json` | Local OpenClaw config for the current machine; not a cross-machine source |
+| `openclaw/skills/meta-theory/` | OpenClaw installable skill mirror |
+| `openclaw/workspaces/*` | OpenClaw workspace projections for the 9 meta agents |
+| `openclaw/capability-index/` | OpenClaw capability-index mirror |
 
-每个 `openclaw/workspaces/<agent>/` 通常包含：
+Each `openclaw/workspaces/<agent>/` usually contains:
 
-| 文件名 | 作用 |
+| File | Purpose |
 | --- | --- |
-| `BOOT.md` | OpenClaw 启动入口 |
-| `BOOTSTRAP.md` | 冷启动阅读顺序 |
-| `IDENTITY.md` | agent 身份卡 |
-| `MEMORY.md` | 长期记忆策略 |
-| `USER.md` | 用户长期上下文占位 |
-| `SOUL.md` | agent 主提示词投影 |
-| `AGENTS.md` | 团队目录 |
-| `TOOLS.md` | OpenClaw 运行时与 skill 约定 |
-| `HEARTBEAT.md` | 心跳 / 定时任务约定 |
-| `memory/README.md` | session memory 写入目录说明 |
-| `skills/meta-theory/SKILL.md` | workspace 内可用的 `meta-theory` skill 镜像 |
+| `BOOT.md` | OpenClaw boot entrypoint |
+| `BOOTSTRAP.md` | cold-start reading order |
+| `IDENTITY.md` | agent identity card |
+| `MEMORY.md` | long-term memory strategy |
+| `USER.md` | user context placeholder |
+| `SOUL.md` | agent prompt projection |
+| `AGENTS.md` | team directory |
+| `TOOLS.md` | OpenClaw runtime and skill conventions |
+| `HEARTBEAT.md` | heartbeat / scheduled-work convention |
+| `memory/README.md` | session memory write directory note |
+| `skills/meta-theory/SKILL.md` | workspace-local `meta-theory` skill mirror |
 
-## 四、docs/
+## 4. `docs/`
 
-| 路径 | 作用 |
+| Path | Purpose |
 | --- | --- |
-| `docs/repo-map.md` | 这份仓库地图 |
-| `docs/runtime-capability-matrix.md` | Claude Code / Codex / OpenClaw / Cursor 的能力映射矩阵 |
-| `docs/runtime-coverage-audit.md` | 能力面覆盖与宿主限制审计 |
-| `docs/QUICKSTART.md` | 快速使用说明 |
-| `docs/protocols/` | 协议补充说明 |
-| `docs/research/` | 研究与调研材料 |
+| `docs/repo-map.md` | this repository map |
+| `docs/runtime-capability-matrix.md` | capability matrix for Claude Code / Codex / OpenClaw / Cursor |
+| `docs/runtime-coverage-audit.md` | capability-surface coverage and host-limit audit |
+| `docs/QUICKSTART.md` | quick usage guide |
+| `docs/protocols/` | protocol supplements |
+| `docs/research/` | research and investigation materials |
 
-`docs/` 可以解释架构，但不能覆盖 canonical 主源。需要改变 agent 行为、meta-theory、workflow contract 或能力索引时，先改对应 canonical/config 主源，再同步运行时投影。
+`docs/` may explain architecture, but it does not override canonical sources. To change agent behavior, meta-theory, workflow contracts, or capability indexes, edit the corresponding canonical/config source first, then sync runtime projections.
 
-## 五、能力索引 Fetch 顺序
+## 5. Capability-Index Fetch Order
 
-当需要按能力派发时，按以下顺序查找：
+When dispatching by capability, search in this order:
 
-1. 仓库 canonical：`config/capability-index/`
-2. 运行时镜像：`.claude/capability-index/`、`.codex/capability-index/`、`.cursor/capability-index/`、`openclaw/capability-index/`
-3. 本地 runtime inventory：`.meta-kim/state/{profile}/capability-index/global-capabilities.json`
-4. fallback：明确声明没有匹配能力，再使用通用执行或创建能力的流程
+1. repository canonical: `config/capability-index/`
+2. runtime mirrors: `.claude/capability-index/`, `.codex/capability-index/`, `.cursor/capability-index/`, `openclaw/capability-index/`
+3. local runtime inventory: `.meta-kim/state/{profile}/capability-index/global-capabilities.json`
+4. fallback: explicitly record the missed capability, then use general execution or a capability-creation flow
 
-不要绕过 Fetch 直接硬编码某个 agent 名称。
+Do not bypass Fetch by hardcoding an agent name.
 
-## 六、推荐维护顺序
+## 6. Recommended Maintenance Order
 
-1. 先改主源：`canonical/agents/`、`canonical/skills/meta-theory/`、`config/contracts/`、`config/capability-index/`
-2. 运行 `npm run meta:sync`
-3. 运行 `npm run discover:global`
-4. 运行 `npm run meta:validate`
-5. 需要完整发布信心时运行 `npm run meta:verify:all`
+1. Edit sources first: `canonical/agents/`, `canonical/skills/meta-theory/`, `config/contracts/`, `config/capability-index/`.
+2. Run `npm run meta:sync`.
+3. Run `npm run discover:global`.
+4. Run `npm run meta:sync:global` when installed global folders must be refreshed.
+5. Run `npm run meta:check`.
+6. Run `npm run meta:check:global`.
+7. Run `npm run meta:verify:all` when release confidence is required.
 
-旧文档若仍引用已移除的理论叙事文件，应改指向 `canonical/skills/meta-theory/`。
+Old docs that reference removed theory narrative files should point to `canonical/skills/meta-theory/` instead.

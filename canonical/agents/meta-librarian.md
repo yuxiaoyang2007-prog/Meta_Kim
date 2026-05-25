@@ -22,7 +22,7 @@ trigger: "Memory issues, session continuity problems, when an agent needs memory
 > - Debugging issues
 > - Any direct execution tasks
 >
-> **Use run-scoped matchedSkills/tools** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
+> **Use run-scoped matchedCapabilities/capabilityBindings** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
 
 # Meta-Librarian: Archive Meta
 

@@ -8,6 +8,8 @@ import assert from "node:assert";
 import * as path from "node:path";
 import {
   CLAUDE_HOOK_FILES as CANONICAL_HOOKS,
+  CODEX_BUSINESS_ROLE_AGENT_IDS,
+  CODEX_RUNTIME_ADAPTER_AGENT_IDS,
   META_AGENTS,
   OPENCLAW_WORKSPACE_MD,
   expectedAgentProjectionFiles,
@@ -84,6 +86,26 @@ describe("validateHooks()", () => {
 });
 
 describe("summarizeExpectedFiles()", () => {
+  test("Codex expected projections include runtime adapter agents", () => {
+    const expectedCodex = expectedAgentProjectionFiles(".toml", [
+      ...META_AGENTS,
+      ...CODEX_RUNTIME_ADAPTER_AGENT_IDS,
+      ...CODEX_BUSINESS_ROLE_AGENT_IDS,
+    ]);
+
+    assert.ok(expectedCodex.includes("worker.toml"));
+    assert.ok(expectedCodex.includes("explorer.toml"));
+    assert.ok(expectedCodex.includes("frontend.toml"));
+    assert.ok(expectedCodex.includes("backend.toml"));
+    assert.ok(expectedCodex.includes("test.toml"));
+    assert.strictEqual(
+      expectedCodex.length,
+      META_AGENTS.length +
+        CODEX_RUNTIME_ADAPTER_AGENT_IDS.length +
+        CODEX_BUSINESS_ROLE_AGENT_IDS.length,
+    );
+  });
+
   test("counts exact Meta_Kim agents even when extra files exist", () => {
     const summary = summarizeExpectedFiles(
       [

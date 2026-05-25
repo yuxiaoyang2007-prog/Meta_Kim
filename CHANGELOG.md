@@ -6,6 +6,118 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.2.1] - 2026-05-25
+
+### Added
+
+- **v2.2.0 Prism independent review** — `docs/v2.2.0-prism-review.md` records `PASS-WITH-FINDINGS` verdict against the 5 ironclad rules and 4 user decisions, plus drift detection between new contract vocabulary and production hooks scheduled for v2.3.0 wiring.
+
+### Changed
+
+- **Workflow contract extensions** — `config/contracts/workflow-contract.json` adds new packet vocabularies, naming policy fields, and dimension definitions (+580 lines) that align with the v2.2.0 design framework and prepare for v2.3.0 opt-in wiring.
+- **Validator deepening** — `scripts/validate-run-artifact.mjs` and `scripts/validate-project.mjs` add comprehensive packet/binding/secret-boundary checks (+1027 lines combined), enforcing the new contract semantics.
+- **Spine + dispatch hook updates** — `canonical/runtime-assets/shared/hooks/spine-state.mjs` and `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` add stage requirement refinements and dispatch envelope evidence (+283 lines combined) consistent with the new contract.
+- **Meta-theory skill + references** — `canonical/skills/meta-theory/SKILL.md` and `references/dev-governance.md`, `references/create-agent.md` clarify capability-binding evidence, owner-display naming, and pre-decision option-frame language.
+- **Meta agent persona refreshes** — All 9 `canonical/agents/meta-*.md` profiles updated for naming acceptance, role-display rules, and capability-binding semantics.
+- **Run artifact fixtures regenerated** — All 7 `tests/fixtures/run-artifacts/*.json` regenerated with new packet vocabularies (+2854 lines) so contract tests stay green.
+- **Contract compliance + run artifact + spine + business-flow tests extended** — `tests/meta-theory/*.test.mjs` cover the new validator output, packet shapes, and orchestration evidence (+782 lines combined).
+- **Quickstart + cross-runtime + runtime matrix docs refreshed** — `docs/QUICKSTART.md`, `docs/cross-runtime-meta-enforcement.md`, `docs/runtime-capability-matrix.md`, `docs/runtime-coverage-audit.md`, `docs/repo-map.md`, and `docs/protocols/meta-conductor-agent-teams-playbook-integration.md` updated to reflect the v2.2.x contract surface.
+- **Save-progress command + OpenClaw template** — `canonical/runtime-assets/claude/commands/save-progress/SKILL.md` and `canonical/runtime-assets/openclaw/openclaw.template.json` aligned with new run-artifact requirements.
+- **Capability index normalization** — `config/capability-index/meta-kim-capabilities.json` and `config/contracts/capability-index.schema.json` cleaned up.
+- **AGENTS.md + CLAUDE.md** — Cross-runtime governance summary aligned with v2.2.x contract.
+- **Version metadata** — Bumped the package version to `2.2.1`.
+
+### Architecture Notes
+
+- v2.2.1 consolidates the WIP that pre-dated the v2.2.0 ship into a single coherent contract uplift. It does NOT yet wire `shared/lib/` PoC modules into production hooks — that remains the v2.3.0 boundary.
+- The Prism review identifies items to address before R4/R7 wiring; see `docs/v2.2.0-prism-review.md` for the verdict and recommended sequence.
+
+## [2.2.0] - 2026-05-25
+
+### Added
+
+- **Design-time governance gate framework** — Comprehensive blueprint (`docs/design-time-gate-redesign.md`) introducing 5 core abstractions (DeliverableTypeProfile, PolicyRegistry, GateDispatcher, SeverityRule, IntentVerbLexicon) that move governance rules from hook code to declarative contracts. Implements user-locked decisions: Q1 (unknown deliverable types must clarify intent, never auto-allow), Q2 (4-tier severity model: required-strict / required-warn / not_applicable_with_reason / off), Q3 (v1.0 multilingual intent detection in zh / en / ja / ko aligned with README), Q4 (workType inference + first-write confirmation).
+- **deliverable-type-profiles contract** — New single-source-of-truth file `config/contracts/deliverable-type-profiles.json` with 5 standard profiles (`code_implementation`, `documentation`, `governance_contract`, `config_change`, `audit_readonly`), per-profile rule sets with 4-level severity, multilingual intent verb lexicon (16 word lists across 4 intents x 4 languages), and inference strategy configuration.
+- **PoC abstraction library** — Four pure-function ES modules under `canonical/runtime-assets/shared/lib/`:
+  - `deliverable-type-profile.mjs` — load, resolve, and infer deliverable types with confidence bands.
+  - `policy-registry.mjs` — bootstrap-time loader with freeze semantics (Zod-style registry pattern).
+  - `gate-dispatcher.mjs` — pure-function 4-level severity dispatch (OpenAPI 3.1 discriminator pattern).
+  - `intent-verb-lexicon.mjs` — multilingual intent detection (i18next-style namespace lookup).
+- **PoC unit test suite** — 48 tests across 4 files under `tests/poc-design-gate/`, covering all four user decisions plus error paths. Uses Node.js built-in `node --test` (zero new dependencies). Includes `RESULTS.md` summary.
+
+### Changed
+
+- **sync-coverage-check allow list** — `scripts/sync-coverage-check.mjs` now explicitly allow-lists the `shared/lib/` PoC abstraction modules. They are deliberately not projected to runtime mirrors in v2.2.0; they will be wired into hooks in v2.3.0 via feature-flagged opt-in (paths R3/R4 in the design document).
+- **Version metadata** — Bumped the package version to `2.2.0`.
+
+### Architecture Notes
+
+- v2.2.0 introduces the design layer only. Production hooks (`spine-state.mjs`, `enforce-agent-dispatch.mjs`) are untouched; existing behavior is preserved end-to-end.
+- 18 hardcoding sites are inventoried in the design document with file:line citations and a migration plan (R1-R8 paths, phased v2.2.0 to v3.x).
+- All five ironclad rules (no hardcoding / intent-first / design-not-validation / no-compromise / best-practice cases) are mapped to specific design artifacts in section 10 of the design document.
+
+## [2.1.5] - 2026-05-24
+
+### Added
+
+- **Codex business-role custom agents** — Runtime sync now generates `frontend.toml`, `backend.toml`, `test.toml`, `review.toml`, `analysis.toml`, `verify.toml`, and `docs.toml` alongside the generic `worker.toml` / `explorer.toml` fallbacks so Codex hosts that honor named custom agents can display stable role-family names.
+
+### Fixed
+
+- **Codex sidebar naming acceptance boundary** — Documentation and tests now treat `Popper`, `Zeno`, or other host aliases as Codex runtime instance aliases only. Meta_Kim's own task boards and run artifacts must keep `roleDisplayName` as a coarse business role and must not count host sidebar aliases as project naming acceptance.
+
+### Changed
+
+- **Version metadata** — Bumped the package version to `2.1.5`.
+
+## [2.1.4] - 2026-05-24
+
+### Added
+
+- **Codex readable subagent adapters** — Codex runtime sync now generates `worker.toml` and `explorer.toml` runtime adapters plus `nickname_candidates` for Codex meta-agent TOML projections. These are best-effort Codex display hints and do not become durable Meta_Kim execution owners.
+
+### Fixed
+
+- **Cross-runtime agent format boundaries** — Runtime path rewriting now emits each target's native agent paths: `.codex/agents/*.toml` for Codex, `.claude/agents/*.md` for Claude Code, `.cursor/agents/*.md` for Cursor, and OpenClaw workspace `SOUL.md` files, preventing Codex mirrors from saying `.codex/agents/*.md`.
+- **Runtime alias handling** — Documentation now separates host runtime aliases from Meta_Kim `roleDisplayName`, so task boards and run artifacts keep business-readable names even when Codex Desktop falls back to generic aliases.
+
+### Changed
+
+- **Version metadata** — Bumped the package version to `2.1.4`.
+
+## [2.1.3] - 2026-05-24
+
+### Fixed
+
+- **Stable capability-index regeneration** — `discover:global` now preserves the existing canonical capability index `generatedAt` value when the capability content is unchanged, so release verification no longer leaves the worktree dirty from a timestamp-only diff.
+- **Default update flow** — `node setup.mjs --update` now wins over non-TTY silent install mode, chooses default list options without waiting for stdin, and skips the optional custom deploy directory prompt in silent/default update runs.
+- **Graphify update idempotency** — Setup now skips guide-mutating Graphify platform installs when `AGENTS.md` or `CLAUDE.md` already contains a Graphify section, preventing duplicate `## graphify` blocks and line-ending churn.
+- **Capability-index mtime churn** — Global capability discovery now treats recursive `modified` timestamps as volatile metadata, so file mtime changes do not dirty canonical capability indexes when capabilities are unchanged.
+
+### Changed
+
+- **Version metadata** — Bumped the package version to `2.1.3`.
+
+## [2.1.2] - 2026-05-24
+
+### Added
+
+- **Pre-orchestration choice gate** — Critical and Fetch now feed an explicit unresolved-question and solution-option gate before Thinking may lock the plan, produce orchestration details, or create worker packets.
+- **Cross-runtime sync coverage check** — Added `npm run meta:check:sync-coverage` to keep canonical runtime assets and generated mirrors from drifting silently.
+- **OpenClaw heartbeat template coverage** — Added the canonical OpenClaw heartbeat template to the sync surface so downstream installs receive the same governance wording as other runtimes.
+
+### Changed
+
+- **Governance vs execution boundary** — Clarified that governance agents actively participate in Critical, Fetch, Thinking, and Review, while the Execution production stage must dispatch execution-layer agents, skills, commands, MCPs, or tools for concrete work.
+- **Role display naming** — User-visible worker names now stay coarse and readable; generated runtime aliases such as host instance ids remain internal metadata.
+- **Codex skill installation shape** — Codex project skill projection now prefers the current `.agents/skills/` path while keeping the legacy `.codex/skills/` mirror for already-installed users.
+- **Version metadata** — Bumped the package version to `2.1.2`.
+
+### Fixed
+
+- **Premature orchestration** — Run validation now rejects artifacts that finalize a plan without unresolved-question handling, solution options, and explicit confirmation or recorded skip evidence.
+- **Installer conflict cleanup** — Skill update cleanup now targets Meta_Kim-managed legacy residue more narrowly, avoiding accidental removal of user-created skills while still migrating old installs safely.
+
 ## [2.1.1] - 2026-05-23
 
 ### Fixed

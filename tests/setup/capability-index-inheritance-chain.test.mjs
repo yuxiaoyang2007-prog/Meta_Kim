@@ -4,6 +4,9 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import {
+  preserveGeneratedAtWhenUnchanged,
+} from "../../scripts/discover-global-capabilities.mjs";
+import {
   repoRoot,
   resolveRuntimeProjection,
 } from "../../scripts/meta-kim-sync-config.mjs";
@@ -81,9 +84,34 @@ describe("capability index inheritance chain", () => {
     );
   });
 
+  test("capability index covers canonical runtime commands", async () => {
+    const index = await readJson("config/capability-index/meta-kim-capabilities.json");
+    const commandPaths = new Set(
+      Object.values(index.byCapabilityType?.commands ?? {}).map((entry) => entry.path),
+    );
+
+    for (const expectedPath of [
+      "canonical/runtime-assets/claude/commands/save-progress/SKILL.md",
+      "canonical/runtime-assets/codex/commands/meta-theory.md",
+    ]) {
+      assert.ok(
+        commandPaths.has(expectedPath),
+        `${expectedPath} must be represented in byCapabilityType.commands`,
+      );
+    }
+    assert.ok(
+      index.summary?.totalCommands >= 2,
+      "capability index summary must count canonical runtime commands",
+    );
+  });
+
   test("sync configuration treats canonical skills as a directory of skills", async () => {
     const manifest = await readJson("config/sync.json");
     assert.equal(manifest.canonicalRoots?.skills, "canonical/skills");
+    assert.ok(
+      manifest.generatedTargets?.codex?.includes(".agents/skills"),
+      "Codex project skill projection must include the official .agents/skills root.",
+    );
 
     for (const runtimeId of ["claude", "codex", "openclaw", "cursor"]) {
       const projection = resolveRuntimeProjection(runtimeId, "project");
@@ -101,6 +129,13 @@ describe("capability index inheritance chain", () => {
         `${runtimeId} projection must expose a capability index mirror directory`,
       );
     }
+
+    const codexProjection = resolveRuntimeProjection("codex", "project");
+    assert.equal(
+      codexProjection.projectSkillsDir.endsWith(path.join(".agents", "skills")),
+      true,
+      "Codex project projection must expose .agents/skills as the project skill root.",
+    );
   });
 
   test("release verification refreshes global capability discovery before checks", async () => {
@@ -113,6 +148,49 @@ describe("capability index inheritance chain", () => {
         `${scriptName} must refresh capability indexes before validation checks`,
       );
     }
+  });
+
+  test("global discovery keeps volatile timestamps stable when canonical capability content is unchanged", () => {
+    const existing = {
+      generatedAt: "2026-05-23T21:39:16.715Z",
+      registryName: "meta-kim-capabilities",
+      summary: { totalAgents: 9 },
+      byCapabilityType: {
+        mcpServers: {
+          "repo:repo-mcp:meta-kim-runtime": {
+            id: "meta-kim-runtime",
+            modified: "2026-05-20T05:24:46.853Z",
+          },
+        },
+      },
+    };
+    const next = {
+      generatedAt: "2026-05-23T21:45:13.184Z",
+      registryName: "meta-kim-capabilities",
+      summary: { totalAgents: 9 },
+      byCapabilityType: {
+        mcpServers: {
+          "repo:repo-mcp:meta-kim-runtime": {
+            id: "meta-kim-runtime",
+            modified: "2026-05-24T09:13:38.181Z",
+          },
+        },
+      },
+    };
+
+    assert.deepEqual(
+      preserveGeneratedAtWhenUnchanged(next, existing),
+      existing,
+      "pure regeneration must not dirty canonical capability index timestamps",
+    );
+    assert.equal(
+      preserveGeneratedAtWhenUnchanged(
+        { ...next, summary: { totalAgents: 10 } },
+        existing,
+      ).generatedAt,
+      next.generatedAt,
+      "real capability content changes must keep the new generation timestamp",
+    );
   });
 
   test("project validator enforces the capability index schema contract", async () => {

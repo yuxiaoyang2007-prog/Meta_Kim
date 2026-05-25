@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 10,
+  "schemaVersion": 11,
   "owner": "Meta_Kim",
   "businessWorkflow": {
     "id": "business",
@@ -15,6 +15,72 @@
       "verification",
       "evolution"
     ],
+    "stageSemantics": {
+      "critical": {
+        "primaryAction": "clarify_intent_first",
+        "description": "Clarify true intent, scope, constraints, permissions, safety, and language before Fetch, planning, or execution confirmation."
+      },
+      "fetch": {
+        "primaryAction": "research_and_confirm_problem_with_candidate_solutions",
+        "sourceModes": ["online", "local"],
+        "requiredConfirmations": ["problem_statement", "candidate_solutions"],
+        "description": "Search local project evidence and online or external retrieval sources when needed; confirm the actual problem and candidate solutions before Thinking chooses capability owners."
+      },
+      "thinking": {
+        "primaryAction": "capability_first_orchestration",
+        "capabilityDecisionOrder": [
+          "determine_needed_execution_capabilities",
+          "match_existing_capabilities",
+          "create_or_upgrade_only_for_gaps",
+          "orchestrate_dag_with_merge_owner"
+        ],
+        "capabilityTypes": [
+          "agent",
+          "skill",
+          "command",
+          "mcp_capability",
+          "tool",
+          "mcp_tool",
+          "runtime_tool",
+          "file_set",
+          "capability_index_query",
+          "contract_ref",
+          "graph_node_set"
+        ],
+        "orchestrationModes": ["parallel", "serial", "dag"],
+        "description": "First decide which execution agents, skills, commands, MCP capabilities, and tools are needed; then match existing capabilities, create or upgrade only for documented gaps, and build parallel, serial, or DAG orchestration with mergeOwner."
+      },
+      "execution": {
+        "primaryAction": "multi_agent_execution_using_matched_capabilities",
+        "executionCapabilityTypes": [
+          "agent",
+          "skill",
+          "command",
+          "mcp_capability",
+          "tool",
+          "mcp_tool",
+          "runtime_tool",
+          "file_set",
+          "capability_index_query",
+          "contract_ref",
+          "graph_node_set"
+        ],
+        "description": "Run multi-agent execution through matched agents and their selected skills, commands, MCP capabilities, and tools from the Thinking dispatch plan."
+      },
+      "review": {
+        "primaryAction": "capability_matched_output_review"
+      },
+      "meta_review": {
+        "primaryAction": "review_standard_verification"
+      },
+      "verification": {
+        "primaryAction": "run_real_tests_with_fresh_evidence"
+      },
+      "evolution": {
+        "primaryAction": "writeback_or_explicit_none",
+        "allowedDecisions": ["writeback", "none"]
+      }
+    },
     "phases": [
       "direction",
       "planning",
@@ -52,17 +118,17 @@
     ],
     "labels": {
       "zh-CN": {
-        "direction": "CEO方向",
-        "planning": "经理规划",
-        "execution": "执行产出",
-        "review": "经理评审",
-        "meta_review": "元部门审计",
-        "revision": "修改迭代",
-        "verify": "经理验证",
-        "summary": "经理汇总",
-        "feedback": "CEO反馈",
-        "evolve": "Agent进化",
-        "mirror": "镜像发布"
+        "direction": "CEO Direction (zh-CN)",
+        "planning": "Manager Planning (zh-CN)",
+        "execution": "Execution Output (zh-CN)",
+        "review": "Manager Review (zh-CN)",
+        "meta_review": "Meta Department Audit (zh-CN)",
+        "revision": "Revision Iteration (zh-CN)",
+        "verify": "Manager Verification (zh-CN)",
+        "summary": "Manager Summary (zh-CN)",
+        "feedback": "CEO Feedback (zh-CN)",
+        "evolve": "Agent Evolution (zh-CN)",
+        "mirror": "Mirror Publish (zh-CN)"
       },
       "en-US": {
         "direction": "CEO Direction",
@@ -93,9 +159,9 @@
     ],
     "labels": {
       "zh-CN": {
-        "analyze": "元分析",
-        "propose": "元提案",
-        "report": "元报告"
+        "analyze": "Meta Analysis (zh-CN)",
+        "propose": "Meta Proposal (zh-CN)",
+        "report": "Meta Report (zh-CN)"
       },
       "en-US": {
         "analyze": "Meta Analysis",
@@ -279,13 +345,13 @@
         "on_user_request"
       ],
       "cardTimingDescriptions": {
-        "immediate": "立即执行，不等待任何前置条件",
-        "next_stage": "等待下一个阶段开始后执行",
-        "after_dependency": "等待dependsOn中声明的所有依赖项满足后执行（channel/gate/event三种语义，见dependencyContract）",
-        "after_verify": "等待验证阶段完成后执行",
-        "on_risk": "风险信号触发时执行",
-        "on_timeout": "超时事件触发时执行",
-        "on_user_request": "用户明确请求时执行"
+        "immediate": "Execute immediately without waiting for any precondition.",
+        "next_stage": "Execute after the next stage starts.",
+        "after_dependency": "Execute after every dependency declared in dependsOn is satisfied. The channel/gate/event semantics are defined by dependencyContract.",
+        "after_verify": "Execute after Verification completes.",
+        "on_risk": "Execute when a risk signal is triggered.",
+        "on_timeout": "Execute when a timeout event is triggered.",
+        "on_user_request": "Execute when the user explicitly requests it."
       },
       "cardShellEnum": [
         "conversation",
@@ -612,7 +678,7 @@
         "requiresExplicitOwnerLabel": true,
         "requiresJustification": true,
         "requiresEvolutionReview": true,
-        "publicRepoPolicy": "Forbidden as durable owner state. Public Meta_Kim must return to Thinking and choose a governance meta owner plus run-scoped matchedSkills, or emit capabilityGapPacket."
+        "publicRepoPolicy": "Forbidden as durable owner state. Public Meta_Kim must return to Thinking and choose a governance meta owner plus run-scoped matchedCapabilities / capabilityBindings, or use legacy matchedSkills as compatibility evidence, or emit capabilityGapPacket."
       }
     },
     "parallelism": {
@@ -708,6 +774,184 @@
       },
       "publicReadyGate": "If summaryPacket.publicReady is true, interfaceIntegrationContractPacket must have no blocking_unknown entries and must include all review gates required for its integrationKind."
     },
+    "productDeliverableGatePolicy": {
+      "enabled": true,
+      "requiredForNonQuery": true,
+      "requiredWhenDeliverableTypes": [
+        "web_app",
+        "landing_page",
+        "dashboard",
+        "api_service",
+        "internal_api_integration",
+        "third_party_integration",
+        "data_pipeline",
+        "runtime_package",
+        "install_release",
+        "custom"
+      ],
+      "requiredPackets": [
+        "productCompletenessPacket",
+        "experienceQualityPacket",
+        "testStrategyPacket",
+        "structureHygienePacket"
+      ],
+      "requiredSideEffectPackets": [
+        "permissionMatrixPacket",
+        "sideEffectLedgerPacket",
+        "rollbackPlanPacket"
+      ],
+      "dimensionCoverageFieldByPacket": {
+        "productCompletenessPacket": "designDimensions",
+        "experienceQualityPacket": "experienceDimensions",
+        "testStrategyPacket": "testDimensions",
+        "structureHygienePacket": "structureDimensions",
+        "permissionMatrixPacket": "permissionDimensions",
+        "sideEffectLedgerPacket": "sideEffectDimensions",
+        "rollbackPlanPacket": "rollbackDimensions"
+      },
+      "dimensionCoverageRequiredFields": [
+        "dimensionId",
+        "status"
+      ],
+      "dimensionCoverageStatusEnum": [
+        "covered",
+        "omitted_with_reason",
+        "blocked"
+      ],
+      "dimensionPublicReadyAllowedStatuses": [
+        "covered",
+        "omitted_with_reason"
+      ],
+      "designDimensionCatalog": [
+        {
+          "dimensionId": "core_highlight",
+          "packet": "productCompletenessPacket",
+          "applicableDeliverableTypes": ["all"],
+          "description": "The run identifies the core user-visible or operator-visible highlight before execution."
+        },
+        {
+          "dimensionId": "feature_completeness",
+          "packet": "productCompletenessPacket",
+          "applicableDeliverableTypes": ["all"],
+          "description": "The run defines what complete functionality means, including explicit non-goals."
+        },
+        {
+          "dimensionId": "api_contract",
+          "packet": "productCompletenessPacket",
+          "applicableDeliverableTypes": [
+            "web_app",
+            "dashboard",
+            "api_service",
+            "internal_api_integration",
+            "third_party_integration",
+            "data_pipeline",
+            "custom"
+          ],
+          "description": "The run decides whether an API or data contract is needed and links to interfaceIntegrationContractPacket when required."
+        },
+        {
+          "dimensionId": "frontend_backend_contract",
+          "packet": "productCompletenessPacket",
+          "applicableDeliverableTypes": [
+            "web_app",
+            "dashboard",
+            "api_service",
+            "internal_api_integration",
+            "custom"
+          ],
+          "description": "The run records producer/consumer boundaries before implementation when front-end, back-end, or internal service surfaces interact."
+        },
+        {
+          "dimensionId": "third_party_integration",
+          "packet": "productCompletenessPacket",
+          "applicableDeliverableTypes": [
+            "third_party_integration",
+            "hybrid",
+            "custom"
+          ],
+          "description": "The run verifies provider facts, auth, callbacks, limits, and contract tests before execution when a third-party integration exists."
+        },
+        {
+          "dimensionId": "evolution_path",
+          "packet": "productCompletenessPacket",
+          "applicableDeliverableTypes": ["all"],
+          "description": "The run decides whether the outcome creates a reusable pattern, capability gap, or no-writeback decision."
+        },
+        {
+          "dimensionId": "ui_ue_ux",
+          "packet": "experienceQualityPacket",
+          "applicableDeliverableTypes": [
+            "web_app",
+            "landing_page",
+            "dashboard",
+            "runtime_package",
+            "install_release",
+            "custom"
+          ],
+          "description": "The run covers user interface, user experience, and interaction expectations or records why they do not apply."
+        },
+        {
+          "dimensionId": "media_audio_motion",
+          "packet": "experienceQualityPacket",
+          "applicableDeliverableTypes": [
+            "web_app",
+            "landing_page",
+            "dashboard",
+            "custom"
+          ],
+          "description": "The run decides whether motion, sound, music, background audio, or other media assets are needed."
+        },
+        {
+          "dimensionId": "real_test_strategy",
+          "packet": "testStrategyPacket",
+          "applicableDeliverableTypes": ["all"],
+          "description": "The run plans real verification coverage before implementation, including contract, integration, browser, device, or runtime checks when relevant."
+        },
+        {
+          "dimensionId": "file_management_extensibility",
+          "packet": "structureHygienePacket",
+          "applicableDeliverableTypes": ["all"],
+          "description": "The run checks whether file ownership, growth path, and extension points are maintainable."
+        },
+        {
+          "dimensionId": "directory_structure",
+          "packet": "structureHygienePacket",
+          "applicableDeliverableTypes": ["all"],
+          "description": "The run checks whether changed or introduced directories fit the repository structure."
+        },
+        {
+          "dimensionId": "dead_redundant_cleanup",
+          "packet": "structureHygienePacket",
+          "applicableDeliverableTypes": ["all"],
+          "description": "The run records cleanup of dead code, redundant code, generated leftovers, and redundant files introduced or made obsolete by the change."
+        },
+        {
+          "dimensionId": "permission_secret_boundary",
+          "packet": "permissionMatrixPacket",
+          "applicableDeliverableTypes": ["all"],
+          "description": "The run records permission, credential, file, network, database, and runtime boundaries before execution."
+        },
+        {
+          "dimensionId": "side_effect_ledger",
+          "packet": "sideEffectLedgerPacket",
+          "applicableDeliverableTypes": ["all"],
+          "description": "The run records state changes and external systems touched, or proves there are none."
+        },
+        {
+          "dimensionId": "rollback_path",
+          "packet": "rollbackPlanPacket",
+          "applicableDeliverableTypes": ["all"],
+          "description": "The run records rollback triggers, affected artifacts, and reversal or containment steps."
+        }
+      ],
+      "statusEnum": [
+        "pass",
+        "partial",
+        "blocked",
+        "not_applicable_with_reason"
+      ],
+      "description": "Design-time completeness gate for executable and product-shaped deliverables. Non-query work must record product completeness, experience quality, test strategy, structure hygiene, permissions, side effects, and rollback before it can be considered public-ready. The designDimensionCatalog is an abstract, deliverable-type-driven matrix so Meta_Kim can reason about product design, UX/UI/UE, media/audio/motion, API and integration contracts, testing, evolution, cleanup, file management, and structure without hardcoding a single frontend/backend path."
+    },
     "protocolFirst": {
       "enabled": true,
       "requiredPackets": [
@@ -720,6 +964,13 @@
         "dispatchEnvelopePacket",
         "orchestrationTaskBoardPacket",
         "businessFlowBlueprintPacket",
+        "productCompletenessPacket",
+        "experienceQualityPacket",
+        "testStrategyPacket",
+        "structureHygienePacket",
+        "permissionMatrixPacket",
+        "sideEffectLedgerPacket",
+        "rollbackPlanPacket",
         "agentBlueprintPacket",
         "dispatchBoard",
         "workerTaskPacket",
@@ -794,7 +1045,7 @@
         "complex_dev",
         "meta_analysis"
       ],
-      "description": "intentPacket is required in run artifacts when taskClassification.governanceFlow is listed in intentPacketRequiredWhenGovernanceFlows (IntentGate-style intent lock-in). intentGatePacket is required for the same flows (structured ambiguity / assumptions gate before Execution). contentEvidencePacket and preDecisionOptionFrame are required before AskUserQuestion / native choice / conversation fallback for non-trivial non-query work; they prove Fetch evidence and Thinking option framing happened before interruption. dispatchEnvelopePacket, dispatchBoard, and workerTaskPacket are finalized only after user choice or an allowed recorded skip. dispatchEnvelopePacket is required for all non-pure-query flows so every executable run has an explicit owner, capability boundary, memory mode, and review / verification routing before dispatch. orchestrationTaskBoardPacket is the mandatory Conductor task board for the same executable flows. businessFlowBlueprintPacket and agentBlueprintPacket are required before workerTaskPacket so Conductor proves the full business flow was considered before dispatch. interfaceIntegrationContractPacket is required when triggerReasons indicate internal interface boundary work or third-party integration, or when the business deliverable type is an interface integration. capabilityGapPacket is required when taskClassification.upgradeReasons records owner_creation_required, or when agentBlueprintPacket.roleCoverageGate fails with missing roles whose ownerResolution is upgrade_existing_owner or create_owner_first. In the Meta_Kim repository itself, owner creation or upgrade means a governance meta-owner decision plus run-scoped matchedSkills. In user projects, executionAgentCard is used only when a global agent must be copied/modified locally or a new project-local agent must be created."
+      "description": "intentPacket is required in run artifacts when taskClassification.governanceFlow is listed in intentPacketRequiredWhenGovernanceFlows (IntentGate-style intent lock-in). intentGatePacket is required for the same flows (structured ambiguity / assumptions gate before Execution). contentEvidencePacket and preDecisionOptionFrame are required before AskUserQuestion / native choice / conversation fallback for non-trivial non-query work; they prove Fetch evidence and Thinking option framing happened before interruption. dispatchEnvelopePacket, dispatchBoard, and workerTaskPacket are finalized only after user choice or an allowed recorded skip. dispatchEnvelopePacket is required for all non-pure-query flows so every executable run has an explicit owner, capability boundary, memory mode, and review / verification routing before dispatch. orchestrationTaskBoardPacket is the mandatory Conductor task board for the same executable flows. businessFlowBlueprintPacket, product / experience / test / structure gate packets, permission / side-effect / rollback packets, and agentBlueprintPacket are required before workerTaskPacket so Conductor proves the full business flow and release risks were considered before dispatch. interfaceIntegrationContractPacket is required before execution when triggerReasons indicate internal interface boundary work or third-party integration, or when the business deliverable type is an interface integration. capabilityGapPacket is required when taskClassification.upgradeReasons records owner_creation_required, or when agentBlueprintPacket.roleCoverageGate fails with missing roles whose ownerResolution is upgrade_existing_owner or create_owner_first. In the Meta_Kim repository itself, owner creation or upgrade means a governance meta-owner decision plus run-scoped matchedCapabilities / capabilityBindings, with matchedSkills accepted only as legacy compatibility evidence. In user projects, executionAgentCard is used only when a global agent must be copied/modified locally or a new project-local agent must be created."
     },
     "localState": {
       "root": ".meta-kim/state",
@@ -925,6 +1176,51 @@
       "cardPlanPacketRequired": true,
       "orchestrationTaskBoardPacketRequired": true,
       "dispatchEnvelopePacketRequiredForNonQuery": true,
+      "productGatePacketsRequiredForNonQuery": true,
+      "sideEffectAndRollbackPacketsRequiredForNonQuery": true,
+      "workerDependencyDagValidationRequired": true,
+      "matchedCapabilitiesOrLegacyMatchedSkillsRequired": true,
+      "productGatePublicReadyStatusPolicy": {
+        "enabled": true,
+        "packetStatusFields": [
+          {
+            "packet": "productCompletenessPacket",
+            "statusField": "completenessStatus",
+            "publicReadyAllowed": ["pass"]
+          },
+          {
+            "packet": "experienceQualityPacket",
+            "statusField": "experienceStatus",
+            "publicReadyAllowed": ["pass", "not_applicable_with_reason"]
+          },
+          {
+            "packet": "testStrategyPacket",
+            "statusField": "testStatus",
+            "publicReadyAllowed": ["pass"]
+          },
+          {
+            "packet": "structureHygienePacket",
+            "statusField": "hygieneStatus",
+            "publicReadyAllowed": ["pass"]
+          },
+          {
+            "packet": "permissionMatrixPacket",
+            "statusField": "permissionStatus",
+            "publicReadyAllowed": ["pass"]
+          },
+          {
+            "packet": "sideEffectLedgerPacket",
+            "statusField": "sideEffectStatus",
+            "publicReadyAllowed": ["none", "tracked"]
+          },
+          {
+            "packet": "rollbackPlanPacket",
+            "statusField": "rollbackStatus",
+            "publicReadyAllowed": ["ready", "not_applicable_with_reason"]
+          }
+        ],
+        "description": "Hard public-ready gate for design-time packets. blocked and partial statuses cannot be published as ready; not_applicable_with_reason is allowed only for explicitly non-applicable experience or rollback contexts."
+      },
       "compactionPacketOptional": true,
       "compactionPacketLocalOnly": true,
       "compactionPacketMustPreserveOpenFindings": true,
@@ -1098,11 +1394,13 @@
         "userChoiceState",
         "builtFromContentEvidence",
         "contentEvidenceRefs",
+        "unresolvedQuestions",
         "candidateOptions",
         "recommendedDefault",
         "requiresUserChoice",
         "nativeChoiceSurface",
         "choiceGateSkip",
+        "solutionChoiceState",
         "reviewOwner"
       ],
       "candidateOptionRequiredFields": [
@@ -1120,7 +1418,13 @@
         "pure_read_only_queryBypass",
         "explicit_auto_proceed"
       ],
-      "description": "Thinking-stage pre-decision frame for non-trivial executable work before AskUserQuestion, native choice, or fallback. It contains contentEvidence-backed candidate orchestration paths and trade-offs only; it is not a finalized dispatchEnvelopePacket, dispatchBoard, or workerTaskPacket."
+      "solutionChoiceStateEnum": [
+        "confirmed",
+        "trivial",
+        "pure_read_only_queryBypass",
+        "explicit_auto_proceed"
+      ],
+      "description": "Thinking-stage pre-decision frame for non-trivial executable work before AskUserQuestion, native choice, or fallback. It must list unresolvedQuestions, present contentEvidence-backed candidate solution paths, and record solutionChoiceState before detailed orchestration is locked. It contains candidate orchestration paths and trade-offs only; it is not a finalized dispatchEnvelopePacket, dispatchBoard, or workerTaskPacket."
     },
     "intentPacket": {
       "requiredFields": [
@@ -1250,10 +1554,14 @@
         "capabilityNeed",
         "capabilitySearchQuery",
         "candidateOwners",
-        "candidateSkills",
+        "matchedCapabilities",
+        "capabilityBindings",
         "selectedOwner",
         "selectionReason",
         "coverageStatus"
+      ],
+      "laneCompatibilityFields": [
+        "candidateSkills"
       ],
       "laneCoverageStatusEnum": [
         "covered",
@@ -1261,7 +1569,138 @@
         "missing",
         "omitted_with_reason"
       ],
-      "description": "Conductor-owned business-flow blueprint produced before worker tasks. It requires the system to infer task-specific business lanes from the requested outcome, scope, and deliverable type; planning dimensions may include product, UX, UI, frontend, backend, data, motion, test, QA, security, release, feedback, and evolution when relevant. Every lane object in requiredLanes or optionalLanes must carry global capability scan evidence: capabilitySearchQuery, candidateOwners, candidateSkills, selectedOwner, selectionReason, and coverageStatus. Omitted lanes require explicit human-readable reasons."
+      "description": "Conductor-owned business-flow blueprint produced before worker tasks. It requires the system to infer task-specific business lanes from the requested outcome, scope, and deliverable type; planning dimensions may include product, UX, UI, frontend, backend, data, motion, test, QA, security, release, feedback, and evolution when relevant. Every lane object in requiredLanes or optionalLanes must carry global capability scan evidence: capabilitySearchQuery, candidateOwners, matchedCapabilities, capabilityBindings, selectedOwner, selectionReason, and coverageStatus. candidateSkills is accepted only as a compatibility field. Omitted lanes require explicit human-readable reasons."
+    },
+    "productCompletenessPacket": {
+      "requiredFields": [
+        "outcome",
+        "userValue",
+        "acceptanceCriteria",
+        "nonGoals",
+        "designDimensions",
+        "completenessStatus",
+        "owner",
+        "evidenceRefs"
+      ],
+      "statusEnum": [
+        "pass",
+        "partial",
+        "blocked",
+        "not_applicable_with_reason"
+      ],
+      "description": "Design-time product completeness gate. It states what outcome is complete, why it matters, what acceptance criteria close the deliverable, and what is explicitly out of scope."
+    },
+    "experienceQualityPacket": {
+      "requiredFields": [
+        "audience",
+        "criticalJourneys",
+        "qualityAttributes",
+        "accessibilityConsiderations",
+        "experienceDimensions",
+        "experienceStatus",
+        "owner",
+        "evidenceRefs"
+      ],
+      "statusEnum": [
+        "pass",
+        "partial",
+        "blocked",
+        "not_applicable_with_reason"
+      ],
+      "description": "Design-time experience gate. For non-UI work it records developer/operator experience and a not_applicable_with_reason status only when no user-facing journey exists."
+    },
+    "testStrategyPacket": {
+      "requiredFields": [
+        "strategy",
+        "requiredTestTypes",
+        "executedTests",
+        "deferredTests",
+        "coverageRationale",
+        "testDimensions",
+        "testStatus",
+        "owner",
+        "evidenceRefs"
+      ],
+      "statusEnum": [
+        "pass",
+        "partial",
+        "blocked",
+        "not_applicable_with_reason"
+      ],
+      "description": "Design-time test strategy gate. It records what test types are required, what was executed, what was deferred, and why the remaining coverage is acceptable or blocking."
+    },
+    "structureHygienePacket": {
+      "requiredFields": [
+        "changedAreas",
+        "boundaryChecks",
+        "orphanCleanup",
+        "namingAndLayoutChecks",
+        "structureDimensions",
+        "hygieneStatus",
+        "owner",
+        "evidenceRefs"
+      ],
+      "statusEnum": [
+        "pass",
+        "partial",
+        "blocked",
+        "not_applicable_with_reason"
+      ],
+      "description": "Design-time structure hygiene gate. It records changed areas, ownership boundaries, cleanup of artifacts introduced by the run, and naming/layout checks."
+    },
+    "permissionMatrixPacket": {
+      "requiredFields": [
+        "accessedResources",
+        "permissionChecks",
+        "secretsPolicy",
+        "permissionDimensions",
+        "permissionStatus",
+        "owner",
+        "evidenceRefs"
+      ],
+      "statusEnum": [
+        "pass",
+        "partial",
+        "blocked",
+        "not_applicable_with_reason"
+      ],
+      "description": "Design-time permission gate. It records file, network, credential, database, runtime, and user-approval boundaries before execution is treated as complete."
+    },
+    "sideEffectLedgerPacket": {
+      "requiredFields": [
+        "sideEffects",
+        "externalSystemsTouched",
+        "stateChanges",
+        "mitigations",
+        "sideEffectDimensions",
+        "sideEffectStatus",
+        "owner",
+        "evidenceRefs"
+      ],
+      "statusEnum": [
+        "none",
+        "tracked",
+        "blocked"
+      ],
+      "description": "Design-time side-effect ledger. It records durable state changes, external systems touched, and mitigations. Empty sideEffects is allowed only when sideEffectStatus=none."
+    },
+    "rollbackPlanPacket": {
+      "requiredFields": [
+        "rollbackScope",
+        "rollbackTriggers",
+        "rollbackSteps",
+        "affectedArtifacts",
+        "rollbackDimensions",
+        "rollbackStatus",
+        "owner",
+        "evidenceRefs"
+      ],
+      "statusEnum": [
+        "ready",
+        "not_applicable_with_reason",
+        "blocked"
+      ],
+      "description": "Design-time rollback gate. It records when rollback is triggered, how to reverse or contain the change, which artifacts are affected, and who owns rollback verification."
     },
     "interfaceIntegrationContractPacket": {
       "requiredFields": [
@@ -1352,7 +1791,6 @@
         "ownerResponsibilityDelta",
         "agentIterationPlan",
         "ownerResolution",
-        "matchedSkills",
         "skillSelectionScope",
         "governanceStageNodes"
       ],
@@ -1375,6 +1813,48 @@
       ],
       "skillSelectionScopeEnum": [
         "run_scoped"
+      ],
+      "capabilitySelectionScopeEnum": [
+        "run_scoped"
+      ],
+      "compatibilityFields": [
+        "matchedSkills"
+      ],
+      "capabilityMatchFields": [
+        "matchedCapabilities",
+        "capabilityBindings",
+        "matchedSkills"
+      ],
+      "capabilityBindingTypeEnum": [
+        "agent",
+        "skill",
+        "command",
+        "mcp_tool",
+        "runtime_tool",
+        "file_set",
+        "capability_index_query",
+        "contract_ref",
+        "graph_node_set"
+      ],
+      "matchedCapabilityRequiredFields": [
+        "matchId",
+        "capabilitySlot",
+        "bindingType",
+        "bindingRef",
+        "source",
+        "confidenceScore",
+        "selectionReason",
+        "selectionScope",
+        "persistencePolicy",
+        "fallback"
+      ],
+      "capabilityBindingRequiredFields": [
+        "bindingId",
+        "capabilitySlot",
+        "bindingType",
+        "bindingRef",
+        "source",
+        "evidenceRef"
       ],
       "matchedSkillRequiredFields": [
         "matchId",
@@ -1409,7 +1889,7 @@
         "forbiddenPrimaryNamePattern": "^[A-Z][a-z]+$",
         "forbiddenScopedNamePattern": "[-_/\\\\:]",
         "scopeDetailsBelongInInstanceFields": true,
-        "description": "User-visible agent names must be coarse business role-family names such as 前端, 后端, 测试, frontend, backend, test. Do not use scoped work-item names as roleDisplayName; put feature, page, installation, shard, or task detail in roleInstanceId, shardScope, assignedResponsibilitySlice, or task text. Host-generated personal nicknames such as Huygens or Mill may be recorded only as runtimeInstanceAlias."
+        "description": "User-visible agent names must be coarse English business role-family names such as frontend, backend, test, review, analysis, verify, or docs. Do not use scoped work-item names or host-generated ids such as agent-019e56a9 as roleDisplayName; put feature, page, installation, shard, or task detail in roleInstanceId, shardScope, assignedResponsibilitySlice, or task text. Host-generated personal nicknames or ids may be recorded only as runtimeInstanceAlias."
       },
       "longTermCapabilityPolicy": {
         "abstractCapabilitySlotsRequired": true,
@@ -1456,7 +1936,7 @@
           "Thinking",
           "Review"
         ],
-        "description": "Fetch searches global agents, skills, tools, and capability indexes first. A global agent that already satisfies the orchestration node is used directly and is not copied into the user project. Only agents that need project-specific modification, persistent capability changes, or recurring local ownership are copied into the downstream project as project-local agents, under governance review. agentCopyPolicy=copy_to_project_for_modification is valid only with ownerSource=project_local and ownerResolution=upgrade_existing_owner; agentCopyPolicy=create_project_local_agent is valid only with ownerSource=project_local and ownerResolution=create_owner_first."
+        "description": "Fetch inventories global agents, skills, tools, and capability indexes as evidence while confirming the problem and candidate solutions. Thinking resolves the owner/loadout from that evidence. A global agent that already satisfies the orchestration node is used directly and is not copied into the user project. Only agents that need project-specific modification, persistent capability changes, or recurring local ownership are copied into the downstream project as project-local agents, under governance review. agentCopyPolicy=copy_to_project_for_modification is valid only with ownerSource=project_local and ownerResolution=upgrade_existing_owner; agentCopyPolicy=create_project_local_agent is valid only with ownerSource=project_local and ownerResolution=create_owner_first."
       },
       "ownerAgentPublicRepoRule": {
         "allowedOwnerAgents": [
@@ -1471,7 +1951,7 @@
           "meta-chrysalis"
         ],
         "forbidPersistedNonGovernanceExecutionAgents": true,
-        "fallbackBehavior": "Inside the Meta_Kim repository itself, use a governance meta owner plus run-scoped matchedSkills, or block with capabilityGapPacket. During user-project use, global execution agents may be reused directly without copying, and project-local execution agents may be created or upgraded only when the governance layer approves the gap."
+        "fallbackBehavior": "Inside the Meta_Kim repository itself, use a governance meta owner plus run-scoped matchedCapabilities / capabilityBindings, or use legacy matchedSkills as compatibility evidence, or block with capabilityGapPacket. During user-project use, global execution agents may be reused directly without copying, and project-local execution agents may be created or upgraded only when the governance layer approves the gap."
       },
       "runScopedSkillPersistenceGate": {
         "failWhenConcreteSkillCopiedToDurableIdentity": true,
@@ -1563,7 +2043,7 @@
         "skillSelectionScope": "run_scoped",
         "description": "Open-source Meta_Kim ignores non-governance execution agents in durable Meta_Kim repository state. Critical, Fetch, Thinking, and Review governance nodes are owned only by governance meta agents and must include their required participants. During user-project use, those governance nodes inspect each orchestration node, allow direct global-agent reuse when it already fits, and approve copying/iterating or creating a project-local agent only when capability gaps require durable local change."
       },
-      "description": "Capability-first role blueprint. In the open-source Meta_Kim project, ownerAgent is one of the governance meta agents, while concrete execution capability is expressed through run-scoped matchedSkills and governanceStageNodes. During user-project use, ownerAgent may be a directly reused global execution agent or a project-local execution agent created/upgraded after governance approval. ownerSource and agentCopyPolicy distinguish direct global reuse from project-local modification so usable global agents are not copied into the project; copying into the project must mean project-local upgrade work, not ordinary reuse. It separates businessRoleId, roleDisplayName, selected owner, assigned responsibility slice, owner responsibility delta, and per-run role instances so owners can run multiple named shards in parallel without confusing users. ownerResolution uses reuse_existing_owner, upgrade_existing_owner, or create_owner_first."
+      "description": "Capability-first role blueprint. In the open-source Meta_Kim project, ownerAgent is one of the governance meta agents, while concrete execution capability is expressed through run-scoped matchedCapabilities / capabilityBindings and governanceStageNodes; matchedSkills remains accepted only as legacy compatibility evidence. During user-project use, ownerAgent may be a directly reused global execution agent or a project-local execution agent created/upgraded after governance approval. ownerSource and agentCopyPolicy distinguish direct global reuse from project-local modification so usable global agents are not copied into the project; copying into the project must mean project-local upgrade work, not ordinary reuse. It separates businessRoleId, roleDisplayName, selected owner, assigned responsibility slice, owner responsibility delta, and per-run role instances so owners can run multiple named shards in parallel without confusing users. ownerResolution uses reuse_existing_owner, upgrade_existing_owner, or create_owner_first."
     },
     "orchestrationTask": {
       "requiredFields": [
@@ -1581,7 +2061,7 @@
         "factory_build",
         "factory_upgrade"
       ],
-      "description": "Conductor编排板中的单个任务单元。dependsOn声明前置依赖，见dependencyContract定义。"
+      "description": "Single task unit in the Conductor orchestration board. dependsOn declares upstream dependencies; see dependencyContract."
     },
     "capabilityGapPacket": {
       "requiredFields": [
@@ -1617,7 +2097,7 @@
         "external_private",
         "project_local"
       ],
-      "description": "Packet for execution-agent creation or upgrade in user projects and external/private registries. It is not used for direct global reuse. Public Meta_Kim does not use this as durable owner state; public owner creation or upgrade is represented by governance meta-owner decisions plus run-scoped matchedSkills."
+      "description": "Packet for execution-agent creation or upgrade in user projects and external/private registries. It is not used for direct global reuse. Public Meta_Kim does not use this as durable owner state; public owner creation or upgrade is represented by governance meta-owner decisions plus run-scoped matchedCapabilities / capabilityBindings, with matchedSkills accepted only as legacy compatibility evidence."
     },
     "cardDecision": {
       "requiredFields": [
@@ -1713,7 +2193,7 @@
         "userChoiceState",
         "finalizationGate"
       ],
-      "description": "派发给worker agent的执行任务包。三大编排核心字段：dependsOn（前置依赖，见dependencyContract）/ parallelGroup（并行分组）/ mergeOwner（合并负责人）。roleDisplayName 是用户可见的短业务岗位名；runtimeInstanceAlias 只记录宿主临时昵称，不能替代业务名。verifySteps 提供原子级完成标准，用于 Verification 阶段的逐条检查。This packet may not finalize before userChoiceState records a user choice or an explicit auto-proceed / choiceGateSkip allowed by preDecisionOptionFrame.",
+      "description": "Execution task packet dispatched to a worker agent. The three core orchestration fields are dependsOn (upstream dependency, see dependencyContract), parallelGroup (parallel grouping), and mergeOwner (merge owner). roleDisplayName is the user-visible short English business role name; runtimeInstanceAlias records only transient host nicknames and must not replace the business role name. verifySteps provides atomic completion criteria for Verification. This packet may not finalize before userChoiceState records a user choice or an explicit auto-proceed / choiceGateSkip allowed by preDecisionOptionFrame.",
       "dependsOnField": {
         "type": "array",
         "items": {
@@ -1722,36 +2202,36 @@
           "properties": {
             "taskRef": {
               "type": "string",
-              "description": "依赖的任务ID（对应源workerTaskPacket.taskPacketId）"
+              "description": "Dependent task id matching the source workerTaskPacket.taskPacketId."
             },
             "type": {
               "type": "string",
               "enum": ["channel", "gate", "event"],
-              "description": "channel=点对点消息传递/gate=质量门放行/event=发布订阅"
+              "description": "channel=point-to-point message, gate=quality-gate release, event=publish/subscribe event."
             },
             "timeout_ms": {
               "type": "integer",
               "default": 300000,
-              "description": "等待依赖满足的超时时间（毫秒），默认5分钟"
+              "description": "Timeout in milliseconds while waiting for the dependency to be satisfied. Default: 5 minutes."
             },
             "retry": {
               "type": "object",
-              "description": "超时后重试策略",
+              "description": "Retry strategy after timeout.",
               "properties": {
-                "max": { "type": "integer", "default": 3, "description": "最大重试次数" },
-                "backoff_ms": { "type": "integer", "default": 5000, "description": "重试间隔（毫秒），支持指数退避" }
+                "max": { "type": "integer", "default": 3, "description": "Maximum retry count." },
+                "backoff_ms": { "type": "integer", "default": 5000, "description": "Retry interval in milliseconds; supports exponential backoff." }
               }
             },
             "onTimeout": {
               "type": "string",
               "enum": ["skip", "abort", "use_fallback"],
-              "description": "超时行为：skip=跳过依赖继续/abort=中止任务/use_fallback=使用兜底产物"
+              "description": "Timeout behavior: skip=continue without the dependency, abort=abort the task, use_fallback=use fallback artifact."
             },
             "fallback": {
               "type": "object",
-              "description": "use_fallback时的兜底配置",
+              "description": "Fallback configuration used when onTimeout is use_fallback.",
               "properties": {
-                "artifact": { "type": "string", "description": "兜底产物路径或默认schema路径" }
+                "artifact": { "type": "string", "description": "Fallback artifact path or default schema path." }
               }
             }
           }
@@ -1759,11 +2239,11 @@
       },
       "parallelGroupField": {
         "type": "string",
-        "description": "并行分组标识。同组内所有任务可并行执行，必须声明mergeOwner接收合并结果"
+        "description": "Parallel group identifier. All tasks in the same group may run in parallel and must declare mergeOwner to receive merged results."
       },
       "mergeOwnerField": {
         "type": "string",
-        "description": "并行组的合并负责人，负责汇总同组所有worker的结果后再推进后续依赖链"
+        "description": "Merge owner for the parallel group. This owner consolidates all worker results in the group before the downstream dependency chain advances."
       },
       "sameOwnerMultiInstancePolicy": {
         "allowed": true,
@@ -1784,17 +2264,17 @@
           "sequentialize"
         ],
         "sameOwnerParallelGroupRequiresUnifiedMergeOwner": true,
-        "description": "同一个 ownerAgent 可以并行启动多个实例，但每个实例必须有短业务岗位 roleDisplayName、唯一 roleInstanceId、明确 shardKey / shardScope、workspaceIsolation、artifactNamespace、collisionPolicy 和统一 mergeOwner。同一 ownerAgent 的并行实例如果共享 parallelGroup，必须指向同一个 mergeOwner；没有这些字段或合并规则的重复 ownerAgent 是伪并行。"
+        "description": "The same ownerAgent may run multiple parallel instances, but each instance must have a short English business roleDisplayName, a unique roleInstanceId, explicit shardKey / shardScope, workspaceIsolation, artifactNamespace, collisionPolicy, and one unified mergeOwner. Parallel instances of the same ownerAgent that share a parallelGroup must point to the same mergeOwner. Repeated ownerAgent entries without those fields or merge rules are pseudo-parallelism."
       },
       "verifyStepsField": {
         "type": "array",
-        "description": "原子级步骤验证清单。每步定义具体完成标准，Verification 阶段逐条检查。源自 Karpathy Goal-Driven Execution 的 [Step] → verify: [check] 格式。",
+        "description": "Atomic step verification checklist. Each step defines a concrete completion criterion that Verification checks item by item. Based on the Goal-Driven Execution format: [Step] -> verify: [check].",
         "items": {
           "type": "object",
           "required": ["step", "verify"],
           "properties": {
-            "step": { "type": "string", "description": "具体执行步骤" },
-            "verify": { "type": "string", "description": "可检查的完成条件" }
+            "step": { "type": "string", "description": "Concrete execution step." },
+            "verify": { "type": "string", "description": "Checkable completion condition." }
           }
         }
       }
@@ -1920,25 +2400,25 @@
       ]
     },
     "dependencyContract": {
-      "description": "编排顺序依赖契约——定义agent间前后关系的标准格式。三种依赖语义覆盖所有前后端联调场景。",
+      "description": "Orchestration dependency contract defining the standard producer / consumer ordering format. The three dependency semantics cover artifact, interface, event, and quality-gate handoffs.",
       "threeModes": {
         "channel": {
-          "label": "通道式（点对点消息）",
-          "semantic": "producer生成消息，consumer从共享存储（artifact store）读取locator。消息体不经过dispatcher信道，避免payload膨胀。",
-          "useCase": "前后端artifact传递、文件产物交接、API响应回传",
-          "example": "frontend_agent产出build产物路径 → backend_agent读取build hash继续编译"
+          "label": "Channel mode (point-to-point message)",
+          "semantic": "Producer emits a message and consumer reads the locator from shared storage such as an artifact store. The message body does not pass through the dispatcher channel, avoiding payload bloat.",
+          "useCase": "artifact transfer, file handoff, API response handoff",
+          "example": "producer outputs artifact locator -> consumer reads locator and continues"
         },
         "gate": {
-          "label": "阶段门式（质量门）",
-          "semantic": "前置任务产出物必须通过schema验证才放行后续任务。不是简单的时间等待，是质量关卡。",
-          "useCase": "OpenAPI schema校验、代码规范检查、安全扫描通过后才推进",
-          "example": "frontend_agent输出api-contract.yaml → backend_agent必须验证schema含paths/components才生成代码"
+          "label": "Gate mode (quality gate)",
+          "semantic": "Upstream task outputs must pass schema validation before downstream tasks are released. This is a quality gate, not a time delay.",
+          "useCase": "OpenAPI schema validation, coding-standard checks, security scans before advancement",
+          "example": "Producer outputs a contract artifact; consumer must verify schema and quality gates before generating or invoking code."
         },
         "event": {
-          "label": "事件订阅式",
-          "semantic": "producer发布事件，consumer订阅并可选filter过滤。blocking=true则等待，false则旁听。",
-          "useCase": "部署完成事件、CI通过事件、监控告警事件触发后续任务",
-          "example": "deploy_agent发布deployment_started事件 → smoke_test_agent订阅并filter=env==staging才执行"
+          "label": "Event subscription mode",
+          "semantic": "Producer publishes an event and consumer subscribes with an optional filter. blocking=true waits; blocking=false listens without blocking.",
+          "useCase": "deployment-complete events, CI-pass events, monitoring alerts triggering downstream tasks",
+          "example": "deploy_agent publishes deployment_started -> smoke_test_agent subscribes and runs only when filter=env==staging"
         }
       },
       "timeoutStrategy": {
@@ -1946,25 +2426,39 @@
         "unit": "milliseconds",
         "retryBackoff": "exponential",
         "maxRetries": 3,
-        "recommendation": "前端构建类依赖建议600000ms（10分钟），接口响应类建议300000ms（5分钟），CI任务建议60000ms（1分钟）"
+        "recommendation": "Recommended defaults: frontend build dependencies 600000 ms (10 minutes), interface-response dependencies 300000 ms (5 minutes), CI tasks 60000 ms (1 minute)."
       },
-      "dagValidation": "dependsOn声明在Stage 3（Thinking）由Conductor构建DAG图。必须检测循环依赖，循环依赖的task不得进入Stage 4。",
-      "frontendBackendContract": {
-        "description": "前后端联调的标准依赖模板",
-        "frontendEmits": {
+      "dagValidation": "dependsOn declarations are turned into a DAG by Conductor during Stage 3 (Thinking). Cycles must be detected, and cyclic tasks may not enter Stage 4.",
+      "interfaceIntegrationContract": {
+        "description": "Generic producer / consumer dependency template for interface, artifact, schema, or event handoffs.",
+        "producerContract": {
           "type": "gate",
-          "outputSchema": "openapi_schema",
-          "requiredFields": ["openapi", "info", "paths"],
-          "minPaths": 3,
+          "producerRoleField": "producerRole",
+          "artifactRefField": "contractArtifactRef",
+          "outputSchema": "task_defined",
+          "requiredFields": [
+            "producerRole",
+            "contractArtifactRef",
+            "schemaRef",
+            "qualityGate"
+          ],
+          "minInterfacePaths": "task_defined",
           "qualityGate": true
         },
-        "backendDepends": {
+        "consumerContract": {
           "type": "gate",
-          "from": "frontend_agent",
+          "consumerRoleField": "consumerRole",
+          "dependsOnField": "producerTaskRef",
+          "requiredFields": [
+            "consumerRole",
+            "producerTaskRef",
+            "acceptedSchemaRef",
+            "onTimeout"
+          ],
           "timeout_ms": 600000,
           "retry": { "max": 2, "backoff_ms": 30000 },
           "onTimeout": "use_fallback",
-          "fallback": { "artifact": "schemas/fallback-api.yaml" }
+          "fallback": { "artifact": "task_defined" }
         }
       }
     }

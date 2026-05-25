@@ -63,6 +63,23 @@ describe("meta-theory run status envelope", () => {
   });
 
   test("spine-state writes active-run and per-run status files", async () => {
+    // Isolate language-resolution env vars: resolveOutputLanguage() falls back
+    // to process.env.LANG / META_KIM_OUTPUT_LANGUAGE / LC_ALL / LANGUAGE when no
+    // higher-priority candidate is present. Host shells (e.g. zh_CN.UTF-8)
+    // leak LANG into the test process and flip languageResolution.source from
+    // "not_resolved" to "environment", breaking the assertions below. Save +
+    // clear before the test, restore in finally so other tests are unaffected.
+    const savedLang = {
+      LANG: process.env.LANG,
+      LC_ALL: process.env.LC_ALL,
+      LANGUAGE: process.env.LANGUAGE,
+      META_KIM_OUTPUT_LANGUAGE: process.env.META_KIM_OUTPUT_LANGUAGE,
+    };
+    delete process.env.LANG;
+    delete process.env.LC_ALL;
+    delete process.env.LANGUAGE;
+    delete process.env.META_KIM_OUTPUT_LANGUAGE;
+
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-status-"));
     try {
       const spine = await import(
@@ -120,6 +137,10 @@ describe("meta-theory run status envelope", () => {
       assert.equal(active.stagePurposeKey, "fetch");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
+      for (const [k, v] of Object.entries(savedLang)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
     }
   });
 

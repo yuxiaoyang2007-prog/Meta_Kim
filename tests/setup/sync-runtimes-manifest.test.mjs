@@ -1,8 +1,16 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
+import { readFile as readFsFile } from "node:fs/promises";
 
 import {
+  CODEX_BUSINESS_ROLE_AGENTS,
+  CODEX_RUNTIME_ADAPTER_AGENTS,
+  applyRuntimePaths,
+  buildCodexAgent,
+  buildCodexBusinessRoleAgent,
+  buildCodexRuntimeAdapterAgent,
+  buildCodexSkillContent,
   buildCursorAgent,
   buildCursorProjectHooksJson,
   buildCodexGraphifyContextHook,
@@ -102,6 +110,10 @@ describe("sync-runtimes / inferProjectCategory", () => {
       inferProjectCategory(p("openclaw/skills/meta-theory/SKILL.md"), REPO),
       CATEGORIES.D,
     );
+    assert.equal(
+      inferProjectCategory(p(".agents/skills/meta-theory/SKILL.md"), REPO),
+      CATEGORIES.D,
+    );
   });
 
   test("maps capability index mirrors to project settings category", () => {
@@ -196,10 +208,44 @@ describe("sync-runtimes / inferProjectPurpose", () => {
 });
 
 describe("sync-runtimes / Codex project hooks", () => {
+  test("registers the enforce-agent-dispatch deny gate before context hooks", () => {
+    const config = buildCodexProjectHooksJson();
+    const preToolUse = config.hooks.PreToolUse;
+
+    const enforceEntry = preToolUse.find((entry) =>
+      entry.hooks?.some((cmd) =>
+        cmd.command?.includes("enforce-agent-dispatch.mjs"),
+      ),
+    );
+    assert(enforceEntry, "enforce-agent-dispatch should be registered");
+    assert.equal(
+      preToolUse[0],
+      enforceEntry,
+      "enforce-agent-dispatch must run before any other PreToolUse hook",
+    );
+    assert.match(
+      enforceEntry.matcher,
+      /Bash\|apply_patch\|Edit\|Write\|MultiEdit\|NotebookEdit\|Agent/,
+    );
+    assert.match(enforceEntry.matcher, /spawn_agent/);
+
+    const graphifyEntry = preToolUse.find((entry) =>
+      entry.hooks?.some((cmd) =>
+        cmd.command?.includes("graphify-context.mjs"),
+      ),
+    );
+    assert(graphifyEntry, "graphify-context should still be registered");
+  });
+
   test("uses a cross-platform Node command instead of Unix shell syntax", () => {
     const config = buildCodexProjectHooksJson();
-    const command =
-      config.hooks.PreToolUse[0].hooks[0].command;
+    const graphifyEntry = config.hooks.PreToolUse.find((entry) =>
+      entry.hooks?.some((cmd) =>
+        cmd.command?.includes("graphify-context.mjs"),
+      ),
+    );
+    assert(graphifyEntry, "graphify-context entry should be present");
+    const command = graphifyEntry.hooks[0].command;
 
     assert.match(command, /node(\.exe)?/);
     assert.match(command, /\.codex\/hooks\/graphify-context\.mjs/);
@@ -255,6 +301,143 @@ describe("sync-runtimes / Codex project hooks", () => {
   });
 });
 
+describe("sync-runtimes / OpenClaw template portability", () => {
+  test("canonical OpenClaw template uses forward-slash placeholders", async () => {
+    const templateRaw = await readFsFile(
+      "canonical/runtime-assets/openclaw/openclaw.template.json",
+      "utf8",
+    );
+
+    assert.doesNotMatch(templateRaw, /__REPO_ROOT__\\/);
+    assert.match(templateRaw, /__REPO_ROOT__\/openclaw\/workspaces/);
+    assert.match(templateRaw, /__REPO_ROOT__\/openclaw\/skills/);
+    assert.doesNotMatch(templateRaw, /before_tool_call/);
+  });
+});
+
+describe("sync-runtimes / Codex skills", () => {
+  test("emits Codex-compatible skill frontmatter with only name and description", () => {
+    const rendered = buildCodexSkillContent(`---
+name: meta-theory
+version: 3.0.0
+author: KimYx0207
+user-invocable: true
+trigger: "meta theory"
+tools:
+  - shell
+description: Meta Arsenal dispatcher
+---
+
+# Meta Arsenal
+
+Body content.
+`);
+
+    const frontmatter = rendered.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "";
+    assert.match(frontmatter, /^name: meta-theory$/m);
+    assert.match(frontmatter, /^description: Meta Arsenal dispatcher$/m);
+    assert.doesNotMatch(frontmatter, /^version:/m);
+    assert.doesNotMatch(frontmatter, /^author:/m);
+    assert.doesNotMatch(frontmatter, /^user-invocable:/m);
+    assert.doesNotMatch(frontmatter, /^trigger:/m);
+    assert.doesNotMatch(frontmatter, /^tools:/m);
+  });
+
+  test("rewrites canonical agent references with runtime-native extensions", () => {
+    const source =
+      "Agent source: canonical/agents/meta-warden.md, canonical/agents/*.md, and canonical/agents/{name}.md";
+
+    assert.equal(
+      applyRuntimePaths(source, "claude"),
+      "Agent source: .claude/agents/meta-warden.md, .claude/agents/*.md, and .claude/agents/{name}.md",
+    );
+    assert.equal(
+      applyRuntimePaths(source, "codex"),
+      "Agent source: .codex/agents/meta-warden.toml, .codex/agents/*.toml, and .codex/agents/{name}.toml",
+    );
+    assert.equal(
+      applyRuntimePaths(source, "cursor"),
+      "Agent source: .cursor/agents/meta-warden.md, .cursor/agents/*.md, and .cursor/agents/{name}.md",
+    );
+    assert.equal(
+      applyRuntimePaths(source, "openclaw"),
+      "Agent source: openclaw/workspaces/meta-warden/SOUL.md, openclaw/workspaces/*/SOUL.md, and openclaw/workspaces/{name}/SOUL.md",
+    );
+  });
+});
+
+describe("sync-runtimes / Codex agents", () => {
+  test("emits Codex TOML nickname candidates for canonical meta agents", () => {
+    const rendered = buildCodexAgent({
+      id: "meta-warden",
+      description: "Coordinates dispatch and final synthesis",
+      body: "Body instructions",
+    });
+
+    assert.match(rendered, /^name = "meta-warden"$/m);
+    assert.match(
+      rendered,
+      /^nickname_candidates = \["Meta Warden", "Warden", "meta-warden"\]$/m,
+    );
+    assert.match(rendered, /^developer_instructions = """$/m);
+    assert.doesNotMatch(rendered, /代码库分析|执行|审查|验证/);
+  });
+
+  test("emits Codex runtime adapter agents for built-in worker and explorer names", () => {
+    const adapterIds = CODEX_RUNTIME_ADAPTER_AGENTS.map((agent) => agent.id);
+    assert.deepEqual(adapterIds, ["worker", "explorer"]);
+
+    for (const agent of CODEX_RUNTIME_ADAPTER_AGENTS) {
+      const rendered = buildCodexRuntimeAdapterAgent(agent);
+      assert.match(rendered, new RegExp(`^name = "${agent.id}"$`, "m"));
+      assert.match(rendered, /^nickname_candidates = \[/m);
+      assert.match(rendered, /runtimeInstanceAlias/);
+      assert.match(rendered, /roleDisplayName/);
+      assert.match(rendered, /not a canonical durable Meta_Kim owner|Do not edit files/);
+    }
+  });
+
+  test("emits Codex business-role custom agents with stable role names", () => {
+    const roleIds = CODEX_BUSINESS_ROLE_AGENTS.map((agent) => agent.id);
+    assert.deepEqual(roleIds, [
+      "frontend",
+      "backend",
+      "test",
+      "review",
+      "analysis",
+      "verify",
+      "docs",
+    ]);
+
+    for (const agent of CODEX_BUSINESS_ROLE_AGENTS) {
+      const rendered = buildCodexBusinessRoleAgent(agent);
+      assert.match(rendered, new RegExp(`^name = "${agent.id}"$`, "m"));
+      assert.match(
+        rendered,
+        new RegExp(`Use this role only when the task packet's roleDisplayName is ${agent.roleDisplayName}`),
+      );
+      assert.match(rendered, /^nickname_candidates = \[/m);
+      assert.match(rendered, /runtimeInstanceAlias/);
+      assert.doesNotMatch(rendered, /Popper|Zeno|agent-019e/);
+    }
+  });
+
+  test("treats generated Codex adapter files as runtime agent projections", () => {
+    assert.equal(
+      inferProjectCategory(p(".codex", "agents", "worker.toml"), REPO),
+      CATEGORIES.F,
+    );
+    assert.equal(
+      inferProjectCategory(p(".codex", "agents", "explorer.toml"), REPO),
+      CATEGORIES.F,
+    );
+    assert.equal(
+      inferProjectCategory(p(".codex", "agents", "frontend.toml"), REPO),
+      CATEGORIES.F,
+    );
+  });
+});
+
 describe("sync-runtimes / Cursor agents", () => {
   test("emits Cursor-required YAML frontmatter", () => {
     const rendered = buildCursorAgent({
@@ -271,6 +454,8 @@ describe("sync-runtimes / Cursor agents", () => {
       rendered,
       /description: "Coordinates dispatch and final synthesis"\n---\n\n# Meta-Warden/,
     );
+    assert.doesNotMatch(rendered, /nickname_candidates/);
+    assert.doesNotMatch(rendered, /^name = /m);
   });
 });
 
@@ -292,7 +477,29 @@ describe("sync-runtimes / Cursor project hooks", () => {
       config.hooks.beforeSubmitPrompt[1].command,
       /hookprompt-adapter\.mjs/,
     );
-    assert.match(config.hooks.preToolUse[0].command, /graphify-context\.mjs/);
+
+    const preToolUse = config.hooks.preToolUse;
+
+    const enforceEntry = preToolUse.find((entry) =>
+      entry.command?.includes("enforce-agent-dispatch.mjs"),
+    );
+    assert(enforceEntry, "enforce-agent-dispatch should be registered");
+    assert.equal(
+      preToolUse[0],
+      enforceEntry,
+      "enforce-agent-dispatch must run before any other preToolUse hook",
+    );
+    assert.equal(
+      enforceEntry.failClosed,
+      true,
+      "enforce-agent-dispatch must be failClosed so the deny payload is honored",
+    );
+
+    const graphifyEntry = preToolUse.find((entry) =>
+      entry.command?.includes("graphify-context.mjs"),
+    );
+    assert(graphifyEntry, "graphify-context should still be registered");
+
     assert.match(
       config.hooks.stop[0].command,
       /meta-kim-memory-save\.mjs.*stop/,

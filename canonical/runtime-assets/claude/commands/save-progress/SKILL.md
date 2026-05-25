@@ -1,5 +1,5 @@
 ---
-description: Save current project task progress to local task state file for cross-session continuity. Use when: user says "save progress", "记一下", "保存进度", session is interrupted, or user wants to resume work later. Writes to .claude/project-task-state.json so next session can load it via SessionStart hook.
+description: Save current project task progress to local task state file for cross-session continuity. Use when the user asks to save progress, uses an equivalent localized trigger phrase, the session is interrupted, or the user wants to resume work later. Writes to .claude/project-task-state.json so next session can load it via SessionStart hook.
 ---
 
 # Save Progress
@@ -63,18 +63,18 @@ Show the user a brief summary after saving.
 
 ## Example
 
-User says: "保存一下进度"
+User says: "save progress"
 
 ```bash
 python "$HOME/.claude/hooks/mcp_memory_global.py" \
   --mode save \
-  --task "审计Meta_Kim依赖并更新4个README" \
-  --done "审计npm依赖license" "审计GitHub skill repos" "写英文README依赖章节" \
-  --remaining "更新中文/日文/韩文README" "推送GitHub" \
-  --note "发现CLI-Anything是Apache 2.0，不是MIT"
+  --task "Audit Meta_Kim dependencies and update 4 READMEs" \
+  --done "Audited npm dependency licenses" "Audited GitHub skill repositories" "Wrote English README dependency section" \
+  --remaining "Update localized READMEs" "Push to GitHub" \
+  --note "Found CLI-Anything is Apache 2.0, not MIT"
 ```
 
-Output: Show the user "✅ 进度已保存：2件事完成，2件事待做，共5个会话"
+Output: show the user a concise progress summary such as "Progress saved: 2 completed, 2 remaining, 5 total sessions."
 
 ## Layered Session Context (how it works)
 
@@ -96,5 +96,5 @@ python mcp_memory_global.py --mode query-project
 python mcp_memory_global.py --mode query-memories
 ```
 
-If the user asks "还有什么上下文"、"查一下历史"、"看看之前的记忆"，use `--mode query-memories`.
-If the user asks "项目进度呢"、"上次做到哪了"，use `--mode query-project`."
+If the user asks for previous context, history, or remembered notes, use `--mode query-memories`.
+If the user asks for project progress or where the previous session stopped, use `--mode query-project`."

@@ -6,6 +6,118 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.2.1] - 2026-05-25
+
+### 新增
+
+- **v2.2.0 Prism 独立审查** — `docs/v2.2.0-prism-review.md` 记录 `PASS-WITH-FINDINGS` 结论，对照 5 条铁律 + 4 条用户决策做合规审计，并检测新契约词汇与产线钩子之间的 drift（v2.3.0 接入前需收敛）。
+
+### 变更
+
+- **workflow 契约扩展** — `config/contracts/workflow-contract.json` 新增 packet 词汇、命名策略字段、维度定义（+580 行），对齐 v2.2.0 设计框架，为 v2.3.0 opt-in 接入做准备。
+- **校验器深化** — `scripts/validate-run-artifact.mjs` 与 `scripts/validate-project.mjs` 增加 packet / binding / secret-boundary 校验（合计 +1027 行），落地新契约语义。
+- **Spine + dispatch 钩子更新** — `canonical/runtime-assets/shared/hooks/spine-state.mjs` 与 `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` 新增阶段要求细化与 dispatch envelope 证据（合计 +283 行），与新契约一致。
+- **meta-theory skill + references** — `canonical/skills/meta-theory/SKILL.md` 与 `references/dev-governance.md`、`references/create-agent.md` 澄清 capability-binding 证据、owner-display 命名、pre-decision option-frame 语言规则。
+- **9 个 meta agent 人设刷新** — 全部 `canonical/agents/meta-*.md` 更新 naming acceptance、role-display 规则与 capability-binding 语义。
+- **run artifact fixtures 全量重生成** — 7 个 `tests/fixtures/run-artifacts/*.json` 按新 packet 词汇重生成（+2854 行），契约测试保持绿。
+- **contract compliance + run artifact + spine + business-flow 测试扩展** — `tests/meta-theory/*.test.mjs` 覆盖新校验器输出、packet 结构与编排证据（合计 +782 行）。
+- **QuickStart + 跨 runtime + 能力矩阵文档刷新** — `docs/QUICKSTART.md`、`docs/cross-runtime-meta-enforcement.md`、`docs/runtime-capability-matrix.md`、`docs/runtime-coverage-audit.md`、`docs/repo-map.md`、`docs/protocols/meta-conductor-agent-teams-playbook-integration.md` 反映 v2.2.x 契约面。
+- **save-progress 命令 + OpenClaw 模板** — `canonical/runtime-assets/claude/commands/save-progress/SKILL.md` 与 `canonical/runtime-assets/openclaw/openclaw.template.json` 对齐新 run-artifact 要求。
+- **能力索引归一化** — `config/capability-index/meta-kim-capabilities.json` 与 `config/contracts/capability-index.schema.json` 清理。
+- **AGENTS.md + CLAUDE.md** — 跨 runtime 治理摘要对齐 v2.2.x 契约。
+- **版本元数据** — package 版本号升至 `2.2.1`。
+
+### 架构说明
+
+- v2.2.1 把 v2.2.0 发版前积压的 WIP 合并为一次完整的契约升级。它**尚未**将 `shared/lib/` PoC 模块接入产线钩子——那是 v2.3.0 的边界。
+- Prism review 列出 R4/R7 接入前需收敛的项；详情见 `docs/v2.2.0-prism-review.md` verdict 与建议顺序。
+
+## [2.2.0] - 2026-05-25
+
+### 新增
+
+- **设计时治理门框架** — 全面蓝图（`docs/design-time-gate-redesign.md`）引入 5 大核心抽象（DeliverableTypeProfile / PolicyRegistry / GateDispatcher / SeverityRule / IntentVerbLexicon），将治理规则从钩子代码迁移到声明式契约。落地用户 4 决策：Q1（陌生交付类型必须先 clarify intent，不允许自动放行）、Q2（4 级 severity 模型：required-strict / required-warn / not_applicable_with_reason / off）、Q3（v1.0 多语言意图识别 zh / en / ja / ko 对齐 README）、Q4（workType 推断 + 第一次写文件前确认）。
+- **deliverable-type-profiles 契约** — 新单一真源文件 `config/contracts/deliverable-type-profiles.json`，含 5 个标准 profile（`code_implementation` / `documentation` / `governance_contract` / `config_change` / `audit_readonly`），每 profile 含 4 级 severity 规则集，多语言意图动词词库（4 意图 x 4 语言 = 16 个词表），推断策略配置。
+- **PoC 抽象库** — 4 个纯函数 ES 模块位于 `canonical/runtime-assets/shared/lib/`：
+  - `deliverable-type-profile.mjs` — 加载、解析、推断交付类型，含置信度档位。
+  - `policy-registry.mjs` — bootstrap 时加载 + freeze 锁定（Zod 风格 registry 模式）。
+  - `gate-dispatcher.mjs` — 纯函数 4 级 severity 派发（OpenAPI 3.1 discriminator 模式）。
+  - `intent-verb-lexicon.mjs` — 多语言意图识别（i18next 风格 namespace lookup）。
+- **PoC 单元测试套件** — `tests/poc-design-gate/` 下 4 个测试文件共 48 个 test case，覆盖 4 条用户决策 + 异常路径。使用 Node.js 内置 `node --test`（零新增依赖）。含 `RESULTS.md` 汇总报告。
+
+### 变更
+
+- **sync-coverage-check 白名单** — `scripts/sync-coverage-check.mjs` 显式将 `shared/lib/` PoC 抽象模块加入白名单。v2.2.0 故意不投影到 runtime mirror；v2.3.0 起通过 feature flag opt-in 接入钩子（R3/R4 改造路径）。
+- **版本元数据** — package 版本号升至 `2.2.0`。
+
+### 架构说明
+
+- v2.2.0 仅引入设计层。生产钩子（`spine-state.mjs` / `enforce-agent-dispatch.mjs`）未改动，现有行为完全保留。
+- 设计文档清单 18 处硬编码位置，含 file:line 引用 + 改造路径 R1-R8 + v2.2.0 至 v3.x 分阶段迁移计划。
+- 5 条铁律（不硬编码 / 意图优先 / 设计前置 / 不让步 / 优秀案例）全部映射到设计文档第 10 节具体落地证据。
+
+## [2.1.5] - 2026-05-24
+
+### 新增
+
+- **Codex 业务角色 custom agents** — 运行时同步现在会在 generic `worker.toml` / `explorer.toml` fallback 之外生成 `frontend.toml`、`backend.toml`、`test.toml`、`review.toml`、`analysis.toml`、`verify.toml`、`docs.toml`。支持 named custom agents 的 Codex host 可以使用稳定的业务角色名。
+
+### 修复
+
+- **Codex 侧边栏命名验收边界** — 文档和测试现在明确把 `Popper`、`Zeno` 或其他宿主昵称视为 Codex runtime instance alias。Meta_Kim 自己的任务板和 run artifact 必须继续使用粗粒度业务 `roleDisplayName`，不能把宿主侧边栏昵称算成项目命名验收通过。
+
+### 变更
+
+- **版本元数据** — 包版本提升到 `2.1.5`。
+
+## [2.1.4] - 2026-05-24
+
+### 新增
+
+- **Codex 可读子智能体适配器** — Codex 运行时同步现在会生成 `worker.toml` 和 `explorer.toml` runtime adapter，并为 Codex meta-agent TOML 投影加入 `nickname_candidates`。这些只是 Codex 显示名的最佳努力提示，不会变成 Meta_Kim 的长期执行 owner。
+
+### 修复
+
+- **跨运行时 agent 格式边界** — 运行时路径重写现在会输出各目标的原生 agent 路径：Codex 的 `.codex/agents/*.toml`、Claude Code 的 `.claude/agents/*.md`、Cursor 的 `.cursor/agents/*.md`、OpenClaw 的 workspace `SOUL.md`，避免 Codex 镜像继续写成 `.codex/agents/*.md`。
+- **运行时别名处理** — 文档现在明确区分宿主 runtime alias 和 Meta_Kim `roleDisplayName`，即使 Codex Desktop 回退成 generic alias，任务板和 run artifact 仍必须使用业务可读名。
+
+### 变更
+
+- **版本元数据** — 包版本提升到 `2.1.4`。
+
+## [2.1.3] - 2026-05-24
+
+### 修复
+
+- **能力索引稳定再生成** — 当能力内容没有变化时，`discover:global` 现在会保留 canonical capability index 里原有的 `generatedAt`，避免发布验证后只因为时间戳 diff 把工作区弄脏。
+- **默认更新流程** — `node setup.mjs --update` 现在优先于非 TTY silent install；列表选择会自动采用默认值，silent/default 更新不会再等待可选部署目录输入。
+- **Graphify 更新幂等** — 当 `AGENTS.md` 或 `CLAUDE.md` 已有 Graphify 段落时，setup 会跳过会改写指南文件的 Graphify 平台安装，避免重复追加 `## graphify` 和行尾污染。
+- **能力索引 mtime 抖动** — 全局能力发现现在把递归 `modified` 时间戳视为易变元数据；能力内容没变时，文件 mtime 变化不会再弄脏 canonical capability index。
+
+### 变更
+
+- **版本元数据** — 包版本提升到 `2.1.3`。
+
+## [2.1.2] - 2026-05-24
+
+### 新增
+
+- **编排前选择门禁** — Critical 和 Fetch 现在必须先产出不明确问题与候选解决方案，Thinking 只有在用户确认或记录跳过理由后，才能锁定方案、生成详细编排和 worker packets。
+- **跨运行时同步覆盖检查** — 新增 `npm run meta:check:sync-coverage`，防止 canonical runtime assets 和生成镜像静默漂移。
+- **OpenClaw heartbeat 模板覆盖** — 新增 canonical OpenClaw heartbeat 模板，让下游安装拿到与其他运行时一致的治理提示。
+
+### 变更
+
+- **治理层与执行层边界** — 明确治理 agent 在 Critical、Fetch、Thinking、Review 必须参与；但大写 Execution 产出阶段必须派执行层 agent、skill、command、MCP 或 tool 具体干活。
+- **角色显示名** — 用户可见 worker 名称保持粗粒度、可读；宿主生成的实例 id 等 runtime alias 只留在内部 metadata。
+- **Codex skill 安装形态** — Codex 项目 skill 现在优先投影到当前 `.agents/skills/` 路径，同时保留旧 `.codex/skills/` 镜像兼容已安装用户。
+- **版本元数据** — 包版本提升到 `2.1.2`。
+
+### 修复
+
+- **过早编排** — run artifact 校验现在会拒绝没有处理不明确问题、候选方案和确认/跳过证据就直接 finalize 计划的运行。
+- **安装器冲突清理** — skill 更新清理现在更窄地限定 Meta_Kim 管理的旧残留，避免误删用户自建 skill，同时仍能安全迁移旧安装。
+
 ## [2.1.1] - 2026-05-23
 
 ### 修复

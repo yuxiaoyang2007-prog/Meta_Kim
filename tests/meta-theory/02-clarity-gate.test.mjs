@@ -134,6 +134,29 @@ describe("Clarity Gate unified execution confirmation", async () => {
     assert.match(policyText, /before.*decision|decision.*before/i);
   });
 
+  test("pre-decision frame must close unclear questions before detailed orchestration", () => {
+    const preDecisionOptionFrame =
+      workflowContractJson.protocols?.preDecisionOptionFrame;
+    assert.ok(
+      preDecisionOptionFrame,
+      "workflow contract must define protocols.preDecisionOptionFrame",
+    );
+
+    for (const field of ["unresolvedQuestions", "solutionChoiceState"]) {
+      assert.ok(
+        preDecisionOptionFrame.requiredFields?.includes(field),
+        `preDecisionOptionFrame missing required field "${field}"`,
+      );
+    }
+
+    const combined = `${skillContent}\n${devGov}\n${workflowContract}`;
+    assert.match(combined, /unresolved questions|unclear questions|不明确问题/i);
+    assert.match(combined, /candidate solution|候选解决方案/i);
+    assert.match(combined, /solutionChoiceState/);
+    assert.match(combined, /finalize.*dispatch|锁定方案|详细编排/i);
+    assert.match(combined, /workerTaskPackets/);
+  });
+
   test("contentEvidencePacket defines deep research requirements for evidence owner", () => {
     const packet = workflowContractJson.protocols?.contentEvidencePacket;
     assert.ok(packet, "workflow contract must define protocols.contentEvidencePacket");

@@ -15,12 +15,13 @@ import {
 const execFileAsync = promisify(execFile);
 
 const businessRoleExamples = [
-  "前端",
-  "后端",
-  "测试",
   "frontend",
   "backend",
   "test",
+  "review",
+  "analysis",
+  "verify",
+  "docs",
 ];
 
 function lane(laneId, owner = "meta-conductor") {
@@ -31,6 +32,30 @@ function lane(laneId, owner = "meta-conductor") {
     capabilitySearchQuery: `${laneId} capability owner`,
     candidateOwners: [owner],
     candidateSkills: ["meta-theory"],
+    matchedCapabilities: [
+      {
+        matchId: `${laneId}-capability-match`,
+        capabilitySlot: `${laneId}_capability`,
+        bindingType: "skill",
+        bindingRef: "meta-theory",
+        source: "config/capability-index/meta-kim-capabilities.json",
+        confidenceScore: 0.91,
+        selectionReason: `${owner} is selected by capability-first scan`,
+        selectionScope: "run_scoped",
+        persistencePolicy: "do_not_persist_to_agent_identity",
+        fallback: "capabilityGapPacket",
+      },
+    ],
+    capabilityBindings: [
+      {
+        bindingId: `${laneId}-capability-binding`,
+        capabilitySlot: `${laneId}_capability`,
+        bindingType: "skill",
+        bindingRef: "meta-theory",
+        source: "config/capability-index/meta-kim-capabilities.json",
+        evidenceRef: `${laneId}-capability-match`,
+      },
+    ],
     selectedOwner: owner,
     selectionReason: `${owner} is selected by capability-first scan`,
     coverageStatus: "covered",
@@ -149,6 +174,50 @@ describe("business-flow blueprint orchestration", async () => {
     assert.match(combined, /auth\/signature/i);
   });
 
+  test("product gate policy defines abstract design-time dimensions", () => {
+    const policy =
+      contract.runDiscipline?.productDeliverableGatePolicy ?? {};
+    const catalog = policy.designDimensionCatalog ?? [];
+    const dimensionIds = catalog.map((dimension) => dimension.dimensionId);
+
+    for (const dimensionId of [
+      "core_highlight",
+      "feature_completeness",
+      "ui_ue_ux",
+      "media_audio_motion",
+      "api_contract",
+      "frontend_backend_contract",
+      "third_party_integration",
+      "file_management_extensibility",
+      "directory_structure",
+      "real_test_strategy",
+      "evolution_path",
+      "dead_redundant_cleanup",
+    ]) {
+      assert.ok(
+        dimensionIds.includes(dimensionId),
+        `designDimensionCatalog must include ${dimensionId}`,
+      );
+    }
+
+    for (const dimension of catalog) {
+      assert.equal(
+        typeof dimension.dimensionId,
+        "string",
+        "dimensionId must be a stable abstract id",
+      );
+      assert.equal(
+        typeof dimension.packet,
+        "string",
+        "dimension packet owner must be explicit",
+      );
+      assert.ok(
+        Array.isArray(dimension.applicableDeliverableTypes),
+        "dimension applicability must be deliverable-type driven",
+      );
+    }
+  });
+
   test("agent blueprint contract forbids fixed concrete child skills in long-term identity", () => {
     const policy =
       contract.protocols?.agentBlueprintPacket?.longTermCapabilityPolicy ?? {};
@@ -181,7 +250,7 @@ describe("business-flow blueprint orchestration", async () => {
     for (const example of businessRoleExamples) {
       assert.match(combined, new RegExp(example, "i"), `missing ${example}`);
     }
-    for (const overScopedExample of ["后端-登录", "测试-安装", "backend-login"]) {
+    for (const overScopedExample of ["backend-login", "test-install"]) {
       assert.doesNotMatch(
         combined,
         new RegExp(overScopedExample, "i"),

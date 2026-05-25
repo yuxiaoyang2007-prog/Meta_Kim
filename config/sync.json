@@ -37,6 +37,7 @@
     "codex": [
       ".codex/agents",
       ".codex/skills",
+      ".agents/skills",
       ".codex/capability-index",
       ".codex/hooks",
       ".codex/hooks.json",

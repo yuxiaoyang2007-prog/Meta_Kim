@@ -46,6 +46,8 @@ import { resolveManifestSkillSubdir } from "./scripts/install-platform-config.mj
 import { buildNodeScriptSpawn } from "./scripts/node-spawn-config.mjs";
 import {
   CLAUDE_HOOK_FILES,
+  CODEX_BUSINESS_ROLE_AGENT_IDS,
+  CODEX_RUNTIME_ADAPTER_AGENT_IDS,
   META_AGENTS,
   OPENCLAW_WORKSPACE_MD,
   expectedAgentProjectionFiles,
@@ -390,7 +392,8 @@ ${r ? `Raw error: ${r}` : ""}
     syncClaudeHooks: (n) => `Claude Code hooks: ${n} scripts`,
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
-    syncCodexAgents: (n) => `Codex agents: ${n}/${META_AGENTS.length} .toml files`,
+    syncCodexAgents: (n, total = META_AGENTS.length) =>
+      `Codex agents: ${n}/${total} .toml files`,
     syncCodexSkills: "Codex skills/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw workspaces: ${n}/${META_AGENTS.length} agents — each folder has the 9 required .md files (BOOT, SOUL, …)`,
@@ -848,7 +851,8 @@ ${r ? `原始错误：${r}` : ""}
     syncClaudeHooks: (n) => `Claude Code 钩子: ${n} 个脚本`,
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
-    syncCodexAgents: (n) => `Codex 智能体: ${n}/${META_AGENTS.length} .toml 文件`,
+    syncCodexAgents: (n, total = META_AGENTS.length) =>
+      `Codex 智能体: ${n}/${total} .toml 文件`,
     syncCodexSkills: "Codex 技能/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw 工作区：${n}/${META_AGENTS.length} 个智能体，各目录 9 个必备 Markdown 已齐（含 BOOT、SOUL 等；不含子文件夹里的额外文件）`,
@@ -1308,7 +1312,8 @@ ${r ? `生エラー：${r}` : ""}
     syncClaudeHooks: (n) => `Claude Code フック: ${n} スクリプト`,
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
-    syncCodexAgents: (n) => `Codex エージェント: ${n}/${META_AGENTS.length} .toml ファイル`,
+    syncCodexAgents: (n, total = META_AGENTS.length) =>
+      `Codex エージェント: ${n}/${total} .toml ファイル`,
     syncCodexSkills: "Codex スキル/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw ワークスペース: ${n}/${META_AGENTS.length} エージェント — 各フォルダに必須の .md 9 件（BOOT、SOUL など）`,
@@ -1784,7 +1789,8 @@ ${r ? `원본 오류：${r}` : ""}
     syncClaudeHooks: (n) => `Claude Code 훅: ${n} 스크립트`,
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
-    syncCodexAgents: (n) => `Codex 에이전트: ${n}/${META_AGENTS.length} .toml 파일`,
+    syncCodexAgents: (n, total = META_AGENTS.length) =>
+      `Codex 에이전트: ${n}/${total} .toml 파일`,
     syncCodexSkills: "Codex 스킬/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw 워크스페이스: ${n}/${META_AGENTS.length} 에이전트 — 각 폴더에 필수 .md 9개(BOOT, SOUL 등)`,
@@ -2259,6 +2265,8 @@ function printMultiMenu(question, choices, focused, selected) {
 }
 
 async function keyboardSelect(question, options) {
+  if (silentMode) return 0;
+
   if (!process.stdin.isTTY) {
     printSelectMenu(question, options, 0);
     const answer = await ask(t.choose(options.length));
@@ -2288,6 +2296,8 @@ async function keyboardSelect(question, options) {
 }
 
 async function keyboardMultiSelect(question, choices, defaultIds, hintText) {
+  if (silentMode) return defaultIds;
+
   if (!process.stdin.isTTY) {
     printMultiMenu(question, choices, 0, new Set(defaultIds));
     const answer = await ask(
@@ -2708,6 +2718,10 @@ function deployPlatformFiles(platformId, targetDir) {
 async function askDeployDirectory() {
   console.log("");
 
+  if (silentMode) {
+    return null;
+  }
+
   const choiceIdx = await askSelect(t.npxQuickAskDeploy, [
     t.npxQuickDeployYes,
     t.npxQuickDeployNo,
@@ -3063,18 +3077,23 @@ function checkSync(
   if (repoTargets.includes("codex")) {
     console.log("");
     const codexAgentsDir = join(PROJECT_DIR, ".codex", "agents");
+    const expectedCodexAgentFiles = expectedAgentProjectionFiles(".toml", [
+      ...META_AGENTS,
+      ...CODEX_RUNTIME_ADAPTER_AGENT_IDS,
+      ...CODEX_BUSINESS_ROLE_AGENT_IDS,
+    ]);
     if (existsSync(codexAgentsDir)) {
       const summary = summarizeExpectedFiles(
         readdirSync(codexAgentsDir).filter((f) => f.endsWith(".toml")),
-        expectedAgentProjectionFiles(".toml"),
+        expectedCodexAgentFiles,
       );
       if (summary.missing.length === 0)
-        ok(t.syncCodexAgents(summary.presentCount));
+        ok(t.syncCodexAgents(summary.presentCount, expectedCodexAgentFiles.length));
       else {
         warn(
           t.syncPartial(
             "Codex agents",
-            `${summary.presentCount}/${META_AGENTS.length}`,
+            `${summary.presentCount}/${expectedCodexAgentFiles.length}`,
             `missing: ${summary.missing.join(", ")}`,
           ),
         );
@@ -3579,6 +3598,26 @@ const GRAPHIFY_PLATFORM_MAP = {
   cursor: "cursor",
 };
 
+const GRAPHIFY_GUIDE_TARGETS = {
+  claude: "CLAUDE.md",
+  codex: "AGENTS.md",
+  claw: "AGENTS.md",
+  opencode: "AGENTS.md",
+  aider: "AGENTS.md",
+  droid: "AGENTS.md",
+  trae: "AGENTS.md",
+  "trae-cn": "AGENTS.md",
+};
+
+function guideAlreadyHasGraphifySection(platform) {
+  const target = GRAPHIFY_GUIDE_TARGETS[platform];
+  if (!target) return false;
+  const filePath = join(PROJECT_DIR, target);
+  if (!existsSync(filePath)) return false;
+  const content = readFileSync(filePath, "utf8");
+  return /^##\s+graphify\b/im.test(content);
+}
+
 /**
  * Attempt to auto-download and install Python 3.10+.
  * Returns the Python object on success, null on failure or user decline.
@@ -3756,6 +3795,12 @@ async function installPythonTools(activeTargets, inUpdateMode = false) {
   for (const target of activeTargets) {
     const platform = GRAPHIFY_PLATFORM_MAP[target];
     if (!platform) continue;
+    if (guideAlreadyHasGraphifySection(platform)) {
+      skip(
+        `${C.dim}graphify ${platform} install skipped (guide already has Graphify section)${C.reset}`,
+      );
+      continue;
+    }
     info(t.graphifySkillRegistering(platform));
     const skillResult = runPythonModule(
       python,
@@ -4921,13 +4966,13 @@ async function main() {
     process.exit(0);
   }
 
-  if (silentMode) {
-    await runInstall();
+  if (updateMode) {
+    await runUpdate();
     process.exit(0);
   }
 
-  if (updateMode) {
-    await runUpdate();
+  if (silentMode) {
+    await runInstall();
     process.exit(0);
   }
 

@@ -3,6 +3,8 @@
 ## Official Documentation
 
 - Codex CLI: https://github.com/openai/codex (OpenAI's CLI agent)
+- Subagents reference: https://developers.openai.com/codex/subagents
+- Config reference: https://developers.openai.com/codex/config-reference
 - Agent Skills standard: https://github.com/vercel-labs/skills
 
 ## Skill System
@@ -41,17 +43,33 @@ Codex uses TOML format for agent definitions:
 ```toml
 name = "agent-id"
 description = "Agent description"
+nickname_candidates = ["Readable Name", "Short Name"]
 developer_instructions = """
 Full agent instructions here
 """
 ```
+
+`nickname_candidates` are Codex-only display hints. Keep them ASCII alphanumeric with spaces, hyphens, or underscores. They must not be copied into Claude Code, Cursor, or OpenClaw projections.
+
+Meta_Kim generates two adapter layers:
+
+- `worker.toml` and `explorer.toml` cover the generic built-in roles that Codex often exposes in tool-backed sessions.
+- `frontend.toml`, `backend.toml`, `test.toml`, `review.toml`, `analysis.toml`, `verify.toml`, and `docs.toml` provide coarse business-role custom agents for Codex hosts that honor named custom agents.
+
+These files are best-effort readability shims, not canonical durable Meta_Kim execution owners.
+
+### Known Host Limitation
+
+OpenAI Codex GitHub issues have reported cases where project named subagents or `.codex/agents/*.toml` config are not loaded in some CLI/Desktop/tool-backed sessions, causing the host to fall back to generic runtime aliases. Meta_Kim therefore treats Codex nicknames as best-effort only and still records host aliases only as `runtimeInstanceAlias`.
+
+Codex Desktop sidebar naming is not a Meta_Kim release gate unless the host actually honors project `.codex/agents/*.toml`. A screenshot that still shows `Popper (worker)` or `Zeno (explorer)` after sync means the host is using runtime instance aliases; task boards and run artifacts must still show `roleDisplayName` such as `frontend`, `backend`, `test`, `review`, `analysis`, `verify`, or `docs`.
 
 ### Differences from Claude Code
 
 - Hooks are available through `.codex/hooks.json`; event names and contracts are not schema-compatible with Claude Code hooks
 - No context:fork capability
 - No plugin marketplace
-- Uses TOML for agent config (Claude uses Markdown with frontmatter)
+- Uses TOML for agent config (Claude and Cursor use Markdown with frontmatter; OpenClaw uses workspaces)
 - Shares `.agents/skills/` universal project path with Cursor and others
 
 ## Data Sources

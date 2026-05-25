@@ -841,6 +841,13 @@ async function validateWorkflowContract() {
     "dispatchEnvelopePacket",
     "orchestrationTaskBoardPacket",
     "businessFlowBlueprintPacket",
+    "productCompletenessPacket",
+    "experienceQualityPacket",
+    "testStrategyPacket",
+    "structureHygienePacket",
+    "permissionMatrixPacket",
+    "sideEffectLedgerPacket",
+    "rollbackPlanPacket",
     "agentBlueprintPacket",
     "dispatchBoard",
     "workerTaskPacket",
@@ -998,6 +1005,91 @@ async function validateWorkflowContract() {
       `workflow-contract.json interfaceIntegrationContractPacketRequiredWhenTriggerReasons must include ${triggerReason}.`,
     );
   }
+  const productGatePolicy =
+    contract.runDiscipline?.productDeliverableGatePolicy ?? {};
+  assert(
+    productGatePolicy.enabled === true &&
+      productGatePolicy.requiredForNonQuery === true,
+    "workflow-contract.json productDeliverableGatePolicy must be enabled for non-query deliverables.",
+  );
+  for (const packet of [
+    "productCompletenessPacket",
+    "experienceQualityPacket",
+    "testStrategyPacket",
+    "structureHygienePacket",
+  ]) {
+    assert(
+      productGatePolicy.requiredPackets?.includes(packet),
+      `workflow-contract.json productDeliverableGatePolicy.requiredPackets must include ${packet}.`,
+    );
+  }
+  for (const packet of [
+    "permissionMatrixPacket",
+    "sideEffectLedgerPacket",
+    "rollbackPlanPacket",
+  ]) {
+    assert(
+      productGatePolicy.requiredSideEffectPackets?.includes(packet),
+      `workflow-contract.json productDeliverableGatePolicy.requiredSideEffectPackets must include ${packet}.`,
+    );
+  }
+  const dimensionFieldByPacket =
+    productGatePolicy.dimensionCoverageFieldByPacket ?? {};
+  const expectedDimensionFields = {
+    productCompletenessPacket: "designDimensions",
+    experienceQualityPacket: "experienceDimensions",
+    testStrategyPacket: "testDimensions",
+    structureHygienePacket: "structureDimensions",
+    permissionMatrixPacket: "permissionDimensions",
+    sideEffectLedgerPacket: "sideEffectDimensions",
+    rollbackPlanPacket: "rollbackDimensions",
+  };
+  for (const [packet, field] of Object.entries(expectedDimensionFields)) {
+    assert(
+      dimensionFieldByPacket[packet] === field,
+      `workflow-contract.json productDeliverableGatePolicy.dimensionCoverageFieldByPacket.${packet} must be ${field}.`,
+    );
+  }
+  for (const dimensionId of [
+    "core_highlight",
+    "feature_completeness",
+    "ui_ue_ux",
+    "media_audio_motion",
+    "api_contract",
+    "frontend_backend_contract",
+    "third_party_integration",
+    "file_management_extensibility",
+    "directory_structure",
+    "real_test_strategy",
+    "evolution_path",
+    "dead_redundant_cleanup",
+  ]) {
+    assert(
+      productGatePolicy.designDimensionCatalog?.some(
+        (dimension) => dimension.dimensionId === dimensionId,
+      ),
+      `workflow-contract.json productDeliverableGatePolicy.designDimensionCatalog must include ${dimensionId}.`,
+    );
+  }
+  const publicReadyStatusPolicy =
+    contract.runDiscipline?.runArtifactValidation
+      ?.productGatePublicReadyStatusPolicy ?? {};
+  assert(
+    publicReadyStatusPolicy.enabled === true &&
+      Array.isArray(publicReadyStatusPolicy.packetStatusFields),
+    "workflow-contract.json runArtifactValidation.productGatePublicReadyStatusPolicy must be enabled.",
+  );
+  for (const packet of [
+    ...productGatePolicy.requiredPackets,
+    ...productGatePolicy.requiredSideEffectPackets,
+  ]) {
+    assert(
+      publicReadyStatusPolicy.packetStatusFields.some(
+        (entry) => entry.packet === packet,
+      ),
+      `workflow-contract.json productGatePublicReadyStatusPolicy.packetStatusFields must include ${packet}.`,
+    );
+  }
   for (const [protocolName, expectedFields] of [
     [
       "taskClassification",
@@ -1102,6 +1194,97 @@ async function validateWorkflowContract() {
         "coverageJudgment",
         "blueprintSource",
         "blueprintVersion",
+      ],
+    ],
+    [
+      "productCompletenessPacket",
+      [
+        "outcome",
+        "userValue",
+        "acceptanceCriteria",
+        "nonGoals",
+        "designDimensions",
+        "completenessStatus",
+        "owner",
+        "evidenceRefs",
+      ],
+    ],
+    [
+      "experienceQualityPacket",
+      [
+        "audience",
+        "criticalJourneys",
+        "qualityAttributes",
+        "accessibilityConsiderations",
+        "experienceDimensions",
+        "experienceStatus",
+        "owner",
+        "evidenceRefs",
+      ],
+    ],
+    [
+      "testStrategyPacket",
+      [
+        "strategy",
+        "requiredTestTypes",
+        "executedTests",
+        "deferredTests",
+        "coverageRationale",
+        "testDimensions",
+        "testStatus",
+        "owner",
+        "evidenceRefs",
+      ],
+    ],
+    [
+      "structureHygienePacket",
+      [
+        "changedAreas",
+        "boundaryChecks",
+        "orphanCleanup",
+        "namingAndLayoutChecks",
+        "structureDimensions",
+        "hygieneStatus",
+        "owner",
+        "evidenceRefs",
+      ],
+    ],
+    [
+      "permissionMatrixPacket",
+      [
+        "accessedResources",
+        "permissionChecks",
+        "secretsPolicy",
+        "permissionDimensions",
+        "permissionStatus",
+        "owner",
+        "evidenceRefs",
+      ],
+    ],
+    [
+      "sideEffectLedgerPacket",
+      [
+        "sideEffects",
+        "externalSystemsTouched",
+        "stateChanges",
+        "mitigations",
+        "sideEffectDimensions",
+        "sideEffectStatus",
+        "owner",
+        "evidenceRefs",
+      ],
+    ],
+    [
+      "rollbackPlanPacket",
+      [
+        "rollbackScope",
+        "rollbackTriggers",
+        "rollbackSteps",
+        "affectedArtifacts",
+        "rollbackDimensions",
+        "rollbackStatus",
+        "owner",
+        "evidenceRefs",
       ],
     ],
     [
@@ -1290,7 +1473,8 @@ async function validateWorkflowContract() {
     "capabilityNeed",
     "capabilitySearchQuery",
     "candidateOwners",
-    "candidateSkills",
+    "matchedCapabilities",
+    "capabilityBindings",
     "selectedOwner",
     "selectionReason",
     "coverageStatus",
@@ -1300,6 +1484,10 @@ async function validateWorkflowContract() {
       `workflow-contract.json businessFlowBlueprintPacket.laneRequiredFields must include ${field}.`,
     );
   }
+  assert(
+    businessFlowProtocol.laneCompatibilityFields?.includes("candidateSkills"),
+    "workflow-contract.json businessFlowBlueprintPacket must keep candidateSkills as a compatibility field only.",
+  );
   for (const status of [
     "covered",
     "partial",
@@ -1395,13 +1583,38 @@ async function validateWorkflowContract() {
     "ownerResponsibilityDelta",
     "agentIterationPlan",
     "ownerResolution",
-    "matchedSkills",
     "skillSelectionScope",
     "governanceStageNodes",
   ]) {
     assert(
       agentBlueprintProtocol.roleRequiredFields?.includes(field),
       `workflow-contract.json agentBlueprintPacket.roleRequiredFields must include ${field}.`,
+    );
+  }
+  assert(
+    agentBlueprintProtocol.compatibilityFields?.includes("matchedSkills"),
+    "workflow-contract.json agentBlueprintPacket must keep matchedSkills as a compatibility field.",
+  );
+  for (const field of ["matchedCapabilities", "capabilityBindings"]) {
+    assert(
+      agentBlueprintProtocol.capabilityMatchFields?.includes(field),
+      `workflow-contract.json agentBlueprintPacket.capabilityMatchFields must include ${field}.`,
+    );
+  }
+  for (const bindingType of [
+    "agent",
+    "skill",
+    "command",
+    "mcp_tool",
+    "runtime_tool",
+    "file_set",
+    "capability_index_query",
+    "contract_ref",
+    "graph_node_set",
+  ]) {
+    assert(
+      agentBlueprintProtocol.capabilityBindingTypeEnum?.includes(bindingType),
+      `workflow-contract.json agentBlueprintPacket.capabilityBindingTypeEnum must include ${bindingType}.`,
     );
   }
   assert(
@@ -1681,6 +1894,10 @@ async function validateWorkflowContract() {
     "summaryPacketRequired",
     "cardPlanPacketRequired",
     "orchestrationTaskBoardPacketRequired",
+    "productGatePacketsRequiredForNonQuery",
+    "sideEffectAndRollbackPacketsRequiredForNonQuery",
+    "workerDependencyDagValidationRequired",
+    "matchedCapabilitiesOrLegacyMatchedSkillsRequired",
   ]) {
     assert(
       runArtifactValidation?.[field] === true,
@@ -1713,7 +1930,7 @@ async function validateRuntimeParityMatrix() {
   const raw = await fs.readFile(matrixPath, "utf8");
 
   for (const marker of [
-    "行为一致性对照表",
+    "Behavior Parity Matrix",
     "trigger parity",
     "card parity",
     "silence parity",
@@ -2205,6 +2422,79 @@ async function validateDocumentationFacts() {
       );
     }
   }
+
+  await validateEnglishGovernanceFiles();
+}
+
+function isAllowedLocalizedTriggerLine(line) {
+  return (
+    /^\s*trigger:\s*"/.test(line) ||
+    line.includes("`元理论`") ||
+    line.includes("`仅分析`") ||
+    line.includes("`只读`") ||
+    line.includes('"不需要确认"')
+  );
+}
+
+async function readExistingTextFile(relativePath) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!(await exists(absolutePath))) return null;
+  return fs.readFile(absolutePath, "utf8");
+}
+
+async function validateNoHanOutsideAllowedTriggers(relativePath) {
+  const raw = await readExistingTextFile(relativePath);
+  if (raw === null) return;
+  const lines = raw.split(/\r?\n/);
+  for (const [index, line] of lines.entries()) {
+    if (!/[\p{Script=Han}]/u.test(line)) continue;
+    if (isAllowedLocalizedTriggerLine(line)) continue;
+    throw new Error(
+      `${relativePath}:${index + 1} must be English-only; localized trigger phrases are allowed only in trigger lines or explicit trigger examples.`,
+    );
+  }
+}
+
+async function validateEnglishGovernanceFiles() {
+  const fixedPaths = [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "config/contracts/workflow-contract.json",
+    "docs/runtime-capability-matrix.md",
+    "docs/runtime-coverage-audit.md",
+    "canonical/runtime-assets/claude/commands/save-progress/SKILL.md",
+    "canonical/skills/meta-theory/SKILL.md",
+    "canonical/skills/meta-theory/references/dev-governance.md",
+    "canonical/skills/meta-theory/references/create-agent.md",
+    ".agents/skills/meta-theory/SKILL.md",
+    ".codex/skills/meta-theory/SKILL.md",
+    ".claude/skills/meta-theory/SKILL.md",
+    ".cursor/skills/meta-theory/SKILL.md",
+    "openclaw/skills/meta-theory/SKILL.md",
+  ];
+
+  const dynamicFiles = [
+    ...(await walkFilesByExtensions(canonicalAgentsDir, [".md"])),
+    ...(await walkFilesByExtensions(path.join(repoRoot, ".claude", "agents"), [
+      ".md",
+    ])),
+    ...(await walkFilesByExtensions(path.join(repoRoot, ".cursor", "agents"), [
+      ".md",
+    ])),
+    ...(await walkFilesByExtensions(
+      path.join(repoRoot, "openclaw", "workspaces"),
+      [".md"],
+    )),
+  ].filter((filePath) => /(?:^|[\\/])(?:AGENTS|SOUL)\.md$|[\\/]agents[\\/][^\\/]+\.md$/.test(filePath));
+
+  const targetPaths = new Set([
+    ...fixedPaths,
+    ...dynamicFiles.map((filePath) => toRepoRelative(filePath)),
+  ]);
+
+  for (const relativePath of targetPaths) {
+    await validateNoHanOutsideAllowedTriggers(relativePath);
+  }
 }
 
 async function validateRunArtifactFixtures() {
@@ -2356,6 +2646,18 @@ async function validateOpenClawArtifacts(agentIds) {
     "canonical OpenClaw template agent list is out of sync with canonical/agents.",
   );
 
+  for (const agent of templateConfig.agents?.list ?? []) {
+    const workspace = agent.workspace ?? "";
+    assert(
+      !workspace.includes("\\"),
+      `canonical OpenClaw template workspace for ${agent.id} must use forward slashes.`,
+    );
+    assert(
+      workspace === `__REPO_ROOT__/openclaw/workspaces/${agent.id}`,
+      `canonical OpenClaw template workspace for ${agent.id} must be repo-root placeholder based.`,
+    );
+  }
+
   const allowedIds = templateConfig.tools?.agentToAgent?.allow ?? [];
   const sortedAllowedIds = [...allowedIds].sort();
   assert(
@@ -2377,7 +2679,7 @@ async function validateOpenClawArtifacts(agentIds) {
 
   const extraSkillDirs = templateConfig.skills?.load?.extraDirs ?? [];
   assert(
-    extraSkillDirs.includes("__REPO_ROOT__\\openclaw\\skills"),
+    extraSkillDirs.includes("__REPO_ROOT__/openclaw/skills"),
     "canonical OpenClaw template must register repo-local openclaw/skills via skills.load.extraDirs.",
   );
 
@@ -2524,8 +2826,12 @@ async function validateSyncConfiguration() {
   assert(
     profiles.codex.projection.outputPaths.skillsDir === ".codex/skills" &&
       profiles.codex.projection.outputPaths.skillRoot ===
-        ".codex/skills/meta-theory",
-    "Codex runtime profile must declare both the skills root and the meta-theory compatibility root.",
+        ".codex/skills/meta-theory" &&
+      profiles.codex.projection.outputPaths.projectSkillsDir ===
+        ".agents/skills" &&
+      profiles.codex.projection.outputPaths.projectSkillRoot ===
+        ".agents/skills/meta-theory",
+    "Codex runtime profile must declare both the compatibility .codex/skills root and the official project .agents/skills root.",
   );
   assert(
     profiles.claude.projection.outputPaths.skillsDir === ".claude/skills" &&
@@ -2565,6 +2871,7 @@ async function validateCodexArtifacts() {
     "[agents]",
     "[mcp_servers.meta_kim_runtime]",
     ".codex/skills/",
+    ".agents/skills/",
   ]) {
     assert(
       configExample.includes(expected),
@@ -2581,6 +2888,7 @@ async function validateCodexArtifacts() {
   for (const expected of [
     "name: meta-theory",
     "~/.codex/skills/meta-theory/SKILL.md",
+    ".agents/skills/meta-theory/SKILL.md",
     ".codex/skills/meta-theory/SKILL.md",
   ]) {
     assert(

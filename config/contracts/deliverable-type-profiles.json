@@ -1,0 +1,188 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://meta-kim.dev/schemas/deliverable-type-profiles.json",
+  "title": "Meta_Kim Deliverable Type Profiles",
+  "description": "Single source of truth for deliverable type classification, severity model, multilingual intent lexicon, and inference strategy. Implements user-locked decisions Q1-Q4.",
+  "schemaVersion": "1.0.0",
+  "lastUpdated": "2026-05-25",
+
+  "defaultBehavior": {
+    "unknownType": "require_user_intent_clarification",
+    "_q1_decision_evidence": "Q1 lock: unknown deliverable types must NOT be auto-allowed. Hook calls into clarification flow before proceeding."
+  },
+
+  "severityModel": {
+    "levels": [
+      { "name": "required-strict", "decision_on_fail": "block", "description": "Mandatory. Failure blocks execution. Cannot be skipped." },
+      { "name": "required-warn", "decision_on_fail": "warn", "description": "Mandatory but advisory. Failure logs a strong warning and continues. Audit-logged." },
+      { "name": "not_applicable_with_reason", "decision_on_fail_without_reason": "block", "decision_on_fail_with_reason": "skip", "description": "Conditionally skippable. User must provide a written reason. Without reason, treated as block." },
+      { "name": "off", "decision_on_fail": "pass", "description": "Rule disabled. Always passes." }
+    ],
+    "_q2_decision_evidence": "Q2 lock: 4-tier severity model rejects binary pass/fail. Each rule per profile specifies severity."
+  },
+
+  "i18n": {
+    "v1Languages": ["zh", "en", "ja", "ko"],
+    "v1_1Languages": ["zh", "en", "ja", "ko", "es", "fr"],
+    "fallbackLanguage": "en",
+    "_q3_decision_evidence": "Q3 lock: v1.0 aligned with README zh/en/ja/ko. v1.1 extends to es/fr."
+  },
+
+  "inferenceStrategy": {
+    "mode": "guess_then_confirm_at_first_write",
+    "confidenceThresholds": { "high": 0.85, "medium": 0.6, "low": 0.0 },
+    "confirmBeforeAction": "first_file_write",
+    "_q4_decision_evidence": "Q4 lock: system infers deliverableType from workType + context. Before first file write, asks user to confirm or correct."
+  },
+
+  "intentLexicon": {
+    "version": "1.0.0",
+    "intents": {
+      "implement": {
+        "zh": ["实现", "做", "构建", "写", "落地", "开发", "建", "完成"],
+        "en": ["implement", "build", "create", "write", "develop", "code", "make", "ship"],
+        "ja": ["実装", "作成", "構築", "書く", "開発", "作る", "構成"],
+        "ko": ["구현", "작성", "생성", "개발", "만들다", "구축", "쓰다"]
+      },
+      "analyze": {
+        "zh": ["分析", "审查", "检查", "评估", "诊断", "排查"],
+        "en": ["analyze", "review", "inspect", "assess", "diagnose", "investigate"],
+        "ja": ["分析", "レビュー", "検査", "評価", "診断", "調査"],
+        "ko": ["분석", "검토", "검사", "평가", "진단", "조사"]
+      },
+      "review": {
+        "zh": ["复审", "评审", "审核", "审视", "复核"],
+        "en": ["review", "audit", "examine", "vet", "approve"],
+        "ja": ["レビュー", "監査", "確認", "承認"],
+        "ko": ["검토", "감사", "확인", "승인"]
+      },
+      "verify": {
+        "zh": ["验证", "测试", "验收", "确认", "校验"],
+        "en": ["verify", "test", "validate", "confirm", "check"],
+        "ja": ["検証", "テスト", "確認", "妥当性確認"],
+        "ko": ["검증", "테스트", "확인", "유효성검사"]
+      }
+    }
+  },
+
+  "profiles": [
+    {
+      "type": "code_implementation",
+      "displayName": { "zh": "代码实现", "en": "Code Implementation", "ja": "コード実装", "ko": "코드 구현" },
+      "inferenceHints": {
+        "workTypeKeywords": {
+          "zh": ["实现", "开发", "编码", "构建功能"],
+          "en": ["implement", "develop", "build feature", "code"],
+          "ja": ["実装", "開発", "コーディング"],
+          "ko": ["구현", "개발", "코딩"]
+        },
+        "fileExtensions": [".js", ".mjs", ".ts", ".tsx", ".py", ".go", ".rs", ".java", ".cpp", ".c"],
+        "pathPatterns": ["src/", "lib/", "app/", "components/"]
+      },
+      "rules": [
+        { "id": "testStrategyDefined", "severity": "required-strict", "description": "Must define unit/integration test strategy before code." },
+        { "id": "rollbackPlanDefined", "severity": "required-strict", "description": "Production code must have a rollback plan." },
+        { "id": "interfaceContract", "severity": "required-warn", "description": "Public functions should have documented contracts." },
+        { "id": "sideEffectLedger", "severity": "required-warn", "description": "Document expected side effects." },
+        { "id": "permissionMatrix", "severity": "required-warn", "description": "Document required permissions/scopes." },
+        { "id": "structureHygiene", "severity": "required-warn", "description": "Follow project file/folder conventions." }
+      ],
+      "defaultLanes": ["plan", "build", "test", "review"],
+      "riskBaseline": "medium"
+    },
+    {
+      "type": "documentation",
+      "displayName": { "zh": "文档撰写", "en": "Documentation", "ja": "ドキュメント", "ko": "문서화" },
+      "inferenceHints": {
+        "workTypeKeywords": {
+          "zh": ["文档", "说明", "教程", "指南", "README"],
+          "en": ["docs", "documentation", "tutorial", "guide", "README"],
+          "ja": ["ドキュメント", "説明", "チュートリアル", "ガイド"],
+          "ko": ["문서", "설명", "튜토리얼", "가이드"]
+        },
+        "fileExtensions": [".md", ".mdx", ".rst", ".txt"],
+        "pathPatterns": ["docs/", "README", "CHANGELOG"]
+      },
+      "rules": [
+        { "id": "structureHygiene", "severity": "required-strict", "description": "Follow doc structure conventions (TOC, headers)." },
+        { "id": "testStrategyDefined", "severity": "off", "description": "Tests not applicable to pure documentation." },
+        { "id": "rollbackPlanDefined", "severity": "not_applicable_with_reason", "description": "Docs can usually be reverted via git; skip with reason." },
+        { "id": "permissionMatrix", "severity": "off", "description": "No runtime permissions involved." },
+        { "id": "linkValidation", "severity": "required-warn", "description": "Internal links should be valid." }
+      ],
+      "defaultLanes": ["draft", "review", "publish"],
+      "riskBaseline": "low"
+    },
+    {
+      "type": "governance_contract",
+      "displayName": { "zh": "治理契约变更", "en": "Governance Contract Change", "ja": "ガバナンス契約変更", "ko": "거버넌스 계약 변경" },
+      "inferenceHints": {
+        "workTypeKeywords": {
+          "zh": ["契约", "治理", "规则", "策略", "约束"],
+          "en": ["contract", "governance", "rule", "policy", "constraint"],
+          "ja": ["契約", "ガバナンス", "ルール", "ポリシー"],
+          "ko": ["계약", "거버넌스", "규칙", "정책"]
+        },
+        "fileExtensions": [".json", ".yaml", ".yml"],
+        "pathPatterns": ["config/contracts/", "canonical/", ".meta-kim/"]
+      },
+      "rules": [
+        { "id": "interfaceContract", "severity": "required-strict", "description": "Schema must be backward compatible or major-bumped." },
+        { "id": "testStrategyDefined", "severity": "required-strict", "description": "Contract tests must cover all callers." },
+        { "id": "rollbackPlanDefined", "severity": "required-strict", "description": "Contract changes need explicit rollback path." },
+        { "id": "permissionMatrix", "severity": "required-warn", "description": "Document who can author/approve." },
+        { "id": "sideEffectLedger", "severity": "required-strict", "description": "List every consumer affected." },
+        { "id": "structureHygiene", "severity": "required-warn", "description": "Schema follows JSON Schema conventions." }
+      ],
+      "defaultLanes": ["design", "review", "validate", "publish"],
+      "riskBaseline": "high"
+    },
+    {
+      "type": "config_change",
+      "displayName": { "zh": "配置变更", "en": "Configuration Change", "ja": "設定変更", "ko": "구성 변경" },
+      "inferenceHints": {
+        "workTypeKeywords": {
+          "zh": ["配置", "设置", "调整参数"],
+          "en": ["config", "configuration", "settings", "tweak"],
+          "ja": ["設定", "構成", "調整"],
+          "ko": ["구성", "설정", "조정"]
+        },
+        "fileExtensions": [".json", ".yaml", ".yml", ".toml", ".env"],
+        "pathPatterns": ["config/", ".env", "package.json", "tsconfig.json"]
+      },
+      "rules": [
+        { "id": "rollbackPlanDefined", "severity": "required-strict", "description": "Config changes must be reversible." },
+        { "id": "testStrategyDefined", "severity": "required-warn", "description": "Smoke test after change." },
+        { "id": "interfaceContract", "severity": "not_applicable_with_reason", "description": "Skip if config is internal-only." },
+        { "id": "permissionMatrix", "severity": "required-warn", "description": "Note who has access to the config." },
+        { "id": "sideEffectLedger", "severity": "required-strict", "description": "List every component affected by the change." }
+      ],
+      "defaultLanes": ["plan", "apply", "verify"],
+      "riskBaseline": "medium"
+    },
+    {
+      "type": "audit_readonly",
+      "displayName": { "zh": "只读审计", "en": "Read-only Audit", "ja": "読み取り専用監査", "ko": "읽기 전용 감사" },
+      "inferenceHints": {
+        "workTypeKeywords": {
+          "zh": ["审查", "审计", "分析", "排查", "诊断", "只读"],
+          "en": ["audit", "review", "analyze", "inspect", "diagnose", "readonly"],
+          "ja": ["監査", "レビュー", "分析", "診断", "読み取り専用"],
+          "ko": ["감사", "검토", "분석", "진단", "읽기전용"]
+        },
+        "fileExtensions": [],
+        "pathPatterns": []
+      },
+      "rules": [
+        { "id": "testStrategyDefined", "severity": "off", "description": "Read-only audits do not need code tests." },
+        { "id": "rollbackPlanDefined", "severity": "off", "description": "No state changes; nothing to roll back." },
+        { "id": "interfaceContract", "severity": "off", "description": "No interface produced." },
+        { "id": "permissionMatrix", "severity": "required-warn", "description": "Document what access was used." },
+        { "id": "sideEffectLedger", "severity": "required-strict", "description": "Must declare zero-side-effect explicitly." },
+        { "id": "structureHygiene", "severity": "required-warn", "description": "Output report follows standard format." }
+      ],
+      "defaultLanes": ["scope", "investigate", "report"],
+      "riskBaseline": "low"
+    }
+  ]
+}

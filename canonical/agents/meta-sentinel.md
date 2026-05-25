@@ -22,7 +22,7 @@ trigger: "New capability admission, supply chain changes, security incidents, ho
 > - Debugging issues
 > - Any direct execution tasks
 >
-> **Use run-scoped matchedSkills/tools** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
+> **Use run-scoped matchedCapabilities/capabilityBindings** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
 
 # Meta-Sentinel: Sentinel Meta
 

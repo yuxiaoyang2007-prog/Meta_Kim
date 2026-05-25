@@ -102,6 +102,7 @@ export function inferProjectCategory(filePath, rootDir = repoRoot) {
   if (
     rel.startsWith(".claude/skills/") ||
     rel.startsWith(".codex/skills/") ||
+    rel.startsWith(".agents/skills/") ||
     rel.startsWith(".cursor/skills/") ||
     rel.startsWith("openclaw/skills/") ||
     rel.startsWith("openclaw/workspaces/")
@@ -111,7 +112,8 @@ export function inferProjectCategory(filePath, rootDir = repoRoot) {
   if (
     rel.startsWith(".codex/commands/") ||
     rel === ".codex/hooks.json" ||
-    rel === ".cursor/hooks.json"
+    rel === ".cursor/hooks.json" ||
+    rel.startsWith(".cursor/rules/")
   ) {
     return CATEGORIES.G;
   }
@@ -628,6 +630,8 @@ function resolveProjectionDirs(scope) {
     // Codex
     codexSkillsDir: codex.skillsDir,
     codexSkillRoot: codex.skillRoot,
+    codexProjectSkillsDir: codex.projectSkillsDir,
+    codexProjectSkillRoot: codex.projectSkillRoot,
     codexLegacySkillFile: globalScope ? null : codex.legacySkillFile,
     codexLegacySkillReferencesDir: globalScope
       ? null
@@ -661,6 +665,7 @@ function resolveProjectionDirs(scope) {
     cursorHooksFile: cursor.hooksFile,
     cursorMcpPath: cursor.mcpFile,
     cursorCapabilityIndexDir: cursor.capabilityIndexDir,
+    cursorRulesDir: cursor.rulesDir,
 
     // Allowed roots for safety assertion
     allowedRoots: resolveRuntimeAllowedRoots(scope),
@@ -676,6 +681,8 @@ function resolveProjectionDirs(scope) {
       codexAgents: codex.display.agentsDir,
       codexSkillsRoot: codex.display.skillsDir,
       codexSkills: codex.display.skillRoot,
+      codexProjectSkillsRoot: codex.display.projectSkillsDir,
+      codexProjectSkill: codex.display.projectSkillRoot,
       codexHooks: globalScope ? null : codex.display.hooksDir,
       codexHooksFile: globalScope ? null : codex.display.hooksFile,
       codexCommands: codex.display.commandsDir,
@@ -696,6 +703,7 @@ function resolveProjectionDirs(scope) {
       cursorHooksFile: cursor.display.hooksFile,
       cursorMcp: cursor.display.mcpFile,
       cursorCapabilityIndex: cursor.display.capabilityIndexDir,
+      cursorRules: cursor.display.rulesDir,
     },
   };
 }
@@ -739,6 +747,23 @@ const canonicalSharedSpineHookPath = path.join(
   "shared",
   "hooks",
   "activate-meta-theory-spine.mjs",
+);
+const canonicalClaudeEnforceDispatchHookPath = path.join(
+  canonicalRuntimeAssetsDir,
+  "claude",
+  "hooks",
+  "enforce-agent-dispatch.mjs",
+);
+const canonicalClaudeBashReadonlyWhitelistPath = path.join(
+  canonicalRuntimeAssetsDir,
+  "claude",
+  "hooks",
+  "bash-readonly-whitelist.mjs",
+);
+const canonicalCursorRulesDir = path.join(
+  canonicalRuntimeAssetsDir,
+  "cursor",
+  "rules",
 );
 const canonicalOpenClawTemplatePath = path.join(
   canonicalRuntimeAssetsDir,
@@ -1005,19 +1030,26 @@ ${agent.body}
 `;
 }
 
-function buildHeartbeat(agent) {
-  return `# HEARTBEAT.md - ${agent.id}
+let heartbeatTemplateCache = null;
 
-Default heartbeat policy:
+async function loadHeartbeatTemplate() {
+  if (heartbeatTemplateCache !== null) return heartbeatTemplateCache;
+  const templatePath = path.join(
+    canonicalRuntimeAssetsDir,
+    "openclaw",
+    "HEARTBEAT.template.md",
+  );
+  const raw = await fs.readFile(templatePath, "utf8");
+  // Strip leading canonical-only HTML comment line(s). The comment is metadata
+  // for editors; it must not appear in the generated workspace file.
+  const stripped = raw.replace(/^<!--[\s\S]*?-->\r?\n/, "");
+  heartbeatTemplateCache = stripped;
+  return stripped;
+}
 
-- If there is no explicit scheduled work, respond with \`HEARTBEAT_OK\`.
-- Do not create autonomous tasks or self-assign missions by default.
-- Only act proactively after the deployment owner adds concrete heartbeat tasks below.
-
-## Deployment Tasks
-
-- None by default.
-`;
+async function buildHeartbeat(agent) {
+  const template = await loadHeartbeatTemplate();
+  return template.replaceAll("{{AGENT_ID}}", agent.id);
 }
 
 function buildTools(agent, agents) {
@@ -1130,6 +1162,192 @@ function escapeTomlBasicMultiline(value) {
   return value.replace(/\\/g, "\\\\").replace(/"""/g, '\\"\\"\\"');
 }
 
+function escapeTomlBasicString(value) {
+  return String(value ?? "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+const CODEX_NICKNAME_CANDIDATES_BY_AGENT = {
+  "meta-warden": ["Meta Warden", "Warden"],
+  "meta-genesis": ["Meta Genesis", "Genesis"],
+  "meta-artisan": ["Meta Artisan", "Artisan"],
+  "meta-sentinel": ["Meta Sentinel", "Sentinel"],
+  "meta-librarian": ["Meta Librarian", "Librarian"],
+  "meta-conductor": ["Meta Conductor", "Conductor"],
+  "meta-prism": ["Meta Prism", "Prism", "Review"],
+  "meta-scout": ["Meta Scout", "Scout"],
+  "meta-chrysalis": ["Meta Chrysalis", "Chrysalis"],
+};
+
+export const CODEX_RUNTIME_ADAPTER_AGENTS = [
+  {
+    id: "worker",
+    description:
+      "Execute bounded Meta_Kim implementation tasks after governance dispatch.",
+    nicknameCandidates: ["Execution", "Worker", "Implementation"],
+    instructions: [
+      "You are the Codex runtime adapter for bounded Meta_Kim execution work.",
+      "This file exists to give Codex a readable project-level custom-agent definition for its generic worker role.",
+      "It is not a canonical durable Meta_Kim owner. Durable governance ownership stays with canonical meta agents; concrete execution ownership is selected per run through matched capabilities, skills, commands, MCP capabilities, and tools.",
+      "Use the parent task packet as the source of truth for roleDisplayName, roleInstanceId, scope, dependencies, verification steps, and merge owner.",
+      "Never replace roleDisplayName with a Codex runtime nickname. If Codex assigns an incidental alias, report it only as runtimeInstanceAlias.",
+    ].join("\n"),
+  },
+  {
+    id: "explorer",
+    description:
+      "Perform read-only codebase, platform, and evidence discovery for Meta_Kim runs.",
+    nicknameCandidates: ["Codebase Analysis", "Explorer", "Research"],
+    instructions: [
+      "You are the Codex runtime adapter for read-only Meta_Kim discovery work.",
+      "This file exists to give Codex a readable project-level custom-agent definition for its generic explorer role.",
+      "Inspect files, official documentation, capability indexes, commands, MCP capabilities, and tool availability as requested by the parent task packet.",
+      "Do not edit files or finalize implementation decisions. Return evidence, uncertainty, and candidate paths for the governance owner to merge.",
+      "Never replace roleDisplayName with a Codex runtime nickname. If Codex assigns an incidental alias, report it only as runtimeInstanceAlias.",
+    ].join("\n"),
+  },
+];
+
+export const CODEX_BUSINESS_ROLE_AGENTS = [
+  {
+    id: "frontend",
+    roleDisplayName: "frontend",
+    description:
+      "Implement bounded frontend, UI, and client-side work after Meta_Kim governance dispatch.",
+    nicknameCandidates: ["frontend", "ui", "client"],
+    instructions: [
+      "You are the Codex project custom agent for Meta_Kim frontend work.",
+      "Use this role only when the task packet's roleDisplayName is frontend or an equivalent client/UI role family.",
+      "Follow the parent task packet for scope, dependencies, verification, and merge owner.",
+      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
+    ].join("\n"),
+  },
+  {
+    id: "backend",
+    roleDisplayName: "backend",
+    description:
+      "Implement bounded backend, API, data, and service work after Meta_Kim governance dispatch.",
+    nicknameCandidates: ["backend", "server", "api"],
+    instructions: [
+      "You are the Codex project custom agent for Meta_Kim backend work.",
+      "Use this role only when the task packet's roleDisplayName is backend or an equivalent service/API/data role family.",
+      "Follow the parent task packet for scope, dependencies, verification, and merge owner.",
+      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
+    ].join("\n"),
+  },
+  {
+    id: "test",
+    roleDisplayName: "test",
+    description:
+      "Write or run bounded tests and QA checks after Meta_Kim governance dispatch.",
+    nicknameCandidates: ["test", "qa", "checks"],
+    instructions: [
+      "You are the Codex project custom agent for Meta_Kim test and QA work.",
+      "Use this role only when the task packet's roleDisplayName is test or an equivalent QA role family.",
+      "Follow the parent task packet for target checks, expected evidence, dependencies, and merge owner.",
+      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
+    ].join("\n"),
+  },
+  {
+    id: "review",
+    roleDisplayName: "review",
+    description:
+      "Review bounded implementation outputs and report findings after Meta_Kim governance dispatch.",
+    nicknameCandidates: ["review", "quality", "audit"],
+    instructions: [
+      "You are the Codex project custom agent for Meta_Kim review work.",
+      "Use this role only when the task packet's roleDisplayName is review or an equivalent quality/audit role family.",
+      "Return findings, risks, and missing verification. Do not patch reviewed files unless the parent task explicitly re-dispatches execution.",
+      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
+    ].join("\n"),
+  },
+  {
+    id: "analysis",
+    roleDisplayName: "analysis",
+    description:
+      "Perform bounded read-only codebase, platform, or product analysis after Meta_Kim governance dispatch.",
+    nicknameCandidates: ["analysis", "research", "discovery"],
+    instructions: [
+      "You are the Codex project custom agent for Meta_Kim analysis work.",
+      "Use this role only when the task packet's roleDisplayName is analysis or an equivalent discovery/research role family.",
+      "Return evidence, uncertainty, and candidate paths. Do not finalize implementation decisions or edit files.",
+      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
+    ].join("\n"),
+  },
+  {
+    id: "verify",
+    roleDisplayName: "verify",
+    description:
+      "Run bounded verification evidence collection after Meta_Kim governance dispatch.",
+    nicknameCandidates: ["verify", "validation", "evidence"],
+    instructions: [
+      "You are the Codex project custom agent for Meta_Kim verification work.",
+      "Use this role only when the task packet's roleDisplayName is verify or an equivalent validation/evidence role family.",
+      "Run or inspect only the checks assigned by the parent task packet and report fresh evidence.",
+      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
+    ].join("\n"),
+  },
+  {
+    id: "docs",
+    roleDisplayName: "docs",
+    description:
+      "Write or update bounded documentation after Meta_Kim governance dispatch.",
+    nicknameCandidates: ["docs", "writing", "documentation"],
+    instructions: [
+      "You are the Codex project custom agent for Meta_Kim documentation work.",
+      "Use this role only when the task packet's roleDisplayName is docs or an equivalent documentation/writing role family.",
+      "Follow the parent task packet for audience, files, scope, and review owner.",
+      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
+    ].join("\n"),
+  },
+];
+
+function normalizeCodexNicknameCandidate(value) {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function assertCodexNicknameCandidate(value, context) {
+  if (!/^[A-Za-z0-9 _-]+$/.test(value)) {
+    throw new Error(
+      `${context} has invalid Codex nickname candidate "${value}". ` +
+        "Codex nickname_candidates must stay ASCII alphanumeric with spaces, hyphens, or underscores.",
+    );
+  }
+}
+
+function uniqueNicknameCandidates(candidates, context) {
+  const result = [];
+  const seen = new Set();
+  for (const rawCandidate of candidates) {
+    const candidate = normalizeCodexNicknameCandidate(rawCandidate);
+    if (!candidate || seen.has(candidate)) continue;
+    assertCodexNicknameCandidate(candidate, context);
+    seen.add(candidate);
+    result.push(candidate);
+  }
+  return result;
+}
+
+function titleCaseAgentId(agentId) {
+  return String(agentId ?? "")
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function buildCodexNicknameCandidates(agent) {
+  const configured = CODEX_NICKNAME_CANDIDATES_BY_AGENT[agent.id] ?? [];
+  const fallback = titleCaseAgentId(agent.id);
+  return uniqueNicknameCandidates(
+    [...configured, fallback, agent.id],
+    `Codex agent ${agent.id}`,
+  );
+}
+
+function formatTomlStringArray(values) {
+  return `[${values.map((value) => `"${escapeTomlBasicString(value)}"`).join(", ")}]`;
+}
+
 function buildCodexAgentInstructions(agent) {
   return [
     `You are the Codex custom agent mirror of Meta_Kim agent \`${agent.id}\`.`,
@@ -1142,13 +1360,47 @@ function buildCodexAgentInstructions(agent) {
   ].join("\n");
 }
 
-function buildCodexAgent(agent) {
+export function buildCodexAgent(agent) {
   const instructions = escapeTomlBasicMultiline(
     buildCodexAgentInstructions(agent),
   );
+  const nicknameCandidates = buildCodexNicknameCandidates(agent);
 
   return `name = "${agent.id}"
-description = "${agent.description.replace(/"/g, '\\"')}"
+description = "${escapeTomlBasicString(agent.description)}"
+nickname_candidates = ${formatTomlStringArray(nicknameCandidates)}
+developer_instructions = """
+${instructions}
+"""
+`;
+}
+
+export function buildCodexRuntimeAdapterAgent(agent) {
+  const nicknameCandidates = uniqueNicknameCandidates(
+    agent.nicknameCandidates ?? [],
+    `Codex runtime adapter ${agent.id}`,
+  );
+  const instructions = escapeTomlBasicMultiline(agent.instructions ?? "");
+
+  return `name = "${escapeTomlBasicString(agent.id)}"
+description = "${escapeTomlBasicString(agent.description)}"
+nickname_candidates = ${formatTomlStringArray(nicknameCandidates)}
+developer_instructions = """
+${instructions}
+"""
+`;
+}
+
+export function buildCodexBusinessRoleAgent(agent) {
+  const nicknameCandidates = uniqueNicknameCandidates(
+    agent.nicknameCandidates ?? [agent.roleDisplayName, agent.id],
+    `Codex business role agent ${agent.id}`,
+  );
+  const instructions = escapeTomlBasicMultiline(agent.instructions ?? "");
+
+  return `name = "${escapeTomlBasicString(agent.id)}"
+description = "${escapeTomlBasicString(agent.description)}"
+nickname_candidates = ${formatTomlStringArray(nicknameCandidates)}
 developer_instructions = """
 ${instructions}
 """
@@ -1339,6 +1591,10 @@ function buildRuntimeSkillMap(targetId) {
         pattern: /canonical\/skills\/meta-theory\/references\//g,
         replacement: ".claude/skills/meta-theory/references/",
       },
+      {
+        pattern: /canonical\/agents\/([A-Za-z0-9_*{}<>-]+)\.md/g,
+        replacement: ".claude/agents/$1.md",
+      },
       // Agent definitions: canonical/ → runtime-specific for Claude
       { pattern: /canonical\/agents\//g, replacement: ".claude/agents/" },
       // Hook files: stay in .claude/hooks/ (no canonical equivalent)
@@ -1359,6 +1615,10 @@ function buildRuntimeSkillMap(targetId) {
       },
       // Skill root: canonical/skills/ → .codex/skills/
       { pattern: /canonical\/skills\//g, replacement: ".codex/skills/" },
+      {
+        pattern: /canonical\/agents\/([A-Za-z0-9_*{}<>-]+)\.md/g,
+        replacement: ".codex/agents/$1.toml",
+      },
       // Agent definitions: canonical/ → .codex/agents/
       { pattern: /canonical\/agents\//g, replacement: ".codex/agents/" },
       // Hooks: Codex uses .codex/hooks/ plus .codex/hooks.json
@@ -1379,6 +1639,10 @@ function buildRuntimeSkillMap(targetId) {
       },
       // Skill root: canonical/skills/ → openclaw/skills/
       { pattern: /canonical\/skills\//g, replacement: "openclaw/skills/" },
+      {
+        pattern: /canonical\/agents\/([A-Za-z0-9_*{}<>-]+)\.md/g,
+        replacement: "openclaw/workspaces/$1/SOUL.md",
+      },
       // Agent definitions: OpenClaw uses workspace-per-agent model.
       // Each workspace has AGENTS.md containing all agent definitions.
       {
@@ -1403,6 +1667,10 @@ function buildRuntimeSkillMap(targetId) {
       },
       // Skill root: canonical/skills/ → .cursor/skills/
       { pattern: /canonical\/skills\//g, replacement: ".cursor/skills/" },
+      {
+        pattern: /canonical\/agents\/([A-Za-z0-9_*{}<>-]+)\.md/g,
+        replacement: ".cursor/agents/$1.md",
+      },
       // Agent definitions: canonical/ → .cursor/agents/
       { pattern: /canonical\/agents\//g, replacement: ".cursor/agents/" },
       // Hooks: Cursor uses .cursor/hooks/ plus .cursor/hooks.json
@@ -1426,13 +1694,62 @@ function buildRuntimeSkillMap(targetId) {
  * @param {"claude"|"codex"|"openclaw"|"cursor"} targetId
  * @returns {string}
  */
-function applyRuntimePaths(content, targetId) {
+export function applyRuntimePaths(content, targetId) {
   const rules = buildRuntimeSkillMap(targetId);
   let result = content;
   for (const { pattern, replacement } of rules) {
     result = result.replace(pattern, replacement);
   }
   return result;
+}
+
+function readFrontmatterField(frontmatter, key) {
+  const lines = frontmatter.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(new RegExp(`^${key}:\\s*(.*)$`));
+    if (!match) continue;
+    const rawValue = match[1].trim();
+    if (rawValue === "|" || rawValue === ">") {
+      const blockLines = [];
+      for (let next = index + 1; next < lines.length; next += 1) {
+        if (/^[A-Za-z0-9_-]+:\s*/.test(lines[next])) {
+          break;
+        }
+        blockLines.push(lines[next].replace(/^\s{2}/, ""));
+      }
+      return blockLines.join("\n").trim();
+    }
+    return rawValue.replace(/^['"]|['"]$/g, "").trim();
+  }
+  return "";
+}
+
+function formatYamlScalar(value) {
+  const normalized = String(value ?? "").trim();
+  if (normalized.includes("\n")) {
+    return `|\n${normalized
+      .split(/\r?\n/)
+      .map((line) => `  ${line}`)
+      .join("\n")}`;
+  }
+  if (/^[A-Za-z0-9 _.,;()'"—-]+$/.test(normalized)) {
+    return normalized;
+  }
+  return JSON.stringify(normalized);
+}
+
+export function buildCodexSkillContent(content) {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (!match) {
+    return content;
+  }
+  const frontmatter = match[1];
+  const name = readFrontmatterField(frontmatter, "name");
+  const description = readFrontmatterField(frontmatter, "description");
+  if (!name || !description) {
+    return content;
+  }
+  return `---\nname: ${formatYamlScalar(name)}\ndescription: ${formatYamlScalar(description)}\n---\n\n${content.slice(match[0].length)}`;
 }
 
 export function buildCodexGraphifyContextHook() {
@@ -1469,12 +1786,14 @@ export function buildCodexProjectHooksJson({
   graphifyHookPath = ".codex/hooks/graphify-context.mjs",
   memoryHookPath = ".codex/hooks/meta-kim-memory-save.mjs",
   spineHookPath = ".codex/hooks/activate-meta-theory-spine.mjs",
+  enforceAgentDispatchHookPath = ".codex/hooks/enforce-agent-dispatch.mjs",
   hookPromptAdapterPath = null,
 } = {}) {
   return buildCodexHooksJson({
     graphifyHookPath,
     memoryHookPath,
     spineHookPath,
+    enforceAgentDispatchHookPath,
     hookPromptAdapterPath,
   });
 }
@@ -1482,11 +1801,13 @@ export function buildCodexProjectHooksJson({
 export function buildCursorProjectHooksJson({
   graphifyHookPath = ".cursor/hooks/graphify-context.mjs",
   memoryHookPath = ".cursor/hooks/meta-kim-memory-save.mjs",
+  enforceAgentDispatchHookPath = ".cursor/hooks/enforce-agent-dispatch.mjs",
   hookPromptAdapterPath = null,
 } = {}) {
   return buildCursorHooksJson({
     graphifyHookPath,
     memoryHookPath,
+    enforceAgentDispatchHookPath,
     hookPromptAdapterPath,
   });
 }
@@ -1505,11 +1826,15 @@ async function syncRuntimeSkills(
         skill.id,
         ...file.relativePath.split("/"),
       );
+      const runtimeContent =
+        runtimeId === "codex" && file.relativePath === "SKILL.md"
+          ? buildCodexSkillContent(applyRuntimePaths(file.content, runtimeId))
+          : applyRuntimePaths(file.content, runtimeId);
       if (
         (
           await writeGeneratedFile(
             targetPath,
-            applyRuntimePaths(file.content, runtimeId),
+            runtimeContent,
           )
         ).changed
       ) {
@@ -1769,6 +2094,7 @@ Examples:
 
     for (const agent of agents) {
       const workspaceDir = dirs.openclawWorkspaceDir(agent.id);
+      const heartbeatContent = await buildHeartbeat(agent);
       const writes = await Promise.all([
         writeGeneratedFile(
           path.join(workspaceDir, "BOOT.md"),
@@ -1794,7 +2120,7 @@ Examples:
         writeGeneratedFile(path.join(workspaceDir, "AGENTS.md"), teamDirectory),
         writeGeneratedFile(
           path.join(workspaceDir, "HEARTBEAT.md"),
-          buildHeartbeat(agent),
+          heartbeatContent,
         ),
         writeGeneratedFile(
           path.join(workspaceDir, "TOOLS.md"),
@@ -1899,15 +2225,14 @@ Examples:
       canonicalSkills,
       changedFiles,
     );
-    if (
-      scope !== "global" &&
-      (
-        await removeGeneratedPath(
-          path.join(repoRoot, ".agents", "skills", "meta-theory"),
-        )
-      ).changed
-    ) {
-      changedFiles.push(".agents/skills/meta-theory");
+    if (scope !== "global" && dirs.codexProjectSkillsDir) {
+      await syncRuntimeSkills(
+        "codex",
+        dirs.codexProjectSkillsDir,
+        dp.codexProjectSkillsRoot,
+        canonicalSkills,
+        changedFiles,
+      );
     }
     const codexConfigExample = await tryReadCanonical(
       canonicalCodexConfigExamplePath,
@@ -1973,6 +2298,38 @@ Examples:
         ).changed
       ) {
         changedFiles.push(`${dp.codexHooks}/activate-meta-theory-spine.mjs`);
+      }
+      // Sync the dispatch-enforcement gate + its bash-readonly classifier from
+      // the Claude canonical hooks directory. These two files implement the
+      // capability-first gate and meta-readonly contract; they share a deny()
+      // shape that detects the host runtime at invocation time.
+      const enforceDispatchHookContent = await tryReadCanonical(
+        canonicalClaudeEnforceDispatchHookPath,
+      );
+      if (
+        enforceDispatchHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexHooksDir, "enforce-agent-dispatch.mjs"),
+            enforceDispatchHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexHooks}/enforce-agent-dispatch.mjs`);
+      }
+      const bashReadonlyWhitelistContent = await tryReadCanonical(
+        canonicalClaudeBashReadonlyWhitelistPath,
+      );
+      if (
+        bashReadonlyWhitelistContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexHooksDir, "bash-readonly-whitelist.mjs"),
+            bashReadonlyWhitelistContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexHooks}/bash-readonly-whitelist.mjs`);
       }
       // Sync shared hook dependencies (utils.mjs, spine-state.mjs, hook-i18n.mjs, skip-reminder.mjs)
       const utilsHookContent = await tryReadCanonical(
@@ -2053,6 +2410,10 @@ Examples:
         scope === "global"
           ? path.join(dirs.codexHooksDir, "activate-meta-theory-spine.mjs")
           : ".codex/hooks/activate-meta-theory-spine.mjs";
+      const enforceAgentDispatchHookPath =
+        scope === "global"
+          ? path.join(dirs.codexHooksDir, "enforce-agent-dispatch.mjs")
+          : ".codex/hooks/enforce-agent-dispatch.mjs";
       const hookPromptAdapterPath =
         scope === "global"
           ? path.join(dirs.codexHooksDir, "hookprompt-adapter.mjs")
@@ -2065,6 +2426,7 @@ Examples:
               graphifyHookPath,
               memoryHookPath,
               spineHookPath,
+              enforceAgentDispatchHookPath,
               hookPromptAdapterPath,
             }),
           )
@@ -2080,6 +2442,32 @@ Examples:
           await writeGeneratedFile(
             path.join(dirs.codexAgentsDir, `${agent.id}.toml`),
             buildCodexAgent(agent),
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexAgents}/${agent.id}.toml`);
+      }
+    }
+
+    for (const agent of CODEX_RUNTIME_ADAPTER_AGENTS) {
+      if (
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexAgentsDir, `${agent.id}.toml`),
+            buildCodexRuntimeAdapterAgent(agent),
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexAgents}/${agent.id}.toml`);
+      }
+    }
+
+    for (const agent of CODEX_BUSINESS_ROLE_AGENTS) {
+      if (
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexAgentsDir, `${agent.id}.toml`),
+            buildCodexBusinessRoleAgent(agent),
           )
         ).changed
       ) {
@@ -2103,6 +2491,43 @@ Examples:
         ).changed
       ) {
         changedFiles.push(`${dp.cursorAgents}/${agent.id}.md`);
+      }
+    }
+
+    // Cursor MDC rules (.cursor/rules/*.mdc) — copied verbatim from
+    // canonical/runtime-assets/cursor/rules/. Mirrors the agent-projection
+    // pattern: each canonical .mdc file is fully overwritten in the runtime
+    // mirror. Files only in the destination are left alone (no prune) —
+    // matches buildCursorAgent semantics that only emit canonical-owned IDs.
+    if (dirs.cursorRulesDir) {
+      let cursorRuleEntries = [];
+      try {
+        cursorRuleEntries = await fs.readdir(canonicalCursorRulesDir, {
+          withFileTypes: true,
+        });
+      } catch (error) {
+        if (error.code !== "ENOENT") {
+          throw error;
+        }
+      }
+      const sortedRuleEntries = cursorRuleEntries
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".mdc"))
+        .sort((left, right) => left.name.localeCompare(right.name));
+      for (const ruleEntry of sortedRuleEntries) {
+        const ruleContent = await tryReadCanonical(
+          path.join(canonicalCursorRulesDir, ruleEntry.name),
+        );
+        if (
+          ruleContent &&
+          (
+            await writeGeneratedFile(
+              path.join(dirs.cursorRulesDir, ruleEntry.name),
+              ruleContent,
+            )
+          ).changed
+        ) {
+          changedFiles.push(`${dp.cursorRules}/${ruleEntry.name}`);
+        }
       }
     }
 
@@ -2138,6 +2563,96 @@ Examples:
       ) {
         changedFiles.push(`${dp.cursorHooks}/graphify-context.mjs`);
       }
+      // Sync the dispatch-enforcement gate + its bash-readonly classifier from
+      // the Claude canonical hooks directory. deny() output adapts to Cursor's
+      // v1.7+ JSON schema at runtime via META_KIM_HOOK_RUNTIME / argv inspection.
+      const cursorEnforceDispatchHookContent = await tryReadCanonical(
+        canonicalClaudeEnforceDispatchHookPath,
+      );
+      if (
+        cursorEnforceDispatchHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.cursorHooksDir, "enforce-agent-dispatch.mjs"),
+            cursorEnforceDispatchHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.cursorHooks}/enforce-agent-dispatch.mjs`);
+      }
+      const cursorBashReadonlyWhitelistContent = await tryReadCanonical(
+        canonicalClaudeBashReadonlyWhitelistPath,
+      );
+      if (
+        cursorBashReadonlyWhitelistContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.cursorHooksDir, "bash-readonly-whitelist.mjs"),
+            cursorBashReadonlyWhitelistContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.cursorHooks}/bash-readonly-whitelist.mjs`);
+      }
+      // Shared dependencies required by enforce-agent-dispatch.mjs: utils.mjs,
+      // spine-state.mjs, skip-reminder.mjs, hook-i18n.mjs. Without these the
+      // dispatch gate cannot resolve its imports.
+      const cursorUtilsHookContent = await tryReadCanonical(
+        path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "utils.mjs"),
+      );
+      if (
+        cursorUtilsHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.cursorHooksDir, "utils.mjs"),
+            cursorUtilsHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.cursorHooks}/utils.mjs`);
+      }
+      const cursorSpineStateHookContent = await tryReadCanonical(
+        path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "spine-state.mjs"),
+      );
+      if (
+        cursorSpineStateHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.cursorHooksDir, "spine-state.mjs"),
+            cursorSpineStateHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.cursorHooks}/spine-state.mjs`);
+      }
+      const cursorSkipReminderHookContent = await tryReadCanonical(
+        path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "skip-reminder.mjs"),
+      );
+      if (
+        cursorSkipReminderHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.cursorHooksDir, "skip-reminder.mjs"),
+            cursorSkipReminderHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.cursorHooks}/skip-reminder.mjs`);
+      }
+      const cursorHookI18nContent = await tryReadCanonical(
+        path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "hook-i18n.mjs"),
+      );
+      if (
+        cursorHookI18nContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.cursorHooksDir, "hook-i18n.mjs"),
+            cursorHookI18nContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.cursorHooks}/hook-i18n.mjs`);
+      }
       if (
         (
           await writeGeneratedFile(
@@ -2156,6 +2671,10 @@ Examples:
         scope === "global"
           ? path.join(dirs.cursorHooksDir, "meta-kim-memory-save.mjs")
           : ".cursor/hooks/meta-kim-memory-save.mjs";
+      const enforceAgentDispatchHookPath =
+        scope === "global"
+          ? path.join(dirs.cursorHooksDir, "enforce-agent-dispatch.mjs")
+          : ".cursor/hooks/enforce-agent-dispatch.mjs";
       const hookPromptAdapterPath =
         scope === "global"
           ? path.join(dirs.cursorHooksDir, "hookprompt-adapter.mjs")
@@ -2167,6 +2686,7 @@ Examples:
             buildCursorProjectHooksJson({
               graphifyHookPath,
               memoryHookPath,
+              enforceAgentDispatchHookPath,
               hookPromptAdapterPath,
             }),
           )
@@ -2327,6 +2847,9 @@ Examples:
         normalizeDisplayPath(f) ===
         normalizeDisplayPath(dirs.displayPaths.cursorMcp),
     ).length,
+    cursorRules: changedFiles.filter((f) =>
+      hasDisplayPrefix(f, dirs.displayPaths.cursorRules),
+    ).length,
   };
 
   const teamSize = agents.length;
@@ -2368,6 +2891,10 @@ Examples:
           label: dirs.displayPaths.codexAgents,
           count: layerCounts.codexAgents,
           summaryKind: "agents",
+          expectedCount:
+            teamSize +
+            CODEX_RUNTIME_ADAPTER_AGENTS.length +
+            CODEX_BUSINESS_ROLE_AGENTS.length,
         },
         {
           label: dirs.displayPaths.codexSkillsRoot,
@@ -2444,6 +2971,11 @@ Examples:
           count: layerCounts.cursorMcp,
           summaryKind: "files",
         },
+        {
+          label: dirs.displayPaths.cursorRules,
+          count: layerCounts.cursorRules,
+          summaryKind: "files",
+        },
       ],
     },
   ];
@@ -2477,7 +3009,7 @@ Examples:
       const pathCol = String(entry.label).padEnd(pathColWidth);
       let detail = "";
       if (entry.summaryKind === "agents") {
-        detail = t.syncDetailAgents(entry.count, teamSize);
+        detail = t.syncDetailAgents(entry.count, entry.expectedCount ?? teamSize);
       } else if (entry.summaryKind === "workspaces") {
         detail = t.syncDetailWorkspaces(entry.count, teamSize);
       } else {

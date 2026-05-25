@@ -9,10 +9,11 @@
  */
 
 import { promises as fs } from "node:fs";
+import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { ensureProfileState } from "./meta-kim-local-state.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -494,6 +495,19 @@ async function scanCommandFiles(dir) {
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith(".md")) {
+        const commandPath = path.join(dir, entry.name);
+        const stat = await fs.stat(commandPath);
+        results.push({
+          id: path.basename(entry.name, ".md"),
+          path: commandPath,
+          relativePath: entry.name,
+          size: stat.size,
+          modified: stat.mtime,
+        });
+        continue;
+      }
+
       if (entry.isDirectory()) {
         const commandDir = path.join(dir, entry.name);
         // 查找 command.md 或 SKILL.md
@@ -514,6 +528,7 @@ async function scanCommandFiles(dir) {
           results.push({
             id: entry.name,
             path: foundPath,
+            relativePath: path.relative(dir, foundPath),
             size: stat.size,
             modified: stat.mtime,
           });
@@ -522,6 +537,122 @@ async function scanCommandFiles(dir) {
     }
   } catch {}
   return results;
+}
+
+async function scanMcpConfig(configPath) {
+  const servers = [];
+  const tools = [];
+
+  let raw;
+  let stat;
+  try {
+    [raw, stat] = await Promise.all([
+      fs.readFile(configPath, "utf8"),
+      fs.stat(configPath),
+    ]);
+  } catch {
+    return { servers, tools };
+  }
+
+  let config;
+  try {
+    config = JSON.parse(raw);
+  } catch {
+    return { servers, tools };
+  }
+
+  for (const [serverId, serverConfig] of Object.entries(config.mcpServers || {})) {
+    const command = serverConfig?.command || "";
+    const args = Array.isArray(serverConfig?.args) ? serverConfig.args : [];
+    const env = serverConfig?.env && typeof serverConfig.env === "object"
+      ? serverConfig.env
+      : {};
+    const serverEntry = {
+      id: serverId,
+      path: configPath,
+      size: stat.size,
+      modified: stat.mtime,
+      command,
+      args,
+      metadata: {
+        name: serverId,
+        description: `Configured MCP server ${serverId}`,
+        providerKind: "mcp-server",
+        transport: serverConfig?.type || "stdio",
+        command,
+        args: args.join(" "),
+        envKeys: Object.keys(env).join(","),
+        permissionStatus: "configured",
+      },
+    };
+
+    servers.push(serverEntry);
+
+    const selfTest = runKnownMcpSelfTest(command, args);
+    if (selfTest?.ok) {
+      serverEntry.metadata.permissionStatus = "self_test_verified";
+      serverEntry.metadata.toolCount = String(selfTest.tools.length);
+      for (const toolName of selfTest.tools) {
+        tools.push({
+          id: `${serverId}:${toolName}`,
+          path: configPath,
+          size: stat.size,
+          modified: stat.mtime,
+          metadata: {
+            name: toolName,
+            description: `MCP tool ${toolName} from server ${serverId}`,
+            providerKind: "mcp-tool",
+            serverId,
+            permissionStatus: "self_test_verified",
+            source: "mcp-self-test",
+          },
+        });
+      }
+    } else {
+      tools.push({
+        id: `${serverId}:tools-unlisted`,
+        path: configPath,
+        size: stat.size,
+        modified: stat.mtime,
+        metadata: {
+          name: "tools-unlisted",
+          description: `MCP server ${serverId} is configured, but tool names were not introspected during static discovery.`,
+          providerKind: "mcp-tool-list",
+          serverId,
+          permissionStatus: "configured_unverified",
+          source: "mcp-config",
+        },
+      });
+    }
+  }
+
+  return { servers, tools };
+}
+
+function runKnownMcpSelfTest(command, args) {
+  if (!command || !Array.isArray(args)) return null;
+  const scriptArg = args.find((arg) =>
+    typeof arg === "string" && arg.replace(/\\/g, "/").endsWith("scripts/mcp/meta-runtime-server.mjs")
+  );
+  if (!scriptArg) return null;
+
+  const result = spawnSync(command, [...args, "--self-test"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 10000,
+  });
+  if (result.status !== 0) return null;
+
+  try {
+    const parsed = JSON.parse(result.stdout);
+    return {
+      ok: parsed?.ok === true,
+      tools: Array.isArray(parsed?.tools) ? parsed.tools : [],
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ========== Agent 元数据提取 ==========
@@ -758,6 +889,13 @@ async function collectRepoCanonicalCapabilities() {
   const openclawHooks = await scanHookFiles(
     path.join(repoRoot, "canonical", "runtime-assets", "openclaw", "hooks"),
   );
+  const claudeCommands = await scanCommandFiles(
+    path.join(repoRoot, "canonical", "runtime-assets", "claude", "commands"),
+  );
+  const codexCommands = await scanCommandFiles(
+    path.join(repoRoot, "canonical", "runtime-assets", "codex", "commands"),
+  );
+  const mcpDiscovery = await scanMcpConfig(path.join(repoRoot, ".mcp.json"));
 
   // Determine agent layer: meta (governance) vs execution (work)
   function determineAgentLayer(id, namespace) {
@@ -817,8 +955,16 @@ async function collectRepoCanonicalCapabilities() {
     hooks: [...sharedHooks, ...claudeHooks, ...openclawHooks].map((item) =>
       toRepoCapability(item, "hooks", "canonical-runtime-assets"),
     ),
+    mcpServers: mcpDiscovery.servers.map((item) =>
+      toRepoCapability(item, "mcpServers", "repo-mcp"),
+    ),
+    mcpTools: mcpDiscovery.tools.map((item) =>
+      toRepoCapability(item, "mcpTools", "repo-mcp"),
+    ),
     plugins: [],
-    commands: [],
+    commands: [...claudeCommands, ...codexCommands].map((item) =>
+      toRepoCapability(item, "commands", "canonical-runtime-assets"),
+    ),
   };
 }
 
@@ -848,8 +994,10 @@ async function buildRepoCapabilityIndex() {
       totalAgents: capabilities.agents.length,
       totalSkills: capabilities.skills.length,
       totalHooks: capabilities.hooks.length,
+      totalMcpServers: capabilities.mcpServers.length,
+      totalMcpTools: capabilities.mcpTools.length,
       totalPlugins: 0,
-      totalCommands: 0,
+      totalCommands: capabilities.commands.length,
     },
     ...metaSkillProviderContract,
     byCapabilityType: {
@@ -871,19 +1019,84 @@ async function buildRepoCapabilityIndex() {
           cap,
         ]),
       ),
+      mcpServers: Object.fromEntries(
+        capabilities.mcpServers.map((cap) => [
+          `repo:${cap.namespace}:${cap.id}`,
+          cap,
+        ]),
+      ),
+      mcpTools: Object.fromEntries(
+        capabilities.mcpTools.map((cap) => [
+          `repo:${cap.namespace}:${cap.id}`,
+          cap,
+        ]),
+      ),
       plugins: {},
-      commands: {},
+      commands: Object.fromEntries(
+        capabilities.commands.map((cap) => [
+          `repo:${cap.namespace}:${cap.id}`,
+          cap,
+        ]),
+      ),
     },
   };
 
   // Add governance rules to prevent meta-agent misuse
   index.governanceRules = {
-    metaAgentDispatchRule: "Meta-agents (layer='meta') are the only durable public Meta_Kim owners for Critical, Fetch, Thinking, and Review. They MUST NOT perform implementation work directly; concrete implementation capability is recorded as run-scoped matchedSkills/tools.",
-    fallbackBehavior: "Use a governance meta owner plus run-scoped matchedSkills, or block with capabilityGapPacket. Do not persist non-governance execution agents in the public repo.",
+    metaAgentDispatchRule: "Meta-agents (layer='meta') are the only durable public Meta_Kim owners for Critical, Fetch, Thinking, and Review. They MUST NOT perform implementation work directly; concrete implementation capability is recorded as run-scoped matchedCapabilities/capabilityBindings across skills, commands, MCP tools, runtime tools, file sets, or capability-index queries; legacy matchedSkills is compatibility evidence only.",
+    fallbackBehavior: "Use a governance meta owner plus run-scoped matchedCapabilities/capabilityBindings, or block with capabilityGapPacket. Do not persist non-governance execution agents in the public repo.",
     layerClassification: "Meta-agents: id starts with 'meta-' in canonical namespace. In public Meta_Kim, all other agents are ignored as durable owners and may appear only as run-scoped capability evidence when explicitly discovered.",
   };
 
   return index;
+}
+
+export function capabilityIndexWithoutGeneratedAt(index) {
+  const normalized = JSON.parse(JSON.stringify(index ?? {}));
+  delete normalized.generatedAt;
+  return normalized;
+}
+
+export function capabilityIndexWithoutVolatileFields(index) {
+  const normalized = JSON.parse(JSON.stringify(index ?? {}));
+
+  function stripVolatile(value) {
+    if (Array.isArray(value)) {
+      for (const item of value) stripVolatile(item);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+
+    delete value.generatedAt;
+    delete value.modified;
+    for (const child of Object.values(value)) {
+      stripVolatile(child);
+    }
+  }
+
+  stripVolatile(normalized);
+  return normalized;
+}
+
+export function preserveGeneratedAtWhenUnchanged(nextIndex, existingIndex) {
+  if (
+    existingIndex &&
+    typeof existingIndex.generatedAt === "string" &&
+    JSON.stringify(capabilityIndexWithoutVolatileFields(nextIndex)) ===
+      JSON.stringify(capabilityIndexWithoutVolatileFields(existingIndex))
+  ) {
+    return existingIndex;
+  }
+
+  return nextIndex;
+}
+
+async function readJsonIfExists(filePath) {
+  try {
+    return JSON.parse(await fs.readFile(filePath, "utf8"));
+  } catch {
+    return null;
+  }
 }
 
 async function buildGlobalCapabilityInventory(scannedResults, profile) {
@@ -899,6 +1112,8 @@ async function buildGlobalCapabilityInventory(scannedResults, profile) {
       totalAgents: 0,
       totalSkills: 0,
       totalHooks: 0,
+      totalMcpServers: 0,
+      totalMcpTools: 0,
       totalPlugins: 0,
       totalCommands: 0,
     },
@@ -907,6 +1122,8 @@ async function buildGlobalCapabilityInventory(scannedResults, profile) {
       agents: {},
       skills: {},
       hooks: {},
+      mcpServers: {},
+      mcpTools: {},
       plugins: {},
       commands: {},
     },
@@ -1022,7 +1239,11 @@ async function main() {
   }
 
   const profileState = await ensureProfileState();
-  const repoCapabilityIndex = await buildRepoCapabilityIndex();
+  const canonicalIndexPath = path.join(repoRoot, CANONICAL_CAPABILITY_INDEX);
+  const repoCapabilityIndex = preserveGeneratedAtWhenUnchanged(
+    await buildRepoCapabilityIndex(),
+    await readJsonIfExists(canonicalIndexPath),
+  );
   const globalInventory = await buildGlobalCapabilityInventory(
     scannedResults,
     profileState.profile,
@@ -1037,7 +1258,6 @@ async function main() {
   // Write the repo-neutral canonical index, then mirror only that index into
   // runtime projections. Machine-specific global inventory stays local-only.
   const repoContent = `${JSON.stringify(repoCapabilityIndex, null, 2)}\n`;
-  const canonicalIndexPath = path.join(repoRoot, CANONICAL_CAPABILITY_INDEX);
   await fs.mkdir(path.dirname(canonicalIndexPath), { recursive: true });
   await fs.writeFile(canonicalIndexPath, repoContent);
 
@@ -1111,4 +1331,9 @@ async function main() {
   );
 }
 
-await main();
+if (
+  process.argv[1] &&
+  pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url
+) {
+  await main();
+}

@@ -149,6 +149,49 @@ describe("validate-run-artifact.mjs", () => {
     };
   }
 
+  function modernCapabilityBindings() {
+    return {
+      matchedCapabilities: [
+        {
+          matchId: "cap-match-auth-refresh-001",
+          capabilitySlot: "auth refresh implementation discipline",
+          bindingType: "skill",
+          bindingRef: "meta-theory:local-project-code-change",
+          providerId: "meta-theory",
+          source: "capability-index",
+          confidenceScore: 4,
+          selectionReason:
+            "Represents implementation capability as run-scoped evidence while durable ownership stays with governance meta agents.",
+          selectionScope: "run_scoped",
+          persistencePolicy: "do_not_persist_to_agent_identity",
+          fallback:
+            "Block with capabilityGapPacket if no governance owner can supervise the run-scoped capability.",
+        },
+      ],
+      capabilityBindings: [
+        {
+          bindingId: "binding-auth-refresh-001",
+          capabilitySlot: "auth refresh implementation discipline",
+          bindingType: "skill",
+          bindingRef: "meta-theory:local-project-code-change",
+          source: "capability-index",
+          evidenceRef: "contentEvidencePacket.capabilityEvidence[0]",
+        },
+      ],
+    };
+  }
+
+  function addTriggerReason(artifact, reason) {
+    if (!artifact.taskClassification.triggerReasons.includes(reason)) {
+      artifact.taskClassification.triggerReasons.push(reason);
+    }
+    const reviewReasons =
+      artifact.reviewPacket.triggerVsSkipReasonCheck.triggerReasons;
+    if (!reviewReasons.includes(reason)) {
+      reviewReasons.push(reason);
+    }
+  }
+
   test("accepts a valid run artifact with full finding lineage", async () => {
     const result = await validateFixture(validFixture);
     assert.equal(result.ok, true);
@@ -157,6 +200,61 @@ describe("validate-run-artifact.mjs", () => {
     assert.ok(result.validatedPackets.includes("orchestrationTaskBoardPacket"));
     assert.ok(result.validatedPackets.includes("cardPlanPacket"));
     assert.ok(result.validatedPackets.includes("summaryPacket"));
+  });
+
+  test("rejects pre-decision frames missing unresolved question closure", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      delete artifact.preDecisionOptionFrame.unresolvedQuestions;
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /preDecisionOptionFrame.*unresolvedQuestions/,
+    );
+  });
+
+  test("rejects finalized dispatch when solution choice is still pending", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.intentGatePacket.requiresUserChoice = true;
+      artifact.intentGatePacket.pendingUserChoices = [
+        "Choose between narrow patch and full runtime migration.",
+      ];
+      artifact.preDecisionOptionFrame.requiresUserChoice = true;
+      artifact.preDecisionOptionFrame.choiceGateSkip = null;
+      artifact.preDecisionOptionFrame.solutionChoiceState = "pending";
+      artifact.dispatchEnvelopePacket.userChoiceState = "pending";
+      artifact.workerTaskPackets[0].userChoiceState = "pending";
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /solutionChoiceState/,
+    );
+  });
+
+  test("rejects runtime-generated agent ids as user-visible role names", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.dispatchEnvelopePacket.roleDisplayName = "agent-019e56a9";
+      artifact.agentBlueprintPacket.roles[0].roleDisplayName =
+        "agent-019e56a9";
+      artifact.workerTaskPackets[0].roleDisplayName = "agent-019e56a9";
+      artifact.orchestrationTaskBoardPacket.tasks[0].roleDisplayName =
+        "agent-019e56a9";
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /runtime alias|runtime nickname|role-family/,
+    );
   });
 
   test("rejects an invalid public-ready run artifact", async () => {
@@ -244,14 +342,172 @@ describe("validate-run-artifact.mjs", () => {
 
   test("accepts a minimal valid third-party interface integration packet", async (t) => {
     const tempFixture = await writeTempFixture(t, (artifact) => {
-      artifact.taskClassification.triggerReasons.push("third_party_integration");
+      addTriggerReason(artifact, "third_party_integration");
       artifact.businessFlowBlueprintPacket.deliverableType =
         "third_party_integration";
+      artifact.productCompletenessPacket.designDimensions.push({
+        dimensionId: "third_party_integration",
+        status: "covered",
+        evidenceRef: "interfaceIntegrationContractPacket",
+      });
       artifact.interfaceIntegrationContractPacket =
         validInterfaceIntegrationPacket("third_party");
     });
     const result = await validateFixture(tempFixture);
     assert.equal(result.ok, true);
+  });
+
+  test("rejects product deliverables missing productCompletenessPacket", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      delete artifact.productCompletenessPacket;
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /productCompletenessPacket/,
+    );
+  });
+
+  test("rejects product deliverables missing side-effect or rollback gates", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      delete artifact.sideEffectLedgerPacket;
+      delete artifact.rollbackPlanPacket;
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /sideEffectLedgerPacket|rollbackPlanPacket/,
+    );
+  });
+
+  test("rejects every non-public-ready design gate status", async (t) => {
+    const contract = JSON.parse(
+      await fs.readFile(
+        path.join(REPO_ROOT, "config", "contracts", "workflow-contract.json"),
+        "utf8",
+      ),
+    );
+    const statusPolicy =
+      contract.runDiscipline.runArtifactValidation
+        .productGatePublicReadyStatusPolicy.packetStatusFields;
+
+    for (const entry of statusPolicy) {
+      const protocol = contract.protocols[entry.packet];
+      const statusEnum = protocol.statusEnum ?? [];
+      const rejectedStatuses = statusEnum.filter(
+        (status) => !entry.publicReadyAllowed.includes(status),
+      );
+      assert.ok(
+        rejectedStatuses.length > 0,
+        `${entry.packet} should have at least one non-public-ready status`,
+      );
+
+      for (const badStatus of rejectedStatuses) {
+        const tempFixture = await writeTempFixture(t, (artifact) => {
+          artifact[entry.packet][entry.statusField] = badStatus;
+        });
+        await assert.rejects(
+          execFileAsync(
+            "node",
+            ["scripts/validate-run-artifact.mjs", tempFixture],
+            { cwd: REPO_ROOT },
+          ),
+          new RegExp(`${entry.packet}|publicReady`),
+        );
+      }
+    }
+  });
+
+  test("rejects executable work misclassified as query", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.taskClassification.governanceFlow = "query";
+      artifact.taskClassification.requestClass = "execute";
+      artifact.taskClassification.taskClass = "A";
+      artifact.taskClassification.ownerRequired = true;
+      artifact.taskClassification.bypassReasons = ["pure_query"];
+      artifact.businessFlowBlueprintPacket.deliverableType = "article";
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /governanceFlow=query|pure-query|misclassified/i,
+    );
+  });
+
+  test("rejects gate evidence refs that do not resolve to artifact evidence", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.productCompletenessPacket.evidenceRefs = [
+        "missingPacket.nonexistentEvidence",
+      ];
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /evidenceRefs|missingPacket/,
+    );
+  });
+
+  test("rejects missing design-time dimension coverage before public-ready", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.productCompletenessPacket.designDimensions = [];
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /designDimensions|core_highlight/,
+    );
+  });
+
+  test("rejects design-time dimensions without evidence or omission reason", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.experienceQualityPacket.experienceDimensions = [];
+      artifact.experienceQualityPacket.experienceDimensions.push({
+        dimensionId: "media_audio_motion",
+        status: "omitted_with_reason",
+      });
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /media_audio_motion|omissionReason|evidenceRef/,
+    );
+  });
+
+  test("rejects secret-like values inside design gate arrays", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.sideEffectLedgerPacket.sideEffects = [
+        {
+          kind: "external_api",
+          secretValue: "sk-test-should-never-appear",
+        },
+      ];
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /must not store secret values/,
+    );
   });
 
   test("rejects Evolution writeback targets that use local memory or continuity storage", async (t) => {
@@ -411,6 +667,35 @@ describe("validate-run-artifact.mjs", () => {
     );
   });
 
+  test("rejects circular worker dependencies", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      const secondTask = {
+        ...artifact.workerTaskPackets[0],
+        taskPacketId: "task-002",
+        roleInstanceId: "auth-refresh#2",
+        shardScope: ["auth-refresh-hardening:token-refresh-tests"],
+        artifactNamespace: "auth-refresh-tests",
+        dependsOn: [{ taskRef: "task-001", type: "gate" }],
+      };
+      artifact.workerTaskPackets[0].dependsOn = [
+        { taskRef: "task-002", type: "gate" },
+      ];
+      artifact.workerTaskPackets.push(secondTask);
+      artifact.workerResultPackets.push({
+        ...artifact.workerResultPackets[0],
+        taskPacketId: "task-002",
+      });
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /cycle|circular/i,
+    );
+  });
+
   test("rejects missing fetchPacket for governed runs", async (t) => {
     const tempFixture = await writeTempFixture(t, (artifact) => {
       delete artifact.fetchPacket;
@@ -493,6 +778,38 @@ describe("validate-run-artifact.mjs", () => {
           cwd: REPO_ROOT,
         },
       ),
+    );
+  });
+
+  test("rejects review process checks that omit Critical trigger reasons", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.reviewPacket.triggerVsSkipReasonCheck.triggerReasons =
+        artifact.taskClassification.triggerReasons.filter(
+          (reason) => reason !== "multi_file",
+        );
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /triggerVsSkipReasonCheck.*triggerReasons/,
+    );
+  });
+
+  test("rejects review process checks that claim pass for a mismatched skip reason", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.reviewPacket.triggerVsSkipReasonCheck.skipReason =
+        "unrecorded_skip";
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /triggerVsSkipReasonCheck.*skipReason/,
     );
   });
 
@@ -889,6 +1206,63 @@ describe("validate-run-artifact.mjs", () => {
         },
       ),
     );
+  });
+
+  test("accepts role blueprints that use matchedCapabilities without matchedSkills", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      const role = artifact.agentBlueprintPacket.roles[0];
+      const bindings = modernCapabilityBindings();
+      delete role.matchedSkills;
+      role.matchedCapabilities = bindings.matchedCapabilities;
+      role.capabilityBindings = bindings.capabilityBindings;
+    });
+    const result = await validateFixture(tempFixture);
+    assert.equal(result.ok, true);
+  });
+
+  test("rejects matchedCapabilities without concrete capabilityBindings", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      const role = artifact.agentBlueprintPacket.roles[0];
+      const bindings = modernCapabilityBindings();
+      delete role.matchedSkills;
+      role.matchedCapabilities = bindings.matchedCapabilities;
+      delete role.capabilityBindings;
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /capabilityBindings/,
+    );
+  });
+
+  test("rejects role blueprints without matched capability evidence", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      const role = artifact.agentBlueprintPacket.roles[0];
+      delete role.matchedSkills;
+      delete role.matchedCapabilities;
+      delete role.capabilityBindings;
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /matchedCapabilities|matchedSkills/,
+    );
+  });
+
+  test("accepts legacy role blueprints that only use matchedSkills", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      const role = artifact.agentBlueprintPacket.roles[0];
+      delete role.matchedCapabilities;
+      delete role.capabilityBindings;
+    });
+    const result = await validateFixture(tempFixture);
+    assert.equal(result.ok, true);
   });
 
   // ── Cross-project flow tests ─────────────────────────────────────────

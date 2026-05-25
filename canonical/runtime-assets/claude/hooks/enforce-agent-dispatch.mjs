@@ -8,6 +8,29 @@
  *      a caller identified as a meta-* agent must not directly mutate the
  *      workspace via Edit / Write / MultiEdit / NotebookEdit / Bash. They must
  *      dispatch down to an execution worker instead.
+ *   3. Capability-first gate: Agent dispatches at or after the execution stage
+ *      require a prior capability search recorded in spine state. Forces the
+ *      capability-first discovery contract instead of hardcoded agent names.
+ *
+ * Two-gate disconnect (intentional contract — read carefully):
+ *
+ *   META_KIM_META_ENFORCEMENT_MODE        (meta-readonly gate)
+ *     Default: "progressive" — warn for 7 days, then block
+ *     Rationale: meta-agents existed before this contract was added,
+ *                grace period lets teams migrate without breakage
+ *
+ *   META_KIM_CAPABILITY_GATE              (capability-first gate)
+ *     Default: "progressive"
+ *     Rationale: aligned with meta-readonly mode pattern for consistency;
+ *                operators set =block to enforce immediately, =off to disable
+ *
+ * Override knobs (precedence order):
+ *   META_KIM_HOOK_SKIP                  → skip hook entirely (debug)
+ *   META_KIM_META_ENFORCEMENT_MODE     → meta-readonly gate mode
+ *   META_KIM_META_ENFORCEMENT_GRACE_DAYS → meta-readonly grace days (default 7)
+ *   META_KIM_CAPABILITY_GATE           → capability-first gate mode (warn|block|progressive|off)
+ *   META_KIM_CAPABILITY_GATE_GRACE_DAYS → capability gate grace days (default 7)
+ *   META_KIM_HOOK_RUNTIME              → optional override of runtime detection
  *
  * Environment knobs:
  *   META_KIM_HOOK_SKIP
@@ -26,6 +49,27 @@
  *   META_KIM_META_ENFORCEMENT_GRACE_DAYS
  *     Integer day count for the progressive grace window. Default 7.
  *
+ *   META_KIM_CAPABILITY_GATE  (controls capability-first gate on Agent dispatch)
+ *     "warn"               — log to stderr and allow.
+ *     "block"              — deny Agent dispatch in execution / review / meta_review
+ *                            / verification / evolution when
+ *                            fetchRecord.capabilitySearchPerformed !== true.
+ *     "progressive" (default)
+ *                          — For the first META_KIM_CAPABILITY_GATE_GRACE_DAYS
+ *                            (default 7) days since the run started, behave as
+ *                            "warn"; afterwards behave as "block". Mirrors the
+ *                            meta-readonly progressive rollout.
+ *     "off"                — skip the gate entirely (not recommended).
+ *
+ *   META_KIM_CAPABILITY_GATE_GRACE_DAYS
+ *     Integer day count for the capability-gate progressive grace window. Default 7.
+ *
+ *   META_KIM_HOOK_RUNTIME
+ *     Override runtime detection for cross-runtime deny() output schema.
+ *     Accepted values: "claude" | "codex" | "cursor". If unset, the hook
+ *     inspects process.argv[1] for ".codex/", ".cursor/", or ".claude/"
+ *     and falls back to Claude.
+ *
  *   CLAUDE_SUBAGENT_TYPE
  *     Runtime-injected hint for the current subagent's type. When this starts
  *     with "meta-" we treat the caller as a meta-agent without further parsing.
@@ -37,6 +81,8 @@ import { readJsonFromStdin, extractFilePath } from "./utils.mjs";
 import { isReadOnlyBash, classifyBashCommand } from "./bash-readonly-whitelist.mjs";
 import {
   readSpineState,
+  checkCapabilityNodeBindings,
+  checkPreExecutionReadiness,
   isExecutionTool,
   isReadOnlyTool,
   recordDispatch,
@@ -86,15 +132,113 @@ function isPlanningFile() {
   return planningFiles.some((f) => cmd.includes(f.toLowerCase()));
 }
 
+/**
+ * Detect which runtime is hosting this hook so that deny() can emit the right
+ * payload schema. Priority:
+ *   1. META_KIM_HOOK_RUNTIME env var (explicit override).
+ *   2. Inspect process.argv[1] for a runtime-specific path segment, using
+ *      path.sep so the check works on both POSIX and Windows.
+ *   3. Default to "claude".
+ *
+ * @returns {"claude" | "codex" | "cursor"}
+ */
+export function detectHookRuntime() {
+  const override = (process.env.META_KIM_HOOK_RUNTIME || "").toLowerCase().trim();
+  if (override === "claude" || override === "codex" || override === "cursor") {
+    return override;
+  }
+
+  const scriptPath = normalize(process.argv[1] || "");
+  const sep = process.platform === "win32" ? "\\" : "/";
+  // Build cross-OS segment matchers. Lower-case both sides to be safe on
+  // Windows where path casing is unreliable.
+  const lowered = scriptPath.toLowerCase();
+  const codexSeg = `${sep}.codex${sep}`.toLowerCase();
+  const cursorSeg = `${sep}.cursor${sep}`.toLowerCase();
+  const claudeSeg = `${sep}.claude${sep}`.toLowerCase();
+
+  // Also check forward-slash variants because Node sometimes preserves the
+  // invocation path verbatim on Windows.
+  if (lowered.includes(codexSeg) || lowered.includes("/.codex/")) return "codex";
+  if (lowered.includes(cursorSeg) || lowered.includes("/.cursor/")) return "cursor";
+  if (lowered.includes(claudeSeg) || lowered.includes("/.claude/")) return "claude";
+
+  return "claude";
+}
+
 function deny(reason) {
+  const runtime = detectHookRuntime();
+  const message = `[Meta_Kim Spine] ${reason}`;
+
+  if (runtime === "cursor") {
+    // Cursor v1.7+ contract: JSON on stdout with permission/user_message/agent_message,
+    // plus exit code 2 and stderr text for older shells.
+    process.stdout.write(
+      JSON.stringify({
+        permission: "deny",
+        user_message: message,
+        agent_message: message,
+      }),
+    );
+    process.stderr.write(`${message}\n`);
+    return 2;
+  }
+
+  // Claude and Codex share the hookSpecificOutput JSON contract.
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "deny",
-        permissionDecisionReason: `[Meta_Kim Spine] ${reason}`,
+        permissionDecisionReason: message,
       },
     }),
+  );
+  return 0;
+}
+
+function exitAfterDeny(reason) {
+  process.exit(deny(reason));
+}
+
+function isAgentDispatchTool(name) {
+  return name === "Agent" || name === "spawn_agent";
+}
+
+function dispatchIntentText(input) {
+  return [
+    input?.description,
+    input?.prompt,
+    input?.message,
+    input?.agent_type,
+    input?.subagent_type,
+    JSON.stringify(input?.items || []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function isExecutionDispatchIntent(input, metaName) {
+  if (metaName && isMetaAgent(metaName)) return false;
+
+  const target = String(
+    input?.agent_type || input?.subagent_type || input?.type || "",
+  )
+    .toLowerCase()
+    .trim();
+  const executionTargets = new Set([
+    "backend",
+    "frontend",
+    "worker",
+    "test",
+    "verify",
+  ]);
+  if (executionTargets.has(target)) return true;
+
+  const text = dispatchIntentText(input);
+  return /\b(implement|write|create|build|test|fix|debug|execute|run|generate|produce|code)\b/i.test(
+    text,
   );
 }
 
@@ -134,7 +278,7 @@ function warnMetaAgentExecution(agentName, stage) {
   const warning = `\n⚠️  [Meta_Kim] WARNING: Meta-agent "${agentName}" may be used for execution work in stage "${stage}"\n` +
     `Meta-agents (layer='meta') are for governance coordination only.\n` +
     `They should NOT perform direct execution tasks like writing code or running tests.\n` +
-    `Use governance meta owners plus run-scoped matchedSkills/tools for public Meta_Kim execution capability.\n` +
+    `Use governance meta owners plus run-scoped matchedCapabilities/capabilityBindings for public Meta_Kim execution capability.\n` +
     `If this is governance work (coordination, review, synthesis), you may ignore this warning.\n`;
 
   process.stderr.write(warning);
@@ -182,6 +326,63 @@ function inferCallerIdentity(state) {
 }
 
 /**
+ * Resolve a gate's effective mode when the raw value is "progressive".
+ *
+ * Shared by both the meta-readonly gate (META_KIM_META_ENFORCEMENT_MODE) and
+ * the capability-first gate (META_KIM_CAPABILITY_GATE), so they apply the same
+ * grace-window semantics:
+ *
+ *   - During the first `defaultGraceDays` days since the run started, return
+ *     "warn" (soft rollout).
+ *   - After the grace window expires, return "block" (final state).
+ *   - If no run-start anchor is available, return "warn" conservatively.
+ *
+ * The grace-days value can be overridden via the env var named by
+ * `graceDaysEnvVar`. Non-finite or negative overrides fall back to the
+ * provided default.
+ *
+ * @param {string} modeRaw - Already-lowercased mode value (e.g. "progressive").
+ *                           Callers should pass the raw env value normalized to
+ *                           lowercase + trimmed.
+ * @param {string} graceDaysEnvVar - Name of the env var holding the override
+ *                                    grace-day count.
+ * @param {number} defaultGraceDays - Default grace days when the env var is
+ *                                    unset or invalid.
+ * @param {object|null} state - Spine state (used to read run-start timestamps).
+ * @returns {"warn" | "block"}
+ */
+function resolveGracedMode(modeRaw, graceDaysEnvVar, defaultGraceDays, state) {
+  if (modeRaw === "warn") return "warn";
+  if (modeRaw === "block") return "block";
+
+  // progressive (or unknown) → time-bounded warn → block transition.
+  const graceDaysRaw = parseInt(
+    process.env[graceDaysEnvVar] || String(defaultGraceDays),
+    10,
+  );
+  const graceDays =
+    Number.isFinite(graceDaysRaw) && graceDaysRaw >= 0
+      ? graceDaysRaw
+      : defaultGraceDays;
+
+  const startedAt =
+    state?.runStartTimestamp || state?.triggeredAt || state?.startedAt || null;
+  if (!startedAt) {
+    // No anchor: be conservative and warn.
+    return "warn";
+  }
+  const startedMs = Date.parse(startedAt);
+  if (!Number.isFinite(startedMs)) {
+    process.stderr.write(
+      `\n⚠️  [Meta_Kim graced-mode] invalid runStartTimestamp ${JSON.stringify(startedAt)}; degrading to warn\n`,
+    );
+    return "warn";
+  }
+  const elapsedDays = (Date.now() - startedMs) / (1000 * 60 * 60 * 24);
+  return elapsedDays < graceDays ? "warn" : "block";
+}
+
+/**
  * Decide which enforcement mode is active right now.
  *
  *   warn        -> log + allow
@@ -195,25 +396,12 @@ function resolveEnforcementMode(state) {
     .toLowerCase()
     .trim();
 
-  if (raw === "warn") return "warn";
-  if (raw === "block") return "block";
-
-  // progressive (default)
-  const graceDaysRaw = parseInt(
-    process.env.META_KIM_META_ENFORCEMENT_GRACE_DAYS || "7",
-    10,
+  return resolveGracedMode(
+    raw,
+    "META_KIM_META_ENFORCEMENT_GRACE_DAYS",
+    7,
+    state,
   );
-  const graceDays = Number.isFinite(graceDaysRaw) && graceDaysRaw >= 0 ? graceDaysRaw : 7;
-  const startedAt =
-    state?.runStartTimestamp || state?.triggeredAt || state?.startedAt || null;
-  if (!startedAt) {
-    // No anchor: be conservative and warn.
-    return "warn";
-  }
-  const startedMs = Date.parse(startedAt);
-  if (!Number.isFinite(startedMs)) return "warn";
-  const elapsedDays = (Date.now() - startedMs) / (1000 * 60 * 60 * 24);
-  return elapsedDays < graceDays ? "warn" : "block";
 }
 
 /**
@@ -251,8 +439,7 @@ function enforceMetaReadonly(toolName, input, state, caller) {
       process.stderr.write(`\n⚠️  [Meta_Kim meta-readonly:warn] ${reasonText}\n`);
       return false; // allow
     }
-    deny(reasonText);
-    process.exit(0);
+    exitAfterDeny(reasonText);
   }
 
   // Any direct file-mutation tool is denied for meta-* callers.
@@ -261,6 +448,7 @@ function enforceMetaReadonly(toolName, input, state, caller) {
     "Write",
     "MultiEdit",
     "NotebookEdit",
+    "apply_patch",
   ]);
   if (mutationTools.has(toolName)) {
     const mode = resolveEnforcementMode(state);
@@ -272,8 +460,7 @@ function enforceMetaReadonly(toolName, input, state, caller) {
       process.stderr.write(`\n⚠️  [Meta_Kim meta-readonly:warn] ${reasonText}\n`);
       return false;
     }
-    deny(reasonText);
-    process.exit(0);
+    exitAfterDeny(reasonText);
   }
 
   // MCP write-like operations: best-effort heuristic — anything with create/update/
@@ -291,8 +478,7 @@ function enforceMetaReadonly(toolName, input, state, caller) {
       process.stderr.write(`\n⚠️  [Meta_Kim meta-readonly:warn] ${reasonText}\n`);
       return false;
     }
-    deny(reasonText);
-    process.exit(0);
+    exitAfterDeny(reasonText);
   }
 
   return false;
@@ -403,14 +589,36 @@ if (!state || !state.active) {
   process.exit(0);
 }
 
-// Agent tool: record dispatch + track dispatch chain
-if (toolName === "Agent") {
+// Agent dispatch tools: record dispatch + track dispatch chain.
+// Claude calls this capability `Agent`; Codex exposes it as `spawn_agent`.
+if (isAgentDispatchTool(toolName)) {
   const agentDesc =
-    toolInput?.description || toolInput?.prompt?.substring(0, 80) || "unknown";
+    toolInput?.description ||
+    toolInput?.message?.substring(0, 80) ||
+    toolInput?.prompt?.substring(0, 80) ||
+    toolInput?.agent_type ||
+    "unknown";
   const metaName = extractMetaAgentName(
     toolInput?.description,
-    toolInput?.prompt,
+    [toolInput?.prompt, toolInput?.message, toolInput?.agent_type]
+      .filter(Boolean)
+      .join(" "),
   );
+
+  if (
+    !state.queryBypass &&
+    !state.simpleMode &&
+    ["critical", "fetch", "thinking"].includes(state.currentStage) &&
+    isExecutionDispatchIntent(toolInput, metaName)
+  ) {
+    const readinessGate = checkPreExecutionReadiness(state);
+    if (!readinessGate.met) {
+      exitAfterDeny(
+        `Pre-execution readiness violation: design-time packets must be complete before execution dispatch. ` +
+          `Missing: ${readinessGate.missing.join(", ")}.`,
+      );
+    }
+  }
 
   // Check if a meta-agent is being dispatched for execution work
   // Warn if in execution stage and dispatching a meta-agent
@@ -427,6 +635,110 @@ if (toolName === "Agent") {
 
     if (stage === "execution" && isExecWork) {
       warnMetaAgentExecution(metaName, stage);
+    }
+  }
+
+  // Capability-first gate: at or after the execution stage, dispatching an
+  // Agent requires evidence that a capability search was performed. Discovery
+  // happens during critical / fetch / thinking, so those stages are exempt.
+  // queryBypass and simpleMode runs are also exempt because they intentionally
+  // skip the regulated dispatch flow.
+  if (!state.queryBypass && !state.simpleMode) {
+    const stage = state.currentStage;
+    const discoveryStages = new Set(["critical", "fetch", "thinking"]);
+    const capabilityGateModeRaw = (
+      process.env.META_KIM_CAPABILITY_GATE || "progressive"
+    )
+      .toLowerCase()
+      .trim();
+
+    if (capabilityGateModeRaw !== "off" && !discoveryStages.has(stage)) {
+      const performed = state?.fetchRecord?.capabilitySearchPerformed === true;
+      if (!performed) {
+        // Resolve the effective mode. For "warn" / "block" this is a passthrough;
+        // for "progressive" (the default) this returns "warn" during the
+        // grace window and "block" afterwards, mirroring the meta-readonly gate.
+        const effectiveMode = resolveGracedMode(
+          capabilityGateModeRaw,
+          "META_KIM_CAPABILITY_GATE_GRACE_DAYS",
+          7,
+          state,
+        );
+
+        const reason =
+          `Capability-first violation: fetchRecord.capabilitySearchPerformed must be true ` +
+          `before Agent dispatch in stage "${stage}". Search config/capability-index/ + ` +
+          `canonical/agents/ first, then update spine state fetchRecord. ` +
+          `Capability gate mode: "${capabilityGateModeRaw}" (effective: "${effectiveMode}"; ` +
+          `default is "progressive"). ` +
+          `Override with META_KIM_CAPABILITY_GATE=block (immediate), =warn (log only), ` +
+          `or =off (disabled, not recommended).`;
+
+        if (effectiveMode === "warn") {
+          process.stderr.write(
+            `\n⚠️  [Meta_Kim capability-gate:warn] ${reason}\n`,
+          );
+        } else {
+          exitAfterDeny(reason);
+        }
+      }
+
+      const readinessGate = checkPreExecutionReadiness(state);
+      if (!readinessGate.met) {
+        exitAfterDeny(
+          `Pre-execution readiness violation: design-time packets must be complete before execution dispatch. ` +
+            `Missing: ${readinessGate.missing.join(", ")}.`,
+        );
+      }
+
+      const nodeBindingGate = checkCapabilityNodeBindings(state);
+      if (!nodeBindingGate.met) {
+        exitAfterDeny(
+          `Capability node binding violation: ${nodeBindingGate.reason} ` +
+            `Missing: ${nodeBindingGate.missing.join(", ")}.`,
+        );
+      }
+
+      const dispatchText = [
+        agentDesc,
+        toolInput?.prompt,
+        toolInput?.description,
+        toolInput?.message,
+        toolInput?.agent_type,
+        JSON.stringify(toolInput?.items || []),
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const matchedTaskPacket = (state?.workerTaskPackets || []).find(
+        (packet) =>
+          packet?.taskPacketId && dispatchText.includes(packet.taskPacketId) ||
+          packet?.roleInstanceId && dispatchText.includes(packet.roleInstanceId),
+      );
+      if (!matchedTaskPacket) {
+        exitAfterDeny(
+          "Capability node binding violation: Agent dispatch in execution or later " +
+            "must cite a workerTaskPackets[].taskPacketId or roleInstanceId so the " +
+            "dispatch can be traced to a capability-matched task node.",
+        );
+      }
+
+      const dispatchTarget =
+        metaName ||
+        toolInput?.agent_type ||
+        toolInput?.subagent_type ||
+        toolInput?.type ||
+        "";
+      if (
+        typeof dispatchTarget === "string" &&
+        dispatchTarget.startsWith("meta-") &&
+        matchedTaskPacket.ownerAgent !== dispatchTarget
+      ) {
+        exitAfterDeny(
+          `Capability node binding violation: dispatch target "${dispatchTarget}" ` +
+            `does not match worker task ownerAgent "${matchedTaskPacket.ownerAgent}" ` +
+            `for ${matchedTaskPacket.taskPacketId}.`,
+        );
+      }
     }
   }
 
@@ -476,10 +788,9 @@ if (isExecutionTool(toolName)) {
 
   const choiceSurfaceGate = checkChoiceSurfaceGate(state);
   if (!choiceSurfaceGate.met) {
-    deny(
+    exitAfterDeny(
       `${choiceSurfaceGate.reason} Missing: ${choiceSurfaceGate.missing.join(", ")}.`,
     );
-    process.exit(0);
   }
 
   const stage = state.currentStage;
@@ -496,6 +807,20 @@ if (isExecutionTool(toolName)) {
   const currentIdx = stageOrder.indexOf(stage);
   const execIdx = stageOrder.indexOf("execution");
 
+  if (
+    currentIdx >= execIdx &&
+    !state.queryBypass &&
+    !state.simpleMode
+  ) {
+    const nodeBindingGate = checkCapabilityNodeBindings(state);
+    if (!nodeBindingGate.met) {
+      exitAfterDeny(
+        `Capability node binding violation: ${nodeBindingGate.reason} ` +
+          `Missing: ${nodeBindingGate.missing.join(", ")}.`,
+      );
+    }
+  }
+
   // Pre-execution stages: block + check meta-agent requirements
   if (currentIdx < execIdx) {
     const req = checkStageRequirements(state);
@@ -503,27 +828,25 @@ if (isExecutionTool(toolName)) {
     const label = stageInfo?.label || stage;
 
     if (!req.met) {
-      deny(
+      exitAfterDeny(
         `Stage "${label}" requires: ${req.missing.join(", ")}. ` +
           `Dispatch them via Agent tool (description must contain the meta-agent name). ` +
           `Dispatch chain so far: ${JSON.stringify(state.dispatchChain || {})}`,
       );
     } else {
-      deny(
+      exitAfterDeny(
         `You are in stage "${label}". Complete this stage before executing. ` +
           `Dispatch chain: ${JSON.stringify(state.dispatchChain || {})}`,
       );
     }
-    process.exit(0);
   }
 
   // Execution stage: require at least one agent dispatch
   if (stage === "execution" && state.dispatchedAgents.length === 0) {
-    deny(
+    exitAfterDeny(
       "Execution stage requires at least one agent dispatch via Agent tool. " +
         "Dispatch a specialist first. Violation: self-execution without delegation.",
     );
-    process.exit(0);
   }
 
   // Post-execution stages: require correct meta-agent
@@ -531,12 +854,11 @@ if (isExecutionTool(toolName)) {
     const req = checkStageRequirements(state);
     if (!req.met) {
       const stageInfo = STAGE_META_AGENT_MAP[stage];
-      deny(
+      exitAfterDeny(
         `Stage "${stageInfo?.label || stage}" requires: ${req.missing.join(", ")}. ` +
           `Dispatch them via Agent tool first. ` +
           `Dispatch chain: ${JSON.stringify(state.dispatchChain || {})}`,
       );
-      process.exit(0);
     }
   }
 }

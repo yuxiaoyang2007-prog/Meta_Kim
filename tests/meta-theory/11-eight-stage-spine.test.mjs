@@ -14,7 +14,18 @@
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  checkCapabilityNodeBindings,
   checkChoiceSurfaceGate,
   checkStageRequirements,
   createInitialState,
@@ -31,6 +42,265 @@ const DEV_GOV_PATH = `${REPO_ROOT}/canonical/skills/meta-theory/references/dev-g
 const SKILL_PATH = `${REPO_ROOT}/canonical/skills/meta-theory/SKILL.md`;
 const WORKFLOW_CONTRACT = `${REPO_ROOT}/config/contracts/workflow-contract.json`;
 const VALID_FIXTURE = `${REPO_ROOT}/tests/fixtures/run-artifacts/valid-run.json`;
+
+function minimalNodeBindings() {
+  return {
+    fetchRecord: {
+      capabilitySearchPerformed: true,
+      capabilityMatches: [
+        {
+          name: "backend implementation capability",
+          score: 3,
+          matchReason: "covered by backend role lane",
+        },
+      ],
+    },
+    businessFlowBlueprintPacket: {
+      requiredLanes: [
+        {
+          laneId: "backend",
+          capabilityNeed: "backend implementation",
+          capabilitySearchQuery: "backend implementation owner",
+          candidateOwners: ["meta-conductor"],
+          candidateSkills: ["meta-theory"],
+          selectedOwner: "meta-conductor",
+          selectionReason: "capability-first scan selected meta-conductor",
+          coverageStatus: "covered",
+        },
+      ],
+      optionalLanes: [],
+    },
+    agentBlueprintPacket: {
+      roles: [
+        {
+          businessRoleId: "backend",
+          roleDisplayName: "backend",
+          ownerAgent: "meta-conductor",
+          ownerSource: "meta_kim_canonical",
+          agentCopyPolicy: "meta_kim_governance_only",
+          ownerResolution: "reuse_existing_owner",
+          assignedResponsibilitySlice: ["backend"],
+          matchedSkills: [
+            {
+              matchId: "match-backend-001",
+              capabilitySlot: "backend implementation",
+              providerId: "meta-theory",
+              skillId: "local-project-code-change",
+              source: "capability-index",
+              selectionReason: "run-scoped skill evidence",
+              selectionScope: "run_scoped",
+            },
+          ],
+          skillSelectionScope: "run_scoped",
+          governanceStageNodes: [
+            {
+              stage: "Fetch",
+              ownerAgent: "meta-artisan",
+              responsibility: "match capability",
+            },
+          ],
+        },
+      ],
+    },
+    workerTaskPackets: [
+      {
+        taskPacketId: "task-backend-001",
+        ownerAgent: "meta-conductor",
+        businessRoleId: "backend",
+        roleDisplayName: "backend",
+        roleInstanceId: "backend#1",
+        todayTask: "implement bounded backend change",
+        output: "patch and verification notes",
+        verifySteps: ["focused test passes"],
+      },
+    ],
+  };
+}
+
+function completePreExecutionBindings() {
+  return {
+    ...minimalNodeBindings(),
+    dispatchEnvelopePacket: {
+      ownerAgent: "meta-conductor",
+      roleDisplayName: "backend",
+      route: "project_only",
+      capabilityBoundary: "backend implementation",
+      allowedCapabilities: ["backend implementation"],
+      blockedCapabilities: ["deploy production"],
+      ownerSelection: "capability_first",
+      memoryMode: "project_only",
+      reviewOwner: "meta-prism",
+      verificationOwner: "meta-warden",
+      userChoiceState: "explicit_auto_proceed",
+    },
+    orchestrationTaskBoardPacket: {
+      dispatchBoardId: "board-001",
+      boardMode: "direct_dispatch",
+      synthesisOwner: "meta-conductor",
+      tasks: [
+        {
+          taskId: "task-backend-001",
+          ownerAgent: "meta-conductor",
+          dependsOn: [],
+        },
+      ],
+    },
+    dispatchBoard: {
+      boardId: "board-001",
+      department: "Meta_Kim",
+      primaryDeliverable: "auth-refresh-hardening",
+      ownerAgent: "meta-conductor",
+      reviewerAgent: "meta-prism",
+      verifierAgent: "meta-warden",
+    },
+    productCompletenessPacket: {
+      completenessStatus: "pass",
+      owner: "meta-conductor",
+      evidenceRefs: ["businessFlowBlueprintPacket"],
+    },
+    experienceQualityPacket: {
+      experienceStatus: "not_applicable_with_reason",
+      owner: "meta-prism",
+      evidenceRefs: ["summaryPacket"],
+    },
+    testStrategyPacket: {
+      testStatus: "pass",
+      owner: "meta-warden",
+      evidenceRefs: ["workerTaskPackets[0].verifySteps"],
+    },
+    structureHygienePacket: {
+      hygieneStatus: "pass",
+      owner: "meta-prism",
+      evidenceRefs: ["workerResultPackets"],
+    },
+    permissionMatrixPacket: {
+      permissionStatus: "pass",
+      owner: "meta-sentinel",
+      evidenceRefs: ["reviewPacket"],
+    },
+    sideEffectLedgerPacket: {
+      sideEffectStatus: "tracked",
+      owner: "meta-sentinel",
+      evidenceRefs: ["workerResultPackets"],
+    },
+    rollbackPlanPacket: {
+      rollbackStatus: "ready",
+      owner: "meta-warden",
+      evidenceRefs: ["verificationPacket"],
+    },
+    businessFlowBlueprintPacket: {
+      ...minimalNodeBindings().businessFlowBlueprintPacket,
+      deliverableType: "custom",
+      omittedLanes: [],
+      laneDependencies: [],
+      coverageJudgment: "complete",
+      blueprintSource: "test",
+      blueprintVersion: "v1",
+    },
+  };
+}
+
+function preExecutionReadinessPacketsOnly() {
+  const {
+    fetchRecord,
+    businessFlowBlueprintPacket,
+    agentBlueprintPacket,
+    workerTaskPackets,
+    ...packets
+  } = completePreExecutionBindings();
+  return packets;
+}
+
+function modernCapabilityNodeBindings() {
+  const state = completePreExecutionBindings();
+  const lane = state.businessFlowBlueprintPacket.requiredLanes[0];
+  lane.candidateCapabilities = [
+    {
+      capabilitySlot: "backend implementation",
+      bindingType: "command",
+      bindingRef: "npm:test:meta-theory",
+    },
+  ];
+  delete lane.candidateSkills;
+
+  const role = state.agentBlueprintPacket.roles[0];
+  delete role.matchedSkills;
+  role.matchedCapabilities = [
+    {
+      matchId: "cap-backend-001",
+      capabilitySlot: "backend implementation",
+      bindingType: "command",
+      bindingRef: "npm run meta:test:meta-theory",
+      source: "config/capability-index",
+      confidenceScore: 4,
+      selectionReason: "Focused command binding covers the test lane.",
+      selectionScope: "run_scoped",
+      persistencePolicy: "do_not_persist_to_agent_identity",
+      fallback: "Block with capabilityGapPacket if the command is unavailable.",
+    },
+  ];
+  role.capabilityBindings = [
+    {
+      bindingId: "binding-backend-001",
+      capabilitySlot: "backend implementation",
+      bindingType: "command",
+      bindingRef: "npm run meta:test:meta-theory",
+      source: "config/capability-index",
+      evidenceRef: "fetchRecord.capabilityMatches[0]",
+    },
+  ];
+
+  return state;
+}
+
+function runEnforceHook(state, payload, options = {}) {
+  const { runtime = "codex" } = options;
+  const cwd = mkdtempSync(join(tmpdir(), "meta-kim-hook-"));
+  try {
+    const hookDir = join(cwd, "hooks");
+    mkdirSync(hookDir, { recursive: true });
+    for (const fileName of [
+      "enforce-agent-dispatch.mjs",
+      "bash-readonly-whitelist.mjs",
+      "spine-state.mjs",
+    ]) {
+      copyFileSync(
+        join(REPO_ROOT, "canonical/runtime-assets/claude/hooks", fileName),
+        join(hookDir, fileName),
+      );
+    }
+    for (const fileName of ["utils.mjs", "skip-reminder.mjs", "hook-i18n.mjs"]) {
+      copyFileSync(
+        join(REPO_ROOT, "canonical/runtime-assets/shared/hooks", fileName),
+        join(hookDir, fileName),
+      );
+    }
+    const spineDir = join(cwd, ".meta-kim", "state", "test", "spine");
+    mkdirSync(spineDir, { recursive: true });
+    writeFileSync(
+      join(spineDir, "spine-state.json"),
+      JSON.stringify(state, null, 2),
+      "utf8",
+    );
+    return spawnSync(
+      process.execPath,
+      [join(hookDir, "enforce-agent-dispatch.mjs")],
+      {
+        cwd,
+        input: JSON.stringify(payload),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          META_KIM_SPINE_STATE_DIR: ".meta-kim/state/test/spine",
+          META_KIM_CAPABILITY_GATE: "block",
+          META_KIM_HOOK_RUNTIME: runtime,
+        },
+      },
+    );
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+}
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Part A: Stage Ordering & State Machine
@@ -93,6 +363,104 @@ describe("Part A: 8-stage spine ordering", async () => {
         "Critical",
       ),
       "business workflow must reference the canonical 8-stage spine",
+    );
+  });
+
+  test("workflow-contract.json documents the new stage semantics", async () => {
+    const contract = await readJson("config/contracts/workflow-contract.json");
+    const semantics = contract.businessWorkflow?.stageSemantics ?? {};
+
+    assert.equal(
+      semantics.critical?.primaryAction,
+      "clarify_intent_first",
+      "Critical must clarify intent before research or planning",
+    );
+    assert.equal(
+      semantics.fetch?.primaryAction,
+      "research_and_confirm_problem_with_candidate_solutions",
+      "Fetch must search local/online sources and confirm the problem plus candidate solutions",
+    );
+    assert.deepEqual(
+      semantics.thinking?.capabilityDecisionOrder,
+      [
+        "determine_needed_execution_capabilities",
+        "match_existing_capabilities",
+        "create_or_upgrade_only_for_gaps",
+        "orchestrate_dag_with_merge_owner",
+      ],
+      "Thinking must decide capability needs before matching, gap creation, and DAG orchestration",
+    );
+    assert.ok(
+      semantics.execution?.executionCapabilityTypes?.includes("agent") &&
+        semantics.execution?.executionCapabilityTypes?.includes("skill") &&
+        semantics.execution?.executionCapabilityTypes?.includes("command") &&
+        semantics.execution?.executionCapabilityTypes?.includes("mcp_capability") &&
+        semantics.execution?.executionCapabilityTypes?.includes("tool"),
+      "Execution must cover agents, skills, commands, MCP capabilities, and tools",
+    );
+    assert.equal(
+      semantics.verification?.primaryAction,
+      "run_real_tests_with_fresh_evidence",
+      "Verification must require real tests, not summary-only checks",
+    );
+    assert.ok(
+      semantics.evolution?.allowedDecisions?.includes("writeback") &&
+        semantics.evolution?.allowedDecisions?.includes("none"),
+      "Evolution must write back or explicitly record no writeback",
+    );
+  });
+
+  test("SKILL.md and dev-governance.md describe Fetch before Thinking capability matching", async () => {
+    const skill = await readFile("canonical/skills/meta-theory/SKILL.md");
+    const devGov = await readFile(
+      "canonical/skills/meta-theory/references/dev-governance.md",
+    );
+    const combined = `${skill}\n${devGov}`;
+
+    assert.doesNotMatch(
+      skill,
+      /## Fetch-first Pattern \(Search → Match → Invoke\)|3-step capability discovery[\s\S]{0,120}keyword → search → invoke/i,
+      "SKILL.md must not keep the old Fetch-first Search-Match-Invoke main flow",
+    );
+    assert.doesNotMatch(
+      devGov,
+      /Fetch — Discover Available Agents|Invoke selected agents from Stage 2|<selected agent from Stage 2>|Capability discovery \(Search–Match–Invoke\)/i,
+      "dev-governance.md must not route Execution through Stage 2 selected agents",
+    );
+    assert.match(
+      skill,
+      /\| 2 \| Fetch \|[\s\S]{0,360}(?:online|联网|web)[\s\S]{0,220}(?:local|本地)[\s\S]{0,220}(?:confirm|确认)[\s\S]{0,220}(?:problem|问题)[\s\S]{0,220}(?:candidate solutions|候选解决方案)/i,
+      "The SKILL.md stage table must define Fetch as online/local problem and candidate-solution research",
+    );
+    assert.match(
+      skill,
+      /\| 3 \| Thinking \|[\s\S]{0,520}determine needed execution capabilities[\s\S]{0,260}agents[\s\S]{0,160}skills[\s\S]{0,160}commands[\s\S]{0,160}MCP capabilities[\s\S]{0,160}tools[\s\S]{0,260}match existing capabilities[\s\S]{0,260}create or upgrade only for gaps[\s\S]{0,260}(?:DAG|parallel|serial)[\s\S]{0,160}mergeOwner/i,
+      "The SKILL.md stage table must make Thinking the owner/skill/tool matching and orchestration stage",
+    );
+    assert.match(
+      devGov,
+      /## STAGE 4: Execution[\s\S]{0,900}agentBlueprintPacket[\s\S]{0,240}workerTaskPackets[\s\S]{0,360}(?:skills|commands|MCP|tools)/i,
+      "The dev-governance Execution section must dispatch from Thinking artifacts and selected capabilities",
+    );
+    assert.match(
+      combined,
+      /Critical[\s\S]{0,240}clarif(?:y|ies)[\s\S]{0,160}intent/i,
+      "Critical must explicitly clarify intent first",
+    );
+    assert.match(
+      combined,
+      /Fetch[\s\S]{0,260}(?:online|联网|web)[\s\S]{0,260}(?:local|本地)[\s\S]{0,260}(?:confirm|确认)[\s\S]{0,220}(?:problem|问题)[\s\S]{0,220}(?:candidate solutions|候选解决方案)/i,
+      "Fetch must cover online/local research and confirm problem plus candidate solutions",
+    );
+    assert.match(
+      combined,
+      /Thinking[\s\S]{0,260}determine needed execution capabilities[\s\S]{0,260}agents[\s\S]{0,160}skills[\s\S]{0,160}commands[\s\S]{0,160}MCP capabilities[\s\S]{0,160}tools[\s\S]{0,260}match existing capabilities[\s\S]{0,260}create or upgrade only for gaps[\s\S]{0,260}(?:DAG|parallel|serial)[\s\S]{0,160}mergeOwner/i,
+      "Thinking must first decide needed capabilities, then match/create gaps, then plan DAG/merge owner",
+    );
+    assert.match(
+      combined,
+      /Execution[\s\S]{0,260}multi-agent[\s\S]{0,260}(?:skill|command|MCP|tool)/i,
+      "Execution must be multi-agent work using skills, commands, MCP capabilities, and tools",
     );
   });
 });
@@ -581,15 +949,38 @@ describe("Part F2: choice surface runtime gate", async () => {
     assert.deepEqual(result.missing, ["choiceSurfaceState=completed"]);
   });
 
-  test("allows Execution after Fetch evidence, Thinking options, and completed confirmation", () => {
+  test("blocks Execution when design-time packets are incomplete", () => {
     const state = {
       ...createInitialState({
         taskClassification: "meta_theory_auto",
         triggerReason: "test",
       }),
+      ...minimalNodeBindings(),
       currentStage: "execution",
       dispatchedAgents: ["frontend"],
-      fetchRecord: { capabilityMatches: ["frontend"] },
+      preDecisionOptionFrame: {
+        candidatePaths: ["direct hook enforcement", "contract-only guard"],
+      },
+      choiceSurfaceState: "completed",
+    };
+
+    const result = checkStageRequirements(state);
+    assert.equal(result.met, false);
+    assert.match(result.reason, /pre-execution readiness|design-time/i);
+    assert.ok(result.missing.includes("dispatchEnvelopePacket"));
+    assert.ok(result.missing.includes("productCompletenessPacket"));
+    assert.ok(result.missing.includes("rollbackPlanPacket"));
+  });
+
+  test("allows Execution after Fetch, Thinking, and complete design-time packets", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...completePreExecutionBindings(),
+      currentStage: "execution",
+      dispatchedAgents: ["frontend"],
       preDecisionOptionFrame: {
         candidatePaths: ["direct hook enforcement", "contract-only guard"],
       },
@@ -598,6 +989,67 @@ describe("Part F2: choice surface runtime gate", async () => {
 
     const result = checkStageRequirements(state);
     assert.equal(result.met, true);
+  });
+
+  test("allows Execution with generalized capability bindings without matchedSkills", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...modernCapabilityNodeBindings(),
+      currentStage: "execution",
+      dispatchedAgents: ["frontend"],
+      preDecisionOptionFrame: {
+        candidatePaths: ["command binding", "skill binding"],
+      },
+      choiceSurfaceState: "completed",
+    };
+
+    const result = checkStageRequirements(state);
+    assert.equal(result.met, true);
+  });
+
+  test("blocks Execution when top-level capability search lacks node bindings", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...preExecutionReadinessPacketsOnly(),
+      currentStage: "execution",
+      dispatchedAgents: ["meta-conductor"],
+      fetchRecord: {
+        capabilitySearchPerformed: true,
+        capabilityMatches: ["backend"],
+      },
+      preDecisionOptionFrame: {
+        candidatePaths: ["direct hook enforcement", "contract-only guard"],
+      },
+      choiceSurfaceState: "completed",
+    };
+
+    const result = checkStageRequirements(state);
+    assert.equal(result.met, false);
+    assert.match(result.reason, /every orchestration node/);
+    assert.ok(result.missing.includes("businessFlowBlueprintPacket"));
+    assert.ok(result.missing.includes("agentBlueprintPacket"));
+    assert.ok(result.missing.includes("workerTaskPackets"));
+  });
+
+  test("blocks Execution when a worker task cannot bind to an agent role", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...minimalNodeBindings(),
+    };
+    state.workerTaskPackets[0].businessRoleId = "frontend";
+
+    const result = checkCapabilityNodeBindings(state);
+    assert.equal(result.met, false);
+    assert.ok(result.missing.includes("workerTaskPackets[0].agentBlueprintRoleBinding"));
   });
 
   test("allows explicit choiceGateSkip as an auditable non-interactive path", () => {
@@ -626,6 +1078,216 @@ describe("Part F2: choice surface runtime gate", async () => {
     );
     assert.match(hook, /checkChoiceSurfaceGate/);
     assert.match(hook, /choiceSurfaceGate\.met/);
+    assert.match(hook, /checkCapabilityNodeBindings/);
+    assert.match(hook, /Capability node binding violation/);
+  });
+
+  test("Agent hook denies execution dispatch without node bindings", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...preExecutionReadinessPacketsOnly(),
+      currentStage: "execution",
+      fetchRecord: {
+        capabilitySearchPerformed: true,
+        capabilityMatches: ["backend"],
+      },
+      preDecisionOptionFrame: {
+        candidatePaths: ["direct hook enforcement", "contract-only guard"],
+      },
+      choiceSurfaceState: "completed",
+    };
+
+    const result = runEnforceHook(state, {
+      tool_name: "Agent",
+      tool_input: {
+        description: "meta-conductor backend execution",
+        prompt: "Run task-backend-001",
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /Capability node binding violation/);
+  });
+
+  test("spawn_agent hook denies execution dispatch before capability search", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...minimalNodeBindings(),
+      currentStage: "execution",
+    };
+    state.fetchRecord.capabilitySearchPerformed = false;
+
+    const result = runEnforceHook(state, {
+      tool_name: "spawn_agent",
+      tool_input: {
+        agent_type: "meta-conductor",
+        message: "Run task-backend-001 for role backend#1",
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /Capability-first violation/);
+  });
+
+  test("spawn_agent hook denies execution-intent dispatch during Thinking before readiness", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...minimalNodeBindings(),
+      currentStage: "thinking",
+      dispatchChain: { thinking: ["meta-conductor"] },
+      preDecisionOptionFrame: {
+        candidatePaths: ["direct hook enforcement", "contract-only guard"],
+      },
+      choiceSurfaceState: "completed",
+    };
+
+    const result = runEnforceHook(state, {
+      tool_name: "spawn_agent",
+      tool_input: {
+        agent_type: "backend",
+        message: "Implement backend task task-backend-001",
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /pre-execution readiness|design-time/i);
+  });
+
+  test("spawn_agent hook allows governance dispatch during Thinking", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...minimalNodeBindings(),
+      currentStage: "thinking",
+      dispatchChain: { thinking: ["meta-conductor"] },
+      preDecisionOptionFrame: {
+        candidatePaths: ["direct hook enforcement", "contract-only guard"],
+      },
+      choiceSurfaceState: "completed",
+    };
+
+    const result = runEnforceHook(state, {
+      tool_name: "spawn_agent",
+      tool_input: {
+        agent_type: "meta-prism",
+        message: "Review Thinking packet quality as meta-prism",
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.doesNotMatch(result.stdout, /permissionDecision/);
+  });
+
+  test("apply_patch hook is treated as an execution tool", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...preExecutionReadinessPacketsOnly(),
+      currentStage: "execution",
+      fetchRecord: {
+        capabilitySearchPerformed: true,
+        capabilityMatches: ["backend"],
+      },
+      preDecisionOptionFrame: {
+        candidatePaths: ["direct hook enforcement", "contract-only guard"],
+      },
+      choiceSurfaceState: "completed",
+    };
+
+    const result = runEnforceHook(state, {
+      tool_name: "apply_patch",
+      tool_input: {
+        patch: "*** Begin Patch\n*** End Patch\n",
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /Capability node binding violation/);
+  });
+
+  test("Cursor deny path exits with code 2 and Cursor payload", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...minimalNodeBindings(),
+      currentStage: "execution",
+    };
+    state.fetchRecord.capabilitySearchPerformed = false;
+
+    const result = runEnforceHook(
+      state,
+      {
+        tool_name: "spawn_agent",
+        tool_input: {
+          agent_type: "meta-conductor",
+          message: "Run task-backend-001 for role backend#1",
+        },
+      },
+      { runtime: "cursor" },
+    );
+
+    assert.equal(result.status, 2);
+    assert.match(result.stdout, /"permission":"deny"/);
+    assert.match(result.stderr, /Capability-first violation/);
+  });
+
+  test("Agent hook denies execution dispatch that omits task node id", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...completePreExecutionBindings(),
+      currentStage: "execution",
+    };
+
+    const result = runEnforceHook(state, {
+      tool_name: "Agent",
+      tool_input: {
+        description: "meta-conductor backend execution",
+        prompt: "Run the backend task without citing its packet id",
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /must cite a workerTaskPackets/);
+  });
+
+  test("Agent hook allows execution dispatch with matching task node id", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...completePreExecutionBindings(),
+      currentStage: "execution",
+    };
+
+    const result = runEnforceHook(state, {
+      tool_name: "Agent",
+      tool_input: {
+        description: "meta-conductor backend execution",
+        prompt: "Run task-backend-001 for role backend#1",
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.doesNotMatch(result.stdout, /permissionDecision/);
   });
 });
 

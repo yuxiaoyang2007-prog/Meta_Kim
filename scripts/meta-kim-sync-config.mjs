@@ -89,6 +89,8 @@ const runtimeProfileCatalog = {
         agentsDir: ".codex/agents",
         skillsDir: ".codex/skills",
         skillRoot: ".codex/skills/meta-theory",
+        projectSkillsDir: ".agents/skills",
+        projectSkillRoot: ".agents/skills/meta-theory",
         hooksDir: ".codex/hooks",
         hooksFile: ".codex/hooks.json",
         commandsDir: ".codex/commands",
@@ -142,7 +144,7 @@ const runtimeProfileCatalog = {
     projection: {
       supportsRepoProjection: true,
       supportsLocalActivation: true,
-      assetTypes: ["agents", "skills", "hooks", "mcp", "capabilityIndex"],
+      assetTypes: ["agents", "skills", "hooks", "mcp", "capabilityIndex", "rules"],
       outputPaths: {
         agentsDir: ".cursor/agents",
         skillsDir: ".cursor/skills",
@@ -151,6 +153,7 @@ const runtimeProfileCatalog = {
         hooksFile: ".cursor/hooks.json",
         mcpFile: ".cursor/mcp.json",
         capabilityIndexDir: ".cursor/capability-index",
+        rulesDir: ".cursor/rules",
       },
     },
     activation: {
@@ -407,6 +410,8 @@ const runtimeProjectionLayouts = {
       agentsDir: [".codex", "agents"],
       skillsDir: [".codex", "skills"],
       skillRoot: [".codex", "skills", "meta-theory"],
+      projectSkillsDir: [".agents", "skills"],
+      projectSkillRoot: [".agents", "skills", "meta-theory"],
       legacySkillFile: [".codex", "skills", "meta-theory.md"],
       legacySkillReferencesDir: [".codex", "skills", "references"],
       hooksDir: [".codex", "hooks"],
@@ -455,6 +460,7 @@ const runtimeProjectionLayouts = {
       hooksFile: [".cursor", "hooks.json"],
       mcpFile: [".cursor", "mcp.json"],
       capabilityIndexDir: [".cursor", "capability-index"],
+      rulesDir: [".cursor", "rules"],
     },
     global: {
       agentsDir: ["agents"],
@@ -464,6 +470,7 @@ const runtimeProjectionLayouts = {
       hooksFile: ["hooks.json"],
       mcpFile: ["mcp.json"],
       capabilityIndexDir: ["capability-index"],
+      rulesDir: ["rules"],
     },
   },
 };

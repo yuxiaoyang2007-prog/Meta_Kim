@@ -4,6 +4,7 @@
 
 - Primary docs: https://docs.anthropic.com/en/docs/claude-code
 - Skills reference: https://docs.anthropic.com/en/docs/claude-code/skills
+- Sub-agents reference: https://docs.anthropic.com/en/docs/claude-code/sub-agents
 - Hooks reference: https://docs.anthropic.com/en/docs/claude-code/hooks
 
 ## Skill System
@@ -21,6 +22,7 @@
 |-------|------|
 | Global skills | `~/.claude/skills/<skill-id>/SKILL.md` |
 | Project skills | `.claude/skills/<skill-id>/SKILL.md` |
+| Project agents | `.claude/agents/<agent-id>.md` |
 | User-level settings | `~/.claude/settings.json` |
 | Project-level settings | `.claude/settings.json` |
 
@@ -33,6 +35,22 @@
 | `context: fork` | Y | Unique to Claude Code - skill runs in a separate context |
 | Hooks | Y | Pre/Post tool execution, Stop event |
 | Plugins | Y | Official marketplace (`claude plugin install`) |
+
+### Agent Format
+
+Claude Code subagents use Markdown files with YAML frontmatter:
+
+```markdown
+---
+name: code-reviewer
+description: Reviews code for correctness and quality
+tools: Read, Grep, Glob
+---
+
+You are a code reviewer...
+```
+
+Claude Code does not use Codex `nickname_candidates` or TOML agent manifests.
 
 ### Hooks System
 

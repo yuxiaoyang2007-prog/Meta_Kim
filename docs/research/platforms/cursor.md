@@ -3,6 +3,7 @@
 ## Official Documentation
 
 - Primary site: https://docs.cursor.com
+- Rules reference: https://docs.cursor.com/en/context/rules
 - Agent Skills support confirmed via Skills CLI reference
 - Cursor IDE by Anysphere
 
@@ -39,7 +40,7 @@ Note: `.agents/skills/` may exist as a portable AgentSkills mirror for other run
 
 ### Agent Format
 
-Cursor agents use Markdown files with YAML frontmatter:
+Cursor agents use Markdown files with YAML frontmatter in Meta_Kim's projection layer:
 
 ```markdown
 ---
@@ -51,6 +52,8 @@ You are a code reviewer...
 ```
 
 This matches Cursor's built-in `create-subagent` guidance. It differs from Codex's TOML custom-agent format.
+
+Cursor's official context system also relies heavily on project rules (`.cursor/rules/*.mdc`) and repository `AGENTS.md` context. Do not add Codex `nickname_candidates` to Cursor files.
 
 ### Evidence of Cursor Skill Support
 

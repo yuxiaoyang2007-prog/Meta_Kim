@@ -240,6 +240,79 @@ export async function detectPluginBundleSkillResidue(targetDir) {
   return adapterCount >= 2;
 }
 
+export async function detectManagedInstallConflict(
+  targetDir,
+  {
+    skillId,
+    subdirPath,
+    manifestManagedPaths = [],
+    legacyFlatMetaTheory = false,
+  } = {},
+) {
+  if (!(await pathExists(targetDir))) {
+    return { conflict: false };
+  }
+
+  const resolvedTarget = path.resolve(targetDir);
+  for (const entry of manifestManagedPaths) {
+    const entryPath = typeof entry === "string" ? entry : entry?.path;
+    if (!entryPath || path.resolve(entryPath) !== resolvedTarget) {
+      continue;
+    }
+
+    if (
+      isTrustedManagedManifestEntry(entry, skillId) ||
+      (await hasManagedInstallResidue(targetDir, subdirPath))
+    ) {
+      return { conflict: true, reason: "manifest_managed_path" };
+    }
+  }
+
+  if (legacyFlatMetaTheory && path.basename(targetDir) === "meta-theory.md") {
+    return { conflict: true, reason: "legacy_flat_meta_theory" };
+  }
+
+  if (await detectLegacySubdirInstall(targetDir, subdirPath)) {
+    return { conflict: true, reason: "legacy_subdir_install" };
+  }
+
+  if (await detectPluginBundleSkillResidue(targetDir)) {
+    return { conflict: true, reason: "plugin_bundle_residue" };
+  }
+
+  return { conflict: false };
+}
+
+function isTrustedManagedManifestEntry(entry, skillId) {
+  if (!entry || typeof entry === "string") {
+    return false;
+  }
+
+  if (skillId && entry.skillId === skillId) {
+    return true;
+  }
+
+  const purpose = String(entry.purpose ?? "");
+  if (skillId && purpose === `${skillId}-global-skill`) {
+    return true;
+  }
+
+  const source = String(entry.source ?? "");
+  return (
+    entry.category === "A" &&
+    entry.kind === "dir" &&
+    /global-skill$/.test(purpose) &&
+    /install-global-skills|sync-global-meta-theory|setup\.mjs/.test(source)
+  );
+}
+
+async function hasManagedInstallResidue(targetDir, subdirPath) {
+  return (
+    (await detectLegacySubdirInstall(targetDir, subdirPath)) ||
+    (await detectPluginBundleSkillResidue(targetDir))
+  );
+}
+
 /**
  * Bundled copies of other runtimes (OpenClaw/Codex/Cursor) ship nested SKILL.md files
  * that are not required to match Claude Code frontmatter. Match case-insensitively and

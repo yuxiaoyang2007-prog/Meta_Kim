@@ -33,8 +33,7 @@ describe("release documentation semantics", () => {
       "utf8",
     );
 
-    assert.match(raw, /\| 项目级 Skill \| .*`\.codex\/skills\/`.*`\.cursor\/skills\/`/);
-    assert.doesNotMatch(raw, /\| 项目级 Skill \|[^\n]*`\.agents\/skills\/`/);
-    assert.doesNotMatch(raw, /`\.agents\/skills\/meta-theory\/SKILL\.md`/);
+    assert.match(raw, /\| 项目级 Skill \| .*`\.agents\/skills\/`.*`\.codex\/skills\/`.*`\.cursor\/skills\/`/);
+    assert.match(raw, /`\.agents\/skills\/meta-theory\/SKILL\.md`/);
   });
 });

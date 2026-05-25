@@ -1,142 +1,152 @@
-# Meta_Kim 运行时能力矩阵
+# Meta_Kim Runtime Capability Matrix
 
-Meta_Kim 同时对接 Claude Code、Codex、OpenClaw、Cursor，但四者不是同一种产品，不能假装完全同构。
+Meta_Kim integrates Claude Code, Codex, OpenClaw, and Cursor, but these hosts are not the same product. The project must not pretend that all runtime surfaces are isomorphic.
 
-正确做法不是硬说”四端完全一样”，而是：
+The correct model is:
 
-- 一个 canonical agent 主源
-- 一个 canonical skill / meta-theory 主源
-- 一个 contract 主源
-- 一个 capability-index 主源
-- 每个运行时各自走原生入口
-- 没有 1:1 对应项时明确标注
-- 运行时目录只作为镜像 / 投影
+- one canonical agent source
+- one canonical skill / meta-theory source
+- one contract source
+- one capability-index source
+- native entrypoints for each runtime
+- explicit downgrade notes when no 1:1 host surface exists
+- runtime directories as mirrors / projections only
 
-## 一、核心能力映射
+## Core Capability Mapping
 
-| 能力 | Claude Code | Codex | OpenClaw | Cursor | Meta_Kim 落地 |
+| Capability | Claude Code | Codex | OpenClaw | Cursor | Meta_Kim implementation |
 | --- | --- | --- | --- | --- | --- |
-| 理论 / skill 入口 | `.claude/skills/meta-theory/` runtime mirror | `.codex/skills/meta-theory/` runtime mirror | `openclaw/skills/meta-theory/` + workspace mirror | `.cursor/skills/meta-theory/` runtime mirror | 由项目治理层同步到各运行时 |
-| 角色 / 代理入口 | `.claude/agents/*.md` + `~/.claude/agents/*.md` | `.codex/agents/*.toml` + `~/.codex/agents/*.toml` | `openclaw/workspaces/<agent>/` + `~/.openclaw/agents/` | `.cursor/agents/*.md` + `~/.cursor/agents/*.md`（项目级优先） | 由项目治理层同步；全局能力通过发现器整合 |
-| 子代理 / 多代理 | 原生 subagents | 原生 custom agents / subagents | 原生多 agent + agent-to-agent | Cursor 原生 agent rules | 9 个 meta agent 四端全映射，全局 agents 按需调用 |
-| Skill | `.claude/skills/<name>/SKILL.md` + `~/.claude/skills/` | `.codex/skills/<name>/SKILL.md` + `~/.codex/skills/` | `<workspace>/skills/` + `skills.load.extraDirs[]` + `~/.openclaw/skills/` | `.cursor/skills/<name>/SKILL.md` + `~/.cursor/skills/` | 项目 skill 镜像到各运行时 |
-| Hook / 守卫 | `.claude/settings.json` hooks + `~/.claude/hooks/` | `.codex/hooks.json` trusted project/user hooks | Plugin SDK hooks + bundled/internal hooks | `.cursor/hooks.json` lowerCamel lifecycle hooks + `~/.cursor/hooks/` | Hook 能力按 runtime 原生面映射；没有官方面时显式降级 |
-| 记忆 | SessionStart + Stop MCP Memory hooks | SessionStart / UserPromptSubmit / Stop MCP Memory hooks | `MEMORY.md` + `session-memory` + MCP Memory managed hook | beforeSubmitPrompt / stop MCP Memory hooks | 元记忆策略主源写在 canonical runtime assets 中 |
-| **能力索引** | `.claude/capability-index/` mirror | `.codex/capability-index/` mirror | `openclaw/capability-index/` mirror | `.cursor/capability-index/` mirror | 项目索引镜像到运行时；全局发现结果进入本地 inventory |
+| Theory / skill entry | `.claude/skills/meta-theory/` runtime mirror | `.agents/skills/meta-theory/` project skill + `.codex/skills/meta-theory/` compatibility mirror | `openclaw/skills/meta-theory/` + workspace mirror | `.cursor/skills/meta-theory/` runtime mirror | Synced to each runtime by the project governance layer |
+| Role / agent entry | `.claude/agents/*.md` + `~/.claude/agents/*.md` | `.codex/agents/*.toml` + `~/.codex/agents/*.toml` | `openclaw/workspaces/<agent>/` + `~/.openclaw/agents/` | `.cursor/agents/*.md` + `~/.cursor/agents/*.md` with project-level priority | Synced by project governance; global capabilities are integrated through discovery |
+| Agent file format | Markdown + YAML frontmatter | TOML with `name`, `description`, `developer_instructions`, and optional `nickname_candidates` | workspace file group + template JSON | Markdown + YAML frontmatter + rules/context | Codex TOML fields must not leak into other runtimes |
+| Subagent / multi-agent | Native subagents | Native custom agents / subagents | Native multi-agent + agent-to-agent | Native Cursor agent rules | The 9 meta agents are mapped across all four runtimes; global agents are called as needed |
+| Skill | `.claude/skills/<name>/SKILL.md` + `~/.claude/skills/` | `.agents/skills/<name>/SKILL.md` project skill + `.codex/skills/<name>/SKILL.md` compatibility mirror + `~/.codex/skills/` | `<workspace>/skills/` + `skills.load.extraDirs[]` + `~/.openclaw/skills/` | `.cursor/skills/<name>/SKILL.md` + `~/.cursor/skills/` | Project skills are mirrored into runtime-specific locations |
+| Hook / guard | `.claude/settings.json` hooks + `~/.claude/hooks/` | `.codex/hooks.json` trusted project/user hooks | Plugin SDK hooks + bundled/internal hooks | `.cursor/hooks.json` lowerCamel lifecycle hooks + `~/.cursor/hooks/` | Hook capability maps to each runtime's native surface; missing official surfaces are explicitly downgraded |
+| Memory | SessionStart + Stop MCP Memory hooks | SessionStart / UserPromptSubmit / Stop MCP Memory hooks | `MEMORY.md` + `session-memory` + MCP Memory managed hook | beforeSubmitPrompt / stop MCP Memory hooks | Meta memory strategy is sourced from canonical runtime assets |
+| Capability index | `.claude/capability-index/` mirror | `.codex/capability-index/` mirror | `openclaw/capability-index/` mirror | `.cursor/capability-index/` mirror | Project index mirrors to runtimes; global discovery writes local inventory |
 
-## 一.五、能力索引与全局能力发现
+## Capability Index And Global Discovery
 
-Meta_Kim 现在支持跨平台全局能力发现：
+Meta_Kim supports cross-platform global capability discovery:
 
 ```bash
-# 查看当前全局能力数量
+# Show current global capability counts
 npm run discover:global
 
-# 查看详细列表
+# Show detailed inventory
 npm run discover:global -- --json
 ```
 
-功能：
-- **Claude Code**：扫描 `~/.claude/agents/`, `~/.claude/skills/`, `~/.claude/hooks/`, `~/.claude/plugins/`, `~/.claude/commands/`
-- **OpenClaw**：扫描 `~/.openclaw/` 下的 agents/skills/hooks/commands
-- **Codex**：扫描 `~/.codex/` 下的 agents/skills/commands
-- **Cursor**：扫描 `~/.cursor/skills/`, `~/.cursor/plugins/`, `~/.cursor/agents/`
-- 生成仓库级能力索引镜像，并把本机扫描结果写入 `.meta-kim/state/{profile}/capability-index/global-capabilities.json`
+Discovery covers:
 
-Fetch 阶段的能力索引顺序必须是：
+- **Claude Code**: `~/.claude/agents/`, `~/.claude/skills/`, `~/.claude/hooks/`, `~/.claude/plugins/`, `~/.claude/commands/`
+- **OpenClaw**: agents / skills / hooks / commands under `~/.openclaw/`
+- **Codex**: agents / skills / commands under `~/.codex/`
+- **Cursor**: `~/.cursor/skills/`, `~/.cursor/plugins/`, `~/.cursor/agents/`
+- repository-level capability-index mirrors plus the local inventory at `.meta-kim/state/{profile}/capability-index/global-capabilities.json`
 
-1. 仓库 canonical：`config/capability-index/`
-2. runtime mirror：`.claude/capability-index/`、`.codex/capability-index/`、`.cursor/capability-index/`、`openclaw/capability-index/`
-3. local inventory：`.meta-kim/state/{profile}/capability-index/global-capabilities.json`
-4. fallback：明确声明未命中，再进入通用执行或能力创建流程
+The Fetch-stage capability-index order is:
 
-**发现的能力类型**：
-- **Agents**：可复用的专业agents（如ai-engineer, backend-architect, code-reviewer）
-- **Skills**：可触发的技能（如agent-browser, planning-with-files, claudeception）
-- **Hooks**：PreToolUse/PostToolUse/UserPromptSubmit/SessionStart hooks
-- **Plugins**：Claude Code plugins（LSP servers, tool extensions等）
-- **Commands**：Slash commands（commit, debug, test-driven-development等）
+1. repo canonical: `config/capability-index/`
+2. runtime mirrors: `.claude/capability-index/`, `.codex/capability-index/`, `.cursor/capability-index/`, `openclaw/capability-index/`
+3. local inventory: `.meta-kim/state/{profile}/capability-index/global-capabilities.json`
+4. fallback: explicitly record the miss, then route to general execution or capability creation
 
-**获取最新数量**：
-运行 `npm run discover:global` 会输出当前扫描到的能力数量统计：
+Discovered capability types:
+
+- **Agents**: reusable specialists such as `ai-engineer`, `backend-architect`, or `code-reviewer`
+- **Skills**: triggerable capabilities such as `agent-browser`, `planning-with-files`, or `claudeception`
+- **Hooks**: PreToolUse / PostToolUse / UserPromptSubmit / SessionStart hooks
+- **Plugins**: Claude Code plugins such as LSP servers or tool extensions
+- **Commands**: slash commands such as `commit`, `debug`, or `test-driven-development`
+
+To get current counts, run `npm run discover:global`. It prints a summary like:
+
+```text
+Global Capability Summary
+Claude Code (~/.claude)
+   agents: [current count]
+   skills: [current count]
+   hooks: [current count]
+   plugins: [current count]
+   commands: [current count]
 ```
-📊 Global Capability Summary
-🔹 Claude Code (~/.claude)
-   agents: [当前数量]
-   skills: [当前数量]
-   hooks: [当前数量]
-   plugins: [当前数量]
-   commands: [当前数量]
-```
 
-元架构的 Fetch 阶段会自动把仓库 canonical、运行时镜像、全局能力和本地库存纳入匹配范围，再按平台差异调用（Claude Code 用 subagent_type，OpenClaw 用 sessions_send）。
+The meta architecture's Fetch stage includes repository canonical sources, runtime mirrors, global capabilities, and local inventory before platform-specific invocation. For example, Claude Code uses `subagent_type`, while OpenClaw uses its workspace/session mechanism.
 
-**典型使用场景**：
-- 用户说"review code" → 匹配到 `everything-claude-code:code-reviewer` agent
-- 用户说"帮我规划" → 匹配到 `planning-with-files` skill
-- 用户说"提交代码" → 匹配到 `commit` command
+Typical examples:
 
-## 二、主源位置
+- user asks for "review code" -> match `everything-claude-code:code-reviewer`
+- user asks for planning -> match the `planning-with-files` skill
+- user asks to commit code -> match the `commit` command
 
-- Agent 主源：`canonical/agents/*.md`
-- Skill / meta-theory 主源：`canonical/skills/meta-theory/SKILL.md` 和 `canonical/skills/meta-theory/references/*.md`
-- Contract 主源：`config/contracts/`
-- Capability-index 主源：`config/capability-index/`
+## Source Locations
 
-## 三、派生产物 / runtime mirrors
+- Agent source: `canonical/agents/*.md`
+- Skill / meta-theory source: `canonical/skills/meta-theory/SKILL.md` and `canonical/skills/meta-theory/references/*.md`
+- Contract source: `config/contracts/`
+- Capability-index source: `config/capability-index/`
 
-- Claude Code runtime projection：`.claude/agents/`、`.claude/skills/meta-theory/`、`.claude/hooks/`、`.claude/settings.json`、`.claude/capability-index/`
-- Codex custom agents：`.codex/agents/*.toml`
-- Codex project skill：`.codex/skills/meta-theory/SKILL.md`
-- Codex slash command：`.codex/commands/meta-theory.md` / `~/.codex/commands/meta-theory.md`
-- Codex capability mirror：`.codex/capability-index/`
-- OpenClaw workspaces：`openclaw/workspaces/*`
-- OpenClaw installable skill：`openclaw/skills/meta-theory/SKILL.md`
-- OpenClaw config：`openclaw/openclaw.template.json`
-- OpenClaw capability mirror：`openclaw/capability-index/`
-- Cursor runtime projection：`.cursor/agents/`、`.cursor/skills/meta-theory/`、`.cursor/mcp.json`、`.cursor/capability-index/`
+## Derived Artifacts / Runtime Mirrors
 
-## 四、标准流程
+- Claude Code runtime projection: `.claude/agents/`, `.claude/skills/meta-theory/`, `.claude/hooks/`, `.claude/settings.json`, `.claude/capability-index/`
+- Codex custom agents: `.codex/agents/*.toml`; `worker.toml` / `explorer.toml` are generic fallback adapters, while `frontend.toml`, `backend.toml`, `test.toml`, `review.toml`, `analysis.toml`, `verify.toml`, and `docs.toml` are business-role adapters for hosts that honor `nickname_candidates` and named custom agents. If Codex Desktop or a tool-backed session still shows `Popper`, `Zeno`, or another host nickname, Meta_Kim records it as `runtimeInstanceAlias`; it does not count as a project-level `roleDisplayName`.
+- Codex project skill: `.agents/skills/meta-theory/SKILL.md`
+- Codex compatibility skill mirror: `.codex/skills/meta-theory/SKILL.md`
+- Codex slash command: `.codex/commands/meta-theory.md` / `~/.codex/commands/meta-theory.md`
+- Codex capability mirror: `.codex/capability-index/`
+- OpenClaw workspaces: `openclaw/workspaces/*`
+- OpenClaw installable skill: `openclaw/skills/meta-theory/SKILL.md`
+- OpenClaw config: `openclaw/openclaw.template.json`
+- OpenClaw capability mirror: `openclaw/capability-index/`
+- Cursor runtime projection: `.cursor/agents/`, `.cursor/skills/meta-theory/`, `.cursor/mcp.json`, `.cursor/capability-index/`
 
-每次修改 canonical agent、共享 skill、workflow contract 或 capability index 后：
+## Standard Update Flow
 
-1. 先改主源文件。
-2. 运行 `npm run meta:sync`。
-3. 运行 `npm run meta:check:global`（新增：更新全局能力索引）。
-4. 运行 `npm run meta:validate`。
-5. 日常运行 `npm run meta:eval:agents`（no-LLM smoke）。
-6. 需要真实 runtime prompt 验收时运行 `npm run meta:eval:agents:live`。
-7. 如果运行时契约变化，再更新 `README.md`、`CLAUDE.md`、`AGENTS.md`。
+After changing a canonical agent, shared skill, workflow contract, or capability index:
 
-## 五、行为一致性对照表
+1. Edit the source-of-truth file first.
+2. Run `npm run meta:sync`.
+3. Run `npm run discover:global`.
+4. Run `npm run meta:sync:global` when global installation folders must receive the updated assets.
+5. Run `npm run meta:check`.
+6. Run `npm run meta:check:global`.
+7. Run `npm run meta:eval:agents` for no-LLM runtime smoke.
+8. Run `npm run meta:eval:agents:live` when prompt-backed runtime acceptance is required.
+9. Update `README.md`, `CLAUDE.md`, and `AGENTS.md` when the runtime contract changes.
 
-这张表不是”看起来统一”，而是四端最少必须对齐的**行为约束**。
+## Behavior Parity Matrix
 
-| parity item | Claude Code | Codex | OpenClaw | Cursor | 必须保持一致的判定 |
+This table defines minimum behavior constraints, not surface-level uniformity.
+
+| Parity item | Claude Code | Codex | OpenClaw | Cursor | Required invariant |
 | --- | --- | --- | --- | --- | --- |
-| trigger parity | 通过 canonical skill + hook / prompt discipline 触发 | 通过 project instructions + custom agents / runtime adapter 触发 | 通过 workspace boot + hooks 触发 | 通过 project rules + agent rules 触发 | 都必须先产出 `taskClassification`，再决定 `query / simple_exec / complex_dev / meta_analysis / proposal_review / rhythm` |
-| card parity | Thinking + protocol packets 决定发牌 | project skill / agents / adapters 决定发牌 | workspace / agent flow 决定发牌 | project skill / agent rules 决定发牌 | 都必须能产出等价 `cardPlanPacket`，把发牌员、牌、交付壳、抑制理由显式化 |
-| blueprint / role naming parity | 可通过 hook 阻断未产出 `businessFlowBlueprintPacket` / `agentBlueprintPacket`、未扫描 lane、或把 runtime 昵称当用户可见角色名的派发 | 主要依赖 conversation preflight、project instructions 和 validator 回退；缺字段时不得进入公开完成态 | 主要依赖 workspace conversation gate、agent flow 和 validator 回退；缺字段时暂停派发 | 主要依赖 Custom Modes / agent rules、conversation gate 和 validator 回退；缺字段时要求补蓝图 | 每个 lane 必须记录 `capabilitySearchQuery`、`candidateOwners`、`candidateSkills`、`selectedOwner`、`selectionReason`、`coverageStatus`；用户可见角色名必须是业务职责名，随机 runtime 昵称只能进 `runtimeInstanceAlias`；role 缺口或 create/upgrade 必须触发 `capabilityGapPacket` / `executionAgentCard` |
-| silence parity | Warden/Conductor 通过 gate + prompt discipline 留白 | adapter / validator 控制 no-card 与 defer | workspace / runtime gate 控制留白 | project rules 控制留白 | 都必须支持 `noInterventionPreferred`、`silenceDecision`、`reasonForSilence`，不能把”不打断”当成漏掉 |
-| control-decision parity | skip / interrupt / override 由 hook + governance owner 驱动 | validator / adapter / agent decision 驱动 | runtime hooks + governance owner 驱动 | agent rules 驱动 | 都必须把 `skipReason`、`interruptReason`、`overrideReason`、`insertedGovernanceOwner` 结构化记录，并声明如何回主链 |
-| shell parity | Claude 输出按受众壳适配 | Codex 输出按受众壳适配 | OpenClaw 输出按受众壳适配 | Cursor 输出按受众壳适配 | 都必须区分意图核与 `deliveryShell`，同一核可换壳，不可把内容和壳绑死 |
-| language parity | 用户可见文案优先跟随工具/运行时已选输出语言，其次用户明确选择，最后用户最新输入；阶段名保留 `Critical / Fetch / Thinking / Review` 等 canonical label | 同左；Codex 原生选择不可用时用同语言确认卡 | 同左；原生选择能力不可用时声明 fallback | 同左；Custom Modes / mode picker 文案按同一语言来源优先级渲染 | 禁止把用户可见选项硬编码成中文或英文；`intentGatePacket` / `cardDecision` / `deliveryShell` 必须记录语言来源 |
-| native choice parity | 优先使用 Claude Code 原生 hook / prompt surface | 优先使用 Codex `request_user_input`；Default mode 配置 `[features] default_mode_request_user_input = true` | 优先使用 OpenClaw 原生 agent / workspace choice mechanism | 优先使用 Cursor Custom Modes / mode picker | 没有原生弹窗时必须记录 `conversation_fallback`，不能假装四端都有同一种弹窗 |
-| hook parity | `.claude/settings.json` 原生 hooks | `.codex/hooks.json` 原生 hooks | Plugin SDK hooks + `openclaw.template.json` internal hooks | `.cursor/hooks.json` 原生 hooks | 危险命令阻断、上下文注入、结束前审计按平台能力实现；事件名和配置格式不要求同构 |
-| review parity | specialist + warden/prism 审核 | custom agent / subagent 审核 | agent-to-agent / local workspace 审核 | agent rules 审核 | Review 都必须产出 `reviewPacket.findings[]`，不能只给 PASS/FAIL |
-| verification parity | 验证 hook + agent 复核 | script / subagent 复核 | workspace verification flow | agent rules 复核 | Verify 都必须消费 `revisionResponses` 和 `verificationResults`，并显式 `closeFindings` |
-| stop condition parity | hook / gate 阻断公开完成态 | validator / adapter 阻断公开完成态 | hook / runtime gate 阻断公开完成态 | hook / agent rules 阻断公开完成态 | 未 `verifyPassed`、未 `summaryClosed`、交付链未闭合时，四端都不得标记 final public-ready |
-| writeback parity | 直接写 canonical 资产 | 写 canonical 后 sync mirror | 写 canonical 后 sync workspace mirror | 写 canonical 后 sync mirror | Evolution 都必须给出 `writebackDecision = writeback|none`，禁止静默跳过 |
-| run artifact parity | 可产出真实 run packet 并校验 | 可产出真实 run packet 并校验 | 可产出真实 run packet 并校验 | 可产出真实 run packet 并校验 | 四端都必须接受同一套 `validate-run-artifact` 链路校验，而不是只过静态字段检查 |
+| trigger parity | Triggered through canonical skill + hook / prompt discipline | Triggered through project instructions + custom agents / runtime adapter | Triggered through workspace boot + hooks | Triggered through project rules + agent rules | All runtimes must produce `taskClassification` before choosing `query / simple_exec / complex_dev / meta_analysis / proposal_review / rhythm` |
+| card parity | Thinking + protocol packets decide cards | Project skill / agents / adapters decide cards | Workspace / agent flow decides cards | Project skill / agent rules decide cards | All runtimes must produce equivalent `cardPlanPacket` and explicitly record dealer, card, delivery shell, and suppression reason |
+| blueprint / role naming parity | Hooks can block dispatch lacking `businessFlowBlueprintPacket` / `agentBlueprintPacket`, lane scans, or proper role naming | Primarily enforced through conversation preflight, project instructions, and validator fallback; missing fields cannot become public-ready | Primarily enforced through workspace conversation gate, agent flow, and validator fallback; dispatch pauses on missing fields | Primarily enforced through Custom Modes / agent rules, conversation gate, and validator fallback | Every lane records `capabilitySearchQuery`, `candidateOwners`, `matchedCapabilities`, `capabilityBindings`, `selectedOwner`, `selectionReason`, and `coverageStatus`; user-visible role names are English business role families; runtime nicknames stay in `runtimeInstanceAlias`; role gaps or create/upgrade paths require `capabilityGapPacket` / `executionAgentCard` |
+| silence parity | Warden/Conductor use gate + prompt discipline | Adapter / validator controls no-card and defer | Workspace / runtime gate controls silence | Project rules control silence | All runtimes must support `noInterventionPreferred`, `silenceDecision`, and `reasonForSilence`; non-interruption cannot mean omission |
+| control-decision parity | skip / interrupt / override driven by hook + governance owner | driven by validator / adapter / agent decision | driven by runtime hooks + governance owner | driven by agent rules | All runtimes must record `skipReason`, `interruptReason`, `overrideReason`, and `insertedGovernanceOwner`, plus how the run returns to the spine |
+| shell parity | Claude output adapts to audience shell | Codex output adapts to audience shell | OpenClaw output adapts to audience shell | Cursor output adapts to audience shell | All runtimes distinguish the intent core from `deliveryShell`; the same core can use different shells |
+| language parity | User-facing text follows runtime/tool selected output language, then explicit user choice, then latest user input; canonical stage labels such as `Critical / Fetch / Thinking / Review` remain English | Same; Codex uses a same-language confirmation card when native choice is unavailable | Same; fallback is declared when native choice is unavailable | Same; Custom Modes / mode picker text follows the same priority | User-facing options must not hardcode a single locale; `intentGatePacket`, `cardDecision`, and `deliveryShell` record language source |
+| native choice parity | Prefer Claude Code native hook / prompt surface | Prefer Codex `request_user_input` when listed; config should set `[features] default_mode_request_user_input = true` | Prefer OpenClaw native agent / workspace choice mechanism | Prefer Cursor Custom Modes / mode picker | When no native popup exists, record `conversation_fallback`; do not pretend all runtimes share the same popup |
+| hook parity | `.claude/settings.json` native hooks | `.codex/hooks.json` native hooks with same-source `enforce-agent-dispatch.mjs` projection | Plugin SDK hooks + `openclaw.template.json` internal hooks | `.cursor/hooks.json` native hooks with same-source `enforce-agent-dispatch.mjs` projection and `failClosed: true` | Dangerous command blocking, context injection, and pre-completion audits use each platform's capability; event names and config formats need not be isomorphic. Capability-first and meta-readonly gates are mechanically projected in Claude / Codex / Cursor; current OpenClaw remains declarative until a plugin enforcement adapter is installed |
+| review parity | specialist + Warden/Prism review | custom agent / subagent review | agent-to-agent / local workspace review | agent rules review | Review always produces `reviewPacket.findings[]`, never just PASS/FAIL |
+| verification parity | verification hook + agent recheck | script / subagent recheck | workspace verification flow | agent rules recheck | Verify consumes `revisionResponses` and `verificationResults`, then explicitly closes findings |
+| stop condition parity | hook / gate blocks public-ready | validator / adapter blocks public-ready | hook / runtime gate blocks public-ready | hook / agent rules block public-ready | A run cannot be final public-ready without `verifyPassed`, `summaryClosed`, and a closed deliverable chain |
+| writeback parity | write canonical assets directly | write canonical then sync mirrors | write canonical then sync workspace mirrors | write canonical then sync mirrors | Evolution must produce `writebackDecision = writeback|none`; silent omission is forbidden |
+| run artifact parity | can produce and validate real run packets | can produce and validate real run packets | can produce and validate real run packets | can produce and validate real run packets | All runtimes use the same `validate-run-artifact` chain rather than static field checks only |
 
-## 六、漂移检测
+## Drift Detection
 
-README 只能解释口径，不能承担一致性本身。真正防漂移要靠：
+README files can explain the model, but they cannot guarantee parity. Drift control depends on:
 
-- canonical source 固定为 `canonical/agents/*.md`、`canonical/skills/meta-theory/`、`config/contracts/`、`config/capability-index/`
-- `npm run meta:sync` 生成 Claude Code / Codex / OpenClaw / Cursor mirrors
-- `npm run meta:validate` 检查 mirror 是否与 canonical 一致
-- `npm run meta:eval:agents` 做轻量 runtime smoke
-- `npm run meta:eval:agents:live` 做真实 prompt-backed runtime acceptance
+- canonical sources fixed at `canonical/agents/*.md`, `canonical/skills/meta-theory/`, `config/contracts/`, and `config/capability-index/`
+- `npm run meta:sync` generating Claude Code / Codex / OpenClaw / Cursor mirrors
+- `npm run discover:global` refreshing local/global capability inventory and repository capability-index mirrors
+- `npm run meta:sync:global` updating the installation folders configured for global runtime use
+- `npm run meta:check` verifying runtime mirrors, sync coverage, and project validity
+- `npm run meta:check:global` verifying global installation mirrors
+- `npm run meta:eval:agents` for lightweight runtime smoke
+- `npm run meta:eval:agents:live` for real prompt-backed runtime acceptance
 
-如果某一端只能在 README 里声明“等价”，但 validator 和 smoke/live acceptance 都无法证明，那它就不算真正等价。
+If a runtime can only be described as equivalent in README text, but validator and smoke/live acceptance cannot prove it, it is not truly equivalent.

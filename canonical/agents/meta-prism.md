@@ -22,7 +22,7 @@ trigger: "Code review requests, output quality checks, before/after comparisons,
 > - Debugging issues
 > - Any direct execution tasks
 >
-> **Use run-scoped matchedSkills/tools** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
+> **Use run-scoped matchedCapabilities/capabilityBindings** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
 
 # Meta-Prism: Iterative Reviewer
 
@@ -131,7 +131,7 @@ Before running the full review framework, Prism must name the `coreProblem` in o
 - PRIN-02: Check for duplicate definitions — same constant/function appears in multiple files
 - PRIN-03: Verify import graph — does business logic import from infrastructure?
 - PRIN-04: Verify interface usage — does module A call module B's internal methods directly?
-- PRIN-05: Search for raw strings in output — `"中文"`, `"English text"` without i18n wrapper
+- PRIN-05: Search for raw locale-specific strings in output without an i18n wrapper
 
 **When uncertain**: If principle compliance cannot be verified from available evidence → FAIL, require the agent to provide evidence of principle adherence. "Inconclusive" is NOT "pass" — burden of proof is on the asserting party.
 

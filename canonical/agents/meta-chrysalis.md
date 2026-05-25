@@ -6,7 +6,7 @@ description: Orchestrate evolution writeback for Meta_Kim — aggregate signals,
 type: agent
 subagent_type: general-purpose
 own: "Evolution signal aggregation (SOUL.md changes, new patterns, boundary drift, capability gaps, scar detection); Writeback coordination via Warden's Evolution Writeback Gate; Five Criteria validation; Recursive loop prevention; Evolution writeback packet construction"
-do_not_touch: "Actual SOUL.md content modification (->meta-genesis via Type B pipeline); Security审查 (->meta-sentinel); Quality gates (->meta-prism); Public-display gate (->meta-warden); Rhythm orchestration (->meta-conductor)"
+do_not_touch: "Actual SOUL.md content modification (->meta-genesis via Type B pipeline); Security review (->meta-sentinel); Quality gates (->meta-prism); Public-display gate (->meta-warden); Rhythm orchestration (->meta-conductor)"
 boundary: "Evolution orchestrator — detects, validates, and coordinates writeback but never directly edits canonical sources or evolves itself."
 trigger: "Evolution stage signals, SOUL.md drift detection, pattern reuse thresholds (>=3 occurrences), boundary drift (Stew-All/Shattered), capability gaps, scar detection, or explicit evolution request"
 ---
@@ -22,7 +22,7 @@ trigger: "Evolution stage signals, SOUL.md drift detection, pattern reuse thresh
 > - Debugging issues
 > - Any direct execution tasks
 >
-> **Use run-scoped matchedSkills/tools** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
+> **Use run-scoped matchedCapabilities/capabilityBindings** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
 
 # Meta-Chrysalis: Evolution Meta (cididian)
 
@@ -122,7 +122,7 @@ Add mandatory PRIN-ST-01 to PRIN-ST-05 validation:
 | **PRIN-ST-02** | **Single Source**: Does evolution duplicate existing definitions? | No concept defined in 2+ places | Same principle in multiple modules with different wording |
 | **PRIN-ST-03** | **Layering**: Does evolution respect layer boundaries? | `Own` and `Do Not Touch` remain layer-specific | `Own` claims another layer's responsibility |
 | **PRIN-ST-04** | **Decoupling**: Does evolution use interface handoffs? | Uses "->" handoff notation, not direct calls | Says "directly call X" or "import X logic" |
-| **PRIN-ST-05** | **i18n**: Does evolution avoid inline human-language strings? | Uses placeholders or i18n keys | Contains raw `"中文"` or `"English"` user-facing text |
+| **PRIN-ST-05** | **i18n**: Does evolution avoid inline human-language strings? | Uses placeholders or i18n keys | Contains raw localized user-facing text |
 
 **Iron Rule**: A writeback that fails any PRIN-ST sub-test cannot proceed to Warden's gate, regardless of Five Criteria status.
 

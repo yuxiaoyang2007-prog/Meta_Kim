@@ -4,13 +4,14 @@ Claude Code is one runtime projection of Meta_Kim. It is important, but it is no
 
 ## Fast Read
 
-If you only keep five rules in mind:
+If you only keep six rules in mind:
 
 - `meta-warden` is the public front door; the other meta agents are backstage specialists.
 - `canonical/agents/`, `canonical/skills/meta-theory/`, `canonical/runtime-assets/`, `config/contracts/`, and `config/capability-index/` are the durable sources of truth.
 - `.claude/` is a runtime projection generated from canonical assets. Sync it instead of hand-forking it.
 - When `meta-theory` is active, the main Claude thread dispatches; it does not execute complex work directly.
-- User-visible worker names must be coarse business role-family names such as `前端`, `后端`, `测试`, `frontend`, `backend`, or `test`, not scoped work items or host-generated personal nicknames.
+- Capability-first dispatch is **mechanically enforced** in Claude Code via the `enforce-agent-dispatch.mjs` PreToolUse hook (deny payload). Codex and Cursor v1.7+ now have the same hook projected; see `docs/cross-runtime-meta-enforcement.md` for the four-runtime matrix.
+- User-visible worker names must be coarse English business role-family names such as `frontend`, `backend`, or `test`, not scoped work items or host-generated personal nicknames. Localized trigger words may be recognized as input, but durable governance files stay English.
 
 ## What This Repository Is
 
@@ -128,6 +129,19 @@ Need capability
 
 Named dispatch without a discovery step is a design shortcut, not the canonical method.
 
+### Mechanical Enforcement
+
+Capability-first is no longer only a prompt-level discipline. In Claude Code it is enforced by the PreToolUse hook `enforce-agent-dispatch.mjs` (canonical source: `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs`).
+
+Behavior:
+
+- **Active stages**: `execution`, `review`, `meta_review`, `verification`, `evolution`. The hook denies any `Agent` dispatch in these stages unless `fetchRecord.capabilitySearchPerformed === true` is present in spine state.
+- **Exempt stages**: `critical`, `fetch`, `thinking`. Discovery happens here, so the gate does not fire.
+- **Override env var**: `META_KIM_CAPABILITY_GATE`. Values: `progressive`, `block`, `warn` (stderr warning only), `off` (gate disabled). Default: `progressive` (warn for the grace window, then block); `block` restores immediate deny. Use `warn` or `off` only for debugging — production runs should keep `progressive` (or `block` for strict environments).
+- **Other env vars**: `META_KIM_HOOK_RUNTIME` (one of `claude` / `codex` / `cursor`) selects the deny payload schema when the same hook is projected to a different runtime.
+
+The same hook script is now projected to Codex (`.codex/hooks/`) and Cursor v1.7+ (`.cursor/hooks/`) via `sync-runtimes.mjs`. See `docs/cross-runtime-meta-enforcement.md` for the four-runtime mechanical-deny matrix and OpenClaw's declarative-only gap.
+
 ## Business Flow Before Execution
 
 Before execution, create a business-flow blueprint for executable work. For a web product, for example, the blueprint may include:
@@ -158,7 +172,7 @@ The blueprint does not need every lane for every task, but omissions should be d
 Keep three names separate:
 
 - `ownerAgent`: real governance or execution owner, for example `meta-conductor` or `frontend-developer`
-- `roleDisplayName`: short user-visible business role family, for example `前端`, `后端`, `测试`, `frontend`, `backend`, or `test`
+- `roleDisplayName`: short user-visible English business role family, for example `frontend`, `backend`, or `test`
 - `runtimeInstanceAlias`: incidental runtime nickname, if Claude or another host assigns one
 
 Rules:
@@ -310,6 +324,7 @@ Use supporting commands as needed:
 
 - `npm run meta:validate`
 - `npm run meta:check:runtimes`
+- `npm run meta:check:sync-coverage`
 - `npm run meta:doctor:governance`
 - `npm run meta:eval:agents`
 - `npm run meta:eval:agents:live`

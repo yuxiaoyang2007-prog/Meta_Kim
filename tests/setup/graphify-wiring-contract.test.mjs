@@ -56,6 +56,21 @@ describe("graphify idempotent wiring (contract)", () => {
     assert.match(src, /case "rebuild":/);
   });
 
+  test("graphify-cli.mjs stamps freshness metadata after successful rebuild", () => {
+    const src = readFileSync(
+      path.join(root, "scripts/graphify-cli.mjs"),
+      "utf8",
+    );
+    const rebuildIdx = src.indexOf("function runRebuild()");
+    assert.notEqual(rebuildIdx, -1);
+    const rebuildBody = src.slice(rebuildIdx, rebuildIdx + 1200);
+
+    assert.match(src, /function stampGraphFreshness\(/);
+    assert.match(src, /graph\.built_at_commit = currentHead/);
+    assert.ok(src.includes("Built from commit:\\s*`?([0-9a-f]{7,40})`?"));
+    assert.match(rebuildBody, /stampGraphFreshness\(\)/);
+  });
+
   test("package exposes a cross-platform graphify rebuild script", () => {
     const pkg = JSON.parse(
       readFileSync(path.join(root, "package.json"), "utf8"),
@@ -107,6 +122,16 @@ describe("graphify idempotent wiring (contract)", () => {
     );
   });
 
+  test("setup.mjs skips guide-mutating graphify platform install when guide section exists", () => {
+    const src = readFileSync(path.join(root, "setup.mjs"), "utf8");
+
+    assert.match(src, /const GRAPHIFY_GUIDE_TARGETS = \{/);
+    assert.match(src, /function guideAlreadyHasGraphifySection\(platform\)/);
+    assert.match(src, /\^##\\s\+graphify\\b\/im/);
+    assert.match(src, /if \(guideAlreadyHasGraphifySection\(platform\)\)/);
+    assert.match(src, /continue;/);
+  });
+
   test("install and update validation skip local graphify gate but release validation keeps it", () => {
     const setupSrc = readFileSync(path.join(root, "setup.mjs"), "utf8");
     const validateSrc = readFileSync(
@@ -147,6 +172,22 @@ describe("graphify idempotent wiring (contract)", () => {
     assert.notEqual(idx, -1);
     const branch = src.slice(idx, idx + 600);
     assert.match(branch, /ensureGraphifyWiring\(\)/);
+  });
+
+  test("install-global-skills-all-runtimes.mjs does not let graphify rewrite existing Claude guide wiring", () => {
+    const src = readFileSync(
+      path.join(root, "scripts/install-global-skills-all-runtimes.mjs"),
+      "utf8",
+    );
+    const idx = src.indexOf("const ensureGraphifyWiring = () =>");
+    assert.notEqual(idx, -1);
+    const wiring = src.slice(idx, idx + 1000);
+
+    assert.match(src, /function guideAlreadyHasGraphifySection\(platform\)/);
+    assert.match(src, /\^##\\s\+graphify\\b\/im/);
+    assert.match(wiring, /guideAlreadyHasGraphifySection\("claude"\)/);
+    assert.match(wiring, /graphify claude install skipped/);
+    assert.match(wiring, /\["-m", "graphify", "hook", "install"\]/);
   });
 
   test("canonical subagent-context mentions GRAPH_REPORT.md", () => {

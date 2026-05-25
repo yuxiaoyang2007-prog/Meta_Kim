@@ -69,6 +69,9 @@ pwsh.*.omp.cache
 lib/
 */lib/
 */node_modules/
+# v2.2.0 exception: canonical abstraction modules live under shared/lib/ on purpose
+!canonical/runtime-assets/shared/lib/
+!canonical/runtime-assets/shared/lib/**
 
 # ========== Ignored docs ==========
 docs/architecture.zh-CN.md

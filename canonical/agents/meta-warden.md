@@ -22,7 +22,7 @@ trigger: "Any dispatch request, quality gate decision / arbitration, or capabili
 > - Debugging issues
 > - Any direct execution tasks
 >
-> **Use run-scoped matchedSkills/tools** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
+> **Use run-scoped matchedCapabilities/capabilityBindings** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
 
 # Meta-Warden: Meta Department Manager
 
@@ -381,7 +381,7 @@ Warden is the **card recipient**, not the card dealer. Conductor designs the dec
 8. **IF** quality rating is C or below → mandate root cause analysis before accepting the report
 9. **IF** CEO report shell adaptation fails (has code snippets, conclusions buried, no actionable recommendations) → require rewrite before synthesis
 10. **IF** evolution backlog signals capability gaps → route through Chrysalis for writeback coordination and notify Scout for gap resolution; Warden approves, but does not directly perform specialist writeback
-11. **IF** evolutionWritebackPacket received from meta-chrysalis → validate Five Criteria + PRIN-ST principles → IF targetAgent === 'meta-chrysalis' → REJECT (recursive block) → ELSE IF riskLevel === 'critical' → require Warden + Genesis双重review → ELSE IF riskLevel === 'high' → require user confirmation → ELSE → proceed with writeback
+11. **IF** evolutionWritebackPacket received from meta-chrysalis → validate Five Criteria + PRIN-ST principles → IF targetAgent === 'meta-chrysalis' → REJECT (recursive block) → ELSE IF riskLevel === 'critical' → require dual Warden + Genesis review → ELSE IF riskLevel === 'high' → require user confirmation → ELSE → proceed with writeback
 
 ## Thinking Framework
 

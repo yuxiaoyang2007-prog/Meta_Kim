@@ -1,11 +1,14 @@
 import { afterEach, describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import {
   CODEX_SKILL_DESCRIPTION_MAX_CHARS,
+  detectManagedInstallConflict,
   detectLegacySubdirInstall,
   detectPluginBundleSkillResidue,
   getSkillDescriptionLength,
@@ -17,6 +20,11 @@ import {
 } from "../../scripts/install-skill-sanitizer.mjs";
 
 const tempDirs = [];
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+);
 
 async function makeTempDir() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "meta-kim-sanitize-"));
@@ -131,6 +139,160 @@ describe("legacy subdir detection", () => {
 
     assert.equal(await detectLegacySubdirInstall(targetDir, "skills"), false);
   });
+
+  test("classifies trusted manifest-managed paths and legacy flat meta-theory files", async () => {
+    const root = await makeTempDir();
+    const managedDir = path.join(root, "skills", "findskill");
+    const legacyFile = path.join(root, "skills", "meta-theory.md");
+    await fs.mkdir(managedDir, { recursive: true });
+    await fs.mkdir(path.dirname(legacyFile), { recursive: true });
+    await fs.writeFile(legacyFile, "# old flat skill\n", "utf8");
+
+    assert.deepEqual(
+      await detectManagedInstallConflict(managedDir, {
+        skillId: "findskill",
+        manifestManagedPaths: [
+          {
+            path: managedDir,
+            source: "install-global-skills-all-runtimes",
+            purpose: "findskill-global-skill",
+            skillId: "findskill",
+          },
+        ],
+      }),
+      { conflict: true, reason: "manifest_managed_path" },
+    );
+    assert.deepEqual(
+      await detectManagedInstallConflict(legacyFile, {
+        legacyFlatMetaTheory: true,
+      }),
+      { conflict: true, reason: "legacy_flat_meta_theory" },
+    );
+  });
+
+  test("does not classify a normal user skill from a stale manifest path alone", async () => {
+    const root = await makeTempDir();
+    const userSkillDir = path.join(root, "skills", "findskill");
+    await fs.mkdir(userSkillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(userSkillDir, "SKILL.md"),
+      `---
+name: findskill
+description: User-created replacement skill
+---
+`,
+      "utf8",
+    );
+
+    const result = await detectManagedInstallConflict(userSkillDir, {
+      skillId: "findskill",
+      manifestManagedPaths: [
+        {
+          path: userSkillDir,
+          source: "old-scan",
+          purpose: "other-global-skill",
+          skillId: "other-skill",
+        },
+      ],
+    });
+
+    assert.deepEqual(result, { conflict: false });
+  });
+
+  test("classifies a manifest path when entry metadata matches the skill", async () => {
+    const root = await makeTempDir();
+    const managedDir = path.join(root, "skills", "findskill");
+    await fs.mkdir(managedDir, { recursive: true });
+    await fs.writeFile(path.join(managedDir, "README.md"), "managed", "utf8");
+
+    const result = await detectManagedInstallConflict(managedDir, {
+      skillId: "findskill",
+      manifestManagedPaths: [
+        {
+          path: managedDir,
+          source: "install-global-skills-all-runtimes",
+          purpose: "findskill-global-skill",
+          skillId: "findskill",
+        },
+      ],
+    });
+
+    assert.deepEqual(result, {
+      conflict: true,
+      reason: "manifest_managed_path",
+    });
+  });
+});
+
+describe("git update fallback failure reporting", () => {
+  test("exits non-zero when pull fallback clone also fails", async () => {
+    const root = await makeTempDir();
+    const runtimeHome = path.join(root, "claude-home");
+    const targetDir = path.join(
+      runtimeHome,
+      "skills",
+      "agent-teams-playbook",
+    );
+    await fs.mkdir(path.join(targetDir, ".git"), { recursive: true });
+    await fs.writeFile(
+      path.join(targetDir, "SKILL.md"),
+      `---
+name: agent-teams-playbook
+description: Existing install
+---
+`,
+      "utf8",
+    );
+
+    const fakeBin = path.join(root, "bin");
+    await fs.mkdir(fakeBin, { recursive: true });
+    if (process.platform === "win32") {
+      const fakeGit = `@echo off\r\necho fake git failure 1>&2\r\nexit /b 1\r\n`;
+      await fs.writeFile(path.join(fakeBin, "git.cmd"), fakeGit, "utf8");
+      await fs.writeFile(path.join(fakeBin, "git.bat"), fakeGit, "utf8");
+    } else {
+      const gitPath = path.join(fakeBin, "git");
+      await fs.writeFile(
+        gitPath,
+        `#!/bin/sh\nexit 1\n`,
+        "utf8",
+      );
+      await fs.chmod(gitPath, 0o755);
+    }
+
+    const childEnv = { ...process.env };
+    delete childEnv.PATH;
+    delete childEnv.Path;
+    childEnv.META_KIM_CLAUDE_HOME = runtimeHome;
+    childEnv.META_KIM_SKILL_OWNER =
+      "meta-kim-test-owner-that-should-not-exist-000000";
+    childEnv.Path = `${fakeBin}${path.delimiter}${process.env.Path ?? process.env.PATH ?? ""}`;
+    childEnv.PATH = childEnv.Path;
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(repoRoot, "scripts", "install-global-skills-all-runtimes.mjs"),
+        "--update",
+        "--skip-plugins",
+        "--targets",
+        "claude",
+        "--skills",
+        "agent-teams-playbook",
+      ],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: childEnv,
+      },
+    );
+
+    assert.notEqual(
+      result.status,
+      0,
+      `installer unexpectedly succeeded\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+    );
+  });
 });
 
 describe("plugin bundle residue detection", () => {
@@ -171,6 +333,45 @@ description: Normal user skill
     );
 
     assert.equal(await detectPluginBundleSkillResidue(targetDir), false);
+  });
+
+  test("classifies ECC-style plugin residue only with marker plus multiple runtime adapters", async () => {
+    const root = await makeTempDir();
+    const targetDir = path.join(root, "everything-claude-code");
+    await fs.mkdir(path.join(targetDir, ".codex"), { recursive: true });
+    await fs.mkdir(path.join(targetDir, ".cursor"), { recursive: true });
+    await fs.writeFile(path.join(targetDir, "plugin.json"), "{}", "utf8");
+
+    const result = await detectManagedInstallConflict(targetDir, {
+      skillId: "everything-claude-code",
+    });
+
+    assert.deepEqual(result, {
+      conflict: true,
+      reason: "plugin_bundle_residue",
+    });
+  });
+
+  test("does not classify a user skill that has only a plugin marker", async () => {
+    const root = await makeTempDir();
+    const targetDir = path.join(root, "my-custom-skill");
+    await fs.mkdir(targetDir, { recursive: true });
+    await fs.writeFile(path.join(targetDir, "plugin.json"), "{}", "utf8");
+    await fs.writeFile(
+      path.join(targetDir, "SKILL.md"),
+      `---
+name: my-custom-skill
+description: Normal user skill
+---
+`,
+      "utf8",
+    );
+
+    const result = await detectManagedInstallConflict(targetDir, {
+      skillId: "my-custom-skill",
+    });
+
+    assert.deepEqual(result, { conflict: false });
   });
 });
 

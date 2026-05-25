@@ -183,6 +183,7 @@ export function buildCodexHooksJson({
   graphifyHookPath = ".codex/hooks/graphify-context.mjs",
   memoryHookPath = ".codex/hooks/meta-kim-memory-save.mjs",
   spineHookPath = ".codex/hooks/activate-meta-theory-spine.mjs",
+  enforceAgentDispatchHookPath = ".codex/hooks/enforce-agent-dispatch.mjs",
   hookPromptAdapterPath = null,
 } = {}) {
   const userPromptHooks = [
@@ -210,6 +211,12 @@ export function buildCodexHooksJson({
         },
       ],
       PreToolUse: [
+        // Capability-first + meta-readonly deny gate must run before any other
+        // PreToolUse logic so it can short-circuit unsafe dispatches.
+        {
+          matcher: "Bash|apply_patch|Edit|Write|MultiEdit|NotebookEdit|Agent|spawn_agent",
+          hooks: [hookCommand(nodeHookCommand(enforceAgentDispatchHookPath), 10)],
+        },
         {
           matcher: "Bash",
           hooks: [hookCommand(nodeHookCommand(graphifyHookPath))],
@@ -233,6 +240,7 @@ export function buildCodexHooksJson({
 export function buildCursorHooksJson({
   graphifyHookPath = ".cursor/hooks/graphify-context.mjs",
   memoryHookPath = ".cursor/hooks/meta-kim-memory-save.mjs",
+  enforceAgentDispatchHookPath = ".cursor/hooks/enforce-agent-dispatch.mjs",
   hookPromptAdapterPath = null,
 } = {}) {
   const beforeSubmitPromptHooks = [
@@ -259,6 +267,13 @@ export function buildCursorHooksJson({
       ],
       beforeSubmitPrompt: beforeSubmitPromptHooks,
       preToolUse: [
+        // Capability-first + meta-readonly deny gate. failClosed=true ensures
+        // Cursor honors the deny payload even if the hook crashes.
+        {
+          command: nodeHookCommand(enforceAgentDispatchHookPath),
+          timeout: 10,
+          failClosed: true,
+        },
         {
           command: nodeHookCommand(graphifyHookPath),
         },

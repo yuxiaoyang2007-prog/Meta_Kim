@@ -25,6 +25,13 @@ export const PACKET_LOCATIONS = {
   dispatchEnvelopePacket: "dispatchEnvelopePacket",
   orchestrationTaskBoardPacket: "orchestrationTaskBoardPacket",
   businessFlowBlueprintPacket: "businessFlowBlueprintPacket",
+  productCompletenessPacket: "productCompletenessPacket",
+  experienceQualityPacket: "experienceQualityPacket",
+  testStrategyPacket: "testStrategyPacket",
+  structureHygienePacket: "structureHygienePacket",
+  permissionMatrixPacket: "permissionMatrixPacket",
+  sideEffectLedgerPacket: "sideEffectLedgerPacket",
+  rollbackPlanPacket: "rollbackPlanPacket",
   interfaceIntegrationContractPacket: "interfaceIntegrationContractPacket",
   agentBlueprintPacket: "agentBlueprintPacket",
   capabilityGapPacket: "capabilityGapPacket",
@@ -161,6 +168,44 @@ function ensureStringArray(value, context) {
   for (const [index, item] of value.entries()) {
     ensureString(item, `${context}[${index}]`);
   }
+}
+
+const DEFAULT_PRODUCT_GATE_PACKET_NAMES = [
+  "productCompletenessPacket",
+  "experienceQualityPacket",
+  "testStrategyPacket",
+  "structureHygienePacket",
+  "permissionMatrixPacket",
+  "sideEffectLedgerPacket",
+  "rollbackPlanPacket",
+];
+
+function productGatePacketNames(contract) {
+  const policy = contract.runDiscipline?.productDeliverableGatePolicy ?? {};
+  const names = [
+    ...(policy.requiredPackets ?? []),
+    ...(policy.requiredSideEffectPackets ?? []),
+  ];
+  return names.length > 0 ? [...new Set(names)] : DEFAULT_PRODUCT_GATE_PACKET_NAMES;
+}
+
+function getPathValue(root, ref) {
+  const normalized = String(ref ?? "")
+    .trim()
+    .replace(/\[(\d+)\]/g, ".$1");
+  if (!normalized) return undefined;
+  let cursor = root;
+  for (const part of normalized.split(".")) {
+    if (!part) continue;
+    if (cursor === undefined || cursor === null) return undefined;
+    cursor = cursor[part];
+  }
+  return cursor;
+}
+
+function evidenceRefResolves(artifact, ref) {
+  const value = getPathValue(artifact, ref);
+  return value !== undefined;
 }
 
 function ensureObjectArray(value, context) {
@@ -364,6 +409,132 @@ function validateMatchedSkills(policy, skills, context) {
   }
 }
 
+function validateMatchedCapabilities(policy, capabilities, context) {
+  ensureObjectArray(capabilities, context);
+  ensure(
+    capabilities.length >= 1,
+    `${context} must contain at least one run-scoped capability match.`,
+  );
+  const allowedTypes = policy.capabilityBindingTypeEnum ?? [];
+  const allowedScopes =
+    policy.capabilitySelectionScopeEnum ?? policy.skillSelectionScopeEnum;
+  for (const [index, capability] of capabilities.entries()) {
+    ensureFields(
+      capability,
+      policy.matchedCapabilityRequiredFields,
+      `${context}[${index}]`,
+    );
+    ensureString(capability.matchId, `${context}[${index}].matchId`);
+    ensureString(
+      capability.capabilitySlot,
+      `${context}[${index}].capabilitySlot`,
+    );
+    ensureEnum(
+      capability.bindingType,
+      allowedTypes,
+      `${context}[${index}].bindingType`,
+    );
+    ensureString(
+      capability.bindingRef,
+      `${context}[${index}].bindingRef`,
+    );
+    ensureString(capability.source, `${context}[${index}].source`);
+    ensure(
+      Number.isFinite(capability.confidenceScore),
+      `${context}[${index}].confidenceScore must be a number.`,
+    );
+    ensureString(
+      capability.selectionReason,
+      `${context}[${index}].selectionReason`,
+    );
+    ensureEnum(
+      capability.selectionScope,
+      allowedScopes,
+      `${context}[${index}].selectionScope`,
+    );
+    ensure(
+      capability.persistencePolicy === "do_not_persist_to_agent_identity",
+      `${context}[${index}].persistencePolicy must be do_not_persist_to_agent_identity.`,
+    );
+    ensureString(capability.fallback, `${context}[${index}].fallback`);
+  }
+}
+
+function validateCapabilityBindings(policy, bindings, context) {
+  ensureObjectArray(bindings, context);
+  ensure(
+    bindings.length >= 1,
+    `${context} must contain at least one concrete capability binding.`,
+  );
+  const allowedTypes = policy.capabilityBindingTypeEnum ?? [];
+  for (const [index, binding] of bindings.entries()) {
+    ensureFields(
+      binding,
+      policy.capabilityBindingRequiredFields,
+      `${context}[${index}]`,
+    );
+    ensureString(binding.bindingId, `${context}[${index}].bindingId`);
+    ensureString(
+      binding.capabilitySlot,
+      `${context}[${index}].capabilitySlot`,
+    );
+    ensureEnum(
+      binding.bindingType,
+      allowedTypes,
+      `${context}[${index}].bindingType`,
+    );
+    ensureString(binding.bindingRef, `${context}[${index}].bindingRef`);
+    ensureString(binding.source, `${context}[${index}].source`);
+    ensureString(binding.evidenceRef, `${context}[${index}].evidenceRef`);
+  }
+}
+
+function validateRoleCapabilityMatches(policy, role, context) {
+  const hasMatchedCapabilities = role.matchedCapabilities !== undefined;
+  const hasMatchedSkills = role.matchedSkills !== undefined;
+  ensure(
+    hasMatchedCapabilities || hasMatchedSkills,
+    `${context} must include matchedCapabilities or legacy matchedSkills capability evidence.`,
+  );
+
+  if (hasMatchedCapabilities) {
+    validateMatchedCapabilities(
+      policy,
+      role.matchedCapabilities,
+      `${context}.matchedCapabilities`,
+    );
+    ensure(
+      role.capabilityBindings !== undefined,
+      `${context}.capabilityBindings is required when matchedCapabilities are present.`,
+    );
+  }
+  if (role.capabilityBindings !== undefined) {
+    validateCapabilityBindings(
+      policy,
+      role.capabilityBindings,
+      `${context}.capabilityBindings`,
+    );
+  }
+  if (hasMatchedCapabilities) {
+    const bindings = role.capabilityBindings ?? [];
+    for (const [index, capability] of role.matchedCapabilities.entries()) {
+      const hasBinding = bindings.some(
+        (binding) =>
+          binding.capabilitySlot === capability.capabilitySlot &&
+          binding.bindingType === capability.bindingType &&
+          binding.bindingRef === capability.bindingRef,
+      );
+      ensure(
+        hasBinding,
+        `${context}.matchedCapabilities[${index}] must have a matching capabilityBindings entry with the same capabilitySlot, bindingType, and bindingRef.`,
+      );
+    }
+  }
+  if (hasMatchedSkills) {
+    validateMatchedSkills(policy, role.matchedSkills, `${context}.matchedSkills`);
+  }
+}
+
 function validateGovernanceStageNodes(policy, nodes, context) {
   ensureObjectArray(nodes, context);
   ensure(nodes.length >= 1, `${context} must contain at least one governance stage node.`);
@@ -404,8 +575,149 @@ function contractFromPolicy(policy) {
   };
 }
 
+function shouldRequireProductGatePackets(contract, artifact) {
+  const policy = contract.runDiscipline?.productDeliverableGatePolicy ?? {};
+  if (policy.enabled !== true) return false;
+
+  const flow = artifact.taskClassification?.governanceFlow;
+  if (policy.requiredForNonQuery === true && flow && flow !== "query") {
+    return true;
+  }
+
+  const deliverableType = artifact.businessFlowBlueprintPacket?.deliverableType;
+  return (policy.requiredWhenDeliverableTypes ?? []).includes(deliverableType);
+}
+
+function productGatePolicy(contract) {
+  return contract.runDiscipline?.productDeliverableGatePolicy ?? {};
+}
+
+function dimensionCoverageFieldForPacket(contract, packetName) {
+  return productGatePolicy(contract).dimensionCoverageFieldByPacket?.[packetName];
+}
+
+function dimensionCatalogForPacket(contract, packetName, deliverableType) {
+  const catalog = productGatePolicy(contract).designDimensionCatalog ?? [];
+  return catalog.filter((dimension) => {
+    if (dimension?.packet !== packetName) return false;
+    const applicable = dimension.applicableDeliverableTypes ?? [];
+    return applicable.includes("all") || applicable.includes(deliverableType);
+  });
+}
+
+function validateDimensionCoverage(
+  contract,
+  packetName,
+  packet,
+  artifact,
+) {
+  const fieldName = dimensionCoverageFieldForPacket(contract, packetName);
+  if (!fieldName) return;
+
+  const policy = productGatePolicy(contract);
+  const deliverableType = artifact.businessFlowBlueprintPacket?.deliverableType;
+  const requiredDimensions = dimensionCatalogForPacket(
+    contract,
+    packetName,
+    deliverableType,
+  );
+  const requiredDimensionIds = new Set(
+    requiredDimensions.map((dimension) => dimension.dimensionId),
+  );
+  const knownDimensionIds = new Set(
+    (policy.designDimensionCatalog ?? []).map((dimension) => dimension.dimensionId),
+  );
+  const allowedStatuses = policy.dimensionCoverageStatusEnum ?? [
+    "covered",
+    "omitted_with_reason",
+    "blocked",
+  ];
+  const publicReadyAllowed = policy.dimensionPublicReadyAllowedStatuses ?? [
+    "covered",
+    "omitted_with_reason",
+  ];
+
+  ensureObjectArray(packet[fieldName], `${packetName}.${fieldName}`);
+
+  const coveredIds = new Set();
+  for (const [index, dimension] of packet[fieldName].entries()) {
+    const context = `${packetName}.${fieldName}[${index}]`;
+    ensureFields(
+      dimension,
+      policy.dimensionCoverageRequiredFields ?? ["dimensionId", "status"],
+      context,
+    );
+    ensureString(dimension.dimensionId, `${context}.dimensionId`);
+    ensure(
+      knownDimensionIds.has(dimension.dimensionId),
+      `${context}.dimensionId must be defined in productDeliverableGatePolicy.designDimensionCatalog: ${dimension.dimensionId}`,
+    );
+    ensureEnum(dimension.status, allowedStatuses, `${context}.status`);
+
+    if (dimension.status === "covered") {
+      ensureString(dimension.evidenceRef, `${context}.evidenceRef`);
+      ensure(
+        evidenceRefResolves(artifact, dimension.evidenceRef),
+        `${context}.evidenceRef must resolve to an artifact evidence path, got: ${dimension.evidenceRef}`,
+      );
+    } else if (dimension.status === "omitted_with_reason") {
+      ensureString(dimension.omissionReason, `${context}.omissionReason`);
+    } else if (dimension.status === "blocked") {
+      ensureString(dimension.blockingReason, `${context}.blockingReason`);
+    }
+
+    if (artifact.summaryPacket?.publicReady === true) {
+      ensure(
+        publicReadyAllowed.includes(dimension.status),
+        `summaryPacket.publicReady=true requires ${context}.status to be one of [${publicReadyAllowed.join(", ")}], got: ${dimension.status}`,
+      );
+    }
+
+    coveredIds.add(dimension.dimensionId);
+  }
+
+  for (const dimensionId of requiredDimensionIds) {
+    ensure(
+      coveredIds.has(dimensionId),
+      `${packetName}.${fieldName} must include design-time dimension ${dimensionId} for deliverableType=${deliverableType}.`,
+    );
+  }
+}
+
+function ensureAcyclicDependencyGraph(dependenciesById, context) {
+  const visiting = new Set();
+  const visited = new Set();
+  const stack = [];
+
+  const visit = (id) => {
+    if (visited.has(id)) return;
+    if (visiting.has(id)) {
+      const cycleStart = stack.indexOf(id);
+      const cyclePath = [...stack.slice(cycleStart), id].join(" -> ");
+      fail(`${context} contains a dependency cycle: ${cyclePath}`);
+    }
+
+    visiting.add(id);
+    stack.push(id);
+    for (const dep of dependenciesById.get(id) ?? []) {
+      visit(dep);
+    }
+    stack.pop();
+    visiting.delete(id);
+    visited.add(id);
+  };
+
+  for (const id of dependenciesById.keys()) {
+    visit(id);
+  }
+}
+
 function validateRoleDisplayName(name, context) {
   const trimmed = String(name ?? "").trim();
+  ensure(
+    !/^agent-[0-9a-f-]+$/i.test(trimmed),
+    `${context} must be a role-family name; runtime alias ids such as agent-019e56a9 belong in runtimeInstanceAlias only.`,
+  );
   ensure(
     !/^[A-Z][a-z]+$/.test(trimmed),
     `${context} must be business-readable, not a runtime nickname.`,
@@ -536,6 +848,15 @@ function validateTaskClassification(contract, taskClassification) {
         taskClassification.governanceFlow === "query" &&
         taskClassification.bypassReasons.includes("pure_query"),
       "ownerRequired=false is only legal for pure-query runs.",
+    );
+  }
+  if (taskClassification.governanceFlow === "query") {
+    ensure(
+      taskClassification.taskClass === "Q" &&
+        taskClassification.requestClass === "query" &&
+        taskClassification.ownerRequired === false &&
+        taskClassification.bypassReasons.includes("pure_query"),
+      "governanceFlow=query is only legal for true pure-query runs; executable work is misclassified.",
     );
   }
 }
@@ -824,6 +1145,160 @@ function validateIntentGatePacketWhenRequired(contract, artifact) {
   }
 }
 
+function validatePreDecisionOptionFrame(contract, artifact) {
+  const when =
+    contract.runDiscipline.protocolFirst
+      .preDecisionOptionFrameRequiredBeforeUserChoiceWhenGovernanceFlows ?? [];
+  const flow = artifact.taskClassification?.governanceFlow;
+  if (!when.includes(flow)) {
+    return;
+  }
+
+  const packet = artifact.preDecisionOptionFrame;
+  ensure(
+    packet && typeof packet === "object",
+    `preDecisionOptionFrame is required when governanceFlow is ${flow}.`,
+  );
+  const policy = contract.protocols.preDecisionOptionFrame;
+  ensureFields(packet, policy.requiredFields, "preDecisionOptionFrame");
+  ensure(
+    packet.presentedBeforeDecision === true,
+    "preDecisionOptionFrame.presentedBeforeDecision must be true.",
+  );
+  ensure(
+    packet.builtFromContentEvidence === true,
+    "preDecisionOptionFrame.builtFromContentEvidence must be true.",
+  );
+  ensureArray(
+    packet.contentEvidenceRefs,
+    "preDecisionOptionFrame.contentEvidenceRefs",
+  );
+  ensure(
+    packet.contentEvidenceRefs.length >= 1,
+    "preDecisionOptionFrame.contentEvidenceRefs must include at least one evidence reference.",
+  );
+  ensureArray(
+    packet.unresolvedQuestions,
+    "preDecisionOptionFrame.unresolvedQuestions",
+  );
+  for (const [index, question] of packet.unresolvedQuestions.entries()) {
+    if (typeof question === "string") {
+      ensure(
+        question.trim().length >= 1,
+        `preDecisionOptionFrame.unresolvedQuestions[${index}] must be non-empty.`,
+      );
+    } else {
+      ensureObject(
+        question,
+        `preDecisionOptionFrame.unresolvedQuestions[${index}]`,
+      );
+      ensureString(
+        question.question ?? question.text,
+        `preDecisionOptionFrame.unresolvedQuestions[${index}].question`,
+      );
+      if (question.status !== undefined) {
+        ensure(
+          ["open", "closed", "skipped"].includes(question.status),
+          `preDecisionOptionFrame.unresolvedQuestions[${index}].status must be open, closed, or skipped.`,
+        );
+      }
+    }
+  }
+  ensureArray(packet.candidateOptions, "preDecisionOptionFrame.candidateOptions");
+  ensure(
+    packet.candidateOptions.length >= 2,
+    "preDecisionOptionFrame.candidateOptions must include at least two candidate solution paths.",
+  );
+  for (const [index, option] of packet.candidateOptions.entries()) {
+    ensureObject(option, `preDecisionOptionFrame.candidateOptions[${index}]`);
+    ensureFields(
+      option,
+      policy.candidateOptionRequiredFields,
+      `preDecisionOptionFrame.candidateOptions[${index}]`,
+    );
+    ensureArray(
+      option.candidateOwners,
+      `preDecisionOptionFrame.candidateOptions[${index}].candidateOwners`,
+    );
+    ensure(
+      option.candidateOwners.length >= 1,
+      `preDecisionOptionFrame.candidateOptions[${index}].candidateOwners must not be empty.`,
+    );
+    ensureString(
+      option.candidateTaskShape,
+      `preDecisionOptionFrame.candidateOptions[${index}].candidateTaskShape`,
+    );
+  }
+  ensure(
+    typeof packet.requiresUserChoice === "boolean",
+    "preDecisionOptionFrame.requiresUserChoice must be a boolean.",
+  );
+  const allowedSkips = policy.choiceGateSkipAllowedWhen ?? [];
+  if (packet.choiceGateSkip !== null && packet.choiceGateSkip !== undefined) {
+    ensureEnum(
+      packet.choiceGateSkip,
+      allowedSkips,
+      "preDecisionOptionFrame.choiceGateSkip",
+    );
+  }
+  ensureString(
+    packet.solutionChoiceState,
+    "preDecisionOptionFrame.solutionChoiceState",
+  );
+  ensureEnum(
+    packet.solutionChoiceState,
+    policy.solutionChoiceStateEnum ?? ["confirmed", ...allowedSkips],
+    "preDecisionOptionFrame.solutionChoiceState",
+  );
+  if (allowedSkips.includes(packet.solutionChoiceState)) {
+    ensure(
+      packet.choiceGateSkip === packet.solutionChoiceState,
+      "preDecisionOptionFrame.solutionChoiceState must match choiceGateSkip when confirmation is skipped.",
+    );
+  }
+  if (packet.requiresUserChoice === true) {
+    ensure(
+      packet.solutionChoiceState === "confirmed",
+      "preDecisionOptionFrame.solutionChoiceState must be confirmed before dispatch artifacts are finalized when user choice is required.",
+    );
+    ensure(
+      packet.choiceGateSkip === null || packet.choiceGateSkip === undefined,
+      "preDecisionOptionFrame.choiceGateSkip must be empty when user choice is required.",
+    );
+  }
+  if (packet.solutionChoiceState === "confirmed") {
+    ensure(
+      packet.userChoiceState === "confirmed",
+      "preDecisionOptionFrame.userChoiceState must be confirmed when solutionChoiceState is confirmed.",
+    );
+  } else {
+    ensure(
+      packet.userChoiceState === packet.solutionChoiceState,
+      "preDecisionOptionFrame.userChoiceState must match solutionChoiceState for skip-based confirmation.",
+    );
+  }
+}
+
+function validateFinalizedChoiceState(artifact, packet, context) {
+  const frame = artifact.preDecisionOptionFrame;
+  if (!frame) return;
+  ensureString(packet.preDecisionOptionFrameRef, `${context}.preDecisionOptionFrameRef`);
+  ensure(
+    packet.preDecisionOptionFrameRef === "preDecisionOptionFrame",
+    `${context}.preDecisionOptionFrameRef must point to preDecisionOptionFrame.`,
+  );
+  ensureString(packet.userChoiceState, `${context}.userChoiceState`);
+  ensure(
+    packet.userChoiceState === frame.solutionChoiceState,
+    `${context}.userChoiceState must match preDecisionOptionFrame.solutionChoiceState.`,
+  );
+  ensureString(packet.finalizationGate, `${context}.finalizationGate`);
+  ensure(
+    !/pending|before/i.test(packet.finalizationGate),
+    `${context}.finalizationGate must show dispatch was finalized after user choice or an allowed skip.`,
+  );
+}
+
 function validateDispatchEnvelope(contract, artifact) {
   const when =
     contract.runDiscipline.protocolFirst
@@ -852,6 +1327,7 @@ function validateDispatchEnvelope(contract, artifact) {
     "dispatchEnvelopePacket.roleDisplayName",
   );
   ensureString(packet.roleInstanceId, "dispatchEnvelopePacket.roleInstanceId");
+  validateFinalizedChoiceState(artifact, packet, "dispatchEnvelopePacket");
   ensureString(packet.taskRef, "dispatchEnvelopePacket.taskRef");
   ensureStringArray(
     packet.allowedCapabilities,
@@ -920,6 +1396,28 @@ function validateDispatchEnvelope(contract, artifact) {
     ensure(
       packet.memoryMode === "cross_project_readonly",
       "all_projects runs must use dispatchEnvelopePacket.memoryMode=cross_project_readonly.",
+    );
+  }
+}
+
+function validateDispatchBoard(contract, artifact) {
+  const packet = artifact.dispatchBoard;
+  ensureFields(
+    packet,
+    contract.protocols.dispatchBoard.requiredFields,
+    "dispatchBoard",
+  );
+  for (const field of contract.protocols.dispatchBoard.requiredFields) {
+    ensureString(packet[field], `dispatchBoard.${field}`);
+  }
+  ensure(
+    packet.primaryDeliverable === artifact.runHeader.primaryDeliverable,
+    "dispatchBoard.primaryDeliverable must match runHeader.primaryDeliverable.",
+  );
+  if (artifact.orchestrationTaskBoardPacket) {
+    ensure(
+      packet.boardId === artifact.orchestrationTaskBoardPacket.dispatchBoardId,
+      "dispatchBoard.boardId must match orchestrationTaskBoardPacket.dispatchBoardId.",
     );
   }
 }
@@ -1023,7 +1521,9 @@ function validateOrchestrationTaskBoard(contract, artifact) {
     }
   }
 
+  const dependenciesByTaskId = new Map();
   for (const [index, task] of packet.tasks.entries()) {
+    dependenciesByTaskId.set(task.taskId, []);
     for (const [depIndex, dep] of task.dependsOn.entries()) {
       ensureString(
         dep,
@@ -1033,8 +1533,13 @@ function validateOrchestrationTaskBoard(contract, artifact) {
         taskIds.has(dep),
         `orchestrationTaskBoardPacket task ${task.taskId} depends on unknown taskId ${dep}.`,
       );
+      dependenciesByTaskId.get(task.taskId).push(dep);
     }
   }
+  ensureAcyclicDependencyGraph(
+    dependenciesByTaskId,
+    "orchestrationTaskBoardPacket.tasks",
+  );
 
   if (packet.boardMode === "factory_then_dispatch") {
     ensure(
@@ -1053,6 +1558,7 @@ function validateOrchestrationTaskBoard(contract, artifact) {
 function validateBusinessFlowBlueprint(contract, artifact) {
   const flow = artifact.businessFlowBlueprintPacket;
   const policy = contract.protocols.businessFlowBlueprintPacket;
+  const capabilityPolicy = contract.protocols.agentBlueprintPacket;
   ensureFields(
     flow,
     policy.requiredFields,
@@ -1075,25 +1581,47 @@ function validateBusinessFlowBlueprint(contract, artifact) {
     ensureObject(lane, context);
     ensureFields(lane, policy.laneRequiredFields, context);
     for (const field of policy.laneRequiredFields) {
-      if (field === "candidateOwners" || field === "candidateSkills") {
+      if (field === "candidateOwners") {
         ensureStringArray(lane[field], `${context}.${field}`);
         ensure(
           lane[field].length >= 1,
           `${context}.${field} must include at least one global capability scan candidate.`,
         );
-        if (field === "candidateOwners") {
-          for (const [ownerIndex, owner] of lane[field].entries()) {
-            ensureDurableOwner(
-              contract,
-              artifact,
-              owner,
-              `${context}.candidateOwners[${ownerIndex}]`,
-            );
-          }
+        for (const [ownerIndex, owner] of lane[field].entries()) {
+          ensureDurableOwner(
+            contract,
+            artifact,
+            owner,
+            `${context}.candidateOwners[${ownerIndex}]`,
+          );
         }
+      } else if (field === "matchedCapabilities") {
+        validateMatchedCapabilities(
+          capabilityPolicy,
+          lane[field],
+          `${context}.${field}`,
+        );
+      } else if (field === "capabilityBindings") {
+        validateCapabilityBindings(
+          capabilityPolicy,
+          lane[field],
+          `${context}.${field}`,
+        );
       } else {
         ensureString(lane[field], `${context}.${field}`);
       }
+    }
+    for (const [capabilityIndex, capability] of lane.matchedCapabilities.entries()) {
+      const hasBinding = lane.capabilityBindings.some(
+        (binding) =>
+          binding.capabilitySlot === capability.capabilitySlot &&
+          binding.bindingType === capability.bindingType &&
+          binding.bindingRef === capability.bindingRef,
+      );
+      ensure(
+        hasBinding,
+        `${context}.matchedCapabilities[${capabilityIndex}] must have a matching capabilityBindings entry with the same capabilitySlot, bindingType, and bindingRef.`,
+      );
     }
     ensureDurableOwner(contract, artifact, lane.selectedOwner, `${context}.selectedOwner`);
     ensureEnum(
@@ -1154,6 +1682,159 @@ function validateBusinessFlowBlueprint(contract, artifact) {
   }
 
   return { requiredLaneIds, optionalLaneIds, omittedLaneIds };
+}
+
+function validateEvidenceBackedGatePacket(
+  contract,
+  packetName,
+  statusField,
+  artifact,
+  options = {},
+) {
+  const packet = artifact[packetName];
+  const protocol = contract.protocols[packetName];
+  ensureFields(packet, protocol.requiredFields, packetName);
+  ensureForbiddenSecretValueKeysAbsent(packet, packetName);
+
+  for (const field of protocol.requiredFields) {
+    if (field === "owner") {
+      ensureDurableOwner(contract, artifact, packet[field], `${packetName}.${field}`);
+      continue;
+    }
+    if (field === "evidenceRefs") {
+      ensureStringArray(packet[field], `${packetName}.${field}`);
+      ensure(
+        packet[field].length >= 1,
+        `${packetName}.${field} must include at least one evidence reference.`,
+      );
+      for (const [index, ref] of packet[field].entries()) {
+        ensure(
+          evidenceRefResolves(artifact, ref),
+          `${packetName}.evidenceRefs[${index}] must resolve to an artifact evidence path, got: ${ref}`,
+        );
+      }
+      continue;
+    }
+    if (Array.isArray(packet[field])) {
+      if (
+        options.allowEmptyArrays?.includes(field) &&
+        packet[field].length === 0
+      ) {
+        continue;
+      }
+      ensure(
+        packet[field].length >= 1,
+        `${packetName}.${field} must not be empty.`,
+      );
+      for (const [index, item] of packet[field].entries()) {
+        ensure(
+          (typeof item === "string" && item.trim().length >= 1) ||
+            (item && typeof item === "object"),
+          `${packetName}.${field}[${index}] must be a non-empty string or object.`,
+        );
+      }
+      continue;
+    }
+    ensureNonEmptyValue(packet[field], `${packetName}.${field}`);
+  }
+
+  ensureEnum(packet[statusField], protocol.statusEnum, `${packetName}.${statusField}`);
+  validateDimensionCoverage(contract, packetName, packet, artifact);
+}
+
+function validateProductGatePackets(contract, artifact) {
+  if (!shouldRequireProductGatePackets(contract, artifact)) {
+    return;
+  }
+
+  for (const packetName of productGatePacketNames(contract)) {
+    ensure(
+      artifact[packetName] !== undefined,
+      `${packetName} is required for non-query or product deliverable run artifacts.`,
+    );
+  }
+
+  validateEvidenceBackedGatePacket(
+    contract,
+    "productCompletenessPacket",
+    "completenessStatus",
+    artifact,
+  );
+  validateEvidenceBackedGatePacket(
+    contract,
+    "experienceQualityPacket",
+    "experienceStatus",
+    artifact,
+  );
+  validateEvidenceBackedGatePacket(
+    contract,
+    "testStrategyPacket",
+    "testStatus",
+    artifact,
+    { allowEmptyArrays: ["deferredTests"] },
+  );
+  validateEvidenceBackedGatePacket(
+    contract,
+    "structureHygienePacket",
+    "hygieneStatus",
+    artifact,
+  );
+  validateEvidenceBackedGatePacket(
+    contract,
+    "permissionMatrixPacket",
+    "permissionStatus",
+    artifact,
+  );
+  validateEvidenceBackedGatePacket(
+    contract,
+    "sideEffectLedgerPacket",
+    "sideEffectStatus",
+    artifact,
+    {
+      allowEmptyArrays: [
+        "sideEffects",
+        "externalSystemsTouched",
+        "stateChanges",
+      ],
+    },
+  );
+  if (artifact.sideEffectLedgerPacket.sideEffectStatus !== "none") {
+    ensure(
+      artifact.sideEffectLedgerPacket.sideEffects.length >= 1 ||
+        artifact.sideEffectLedgerPacket.stateChanges.length >= 1,
+      "sideEffectLedgerPacket must record sideEffects or stateChanges unless sideEffectStatus=none.",
+    );
+  }
+  validateEvidenceBackedGatePacket(
+    contract,
+    "rollbackPlanPacket",
+    "rollbackStatus",
+    artifact,
+  );
+}
+
+function validateProductGatePublicReadyStatus(contract, artifact) {
+  if (
+    artifact.summaryPacket?.publicReady !== true ||
+    !shouldRequireProductGatePackets(contract, artifact)
+  ) {
+    return;
+  }
+
+  const policy =
+    contract.runDiscipline?.runArtifactValidation
+      ?.productGatePublicReadyStatusPolicy ?? {};
+  if (policy.enabled !== true) return;
+
+  for (const entry of policy.packetStatusFields ?? []) {
+    const packet = artifact[entry.packet];
+    const value = packet?.[entry.statusField];
+    const allowed = entry.publicReadyAllowed ?? [];
+    ensure(
+      allowed.includes(value),
+      `summaryPacket.publicReady=true requires ${entry.packet}.${entry.statusField} to be one of [${allowed.join(", ")}], got: ${value}`,
+    );
+  }
 }
 
 function validateInterfaceIntegrationContractWhenRequired(contract, artifact) {
@@ -1347,7 +2028,7 @@ function validateAgentBlueprint(contract, artifact) {
       `agentBlueprintPacket.roles[${index}]`,
     );
     for (const field of policy.roleRequiredFields) {
-      if (["matchedSkills", "governanceStageNodes"].includes(field)) {
+      if (["governanceStageNodes"].includes(field)) {
         continue;
       }
       ensureNonEmptyValue(role[field], `agentBlueprintPacket.roles[${index}].${field}`);
@@ -1361,16 +2042,29 @@ function validateAgentBlueprint(contract, artifact) {
       policy.ownerResolutionEnum,
       `agentBlueprintPacket.roles[${index}].ownerResolution`,
     );
-    validateMatchedSkills(policy, role.matchedSkills, `agentBlueprintPacket.roles[${index}].matchedSkills`);
+    validateRoleCapabilityMatches(
+      policy,
+      role,
+      `agentBlueprintPacket.roles[${index}]`,
+    );
     if (role.providerCompatibility !== undefined) {
       ensureStringArray(
         role.providerCompatibility,
         `agentBlueprintPacket.roles[${index}].providerCompatibility`,
       );
-      for (const [skillIndex, skill] of role.matchedSkills.entries()) {
+      for (const [skillIndex, skill] of (role.matchedSkills ?? []).entries()) {
         ensure(
           role.providerCompatibility.includes(skill.providerId),
           `agentBlueprintPacket.roles[${index}].matchedSkills[${skillIndex}].providerId must appear in role providerCompatibility.`,
+        );
+      }
+      for (const [capabilityIndex, capability] of (
+        role.matchedCapabilities ?? []
+      ).entries()) {
+        if (capability.providerId === undefined) continue;
+        ensure(
+          role.providerCompatibility.includes(capability.providerId),
+          `agentBlueprintPacket.roles[${index}].matchedCapabilities[${capabilityIndex}].providerId must appear in role providerCompatibility.`,
         );
       }
     }
@@ -1864,6 +2558,59 @@ function validateCardPlan(contract, artifact) {
   }
 }
 
+function normalizeWorkerDependency(contract, dep, context) {
+  if (typeof dep === "string") {
+    ensureString(dep, context);
+    return dep;
+  }
+
+  ensureObject(dep, context);
+  ensureFields(dep, ["taskRef"], context);
+  ensureString(dep.taskRef, `${context}.taskRef`);
+
+  if (dep.type !== undefined) {
+    ensureEnum(
+      dep.type,
+      Object.keys(contract.protocols.dependencyContract?.threeModes ?? {}),
+      `${context}.type`,
+    );
+  }
+  if (dep.timeout_ms !== undefined) {
+    ensure(
+      Number.isInteger(dep.timeout_ms) && dep.timeout_ms > 0,
+      `${context}.timeout_ms must be a positive integer.`,
+    );
+  }
+  if (dep.retry !== undefined) {
+    ensureObject(dep.retry, `${context}.retry`);
+    if (dep.retry.max !== undefined) {
+      ensure(
+        Number.isInteger(dep.retry.max) && dep.retry.max >= 0,
+        `${context}.retry.max must be a non-negative integer.`,
+      );
+    }
+    if (dep.retry.backoff_ms !== undefined) {
+      ensure(
+        Number.isInteger(dep.retry.backoff_ms) && dep.retry.backoff_ms >= 0,
+        `${context}.retry.backoff_ms must be a non-negative integer.`,
+      );
+    }
+  }
+  if (dep.onTimeout !== undefined) {
+    ensureEnum(
+      dep.onTimeout,
+      ["skip", "abort", "use_fallback"],
+      `${context}.onTimeout`,
+    );
+    if (dep.onTimeout === "use_fallback") {
+      ensureObject(dep.fallback, `${context}.fallback`);
+      ensureString(dep.fallback.artifact, `${context}.fallback.artifact`);
+    }
+  }
+
+  return dep.taskRef;
+}
+
 function validateWorkerPackets(contract, artifact) {
   const primaryDeliverable = artifact.runHeader.primaryDeliverable;
   ensure(
@@ -1877,6 +2624,7 @@ function validateWorkerPackets(contract, artifact) {
   ensureArray(resultPackets, "workerResultPackets");
 
   const taskById = new Map();
+  const dependenciesByTaskId = new Map();
   const packetsByOwnerAgent = new Map();
   const workerPolicy = contract.protocols.workerTaskPacket.sameOwnerMultiInstancePolicy;
   const validCollisionPolicies = workerPolicy.collisionPolicyEnum ?? [];
@@ -1891,6 +2639,7 @@ function validateWorkerPackets(contract, artifact) {
       contract.protocols.workerTaskPacket.requiredFields,
       `workerTaskPackets[${index}]`,
     );
+    ensureString(packet.taskPacketId, `workerTaskPackets[${index}].taskPacketId`);
     ensure(
       !taskById.has(packet.taskPacketId),
       `Duplicate workerTaskPacket taskPacketId: ${packet.taskPacketId}`,
@@ -1925,9 +2674,16 @@ function validateWorkerPackets(contract, artifact) {
       validWorkspaceIsolation.has(packet.workspaceIsolation),
       `workerTaskPackets[${index}].workspaceIsolation must be one of [${[...validWorkspaceIsolation].join(", ")}].`,
     );
+    ensureArray(packet.dependsOn, `workerTaskPackets[${index}].dependsOn`);
+    dependenciesByTaskId.set(packet.taskPacketId, []);
     validateRoleDisplayName(
       packet.roleDisplayName,
       `workerTaskPacket ${packet.taskPacketId} roleDisplayName`,
+    );
+    validateFinalizedChoiceState(
+      artifact,
+      packet,
+      `workerTaskPackets[${index}]`,
     );
     const ownerPackets = packetsByOwnerAgent.get(packet.ownerAgent) ?? [];
     ownerPackets.push({ ...packet, index });
@@ -1945,6 +2701,22 @@ function validateWorkerPackets(contract, artifact) {
       );
     }
   }
+
+  for (const [index, packet] of taskPackets.entries()) {
+    for (const [depIndex, dep] of packet.dependsOn.entries()) {
+      const depRef = normalizeWorkerDependency(
+        contract,
+        dep,
+        `workerTaskPackets[${index}].dependsOn[${depIndex}]`,
+      );
+      ensure(
+        taskById.has(depRef),
+        `workerTaskPacket ${packet.taskPacketId} depends on unknown taskPacketId ${depRef}.`,
+      );
+      dependenciesByTaskId.get(packet.taskPacketId).push(depRef);
+    }
+  }
+  ensureAcyclicDependencyGraph(dependenciesByTaskId, "workerTaskPackets");
 
   for (const [ownerAgent, ownerPackets] of packetsByOwnerAgent.entries()) {
     const roleInstanceIds = new Set();
@@ -2013,6 +2785,73 @@ function validateWorkerPackets(contract, artifact) {
   }
 }
 
+function normalizeReasonValue(value) {
+  if (typeof value === "string") return value.trim();
+  if (value && typeof value === "object") {
+    return String(value.reason ?? value.value ?? value.status ?? "").trim();
+  }
+  return "";
+}
+
+function collectRecordedChoiceOrSkipReasons(artifact) {
+  const reasons = new Set();
+  for (const value of [
+    artifact.intentGatePacket?.choiceGateSkip,
+    artifact.preDecisionOptionFrame?.choiceGateSkip,
+    artifact.preDecisionOptionFrame?.solutionChoiceState,
+    artifact.preDecisionOptionFrame?.userChoiceState,
+    artifact.dispatchEnvelopePacket?.userChoiceState,
+    ...(artifact.workerTaskPackets ?? []).map((packet) => packet.userChoiceState),
+  ]) {
+    const reason = normalizeReasonValue(value);
+    if (reason) reasons.add(reason);
+  }
+  return reasons;
+}
+
+function validateReviewProcessChecks(artifact) {
+  const check = artifact.reviewPacket.triggerVsSkipReasonCheck;
+  ensureObject(check, "reviewPacket.triggerVsSkipReasonCheck");
+  ensureFields(
+    check,
+    ["status", "triggerReasons", "skipReason", "evidence"],
+    "reviewPacket.triggerVsSkipReasonCheck",
+  );
+  ensureEnum(
+    check.status,
+    ["pass", "fail"],
+    "reviewPacket.triggerVsSkipReasonCheck.status",
+  );
+  ensureStringArray(
+    check.triggerReasons,
+    "reviewPacket.triggerVsSkipReasonCheck.triggerReasons",
+  );
+  ensureString(check.skipReason, "reviewPacket.triggerVsSkipReasonCheck.skipReason");
+  ensureString(check.evidence, "reviewPacket.triggerVsSkipReasonCheck.evidence");
+
+  for (const triggerReason of artifact.taskClassification.triggerReasons ?? []) {
+    ensure(
+      check.triggerReasons.includes(triggerReason),
+      `reviewPacket.triggerVsSkipReasonCheck.triggerReasons must include taskClassification trigger reason ${triggerReason}.`,
+    );
+  }
+
+  const recordedReasons = collectRecordedChoiceOrSkipReasons(artifact);
+  if (check.skipReason && check.skipReason !== "none") {
+    ensure(
+      recordedReasons.has(check.skipReason),
+      `reviewPacket.triggerVsSkipReasonCheck.skipReason must match a recorded choiceGateSkip or userChoiceState, got: ${check.skipReason}`,
+    );
+  }
+
+  if (check.status === "fail") {
+    ensure(
+      artifact.reviewPacket.revisionNeeded === true,
+      "reviewPacket.triggerVsSkipReasonCheck.status=fail requires reviewPacket.revisionNeeded=true.",
+    );
+  }
+}
+
 function validateFindingChain(contract, artifact) {
   const reviewPacket = artifact.reviewPacket;
   const verificationPacket = artifact.verificationPacket;
@@ -2046,6 +2885,8 @@ function validateFindingChain(contract, artifact) {
     verificationPacket.closeFindings,
     "verificationPacket.closeFindings",
   );
+
+  validateReviewProcessChecks(artifact);
 
   const findingClosure = contract.runDiscipline.findingClosure;
   const findings = new Map();
@@ -2258,6 +3099,7 @@ function validateSummaryAndEvolution(contract, artifact) {
       missingConditions.length === 0,
       `summaryPacket.publicReady=true but these public-display conditions are false: ${missingConditions.join(", ")}`,
     );
+    validateProductGatePublicReadyStatus(contract, artifact);
     ensure(
       summaryPacket.blockedBy.length === 0,
       "summaryPacket.publicReady=true requires blockedBy to be empty.",
@@ -2430,6 +3272,12 @@ function validateRequiredPackets(contract, artifact) {
     ) {
       continue;
     }
+    if (
+      productGatePacketNames(contract).includes(packetName) &&
+      !shouldRequireProductGatePackets(contract, artifact)
+    ) {
+      continue;
+    }
     const packet = getPacket(artifact, packetName);
     ensure(
       packet !== undefined,
@@ -2450,16 +3298,14 @@ export function validateArtifact(contract, artifact) {
   validateContentEvidencePacket(contract, artifact);
   validateIntentPacketWhenRequired(contract, artifact);
   validateIntentGatePacketWhenRequired(contract, artifact);
+  validatePreDecisionOptionFrame(contract, artifact);
   validateCardPlan(contract, artifact);
   validateDispatchEnvelope(contract, artifact);
-  ensureFields(
-    artifact.dispatchBoard,
-    contract.protocols.dispatchBoard.requiredFields,
-    "dispatchBoard",
-  );
+  validateDispatchBoard(contract, artifact);
   validateOrchestrationTaskBoard(contract, artifact);
   validateBusinessFlowBlueprint(contract, artifact);
   validateInterfaceIntegrationContractWhenRequired(contract, artifact);
+  validateProductGatePackets(contract, artifact);
   validateAgentBlueprint(contract, artifact);
   validateCapabilityGapPacketWhenRequired(contract, artifact);
   validateExecutionAgentCardWhenRequired(contract, artifact);

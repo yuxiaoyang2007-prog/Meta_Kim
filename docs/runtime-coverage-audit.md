@@ -1,122 +1,122 @@
-# Meta_Kim 覆盖审计
+# Meta_Kim Runtime Coverage Audit
 
-这份文档回答两个问题：
+This document answers two questions:
 
-1. Meta_Kim 现在到底覆盖了哪些运行时能力面？
-2. 哪些东西属于宿主产品本身，不能靠仓库文件硬覆盖？
+1. Which runtime capability surfaces does Meta_Kim currently cover?
+2. Which surfaces belong to the host product itself and cannot be fully controlled by repository files?
 
-## 一、审计口径
+## Audit Scope
 
-这里说的“覆盖”，只统计和 **做事能力** 直接相关、且可以由仓库资产控制的能力面：
+Coverage here means capability surfaces that directly affect work execution and can be controlled by repository assets:
 
-- 角色入口
-- 子代理 / 自定义代理
-- Skill
+- role entrypoints
+- subagents / custom agents
+- skills
 - MCP
-- Hook / 守卫
-- Workspace 启动与记忆
-- 多代理路由
-- Sandbox / Approval 配置入口
-- 本地验证与冒烟
+- hooks / guards
+- workspace boot and memory
+- multi-agent routing
+- sandbox / approval configuration entrypoints
+- local verification and smoke checks
 
-不把这些宿主级能力算进“仓库可覆盖”：
+These host-level surfaces are intentionally excluded from "repository-coverable" scope:
 
-- 登录、授权、OAuth、API Key 生命周期
-- 桌面 UI、聊天历史侧边栏、通知
-- 各家产品自己的云端状态
-- CLI 二进制本身是否安装
+- login, authorization, OAuth, and API key lifecycle
+- desktop UI, chat-history sidebar, and notifications
+- each vendor product's cloud-side state
+- whether the CLI binary itself is installed on the machine
 
-## 二、总结论
+## Summary
 
-### 已覆盖
+### Covered
 
-- Claude Code 的项目级 `subagents + skills + hooks + MCP`
-- Codex 的仓库级 `AGENTS.md + custom agents + project skills + MCP config + sandbox/approval config example`
-- OpenClaw 的 `workspace family + skill + bundled hooks + boot + memory + local auth bootstrap + agent-to-agent`
-- Cursor 的项目级 `agents + skills + MCP config`
+- Claude Code project-level `subagents + skills + hooks + MCP`
+- Codex repository-level `AGENTS.md + custom agents + project skills + MCP config + sandbox/approval config example`
+- OpenClaw `workspace family + skill + bundled hooks + boot + memory + local auth bootstrap + agent-to-agent`
+- Cursor project-level `agents + skills + MCP config`
 
-### 不能诚实宣称“仓库全覆盖”的部分
+### Not Claimable As Full Repository Coverage
 
-- Claude Code、Codex、OpenClaw、Cursor 的账号体系、桌面 UI、云端状态
-- OpenClaw 的 hook 启用结果仍依赖宿主 OpenClaw CLI/网关版本
-- Codex 与 Claude 的最终工具面仍受宿主会话参数、审批策略、运行环境影响
+- Claude Code, Codex, OpenClaw, and Cursor account systems, desktop UI, and cloud-side state
+- OpenClaw hook enablement still depends on the host OpenClaw CLI/gateway version
+- Codex and Claude final tool surfaces still depend on host session parameters, approval policy, and runtime environment
 
-## 三、能力面逐项审计
+## Capability Surface Audit
 
-| 能力面 | Claude Code | Codex | OpenClaw | Cursor | Meta_Kim 当前状态 |
+| Surface | Claude Code | Codex | OpenClaw | Cursor | Meta_Kim status |
 | --- | --- | --- | --- | --- | --- |
-| 理论 / skill 入口 | `.claude/skills/meta-theory/` mirror | `.codex/skills/meta-theory/` mirror | `openclaw/skills/meta-theory/` + workspace mirror | `.cursor/skills/meta-theory/` mirror | 已覆盖，由项目治理层同步 |
-| 角色入口 | `CLAUDE.md` + `.claude/agents/` | `AGENTS.md` + `.codex/agents/` | `workspaces/<agent>/SOUL.md` 等 | `.cursor/agents/*.md`（项目级） | 已覆盖 |
-| 子代理 / 自定义代理 | 原生 subagents | 原生 custom agents / subagents | 原生多 agent workspace | Cursor 原生 agent rules | 已覆盖 |
-| 项目级 Skill | `.claude/skills/` | `.codex/skills/` | workspace skill + installable skill | `.cursor/skills/` | 已覆盖 |
-| 兼容 Skill 镜像 | 不需要 | `.codex/skills/` runtime mirror | `openclaw/skills/` 镜像 | `.cursor/skills/` runtime mirror + `~/.cursor/skills/` 全局 | 已覆盖 |
-| MCP | `.mcp.json` | `config.toml` 例子 | 共享同一 MCP server | `.cursor/mcp.json` | 已覆盖 |
-| Hook / 守卫 | `.claude/settings.json` hooks | `.codex/hooks.json` trusted project/user hooks | Plugin SDK hooks + bundled/internal hooks | `.cursor/hooks.json` lowerCamel lifecycle hooks | 已覆盖，但不是 1:1 同构 |
-| 启动文件 | `CLAUDE.md` / agent prompt | `AGENTS.md` / custom agent prompt | `BOOT.md` / `BOOTSTRAP.md` / `IDENTITY.md` | `.cursorrules` / agent prompt | 已覆盖 |
-| 记忆入口 | SessionStart + Stop MCP Memory hooks | SessionStart / UserPromptSubmit / Stop MCP Memory hooks | `MEMORY.md` + `session-memory` + MCP Memory managed hook | beforeSubmitPrompt / stop MCP Memory hooks | 已覆盖 |
-| 多代理路由 | Claude 原生委派 | Codex subagents | OpenClaw agent-to-agent | Cursor 原生 agent 委派 | 已覆盖 |
-| 能力索引 | `.claude/capability-index/` mirror | `.codex/capability-index/` mirror | `openclaw/capability-index/` mirror | `.cursor/capability-index/` mirror | 已覆盖；Fetch 顺序为 repo source -> mirror -> local inventory -> fallback |
-| Sandbox / Approval | Claude 原生 permission / tool control | `sandbox_mode` / `approval_policy` | 宿主网关与工具约束 | Cursor 原生 approval | 已覆盖到仓库配置入口 |
-| 本地验证 | `claude agents` + schema eval | `codex exec --json` smoke | `openclaw config validate` + 本地 agent smoke | `.cursor/agents/` 存在性检查 | 已覆盖 |
+| Theory / skill entry | `.claude/skills/meta-theory/` mirror | `.agents/skills/meta-theory/` project skill + `.codex/skills/meta-theory/` compatibility mirror | `openclaw/skills/meta-theory/` + workspace mirror | `.cursor/skills/meta-theory/` mirror | Covered through project-governed sync |
+| Role entry | `CLAUDE.md` + `.claude/agents/` | `AGENTS.md` + `.codex/agents/` | `workspaces/<agent>/SOUL.md`, etc. | `.cursor/agents/*.md` project-level files | Covered |
+| Subagents / custom agents | Native subagents | Native custom agents / subagents | Native multi-agent workspace | Native Cursor agent rules | Covered |
+| Project skill | `.claude/skills/` | `.agents/skills/` + compatibility `.codex/skills/` | workspace skill + installable skill | `.cursor/skills/` | Covered |
+| Compatibility skill mirror | Not needed | `.codex/skills/` runtime mirror | `openclaw/skills/` mirror | `.cursor/skills/` runtime mirror + `~/.cursor/skills/` global | Covered |
+| MCP | `.mcp.json` | `config.toml` example | shared MCP server | `.cursor/mcp.json` | Covered |
+| Hooks / guards | `.claude/settings.json` hooks | `.codex/hooks.json` trusted project/user hooks | Plugin SDK hooks + bundled/internal hooks | `.cursor/hooks.json` lowerCamel lifecycle hooks | Covered, but not 1:1 isomorphic |
+| Boot files | `CLAUDE.md` / agent prompt | `AGENTS.md` / custom agent prompt | `BOOT.md` / `BOOTSTRAP.md` / `IDENTITY.md` | `.cursorrules` / agent prompt | Covered |
+| Memory entry | SessionStart + Stop MCP Memory hooks | SessionStart / UserPromptSubmit / Stop MCP Memory hooks | `MEMORY.md` + `session-memory` + MCP Memory managed hook | beforeSubmitPrompt / stop MCP Memory hooks | Covered |
+| Multi-agent routing | Claude native delegation | Codex subagents | OpenClaw agent-to-agent | Cursor native agent delegation | Covered |
+| Capability index | `.claude/capability-index/` mirror | `.codex/capability-index/` mirror | `openclaw/capability-index/` mirror | `.cursor/capability-index/` mirror | Covered; Fetch order is repo source -> mirror -> local inventory -> fallback |
+| Sandbox / approval | Claude native permission / tool control | `sandbox_mode` / `approval_policy` | host gateway and tool constraints | Cursor native approval | Covered as repository configuration entrypoints |
+| Local verification | `claude agents` + schema eval | `codex exec --json` smoke | `openclaw config validate` + local agent smoke | `.cursor/agents/` existence check | Covered |
 
-## 四、仓库内对应位置
+## Repository Locations
 
-- Canonical:
-  - `canonical/agents/*.md`
-  - `canonical/skills/meta-theory/SKILL.md`
-  - `canonical/skills/meta-theory/references/*.md`
-  - `config/contracts/`
-  - `config/capability-index/`
-- Claude Code:
-  - `CLAUDE.md`
-  - `.claude/agents/*.md`
-  - `.claude/skills/meta-theory/SKILL.md`
-  - `.claude/settings.json`
-  - `.claude/capability-index/`
-  - `.mcp.json`
-- Codex:
-  - `AGENTS.md`
-  - `.codex/agents/*.toml`
-  - `.codex/skills/meta-theory/SKILL.md`
-  - `.codex/capability-index/`
-  - `codex/config.toml.example`
-- OpenClaw:
-  - `openclaw/openclaw.template.json`
-  - `openclaw/workspaces/*/BOOT.md`
-  - `openclaw/workspaces/*/BOOTSTRAP.md`
-  - `openclaw/workspaces/*/MEMORY.md`
-  - `openclaw/workspaces/*/memory/README.md`
-  - `openclaw/workspaces/*/SOUL.md`
-  - `openclaw/workspaces/*/AGENTS.md`
-  - `openclaw/workspaces/*/TOOLS.md`
-  - `openclaw/workspaces/*/skills/meta-theory/SKILL.md`
-  - `openclaw/capability-index/`
-- Cursor:
-  - `.cursor/agents/*.md`
-  - `.cursor/skills/meta-theory/SKILL.md`
-  - `.cursor/mcp.json`
-  - `.cursor/capability-index/`
+Canonical:
 
-这些运行时位置是镜像 / 投影。涉及行为、理论、契约或能力索引的长期改动，应先落在 canonical/config 主源，再同步到运行时目录。
+- `canonical/agents/*.md`
+- `canonical/skills/meta-theory/SKILL.md`
+- `canonical/skills/meta-theory/references/*.md`
+- `config/contracts/`
+- `config/capability-index/`
 
-## 五、最终判断
+Claude Code:
 
-如果标准是：
+- `CLAUDE.md`
+- `.claude/agents/*.md`
+- `.claude/skills/meta-theory/SKILL.md`
+- `.claude/settings.json`
+- `.claude/capability-index/`
+- `.mcp.json`
 
-- “用于做事的元架构能力面必须都落在仓库里”
+Codex:
 
-那么当前版本可以判定为：
+- `AGENTS.md`
+- `.codex/agents/*.toml`
+- `.agents/skills/meta-theory/SKILL.md`
+- `.codex/skills/meta-theory/SKILL.md`
+- `.codex/capability-index/`
+- `codex/config.toml.example`
 
-**已覆盖。**
+OpenClaw:
 
-如果标准是：
+- `openclaw/openclaw.template.json`
+- `openclaw/workspaces/*/BOOT.md`
+- `openclaw/workspaces/*/BOOTSTRAP.md`
+- `openclaw/workspaces/*/MEMORY.md`
+- `openclaw/workspaces/*/memory/README.md`
+- `openclaw/workspaces/*/SOUL.md`
+- `openclaw/workspaces/*/AGENTS.md`
+- `openclaw/workspaces/*/TOOLS.md`
+- `openclaw/workspaces/*/skills/meta-theory/SKILL.md`
+- `openclaw/capability-index/`
 
-- “三家产品所有宿主功能 100% 完全等价”
+Cursor:
 
-那么这个目标本身就不成立，任何仓库都做不到。
+- `.cursor/agents/*.md`
+- `.cursor/skills/meta-theory/SKILL.md`
+- `.cursor/mcp.json`
+- `.cursor/capability-index/`
 
-Meta_Kim 现在做的是正确的版本：
+Runtime locations are mirrors / projections. Long-term behavior, theory, contracts, and capability-index changes should land in canonical/config sources first, then sync to runtime directories.
 
-- 把可仓库化的能力面全部仓库化
-- 把不能同构的宿主能力明确标注出来
-- 用 `sync + validate + eval` 做持续校验
+## Final Judgment
+
+If the standard is "all work-capable meta-architecture surfaces must live in the repository," the current version is covered.
+
+If the standard is "all host-product features across all vendors must be 100% equivalent," the target is impossible for any repository because account systems, cloud state, and desktop surfaces are host-owned.
+
+Meta_Kim's correct scope is:
+
+- keep every repository-coverable capability surface in the repository
+- explicitly mark host surfaces that cannot be made isomorphic
+- continuously verify with `sync + validate + eval`

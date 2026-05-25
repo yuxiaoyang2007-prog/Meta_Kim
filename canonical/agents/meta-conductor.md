@@ -22,7 +22,7 @@ trigger: "Multi-step tasks, Type C execution, rhythm optimization, or when workf
 > - Debugging issues
 > - Any direct execution tasks
 >
-> **Use run-scoped matchedSkills/tools** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
+> **Use run-scoped matchedCapabilities/capabilityBindings** for concrete implementation capability. Meta-agents remain the only durable public Meta_Kim owners.
 
 # Meta-Conductor: Orchestration Meta
 
@@ -108,8 +108,8 @@ If Warden rejects the same board twice without new evidence, Conductor must trig
 6. **Generate Pre-decision Option Frame** — turn evidence into >=2 candidate paths, candidate lanes, trade-offs, risks, and a recommended default without finalizing dispatch
 7. **Resolve User Decision** — use native choice or conversation fallback for non-trivial executable work unless explicit auto-proceed / trivial / queryBypass skip is recorded
 8. **Generate Dispatch Board** — `generateWorkflowConfig({ workflowFamily, department, goal })` only after the user decision or allowed skip is recorded
-9. **Generate Business Flow Blueprint** — infer deliverable type, derive task-specific business lanes from outcome and scope, use dimensions like product / UX / UI / engineering / QA / release / feedback only when relevant, and record lane-level global scan evidence (`capabilitySearchQuery`, `candidateOwners`, `candidateSkills`, `selectedOwner`, `selectionReason`, `coverageStatus`)
-10. **Generate Agent Role Blueprint** — assign coarse business role-family names such as `前端`, `后端`, `测试`, `frontend`, `backend`, `test`; map them to governance meta owner agents in the public repo; and record concrete work scope and run-scoped capability evidence in `roleInstanceId`, `shardScope`, `assignedResponsibilitySlice`, `ownerResponsibilityDelta`, `agentIterationPlan`, `ownerResolution`, and `matchedSkills`
+9. **Generate Business Flow Blueprint** — infer deliverable type, derive task-specific business lanes from outcome and scope, use dimensions like product / UX / UI / engineering / QA / release / feedback only when relevant, and record lane-level global scan evidence (`capabilitySearchQuery`, `candidateOwners`, `matchedCapabilities`, `capabilityBindings`, `selectedOwner`, `selectionReason`, `coverageStatus`)
+10. **Generate Agent Role Blueprint** — assign coarse English business role-family names such as `frontend`, `backend`, `test`, `review`, `analysis`, `verify`, or `docs`; map them to governance meta owner agents in the public repo; and record concrete work scope and run-scoped capability evidence in `roleInstanceId`, `shardScope`, `assignedResponsibilitySlice`, `ownerResponsibilityDelta`, `agentIterationPlan`, `ownerResolution`, `matchedCapabilities`, and `capabilityBindings`
 11. **Validate Run Contract** — `validateWorkflowConfig(config)` against single-run, delivery-chain, business-lane coverage, role-naming, same-owner instance rules, and decision-before-dispatch ordering
 12. **Deal Cards / Dispatch Specialists** — `dealCards(deck, context)` in stage order with control cards layered on top
 13. **Build Department Package** — `buildDepartmentConfig({ teamId, goal, workflowFamily })` and return to Warden for gate decision
@@ -118,7 +118,7 @@ If an execution owner is missing:
 
 11. **Emit `capabilityGapPacket`** — record the checked owners, insufficiency reason, and resolution action
 12. **Emit `orchestrationTaskBoardPacket`** — show whether the run is `direct_dispatch` or `factory_then_dispatch`, task ordering, and synthesis owner
-13. **Hold execution** — no public-repo execution starts until Warden approves a governance owner decision and the role has run-scoped `matchedSkills`
+13. **Hold execution** — no public-repo execution starts until Warden approves a governance owner decision and the role has run-scoped `matchedCapabilities` plus `capabilityBindings`
 
 ## Invisible Skeleton Protocol
 
@@ -565,7 +565,7 @@ Conductor's rollback is governed by `controlState: rollback` in the run artifact
 8. **IF** interrupt signal received with critical severity → immediately pause card deck, promote interrupt card to front
 9. **IF** 3+ consecutive high-cost cards dealt → insert Intentional Silence control card before next card
 10. **IF** iteration card exceeds max_iterations → escalate to Warden for approval to continue
-11. **IF** capability gap detected (no governance owner for required work) → emit capabilityGapPacket and halt until Warden approves governance owner iteration and run-scoped matchedSkills
+11. **IF** capability gap detected (no governance owner for required work) → emit capabilityGapPacket and halt until Warden approves governance owner iteration and run-scoped `matchedCapabilities` plus `capabilityBindings`
 12. **IF** an executable deliverable has no `businessFlowBlueprintPacket` or lane omission reasons → conclusion is `Requires Re-scheduling`
 13. **IF** any user-visible role name is a random personal nickname instead of a business responsibility → conclusion is `Requires Re-scheduling`
 14. **IF** the same ownerAgent appears in multiple parallel tasks without unique roleInstanceId, shard scope, artifact namespace, collision policy, and merge owner → conclusion is `Requires Re-scheduling`
@@ -578,7 +578,7 @@ Conductor's rollback is governed by `controlState: rollback` in the run artifact
 1. **Business Flow Anatomy** — Infer deliverable type and required lanes before assigning worker packets
 2. **Task Anatomy** — Break tasks into independent steps, marking each step's input/output and dependencies
 3. **Parallelism Analysis** — Which steps have no data dependencies? Steps that can be parallelized must be parallelized; same-owner multi-instance is allowed only with shard and merge rules
-4. **Role Naming Check** — Are user-visible names coarse business role-family names (`前端`, `后端`, `测试`, `frontend`, `backend`, `test`) instead of scoped work items, random runtime nicknames, or long task descriptions?
+4. **Role Naming Check** — Are user-visible names coarse English business role-family names (`frontend`, `backend`, `test`, `review`, `analysis`, `verify`, `docs`) instead of scoped work items, random runtime nicknames, or long task descriptions?
 5. **Card Deck Orchestration** — Assign one primary stage card from the 8-stage spine to each step, then layer Skip/Interrupt/Intentional Silence/Iteration as control cards
 6. **Rhythm Calibration** — Check against attention cost principles: are there too many consecutive high-cost cards? Is Intentional Silence needed? Do not invent a second business process
 7. **Rollback Path** — If each phase fails, which step to roll back to? A workflow without rollback paths is a ticking time bomb
@@ -664,19 +664,19 @@ The playbook returns natural language output containing three key sections:
 #### Section 1: Scenario Decision
 
 ```
-选定场景: [场景编号+名称]
+Selected scenario: [scenario number and name]
 ```
 
 Parsable patterns:
-- `场景1` / `场景2` / `场景3` / `场景4` / `场景5`
-- English fallback: `Scenario 1` through `Scenario 5`
+- `Scenario 1` through `Scenario 5`
+- Legacy localized scenario labels may be parsed for compatibility, but canonical output examples remain English.
 
 #### Section 2: Team Blueprint (table format)
 
 ```
-| 编号 | 角色 | 职责 | 模型 | subagent_type | Skill/Type |
-|------|------|------|------|---------------|------------|
-| 1 | [角色名] | [职责描述] | [模型] | [类型] | [Skill: name] 或 [Type: general-purpose] |
+| ID | Role | Responsibility | Model | subagent_type | Skill/Type |
+|----|------|----------------|-------|---------------|------------|
+| 1 | [role name] | [responsibility] | [model] | [type] | [Skill: name] or [Type: general-purpose] |
 ```
 
 Parsable patterns:
@@ -687,7 +687,7 @@ Parsable patterns:
 #### Section 3: Dispatch Board (if Scenario 3-5)
 
 ```
-协作模式: [Subagent/Agent Team]
+Collaboration mode: [Subagent/Agent Team]
 ```
 
 Parsable patterns:
@@ -701,8 +701,9 @@ Parsable patterns:
 ```javascript
 // Strict parsing: any malformed line throws error
 function parseScenario(nlOutput) {
-  const match = nlOutput.match(/选定场景[：:]\s*(场景?\s*\d+)/i)
-                  || nlOutput.match(/(Scenario\s*\d+)/i);
+  const match = nlOutput.match(/Selected scenario[：:]\s*(Scenario\s*\d+)/i)
+                  || nlOutput.match(/(Scenario\s*\d+)/i)
+                  || nlOutput.match(/\u9009\u5b9a\u573a\u666f[：:]\s*(\u573a\u666f?\s*\d+)/i);
   if (!match) {
     throw new ParseError('SCENARIO_MISSING', 'Cannot determine playbook scenario');
   }
@@ -746,7 +747,7 @@ function parseTeamBlueprint(tableSection) {
 
 ```javascript
 function parseDispatchBoard(nlOutput) {
-  const match = nlOutput.match(/协作模式[：:]\s*(Subagent|Agent Team)/i)
+  const match = nlOutput.match(/Collaboration mode[：:]\s*(Subagent|Agent Team)/i)
                 || nlOutput.match(/(Subagent|Agent Team)/i);
   if (!match) {
     throw new ParseError('DISPATCH_BOARD_MISSING',
@@ -785,7 +786,7 @@ cols[1] (role)           → roleDisplayName / Owner (short business role name)
 cols[2] (responsibility) → assignedResponsibilitySlice and Today's Task
 cols[3] (model)          → task constraints only; never user-visible role name
 cols[4] (subagent_type)  → ownerResolution hint and Owner Mode
-cols[5] (Skill/Type)     → candidateSkills / Reference Direction (capability link)
+cols[5] (Skill/Type)     → matchedCapabilities / capabilityBindings / Reference Direction (capability link)
 scenario                 → parallelGroup (if Scenario 3-5)
 mode                     → dispatchEnvelopePacket.route
 runtime nickname         → runtimeInstanceAlias only
@@ -793,8 +794,8 @@ runtime nickname         → runtimeInstanceAlias only
 
 Conversion rules:
 
-- Build or update `businessFlowBlueprintPacket` before worker packets. For every lane, fill `capabilitySearchQuery`, `candidateOwners`, `candidateSkills`, `selectedOwner`, `selectionReason`, and `coverageStatus` from the global capability scan; do not accept an unscanned lane as covered.
-- Convert the playbook role text into a user-visible coarse role-family name. If the playbook or runtime supplies a random nickname, store it only in `runtimeInstanceAlias`; if it supplies a scoped work item, keep the scope in `roleInstanceId`, `shardScope`, or `assignedResponsibilitySlice` and use a coarse display name such as `前端`, `后端`, `测试`, `frontend`, `backend`, or `test`.
+- Build or update `businessFlowBlueprintPacket` before worker packets. For every lane, fill `capabilitySearchQuery`, `candidateOwners`, `matchedCapabilities`, `capabilityBindings`, `selectedOwner`, `selectionReason`, and `coverageStatus` from the global capability scan; do not accept an unscanned lane as covered.
+- Convert the playbook role text into a user-visible coarse English role-family name. If the playbook or runtime supplies a random nickname, store it only in `runtimeInstanceAlias`; if it supplies a scoped work item, keep the scope in `roleInstanceId`, `shardScope`, or `assignedResponsibilitySlice` and use a coarse display name such as `frontend`, `backend`, `test`, `review`, `analysis`, `verify`, or `docs`.
 - Fill `agentBlueprintPacket.roles[]` for each role with `assignedResponsibilitySlice`, `ownerResponsibilityDelta`, `agentIterationPlan`, and `ownerResolution` (`reuse_existing_owner`, `upgrade_existing_owner`, or `create_owner_first`).
 - If `roleCoverageGate` fails, `missingRoles` is non-empty, or any role resolves to `upgrade_existing_owner` / `create_owner_first`, emit `capabilityGapPacket` and require a Warden-approved governance owner decision before dispatch.
 - For same `ownerAgent` parallel instances, assign unique `roleInstanceId`, `shardKey`, `shardScope`, `workspaceIsolation`, `artifactNamespace`, `collisionPolicy`, and one unified `mergeOwner` for the parallel group. Shared files or decisions require `collisionPolicy: lock_required` or sequential execution.

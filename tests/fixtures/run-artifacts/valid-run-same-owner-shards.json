@@ -525,7 +525,31 @@
         ],
         "selectedOwner": "meta-conductor",
         "selectionReason": "meta-conductor matched by Fetch-first capability scan",
-        "coverageStatus": "covered"
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "product_capability_match",
+            "capabilitySlot": "product_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-conductor matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "product_capability_binding",
+            "capabilitySlot": "product_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "product_capability_match"
+          }
+        ]
       },
       {
         "laneId": "backend",
@@ -541,7 +565,31 @@
         ],
         "selectedOwner": "meta-conductor",
         "selectionReason": "meta-conductor matched by Fetch-first capability scan",
-        "coverageStatus": "covered"
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "backend_capability_match",
+            "capabilitySlot": "backend_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-conductor matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "backend_capability_binding",
+            "capabilitySlot": "backend_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "backend_capability_match"
+          }
+        ]
       },
       {
         "laneId": "auth-security",
@@ -557,7 +605,31 @@
         ],
         "selectedOwner": "meta-sentinel",
         "selectionReason": "meta-sentinel matched by Fetch-first capability scan",
-        "coverageStatus": "covered"
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "auth-security_capability_match",
+            "capabilitySlot": "auth-security_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-sentinel matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "auth-security_capability_binding",
+            "capabilitySlot": "auth-security_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "auth-security_capability_match"
+          }
+        ]
       },
       {
         "laneId": "test",
@@ -573,7 +645,31 @@
         ],
         "selectedOwner": "meta-prism",
         "selectionReason": "meta-prism matched by Fetch-first capability scan",
-        "coverageStatus": "covered"
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "test_capability_match",
+            "capabilitySlot": "test_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-prism matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "test_capability_binding",
+            "capabilitySlot": "test_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "test_capability_match"
+          }
+        ]
       },
       {
         "laneId": "review",
@@ -589,7 +685,31 @@
         ],
         "selectedOwner": "meta-prism",
         "selectionReason": "meta-prism matched by Fetch-first capability scan",
-        "coverageStatus": "covered"
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "review_capability_match",
+            "capabilitySlot": "review_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-prism matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "review_capability_binding",
+            "capabilitySlot": "review_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "review_capability_match"
+          }
+        ]
       },
       {
         "laneId": "verify",
@@ -605,7 +725,31 @@
         ],
         "selectedOwner": "meta-warden",
         "selectionReason": "meta-warden matched by Fetch-first capability scan",
-        "coverageStatus": "covered"
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "verify_capability_match",
+            "capabilitySlot": "verify_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-warden matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "verify_capability_binding",
+            "capabilitySlot": "verify_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "verify_capability_match"
+          }
+        ]
       }
     ],
     "optionalLanes": [
@@ -622,7 +766,31 @@
         ],
         "selectedOwner": "meta-artisan",
         "selectionReason": "meta-artisan matched by Fetch-first capability scan",
-        "coverageStatus": "covered"
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "database_capability_match",
+            "capabilitySlot": "database_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-artisan matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "database_capability_binding",
+            "capabilitySlot": "database_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "database_capability_match"
+          }
+        ]
       },
       {
         "laneId": "browser-qa",
@@ -638,7 +806,31 @@
         ],
         "selectedOwner": "meta-prism",
         "selectionReason": "meta-prism matched by Fetch-first capability scan",
-        "coverageStatus": "covered"
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "browser-qa_capability_match",
+            "capabilitySlot": "browser-qa_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-prism matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "browser-qa_capability_binding",
+            "capabilitySlot": "browser-qa_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "browser-qa_capability_match"
+          }
+        ]
       },
       {
         "laneId": "release",
@@ -654,7 +846,31 @@
         ],
         "selectedOwner": "meta-warden",
         "selectionReason": "meta-warden matched by Fetch-first capability scan",
-        "coverageStatus": "covered"
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "release_capability_match",
+            "capabilitySlot": "release_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-warden matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "release_capability_binding",
+            "capabilitySlot": "release_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "release_capability_match"
+          }
+        ]
       }
     ],
     "omittedLanes": [
@@ -755,7 +971,32 @@
           }
         ],
         "ownerSource": "meta_kim_canonical",
-        "agentCopyPolicy": "meta_kim_governance_only"
+        "agentCopyPolicy": "meta_kim_governance_only",
+        "matchedCapabilities": [
+          {
+            "matchId": "cap-match-auth-refresh-001",
+            "capabilitySlot": "auth refresh implementation discipline",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory:local-project-code-change",
+            "providerId": "meta-theory",
+            "source": "capability-index",
+            "confidenceScore": 4,
+            "selectionReason": "Represents implementation capability as run-scoped evidence while durable ownership stays with governance meta agents.",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "Block with capabilityGapPacket if no governance owner can supervise the run-scoped capability."
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "binding-auth-refresh-001",
+            "capabilitySlot": "auth refresh implementation discipline",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory:local-project-code-change",
+            "source": "capability-index",
+            "evidenceRef": "agentBlueprintPacket.roles[0].matchedCapabilities[0]"
+          }
+        ]
       }
     ],
     "roleCoverageGate": "pass",
@@ -928,6 +1169,7 @@
     "contentEvidenceRefs": [
       "contentEvidencePacket"
     ],
+    "unresolvedQuestions": [],
     "candidateOptions": [
       {
         "optionId": "A",
@@ -969,6 +1211,227 @@
     "requiresUserChoice": false,
     "nativeChoiceSurface": "conversation_fallback",
     "choiceGateSkip": "explicit_auto_proceed",
+    "solutionChoiceState": "explicit_auto_proceed",
     "reviewOwner": "meta-prism"
+  },
+  "productCompletenessPacket": {
+    "outcome": "auth-refresh-hardening",
+    "userValue": "Deliver the requested run outcome without expanding unrelated scope.",
+    "acceptanceCriteria": [
+      "no hardcoded secret in refresh.ts",
+      "test suite passes"
+    ],
+    "nonGoals": [
+      "No unrelated auth flows (login UI, OAuth providers); no production deploy in this run."
+    ],
+    "completenessStatus": "pass",
+    "owner": "meta-conductor",
+    "evidenceRefs": [
+      "intentPacket",
+      "businessFlowBlueprintPacket"
+    ],
+    "designDimensions": [
+      {
+        "dimensionId": "core_highlight",
+        "status": "covered",
+        "evidenceRef": "productCompletenessPacket.acceptanceCriteria"
+      },
+      {
+        "dimensionId": "feature_completeness",
+        "status": "covered",
+        "evidenceRef": "productCompletenessPacket.acceptanceCriteria"
+      },
+      {
+        "dimensionId": "evolution_path",
+        "status": "covered",
+        "evidenceRef": "evolutionWritebackPacket"
+      },
+      {
+        "dimensionId": "api_contract",
+        "status": "covered",
+        "evidenceRef": "businessFlowBlueprintPacket"
+      },
+      {
+        "dimensionId": "frontend_backend_contract",
+        "status": "omitted_with_reason",
+        "omissionReason": "No separate frontend/back-end handoff is present in this fixture; the API contract remains inside the governed service boundary."
+      }
+    ]
+  },
+  "experienceQualityPacket": {
+    "audience": "developer",
+    "criticalJourneys": [
+      "Maintainer can understand the deliverable, review evidence, and rollback path from the run artifact."
+    ],
+    "qualityAttributes": [
+      "bounded scope",
+      "clear verification evidence",
+      "no user-facing UI regression expected"
+    ],
+    "accessibilityConsiderations": [
+      "not_applicable: this fixture has no rendered user interface"
+    ],
+    "experienceStatus": "not_applicable_with_reason",
+    "owner": "meta-prism",
+    "evidenceRefs": [
+      "runHeader",
+      "summaryPacket"
+    ],
+    "experienceDimensions": [
+      {
+        "dimensionId": "ui_ue_ux",
+        "status": "omitted_with_reason",
+        "omissionReason": "No rendered user interface or interaction surface exists for this fixture."
+      },
+      {
+        "dimensionId": "media_audio_motion",
+        "status": "omitted_with_reason",
+        "omissionReason": "No media, audio, motion, or background sound surface exists for this fixture."
+      }
+    ]
+  },
+  "testStrategyPacket": {
+    "strategy": "Use focused verification evidence recorded in worker verifySteps and verificationPacket.",
+    "requiredTestTypes": [
+      "contract_validation",
+      "targeted_regression"
+    ],
+    "executedTests": [
+      "tests/auth/refresh.test.ts passes with env-only secret flow"
+    ],
+    "deferredTests": [],
+    "coverageRationale": "Fixture records a narrow governed change with explicit verification evidence and no deployment side effect.",
+    "testStatus": "pass",
+    "owner": "meta-warden",
+    "evidenceRefs": [
+      "workerTaskPackets[0].verifySteps",
+      "verificationPacket"
+    ],
+    "testDimensions": [
+      {
+        "dimensionId": "real_test_strategy",
+        "status": "covered",
+        "evidenceRef": "testStrategyPacket.requiredTestTypes"
+      }
+    ]
+  },
+  "structureHygienePacket": {
+    "changedAreas": [
+      "src/auth/refresh.ts",
+      "tests/auth/refresh.test.ts",
+      "tests/auth/refresh.test.ts"
+    ],
+    "boundaryChecks": [
+      "Changed artifacts remain within the primary deliverable boundary."
+    ],
+    "orphanCleanup": [
+      "No generated orphan artifacts are introduced by this fixture."
+    ],
+    "namingAndLayoutChecks": [
+      "Role display names and artifact namespaces remain stable."
+    ],
+    "hygieneStatus": "pass",
+    "owner": "meta-prism",
+    "evidenceRefs": [
+      "dispatchBoard",
+      "workerResultPackets"
+    ],
+    "structureDimensions": [
+      {
+        "dimensionId": "file_management_extensibility",
+        "status": "covered",
+        "evidenceRef": "structureHygienePacket.boundaryChecks"
+      },
+      {
+        "dimensionId": "directory_structure",
+        "status": "covered",
+        "evidenceRef": "structureHygienePacket.namingAndLayoutChecks"
+      },
+      {
+        "dimensionId": "dead_redundant_cleanup",
+        "status": "covered",
+        "evidenceRef": "structureHygienePacket.orphanCleanup"
+      }
+    ]
+  },
+  "permissionMatrixPacket": {
+    "accessedResources": [
+      "src/auth/refresh.ts",
+      "tests/auth/refresh.test.ts",
+      "tests/auth/refresh.test.ts"
+    ],
+    "permissionChecks": [
+      "Repository file changes only; no privileged runtime, database, or credential mutation is recorded."
+    ],
+    "secretsPolicy": "No raw secret values may be stored in the artifact; use environment or secretRef patterns only.",
+    "permissionStatus": "pass",
+    "owner": "meta-sentinel",
+    "evidenceRefs": [
+      "contentEvidencePacket",
+      "reviewPacket"
+    ],
+    "permissionDimensions": [
+      {
+        "dimensionId": "permission_secret_boundary",
+        "status": "covered",
+        "evidenceRef": "permissionMatrixPacket.secretsPolicy"
+      }
+    ]
+  },
+  "sideEffectLedgerPacket": {
+    "sideEffects": [
+      "repository_files_modified"
+    ],
+    "externalSystemsTouched": [],
+    "stateChanges": [
+      "src/auth/refresh.ts",
+      "tests/auth/refresh.test.ts",
+      "tests/auth/refresh.test.ts"
+    ],
+    "mitigations": [
+      "Review and verification packets close the changed artifact chain before public-ready status."
+    ],
+    "sideEffectStatus": "tracked",
+    "owner": "meta-sentinel",
+    "evidenceRefs": [
+      "workerResultPackets",
+      "summaryPacket"
+    ],
+    "sideEffectDimensions": [
+      {
+        "dimensionId": "side_effect_ledger",
+        "status": "covered",
+        "evidenceRef": "sideEffectLedgerPacket.sideEffects"
+      }
+    ]
+  },
+  "rollbackPlanPacket": {
+    "rollbackScope": "auth-refresh-hardening",
+    "rollbackTriggers": [
+      "verification failure",
+      "reopened review finding",
+      "unexpected side effect"
+    ],
+    "rollbackSteps": [
+      "Revert or repair the changed artifacts listed in affectedArtifacts, then rerun verification."
+    ],
+    "affectedArtifacts": [
+      "src/auth/refresh.ts",
+      "tests/auth/refresh.test.ts",
+      "tests/auth/refresh.test.ts"
+    ],
+    "rollbackStatus": "ready",
+    "owner": "meta-warden",
+    "evidenceRefs": [
+      "sideEffectLedgerPacket",
+      "verificationPacket"
+    ],
+    "rollbackDimensions": [
+      {
+        "dimensionId": "rollback_path",
+        "status": "covered",
+        "evidenceRef": "rollbackPlanPacket.rollbackSteps"
+      }
+    ]
   }
 }

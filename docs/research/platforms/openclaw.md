@@ -3,6 +3,9 @@
 ## Official Documentation
 
 - Repository: https://github.com/openclaw/openclaw
+- Documentation: https://docs.openclaw.ai
+- Agent workspace concept: https://docs.openclaw.ai/concepts/agent-workspace
+- Skill format: https://docs.openclaw.ai/clawhub/skill-format
 - OpenClaw is an open-source AI agent orchestration platform
 
 ## Skill System
@@ -48,6 +51,8 @@ OpenClaw has a unique workspace model where each agent gets its own workspace di
 - `MEMORY.md` - Persistent memory
 - `HEARTBEAT.md` - Scheduled task policy
 - `USER.md` - User profile context
+
+OpenClaw does not use Codex `.codex/agents/*.toml` files or `nickname_candidates`. Agent identity is expressed through the workspace files and registered through `openclaw/openclaw.template.json`.
 
 ### Shared Skills Layer
 

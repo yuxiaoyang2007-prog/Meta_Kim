@@ -272,14 +272,18 @@ describe("Agent Dispatch — Part B: Dispatch Rule Verification", async () => {
     );
   });
 
-  test("Fetch-first pattern documented (Search -> Match -> Invoke)", async () => {
+  test("Fetch evidence inventory hands off to Thinking owner resolution", async () => {
     await ensureLoaded();
-    const hasFetchFirst =
-      /Fetch-first/i.test(skillContent) ||
-      /Search.*Match.*Invoke/i.test(skillContent);
+    const hasFetchEvidenceInventory =
+      /Fetch Evidence Inventory/i.test(skillContent) &&
+      /Research -> Inventory -> Thinking Handoff/i.test(skillContent);
+    const hasThinkingResolution =
+      /Thinking determines needed execution capabilities/i.test(skillContent) &&
+      /match existing capabilities/i.test(skillContent) &&
+      /create or upgrade only for gaps/i.test(skillContent);
     assert.ok(
-      hasFetchFirst,
-      "SKILL.md must document the Fetch-first pattern (Search -> Match -> Invoke)"
+      hasFetchEvidenceInventory && hasThinkingResolution,
+      "SKILL.md must document Fetch evidence inventory and Thinking owner/capability resolution"
     );
   });
 

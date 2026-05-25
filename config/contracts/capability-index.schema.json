@@ -279,12 +279,12 @@
         "metaAgentDispatchRule": {
           "type": "string",
           "description": "Rule for when meta-agents can be dispatched",
-          "const": "Meta-agents (layer='meta') are the only durable public Meta_Kim owners for Critical, Fetch, Thinking, and Review. They MUST NOT perform implementation work directly; concrete implementation capability is recorded as run-scoped matchedSkills/tools."
+          "const": "Meta-agents (layer='meta') are the only durable public Meta_Kim owners for Critical, Fetch, Thinking, and Review. They MUST NOT perform implementation work directly; concrete implementation capability is recorded as run-scoped matchedCapabilities/capabilityBindings across skills, commands, MCP tools, runtime tools, file sets, or capability-index queries; legacy matchedSkills is compatibility evidence only."
         },
         "fallbackBehavior": {
           "type": "string",
           "description": "Behavior when no open-source governance owner or run-scoped capability evidence is found",
-          "const": "Use a governance meta owner plus run-scoped matchedSkills, or block with capabilityGapPacket. Do not persist non-governance execution agents in the public repo."
+          "const": "Use a governance meta owner plus run-scoped matchedCapabilities/capabilityBindings, or block with capabilityGapPacket. Do not persist non-governance execution agents in the public repo."
         }
       }
     }
