@@ -11,6 +11,11 @@
  *   3. Capability-first gate: Agent dispatches at or after the execution stage
  *      require a prior capability search recorded in spine state. Forces the
  *      capability-first discovery contract instead of hardcoded agent names.
+ *   4. Read-only verifier fast-path (EB-002, v2.3.1): during Review /
+ *      Meta-Review / Verification stages, Bash commands that match the stage's
+ *      `readOnlyVerifierCommands` whitelist (e.g. `git diff`, `npm run
+ *      meta:check`, `node --check`) bypass the stage-requirements check.
+ *      Commands not on the whitelist still fall through to existing checks.
  *
  * Two-gate disconnect (intentional contract — read carefully):
  *
@@ -742,7 +747,7 @@ if (isAgentDispatchTool(toolName)) {
     }
   }
 
-  const updated = recordDispatch(state, agentDesc, metaName);
+  const updated = recordDispatch(state, agentDesc, metaName, toolInput);
   await writeSpineState(cwd, updated);
   process.exit(0);
 }
@@ -818,6 +823,35 @@ if (isExecutionTool(toolName)) {
         `Capability node binding violation: ${nodeBindingGate.reason} ` +
           `Missing: ${nodeBindingGate.missing.join(", ")}.`,
       );
+    }
+  }
+
+  // EB-002 read-only verifier fast-path (v2.3.1).
+  //
+  // Review / Meta-Review / Verification stages own quality forensics: they
+  // legitimately run `git diff`, `npm run meta:check`, `node --check`, etc.
+  // Forcing those reads through a downstream dispatch creates churn without
+  // adding governance value, because the commands cannot mutate state.
+  //
+  // Behavior: when the current stage has `readOnlyVerifierEnabled: true` and
+  // the Bash command starts with one of `readOnlyVerifierCommands`, allow it
+  // immediately and skip the stage-requirements check below. Commands NOT in
+  // the whitelist fall through to the existing checks (which may still deny).
+  if (
+    toolName === "Bash" &&
+    !state.queryBypass &&
+    !state.simpleMode
+  ) {
+    const stageConfig = STAGE_META_AGENT_MAP[stage];
+    const cmd = (toolInput?.command || "").trim();
+    if (stageConfig?.readOnlyVerifierEnabled) {
+      const whitelist = stageConfig.readOnlyVerifierCommands || [];
+      const allowed = whitelist.some((prefix) => cmd.startsWith(prefix));
+      if (allowed) {
+        // Pass through immediately; skip stage-requirements check.
+        process.exit(0);
+      }
+      // Non-whitelisted command: fall through to the existing checks below.
     }
   }
 

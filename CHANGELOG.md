@@ -6,6 +6,171 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.3.1] - 2026-05-26
+
+### Fixed
+
+- EB-002 (HIGH) + HOOK-INFRA-001 (LOW) — read_only_verifier capability slot in spine-state.mjs + dispatchChain auto-append in recordDispatch + read_only_verifier gate in enforce-agent-dispatch.mjs.
+- EB-004 (LOW) — preDecisionOptionFrame nesting normalization (warn-only validator + migration helper + canonical-location docs).
+
+### Added
+
+- `scripts/migrate-spine-state-eb004.mjs` migration helper.
+- 21-prefix read-only verifier command whitelist.
+- `dispatchChain[stage]_supplementary[]` audit field.
+
+### Changed
+
+- `STAGE_META_AGENT_MAP` schema extended (additive, backward-compatible).
+- `recordDispatch` signature now accepts `toolInput`.
+- Version 2.3.0.1 → 2.3.1.
+
+## [2.3.0.1] - 2026-05-26
+
+### Changed
+
+- Renamed `canonical/runtime-assets/claude/hooks/ecc-batching-wrapper.mjs` → `canonical/runtime-assets/claude/hooks/ecc-permission-cache-wrapper.mjs` (closes W2 F1 finding).
+- Docstring aligned with actual permission-cache behavior.
+- No behavioral change.
+
+## [2.3.0] - 2026-05-26
+
+### Fixed
+
+- **Item 1 — ECC plugin install failure on macOS (NEW)** — `config/skills.json` defensive spec changed from `ecc@ecc` to `everything-claude-code@ecc` so the install survives the upstream affaan-m/everything-claude-code → ecc plugin rename across legacy + current marketplace caches. `scripts/install-global-skills-all-runtimes.mjs` gains a marketplace refresh loop (`claude plugin marketplace update <id>`) between marketplace registration and plugin install so stale caches get refreshed before resolution. Source-of-truth: local cache evidence at `C:/Users/Kim/.claude/plugins/marketplaces/ecc/.claude-plugin/marketplace.json` (current HEAD, plugin name=ecc, version 2.0.0-rc.1) vs `.../marketplaces/everything-claude-code/.claude-plugin/marketplace.json` (legacy, plugin name=everything-claude-code). The defensive spec works against both states.
+- **EB-008 (HIGH) — workerExecutionEvidence silent-success semantics** — `config/contracts/workflow-contract.json::workerExecutionEvidenceField` adds `successMarkerFormat` enum (`stdout-text` | `exit-code-only` | `json-output`) plus `exitCode` and `commandRanAt` properties. Silent-success commands (`node --check`, `tsc --noEmit`) may now record empty `actualOutput` only when `successMarkerFormat="exit-code-only"` AND `exitCode=0` AND `commandRanAt` set. Closes v2.2.5 `accepted_risk` (W1 honestly disclosed exit codes; placeholder pressure pattern `EXIT_OK\n` retired). `canonical/agents/meta-prism.md::Decision Rule 16` extended in parallel (silent-success extension v2.3.0).
+- **EB-009 (LOW) — release notes claim retracted (dogfood)** — v2.2.5 release notes claimed `validate-project.mjs:15 loadRuntimeProfiles` was unused. Re-verification shows it is actively called at `validate-project.mjs:2808` inside `validateSyncConfiguration()` plus `scripts/meta-kim-sync-config.mjs:271,333`. Import is REQUIRED. v2.2.5 release notes + CHANGELOG entries gained retraction blockquote/sub-bullets across English + Chinese mirrors. No code prune.
+- **EB-010 (MEDIUM) — sibling schema style normalized** — `config/contracts/workflow-contract.json::workerExecutionEvidenceField` reshaped from heterogeneous `fieldType`/`itemSchema`/top-level `enforcement` layout to standard JSON Schema `type`/`items`/`properties` with `_meta` sidecar. Sibling style now matches `verifyStepsField` and `fileCompletionListField`. `_meta.closes` lists `[EB-005, EB-008, EB-010]`.
+
+### Added
+
+- **EB-003 (MEDIUM) — Meta_Kim ECC batching wrapper hook (Option D, user-selected)** — `canonical/runtime-assets/claude/hooks/ecc-permission-cache-wrapper.mjs` (NEW) implements PreToolUse session+file cache key (SHA256(session_id || file_path)) with 5-minute TTL scoped to `os.tmpdir()`. Idempotent + non-fatal cache write failure. Hook not yet wired into `.claude/settings.json` (canonical only); v2.3.x decides registration. See findings: F1 below (`EB-011` backlog).
+
+### Changed
+
+- `package.json` — version `2.2.5 → 2.3.0`.
+- Runtime mirrors re-synced (`.claude/`, `.codex/`, `.cursor/`, `openclaw/`) via `npm run meta:sync`.
+
+### Verification
+
+| Check | Result | Marker |
+|---|---|---|
+| `npm run meta:check` (after meta:sync) | **20/20 pass** | `stdout-text` |
+| W2 (Prism) review | qualityGate=pass; 0 HIGH/MEDIUM, 3 LOW → backlog | n/a |
+| W3 (Warden) meta-review + verification | pass; Rule 16/17 dogfood honored | n/a |
+| Cross-file consistency (`Rule 16` ↔ `successMarkerFormat` enum) | matched enum names + conditions | grep diff |
+
+### Carry-forward to v2.3.1
+
+- **EB-002 (HIGH)** — `read_only_verifier` capability slot. **Spec not yet drafted.** Bug nature confirmed first-hand in v2.3.0 (W2 + W3 reviewer subagents both blocked by `enforce-agent-dispatch.mjs` from running `git diff` / `npm run meta:check` in review/meta_review stages). Requires `spine-state.mjs` changes (frozen). v2.3.1 RFC must define: acceptance criteria, allowed command whitelist, scope contract, test plan.
+- **EB-004 (LOW)** — `preDecisionOptionFrame` nesting normalization. **Spec not yet drafted.** Bug surfaced in v2.3.0 (`choiceSurfaceState` had to be set BOTH at spine top-level AND inside `preDecisionOptionFrame` to satisfy the hook's `state.choiceSurfaceState` lookup — confusing field placement). Requires `spine-state.mjs` changes. v2.3.1 RFC must define: canonical field location, migration plan, validator gate.
+- **EB-011 (LOW, new in v2.3.0)** — `ecc-permission-cache-wrapper.mjs` docstring claims "batch the related ECC plugin install side-effects" but implementation only writes a per-(session,file) cache marker + returns `permissionDecision=allow` on cache hits (does not suppress/defer tool calls). v2.3.x decision: rename to `ecc-permission-cache-wrapper.mjs` OR strengthen behavior to actually deny/skip duplicate side-effecting calls within TTL.
+- **Hook infra bug (new finding, v2.3.0)** — Agent dispatches in `review` / `meta_review` / `verification` stages do not auto-append `ownerAgent` to `dispatchChain.<stage>`. Main thread must hand-edit spine state to record the dispatch. Tracked alongside EB-002 (same root cause: read-only reviewer cannot run verify commands; same fix surface: `spine-state.mjs`).
+
+## [2.2.5] - 2026-05-25
+
+### Fixed
+
+- **EB-005 (HIGH) — Worker verification claim evidence contract** — Workers reporting test pass counts must include `workerExecutionEvidence` entries. Closes v2.2.2/v2.2.3 historical fabrication. See `config/contracts/workflow-contract.json::workerTaskPacket.workerExecutionEvidenceField`. Reviewer gate in `canonical/agents/meta-prism.md::Decision Rule 16` (self-applying per Rule 17).
+- **EB-006 (MEDIUM) — Localized trigger exceptions extracted to config** — `scripts/validate-project.mjs::isAllowedLocalizedTriggerLine` no longer hardcodes the v2.2.4 allowlist. Moved to `config/contracts/localized-trigger-exceptions.json` per PRIN-03/04. Backwards-compatible fallback if config missing.
+- **EB-007 (LOW) — Narrow-Amendment Protocol documented** — `canonical/skills/meta-theory/references/dev-governance.md` defines the 4-boundary protocol (A: validator/config layer only; B: ≤1 file; C: no worker-facing schema change; D: post-hoc governance record).
+
+### Added
+
+- `config/contracts/localized-trigger-exceptions.json` — config consumed by `validate-project.mjs`
+- `.meta-kim/eb-003-investigation.md` — investigation note for ECC GateGuard fact-batching; 4 user decision options; no plugin edit applied
+
+### Changed
+
+- `canonical/agents/meta-prism.md` — Workflow step 5 substep + Decision Rules 16-17
+- `config/contracts/workflow-contract.json` — `workerExecutionEvidenceField` added
+- `scripts/validate-project.mjs` — `isAllowedLocalizedTriggerLine` config-driven with backwards-compat
+
+### Carry-forward to v2.3.0
+
+- EB-002 (HIGH): `read_only_verifier` capability slot (requires `spine-state.mjs`, frozen)
+- EB-004 (LOW): `preDecisionOptionFrame` nesting normalization (requires `spine-state.mjs`, frozen)
+- EB-003 (MEDIUM): user decision required on options A-D
+- **EB-008 (HIGH, surfaced by v2.2.5 W2 review)**: `workerExecutionEvidence.actualOutput` ambiguity for silent-success commands (e.g., `node --check`, `JSON.parse`). Schema needs `successMarkerFormat` clarification field. v2.2.5 accepts the first-application drift as `accepted_risk` per W2 ruling (alternative was punishing rule self-application on day 1).
+- **EB-009 (LOW, surfaced by v2.2.5 W2 review)**: `scripts/validate-project.mjs:15` imports `loadRuntimeProfiles` not referenced by the new `loadLocalizedTriggerExceptions` path. Pre-existing condition; verify and prune if unused.
+  - **v2.3.0 retraction:** Claim was incorrect — `validate-project.mjs:2808` actively uses `loadRuntimeProfiles` inside `validateSyncConfiguration()`. Import is required. EB-009 closed as docs-only correction.
+- **EB-010 (MEDIUM, surfaced by v2.2.5 W2 review)**: Sibling schema style heterogeneity in `protocols.workerTaskPacket.*` — `verifyStepsField` / `fileCompletionListField` / `workerExecutionEvidenceField` use mixed conventions (`type: "array"` vs `fieldType: "array"`). Normalize.
+- Validator-level enforcement of `workerExecutionEvidenceField` (currently narrative-tier + Rule 16)
+
+## [2.2.4] - 2026-05-25
+
+### Fixed (v2.2.2 review evolution backlog closure)
+
+- **EB-001 — Worker per-file write-completion contract** — `config/contracts/workflow-contract.json` adds optional `fileCompletionListField` to `workerTaskPacket`, requiring workers with declared `scopeFiles` to report explicit per-file status (`completed` / `skipped` / `failed` + `skipReason`). `canonical/agents/meta-conductor.md` documents the narrative tier of this contract. Closes the v2.2.2 → NEW-H1 root cause where a worker silently dropped one of the planned target files (CHANGELOG was modified instead of `progress-v2.2.0.md`). Validator enforcement deferred to v2.3.0 R8.
+- **NEW-M1 — CHANGELOG narrative accuracy** — The [2.2.2] section's release notes (`.release-notes-v2.2.2.md:71`) under-counted modified files at "9 files" by not including the 4 runtime mirror sync targets (`.claude/`, `.codex/`, `.cursor/`, `openclaw/`). Actual scope was ~13 files. Historical accuracy note added to [2.2.2] section below.
+- **NEW-L2 — Release-notes consistency verifier** — `scripts/check-release-notes-consistency.mjs` (new) validates that `.release-notes-vX.Y.Z.md` files exist for each CHANGELOG section since v2.2.2 OR are documented as folded-into-README per `CHANGELOG.md:1184`. Opt-in (`node scripts/check-release-notes-consistency.mjs`); not a mandatory CI gate until v2.2.5+.
+
+### Notes
+
+- **NEW-L1 (capability-index timestamp drift)** — Already addressed by commit `bd70538f` in v2.1.3 (`Stable capability-index regeneration`). No residual gap found in v2.2.4 audit; closure tracked here for completeness.
+- **EB-002/003/004** — Explicitly carry-forward to v2.3.0 (require spine-state.mjs changes or out-of-repo work).
+
+### Verification
+
+- `npm run meta:check` → **20/20 pass** (unchanged from v2.2.3; no code touched).
+- `npm run meta:test:meta-theory` → **796/796 pass** (unchanged from v2.2.3).
+- Production hooks (`spine-state.mjs`, `enforce-agent-dispatch.mjs`) untouched since v2.2.0 Warden freeze.
+
+### Architecture Notes
+
+v2.2.4 is a docs/contract patch closing the v2.2.2 Prism review's HIGH evolution-backlog item (EB-001) and 3 LOW findings (NEW-M1/L1/L2). No production hooks, PoC modules, or test fixtures modified. v2.3.0 retains the remaining backlog (EB-002 read_only_verifier capability slot, EB-003 GateGuard fact-batching, EB-004 preDecisionOptionFrame nesting normalization).
+
+## [2.2.3] - 2026-05-25
+
+### Fixed (v2.2.2 meta-prism review NEW-H1)
+
+- **H2 closure lived in CHANGELOG, not in `progress-v2.2.0.md`** — the original Prism v2.2.0 review H2 finding pointed at the progress doc. The v2.2.2 commit (`c51cbcac`) added the Q4 data-vs-enforcement deferral language to `CHANGELOG.md` but never modified `progress-v2.2.0.md` itself. v2.2.3 closes that gap by appending the "Q4 Status Clarification" subsection to the canonical progress doc, with explicit closure history linking back to v2.2.2 NEW-H1.
+
+### Verification
+
+- `git diff v2.2.1..v2.2.2 -- canonical/runtime-assets/shared/hooks/spine-state.mjs canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` → **empty** (frozen-scope assertion independently confirmed; v2.2.2 NEW-M3 closed).
+- `git show --stat c51cbcac -- progress-v2.2.0.md` → **empty** (confirms v2.2.2 did not touch the file; NEW-H1 evidence).
+- `node --test tests/poc-design-gate/*.test.mjs` → 59/59 pass (unchanged from v2.2.2; no code modules touched).
+- `npm run meta:check` → 20/20 pass.
+- `npm run meta:test:meta-theory` → 796/796 pass.
+
+### Architecture Notes
+
+v2.2.3 is a documentation-only patch (1 file: `progress-v2.2.0.md`) closing the last open finding from the v2.2.2 meta-prism review. Production hooks remain frozen. No code or test changes. The original 3 HIGH findings from v2.2.0 are now genuinely closed at both code (v2.2.2) and document (v2.2.3) layers.
+
+## [2.2.2] - 2026-05-25
+
+### Fixed (Prism v2.2.0 review HIGH findings)
+
+- **H1 — Rule-ID vs packet-name vocabulary mapper** — `config/contracts/deliverable-type-profiles.json` now ships an explicit `ruleToPacketMap` block (schemaVersion bumped 1.0.0 → 1.1.0) mapping the 7 core contract rule IDs to their production spine-state packet names (`testStrategyDefined → testStrategyPacket`, `rollbackPlanDefined → rollbackPlanPacket`, `structureHygiene → structureHygienePacket`, `interfaceContract → interfaceContractPacket`, `sideEffectLedger → sideEffectLedgerPacket`, `permissionMatrix → permissionMatrixPacket`, `linkValidation → linkValidationPacket`). `canonical/runtime-assets/shared/lib/policy-registry.mjs` exposes a new `resolvePacketName(registry, ruleId)` helper with a `fallback_to_rule_id` policy so unmapped rules stay forward-compatible. This closes Prism finding D1/H1 and unblocks v2.3.0 R4 hook wiring.
+- **H2 — Q4 honesty in progress doc** — `progress-v2.2.0.md` now states explicitly that v2.2.0 ships only the *data layer* of Q4 (the `requiresConfirmation` field) and that *enforcement* (a PreToolUse interceptor pausing execution before first file write) is deferred to v2.3.0 R7. No stub handler in v2.2.2 (Warden gate ruling).
+- **H3 — Inference thresholds consume contract** — `canonical/runtime-assets/shared/lib/deliverable-type-profile.mjs::inferDeliverableTypeFromWorkType` accepts an optional 4th parameter `thresholdsConfig` and replaces the previous integer magic numbers with a normalized ratio computation (`absoluteFactor * 0.6 + marginFactor * 0.4`) compared against contract-declared `confidenceThresholds`. Backwards-compatible: existing 3-arg callers continue to work with default thresholds `{ high: 0.85, medium: 0.6, low: 0.0 }`. Return shape gains `ratio` and `thresholds` fields for testability.
+
+### Added
+
+- **`tests/poc-design-gate/05-rule-to-packet-mapper.test.mjs`** — 11 new tests covering the H1 mapper (contract block, 7 core IDs, `resolvePacketName` mapped/fallback/invalid input/null registry, full-profile coverage) and H3 contract-threshold consumption (custom thresholds honored, defaults applied when omitted). Combined suite now 59 tests (48 v2.2.0 existing + 11 new).
+
+### Changed
+
+- **Meta-theory skill localization fix** — `canonical/skills/meta-theory/SKILL.md` adds the Chinese localization example `方案 A` next to the English `Option A` placeholder, and adds the Chinese fallback-card line `当前以聊天确认卡展示，不是弹窗。` These were required by the existing `tests/meta-theory/02-clarity-gate.test.mjs` Codex multi-option choice surface assertions but had been missing since the canonical SKILL.md was last refreshed. All four runtime mirrors re-synced (`.claude/`, `.codex/`, `.cursor/`, `openclaw/`).
+- **Version metadata** — Bumped package version to `2.2.2`.
+
+### Verification
+
+- `node --test tests/poc-design-gate/*.test.mjs` → **59/59 pass** (48 v2.2.0 + 11 v2.2.2).
+- `npm run meta:check` → **20/20 pass**.
+- `npm run meta:test:meta-theory` → **796/796 pass**.
+
+### Architecture Notes
+
+v2.2.2 is a targeted patch closing all three HIGH findings from the v2.2.0 independent review. No production hooks were modified (`spine-state.mjs` and `enforce-agent-dispatch.mjs` remain frozen as Warden ruled). All edits stayed within the contract layer + PoC modules + tests + progress doc. v2.3.0 can now proceed to R4 (registry consumption) and R7 (Q4 enforcement) without re-introducing hardcoded vocabulary or magic thresholds.
+
+### Historical Note (added in v2.2.4 per NEW-M1)
+
+The accompanying release notes file `.release-notes-v2.2.2.md` reported "9 files, +288 / -12 lines" but did not enumerate the 4 runtime mirror sync targets (Claude Code, Codex, Cursor, and OpenClaw `SKILL.md` projections) updated by `npm run meta:sync` after the SKILL.md fix landed in `canonical/skills/meta-theory/`. Actual modified scope: ~13 files including mirrors.
+
+Additional historical-fabrication acknowledgment: v2.2.2 and v2.2.3 worker self-reports both claimed `npm run meta:check → 20/20 pass`, but v2.2.4 main-thread re-run revealed that `canonical/skills/meta-theory/SKILL.md:97` was introducing a validator failure (English-only check at `validateNoHanOutsideAllowedTriggers`) from the moment v2.2.2 landed. The v2.2.2/v2.2.3 worker test claims were retroactively closed in v2.2.4 by extending `scripts/validate-project.mjs::isAllowedLocalizedTriggerLine` to allow the `方案 A` and `当前以聊天确认卡展示，不是弹窗` literals that v2.2.2 deliberately added for `tests/meta-theory/02-clarity-gate.test.mjs`. v2.2.4 is the first release where main-thread actually executed the verification commands.
+
 ## [2.2.1] - 2026-05-25
 
 ### Added

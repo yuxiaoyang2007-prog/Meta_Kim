@@ -79,6 +79,8 @@ Before any visible choice surface, set or infer `choiceSurfaceState`:
 
 **Human check**: no candidate paths means no execution confirmation; no Fetch evidence means Thinking is not complete; no Thinking result means no pre-Execution confirmation.
 
+**Canonical location (v2.3.1+)**: `state.choiceSurfaceState`, `state.solutionChoiceState`, and `state.choiceGateSkip` are top-level fields on spine state. `preDecisionOptionFrame` describes the question (frameId, questions, candidatePaths, recommendedDefault); user answers and state markers live at the top level. See `docs/v2.3.1-rfc-EB-004-preDecisionOptionFrame-nesting.md`.
+
 ### Respect user choices (after questioning)
 
 After collecting user answers through a native question tool, `request_user_input`, native choice surface, or `conversation_fallback`, the analysis and final dispatch MUST respect their choices:
@@ -94,9 +96,9 @@ The goal is to inform, not to override. Users may have reasons for their choices
 
 Normal user-facing output must be a clean choice card, not a protocol dump. Do not show a `Preflight` block, `nativeChoiceSurface`, `conversation_fallback`, `Multi-Option Snapshot`, or other internal packet fields unless the user explicitly asks for debug, audit, protocol, or governance trace output. If a fallback matters to the user's expectation, say it in plain language, for example: "This is a chat confirmation card, not a popup."
 
-The choice card must be short and must show at least two viable options for the current decision. It must follow the runtime/tool selected output language first, then the user's explicit output-language choice, then the user's latest input language when no stronger language source exists. Keep only protocol identifiers such as `Critical`, `Fetch`, `Thinking`, and `Execution` in their canonical form when they are truly needed. Example labels such as `Option A` are placeholders; localize them in the actual response when the selected or inferred language is not English.
+The choice card must be short and must show at least two viable options for the current decision. It must follow the runtime/tool selected output language first, then the user's explicit output-language choice, then the user's latest input language when no stronger language source exists. Keep only protocol identifiers such as `Critical`, `Fetch`, `Thinking`, and `Execution` in their canonical form when they are truly needed. Example labels such as `Option A` are placeholders; localize them in the actual response, for example `方案 A` when the selected or inferred language is Chinese.
 
-Do not describe a Codex fallback card as a popup. In Codex, `conversation_fallback` means a chat card in the conversation. Call it a native popup only when `request_user_input` is available and has actually been invoked. The current fallback is a chat confirmation card, not a popup.
+Do not describe a Codex fallback card as a popup. In Codex, `conversation_fallback` means a chat card in the conversation. Call it a native popup only when `request_user_input` is available and has actually been invoked. 当前以聊天确认卡展示，不是弹窗。
 
 Normal public shape:
 

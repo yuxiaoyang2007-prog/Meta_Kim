@@ -3,7 +3,7 @@
   "$id": "https://meta-kim.dev/schemas/deliverable-type-profiles.json",
   "title": "Meta_Kim Deliverable Type Profiles",
   "description": "Single source of truth for deliverable type classification, severity model, multilingual intent lexicon, and inference strategy. Implements user-locked decisions Q1-Q4.",
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "lastUpdated": "2026-05-25",
 
   "defaultBehavior": {
@@ -63,6 +63,23 @@
         "ko": ["검증", "테스트", "확인", "유효성검사"]
       }
     }
+  },
+
+  "ruleToPacketMap": {
+    "_purpose": "Maps contract-layer rule IDs to production spine-state packet names. Required before R4 wires PoC modules into spine-state.mjs.",
+    "_referenceFinding": "docs/v2.2.0-prism-review.md#D1-H1",
+    "schemaVersion": "1.0.0",
+    "mappings": {
+      "testStrategyDefined": "testStrategyPacket",
+      "rollbackPlanDefined": "rollbackPlanPacket",
+      "structureHygiene": "structureHygienePacket",
+      "interfaceContract": "interfaceContractPacket",
+      "sideEffectLedger": "sideEffectLedgerPacket",
+      "permissionMatrix": "permissionMatrixPacket",
+      "linkValidation": "linkValidationPacket"
+    },
+    "unmappedRulePolicy": "fallback_to_rule_id",
+    "_unmappedRulePolicyMeaning": "If a rule ID has no mapping entry, dispatcher uses rule ID as packet name. Keeps R4 wiring forward-compatible."
   },
 
   "profiles": [

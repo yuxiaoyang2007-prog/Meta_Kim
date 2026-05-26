@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -2426,14 +2426,44 @@ async function validateDocumentationFacts() {
   await validateEnglishGovernanceFiles();
 }
 
+let _localizedTriggerExceptionsCache = null;
+function loadLocalizedTriggerExceptions() {
+  if (_localizedTriggerExceptionsCache !== null) return _localizedTriggerExceptionsCache;
+  try {
+    const configPath = path.resolve(
+      repoRoot,
+      "config",
+      "contracts",
+      "localized-trigger-exceptions.json",
+    );
+    const cfg = JSON.parse(readFileSync(configPath, "utf8"));
+    const patterns = (cfg.patterns || [])
+      .filter((p) => p.type === "regex")
+      .map((p) => new RegExp(p.pattern));
+    const literals = (cfg.literals || []).map((l) => l.value);
+    _localizedTriggerExceptionsCache = { patterns, literals, source: "config" };
+  } catch {
+    _localizedTriggerExceptionsCache = {
+      patterns: [/^\s*trigger:\s*"/],
+      literals: [
+        "`元理论`",
+        "`仅分析`",
+        "`只读`",
+        '"不需要确认"',
+        "`方案 A`",
+        "当前以聊天确认卡展示，不是弹窗",
+      ],
+      source: "hardcoded-fallback",
+    };
+  }
+  return _localizedTriggerExceptionsCache;
+}
+
 function isAllowedLocalizedTriggerLine(line) {
-  return (
-    /^\s*trigger:\s*"/.test(line) ||
-    line.includes("`元理论`") ||
-    line.includes("`仅分析`") ||
-    line.includes("`只读`") ||
-    line.includes('"不需要确认"')
-  );
+  const ex = loadLocalizedTriggerExceptions();
+  for (const p of ex.patterns) if (p.test(line)) return true;
+  for (const l of ex.literals) if (line.includes(l)) return true;
+  return false;
 }
 
 async function readExistingTextFile(relativePath) {
@@ -3488,6 +3518,68 @@ function fail(msg) {
   console.error(`✗ ${msg}`);
 }
 
+/**
+ * EB-004 deprecation check (v2.3.1, warn-only).
+ *
+ * Scans .meta-kim/state/<profile>/spine/spine-state.json files for
+ * `preDecisionOptionFrame.{choiceSurfaceState,solutionChoiceState,choiceGateSkip}`
+ * — these fields belong on the top-level `state` object, not nested inside
+ * `preDecisionOptionFrame`. The frame describes the question; user answers
+ * and state markers live at the top level.
+ *
+ * v2.3.1 emits warnings only. v2.4.0 will fail validation when legacy nesting
+ * is found. A helper script `scripts/migrate-spine-state-eb004.mjs` promotes
+ * the fields and removes the legacy nesting.
+ *
+ * @returns {Promise<{warnings: string[]}>}
+ */
+async function validateSpineStateChoiceFieldLocations() {
+  const warnings = [];
+  const stateDir = path.join(repoRoot, ".meta-kim", "state");
+  if (!(await exists(stateDir))) {
+    return { warnings };
+  }
+
+  let profiles;
+  try {
+    profiles = await fs.readdir(stateDir);
+  } catch {
+    return { warnings };
+  }
+
+  const legacyFields = [
+    "choiceSurfaceState",
+    "solutionChoiceState",
+    "choiceGateSkip",
+  ];
+
+  for (const profile of profiles) {
+    const stateFile = path.join(stateDir, profile, "spine", "spine-state.json");
+    if (!(await exists(stateFile))) continue;
+    let state;
+    try {
+      state = JSON.parse(await fs.readFile(stateFile, "utf8"));
+    } catch {
+      continue;
+    }
+    const frame = state?.preDecisionOptionFrame;
+    if (!frame || typeof frame !== "object" || Array.isArray(frame)) continue;
+    for (const legacyField of legacyFields) {
+      if (frame[legacyField] !== undefined) {
+        warnings.push(
+          `[EB-004 deprecation, v2.3.1 warn-only] '${toRepoRelative(stateFile)}': ` +
+            `preDecisionOptionFrame.${legacyField} should be moved to state.${legacyField} ` +
+            `(top-level). Will FAIL in v2.4.0. ` +
+            `See docs/v2.3.1-rfc-EB-004-preDecisionOptionFrame-nesting.md. ` +
+            `Helper: scripts/migrate-spine-state-eb004.mjs.`,
+        );
+      }
+    }
+  }
+
+  return { warnings };
+}
+
 async function main() {
   const TOTAL = 20;
   let current = 1;
@@ -3602,9 +3694,21 @@ async function main() {
   await validateFactoryRelease();
   pass(t.val.step15Pass);
 
+  // EB-004 deprecation check (warn-only, does not gate validation).
+  const eb004Result = await validateSpineStateChoiceFieldLocations();
+
   console.log("\n========================================");
   console.log(t.val.footerAll(TOTAL));
   console.log(t.val.footerAgents(agentIds.length));
+  if (eb004Result.warnings.length > 0) {
+    console.log("----------------------------------------");
+    console.log(
+      `EB-004 deprecation warnings (v2.3.1 warn-only, will FAIL in v2.4.0):`,
+    );
+    for (const warning of eb004Result.warnings) {
+      console.log(`  ! ${warning}`);
+    }
+  }
   console.log("========================================\n");
 }
 

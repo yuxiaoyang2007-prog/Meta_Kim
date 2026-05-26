@@ -1934,6 +1934,32 @@ async function installClaudePlugins() {
         );
       }
     }
+
+    // Refresh registered marketplaces to pull latest plugin manifests
+    // (mitigates upstream rename events: e.g., everything-claude-code plugin renamed to ecc;
+    // stale marketplace caches keep the old plugin name and break new install specs)
+    for (const mktId of neededMarketplaces) {
+      console.log(
+        `${C.cyan}→${C.reset} ${C.dim}Refreshing marketplace "${mktId}"${C.reset}`,
+      );
+      const updateOut = spawnSync(
+        "claude",
+        ["plugin", "marketplace", "update", mktId],
+        { encoding: "utf8", shell: claudeShellOpt },
+      );
+      if (updateOut.status === 0) {
+        console.log(
+          `${C.green}✓${C.reset} ${C.dim}Marketplace "${mktId}" refreshed${C.reset}`,
+        );
+      } else {
+        const refreshErr = (updateOut.stderr || updateOut.stdout || "")
+          .trim()
+          .split("\n")[0];
+        console.warn(
+          `${C.yellow}⚠${C.reset} ${C.dim}Failed to refresh marketplace "${mktId}": ${refreshErr}${C.reset}`,
+        );
+      }
+    }
   }
 
   // Load installed plugin records from installed_plugins.json

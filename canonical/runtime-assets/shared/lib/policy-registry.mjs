@@ -118,5 +118,36 @@ export function createRegistryFromContract({ workflowContract, deliverableTypePr
     }
   }
 
+  registry.ruleToPacketMap = (deliverableTypeProfilesConfig && deliverableTypeProfilesConfig.ruleToPacketMap) || null;
+
   return registry.freeze();
+}
+
+/**
+ * Resolves a contract-layer rule ID to its production spine-state packet name.
+ *
+ * Reads `registry.ruleToPacketMap` (populated from
+ * `config/contracts/deliverable-type-profiles.json#ruleToPacketMap` via
+ * `createRegistryFromContract`).
+ *
+ * Lookup order:
+ *   1. Exact match in `mappings`.
+ *   2. Fallback per `unmappedRulePolicy === 'fallback_to_rule_id'`: return the rule ID itself.
+ *   3. Otherwise null.
+ *
+ * Reference: docs/v2.2.0-prism-review.md finding H1.
+ */
+export function resolvePacketName(registry, ruleId) {
+  if (!registry || typeof ruleId !== 'string' || ruleId.length === 0) {
+    return null;
+  }
+  const mappings = registry?.ruleToPacketMap?.mappings;
+  if (mappings && typeof mappings === 'object' && Object.prototype.hasOwnProperty.call(mappings, ruleId)) {
+    return mappings[ruleId];
+  }
+  const policy = registry?.ruleToPacketMap?.unmappedRulePolicy;
+  if (policy === 'fallback_to_rule_id') {
+    return ruleId;
+  }
+  return null;
 }

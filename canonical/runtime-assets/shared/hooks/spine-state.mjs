@@ -47,6 +47,43 @@ const STAGE_PROGRESS_PERCENT = {
   evolution: 100,
 };
 
+/**
+ * Default read-only verifier whitelist (EB-002, v2.3.1).
+ *
+ * Stages that enable `readOnlyVerifierEnabled: true` allow Bash commands that
+ * start with any of these prefixes to bypass the stage-requirements check.
+ * The intent is to let verifier owners (meta-prism, meta-warden) inspect
+ * git history, run validation scripts, and check artifacts without first
+ * dispatching a downstream worker.
+ *
+ * NOTE: these are PREFIX matches (`cmd.startsWith(prefix)`). They are not
+ * regexes and do not enforce command structure. The whitelist is intentionally
+ * narrow — anything not listed falls through to the existing gates.
+ */
+const DEFAULT_READ_ONLY_VERIFIER_COMMANDS = [
+  "git diff",
+  "git diff --stat",
+  "git log",
+  "git show",
+  "git status",
+  "git rev-parse",
+  "git tag --list",
+  "npm run meta:check",
+  "npm run meta:check:runtimes",
+  "npm run meta:check:sync-coverage",
+  "npm run meta:validate",
+  "node --check",
+  "node -e",
+  "node --test",
+  "gh release view",
+  "gh pr view",
+  "ls",
+  "cat",
+  "head",
+  "tail",
+  "wc",
+];
+
 export const STAGE_META_AGENT_MAP = {
   critical: {
     required: ["meta-warden"],
@@ -66,14 +103,20 @@ export const STAGE_META_AGENT_MAP = {
   review: {
     required: ["meta-prism"],
     label: "Review (Prism quality forensics)",
+    readOnlyVerifierEnabled: true,
+    readOnlyVerifierCommands: DEFAULT_READ_ONLY_VERIFIER_COMMANDS,
   },
   meta_review: {
     required: ["meta-warden"],
     label: "Meta-Review (Warden standards check)",
+    readOnlyVerifierEnabled: true,
+    readOnlyVerifierCommands: DEFAULT_READ_ONLY_VERIFIER_COMMANDS,
   },
   verification: {
     required: ["meta-warden"],
     label: "Verification (Warden closure)",
+    readOnlyVerifierEnabled: true,
+    readOnlyVerifierCommands: DEFAULT_READ_ONLY_VERIFIER_COMMANDS,
   },
   evolution: { required: [], label: "Evolution (writeback)" },
 };
@@ -396,22 +439,127 @@ export function completeStage(state, stageName) {
   return newState;
 }
 
-export function recordDispatch(state, agentName, metaAgentName) {
+/**
+ * Record a dispatch into spine state.
+ *
+ * Behavior matrix (HOOK-INFRA-001, v2.3.1):
+ *   - When `metaName` is a known meta-agent name → append to
+ *     `dispatchChain[currentStage]` (legacy/existing behavior).
+ *   - When `metaName` is null but `toolInput.subagent_type` matches a
+ *     `workerTaskPackets[]` entry by `taskPacketId` / `roleInstanceId`:
+ *       * If the matched packet's `ownerAgent` is a meta-agent → append to
+ *         `dispatchChain[currentStage]`.
+ *       * Otherwise → append the worker identifier to
+ *         `dispatchChain[currentStage]_supplementary`.
+ *   - When no match either way → append the raw dispatch identifier into
+ *     `dispatchChain[currentStage]_supplementary` so the chain stays
+ *     auditable.
+ *
+ * Field shape: `dispatchChain` retains its existing
+ * `{ stage: string[] }` shape; the supplementary entries use a parallel
+ * key `${stage}_supplementary` to avoid mixing meta-owners with worker IDs
+ * in the same array. Both fields are append-only and dedup-safe.
+ *
+ * @param {object} state - Current spine state.
+ * @param {string} agentName - Human description / agent identifier.
+ * @param {string|null} metaName - Resolved meta-agent name, if any.
+ * @param {object} [toolInput] - The raw tool input (Agent dispatch payload).
+ * @returns {object} New state with dispatch recorded.
+ */
+export function recordDispatch(state, agentName, metaName, toolInput) {
+  const META_AGENT_NAME_SET = new Set(META_AGENT_NAMES);
   const newState = { ...state };
   if (!newState.dispatchedAgents.includes(agentName)) {
     newState.dispatchedAgents = [...newState.dispatchedAgents, agentName];
   }
 
-  if (metaAgentName) {
-    const chain = { ...newState.dispatchChain };
-    const stage = newState.currentStage;
+  const chain = { ...newState.dispatchChain };
+  const stage = newState.currentStage;
+  const supplementaryKey = `${stage}_supplementary`;
+
+  const appendToChain = (value) => {
+    if (!value) return;
     if (!chain[stage]) chain[stage] = [];
-    if (!chain[stage].includes(metaAgentName)) {
-      chain[stage] = [...chain[stage], metaAgentName];
+    if (!chain[stage].includes(value)) {
+      chain[stage] = [...chain[stage], value];
     }
-    newState.dispatchChain = chain;
+  };
+
+  const appendToSupplementary = (value) => {
+    if (!value) return;
+    if (!chain[supplementaryKey]) chain[supplementaryKey] = [];
+    if (!chain[supplementaryKey].includes(value)) {
+      chain[supplementaryKey] = [...chain[supplementaryKey], value];
+    }
+  };
+
+  if (metaName && META_AGENT_NAME_SET.has(metaName)) {
+    appendToChain(metaName);
+  } else {
+    const subagentType =
+      (toolInput &&
+        (toolInput.subagent_type || toolInput.agent_type || toolInput.type)) ||
+      null;
+    const dispatchText = toolInput
+      ? [
+          toolInput.description,
+          toolInput.prompt,
+          toolInput.message,
+          toolInput.agent_type,
+          toolInput.subagent_type,
+          toolInput.type,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : "";
+    const workerPackets = Array.isArray(newState.workerTaskPackets)
+      ? newState.workerTaskPackets
+      : [];
+
+    const matchedPacket = workerPackets.find((packet) => {
+      if (!packet || typeof packet !== "object") return false;
+      if (
+        subagentType &&
+        (packet.businessRoleId === subagentType ||
+          packet.roleDisplayName === subagentType ||
+          packet.roleInstanceId === subagentType ||
+          packet.taskPacketId === subagentType)
+      ) {
+        return true;
+      }
+      if (
+        dispatchText &&
+        ((packet.taskPacketId && dispatchText.includes(packet.taskPacketId)) ||
+          (packet.roleInstanceId &&
+            dispatchText.includes(packet.roleInstanceId)))
+      ) {
+        return true;
+      }
+      return false;
+    });
+
+    if (matchedPacket) {
+      if (
+        matchedPacket.ownerAgent &&
+        META_AGENT_NAME_SET.has(matchedPacket.ownerAgent)
+      ) {
+        appendToChain(matchedPacket.ownerAgent);
+      } else {
+        appendToSupplementary(
+          matchedPacket.roleInstanceId ||
+            matchedPacket.taskPacketId ||
+            matchedPacket.businessRoleId ||
+            matchedPacket.roleDisplayName ||
+            matchedPacket.ownerAgent ||
+            agentName,
+        );
+      }
+    } else {
+      appendToSupplementary(subagentType || agentName);
+    }
   }
 
+  newState.dispatchChain = chain;
   return newState;
 }
 

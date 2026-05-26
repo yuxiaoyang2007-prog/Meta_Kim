@@ -87,7 +87,7 @@ export function resolveProfile(profiles, deliverableType, options = {}) {
   };
 }
 
-export function inferDeliverableTypeFromWorkType(workType, hints = {}, profiles) {
+export function inferDeliverableTypeFromWorkType(workType, hints = {}, profiles, thresholdsConfig = null) {
   if (!profiles || profiles.size === 0) {
     return { inferred: null, confidence: 'low', candidates: [], reason: 'no_profiles_loaded' };
   }
@@ -127,16 +127,31 @@ export function inferDeliverableTypeFromWorkType(workType, hints = {}, profiles)
   const top = scores[0];
   const second = scores[1] ?? { score: 0 };
   const margin = top.score - second.score;
+
+  // H3 fix (docs/v2.2.0-prism-review.md): normalize score+margin into a [0,1] ratio
+  // and read confidence thresholds from contract (`inferenceStrategy.confidenceThresholds`)
+  // instead of hardcoded integer breakpoints. Backwards compatible: when thresholdsConfig
+  // is null, uses the same default thresholds shipped in v2.2.0.
+  const absoluteFactor = Math.min(1, top.score / 5);
+  const marginFactor = Math.min(1, margin / 3);
+  const ratio = Math.min(1, absoluteFactor * 0.6 + marginFactor * 0.4);
+
+  const thresholds = thresholdsConfig?.confidenceThresholds || { high: 0.85, medium: 0.6, low: 0.0 };
+
   let confidence;
-  if (top.score >= 4 && margin >= 2) confidence = 'high';
-  else if (top.score >= 2 && margin >= 1) confidence = 'medium';
+  if (ratio >= thresholds.high) confidence = 'high';
+  else if (ratio >= thresholds.medium) confidence = 'medium';
   else confidence = 'low';
 
+  const requiresConfirmation = confidence !== 'high';
+
   return {
-    inferred: confidence === 'high' ? top.type : (confidence === 'medium' ? top.type : null),
+    inferred: confidence === 'low' ? null : top.type,
     confidence,
+    ratio,
+    thresholds,
     candidates: scores.slice(0, 3),
     reason: confidence === 'high' ? 'strong_signal' : 'ambiguous_signal',
-    requiresConfirmation: confidence !== 'high'
+    requiresConfirmation
   };
 }

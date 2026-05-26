@@ -818,6 +818,22 @@ Conversion rules:
 
 ---
 
+## Worker Per-File Write-Completion Contract (EB-001)
+
+When dispatching a worker with `scopeFiles` declared in `dispatchEnvelopePacket` or `workerTaskPacket.scopeFiles`, the worker MUST report every promised file in its output `fileCompletionList`, with explicit status per file:
+
+- `completed` — file actually modified as planned
+- `skipped` — file deliberately not modified; must include `skipReason`
+- `failed` — write attempt failed; must include `skipReason`
+
+This is contractual self-disclosure. Workers reporting `5 files edited` while having silently skipped 1-2 promised files is what triggered v2.2.2 H2 → NEW-H1 (Prism review caught a worker that wrote to CHANGELOG instead of progress-v2.2.0.md, silently dropping the original target).
+
+The Conductor's dispatch packet MUST list scopeFiles. The Conductor's downstream review MUST cross-check fileCompletionList against scopeFiles. Mismatch = automatic Review FAIL.
+
+Schema: `config/contracts/workflow-contract.json::workerTaskPacket.fileCompletionListField` (v2.2.4).
+
+---
+
 ## Meta-Theory Compliance
 
 Canonical reference: `canonical/skills/meta-theory/SKILL.md` defines the 5 meta-theory criteria.

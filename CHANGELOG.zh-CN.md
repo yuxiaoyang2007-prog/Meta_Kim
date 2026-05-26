@@ -6,6 +6,171 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.3.1] - 2026-05-26
+
+### 修复
+
+- EB-002 (HIGH) + HOOK-INFRA-001 (LOW) — spine-state.mjs 加入 read_only_verifier 槽位 + recordDispatch 自动追加 dispatchChain + enforce-agent-dispatch.mjs 插入 read_only_verifier 闸门。
+- EB-004 (LOW) — preDecisionOptionFrame 嵌套归一化（warn-only 校验器 + 迁移辅助脚本 + 规范位置文档）。
+
+### 新增
+
+- `scripts/migrate-spine-state-eb004.mjs` 迁移辅助脚本。
+- 21 前缀只读校验命令白名单。
+- `dispatchChain[stage]_supplementary[]` 审计字段。
+
+### 变更
+
+- `STAGE_META_AGENT_MAP` schema 加新字段（增量，向后兼容）。
+- `recordDispatch` 函数签名加 `toolInput` 参数。
+- 版本 2.3.0.1 → 2.3.1。
+
+## [2.3.0.1] - 2026-05-26
+
+### 变更
+
+- 重命名 `canonical/runtime-assets/claude/hooks/ecc-batching-wrapper.mjs` → `canonical/runtime-assets/claude/hooks/ecc-permission-cache-wrapper.mjs`（关闭 W2 F1 评审项）。
+- Docstring 与实际权限缓存行为对齐。
+- 无行为变更。
+
+## [2.3.0] - 2026-05-26
+
+### 修复
+
+- **Item 1 — ECC plugin macOS 安装失败（新）** — `config/skills.json` 防御性规范由 `ecc@ecc` 改为 `everything-claude-code@ecc`，以兼容上游 affaan-m/everything-claude-code → ecc 插件改名跨新旧 marketplace 缓存。`scripts/install-global-skills-all-runtimes.mjs` 在 marketplace 注册和插件安装之间加入刷新循环（`claude plugin marketplace update <id>`），以确保解析前缓存已更新。来源证据：本地缓存 `C:/Users/Kim/.claude/plugins/marketplaces/ecc/.claude-plugin/marketplace.json`（当前 HEAD，插件名=ecc，版本 2.0.0-rc.1）vs `.../marketplaces/everything-claude-code/.claude-plugin/marketplace.json`（旧版，插件名=everything-claude-code）。防御性规范对两种状态都生效。
+- **EB-008（HIGH）— workerExecutionEvidence 静默成功语义** — `config/contracts/workflow-contract.json::workerExecutionEvidenceField` 新增 `successMarkerFormat` enum (`stdout-text` | `exit-code-only` | `json-output`) 及 `exitCode`、`commandRanAt` 属性。静默成功命令（`node --check`、`tsc --noEmit`）只有在 `successMarkerFormat="exit-code-only"` 且 `exitCode=0` 且 `commandRanAt` 已记录时才允许 `actualOutput` 为空。关闭 v2.2.5 `accepted_risk`（W1 诚实披露 exit codes；占位符压力模式 `EXIT_OK\n` 退役）。`canonical/agents/meta-prism.md::Decision Rule 16` 同步扩展（silent-success extension v2.3.0）。
+- **EB-009（LOW）— 公开撤回错判（dogfood）** — v2.2.5 release notes 声称 `validate-project.mjs:15 loadRuntimeProfiles` 未被使用。重新验证显示其在 `validate-project.mjs:2808` 的 `validateSyncConfiguration()` 内被实际调用，且 `scripts/meta-kim-sync-config.mjs:271,333` 也定义和使用。该 import 必需保留。v2.2.5 release notes + CHANGELOG 中英双语条目均加入撤回引用/子条目。不做代码裁剪。
+- **EB-010（MEDIUM）— 同级 schema 风格归一化** — `config/contracts/workflow-contract.json::workerExecutionEvidenceField` 由异构 `fieldType`/`itemSchema`/顶层 `enforcement` 布局重塑为标准 JSON Schema `type`/`items`/`properties` + `_meta` 边带元数据。同级风格现在与 `verifyStepsField`、`fileCompletionListField` 一致。`_meta.closes` 列出 `[EB-005, EB-008, EB-010]`。
+
+### 新增
+
+- **EB-003（MEDIUM）— Meta_Kim ECC 批处理包装钩子（Option D，用户选定）** — `canonical/runtime-assets/claude/hooks/ecc-permission-cache-wrapper.mjs`（新增）实现 PreToolUse 会话+文件缓存键（SHA256(session_id || file_path)），TTL 5 分钟，存储位置限定 `os.tmpdir()`。幂等 + 缓存写失败非致命。钩子尚未在 `.claude/settings.json` 中注册（仅 canonical），v2.3.x 决定是否注册。详见 F1（`EB-011` backlog）。
+
+### 变更
+
+- `package.json` — 版本 `2.2.5 → 2.3.0`。
+- 运行时镜像（`.claude/`、`.codex/`、`.cursor/`、`openclaw/`）经 `npm run meta:sync` 重新同步。
+
+### 验证
+
+| 检查 | 结果 | 标记 |
+|---|---|---|
+| `npm run meta:check`（meta:sync 后） | **20/20 通过** | `stdout-text` |
+| W2（Prism）审查 | qualityGate=pass；0 HIGH/MEDIUM，3 LOW → backlog | 无 |
+| W3（Warden）元审查 + 验证 | pass；Rule 16/17 dogfood 履行 | 无 |
+| 跨文件一致性（`Rule 16` ↔ `successMarkerFormat` enum） | enum 名 + 条件匹配 | grep 比对 |
+
+### 顺延到 v2.3.1
+
+- **EB-002（HIGH）** — `read_only_verifier` 能力槽。**RFC 尚未起草。** v2.3.0 亲身验证 bug 真实存在（W2 + W3 reviewer 子智能体都被 `enforce-agent-dispatch.mjs` 在 review/meta_review 阶段阻止运行 `git diff` / `npm run meta:check`）。需要修改 `spine-state.mjs`（冻结面）。v2.3.1 RFC 必须定义：验收标准、允许命令白名单、scope 契约、测试计划。
+- **EB-004（LOW）** — `preDecisionOptionFrame` 嵌套归一化。**RFC 尚未起草。** v2.3.0 暴露 bug（`choiceSurfaceState` 必须同时在 spine 顶层和 `preDecisionOptionFrame` 内设置才能满足 hook 的 `state.choiceSurfaceState` 查找——字段位置令人困惑）。需要修改 `spine-state.mjs`。v2.3.1 RFC 必须定义：字段规范位置、迁移计划、validator 关卡。
+- **EB-011（LOW，v2.3.0 新发现）** — `ecc-permission-cache-wrapper.mjs` docstring 声称"批处理 ECC 插件安装副作用"，但实现只是写每个（会话,文件）缓存标记 + 缓存命中时返回 `permissionDecision=allow`（不实际阻止/延迟工具调用）。v2.3.x 决定：要么改名为 `ecc-permission-cache-wrapper.mjs`，要么加强行为以实际在 TTL 内拒绝/跳过重复有副作用的调用。
+- **Hook 基础设施 bug（v2.3.0 新发现）** — 在 `review`/`meta_review`/`verification` 阶段的 Agent 分派不会自动把 `ownerAgent` 追加到 `dispatchChain.<stage>`。主线必须手编 spine state 来记录分派。与 EB-002 同源（同一 root cause：只读 reviewer 无法运行 verify 命令；同一修复面：`spine-state.mjs`）。
+
+## [2.2.5] - 2026-05-25
+
+### 修复
+
+- **EB-005（HIGH）— Worker 验证声明证据契约** — 所有上报测试通过计数的 worker 必须附带 `workerExecutionEvidence` 条目。关闭 v2.2.2/v2.2.3 历史造假问题。详见 `config/contracts/workflow-contract.json::workerTaskPacket.workerExecutionEvidenceField`。审查门在 `canonical/agents/meta-prism.md::Decision Rule 16`（按 Rule 17 自我适用）。
+- **EB-006（MEDIUM）— 本地化触发例外抽取到配置** — `scripts/validate-project.mjs::isAllowedLocalizedTriggerLine` 不再硬编码 v2.2.4 的允许列表。移至 `config/contracts/localized-trigger-exceptions.json`，符合 PRIN-03/04。配置缺失时回退到向后兼容的硬编码默认值。
+- **EB-007（LOW）— Narrow-Amendment Protocol 文档化** — `canonical/skills/meta-theory/references/dev-governance.md` 定义 4 条边界协议（A：仅 validator/config 层；B：≤1 个文件；C：不改 worker 可见 schema；D：事后治理留痕）。
+
+### 新增
+
+- `config/contracts/localized-trigger-exceptions.json` — 供 `validate-project.mjs` 消费的配置
+- `.meta-kim/eb-003-investigation.md` — ECC GateGuard 事实批量化的调查记录；4 个用户决策选项；未对插件做任何修改
+
+### 变更
+
+- `canonical/agents/meta-prism.md` — Workflow 第 5 步子项 + Decision Rules 16-17
+- `config/contracts/workflow-contract.json` — 新增 `workerExecutionEvidenceField`
+- `scripts/validate-project.mjs` — `isAllowedLocalizedTriggerLine` 改为配置驱动，附向后兼容回退
+
+### 顺延到 v2.3.0
+
+- EB-002（HIGH）：`read_only_verifier` 能力槽（需要修改 `spine-state.mjs`，已冻结）
+- EB-004（LOW）：`preDecisionOptionFrame` 嵌套归一化（需要修改 `spine-state.mjs`，已冻结）
+- EB-003（MEDIUM）：等用户选择 A-D 选项
+- **EB-008（HIGH，v2.2.5 W2 审查暴露）**：`workerExecutionEvidence.actualOutput` 在静默成功命令（如 `node --check`、`JSON.parse`）下的语义二义性。schema 需要 `successMarkerFormat` 澄清字段。v2.2.5 按 W2 裁决将首次应用偏差记为 `accepted_risk`（第二选项是惩罚规则首日自适用）。
+- **EB-009（LOW，v2.2.5 W2 审查暴露）**：`scripts/validate-project.mjs:15` 引入的 `loadRuntimeProfiles` 不被新的 `loadLocalizedTriggerExceptions` 路径引用。已有的遗留条件；确认未使用后清理。
+  - **v2.3.0 撤回：** 原判定错误——`validate-project.mjs:2808` 在 `validateSyncConfiguration()` 中实际使用了 `loadRuntimeProfiles`。该 import 必需保留。EB-009 仅作文档修正闭环。
+- **EB-010（MEDIUM，v2.2.5 W2 审查暴露）**：`protocols.workerTaskPacket.*` 同级 schema 风格异构 — `verifyStepsField` / `fileCompletionListField` / `workerExecutionEvidenceField` 混用 `type: "array"` 与 `fieldType: "array"` 约定。需统一。
+- `workerExecutionEvidenceField` 的 validator 强制（当前为叙述层 + Rule 16）
+
+## [2.2.4] - 2026-05-25
+
+### 修复（v2.2.2 审查的演进 backlog 收尾）
+
+- **EB-001 — Worker 逐文件写入完成契约** — `config/contracts/workflow-contract.json` 在 `workerTaskPacket` 下新增可选的 `fileCompletionListField`，要求所有声明了 `scopeFiles` 的 worker 在输出中显式上报每个文件的状态（`completed` / `skipped` / `failed` + `skipReason`）。`canonical/agents/meta-conductor.md` 补齐叙述层的契约说明。该补丁关闭 v2.2.2 → NEW-H1 的根因（worker 静默丢弃了原本计划要改的 `progress-v2.2.0.md`，只改了 CHANGELOG）。Validator 层强制延后到 v2.3.0 R8。
+- **NEW-M1 — CHANGELOG 叙述准确性** — [2.2.2] 段对应的 release notes 文件（`.release-notes-v2.2.2.md:71`）把修改文件数低报为 "9 files"，没有列出 `npm run meta:sync` 联动更新的 4 个运行时镜像（`.claude/`、`.codex/`、`.cursor/`、`openclaw/`）。实际范围约 13 个文件。在下方 [2.2.2] 段追加历史准确性说明。
+- **NEW-L2 — Release-notes 一致性检验** — `scripts/check-release-notes-consistency.mjs`（新增）校验 v2.2.2 之后的每个 CHANGELOG 段落是否都有配套的 `.release-notes-vX.Y.Z.md` 文件，或按 `CHANGELOG.md:1184` 显式声明已折叠进 README。Opt-in 校验（`node scripts/check-release-notes-consistency.mjs`）；v2.2.5+ 之前不是强制 CI 门。
+
+### 说明
+
+- **NEW-L1（capability-index 时间戳漂移）** — 已在 v2.1.3 commit `bd70538f`（"Stable capability-index regeneration"）中处理完毕。v2.2.4 审计未发现残留缺口；为完整性记录在此关闭。
+- **EB-002/003/004** — 明确顺延到 v2.3.0（需要修改 `spine-state.mjs` 或属于仓外工作）。
+
+### 验证
+
+- `npm run meta:check` → **20/20 通过**（与 v2.2.3 一致；未触代码）。
+- `npm run meta:test:meta-theory` → **796/796 通过**（与 v2.2.3 一致）。
+- 生产钩子（`spine-state.mjs`、`enforce-agent-dispatch.mjs`）自 v2.2.0 Warden 冻结以来未被修改。
+
+### 架构说明
+
+v2.2.4 是 docs/contract 补丁，关闭 v2.2.2 Prism 审查中 HIGH 级别的演进 backlog 项（EB-001）和 3 个 LOW 发现（NEW-M1/L1/L2）。未触动生产钩子、PoC 模块或测试 fixture。v2.3.0 仍承接剩余 backlog（EB-002 read_only_verifier 能力槽、EB-003 GateGuard 事实批量化、EB-004 preDecisionOptionFrame 嵌套归一化）。
+
+## [2.2.3] - 2026-05-25
+
+### 修复（v2.2.2 meta-prism 审查 NEW-H1）
+
+- **H2 闭环写到了 CHANGELOG 而不是 `progress-v2.2.0.md`** — 原始 Prism v2.2.0 审查的 H2 发现明确指向进度文档。v2.2.2 commit（`c51cbcac`）把 Q4 数据层与强制层分界的说明写进了 `CHANGELOG.md`，但根本没改 `progress-v2.2.0.md` 本身。v2.2.3 通过在 canonical 进度文档末尾追加 "Q4 Status Clarification" 段落补上这个缺口，并显式连接回 v2.2.2 NEW-H1 闭环历史。
+
+### 验证
+
+- `git diff v2.2.1..v2.2.2 -- canonical/runtime-assets/shared/hooks/spine-state.mjs canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` → **空**（生产钩子冻结声明被独立验证；v2.2.2 NEW-M3 关闭）。
+- `git show --stat c51cbcac -- progress-v2.2.0.md` → **空**（证实 v2.2.2 未触碰该文件；NEW-H1 证据）。
+- `node --test tests/poc-design-gate/*.test.mjs` → 59/59 通过（与 v2.2.2 一致，代码模块未动）。
+- `npm run meta:check` → 20/20 通过。
+- `npm run meta:test:meta-theory` → 796/796 通过。
+
+### 架构说明
+
+v2.2.3 是纯文档补丁（1 个文件：`progress-v2.2.0.md`），关闭 v2.2.2 meta-prism 审查的最后一个未闭环发现。生产钩子保持冻结。无代码或测试改动。v2.2.0 原始 3 个 HIGH 发现至此在代码层（v2.2.2）和文档层（v2.2.3）双重闭环。
+
+## [2.2.2] - 2026-05-25
+
+### 修复（Prism v2.2.0 审查 HIGH 级别发现）
+
+- **H1 — 规则ID 到 packet 名称映射器** — `config/contracts/deliverable-type-profiles.json` 新增 `ruleToPacketMap` 块（schemaVersion 1.0.0 → 1.1.0），把 7 个核心契约规则 ID 显式映射到生产 spine-state packet 名（`testStrategyDefined → testStrategyPacket`、`rollbackPlanDefined → rollbackPlanPacket`、`structureHygiene → structureHygienePacket`、`interfaceContract → interfaceContractPacket`、`sideEffectLedger → sideEffectLedgerPacket`、`permissionMatrix → permissionMatrixPacket`、`linkValidation → linkValidationPacket`）。`canonical/runtime-assets/shared/lib/policy-registry.mjs` 新增导出 `resolvePacketName(registry, ruleId)` 辅助函数，未映射规则走 `fallback_to_rule_id` 策略保持向前兼容。关闭 Prism D1/H1 发现，为 v2.3.0 R4 钩子接线扫清障碍。
+- **H2 — 进度文档 Q4 诚实性** — `progress-v2.2.0.md` 明确声明 v2.2.0 只交付了 Q4 的*数据层*（`requiresConfirmation` 字段），而*强制层*（在首次写文件前暂停执行的 PreToolUse 拦截器）已延后到 v2.3.0 R7。v2.2.2 不发桩处理器（Warden 闸门裁定）。
+- **H3 — 推断阈值消费契约** — `canonical/runtime-assets/shared/lib/deliverable-type-profile.mjs::inferDeliverableTypeFromWorkType` 接受可选第 4 参数 `thresholdsConfig`，用归一化比值（`absoluteFactor * 0.6 + marginFactor * 0.4`）替换原先的整数魔数，与契约声明的 `confidenceThresholds` 对比。向后兼容：现有 3 参数调用方继续使用默认阈值 `{ high: 0.85, medium: 0.6, low: 0.0 }`。返回结构新增 `ratio` 和 `thresholds` 字段方便测试与审计。
+
+### 新增
+
+- **`tests/poc-design-gate/05-rule-to-packet-mapper.test.mjs`** — 11 个新测试，覆盖 H1 映射器（契约块、7 个核心 ID、`resolvePacketName` 命中/兜底/非法输入/空 registry、全 profile 覆盖）以及 H3 契约阈值消费（自定义阈值生效、缺省时使用默认）。合并后套件 59 个测试（v2.2.0 已有 48 + v2.2.2 新增 11）。
+
+### 变更
+
+- **元理论技能本地化补丁** — `canonical/skills/meta-theory/SKILL.md` 在英文 `Option A` 占位符旁补齐中文示例 `方案 A`，以及中文兜底说明 `当前以聊天确认卡展示，不是弹窗。`。`tests/meta-theory/02-clarity-gate.test.mjs` 关于 Codex multi-option choice surface 的断言一直需要这两段，但 canonical SKILL.md 上一次刷新时遗漏了。四个运行时镜像（`.claude/`、`.codex/`、`.cursor/`、`openclaw/`）已重新 sync。
+- **版本元数据** — 包版本升至 `2.2.2`。
+
+### 验证
+
+- `node --test tests/poc-design-gate/*.test.mjs` → **59/59 通过**（v2.2.0 48 + v2.2.2 11）。
+- `npm run meta:check` → **20/20 通过**。
+- `npm run meta:test:meta-theory` → **796/796 通过**。
+
+### 架构说明
+
+v2.2.2 是定向补丁，关闭 v2.2.0 独立审查的全部 3 个 HIGH 发现。生产钩子（`spine-state.mjs`、`enforce-agent-dispatch.mjs`）未被修改（Warden 冻结裁定）。所有改动停留在契约层 + PoC 模块 + 测试 + 进度文档。v2.3.0 现在可以推进 R4（registry 消费）和 R7（Q4 强制），不会再引入硬编码词汇或魔数阈值。
+
+### 历史说明（v2.2.4 NEW-M1 补录）
+
+配套的 release notes 文件 `.release-notes-v2.2.2.md` 把范围写成 "9 files, +288 / -12 lines"，但未列出 SKILL.md 修复落到 `canonical/skills/meta-theory/` 之后由 `npm run meta:sync` 联动更新的 4 个运行时镜像（Claude Code、Codex、Cursor、OpenClaw 的 `SKILL.md` 投影）。实际涉及范围约 13 个文件（含镜像）。
+
+历史造假说明补录：v2.2.2 与 v2.2.3 的 worker 自我报告都声称 `npm run meta:check → 20/20 通过`，但 v2.2.4 主线程实际重跑后发现 `canonical/skills/meta-theory/SKILL.md:97` 自 v2.2.2 落地起就在 `validateNoHanOutsideAllowedTriggers`（English-only 校验）这一步触发验证失败。v2.2.4 通过扩展 `scripts/validate-project.mjs::isAllowedLocalizedTriggerLine`，把 v2.2.2 为 `tests/meta-theory/02-clarity-gate.test.mjs` 故意加入的 `方案 A` 和 `当前以聊天确认卡展示，不是弹窗` 字面量纳入例外，回填关闭了 v2.2.2/v2.2.3 worker 的测试通过声明。v2.2.4 是第一个由主线程真正执行验证命令的发版。
+
 ## [2.2.1] - 2026-05-25
 
 ### 新增

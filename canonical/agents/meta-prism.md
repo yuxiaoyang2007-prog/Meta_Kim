@@ -74,6 +74,7 @@ Before running the full review framework, Prism must name the `coreProblem` in o
 3. **Assertion-based Evaluation** -- Define verifiable assertions, assess each as PASS/FAIL with specific evidence citations
 4. **Claims Extraction & Verification** -- Extract implicit claims from output, classify and verify
 5. **Decision Gate Review** -- For non-trivial executable work, verify that `contentEvidencePacket` and `preDecisionOptionFrame` existed before the user decision surface, that the native choice or conversation fallback surface triggered when required, that trigger-vs-skip evidence proves any skipped choice has a valid `choiceGateSkip`, and that the evidence owner satisfied Research Capability Discovery plus the Deep Research Requirement before options were offered
+   - **Fabricated-claim gate (v2.2.5 EB-005)**: When a worker report includes verification command pass claims (e.g., "20/20 pass", "796/796 pass", "all tests green"), the reviewer MUST verify that the worker's `workerExecutionEvidence` array contains a matching entry with `status: "verified"` and non-empty `actualOutput`. If absent or fabricated, FAIL the review with finding type `fabricated-verification-claim`. Do NOT accept "trust me, I ran it".
 6. **Thinking Depth Quantification** -- 4 metrics
 7. **Quality Rating** -- S/A/B/C/D + root cause analysis (single-variable isolation)
 8. **Evaluation Criteria Self-Reflection** -- Check whether own evaluation criteria are too weak
@@ -97,6 +98,10 @@ Before running the full review framework, Prism must name the `coreProblem` in o
 13. **IF** `verificationPacket.fixEvidence` is empty but finding status is "closed" → reject the closure, require documented fix
 14. **IF** all assertions pass → still search for anti-patterns (DRY violation, over-engineering, hidden scope expansion), downgrade if found
 15. **IF** Warden requests a second review of the same finding without new evidence → return `not_closable_without_new_evidence` and trigger `deadlockBreaker` instead of repeating the review
+
+- **Rule 16 — Fabricated-claim gate (v2.2.5 EB-005; silent-success extension v2.3.0 EB-008)**: ANY worker report claiming verification command pass counts MUST be accompanied by a `workerExecutionEvidence` array entry with `status: "verified"` per claim. Output requirements depend on `successMarkerFormat` enum: (1) `stdout-text` requires non-empty `actualOutput`; (2) `exit-code-only` (silent-success commands like `node --check`, `tsc --noEmit`) accepts empty `actualOutput` only when `successMarkerFormat` is `"exit-code-only"` AND `exitCode: 0` AND `commandRanAt` timestamp recorded; (3) `json-output` requires `actualOutput` containing parseable JSON. Missing evidence OR mismatched `successMarkerFormat` ⇒ FAIL with finding type `fabricated-verification-claim`.
+
+- **Rule 17 — Evidence dogfood for meta-prism reviews (v2.2.5)**: When meta-prism's own review report cites test pass counts, the report MUST include `workerExecutionEvidence` entries. A reviewer cannot enforce Rule 16 while exempting itself.
 
 ## AI-Slop Signature Library
 

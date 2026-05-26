@@ -124,6 +124,24 @@ If `taskClassification.upgradeReasons` includes `owner_creation_required`, the a
 
 ---
 
+## Narrow-Amendment Protocol (v2.2.5 EB-007)
+
+The `hardNoEdits` policy (no production hook edits during a run) has narrow exceptions for validator/config-layer amendments that surface during a run. The Narrow-Amendment Protocol allows in-flight extensions IF AND ONLY IF all 4 hard boundaries hold:
+
+**Boundary A — Validator/config layer only**: The edit must target `scripts/validate-project.mjs`, `config/contracts/*.json`, or equivalent allowlist/config plumbing. Production hooks (`spine-state.mjs`, `enforce-agent-dispatch.mjs`) remain frozen — those go through Warden-gated evolution writeback only.
+
+**Boundary B — ≤1 file scope**: The amendment touches at most one production-state file. Multi-file refactors are deferred to the next versioned release and tracked as evolution backlog.
+
+**Boundary C — No worker-facing schema change**: The amendment must not introduce new required fields or alter the shape of any contract that workers/runtimes consume. Allowlist additions, exception literals, and validator scope tweaks are permissible; new required schema fields are not.
+
+**Boundary D — Post-hoc governance record**: The amendment must be recorded in `evolutionWritebackPacket.amendmentsAppliedInFlight` with `boundary: "narrow-amendment-v2.2.5"`, `affectedFile`, `rationale`, and `evidence` (the failure that prompted the amendment). Skipping this record violates the protocol regardless of whether boundaries A–C held.
+
+If ANY boundary fails, the amendment is OUT-OF-SCOPE for the current run. Stop, complete the in-flight work without the amendment, and capture the need as evolution backlog for the next release.
+
+Rationale: v2.2.4 main-thread extended `isAllowedLocalizedTriggerLine` mid-run to close a historical fabrication (SKILL.md:97 had been failing since v2.2.2). That amendment satisfied A/B/C but was recorded post-hoc only in CHANGELOG. v2.2.5 documents the protocol so future amendments cite it explicitly.
+
+---
+
 ## 1B. Multi-iteration closure (until gates pass)
 
 When work is not done after one pass (open review findings, `verificationPacket.verified !== true`, or `npm run meta:validate:run` fails), treat the run like a **Ralph-style loop** without inventing new stage names:
@@ -216,6 +234,8 @@ Default public notice shape:
 - `critical_clarification_allowed` applies only during Critical and only when Fetch cannot proceed safely. The question may clarify intent, scope, permission, safety, or language. It must not present execution options.
 - `execution_confirmation_allowed` applies only after Fetch has produced `contentEvidencePacket` and Thinking has produced `preDecisionOptionFrame`, and before Execution begins. This is the normal consolidated execution confirmation.
 - `completed` means the user has answered or an allowed skip has been recorded; do not ask again unless scope materially changes.
+
+**Canonical location (v2.3.1+)**: `state.choiceSurfaceState`, `state.solutionChoiceState`, and `state.choiceGateSkip` are top-level fields on spine state. `preDecisionOptionFrame` describes the question (frameId, questions, candidatePaths, recommendedDefault); user answers and state markers live at the top level. See `docs/v2.3.1-rfc-EB-004-preDecisionOptionFrame-nesting.md`.
 
 Popup or interaction testing is a requirement to route through the normal flow, not permission to skip to a native choice surface. If no evidence-backed candidate paths exist, the execution confirmation is premature. If Fetch evidence is missing, Thinking is incomplete. If Thinking is incomplete, pre-Execution confirmation is forbidden.
 
