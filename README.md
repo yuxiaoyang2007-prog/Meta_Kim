@@ -746,17 +746,19 @@ The three memory layers work together toward two core goals:
 
 #### Plugin-marketplace skills (Superpowers, Everything Claude Code, cli-anything)
 
-Only Claude Code ships a native plugin marketplace. For **Codex / OpenClaw / Cursor** the installer falls back to a sparse-checkout of the upstream bundle's runtime-specific subtree:
+Superpowers has native plugin entry points in Claude Code, Codex, and Cursor. Meta_Kim no longer treats the old Codex / Cursor `skills/superpowers` fallback as a correct plugin install; update runs remove the legacy fallback written by older Meta_Kim versions and tell users to use the host-native plugin entry point.
+
+For plugin bundles without a native host plugin entry point, the installer still falls back to a sparse-checkout of the upstream bundle's runtime-specific subtree:
 
 | Runtime | Preferred subdir chain |
 | --- | --- |
 | Claude Code | native `claude plugin install <spec>@<marketplace>` (skills without `claudePlugin` fall back to `skills/`) |
-| Codex | `.codex/` → `.codex-plugin/` → `skills/` |
-| Cursor | `.cursor/` → `.cursor-plugin/` → `skills/` |
+| Codex | Superpowers uses the Codex Plugins pane or `/plugins`; other bundles fall back through `.codex/` → `.codex-plugin/` → `skills/` |
+| Cursor | Superpowers uses `/add-plugin superpowers` or Cursor's plugin marketplace; other bundles fall back through `.cursor/` → `.cursor-plugin/` → `skills/` |
 | OpenClaw | `skills/` |
 | opencode | `.opencode/` → `skills/` |
 
-The extracted tree lands in `~/.<runtime>/skills/<id>/`. Run `npm run meta:deps:install:claude-plugins` for the Claude marketplace path only, or `npm run meta:deps:install:all-runtimes` to cover every runtime at once. Upgrading from an older install? Legacy full-repo clones are auto-detected by the `.claude-plugin/` marker at the target root and re-extracted on the next run — no manual cleanup needed.
+The extracted tree lands in `~/.<runtime>/skills/<id>/`. Run `npm run meta:deps:install:claude-plugins` for the Claude marketplace path only, or `npm run meta:deps:install:all-runtimes` to cover every runtime at once. Upgrading from an older install? Legacy full-repo clones are auto-detected by the `.claude-plugin/` marker at the target root and re-extracted on the next run; old Codex/Cursor `skills/superpowers` fallbacks are removed and replaced with native-plugin instructions.
 
 ### Advanced ops
 

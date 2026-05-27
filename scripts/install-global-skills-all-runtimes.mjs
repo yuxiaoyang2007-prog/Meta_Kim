@@ -346,6 +346,8 @@ function loadSkillsManifest() {
         ...(subdir ? { subdir } : {}),
         targets: skill.targets || ["claude", "codex", "openclaw"],
         ...(skill.claudePlugin ? { claudePlugin: skill.claudePlugin } : {}),
+        ...(skill.codexPlugin ? { codexPlugin: skill.codexPlugin } : {}),
+        ...(skill.cursorPlugin ? { cursorPlugin: skill.cursorPlugin } : {}),
         ...(skill.installRoot ? { installRoot: skill.installRoot } : {}),
         ...(skill.pluginHookCompat ? { pluginHookCompat: true } : {}),
         ...(skill.installMethod ? { installMethod: skill.installMethod } : {}),
@@ -1611,6 +1613,68 @@ const PLUGIN_BUNDLE_SUBDIR_PREF = {
   openclaw: ["skills"],
 };
 
+function nativePluginIdForRuntime(spec, runtimeId) {
+  if (runtimeId === "codex") return spec.codexPlugin ?? null;
+  if (runtimeId === "cursor") return spec.cursorPlugin ?? null;
+  return null;
+}
+
+async function looksLikeLegacySuperpowersSkillBundle(targetDir, spec) {
+  if (spec.id !== "superpowers") return false;
+  return (
+    (await pathExists(path.join(targetDir, "using-superpowers", "SKILL.md"))) &&
+    (await pathExists(path.join(targetDir, "test-driven-development", "SKILL.md"))) &&
+    !(await pathExists(path.join(targetDir, "plugin.json"))) &&
+    !(await pathExists(path.join(targetDir, ".codex-plugin"))) &&
+    !(await pathExists(path.join(targetDir, ".cursor-plugin")))
+  );
+}
+
+async function cleanupNativePluginSkillFallback(runtimeHome, runtimeId, spec) {
+  const nativePluginId = nativePluginIdForRuntime(spec, runtimeId);
+  if (!nativePluginId) return;
+
+  const targetDir = path.join(runtimeHome, "skills", spec.id);
+  const hasLegacyBundle =
+    (await detectPluginBundleSkillResidue(targetDir)) ||
+    (await looksLikeLegacySuperpowersSkillBundle(targetDir, spec));
+  if (!hasLegacyBundle) return;
+
+  assertUnderHome(targetDir);
+  console.warn(
+    `${C.yellow}⚠${C.reset} ${spec.id}: removing legacy ${runtimeId} skills/ fallback; use the native ${runtimeId} plugin "${nativePluginId}" instead`,
+  );
+  console.warn(`${C.dim}  ${targetDir}${C.reset}`);
+  if (dryRun) {
+    console.log(t.dryRun(`remove legacy native-plugin fallback: ${targetDir}`));
+    return;
+  }
+
+  try {
+    await rmDirWithRetry(targetDir);
+  } catch (error) {
+    if (isWindowsLockError(error)) {
+      console.warn(`${C.yellow}⚠${C.reset} ${t.warnStagingLocked(targetDir)}`);
+      return;
+    }
+    throw error;
+  }
+}
+
+function printNativePluginInstallHint(runtimeId, pluginId) {
+  if (runtimeId === "codex") {
+    console.log(
+      `${C.yellow}⊘${C.reset} ${C.dim}Codex native plugin required: open /plugins or the Codex app Plugins pane, search "${pluginId}", then install it.${C.reset}`,
+    );
+    return;
+  }
+  if (runtimeId === "cursor") {
+    console.log(
+      `${C.yellow}⊘${C.reset} ${C.dim}Cursor native plugin required: run /add-plugin ${pluginId} in Cursor Agent chat, or install it from Cursor's plugin marketplace.${C.reset}`,
+    );
+  }
+}
+
 async function installPluginBundlesForNonClaudeRuntimes(
   runtimeHomes,
   activeTargets,
@@ -1644,12 +1708,19 @@ async function installPluginBundlesForNonClaudeRuntimes(
     const specTargets = spec.targets || [];
     for (const runtimeId of eligibleRuntimes) {
       if (!specTargets.includes(runtimeId)) continue;
+      const runtimeHome = runtimeHomes[runtimeId];
+      const nativePluginId = nativePluginIdForRuntime(spec, runtimeId);
+      if (nativePluginId) {
+        emitHeader();
+        await cleanupNativePluginSkillFallback(runtimeHome, runtimeId, spec);
+        printNativePluginInstallHint(runtimeId, nativePluginId);
+        continue;
+      }
       // Claude runtime with a native claudePlugin spec: already handled by
       // installClaudePlugins() via `claude plugin install`. Skip here to
       // avoid double install. Claude runtime WITHOUT claudePlugin (e.g.
       // cli-anything) still needs the sparse-checkout fallback.
       if (runtimeId === "claude" && spec.claudePlugin) continue;
-      const runtimeHome = runtimeHomes[runtimeId];
       const targetDir = path.join(runtimeHome, "skills", spec.id);
 
       // Stale bundle residue detection: previous full-repo clones of plugin

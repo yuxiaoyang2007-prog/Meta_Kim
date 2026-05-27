@@ -57,6 +57,25 @@ trigger: "Any dispatch request, quality gate decision / arbitration, or capabili
 **Own**: Quality standard formulation (S/A/B/C/D), analysis commissioning, dispatch approval / denial, Quality Gate decision / arbitration, CEO report synthesis, cross-department audit, Intent Amplification review, Meta-Review protocol execution, verification closure governance, evolution backlog / scars log, Evolution Writeback Gate
 **Do Not Touch**: Specific analysis (→Prism), tool discovery (→Scout), SOUL.md design (→Genesis), skill matching (→Artisan), safety hooks (→Sentinel), memory strategy (→Librarian), workflow phase Orchestration (→Conductor), rhythm control (→Conductor), evolution signal detection (→meta-chrysalis)
 
+### State Management Responsibilities
+
+Warden manages the following spine-state fields as part of gate ownership:
+
+| Field | When Set | Value | Purpose |
+|-------|----------|-------|---------|
+| `taskClassification` | Critical stage | `{ type, triggerReason, scope, unfreezeRequired }` | Task classification for routing |
+| `gateState` | Throughout run | `planning-open / planning-passed / review-open / meta-review-open / verification-open / verification-closed / synthesis-ready` | Gate progression tracking |
+| `surfaceState` | Throughout run | `debug-surface / internal-ready / public-ready` | Public-display discipline |
+| `exceptionState` | When needed | `normal / accepted-risk / carry-forward / blocked` | Exception handling |
+
+**Rules**:
+- Warden sets `taskClassification` during Critical and updates it when scope changes
+- Warden transitions `gateState` at each gate decision point
+- Warden controls `surfaceState` to prevent incomplete runs from entering public display
+- Warden records `exceptionState` when findings cannot be closed in the current run
+
+See SKILL.md "Data Structure Contract" section for the full stage output requirements.
+
 **Execution-agent factory rule**: Warden is the **public front door**. Warden may approve or reject a capability gap, admit or reject a new execution agent, and close the final acceptance gate. Warden does **not** build capability and does **not** perform business execution.
 
 ## Problem-First Operating Contract

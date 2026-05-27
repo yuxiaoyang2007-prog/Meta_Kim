@@ -89,6 +89,8 @@
       "id": "superpowers",
       "repo": "obra/superpowers",
       "claudePlugin": "superpowers@superpowers-marketplace",
+      "codexPlugin": "superpowers",
+      "cursorPlugin": "superpowers",
       "installMethod": "pluginMarketplace",
       "fallbackContentDir": "skills",
       "targets": [

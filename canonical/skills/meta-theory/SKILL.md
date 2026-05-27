@@ -834,6 +834,44 @@ See `references/meta-theory.md` for full constitutional principles. Summary:
 
 Before dispatching, verify task brief includes relevant principle constraints. During Review (Stage 5) and Verification (Stage 7), include principle compliance as a check dimension.
 
+## Data Structure Contract
+
+Each stage of the 8-stage spine produces specific data structures that must be present for validation to pass. The canonical schema definitions are in `config/contracts/workflow-contract.json`.
+
+### Stage Output Requirements
+
+| Stage | Required Output Fields | Schema Reference |
+|-------|----------------------|------------------|
+| **Critical** | `taskClassification.type`, `taskClassification.scope`, `taskClassification.unfreezeRequired` | `protocols.taskClassification` |
+| **Fetch** | `fetchRecord.capabilitySearchPerformed`, `fetchRecord.capabilityMatches`, `contentEvidencePacket` | `protocols.fetchRecord`, `protocols.contentEvidencePacket` |
+| **Thinking** | `preDecisionOptionFrame`, `businessFlowBlueprintPacket`, `agentBlueprintPacket`, `dispatchBoard`, `workerTaskPackets` | `protocols.preDecisionOptionFrame`, `protocols.businessFlowBlueprintPacket`, `protocols.agentBlueprintPacket`, `protocols.workerTaskPackets` |
+| **Execution** | `workerTaskPackets[].fileCompletionList` | `protocols.workerTaskPacket.fileCompletionListField` |
+| **Review** | `reviewPacket.assertions`, `reviewPacket.rating` | `protocols.reviewPacket` |
+| **Meta-Review** | `metaReviewPacket.standardDriftDetected`, `metaReviewPacket.revisionInstructions` | `protocols.metaReviewPacket` |
+| **Verification** | `verificationResults.fixEvidence`, `verificationResults.closeFindings` | `protocols.verificationResults` |
+| **Evolution** | `evolutionWritebackPacket` | `protocols.evolutionWritebackPacket` |
+
+### Choice Surface State Lifecycle
+
+The `choiceSurfaceState` field controls when user-facing choice surfaces are allowed:
+
+| State | When Set | Allowed Surfaces |
+|-------|----------|-------------------|
+| `not_allowed` | Default (before Critical) | No choice surfaces |
+| `critical_clarification_allowed` | During Critical when Fetch cannot proceed safely | Blocking Critical clarification only |
+| `execution_confirmation_allowed` | After Fetch + Thinking, before Execution | Single execution confirmation |
+| `completed` | After user confirms or skip recorded | No repeat confirmation |
+
+**Owner**: `meta-conductor` manages `choiceSurfaceState` transitions. See `meta-conductor.md` "Choice Surface State Management" section.
+
+### Validation Hooks
+
+The enforcement hook (`canonical/runtime-assets/shared/hooks/spine-state.mjs`) validates:
+- `checkStageRequirements()` — verifies required meta-agent dispatch and stage-specific outputs
+- `checkChoiceSurfaceGate()` — verifies choice surface state compliance
+
+If validation fails, the hook denies Write/Edit/Bash tools until the requirement is satisfied.
+
 ## References
 
 - `references/meta-theory.md` — Five Criteria, Four Death Patterns, Organizational Mirror
@@ -842,5 +880,6 @@ Before dispatching, verify task brief includes relevant principle constraints. D
 - `references/rhythm-orchestration.md` — Attention cost model, card dealing rules
 - `references/ten-step-governance.md` — 11-phase business workflow reference; legacy file name kept as a compatibility alias
 - `references/intent-amplification.md` — Intent Core + Delivery Shell model
+- `config/contracts/workflow-contract.json` — Canonical protocol schema definitions
 
 Read when the corresponding Type requires deep methodology.

@@ -37,6 +37,8 @@ README explicitly lists: Claude Code, Cursor, Codex, OpenCode, Gemini, Copilot.
   "id": "superpowers",
   "repo": "obra/superpowers",
   "claudePlugin": "superpowers@superpowers-marketplace",
+  "codexPlugin": "superpowers",
+  "cursorPlugin": "superpowers",
   "targets": ["claude", "codex", "openclaw", "cursor"]
 }
 ```
@@ -46,13 +48,16 @@ README explicitly lists: Claude Code, Cursor, Codex, OpenCode, Gemini, Copilot.
 - **Claude Code**: Dual-channel
   1. `claude plugin install superpowers@superpowers-marketplace` (marketplace plugin)
   2. `git clone --depth 1` to `~/.claude/skills/superpowers/` (skill dir)
-- **Other platforms**: `git clone --depth 1` only
+- **Codex**: native Codex plugin UI or `/plugins`; legacy `~/.codex/skills/superpowers/` fallback is removed on update
+- **Cursor**: native Cursor `/add-plugin superpowers`; legacy `~/.cursor/skills/superpowers/` fallback is removed on update
+- **OpenClaw and other non-native platforms**: `git clone --depth 1` / skill fallback
 - Plugin install is detected and skipped if already installed (checks `claude plugins list --json`)
 
 ## Special Notes
 
 - **Dual-channel distribution** is unique to superpowers among the 9 dependencies
 - The `claudePlugin` field in `config/skills.json` triggers the plugin install path
+- The `codexPlugin` and `cursorPlugin` fields prevent Meta_Kim from presenting a copied skill directory as a native plugin install
 - Install script uses `CLAUDE_PLUGIN_SPECS` array to manage plugin installs
 - Install script has Windows-specific `.cmd` vs `.exe` probing logic for Claude CLI
 

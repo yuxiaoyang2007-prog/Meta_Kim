@@ -67,7 +67,11 @@ describe("installPluginBundlesForNonClaudeRuntimes (dry-run e2e)", () => {
     const plain = stripAnsi(out);
     assert.match(plain, /everything-claude-code/);
     const marketplaceExercised =
+      /claude plugin install everything-claude-code@ecc/.test(plain) ||
       /claude plugin install ecc@ecc/.test(plain) ||
+      /everything-claude-code@ecc.*(already installed|已安装|이미 설치됨|既にインストール)/i.test(
+        plain,
+      ) ||
       /ecc@ecc.*(already installed|已安装|이미 설치됨|既にインストール)/i.test(
         plain,
       );
@@ -79,21 +83,25 @@ describe("installPluginBundlesForNonClaudeRuntimes (dry-run e2e)", () => {
     assert.doesNotMatch(plain, /everything-claude-code@everything-claude-code/);
   });
 
-  test("Codex runtime extracts .codex/ subdir for superpowers", () => {
+  test("Codex runtime uses native plugin flow for superpowers", () => {
     const { status, out } = runDryRun();
     assert.equal(status, 0);
     const plain = stripAnsi(out);
-    assert.match(
+    assert.match(plain, /Codex native plugin required/);
+    assert.match(plain, /search "superpowers"/);
+    assert.doesNotMatch(
       plain,
       /git sparse-checkout https:\/\/github\.com\/obra\/superpowers\.git:\.codex ->/,
     );
   });
 
-  test("Cursor runtime extracts .cursor/ subdir for superpowers", () => {
+  test("Cursor runtime uses native plugin flow for superpowers", () => {
     const { status, out } = runDryRun();
     assert.equal(status, 0);
     const plain = stripAnsi(out);
-    assert.match(
+    assert.match(plain, /Cursor native plugin required/);
+    assert.match(plain, /\/add-plugin superpowers/);
+    assert.doesNotMatch(
       plain,
       /git sparse-checkout https:\/\/github\.com\/obra\/superpowers\.git:\.cursor ->/,
     );

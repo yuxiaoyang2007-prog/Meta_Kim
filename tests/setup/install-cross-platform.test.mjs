@@ -18,6 +18,9 @@ const findskillSkill = skillsManifest.skills.find((skill) => skill.id === "finds
 const planningWithFilesSkill = skillsManifest.skills.find(
   (skill) => skill.id === "planning-with-files",
 );
+const superpowersSkill = skillsManifest.skills.find(
+  (skill) => skill.id === "superpowers",
+);
 
 describe("install platform config", () => {
   test("quick deploy copies root runtime guide files", () => {
@@ -70,6 +73,13 @@ describe("install platform config", () => {
   test("planning-with-files uses skills/ as canonical + pluginHookCompat for hooks", () => {
     assert.equal(planningWithFilesSkill.pluginHookCompat, true);
     assert.equal(planningWithFilesSkill.installRoot, undefined);
+  });
+
+  test("superpowers declares native Codex and Cursor plugin flows", () => {
+    assert.equal(superpowersSkill.installMethod, "pluginMarketplace");
+    assert.equal(superpowersSkill.claudePlugin, "superpowers@superpowers-marketplace");
+    assert.equal(superpowersSkill.codexPlugin, "superpowers");
+    assert.equal(superpowersSkill.cursorPlugin, "superpowers");
   });
 
   test("legacy setup fallback only applies when requested", () => {

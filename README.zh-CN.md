@@ -745,17 +745,19 @@ flowchart TB
 
 #### Plugin 市场类 skill（Superpowers、Everything Claude Code、cli-anything）
 
-只有 Claude Code 自带原生 plugin 市场。对 **Codex / OpenClaw / Cursor**，安装脚本会从 upstream bundle 按 runtime 优先级抽取对应子目录（sparse-checkout）：
+Superpowers 在 Claude Code、Codex 和 Cursor 都有原生 plugin 入口。Meta_Kim 不再把 Codex / Cursor 的 `skills/superpowers` fallback 当成正确插件安装；更新时会清理旧版 Meta_Kim 写入的 fallback 目录，并提示用户走宿主原生插件入口。
+
+对没有原生插件入口的 plugin bundle，安装脚本仍会从 upstream bundle 按 runtime 优先级抽取对应子目录（sparse-checkout）：
 
 | Runtime | 优先链 |
 | --- | --- |
 | Claude Code | 原生 `claude plugin install <spec>@<marketplace>`（无 `claudePlugin` 字段的 skill 走 `skills/` 回退） |
-| Codex | `.codex/` → `.codex-plugin/` → `skills/` |
-| Cursor | `.cursor/` → `.cursor-plugin/` → `skills/` |
+| Codex | Superpowers 走 Codex 插件 UI 或 `/plugins`；其他 bundle 再按 `.codex/` → `.codex-plugin/` → `skills/` 回退 |
+| Cursor | Superpowers 走 `/add-plugin superpowers` 或 Cursor 插件市场；其他 bundle 再按 `.cursor/` → `.cursor-plugin/` → `skills/` 回退 |
 | OpenClaw | `skills/` |
 | opencode | `.opencode/` → `skills/` |
 
-抽取结果装到 `~/.<runtime>/skills/<id>/`。只装 Claude 市场 plugin：`npm run meta:deps:install:claude-plugins`；一次覆盖全 runtime：`npm run meta:deps:install:all-runtimes`。**升级用户无需手动清理**：老版本的整 repo clone 残留会通过目标目录下的 `.claude-plugin/` 标志自动识别，下次运行自动重抽。
+抽取结果装到 `~/.<runtime>/skills/<id>/`。只装 Claude 市场 plugin：`npm run meta:deps:install:claude-plugins`；一次覆盖全 runtime：`npm run meta:deps:install:all-runtimes`。**升级用户无需手动清理**：老版本的整 repo clone 残留会通过目标目录下的 `.claude-plugin/` 标志自动识别；旧版 Codex/Cursor `skills/superpowers` fallback 也会在更新时移除，并提示安装原生插件。
 
 ### 高级运维
 

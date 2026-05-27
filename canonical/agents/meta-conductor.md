@@ -62,6 +62,31 @@ trigger: "Multi-step tasks, Type C execution, rhythm optimization, or when workf
 **Own**: Critical intake clarification and run-viability judgment, workflow family determination (business workflow / meta-analysis workflow), **business-flow blueprint ownership** (`businessFlowBlueprintPacket`), **agent role blueprint ownership** (`agentBlueprintPacket` with short business role names), pre-orchestration evidence lane validation (`contentEvidencePacket`), pre-decision option framing (`preDecisionOptionFrame`), stage Orchestration across `Critical / Fetch / Thinking / Execution / Review / Meta-Review / Verification / Evolution`, rhythm control, dispatch board ownership, department configuration, **stage-card execution lanes** (which kinds of work may run when a stage card is active — not picking concrete skill filenames), event Card Deck management, Intentional Silence / Interrupt / Skip mechanisms, Delivery Shell selection, explicit owner resolution, post-choice `dispatchEnvelopePacket` generation for non-query runs, protocol-first task packaging, parallel lane design, same-owner multi-instance sharding rules, merge-owner assignment
 **Do Not Touch**: SOUL.md design (→Genesis), **named skill/tool loadout per agent** (→Artisan), safety hooks (→Sentinel), memory strategy (→Librarian), quality standard formulation (→Warden), specific quality review (→Prism)
 
+### Choice Surface State Management
+
+Conductor manages the `choiceSurfaceState` field lifecycle as part of pre-decision option framing:
+
+| State | Transition Trigger | Allowed Content | Forbidden Content |
+|-------|-------------------|-----------------|-------------------|
+| `not_allowed` | Default before Critical | None | Any popup/card/question |
+| `critical_clarification_allowed` | During Critical when Fetch cannot safely proceed | Blocking Critical clarification only | Execution options, implementation choices |
+| `execution_confirmation_allowed` | After Fetch + Thinking complete, before Execution | Single consolidated execution confirmation | New discovery questions |
+| `completed` | After user answers or valid skip recorded | None | Repeat confirmations |
+
+**Transition Rules**:
+1. Initialize `choiceSurfaceState = "not_allowed"` when spine state is created
+2. Set to `critical_clarification_allowed` only if Fetch cannot proceed without blocking clarification
+3. Set to `execution_confirmation_allowed` only after both `fetchRecord.capabilitySearchPerformed = true` AND `preDecisionOptionFrame` exists
+4. Set to `completed` after user responds via native question tool OR `solutionChoiceState` records a valid skip (`trivial`/`queryBypass`/`auto-proceed`)
+5. Reset to `not_allowed` if scope materially changes
+
+**Synchronization with `solutionChoiceState`**:
+- `preDecisionOptionFrame.solutionChoiceState` records the user's decision: `pending` → `user_confirmed`/`auto_skipped`/`trivial_skip`
+- When `solutionChoiceState` becomes `user_confirmed`/`auto_skipped`/`trivial_skip`, Conductor MUST also set `choiceSurfaceState = "completed"`
+- Mismatch between these fields causes validation to fail
+
+See SKILL.md "Data Structure Contract" section for the full stage output requirements.
+
 **Execution-agent factory rule**: Conductor is orchestration-only. Conductor may detect a missing owner, issue the `capabilityGapPacket`, and own the `orchestrationTaskBoardPacket`, but Conductor does **not** build or upgrade capability itself.
 
 **Key Distinction**: Conductor binds **stage cards** to **execution lanes and sequencing**; Artisan maps **named skills/tools** to **one agent** from SOUL.md. No shared `matchSkillsToPhase`-style surface — lane specs stay abstract; skill lists stay in Artisan.

@@ -62,6 +62,14 @@
             "type": "string",
             "description": "Claude Code marketplace plugin identifier if this skill is also an official plugin"
           },
+          "codexPlugin": {
+            "type": "string",
+            "description": "Codex plugin marketplace identifier when the package should be installed through Codex's native plugin flow instead of a skills/ fallback"
+          },
+          "cursorPlugin": {
+            "type": "string",
+            "description": "Cursor plugin marketplace identifier when the package should be installed through Cursor's native plugin flow instead of a skills/ fallback"
+          },
           "capabilities": {
             "type": "array",
             "description": "Runtime-neutral capabilities provided by this skill.",

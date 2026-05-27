@@ -58,11 +58,11 @@ Notes: HookPrompt is native on Claude Code. Codex and Cursor require Meta_Kim ad
 | Platform | Decision | Install Method | Rationale |
 |----------|----------|---------------|-----------|
 | Claude Code | DISTRIBUTE | Claude Plugin (`superpowers@superpowers-marketplace`) + git clone | Dual-channel: marketplace plugin + skill dir |
-| Codex | DISTRIBUTE | `git clone --depth 1` | SKILL.md format, explicitly supports Codex |
+| Codex | NATIVE_PLUGIN | Codex Plugins pane or `/plugins` | Upstream Superpowers documents official Codex plugin marketplace support |
 | OpenClaw | DISTRIBUTE | `git clone --depth 1` | SKILL.md format, explicitly supports OpenClaw |
-| Cursor | DISTRIBUTE | `git clone --depth 1` | SKILL.md format, explicitly supports Cursor |
+| Cursor | NATIVE_PLUGIN | `/add-plugin superpowers` or Cursor plugin marketplace | Upstream Superpowers documents Cursor plugin marketplace support |
 
-Notes: `claudePlugin` field triggers `claude plugin install` for Claude Code. Other platforms get git clone only.
+Notes: `claudePlugin` field triggers `claude plugin install` for Claude Code. `codexPlugin` and `cursorPlugin` mark native host-plugin flows; Meta_Kim removes old Codex/Cursor `skills/superpowers` fallbacks during update and prints the host-native install instruction.
 
 ### 5. everything-claude-code
 

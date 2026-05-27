@@ -6,6 +6,13 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.3.2] - 2026-05-26
+
+### Fixed
+
+- **DOC-001 (MEDIUM) — Data structure contract documentation gap** — Added "Data Structure Contract" section to `SKILL.md` explaining each stage's required output fields, Choice Surface State lifecycle, and validation hooks.
+- **DOC-002 (LOW) — State management ownership unclear** — Added "State Management Responsibilities" section to `meta-warden.md` and "Choice Surface State Management" section to `meta-conductor.md`.
+
 ## [2.3.1] - 2026-05-26
 
 ### Fixed

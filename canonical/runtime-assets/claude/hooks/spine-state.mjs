@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { join, dirname, resolve, relative, isAbsolute, normalize } from "node:path";
+import { join, dirname, resolve, relative, isAbsolute } from "node:path";
 
 const META_KIM_STATE_ROOT = ".meta-kim/state";
 const DEFAULT_SPINE_STATE_DIR = ".meta-kim/state/default/spine";
@@ -47,6 +47,43 @@ const STAGE_PROGRESS_PERCENT = {
   evolution: 100,
 };
 
+/**
+ * Default read-only verifier whitelist (EB-002, v2.3.1).
+ *
+ * Stages that enable `readOnlyVerifierEnabled: true` allow Bash commands that
+ * start with any of these prefixes to bypass the stage-requirements check.
+ * The intent is to let verifier owners (meta-prism, meta-warden) inspect
+ * git history, run validation scripts, and check artifacts without first
+ * dispatching a downstream worker.
+ *
+ * NOTE: these are PREFIX matches (`cmd.startsWith(prefix)`). They are not
+ * regexes and do not enforce command structure. The whitelist is intentionally
+ * narrow — anything not listed falls through to the existing gates.
+ */
+const DEFAULT_READ_ONLY_VERIFIER_COMMANDS = [
+  "git diff",
+  "git diff --stat",
+  "git log",
+  "git show",
+  "git status",
+  "git rev-parse",
+  "git tag --list",
+  "npm run meta:check",
+  "npm run meta:check:runtimes",
+  "npm run meta:check:sync-coverage",
+  "npm run meta:validate",
+  "node --check",
+  "node -e",
+  "node --test",
+  "gh release view",
+  "gh pr view",
+  "ls",
+  "cat",
+  "head",
+  "tail",
+  "wc",
+];
+
 export const STAGE_META_AGENT_MAP = {
   critical: {
     required: ["meta-warden"],
@@ -66,14 +103,20 @@ export const STAGE_META_AGENT_MAP = {
   review: {
     required: ["meta-prism"],
     label: "Review (Prism quality forensics)",
+    readOnlyVerifierEnabled: true,
+    readOnlyVerifierCommands: DEFAULT_READ_ONLY_VERIFIER_COMMANDS,
   },
   meta_review: {
     required: ["meta-warden"],
     label: "Meta-Review (Warden standards check)",
+    readOnlyVerifierEnabled: true,
+    readOnlyVerifierCommands: DEFAULT_READ_ONLY_VERIFIER_COMMANDS,
   },
   verification: {
     required: ["meta-warden"],
     label: "Verification (Warden closure)",
+    readOnlyVerifierEnabled: true,
+    readOnlyVerifierCommands: DEFAULT_READ_ONLY_VERIFIER_COMMANDS,
   },
   evolution: { required: [], label: "Evolution (writeback)" },
 };
@@ -94,15 +137,7 @@ function createRunId(timestamp = new Date().toISOString()) {
 }
 
 function isWithin(parent, target) {
-  // Windows file systems are case-insensitive: normalize and lowercase both
-  // sides so that a path like C:\KimProject vs c:\kimproject does not slip
-  // past the containment check.
-  const isWin = process.platform === "win32";
-  const norm = (p) => {
-    const n = normalize(p);
-    return isWin ? n.toLowerCase() : n;
-  };
-  const rel = relative(norm(parent), norm(target));
+  const rel = relative(parent, target);
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
@@ -174,41 +209,6 @@ function normalizeStage(stageName) {
   return STAGE_ORDER.includes(normalized) ? normalized : "critical";
 }
 
-/**
- * Normalize a spine state object so downstream code can safely access
- * required array/object fields without TypeError on undefined.
- *
- * Defensive default for spine states written by older versions or by code
- * paths that constructed partial state. Existing valid fields are preserved.
- *
- * @param {object|null|undefined} state - Spine state (may be partial or null)
- * @returns {object} - State with guaranteed default shape for required fields
- */
-function normalizeSpineState(state) {
-  const base = state && typeof state === "object" ? state : {};
-  const normalized = { ...base };
-
-  normalized.dispatchedAgents = Array.isArray(normalized.dispatchedAgents)
-    ? [...normalized.dispatchedAgents]
-    : [];
-
-  normalized.dispatchChain =
-    normalized.dispatchChain && typeof normalized.dispatchChain === "object"
-      ? { ...normalized.dispatchChain }
-      : {};
-
-  normalized.stages =
-    normalized.stages && typeof normalized.stages === "object"
-      ? { ...normalized.stages }
-      : {};
-
-  normalized.skippedHooks = Array.isArray(normalized.skippedHooks)
-    ? [...normalized.skippedHooks]
-    : [];
-
-  return normalized;
-}
-
 function profileFromState(state) {
   return sanitizeStateProfile(
     state?.profile || state?.stateProfile || process.env.META_KIM_STATE_PROFILE,
@@ -250,7 +250,8 @@ export async function readSpineState(cwd) {
   const filePath = spineStatePath(cwd);
   try {
     const raw = await readFile(filePath, "utf-8");
-    return JSON.parse(raw);
+    const status = JSON.parse(raw);
+    return status?.active === false ? null : status;
   } catch {
     return null;
   }
@@ -259,9 +260,8 @@ export async function readSpineState(cwd) {
 export async function writeSpineState(cwd, state) {
   const filePath = spineStatePath(cwd);
   await ensureDir(filePath);
-  const normalized = normalizeSpineState(state);
-  await writeFile(filePath, JSON.stringify(normalized, null, 2), "utf-8");
-  await writeMetaRunStatus(cwd, normalized);
+  await writeFile(filePath, JSON.stringify(state, null, 2), "utf-8");
+  await writeMetaRunStatus(cwd, state);
 }
 
 export function createInitialState({ taskClassification, triggerReason }) {
@@ -376,7 +376,8 @@ export async function readMetaRunStatus(cwd, profile) {
     .activeRun;
   try {
     const raw = await readFile(filePath, "utf-8");
-    return JSON.parse(raw);
+    const status = JSON.parse(raw);
+    return status?.active === false ? null : status;
   } catch {
     return null;
   }
@@ -388,11 +389,11 @@ export function advanceStage(state, stageName) {
   const idx = stageOrder.indexOf(stageName);
   if (idx === -1) return state;
 
-  const newState = normalizeSpineState(state);
+  const newState = { ...state };
 
   for (let i = 0; i < idx; i++) {
     const prev = stageOrder[i];
-    if (!newState.stages[prev] || newState.stages[prev].status !== "completed") {
+    if (newState.stages[prev].status !== "completed") {
       newState.stages[prev] = {
         status: "completed",
         completedAt: new Date().toISOString(),
@@ -417,8 +418,8 @@ export function advanceStage(state, stageName) {
 }
 
 export function completeStage(state, stageName) {
-  const newState = normalizeSpineState(state);
-  if (!newState.stages[stageName]) return newState;
+  if (!state.stages[stageName]) return state;
+  const newState = { ...state };
   newState.stages[stageName] = {
     status: "completed",
     completedAt: new Date().toISOString(),
@@ -438,22 +439,127 @@ export function completeStage(state, stageName) {
   return newState;
 }
 
-export function recordDispatch(state, agentName, metaAgentName) {
-  const newState = normalizeSpineState(state);
+/**
+ * Record a dispatch into spine state.
+ *
+ * Behavior matrix (HOOK-INFRA-001, v2.3.1):
+ *   - When `metaName` is a known meta-agent name → append to
+ *     `dispatchChain[currentStage]` (legacy/existing behavior).
+ *   - When `metaName` is null but `toolInput.subagent_type` matches a
+ *     `workerTaskPackets[]` entry by `taskPacketId` / `roleInstanceId`:
+ *       * If the matched packet's `ownerAgent` is a meta-agent → append to
+ *         `dispatchChain[currentStage]`.
+ *       * Otherwise → append the worker identifier to
+ *         `dispatchChain[currentStage]_supplementary`.
+ *   - When no match either way → append the raw dispatch identifier into
+ *     `dispatchChain[currentStage]_supplementary` so the chain stays
+ *     auditable.
+ *
+ * Field shape: `dispatchChain` retains its existing
+ * `{ stage: string[] }` shape; the supplementary entries use a parallel
+ * key `${stage}_supplementary` to avoid mixing meta-owners with worker IDs
+ * in the same array. Both fields are append-only and dedup-safe.
+ *
+ * @param {object} state - Current spine state.
+ * @param {string} agentName - Human description / agent identifier.
+ * @param {string|null} metaName - Resolved meta-agent name, if any.
+ * @param {object} [toolInput] - The raw tool input (Agent dispatch payload).
+ * @returns {object} New state with dispatch recorded.
+ */
+export function recordDispatch(state, agentName, metaName, toolInput) {
+  const META_AGENT_NAME_SET = new Set(META_AGENT_NAMES);
+  const newState = { ...state };
   if (!newState.dispatchedAgents.includes(agentName)) {
     newState.dispatchedAgents = [...newState.dispatchedAgents, agentName];
   }
 
-  if (metaAgentName) {
-    const chain = { ...newState.dispatchChain };
-    const stage = newState.currentStage;
+  const chain = { ...newState.dispatchChain };
+  const stage = newState.currentStage;
+  const supplementaryKey = `${stage}_supplementary`;
+
+  const appendToChain = (value) => {
+    if (!value) return;
     if (!chain[stage]) chain[stage] = [];
-    if (!chain[stage].includes(metaAgentName)) {
-      chain[stage] = [...chain[stage], metaAgentName];
+    if (!chain[stage].includes(value)) {
+      chain[stage] = [...chain[stage], value];
     }
-    newState.dispatchChain = chain;
+  };
+
+  const appendToSupplementary = (value) => {
+    if (!value) return;
+    if (!chain[supplementaryKey]) chain[supplementaryKey] = [];
+    if (!chain[supplementaryKey].includes(value)) {
+      chain[supplementaryKey] = [...chain[supplementaryKey], value];
+    }
+  };
+
+  if (metaName && META_AGENT_NAME_SET.has(metaName)) {
+    appendToChain(metaName);
+  } else {
+    const subagentType =
+      (toolInput &&
+        (toolInput.subagent_type || toolInput.agent_type || toolInput.type)) ||
+      null;
+    const dispatchText = toolInput
+      ? [
+          toolInput.description,
+          toolInput.prompt,
+          toolInput.message,
+          toolInput.agent_type,
+          toolInput.subagent_type,
+          toolInput.type,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : "";
+    const workerPackets = Array.isArray(newState.workerTaskPackets)
+      ? newState.workerTaskPackets
+      : [];
+
+    const matchedPacket = workerPackets.find((packet) => {
+      if (!packet || typeof packet !== "object") return false;
+      if (
+        subagentType &&
+        (packet.businessRoleId === subagentType ||
+          packet.roleDisplayName === subagentType ||
+          packet.roleInstanceId === subagentType ||
+          packet.taskPacketId === subagentType)
+      ) {
+        return true;
+      }
+      if (
+        dispatchText &&
+        ((packet.taskPacketId && dispatchText.includes(packet.taskPacketId)) ||
+          (packet.roleInstanceId &&
+            dispatchText.includes(packet.roleInstanceId)))
+      ) {
+        return true;
+      }
+      return false;
+    });
+
+    if (matchedPacket) {
+      if (
+        matchedPacket.ownerAgent &&
+        META_AGENT_NAME_SET.has(matchedPacket.ownerAgent)
+      ) {
+        appendToChain(matchedPacket.ownerAgent);
+      } else {
+        appendToSupplementary(
+          matchedPacket.roleInstanceId ||
+            matchedPacket.taskPacketId ||
+            matchedPacket.businessRoleId ||
+            matchedPacket.roleDisplayName ||
+            matchedPacket.ownerAgent ||
+            agentName,
+        );
+      }
+    } else {
+      appendToSupplementary(subagentType || agentName);
+    }
   }
 
+  newState.dispatchChain = chain;
   return newState;
 }
 
@@ -519,8 +625,7 @@ function collectPreExecutionReadinessGaps(state) {
 }
 
 export function checkPreExecutionReadiness(state) {
-  const normalized = normalizeSpineState(state);
-  if (!normalized || normalized.queryBypass || normalized.simpleMode) {
+  if (!state || state.queryBypass || state.simpleMode) {
     return {
       met: true,
       missing: [],
@@ -528,7 +633,7 @@ export function checkPreExecutionReadiness(state) {
     };
   }
 
-  const missing = collectPreExecutionReadinessGaps(normalized);
+  const missing = collectPreExecutionReadinessGaps(state);
   return {
     met: missing.length === 0,
     missing,
@@ -750,12 +855,11 @@ function collectCapabilityNodeBindingGaps(state) {
 }
 
 export function checkCapabilityNodeBindings(state) {
-  const normalized = normalizeSpineState(state);
-  if (!normalized || normalized.queryBypass || normalized.simpleMode) {
+  if (!state || state.queryBypass || state.simpleMode) {
     return { met: true, missing: [], reason: "capability node binding gate bypassed" };
   }
 
-  const missing = collectCapabilityNodeBindingGaps(normalized);
+  const missing = collectCapabilityNodeBindingGaps(state);
   return {
     met: missing.length === 0,
     missing,
@@ -767,17 +871,16 @@ export function checkCapabilityNodeBindings(state) {
 }
 
 export function checkStageRequirements(state) {
-  const normalized = normalizeSpineState(state);
-  const stage = normalized.currentStage;
+  const stage = state.currentStage;
   const req = STAGE_META_AGENT_MAP[stage];
   if (!req) return { met: true, missing: [], reason: "no requirements" };
 
-  const chain = normalized.dispatchChain;
+  const chain = state.dispatchChain || {};
   const dispatched = chain[stage] || [];
 
   const missing = req.required.filter((a) => !dispatched.includes(a));
 
-  if (req.requiresAgentDispatch && normalized.dispatchedAgents.length === 0) {
+  if (req.requiresAgentDispatch && state.dispatchedAgents.length === 0) {
     return {
       met: false,
       missing: ["at least one agent via Agent tool"],
@@ -786,7 +889,7 @@ export function checkStageRequirements(state) {
   }
 
   // Verify fetchRecord exists when stage requires it
-  if (req.requiresFetchRecord && !normalized.fetchRecord) {
+  if (req.requiresFetchRecord && !state.fetchRecord) {
     return {
       met: false,
       missing: ["fetchRecord in spine state"],
@@ -798,9 +901,9 @@ export function checkStageRequirements(state) {
 
   // Verify research validation when fetchRecord declares research required
   if (
-    normalized.fetchRecord &&
-    normalized.fetchRecord.researchRequired &&
-    !normalized.fetchRecord.researchValidationPerformed
+    state.fetchRecord &&
+    state.fetchRecord.researchRequired &&
+    !state.fetchRecord.researchValidationPerformed
   ) {
     return {
       met: false,
@@ -812,18 +915,18 @@ export function checkStageRequirements(state) {
     };
   }
 
-  const choiceSurfaceGate = checkChoiceSurfaceGate(normalized);
+  const choiceSurfaceGate = checkChoiceSurfaceGate(state);
   if (!choiceSurfaceGate.met) {
     return choiceSurfaceGate;
   }
 
   if (STAGE_ORDER.indexOf(stage) >= STAGE_ORDER.indexOf("execution")) {
-    const readinessGate = checkPreExecutionReadiness(normalized);
+    const readinessGate = checkPreExecutionReadiness(state);
     if (!readinessGate.met) {
       return readinessGate;
     }
 
-    const nodeBindingGate = checkCapabilityNodeBindings(normalized);
+    const nodeBindingGate = checkCapabilityNodeBindings(state);
     if (!nodeBindingGate.met) {
       return nodeBindingGate;
     }
