@@ -96,6 +96,23 @@ Factory lane:
 
 Rule: Conductor may participate before or after the factory, but **Conductor does not build capability**.
 
+### Station Deliverable Contract (Mandatory)
+
+Required Genesis deliverables: SOUL / identity / responsibility boundary.
+Required Artisan deliverables: capability slots, provider compatibility, loadout rules.
+Required Conductor deliverables: orchestration board, dependencies, merge path.
+
+| Station | Deliverable |
+|---|---|
+| Warden | approval gate, public boundary, final owner decision |
+| Genesis | SOUL / identity / responsibility boundary |
+| Artisan | capability slots, provider compatibility, loadout rules |
+| Sentinel | safety, permissions, rollback, external side-effect review |
+| Librarian | memory, continuity, handoff and reuse policy |
+| Conductor | orchestration board, dependencies, merge path |
+| Prism | quality review, anti-slop check, evidence closure |
+| Scout | external capability discovery and gap evidence |
+
 ## Fixed Artifacts (Governance Owner Factory Mode)
 
 The public governance owner factory lane must produce these explicit artifacts:
@@ -260,15 +277,15 @@ All factory questions No → only Genesis + Artisan. If the Conductor question i
 
 ### Step 3: Genesis — soul design (required)
 
-**Read** `.claude/agents/meta-genesis.md` and design SOUL.md per that method.
+Read the canonical `meta-genesis` agent definition first, then use the current runtime mirror only as an adapter. Design SOUL.md per that method.
 
 See references/meta-theory.md, module 8.
 
 ### Step 4: Artisan — capability provider matching (required)
 
-**Read** `.claude/agents/meta-artisan.md`
+Read the canonical `meta-artisan` agent definition first, then use the current runtime mirror only as an adapter.
 
-1. **Scan capability providers and skills**: `ls .claude/skills/*/SKILL.md` + built-in skills + runtime capability index
+1. **Scan capability providers and skills**: canonical capability index, runtime mirrors, local runtime inventory, built-in skills, then external discovery when allowed
 2. **ROI score**: `ROI = (task coverage × frequency) / (context cost + learning curve)`
 3. **Output**: per-agent abstract capability slots, compatible provider packages (`superpowers`, `ecc`, etc.), selection rules, and example run-scoped candidates with ROI and rationale
 
@@ -276,7 +293,7 @@ Do not write the example candidates as durable bindings. They are examples of wh
 
 ### Step 5: Sentinel — safety design (on demand)
 
-**Read** `.claude/agents/meta-sentinel.md`
+Read the canonical `meta-sentinel` agent definition first, then use the current runtime mirror only as an adapter.
 
 - **Threat model**: top 5 threats in this agent’s domain
 - **Permissions**: three levels (CAN / CANNOT / NEVER)
@@ -285,7 +302,7 @@ Do not write the example candidates as durable bindings. They are examples of wh
 
 ### Step 6: Librarian — memory design (on demand)
 
-**Read** `.claude/agents/meta-librarian.md`
+Read the canonical `meta-librarian` agent definition first, then use the current runtime mirror only as an adapter.
 
 - **Memory architecture**: three layers (index / topic / archive)
 - **Expiry**: per-type retention rules
@@ -293,7 +310,7 @@ Do not write the example candidates as durable bindings. They are examples of wh
 
 ### Step 7: Conductor — orchestration design (on demand)
 
-**Read** `.claude/agents/meta-conductor.md`
+Read the canonical `meta-conductor` agent definition first, then use the current runtime mirror only as an adapter.
 
 - **Collaboration flow**: call order among agents, parallel vs serial
 - **Triggers**: when to spawn this agent
@@ -330,7 +347,7 @@ Re-enter Step 8 until **A or better**. **Max 2 rounds**
 
 ### Step 10: Integrate & write
 
-Generate `.claude/agents/{name}.md` with this shape:
+Generate the canonical agent source with this shape, then sync runtime mirrors:
 
 ```markdown
 # {Name}: {Display name} {emoji}

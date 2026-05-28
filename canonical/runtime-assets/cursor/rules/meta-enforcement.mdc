@@ -84,8 +84,8 @@ Ask:
   Discover or create one before touching execution tools.
 
 If any answer is "no" but the work continues, that is a recorded governance
-violation under `cross-runtime-meta-enforcement.md` and a Stage 6 Meta-Review
-finding.
+violation under the `AGENTS.md` Mechanical Enforcement contract and a Stage 6
+Meta-Review finding.
 
 ## Cross-reference
 
@@ -96,8 +96,7 @@ finding.
   `canonical/runtime-assets/cursor/hooks/`)
 - `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` —
   the equivalent mechanical enforcement on Claude Code
-- `docs/cross-runtime-meta-enforcement.md` — full capability matrix and
-  user-expectation management
+- `AGENTS.md` — current cross-runtime enforcement matrix and limits
 - `.cursor/rules/meta-theory-dispatch.mdc` — companion rule for the
   general dispatch protocol (this rule narrows it to meta-agent boundary)
 - [Cursor Hooks docs](https://cursor.com/docs/hooks) — official

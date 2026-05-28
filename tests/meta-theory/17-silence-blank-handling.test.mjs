@@ -294,19 +294,19 @@ describe("Part F: graceful degradation", async () => {
   );
   const skill = await readFile("canonical/skills/meta-theory/SKILL.md");
 
-  test("missing capability → use existing owner + queue for Scout", () => {
+  test("missing capability blocks or queues capability gap for Scout", () => {
     const patterns = [
-      /existing.*owner.*fallback/i,
-      /fallback.*existing.*owner/i,
       /queue.*Scout.*capability.*gap/i,
-      /capability.*gap.*fallback/i,
+      /capabilityGapPacket/i,
+      /return.*Thinking/i,
+      /missing.*capability.*blocks/i,
     ];
     let found =
       patterns.some((p) => p.test(devGov)) ||
       patterns.some((p) => p.test(skill));
     assert.ok(
       found,
-      "Missing capability must fall back to existing owner and queue for Scout",
+      "Missing capability must block, return to Thinking, or queue a capability gap for Scout",
     );
   });
 

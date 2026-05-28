@@ -117,7 +117,7 @@ describe("Capability gap", async () => {
     )
   );
 
-  test("Fetch fallback chain documented", () => {
+  test("Fetch capability discovery path documented", () => {
     const chainSteps = [
       "local",
       "capability index",
@@ -133,15 +133,15 @@ describe("Capability gap", async () => {
     }
     assert.ok(
       matchCount >= 4,
-      `Fetch fallback chain should document at least 4 of 5 steps, found ${matchCount}`
+      `Fetch capability discovery path should document at least 4 of 5 steps, found ${matchCount}`
     );
   });
 
-  test("3 resolution branches documented", () => {
+  test("owner-resolution branches documented", () => {
     const branches = [
       "existing owner",
-      "create",
-      "temporary",
+      "upgrade",
+      "capability gap",
     ];
     let matchCount = 0;
     for (const branch of branches) {
@@ -151,7 +151,7 @@ describe("Capability gap", async () => {
     }
     assert.ok(
       matchCount >= 3,
-      `Expected 3 resolution branches, found evidence for ${matchCount}`
+      `Expected owner-resolution branches without temporary fallback, found evidence for ${matchCount}`
     );
   });
 });

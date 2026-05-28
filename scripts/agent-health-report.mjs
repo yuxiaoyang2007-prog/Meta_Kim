@@ -52,7 +52,7 @@ const ROLE_CONTRACT_MARKERS = {
     "## Required Deliverables",
     "Skill Loadout",
     "MCP / Tool Loadout",
-    "Fallback Plan",
+    "Runtime Compatibility Plan",
     "Capability Gap List",
     "Adoption Notes",
   ],

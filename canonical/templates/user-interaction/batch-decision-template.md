@@ -2,7 +2,7 @@
 
 Use this template when multiple independent questions can be decided together.
 
-Every question must offer 3-4 options. Each option must state what changes, what problem it solves, the expected result, advantages, and disadvantages in product language a non-technical user can understand.
+Every visible question must change an execution branch and offer at least two materially different options. Do not add filler questions or filler options to satisfy a count. Each option must state what changes, what problem it solves, the expected result, advantages, and disadvantages in product language a non-technical user can understand.
 
 ## Dependency Detection
 
@@ -27,7 +27,7 @@ questions = [
 #       → First group: sequential questions, last two: can be batched
 ```
 
-## Linear vs Parallel判定
+## Linear vs Parallel Detection
 
 | Type | Characteristic | Question Format | Example |
 |------|----------------|-----------------|---------|
@@ -85,9 +85,9 @@ For platforms that support multi-question AskUserQuestion:
       "question": "{Question 1}",
       "header": "{Q1 Tag}",
       "options": [
-        {"label": "A", "description": "{4-dimension format}"},
-        {"label": "B", "description": "{4-dimension format}"},
-        {"label": "C", "description": "{4-dimension format}"}
+        {"label": "A", "description": "{product-readable format}"},
+        {"label": "B", "description": "{product-readable format}"},
+        {"label": "C", "description": "{product-readable format}"}
       ],
       "multiSelect": false
     },
@@ -95,9 +95,9 @@ For platforms that support multi-question AskUserQuestion:
       "question": "{Question 2}",
       "header": "{Q2 Tag}",
       "options": [
-        {"label": "A", "description": "{4-dimension format}"},
-        {"label": "B", "description": "{4-dimension format}"},
-        {"label": "C", "description": "{4-dimension format}"}
+        {"label": "A", "description": "{product-readable format}"},
+        {"label": "B", "description": "{product-readable format}"},
+        {"label": "C", "description": "{product-readable format}"}
       ],
       "multiSelect": false
     }
@@ -110,3 +110,9 @@ For platforms that support multi-question AskUserQuestion:
 - Multiple independent decisions need to be made
 - Questions do not have dependency relationships
 - User attention budget is limited (prefer one interaction over N)
+
+## When Not to Use
+
+- A question would not change the deliverable, owner, scope, risk, or acceptance
+- A safe default is clear from Critical, Fetch, and Thinking evidence
+- The batch exists only to make the interaction look comprehensive

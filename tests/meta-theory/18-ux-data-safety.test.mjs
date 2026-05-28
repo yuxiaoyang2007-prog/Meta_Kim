@@ -514,17 +514,17 @@ describe("Part G: execution ownership — no anonymous execution", async () => {
     );
   });
 
-  test("temporary fallback is forbidden as public durable owner state", () => {
-    const fallback =
-      contract.runDiscipline?.executionOwnership?.temporaryFallback ?? {};
-    assert.equal(fallback.allowed, false);
-    assert.equal(fallback.emergencyOnly, true);
-    assert.equal(fallback.requiresExplicitOwnerLabel, true);
-    assert.equal(fallback.requiresJustification, true);
-    assert.equal(fallback.requiresEvolutionReview, true);
+  test("missing owner policy blocks temporary or generic owner paths", () => {
+    const policy =
+      contract.runDiscipline?.executionOwnership?.missingOwnerPolicy ?? {};
+    assert.equal(policy.temporaryFallbackOwnerAllowed, false);
+    assert.equal(policy.genericOwnerAllowed, false);
+    assert.equal(policy.defaultAgentAsOwnerAllowed, false);
+    assert.ok(policy.allowedActions?.includes("return_to_stage"));
+    assert.ok(policy.allowedActions?.includes("capabilityGapPacket"));
     assert.match(
-      fallback.publicRepoPolicy ?? "",
-      /Forbidden as durable owner state/i,
+      policy.publicRepoPolicy ?? "",
+      /return to Thinking|capabilityGapPacket/i,
     );
   });
 });

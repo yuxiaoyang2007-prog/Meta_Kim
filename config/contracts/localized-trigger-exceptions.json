@@ -10,8 +10,6 @@
     {"value": "`元理论`", "description": "Localized trigger word for meta-theory skill", "addedIn": "pre-v2.2.5"},
     {"value": "`仅分析`", "description": "Localized read-only trigger phrase", "addedIn": "pre-v2.2.5"},
     {"value": "`只读`", "description": "Localized read-only trigger phrase", "addedIn": "pre-v2.2.5"},
-    {"value": "\"不需要确认\"", "description": "Localized skip-confirmation trigger phrase", "addedIn": "pre-v2.2.5"},
-    {"value": "`方案 A`", "description": "Localized option label example used in SKILL.md choice card examples", "addedIn": "v2.2.4"},
-    {"value": "当前以聊天确认卡展示，不是弹窗", "description": "Localized clarification text in SKILL.md choice card examples", "addedIn": "v2.2.4"}
+    {"value": "\"不需要确认\"", "description": "Localized skip-confirmation trigger phrase", "addedIn": "pre-v2.2.5"}
   ]
 }

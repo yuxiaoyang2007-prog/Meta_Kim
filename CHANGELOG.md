@@ -6,6 +6,45 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.4.2] - 2026-05-28
+
+### Fixed
+
+- **Planning files 8-stage coverage** — Updated `planning-files.md` to cover the full spine (Critical → Fetch → Thinking → Execution → Review → Meta-Review → Verification → Evolution) instead of only Stage 3. Each stage now has explicit planning file update responsibilities.
+- **SKILL.md reference alignment** — Updated planning-files reference description to reflect 8-stage coverage.
+
+### Changed
+
+- Version bump: 2.4.1 → 2.4.2.
+
+## [2.4.1] - 2026-05-28
+
+### Fixed
+
+- **Meta-theory delivery trust** — Slimmed `/meta-theory` into a progressive dispatcher, split large operational details into references, and aligned Critical / Fetch / Thinking / Review so visible stage feedback is compact, human-readable, follows the resolved user-facing language, and pairs internal packet field names with human labels when shown.
+- **Verification evidence hardening** — Bound `verifySteps[].id` to `workerExecutionEvidence[].verifyStepRef`, parse `json-output` evidence as JSON, structure `fixEvidence`, require accepted-risk ownership/revisit data, and prevent skipped worker evidence from claiming verified or public-ready status.
+- **Cross-runtime prompt/rules alignment** — Updated Conductor, Artisan, Cursor rules, and runtime prompts so agent-team playbooks only run for 2+ independent parallel lanes, capability discovery is runtime-aware, and generated Cursor prompts avoid duplicate headers/warnings.
+- **Release documentation cleanup** — Corrected stale references to removed runtime-matrix docs, updated ECC repository references to `affaan-m/ECC`, and synchronized package metadata for the new release.
+
+### Changed
+
+- Version bump: 2.4.0 -> 2.4.1.
+- Added clearer maintainer paths for rules and scripts so users can find the active sources instead of guessing from generated mirrors.
+
+## [2.4.0] - 2026-05-27
+
+### Fixed
+
+- **ECC install policy corrected** — ECC now points at `affaan-m/ECC` and `ecc@ecc`, uses ECC's native CLI `core` profile for home targets (`codex`, `opencode`, `qwen`), removes legacy `everything-claude-code` fallback directories, and warns project-local targets (`cursor`, `zed`, `gemini`, `codebuddy`, `antigravity`, `joycode`) to run ECC from each project root instead of installing into an npm cache or `skills/` fallback. Codex currently receives the upstream `refactor-cleaner` agent, while `/refactor-clean` remains unavailable there because upstream ECC excludes `commands-core` from its Codex target.
+- **H-001** — README.md badge links already use https:// (verified, no fix needed)
+- **M-002** — MCP Memory Service endpoints use MCP_MEMORY_URL env (verified, no fix needed)
+- **M-003** — Version inconsistency - unified to 2.4.0
+
+### Changed
+
+- Version bump: 2.3.2 → 2.4.0
+- Updated CHANGELOG.zh-CN.md with corresponding changes
+
 ## [2.3.2] - 2026-05-26
 
 ### Fixed

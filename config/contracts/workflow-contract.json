@@ -232,6 +232,225 @@
         "no_downstream_handoff_required"
       ]
     },
+    "qualityFirstPolicy": {
+      "principle": "Start only when the work is defined well enough to create a ten-times-better outcome, not when a later review might catch defects.",
+      "clarificationPolicy": {
+        "questionCountPolicy": "no_quota_ask_only_outcome_branching",
+        "askOnlyIfAnswerChangesExecution": true,
+        "forbidQuestionQuotaFilling": true,
+        "questionMustTarget": [
+          "wrong_goal_risk",
+          "wrong_audience_or_value_risk",
+          "wrong_permission_or_safety_risk",
+          "wrong_deliverable_or_scope_risk"
+        ]
+      },
+      "readBeforeEditPolicy": {
+        "requiredBeforeMutation": true,
+        "allowedDuringCriticalFetch": [
+          "git_status",
+          "git_diff",
+          "targeted_file_read",
+          "directory_listing",
+          "repo_scoped_search",
+          "capability_index_read"
+        ],
+        "blockedBeforeThinkingReadiness": [
+          "mutation",
+          "install_or_update",
+          "generated_mirror",
+          "secret_read",
+          "network_side_effect",
+          "execution_intent_dispatch"
+        ],
+        "hookBlockResponse": "return_to_sentinel_or_conductor_policy"
+      },
+      "stageRequiredOutputs": {
+        "critical": [
+          "surfaceRequest",
+          "realProductProblem",
+          "realIntent",
+          "userPainValue",
+          "successCriteria",
+          "undecidedUserChoices",
+          "nonGoals",
+          "blockingUnknowns",
+          "noQuotaClarification"
+        ],
+        "fetch": [
+          "evidence",
+          "decisionImpactMap",
+          "capabilityDiscovery",
+          "capabilityGap",
+          "contradictionLog"
+        ],
+        "thinking": [
+          "designFrame",
+          "workType",
+          "expertLens",
+          "minimalFixPath",
+          "tenXPathShift",
+          "chosenRationale",
+          "omittedTenXWithReason",
+          "consideredLanes",
+          "omittedLanesWithReason",
+          "workerTaskPackets",
+          "dependencyPolicy"
+        ],
+        "review": [
+          "criticalReadiness",
+          "fetchDecisionImpact",
+          "thinkingWorkOrders",
+          "ownerCapabilityCoverage",
+          "fallbackBoundary",
+          "expertLensFit"
+        ]
+      },
+      "userFacingSummaryContract": {
+        "required": true,
+        "requiredFields": [
+          "whyChanged",
+          "whatChanged",
+          "userImpact",
+          "verificationEvidence",
+          "remainingLimits"
+        ],
+        "rule": "User-facing closure must explain why the path was chosen or changed, what changed and where, how the user path or product behavior changes, what verification evidence supports it, and what remains limited or deferred. Plain language is not a substitute for product rationale."
+      },
+      "userFacingStageFeedbackContract": {
+        "required": true,
+        "requiredStages": [
+          "Critical",
+          "Fetch",
+          "Thinking",
+          "Review"
+        ],
+        "requiredFields": [
+          "stage",
+          "plainVerdict",
+          "decisionImpact",
+          "nextAction"
+        ],
+        "maxBulletsPerStage": 3,
+        "maxLineCountPerStage": 3,
+        "hideProtocolIdsByDefault": true,
+        "hideInternalFieldNamesByDefault": false,
+        "internalFieldNamesRequireHumanLabels": true,
+        "localizedStagePurposeRequired": true,
+        "debugOnlyFullPackets": true,
+        "humanLabeledInternalFieldExamples": [
+          "surfaceRequest",
+          "realProductProblem",
+          "realIntent",
+          "successCriteria",
+          "blockingUnknowns",
+          "evidence",
+          "decisionImpactMap",
+          "workerTaskPackets",
+          "reviewPacket"
+        ],
+        "rule": "Each visible governance stage must emit a compact human-readable note in the user's output language: what was decided, why it matters, and what happens next. Protocol packet names and internal field names are allowed when useful for auditability, but they must be paired with human-readable labels in the user's language; full reasoning traces stay debug-only."
+      },
+      "dependencyPolicy": {
+        "criticalDependencyFailureActions": [
+          "block",
+          "wait",
+          "return_to_stage"
+        ],
+        "forbiddenActions": [
+          "use_fallback",
+          "generic_owner",
+          "temporary_owner",
+          "guessed_artifact"
+        ]
+      },
+      "preExecutionReadiness": [
+        "core_problem_locked",
+        "value_promise_locked",
+        "success_standard_locked",
+        "required_capabilities_bound",
+        "expert_lenses_selected",
+        "business_lanes_covered_or_explicitly_omitted",
+        "worker_inputs_outputs_quality_and_verification_locked"
+      ],
+      "deliverableQualityLenses": [
+        "content: core pain or desire, emotional value, human voice, proof, shareability",
+        "product: growth loop, conversion path, willingness-to-pay, retention, referral",
+        "code: layering, modularity, configurability, internationalization, extensibility, decoupling, concurrency and reliability when relevant",
+        "security: trust boundary, permission scope, secret handling, abuse path, rollback",
+        "performance: load shape, bottleneck, concurrency model, degradation behavior, observability",
+        "localization: language source, locale boundary, cultural fit, fallback text policy",
+        "operations: install path, release risk, rollback path, monitoring, support handoff",
+        "governance: owner fit, capability evidence, handoff clarity, reviewability"
+      ],
+      "fallbackPolicy": "Compatibility fallbacks may keep runtimes usable. Governance fallbacks may not hide missing intent, design, capability, owner, or worker-task quality. Missing quality blocks execution or returns to the responsible earlier stage.",
+      "stageQualityContract": {
+        "critical": "Separate the surface request from the real product problem. Lock intent, audience, pain/value, success standard, undecided user choices, non-goals, and blocking unknowns. Ask only questions whose answer changes execution.",
+        "fetch": "Prove evidence, capability, owner, tool, and constraint fit before options. Missing proof becomes a capabilityGapPacket or blocker.",
+        "thinking": "Design the smallest complete business flow. Compare the minimal fix against any ten-x path shift; record chosen rationale, omitted ten-x reason, required lanes, omitted lanes with reasons, worker inputs, quality bar, verification, and merge path.",
+        "execution": "Start only after workers know what good means, what inputs they can use, what they must deliver, and how success is checked.",
+        "review": "Review the upstream chain first: if intent, evidence, design, owner fit, or worker task quality was missing before execution, fail the run instead of rescuing it."
+      },
+      "expertLensCatalog": [
+        {
+          "workType": "content",
+          "lens": "emotion_value + core_pain + human_voice + proof + shareability",
+          "plainMeaning": "Content must know the feeling it gives, the pain it solves, why it sounds alive, why it is believable, and why someone would pass it on."
+        },
+        {
+          "workType": "product",
+          "lens": "growth_loop + conversion + willingness_to_pay + retention + referral",
+          "plainMeaning": "Product work must know how users arrive, convert, pay, return, and spread it."
+        },
+        {
+          "workType": "code",
+          "lens": "layering + modularity + config + i18n + extensibility + decoupling + concurrency_when_relevant",
+          "plainMeaning": "Code work must know the right boundary, how it changes safely, and which scale or reliability concerns matter."
+        },
+        {
+          "workType": "research",
+          "lens": "claim + source_quality + counterexample + decision_impact",
+          "plainMeaning": "Research must change a decision, not merely collect sources."
+        },
+        {
+          "workType": "design",
+          "lens": "audience + job_to_be_done + first_impression + friction + trust",
+          "plainMeaning": "Design must know who it serves, what job it does, what users feel first, what blocks action, and what earns trust."
+        },
+        {
+          "workType": "security",
+          "lens": "trust_boundary + permission_scope + secret_handling + abuse_path + rollback",
+          "plainMeaning": "Security work must know what boundary is protected, who is allowed, what can leak, how it can be abused, and how to contain damage."
+        },
+        {
+          "workType": "performance",
+          "lens": "load_shape + bottleneck + concurrency_model + degradation + observability",
+          "plainMeaning": "Performance work must know the expected load, likely bottleneck, concurrency risk, graceful degradation path, and how the system will be observed."
+        },
+        {
+          "workType": "localization",
+          "lens": "language_source + locale_boundary + cultural_fit + text_fallback_policy",
+          "plainMeaning": "Localization work must know where language comes from, which locale boundary applies, whether wording fits the audience, and what fallback text is allowed."
+        },
+        {
+          "workType": "operations",
+          "lens": "install_path + release_risk + rollback + monitoring + support_handoff",
+          "plainMeaning": "Operations work must know how it is installed or released, what can fail, how to roll back, what to monitor, and who owns support."
+        }
+      ],
+      "promptPrecisionPolicy": {
+        "principle": "Few words, high instruction density. The prompt is good only when the worker can execute correctly without guessing.",
+        "compactNotationAllowed": true,
+        "examples": [
+          "goal=one clear outcome",
+          "done=observable success",
+          "no=explicit non-goals",
+          "use=evidence/tools allowed",
+          "check=verification steps"
+        ],
+        "userFacingRule": "Internal prompts may be compact; user explanations must stay plain product language."
+      }
+    },
     "taskClassification": {
       "classifierVersion": "v2",
       "taskClassEnum": [
@@ -405,8 +624,8 @@
         "fallbackSurfaces": ["conversation_fallback"],
         "featureFlag": "default_mode_request_user_input",
         "recommendedConfig": "[features].default_mode_request_user_input = true",
-        "triggerDescription": "Use Codex request_user_input only when it is listed in the active tool set. The official default_mode_request_user_input feature flag enables this tool in Default mode when the host supports it; otherwise pause with a localized confirmation card. Codex exec and repository hook adapters must not claim a popup.",
-        "implementation": "Invoke request_user_input when available; otherwise emit a localized markdown confirmation card, record conversation_fallback, and state that it is a chat card rather than a popup."
+        "triggerDescription": "Use Codex request_user_input only when it is listed in the active tool set and the payload has 1-3 valid choice questions. The official default_mode_request_user_input feature flag enables this tool in Default mode when the host supports it; otherwise pause with a localized confirmation card. If the host returns API 400 or another validation error, do not retry blindly; fall back once to a localized chat card and record choiceSurfaceFallback=api_error. Codex exec and repository hook adapters must not claim a popup.",
+        "implementation": "Invoke request_user_input when available and valid; otherwise emit a localized markdown confirmation card, record conversation_fallback or choiceSurfaceFallback=api_error, and state that it is a chat card rather than a popup."
       },
       "openclaw": {
         "primarySurface": "workspace_agent",
@@ -456,10 +675,11 @@
         "requiredDimensions": [
           "what_changes",
           "problem_solved",
+          "expected_result",
           "advantages",
           "disadvantages"
         ],
-        "description": "Every option must specify: what changes, what problem it solves, advantages, and disadvantages"
+        "description": "Every visible option must specify: what changes, what problem it solves, expected result, advantages, and disadvantages. Visible questions must change an execution branch; do not add filler questions or options."
       },
       "batchDecisionMode": {
         "enabled": true,
@@ -670,15 +890,17 @@
         "project_specific_domain_gap",
         "workflow_blocked_by_missing_declared_owner"
       ],
-      "temporaryFallback": {
-        "allowed": false,
-        "subagentType": "generalPurpose",
-        "emergencyOnly": true,
-        "oneOffPreferred": true,
-        "requiresExplicitOwnerLabel": true,
-        "requiresJustification": true,
-        "requiresEvolutionReview": true,
-        "publicRepoPolicy": "Forbidden as durable owner state. Public Meta_Kim must return to Thinking and choose a governance meta owner plus run-scoped matchedCapabilities / capabilityBindings, or use legacy matchedSkills as compatibility evidence, or emit capabilityGapPacket."
+      "missingOwnerPolicy": {
+        "temporaryFallbackOwnerAllowed": false,
+        "genericOwnerAllowed": false,
+        "defaultAgentAsOwnerAllowed": false,
+        "allowedActions": [
+          "reuse_existing_owner",
+          "create_owner_first",
+          "return_to_stage",
+          "capabilityGapPacket"
+        ],
+        "publicRepoPolicy": "If no durable owner and run-scoped capability evidence exist, Public Meta_Kim must return to Thinking or emit capabilityGapPacket. Runtime adapters may keep a host usable, but they cannot become ownerAgent or hide the owner gap."
       }
     },
     "parallelism": {
@@ -1225,17 +1447,19 @@
       "compactionPacketLocalOnly": true,
       "compactionPacketMustPreserveOpenFindings": true,
       "compactionPacketPublicReadyRequiresVerifiedRun": true,
-      "softPublicReadyTodoGate": {
-        "environmentVariable": "META_KIM_SOFT_PUBLIC_READY_GATES",
+      "publicReadyTodoGate": {
+        "environmentVariable": "META_KIM_MIGRATION_PUBLIC_READY_GATES",
         "environmentValue": "1",
         "optionalWorkerField": "taskTodoState",
-        "description": "When the env var is set to 1 and summaryPacket.publicReady is true, no workerTaskPacket may have taskTodoState === \"open\". Omitted field is treated as compliant."
+        "defaultMode": "hard",
+        "description": "When summaryPacket.publicReady is true, no workerTaskPacket may have taskTodoState === \"open\". Legacy env var can only be used by migration tests, not normal validation."
       },
-      "softCommentReviewGate": {
-        "environmentVariable": "META_KIM_SOFT_COMMENT_REVIEW",
+      "commentReviewGate": {
+        "environmentVariable": "META_KIM_MIGRATION_COMMENT_REVIEW",
         "environmentValue": "1",
         "summaryBooleanField": "commentReviewAcknowledged",
-        "description": "When the env var is set to 1 and summaryPacket.publicReady is true, summaryPacket.commentReviewAcknowledged must be true (team acknowledgment that comments/docs were reviewed for AI-slop patterns)."
+        "defaultMode": "hard",
+        "description": "When summaryPacket.publicReady is true, summaryPacket.commentReviewAcknowledged must be true unless the deliverable type explicitly has no comment/doc surface."
       }
     }
   },
@@ -1272,10 +1496,13 @@
       "requiredFields": [
         "evidenceScope",
         "researchCapabilityDiscovery",
+        "evidence",
         "deepResearchPlan",
         "localSourcesRead",
         "contentFindings",
         "capabilityEvidence",
+        "capabilityDiscovery",
+        "capabilityGap",
         "sourceCategoryCoverage",
         "crossReferenceMatrix",
         "contradictionLog",
@@ -1307,6 +1534,19 @@
         "contradictionLog",
         "assumptionLedger",
         "decisionImpactMap"
+      ],
+      "decisionImpactMapRequiredFields": [
+        "finding",
+        "impacts",
+        "decisionChanged",
+        "stageAffected"
+      ],
+      "decisionImpactStageEnum": [
+        "Critical",
+        "Fetch",
+        "Thinking",
+        "Execution",
+        "Review"
       ],
       "researchCapabilityDiscovery": {
         "requiredFields": [
@@ -1400,6 +1640,8 @@
         "requiresUserChoice",
         "nativeChoiceSurface",
         "choiceGateSkip",
+        "skipSource",
+        "skipSafetyRationale",
         "solutionChoiceState",
         "reviewOwner"
       ],
@@ -1410,8 +1652,24 @@
         "expectedResult",
         "advantages",
         "disadvantages",
+        "evidenceRefs",
+        "decisionImpact",
         "candidateOwners",
         "candidateTaskShape"
+      ],
+      "unresolvedQuestionRequiredFields": [
+        "question",
+        "questionTarget",
+        "decisionImpact",
+        "status"
+      ],
+      "questionTargetEnum": [
+        "wrong_goal_risk",
+        "wrong_audience_or_value_risk",
+        "wrong_permission_or_safety_risk",
+        "wrong_deliverable_or_scope_risk",
+        "wrong_owner_or_capability_risk",
+        "wrong_acceptance_or_quality_risk"
       ],
       "choiceGateSkipAllowedWhen": [
         "trivial",
@@ -1424,13 +1682,16 @@
         "pure_read_only_queryBypass",
         "explicit_auto_proceed"
       ],
-      "description": "Thinking-stage pre-decision frame for non-trivial executable work before AskUserQuestion, native choice, or fallback. It must list unresolvedQuestions, present contentEvidence-backed candidate solution paths, and record solutionChoiceState before detailed orchestration is locked. It contains candidate orchestration paths and trade-offs only; it is not a finalized dispatchEnvelopePacket, dispatchBoard, or workerTaskPacket."
+      "description": "Thinking-stage pre-decision frame for non-trivial executable work before AskUserQuestion, native choice, or fallback. It must list unresolvedQuestions, present contentEvidence-backed candidate solution paths, and record solutionChoiceState before detailed orchestration is locked. A skipped choice must include skipSource and skipSafetyRationale, and may only use strict skip reasons. It contains candidate orchestration paths and trade-offs only; it is not a finalized dispatchEnvelopePacket, dispatchBoard, or workerTaskPacket."
     },
     "intentPacket": {
       "requiredFields": [
+        "realIntent",
         "trueUserIntent",
         "successCriteria",
         "nonGoals",
+        "blockingUnknowns",
+        "noQuotaClarification",
         "intentPacketVersion"
       ],
       "description": "Structured user-intent lock before heavy execution: what they really want, how we know we are done, and explicit out-of-scope items."
@@ -1569,7 +1830,7 @@
         "missing",
         "omitted_with_reason"
       ],
-      "description": "Conductor-owned business-flow blueprint produced before worker tasks. It requires the system to infer task-specific business lanes from the requested outcome, scope, and deliverable type; planning dimensions may include product, UX, UI, frontend, backend, data, motion, test, QA, security, release, feedback, and evolution when relevant. Every lane object in requiredLanes or optionalLanes must carry global capability scan evidence: capabilitySearchQuery, candidateOwners, matchedCapabilities, capabilityBindings, selectedOwner, selectionReason, and coverageStatus. candidateSkills is accepted only as a compatibility field. Omitted lanes require explicit human-readable reasons."
+      "description": "Conductor-owned business-flow blueprint produced before worker tasks. It requires the system to infer task-specific business lanes from the requested outcome, scope, and deliverable type; planning dimensions may include product, UX, UI, frontend, backend, data, motion, test, QA, security, release, feedback, and evolution when relevant. Every lane object in requiredLanes or selected optionalLanes must carry global capability scan evidence: capabilitySearchQuery, candidateOwners, matchedCapabilities, capabilityBindings, selectedOwner, selectionReason, and coverageStatus. candidateSkills is accepted only as a compatibility field. Considered-but-unused lanes belong in omittedLanes and require explicit human-readable reasons."
     },
     "productCompletenessPacket": {
       "requiredFields": [
@@ -2172,12 +2433,22 @@
         "roleDisplayName",
         "roleInstanceId",
         "runtimeInstanceAlias",
+        "coreProblem",
         "todayTask",
+        "nonGoals",
         "output",
-        "deliverableLink",
-        "qualityBar",
+        "acceptanceCriteria",
+          "deliverableLink",
+          "scopeFiles",
+          "qualityBar",
+          "workType",
+          "expertLensRefs",
+          "evidenceRefs",
+        "capabilityRequirements",
+        "toolRequirements",
         "referenceDirection",
         "handoffTarget",
+        "handoffContract",
         "lengthExpectation",
         "visualOrAssetPlan",
         "dependsOn",
@@ -2193,7 +2464,17 @@
         "userChoiceState",
         "finalizationGate"
       ],
-      "description": "Execution task packet dispatched to a worker agent. The three core orchestration fields are dependsOn (upstream dependency, see dependencyContract), parallelGroup (parallel grouping), and mergeOwner (merge owner). roleDisplayName is the user-visible short English business role name; runtimeInstanceAlias records only transient host nicknames and must not replace the business role name. verifySteps provides atomic completion criteria for Verification. This packet may not finalize before userChoiceState records a user choice or an explicit auto-proceed / choiceGateSkip allowed by preDecisionOptionFrame. Workers MUST populate fileCompletionList in their output when scopeFiles is declared, listing every promised file with explicit status; this closes EB-001 from v2.2.2 review.",
+      "description": "Execution task packet dispatched to a worker agent. It is a complete work order, not a vague assignment: coreProblem, todayTask, nonGoals, output, acceptanceCriteria, qualityBar, expertLensRefs, evidenceRefs, capabilityRequirements, toolRequirements, handoffContract, and verifySteps must be clear before work starts. ownerMode is the worker-task mode and uses existing-owner or create-owner-first; agentBlueprintPacket.roles[].ownerResolution remains the broader owner-resolution field with reuse_existing_owner, upgrade_existing_owner, or create_owner_first. The three core orchestration fields are dependsOn (upstream dependency, see dependencyContract), parallelGroup (parallel grouping), and mergeOwner (merge owner). roleDisplayName is the user-visible short English business role name; runtimeInstanceAlias records only transient host nicknames and must not replace the business role name. verifySteps provides atomic completion criteria for Verification. This packet may not finalize before userChoiceState records a user choice or an explicit auto-proceed / choiceGateSkip allowed by preDecisionOptionFrame. Workers MUST populate fileCompletionList in their output when scopeFiles is declared, listing every promised file with explicit status; this closes EB-001 from v2.2.2 review.",
+      "ownerModeEnum": [
+        "existing-owner",
+        "create-owner-first"
+      ],
+      "handoffContractRequiredFields": [
+        "handoffTo",
+        "handoffWhen",
+        "handoffPayload",
+        "acceptanceSignal"
+      ],
       "dependsOnField": {
         "type": "array",
         "items": {
@@ -2224,15 +2505,8 @@
             },
             "onTimeout": {
               "type": "string",
-              "enum": ["skip", "abort", "use_fallback"],
-              "description": "Timeout behavior: skip=continue without the dependency, abort=abort the task, use_fallback=use fallback artifact."
-            },
-            "fallback": {
-              "type": "object",
-              "description": "Fallback configuration used when onTimeout is use_fallback.",
-              "properties": {
-                "artifact": { "type": "string", "description": "Fallback artifact path or default schema path." }
-              }
+              "enum": ["block", "wait", "return_to_stage"],
+              "description": "Timeout behavior for a failed dependency. Critical dependencies block, wait, or return to an earlier stage; they must not be replaced by fallback artifacts."
             }
           }
         }
@@ -2268,11 +2542,12 @@
       },
       "verifyStepsField": {
         "type": "array",
-        "description": "Atomic step verification checklist. Each step defines a concrete completion criterion that Verification checks item by item. Based on the Goal-Driven Execution format: [Step] -> verify: [check].",
+        "description": "Atomic step verification checklist. Each step defines a concrete completion criterion that Verification checks item by item. Based on the Goal-Driven Execution format: [Step] -> verify: [check]. Each step has a stable id used by workerExecutionEvidence.verifyStepRef.",
         "items": {
           "type": "object",
-          "required": ["step", "verify"],
+          "required": ["id", "step", "verify"],
           "properties": {
+            "id": { "type": "string", "description": "Stable step id referenced by workerExecutionEvidence.verifyStepRef." },
             "step": { "type": "string", "description": "Concrete execution step." },
             "verify": { "type": "string", "description": "Checkable completion condition." }
           }
@@ -2296,15 +2571,20 @@
       },
       "workerExecutionEvidenceField": {
         "type": "array",
-        "description": "Workers reporting verification command pass/fail claims MUST include actual command output evidence. Closes v2.2.2/v2.2.3 historical fabrication where workers claimed '20/20 pass' without executing commands. Each evidence entry binds one command claim to its actual stdout/stderr capture. v2.3.0 adds successMarkerFormat enum to disambiguate silent-success commands (e.g. node --check) from fabricated empty placeholders (EB-008), and reshapes the field to standard JSON Schema for sibling consistency with verifyStepsField and fileCompletionListField (EB-010).",
+        "description": "Workers reporting verification command pass/fail claims MUST include actual command output evidence. Each evidence entry binds one command claim to one verifySteps item via verifyStepRef and records expectedResult, observedResult, workingDirectory, and stderrTail. v2.3.0 adds successMarkerFormat enum to disambiguate silent-success commands (e.g. node --check) from fabricated empty placeholders (EB-008), and json-output must parse as JSON.",
         "items": {
           "type": "object",
-          "required": ["command", "passClaim", "status", "runBy", "runAt", "successMarkerFormat"],
+          "required": ["verifyStepRef", "command", "passClaim", "status", "runBy", "runAt", "successMarkerFormat", "expectedResult", "observedResult", "workingDirectory", "stderrTail"],
           "properties": {
+            "verifyStepRef": {"type": "string", "description": "Must match one workerTaskPacket.verifySteps[].id exactly once."},
             "command": {"type": "string", "description": "Exact shell command claimed to have been run"},
             "actualOutput": {"type": "string", "description": "Real captured stdout (tail or summary OK). Required non-empty when successMarkerFormat is stdout-text or json-output; may be empty string when successMarkerFormat is exit-code-only AND exitCode is 0."},
             "passClaim": {"type": "string", "description": "What the worker is claiming the command proved"},
-            "status": {"type": "string", "enum": ["verified", "fabricated", "skipped"], "description": "verified = actually run; fabricated = claim without execution (forbidden); skipped = intentionally not run with reason"},
+            "expectedResult": {"type": "string", "description": "Expected check result from the verify step."},
+            "observedResult": {"type": "string", "description": "Observed result from the actual command or inspection."},
+            "workingDirectory": {"type": "string", "description": "Directory where the command or check ran."},
+            "stderrTail": {"type": "string", "description": "Captured stderr tail, empty string allowed when no stderr was produced."},
+            "status": {"type": "string", "enum": ["verified", "fabricated", "skipped"], "description": "verified = actually run; fabricated = claim without execution (forbidden); skipped = intentionally not run with reason and cannot support verificationPacket.verified=true or summaryPacket.publicReady=true"},
             "successMarkerFormat": {"type": "string", "enum": ["stdout-text", "exit-code-only", "json-output"], "description": "How the command signals success. stdout-text: requires non-empty actualOutput. exit-code-only: silent-success commands (node --check, tsc --noEmit) — accepts empty actualOutput only when exitCode is 0 AND commandRanAt timestamp set. json-output: actualOutput must contain parseable JSON. EB-008 closure."},
             "exitCode": {"type": "integer", "description": "Required when successMarkerFormat is exit-code-only. Must be 0 for status=verified."},
             "commandRanAt": {"type": "string", "description": "ISO 8601 timestamp. Required when successMarkerFormat is exit-code-only to prove command actually executed."},
@@ -2335,9 +2615,12 @@
         "owner",
         "status",
         "producedArtifacts",
+        "fileCompletionList",
+        "workerExecutionEvidence",
         "handoffTarget",
         "blockingIssues"
-      ]
+      ],
+      "description": "Worker completion packet. A completed worker must prove what changed and what was actually verified before Review can close the run; producedArtifacts are not enough without fileCompletionList and workerExecutionEvidence."
     },
     "reviewPacket": {
       "requiredFields": [
@@ -2392,7 +2675,24 @@
         "revisionResponses",
         "verificationResults",
         "closeFindings"
-      ]
+      ],
+      "fixEvidenceItem": {
+        "requiredFields": [
+          "findingId",
+          "actionId",
+          "verifiedBy",
+          "verificationMethod",
+          "evidenceRefs",
+          "resultArtifactRef",
+          "result",
+          "failureDisposition"
+        ],
+        "acceptedRiskRequiredFields": [
+          "riskOwner",
+          "riskReason",
+          "expiryOrRevisitTrigger"
+        ]
+      }
     },
     "verificationResult": {
       "requiredFields": [
@@ -2507,8 +2807,7 @@
           ],
           "timeout_ms": 600000,
           "retry": { "max": 2, "backoff_ms": 30000 },
-          "onTimeout": "use_fallback",
-          "fallback": { "artifact": "task_defined" }
+          "onTimeout": "block"
         }
       }
     }

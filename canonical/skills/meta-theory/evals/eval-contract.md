@@ -2,7 +2,7 @@
 
 ## Decision Logic Checklist (must survive refactor)
 
-- [ ] Clarity Gate: 4 dimensions (Scope/Goal/Constraints/Architecture), ≥2 ambiguous → ask
+- [ ] Clarity Gate: ask only outcome-branching questions whose answers change deliverable, audience/value, acceptance, owner/capability, permission/risk, or non-goal
 - [ ] Architecture Type Pre-judgment: Meta Architecture vs Project Technical Architecture
 - [ ] Type A-E routing: 5 types with distinct continuations
 - [ ] Fetch-first 3-step: keyword scan → search owner → score+invoke
@@ -22,8 +22,8 @@
 - [ ] Measurable dispatch triggers: 3+ files read / 20+ lines code / multi-module / any file mod / mid-execution catch
 - [ ] FORBIDDEN PATHS: 6 anti-patterns listed
 - [ ] Gate 3 non-skippable, FAIL override = governance violation
-- [ ] User confirmation required before Execution (stages 1-3 → show plan → confirm)
-- [ ] Capability gap resolution ladder: existing owner → Type B creation → temporary fallback
+- [ ] User confirmation or explicit allowed skip required before Execution after Fetch evidence and Thinking option framing
+- [ ] Capability gap resolution ladder: existing owner → owner upgrade/project-local creation → block or return to Thinking with `capabilityGapPacket`
 - [ ] agentInvocationState lifecycle: idle→discovered→matched→dispatched→returned/escalated
 
 ## Boundaries Checklist (must survive refactor)

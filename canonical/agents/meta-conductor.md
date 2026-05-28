@@ -97,10 +97,29 @@ See SKILL.md "Data Structure Contract" section for the full stage output require
 Before dealing cards or expanding a board, Conductor must name the `coreProblem` in one sentence: what decision, defect, design gap, or deliverable the run must close.
 
 - If a stage, card, or worker packet does not improve the core problem, evidence quality, safety, or writeback quality, compress it into an internal note.
-- If missing information blocks safe routing, ask the smallest blocking clarification; otherwise proceed with explicit assumptions and mark remaining uncertainty.
+- If missing information blocks safe routing, ask the fewest outcome-branching questions: only questions whose answer changes deliverable, audience/value, acceptance, owner/capability, permission/risk, or non-goal. Otherwise proceed with explicit assumptions and mark remaining uncertainty.
 - If the route depends on current external facts, third-party behavior, or platform capability claims, require Fetch/Scout evidence before finalizing options.
 - Conductor may perform read-only inspection and non-destructive verification needed for routing evidence, but must not implement worker deliverables.
 - If the issue is read-only and locally inspectable, gather evidence before interrupting the user with broad choice surfaces.
+
+### Production-Correctness Blueprint
+
+Conductor owns the pre-execution design framework. Before any worker task exists, Conductor must answer:
+
+| Stage | Conductor question | Planning output |
+|---|---|---|
+| `Critical` | What real outcome, pain/value, audience, success standard, and non-goals make this schedulable? | Locked `coreProblem`, success criteria, non-goals, assumptions, and any true blocker question |
+| `Fetch` | Which evidence and capability facts change the route? | Decision-impact evidence, candidate owners/capabilities/tools, contradictions, assumptions, and gaps |
+| `Thinking` | Which smallest complete plan creates the strongest result, and which tempting paths are rejected? | Expert lenses, business lanes, owner resolution, dependency/merge plan, and worker work orders |
+| `Review` | Which upstream stage would make the work fail even if the output compiles? | Review plan that checks Critical, Fetch, and Thinking before output polish |
+
+The blueprint is not a checklist to fill later. If any row is missing, Conductor returns to that stage before Execution.
+
+### Worker Work Order Gate
+
+Conductor may not dispatch a worker with a one-line assignment. Each worker work order must state the core problem, non-goals, final deliverable, acceptance criteria, evidence refs, capability/tool requirements, selected `workType` and `expertLens`, handoff target, dependency policy, and verification steps. If a dependency fails, Conductor may `block`, `wait`, or `return_to_stage`; it must not use `use_fallback`, generic owners, or guessed dependency results.
+
+Conductor must also confirm that the current worktree and every planned source file were read before edits begin. If a hook blocks read-only inspection, Conductor treats that as a Sentinel policy defect instead of proceeding blind.
 
 ### Four dealer questions (compact, aligned with the theory reference)
 
@@ -261,21 +280,21 @@ Rule: Conductor validates evidence lanes, builds the pre-decision option frame, 
 
 ### B. Standard Task Board Fields
 
-Every worker must be organized into the following 8 fields:
+Every worker must be organized into a compact work order. The worker should be able to execute without guessing:
 
-- `Today's Task` — Describe the **type of work** (e.g., "frontend component architecture", "data model design", "API endpoint implementation") — NOT a specific feature name
-- `Deliverable` — What type of artifact this produces (component structure, schema definition, endpoint contract) — NOT a specific file
-- `Relationship to Primary Deliverable`
-- `Quality Standard`
-- `Reference Direction`
-- `Handoff Target`
-- `Length Expectation`
-- `Visual/Material Strategy` — **visual and material strategy** for this worker packet
+- `goal=` one concrete outcome
+- `why=` core pain/value and relationship to the primary deliverable
+- `done=` observable acceptance criteria
+- `no=` explicit non-goals
+- `use=` evidence, files, tools, commands, skills, MCP capabilities, or runtime tools allowed
+- `lens=` selected expert lens, e.g. `code=layering+config+i18n`, `content=emotion+proof+shareability`
+- `handoff=` who receives the output, what payload they need, and what acceptance signal closes the handoff
+- `check=` verification steps
 
 In addition, every worker packet must declare:
 
 - `Owner`
-- `Owner Mode` (`existing-owner / create-owner-first / temporary-fallback-owner`)
+- `Owner Mode` (`existing-owner / create-owner-first`)
 - `Depends On`
 - `Parallel Group`
 - `Merge Owner`
@@ -287,6 +306,8 @@ Missing any one item means clearance to the execution phase is denied. Especiall
 - Missing `Handoff Target` = the delivery chain is not closed
 - Missing `Visual/Material Strategy` = public deliverables may lack visual support
 - Missing `Owner` = anonymous execution risk
+- Missing `lens=` = the worker lacks the top-level expert standard for the work type
+- Missing `done=` or `check=` = Verification will become a rescue attempt instead of a light backstop
 - Missing `Depends On` / `Parallel Group` = parallelism cannot be judged
 - Missing `Merge Owner` = parallel outputs cannot legally consolidate
 
@@ -301,7 +322,7 @@ Target Audience: ...
 Freshness Requirement: ...
 Visual Strategy: ...
 Delivery Chain Closure Judgment: Yes / No
-Owner Resolution: existing-owner / create-owner-first / temporary-fallback-owner
+Owner Resolution: existing-owner / create-owner-first
 Conclusion: Pass / Requires Re-scheduling
 Retained Items: ...
 Items Requiring Adjustment: ...
@@ -314,10 +335,14 @@ Then provide the Standard Task Board for each worker:
 ### WorkerName
 - Owner:
 - Owner Mode:
-- Today's Task:
-- Deliverable:
-- Relationship to Primary Deliverable:
-- Quality Standard:
+- goal:
+- why:
+- done:
+- no:
+- use:
+- lens:
+- handoff:
+- check:
 - Reference Direction:
 - Handoff Target:
 - Length Expectation:
@@ -511,7 +536,7 @@ The 10-card system maps to Conductor's Event Card Deck as follows:
 2. **Capability Index** — Search the runtime's capability index for matching workflow/orchestration patterns before searching externally.
 3. **findskill Search** — Only if local and index results are insufficient, invoke `findskill` to search external ecosystems. Query format: describe the workflow/rhythm capability gap in 1-2 sentences (e.g., "multi-agent task orchestration", "dispatch board generator").
 4. **Provider-Agnostic Runtime Match** — If findskill returns no strong match, consult the current runtime's capability catalogs without converting any concrete child skill into a long-term dependency.
-5. **Generic Fallback** — Only use generic prompts or broad subagent types as last resort.
+5. **Compatibility Degradation Only** — If a runtime surface is missing, record degradation; do not use generic prompts or broad subagent types as governance-quality fallback.
 
 **Rule**: A Skill found locally always takes priority over one found externally. Document which step in the chain resolved the discovery.
 
@@ -638,7 +663,7 @@ Rollback: Phase 5 failure → roll back to Phase 3 redesign
 When Conductor is involved in creating or iterating an agent or department workflow, it must output concrete orchestration deliverables:
 
 - **Dispatch Board** — current round department, sole primary deliverable, target audience, freshness requirement, visual strategy, delivery-chain closure judgment
-- **Owner Resolution Summary** — whether this run uses existing owners, requires Type B creation, or allows a temporary fallback owner
+- **Owner Resolution Summary** — whether this run reuses an existing owner, upgrades an owner, creates a project-local owner, or blocks with `capabilityGapPacket`
 - **Card Deck** — stage cards, priorities, skip conditions, interrupt triggers, and delivery shell choices
 - **Worker Task Board / Task Packets** — one standard task board per worker with owner, dependency, parallel-group, and merge-owner declarations
 - **Handoff Plan** — exact handoff order showing how every worker serves the same primary deliverable
@@ -675,7 +700,7 @@ Constitutional principles for ALL Meta_Kim agents and every system they create o
 
 ### 4.1 Skill Invocation
 
-At the start of Stage 4 (Execution), use the `agent-teams-playbook` provider package to obtain team orchestration decisions. See **Long-Term Capability Slot** for the provider boundary; concrete sub-skill choices remain run-scoped.
+After Thinking and before Stage 4 (Execution), use the `agent-teams-playbook` provider package only when `workerTaskPackets` contain 2+ independent parallel worker lanes. See **Long-Term Capability Slot** for the provider boundary; concrete sub-skill choices remain run-scoped. For serial work, keep orchestration in the dispatch board and do not call the playbook.
 
 **Invocation Context**: Pass the workflow context including:
 - Current stage state from the run header contract
@@ -699,15 +724,16 @@ Parsable patterns:
 #### Section 2: Team Blueprint (table format)
 
 ```
-| ID | Role | Responsibility | Model | subagent_type | Skill/Type |
-|----|------|----------------|-------|---------------|------------|
-| 1 | [role name] | [responsibility] | [model] | [type] | [Skill: name] or [Type: general-purpose] |
+| ID | Role | Responsibility | Model | Owner Resolution | Capability Binding |
+|----|------|----------------|-------|------------|--------------------|
+| 1 | [role name] | [responsibility] | [model] | reuse_existing_owner | [Capability: id] or [Skill: name] or [Gap: capabilityGapPacket] |
 ```
 
 Parsable patterns:
 - Table rows starting with `| 1 |`, `| 2 |`, etc.
-- Column 5: `subagent_type` = `general-purpose` | `skill-based`
-- Column 6: `[Skill: name]` or `[Type: general-purpose]`
+- Column 5: `Owner Resolution` = `reuse_existing_owner` | `upgrade_existing_owner` | `create_owner_first`
+- Column 6: `[Capability: id]`, `[Skill: name]`, or `[Gap: capabilityGapPacket]`
+- `general-purpose` is not a valid execution owner, role, or capability binding. If a host or playbook emits it, Conductor records it only as `runtimeInstanceAlias` / parse compatibility evidence and returns to Thinking unless Fetch evidence maps the lane to a real owner and capability.
 
 #### Section 3: Dispatch Board (if Scenario 3-5)
 

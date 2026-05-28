@@ -11,10 +11,11 @@
  *   3. Capability-first gate: Agent dispatches at or after the execution stage
  *      require a prior capability search recorded in spine state. Forces the
  *      capability-first discovery contract instead of hardcoded agent names.
- *   4. Read-only verifier fast-path (EB-002, v2.3.1): during Review /
- *      Meta-Review / Verification stages, Bash commands that match the stage's
- *      `readOnlyVerifierCommands` whitelist (e.g. `git diff`, `npm run
- *      meta:check`, `node --check`) bypass the stage-requirements check.
+ *   4. Read-only inspection fast-path (EB-002, v2.3.1): during Critical /
+ *      Fetch / Review / Meta-Review / Verification stages, Bash commands that
+ *      match the stage's read-only whitelist can bypass the stage-requirements
+ *      check. Critical / Fetch use a narrower inspection list; verifier stages
+ *      allow validation commands such as `npm run meta:check` and `node --check`.
  *      Commands not on the whitelist still fall through to existing checks.
  *
  * Two-gate disconnect (intentional contract — read carefully):
@@ -769,9 +770,14 @@ if (isReadOnlyTool(toolName)) {
   process.exit(0);
 }
 
-// Query bypass: allow everything
+// Query bypass skips orchestration confirmation only. It remains read-only.
 if (state.queryBypass) {
-  process.exit(0);
+  if (toolName === "Bash" && isReadOnlyBash((toolInput?.command || "").trim())) {
+    process.exit(0);
+  }
+  exitAfterDeny(
+    "queryBypass is limited to pure read-only inspection; mutation or state-changing tools are denied.",
+  );
 }
 
 // Execution tools: enforce dispatch chain
@@ -812,6 +818,26 @@ if (isExecutionTool(toolName)) {
   const currentIdx = stageOrder.indexOf(stage);
   const execIdx = stageOrder.indexOf("execution");
 
+
+  // Read-only inspection must remain available even when execution readiness is
+  // incomplete; otherwise the operator cannot inspect state to return upstream.
+  if (
+    toolName === "Bash" &&
+    !state.queryBypass &&
+    !state.simpleMode
+  ) {
+    const stageConfig = STAGE_META_AGENT_MAP[stage];
+    const cmd = (toolInput?.command || "").trim();
+    const stageWhitelist = [
+      ...(stageConfig?.readOnlyVerifierCommands || []),
+      ...(stageConfig?.readOnlyInspectionCommands || []),
+    ];
+    const allowedByStage = stageWhitelist.some((prefix) => cmd.startsWith(prefix));
+    if (allowedByStage || isReadOnlyBash(cmd)) {
+      process.exit(0);
+    }
+  }
+
   if (
     currentIdx >= execIdx &&
     !state.queryBypass &&
@@ -826,37 +852,10 @@ if (isExecutionTool(toolName)) {
     }
   }
 
-  // EB-002 read-only verifier fast-path (v2.3.1).
-  //
-  // Review / Meta-Review / Verification stages own quality forensics: they
-  // legitimately run `git diff`, `npm run meta:check`, `node --check`, etc.
-  // Forcing those reads through a downstream dispatch creates churn without
-  // adding governance value, because the commands cannot mutate state.
-  //
-  // Behavior: when the current stage has `readOnlyVerifierEnabled: true` and
-  // the Bash command starts with one of `readOnlyVerifierCommands`, allow it
-  // immediately and skip the stage-requirements check below. Commands NOT in
-  // the whitelist fall through to the existing checks (which may still deny).
-  if (
-    toolName === "Bash" &&
-    !state.queryBypass &&
-    !state.simpleMode
-  ) {
-    const stageConfig = STAGE_META_AGENT_MAP[stage];
-    const cmd = (toolInput?.command || "").trim();
-    if (stageConfig?.readOnlyVerifierEnabled) {
-      const whitelist = stageConfig.readOnlyVerifierCommands || [];
-      const allowed = whitelist.some((prefix) => cmd.startsWith(prefix));
-      if (allowed) {
-        // Pass through immediately; skip stage-requirements check.
-        process.exit(0);
-      }
-      // Non-whitelisted command: fall through to the existing checks below.
-    }
-  }
 
   // Pre-execution stages: block + check meta-agent requirements
-  if (currentIdx < execIdx) {
+  // Exception: critical stage is for setup (spine state + planning files), defer checks
+  if (currentIdx < execIdx && stage !== "critical") {
     const req = checkStageRequirements(state);
     const stageInfo = STAGE_META_AGENT_MAP[stage];
     const label = stageInfo?.label || stage;
@@ -873,6 +872,35 @@ if (isExecutionTool(toolName)) {
           `Dispatch chain: ${JSON.stringify(state.dispatchChain || {})}`,
       );
     }
+  }
+
+  // Critical stage: allow only spine-state/planning-file writes and read-only
+  // inspection. Warden is an escalation owner, not a mandatory setup dispatch.
+  // Skip ALL checks if spine is inactive (allows normal work after session ends)
+  if (stage === "critical" && currentIdx < execIdx) {
+    if (isSpineStateWrite() || isPlanningFile()) {
+      process.exit(0); // Allow spine state and planning file writes during critical
+    }
+    // If spine is inactive, skip critical stage requirements (normal work mode)
+    if (!state.active) {
+      process.exit(0);
+    }
+    // For other execution tools in critical with active spine, check requirements
+    const req = checkStageRequirements(state);
+    if (!req.met) {
+      const stageInfo = STAGE_META_AGENT_MAP[stage];
+      exitAfterDeny(
+        `Stage "${stageInfo?.label || stage}" requires: ${req.missing.join(", ")}. ` +
+          `Dispatch them via Agent tool (description must contain the meta-agent name). ` +
+          `Dispatch chain so far: ${JSON.stringify(state.dispatchChain || {})}`,
+      );
+    }
+    exitAfterDeny(
+      "Critical stage is for scope clarification and read-only inspection. " +
+        "Complete Critical, Fetch, and Thinking before mutation. " +
+        "Allowed now: spine state writes, planning files, and read-only inspection. " +
+        `Dispatch chain so far: ${JSON.stringify(state.dispatchChain || {})}`,
+    );
   }
 
   // Execution stage: require at least one agent dispatch

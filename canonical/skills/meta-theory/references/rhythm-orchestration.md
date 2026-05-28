@@ -199,7 +199,7 @@ Intent amplification (deliver)
 
 ### Conductor
 
-Conductor **executes** rhythm; this doc is the **method**. Implementation (deck data, deal function, pause/preempt) lives in `.claude/agents/meta-conductor.md`.
+Conductor **executes** rhythm; this doc is the **method**. Implementation (deck data, deal function, pause/preempt) lives in the canonical `meta-conductor` agent definition and is projected into each runtime mirror.
 
 ### Warden
 

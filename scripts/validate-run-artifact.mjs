@@ -208,6 +208,28 @@ function evidenceRefResolves(artifact, ref) {
   return value !== undefined;
 }
 
+function validateEvidenceRefArray(artifact, refs, context) {
+  ensureStringArray(refs, context);
+  ensure(refs.length >= 1, `${context} must include at least one evidence reference.`);
+  for (const [index, ref] of refs.entries()) {
+    ensure(
+      evidenceRefResolves(artifact, ref),
+      `${context}[${index}] must resolve to an artifact evidence path, got: ${ref}`,
+    );
+  }
+}
+
+function ensureNoUnexpectedFields(value, allowedFields, context) {
+  ensureObject(value, context);
+  const allowed = new Set(allowedFields);
+  for (const field of Object.keys(value)) {
+    ensure(
+      allowed.has(field),
+      `${context}.${field} is not allowed; unsupported fields can hide stale fallback behavior.`,
+    );
+  }
+}
+
 function ensureObjectArray(value, context) {
   ensureArray(value, context);
   for (const [index, item] of value.entries()) {
@@ -406,6 +428,10 @@ function validateMatchedSkills(policy, skills, context) {
       `${context}[${index}].persistencePolicy must be do_not_persist_to_agent_identity.`,
     );
     ensureString(skill.fallback, `${context}[${index}].fallback`);
+    ensure(
+      !/temporary|generic|general[- ]purpose|use_fallback/i.test(skill.fallback),
+      `${context}[${index}].fallback must block or record a capability gap, not assign a temporary or generic fallback owner.`,
+    );
   }
 }
 
@@ -457,6 +483,10 @@ function validateMatchedCapabilities(policy, capabilities, context) {
       `${context}[${index}].persistencePolicy must be do_not_persist_to_agent_identity.`,
     );
     ensureString(capability.fallback, `${context}[${index}].fallback`);
+    ensure(
+      !/temporary|generic|general[- ]purpose|use_fallback/i.test(capability.fallback),
+      `${context}[${index}].fallback must block or record a capability gap, not assign a temporary or generic fallback owner.`,
+    );
   }
 }
 
@@ -943,6 +973,102 @@ function validateContentEvidencePacket(contract, artifact) {
     packet.evidenceLaneValidatedBy,
     "contentEvidencePacket.evidenceLaneValidatedBy",
   );
+  ensureStringArray(packet.evidence, "contentEvidencePacket.evidence");
+  ensure(
+    packet.evidence.length >= 1,
+    "contentEvidencePacket.evidence must contain decision-grade evidence.",
+  );
+  ensureStringArray(
+    packet.capabilityDiscovery,
+    "contentEvidencePacket.capabilityDiscovery",
+  );
+  ensure(
+    packet.capabilityDiscovery.length >= 1,
+    "contentEvidencePacket.capabilityDiscovery must list capability, tool, or owner candidates checked.",
+  );
+  ensure(
+    typeof packet.capabilityGap === "string" ||
+      (packet.capabilityGap && typeof packet.capabilityGap === "object"),
+    "contentEvidencePacket.capabilityGap must be a string or object.",
+  );
+  ensureObject(packet.deepResearchPlan, "contentEvidencePacket.deepResearchPlan");
+  for (const field of [
+    "questions",
+    "sourceCategoriesPlanned",
+    "decisionImpactCriteria",
+  ]) {
+    ensureStringArray(
+      packet.deepResearchPlan[field],
+      `contentEvidencePacket.deepResearchPlan.${field}`,
+    );
+    ensure(
+      packet.deepResearchPlan[field].length >= 1,
+      `contentEvidencePacket.deepResearchPlan.${field} must explain what evidence would change the decision.`,
+    );
+  }
+  for (const field of [
+    "localSourcesRead",
+    "contentFindings",
+    "capabilityEvidence",
+    "sourceCategoryCoverage",
+    "crossReferenceMatrix",
+    "assumptionLedger",
+    "decisionImpactMap",
+  ]) {
+    ensureArray(packet[field], `contentEvidencePacket.${field}`);
+    ensure(
+      packet[field].length >= 1,
+      `contentEvidencePacket.${field} must contain decision-grade evidence before Thinking.`,
+    );
+  }
+  const impactFields = policy.decisionImpactMapRequiredFields ?? [
+    "finding",
+    "impacts",
+    "decisionChanged",
+    "stageAffected",
+  ];
+  const allowedImpactStages = policy.decisionImpactStageEnum ?? [
+    "Critical",
+    "Fetch",
+    "Thinking",
+    "Execution",
+    "Review",
+  ];
+  for (const [index, item] of packet.decisionImpactMap.entries()) {
+    ensureObject(item, `contentEvidencePacket.decisionImpactMap[${index}]`);
+    ensureFields(
+      item,
+      impactFields,
+      `contentEvidencePacket.decisionImpactMap[${index}]`,
+    );
+    ensureString(
+      item.finding,
+      `contentEvidencePacket.decisionImpactMap[${index}].finding`,
+    );
+    ensure(
+      evidenceRefResolves(artifact, item.finding),
+      `contentEvidencePacket.decisionImpactMap[${index}].finding must resolve to an artifact evidence path, got: ${item.finding}`,
+    );
+    validateEvidenceRefArray(
+      artifact,
+      item.impacts,
+      `contentEvidencePacket.decisionImpactMap[${index}].impacts`,
+    );
+    ensureString(
+      item.decisionChanged,
+      `contentEvidencePacket.decisionImpactMap[${index}].decisionChanged`,
+    );
+    ensure(
+      !/none|n\/a|no impact|unchanged/i.test(item.decisionChanged),
+      `contentEvidencePacket.decisionImpactMap[${index}].decisionChanged must explain how evidence changes routing, option, scope, owner, or review.`,
+    );
+    ensureEnum(
+      item.stageAffected,
+      allowedImpactStages,
+      `contentEvidencePacket.decisionImpactMap[${index}].stageAffected`,
+    );
+  }
+  ensureArray(packet.contradictionLog, "contentEvidencePacket.contradictionLog");
 
   const discovery = packet.researchCapabilityDiscovery;
   const discoveryPolicy = policy.researchCapabilityDiscovery;
@@ -962,6 +1088,10 @@ function validateContentEvidencePacket(contract, artifact) {
   ensureStringArray(
     discovery.requiredCapabilities,
     "contentEvidencePacket.researchCapabilityDiscovery.requiredCapabilities",
+  );
+  ensure(
+    discovery.requiredCapabilities.length >= 1,
+    "contentEvidencePacket.researchCapabilityDiscovery.requiredCapabilities must name the information capability needed.",
   );
   ensureFields(
     discovery.runtimeContext,
@@ -988,6 +1118,10 @@ function validateContentEvidencePacket(contract, artifact) {
       `contentEvidencePacket.researchCapabilityDiscovery.toolInventorySources[${index}]`,
     );
   }
+  ensure(
+    discovery.toolInventorySources.length >= 1,
+    "contentEvidencePacket.researchCapabilityDiscovery.toolInventorySources must prove where capability inventory was checked.",
+  );
 
   ensureArray(
     discovery.availableRetrievalCapabilities,
@@ -1022,6 +1156,10 @@ function validateContentEvidencePacket(contract, artifact) {
       `contentEvidencePacket.researchCapabilityDiscovery.availableRetrievalCapabilities[${index}].limitations`,
     );
   }
+  ensure(
+    discovery.availableRetrievalCapabilities.length >= 1,
+    "contentEvidencePacket.researchCapabilityDiscovery.availableRetrievalCapabilities must prove at least one retrieval path or blocker.",
+  );
 
   ensureFields(
     discovery.selectedResearchPath,
@@ -1037,6 +1175,41 @@ function validateContentEvidencePacket(contract, artifact) {
     discovery.selectedResearchPath.reason,
     "contentEvidencePacket.researchCapabilityDiscovery.selectedResearchPath.reason",
   );
+  const selectedMode = discovery.selectedResearchPath.mode;
+  const availableCapabilities = discovery.availableRetrievalCapabilities.filter(
+    (capability) => ["available", "partial"].includes(capability.status),
+  );
+  if (selectedMode === "local_only") {
+    ensure(
+      availableCapabilities.some((capability) => capability.capability === "local_only"),
+      "contentEvidencePacket selectedResearchPath=local_only requires an available local_only capability proof.",
+    );
+  }
+  if (["external_web", "mixed"].includes(selectedMode)) {
+    ensure(
+      availableCapabilities.some((capability) =>
+        ["web_search", "url_fetch", "browser_open", "docs_lookup", "mcp_search", "plugin_search"].includes(
+          capability.capability,
+        ),
+      ),
+      `contentEvidencePacket selectedResearchPath=${selectedMode} requires available external retrieval capability proof.`,
+    );
+  }
+  if (packet.researchRequired === true) {
+    ensure(
+      packet.researchSkipReason === "none",
+      "contentEvidencePacket.researchRequired=true requires researchSkipReason=none.",
+    );
+    ensure(
+      packet.sourceCategoryCoverage.length >= 5,
+      "contentEvidencePacket researchRequired=true requires at least five source categories.",
+    );
+  } else {
+    ensure(
+      packet.researchSkipReason !== "none",
+      "contentEvidencePacket researchRequired=false requires a concrete researchSkipReason.",
+    );
+  }
 
   ensureArray(
     discovery.capabilityGaps,
@@ -1075,12 +1248,19 @@ function validateIntentPacketWhenRequired(contract, artifact) {
     contract.protocols.intentPacket.requiredFields,
     "intentPacket",
   );
-  for (const field of ["trueUserIntent", "successCriteria", "nonGoals"]) {
+  for (const field of [
+    "realIntent",
+    "trueUserIntent",
+    "successCriteria",
+    "nonGoals",
+    "noQuotaClarification",
+  ]) {
     ensure(
       typeof intent[field] === "string" && intent[field].trim().length >= 1,
       `intentPacket.${field} must be a non-empty string.`,
     );
   }
+  ensureStringArray(intent.blockingUnknowns, "intentPacket.blockingUnknowns");
   ensure(
     intent.intentPacketVersion === "v1",
     'intentPacket.intentPacketVersion must be "v1" for this contract revision.',
@@ -1181,28 +1361,44 @@ function validatePreDecisionOptionFrame(contract, artifact) {
     packet.unresolvedQuestions,
     "preDecisionOptionFrame.unresolvedQuestions",
   );
+  const questionFields = policy.unresolvedQuestionRequiredFields ?? [
+    "question",
+    "questionTarget",
+    "decisionImpact",
+    "status",
+  ];
+  const questionTargets = policy.questionTargetEnum ?? [];
   for (const [index, question] of packet.unresolvedQuestions.entries()) {
-    if (typeof question === "string") {
-      ensure(
-        question.trim().length >= 1,
-        `preDecisionOptionFrame.unresolvedQuestions[${index}] must be non-empty.`,
-      );
-    } else {
-      ensureObject(
-        question,
-        `preDecisionOptionFrame.unresolvedQuestions[${index}]`,
-      );
-      ensureString(
-        question.question ?? question.text,
-        `preDecisionOptionFrame.unresolvedQuestions[${index}].question`,
-      );
-      if (question.status !== undefined) {
-        ensure(
-          ["open", "closed", "skipped"].includes(question.status),
-          `preDecisionOptionFrame.unresolvedQuestions[${index}].status must be open, closed, or skipped.`,
-        );
-      }
-    }
+    ensureObject(
+      question,
+      `preDecisionOptionFrame.unresolvedQuestions[${index}]`,
+    );
+    ensureFields(
+      question,
+      questionFields,
+      `preDecisionOptionFrame.unresolvedQuestions[${index}]`,
+    );
+    ensureString(
+      question.question,
+      `preDecisionOptionFrame.unresolvedQuestions[${index}].question`,
+    );
+    ensureEnum(
+      question.questionTarget,
+      questionTargets,
+      `preDecisionOptionFrame.unresolvedQuestions[${index}].questionTarget`,
+    );
+    ensureString(
+      question.decisionImpact,
+      `preDecisionOptionFrame.unresolvedQuestions[${index}].decisionImpact`,
+    );
+    ensure(
+      !/just curious|nice to know|quota|generic/i.test(question.decisionImpact),
+      `preDecisionOptionFrame.unresolvedQuestions[${index}].decisionImpact must explain what execution, scope, risk, owner, or acceptance branch the answer changes.`,
+    );
+    ensure(
+      ["open", "closed", "skipped"].includes(question.status),
+      `preDecisionOptionFrame.unresolvedQuestions[${index}].status must be open, closed, or skipped.`,
+    );
   }
   ensureArray(packet.candidateOptions, "preDecisionOptionFrame.candidateOptions");
   ensure(
@@ -1228,6 +1424,15 @@ function validatePreDecisionOptionFrame(contract, artifact) {
       option.candidateTaskShape,
       `preDecisionOptionFrame.candidateOptions[${index}].candidateTaskShape`,
     );
+    validateEvidenceRefArray(
+      artifact,
+      option.evidenceRefs,
+      `preDecisionOptionFrame.candidateOptions[${index}].evidenceRefs`,
+    );
+    ensureString(
+      option.decisionImpact,
+      `preDecisionOptionFrame.candidateOptions[${index}].decisionImpact`,
+    );
   }
   ensure(
     typeof packet.requiresUserChoice === "boolean",
@@ -1239,6 +1444,15 @@ function validatePreDecisionOptionFrame(contract, artifact) {
       packet.choiceGateSkip,
       allowedSkips,
       "preDecisionOptionFrame.choiceGateSkip",
+    );
+    ensureString(packet.skipSource, "preDecisionOptionFrame.skipSource");
+    ensureString(
+      packet.skipSafetyRationale,
+      "preDecisionOptionFrame.skipSafetyRationale",
+    );
+    ensure(
+      !/fallback/i.test(packet.skipSafetyRationale),
+      "preDecisionOptionFrame.skipSafetyRationale must justify why the choice is safe, not cite fallback as the reason.",
     );
   }
   ensureString(
@@ -1264,6 +1478,10 @@ function validatePreDecisionOptionFrame(contract, artifact) {
     ensure(
       packet.choiceGateSkip === null || packet.choiceGateSkip === undefined,
       "preDecisionOptionFrame.choiceGateSkip must be empty when user choice is required.",
+    );
+    ensure(
+      packet.skipSource === "user_confirmed" || packet.skipSource === "native_choice",
+      "preDecisionOptionFrame.skipSource must show user confirmation when choice is required.",
     );
   }
   if (packet.solutionChoiceState === "confirmed") {
@@ -1677,6 +1895,12 @@ function validateBusinessFlowBlueprint(contract, artifact) {
       ensure(
         lane.coverageStatus === "covered",
         `businessFlowBlueprintPacket.requiredLanes[${index}].coverageStatus must be covered when coverageJudgment=complete.`,
+      );
+    }
+    for (const [index, lane] of flow.optionalLanes.entries()) {
+      ensure(
+        lane.coverageStatus === "covered",
+        `businessFlowBlueprintPacket.optionalLanes[${index}].coverageStatus must be covered when coverageJudgment=complete; use omittedLanes with a reason or mark coverageJudgment incomplete.`,
       );
     }
   }
@@ -2287,15 +2511,7 @@ function validateExecutionAgentCardWhenRequired(contract, artifact) {
   );
 }
 
-function validateSoftPublicReadyGates(contract, artifact) {
-  const soft =
-    contract.runDiscipline?.runArtifactValidation?.softPublicReadyTodoGate;
-  const envKey =
-    soft?.environmentVariable ?? "META_KIM_SOFT_PUBLIC_READY_GATES";
-  const envVal = soft?.environmentValue ?? "1";
-  if (process.env[envKey] !== envVal) {
-    return;
-  }
+function validateHardPublicReadyTodoGate(contract, artifact) {
   const sp = artifact.summaryPacket;
   if (!sp || sp.publicReady !== true) {
     return;
@@ -2305,20 +2521,15 @@ function validateSoftPublicReadyGates(contract, artifact) {
   for (const [index, packet] of packets.entries()) {
     if (packet?.taskTodoState === "open") {
       fail(
-        `Soft gate (${envKey}=${envVal}): workerTaskPackets[${index}] has taskTodoState=open while summaryPacket.publicReady=true.`,
+        `Hard public-ready todo gate: workerTaskPackets[${index}] has taskTodoState=open while summaryPacket.publicReady=true.`,
       );
     }
   }
 }
 
-function validateSoftCommentReviewGate(contract, artifact) {
+function validateHardCommentReviewGate(contract, artifact) {
   const gate =
-    contract.runDiscipline?.runArtifactValidation?.softCommentReviewGate;
-  const envKey = gate?.environmentVariable ?? "META_KIM_SOFT_COMMENT_REVIEW";
-  const envVal = gate?.environmentValue ?? "1";
-  if (process.env[envKey] !== envVal) {
-    return;
-  }
+    contract.runDiscipline?.runArtifactValidation?.commentReviewGate ?? {};
   const sp = artifact.summaryPacket;
   if (!sp || sp.publicReady !== true) {
     return;
@@ -2326,7 +2537,7 @@ function validateSoftCommentReviewGate(contract, artifact) {
   const field = gate?.summaryBooleanField ?? "commentReviewAcknowledged";
   if (sp[field] !== true) {
     fail(
-      `Soft gate (${envKey}=${envVal}): summaryPacket.publicReady=true requires summaryPacket.${field}=true.`,
+      `Hard public-ready comment review gate: summaryPacket.publicReady=true requires summaryPacket.${field}=true.`,
     );
   }
 }
@@ -2565,6 +2776,11 @@ function normalizeWorkerDependency(contract, dep, context) {
   }
 
   ensureObject(dep, context);
+  ensureNoUnexpectedFields(
+    dep,
+    ["taskRef", "type", "timeout_ms", "retry", "onTimeout"],
+    context,
+  );
   ensureFields(dep, ["taskRef"], context);
   ensureString(dep.taskRef, `${context}.taskRef`);
 
@@ -2599,16 +2815,238 @@ function normalizeWorkerDependency(contract, dep, context) {
   if (dep.onTimeout !== undefined) {
     ensureEnum(
       dep.onTimeout,
-      ["skip", "abort", "use_fallback"],
+      ["block", "wait", "return_to_stage"],
       `${context}.onTimeout`,
     );
-    if (dep.onTimeout === "use_fallback") {
-      ensureObject(dep.fallback, `${context}.fallback`);
-      ensureString(dep.fallback.artifact, `${context}.fallback.artifact`);
-    }
+    ensure(
+      dep.onTimeout !== "use_fallback",
+      `${context}.onTimeout must not use fallback artifacts; return to Thinking or abort instead.`,
+    );
   }
 
   return dep.taskRef;
+}
+
+function validateWorkerWorkOrder(contract, artifact, packet, context) {
+  for (const field of [
+    "coreProblem",
+    "todayTask",
+    "output",
+    "deliverableLink",
+    "workType",
+    "qualityBar",
+    "referenceDirection",
+    "lengthExpectation",
+    "visualOrAssetPlan",
+    "preDecisionOptionFrameRef",
+    "finalizationGate",
+  ]) {
+    ensureString(packet[field], `${context}.${field}`);
+  }
+  const allowedWorkTypes = new Set(
+    (contract.runDiscipline?.qualityFirstPolicy?.expertLensCatalog ?? []).map(
+      (entry) => entry.workType,
+    ),
+  );
+  ensure(
+    allowedWorkTypes.has(packet.workType),
+    `${context}.workType must reference a configured expert lens workType, got: ${packet.workType}`,
+  );
+
+  for (const field of [
+    "scopeFiles",
+    "nonGoals",
+    "acceptanceCriteria",
+    "expertLensRefs",
+    "evidenceRefs",
+    "capabilityRequirements",
+    "toolRequirements",
+  ]) {
+    ensureStringArray(packet[field], `${context}.${field}`);
+    ensure(
+      packet[field].length >= 1,
+      `${context}.${field} must contain at least one item before the worker starts.`,
+    );
+  }
+
+  const allowedLensRefs = new Set(
+    (contract.runDiscipline?.qualityFirstPolicy?.expertLensCatalog ?? []).map(
+      (entry) => entry.workType,
+    ),
+  );
+  for (const [index, lensRef] of packet.expertLensRefs.entries()) {
+    ensure(
+      allowedLensRefs.has(lensRef),
+      `${context}.expertLensRefs[${index}] must reference a configured expert lens workType, got: ${lensRef}`,
+    );
+  }
+
+  validateEvidenceRefArray(artifact, packet.evidenceRefs, `${context}.evidenceRefs`);
+
+  ensureObject(packet.handoffContract, `${context}.handoffContract`);
+  const handoffFields =
+    contract.protocols.workerTaskPacket.handoffContractRequiredFields ?? [];
+  ensureFields(packet.handoffContract, handoffFields, `${context}.handoffContract`);
+  for (const field of handoffFields) {
+    ensureString(
+      packet.handoffContract[field],
+      `${context}.handoffContract.${field}`,
+    );
+  }
+}
+
+function validateFileCompletionList(resultPacket, taskPacket, context) {
+  ensureArray(resultPacket.producedArtifacts, `${context}.producedArtifacts`);
+  ensureArray(resultPacket.fileCompletionList, `${context}.fileCompletionList`);
+  const completedPaths = new Map();
+  for (const [index, item] of resultPacket.fileCompletionList.entries()) {
+    ensureObject(item, `${context}.fileCompletionList[${index}]`);
+    ensureString(item.path, `${context}.fileCompletionList[${index}].path`);
+    ensureEnum(
+      item.action,
+      ["edit", "create", "delete", "rename"],
+      `${context}.fileCompletionList[${index}].action`,
+    );
+    ensureEnum(
+      item.status,
+      ["completed", "skipped", "failed"],
+      `${context}.fileCompletionList[${index}].status`,
+    );
+    if (item.status !== "completed") {
+      ensureString(
+        item.skipReason,
+        `${context}.fileCompletionList[${index}].skipReason`,
+      );
+    }
+    completedPaths.set(normalizePathRef(item.path), item);
+  }
+
+  const promisedPaths = [
+    ...resultPacket.producedArtifacts,
+    ...(Array.isArray(taskPacket.scopeFiles) ? taskPacket.scopeFiles : []),
+  ].map((item) => normalizePathRef(String(item)));
+  for (const promisedPath of new Set(promisedPaths)) {
+    ensure(
+      completedPaths.has(promisedPath),
+      `${context}.fileCompletionList must account for promised artifact ${promisedPath}.`,
+    );
+  }
+}
+
+function validateWorkerExecutionEvidence(resultPacket, taskPacket, context, artifact) {
+  ensureArray(taskPacket.verifySteps, `${context}.matchedWorkerTask.verifySteps`);
+  ensureArray(
+    resultPacket.workerExecutionEvidence,
+    `${context}.workerExecutionEvidence`,
+  );
+  ensure(
+    resultPacket.workerExecutionEvidence.length === taskPacket.verifySteps.length,
+    `${context}.workerExecutionEvidence must cover every worker verifySteps entry exactly once.`,
+  );
+  const verifyStepIds = new Set();
+  for (const [index, step] of taskPacket.verifySteps.entries()) {
+    ensureObject(step, `${context}.matchedWorkerTask.verifySteps[${index}]`);
+    ensureString(step.id, `${context}.matchedWorkerTask.verifySteps[${index}].id`);
+    ensure(
+      !verifyStepIds.has(step.id),
+      `${context}.matchedWorkerTask.verifySteps[${index}].id must be unique.`,
+    );
+    verifyStepIds.add(step.id);
+  }
+  const coveredStepIds = new Set();
+  for (const [index, item] of resultPacket.workerExecutionEvidence.entries()) {
+    ensureObject(item, `${context}.workerExecutionEvidence[${index}]`);
+    for (const field of [
+      "verifyStepRef",
+      "command",
+      "passClaim",
+      "status",
+      "runBy",
+      "runAt",
+      "expectedResult",
+      "observedResult",
+      "workingDirectory",
+    ]) {
+      ensureString(item[field], `${context}.workerExecutionEvidence[${index}].${field}`);
+    }
+    ensure(
+      typeof item.stderrTail === "string",
+      `${context}.workerExecutionEvidence[${index}].stderrTail must be a string.`,
+    );
+    ensure(
+      verifyStepIds.has(item.verifyStepRef),
+      `${context}.workerExecutionEvidence[${index}].verifyStepRef must match a worker verifySteps id.`,
+    );
+    ensure(
+      !coveredStepIds.has(item.verifyStepRef),
+      `${context}.workerExecutionEvidence[${index}].verifyStepRef duplicates ${item.verifyStepRef}.`,
+    );
+    coveredStepIds.add(item.verifyStepRef);
+    ensureEnum(
+      item.status,
+      ["verified", "fabricated", "skipped"],
+      `${context}.workerExecutionEvidence[${index}].status`,
+    );
+    ensure(
+      item.status !== "fabricated",
+      `${context}.workerExecutionEvidence[${index}] must not fabricate verification.`,
+    );
+    ensureString(
+      item.successMarkerFormat,
+      `${context}.workerExecutionEvidence[${index}].successMarkerFormat`,
+    );
+    ensureEnum(
+      item.successMarkerFormat,
+      ["stdout-text", "exit-code-only", "json-output"],
+      `${context}.workerExecutionEvidence[${index}].successMarkerFormat`,
+    );
+    if (item.status === "verified") {
+      if (item.successMarkerFormat === "exit-code-only") {
+        ensure(
+          item.exitCode === 0,
+          `${context}.workerExecutionEvidence[${index}].exitCode must be 0 for exit-code-only verified evidence.`,
+        );
+        ensureString(
+          item.commandRanAt,
+          `${context}.workerExecutionEvidence[${index}].commandRanAt`,
+        );
+      } else {
+        ensureString(
+          item.actualOutput,
+          `${context}.workerExecutionEvidence[${index}].actualOutput`,
+        );
+        if (item.successMarkerFormat === "json-output") {
+          try {
+            JSON.parse(item.actualOutput);
+          } catch {
+            ensure(
+              false,
+              `${context}.workerExecutionEvidence[${index}].actualOutput must contain parseable JSON for json-output.`,
+            );
+          }
+        }
+      }
+    }
+    if (item.status === "skipped") {
+      const claimsVerified =
+        artifact.verificationPacket?.verified === true ||
+        artifact.summaryPacket?.publicReady === true;
+      ensure(
+        !claimsVerified,
+        `${context}.workerExecutionEvidence[${index}] has skipped worker verification evidence but verificationPacket.verified or summaryPacket.publicReady claims a verified run.`,
+      );
+      ensureString(
+        item.skipReason,
+        `${context}.workerExecutionEvidence[${index}].skipReason`,
+      );
+    }
+  }
+  for (const stepId of verifyStepIds) {
+    ensure(
+      coveredStepIds.has(stepId),
+      `${context}.workerExecutionEvidence must include verifyStepRef ${stepId}.`,
+    );
+  }
 }
 
 function validateWorkerPackets(contract, artifact) {
@@ -2639,10 +3077,21 @@ function validateWorkerPackets(contract, artifact) {
       contract.protocols.workerTaskPacket.requiredFields,
       `workerTaskPackets[${index}]`,
     );
+    validateWorkerWorkOrder(
+      contract,
+      artifact,
+      packet,
+      `workerTaskPackets[${index}]`,
+    );
     ensureString(packet.taskPacketId, `workerTaskPackets[${index}].taskPacketId`);
     ensure(
       !taskById.has(packet.taskPacketId),
       `Duplicate workerTaskPacket taskPacketId: ${packet.taskPacketId}`,
+    );
+    ensureEnum(
+      packet.ownerMode,
+      contract.protocols.workerTaskPacket.ownerModeEnum ?? [],
+      `workerTaskPackets[${index}].ownerMode`,
     );
     ensureString(packet.roleDisplayName, `workerTaskPackets[${index}].roleDisplayName`);
     ensureString(packet.ownerAgent, `workerTaskPackets[${index}].ownerAgent`);
@@ -2774,6 +3223,13 @@ function validateWorkerPackets(contract, artifact) {
       packet.owner === taskPacket.owner,
       `workerResultPacket ${packet.taskPacketId} owner must match workerTaskPacket owner.`,
     );
+    validateFileCompletionList(packet, taskPacket, `workerResultPackets[${index}]`);
+    validateWorkerExecutionEvidence(
+      packet,
+      taskPacket,
+      `workerResultPackets[${index}]`,
+      artifact,
+    );
     resultById.set(packet.taskPacketId, packet);
   }
 
@@ -2885,6 +3341,10 @@ function validateFindingChain(contract, artifact) {
     verificationPacket.closeFindings,
     "verificationPacket.closeFindings",
   );
+  ensureArray(
+    verificationPacket.fixEvidence,
+    "verificationPacket.fixEvidence",
+  );
 
   validateReviewProcessChecks(artifact);
 
@@ -2992,6 +3452,53 @@ function validateFindingChain(contract, artifact) {
     verificationByFinding.set(result.findingId, result);
   }
 
+  const fixEvidenceByFinding = new Map();
+  for (const [index, item] of verificationPacket.fixEvidence.entries()) {
+    ensureObject(item, `verificationPacket.fixEvidence[${index}]`);
+    for (const field of [
+      "findingId",
+      "actionId",
+      "verifiedBy",
+      "verificationMethod",
+      "resultArtifactRef",
+      "result",
+      "failureDisposition",
+    ]) {
+      ensureString(item[field], `verificationPacket.fixEvidence[${index}].${field}`);
+    }
+    ensureArray(item.evidenceRefs, `verificationPacket.fixEvidence[${index}].evidenceRefs`);
+    ensure(
+      item.evidenceRefs.length >= 1,
+      `verificationPacket.fixEvidence[${index}].evidenceRefs must not be empty.`,
+    );
+    ensure(
+      findings.has(item.findingId),
+      `verificationPacket.fixEvidence[${index}] references unknown findingId ${item.findingId}.`,
+    );
+    ensure(
+      revisionsByFinding.get(item.findingId)?.actionId === item.actionId,
+      `verificationPacket.fixEvidence[${index}].actionId must match the revisionResponse actionId for ${item.findingId}.`,
+    );
+    ensureGovernanceOwner(
+      contract,
+      item.verifiedBy,
+      `verificationPacket.fixEvidence[${index}].verifiedBy`,
+    );
+    if (item.result === "accepted_risk") {
+      for (const field of [
+        "riskOwner",
+        "riskReason",
+        "expiryOrRevisitTrigger",
+      ]) {
+        ensureString(
+          item[field],
+          `verificationPacket.fixEvidence[${index}].${field} for accepted_risk`,
+        );
+      }
+    }
+    fixEvidenceByFinding.set(item.findingId, item);
+  }
+
   for (const findingId of findings.keys()) {
     ensure(
       revisionsByFinding.has(findingId),
@@ -3000,6 +3507,10 @@ function validateFindingChain(contract, artifact) {
     ensure(
       verificationByFinding.has(findingId),
       `Finding ${findingId} is missing a verificationResult.`,
+    );
+    ensure(
+      fixEvidenceByFinding.has(findingId),
+      `Finding ${findingId} is missing structured fixEvidence.`,
     );
   }
 
@@ -3017,6 +3528,27 @@ function validateFindingChain(contract, artifact) {
         ),
       `closeFindings may only contain findings with a terminal verification closeState (${closedId}).`,
     );
+    const fixEvidence = fixEvidenceByFinding.get(closedId);
+    ensure(
+      fixEvidence,
+      `closeFindings requires structured fixEvidence for ${closedId}.`,
+    );
+    if (verificationResult.closeState === "accepted_risk") {
+      ensure(
+        fixEvidence.result === "accepted_risk",
+        `accepted_risk closeState requires matching fixEvidence result for ${closedId}.`,
+      );
+      for (const field of [
+        "riskOwner",
+        "riskReason",
+        "expiryOrRevisitTrigger",
+      ]) {
+        ensureString(
+          fixEvidence[field],
+          `verificationPacket.fixEvidence for accepted_risk ${closedId}.${field}`,
+        );
+      }
+    }
   }
 
   if (verificationPacket.verified === true) {
@@ -3313,8 +3845,8 @@ export function validateArtifact(contract, artifact) {
   validateFindingChain(contract, artifact);
   validateSummaryAndEvolution(contract, artifact);
   validateCompactionPacket(contract, artifact);
-  validateSoftPublicReadyGates(contract, artifact);
-  validateSoftCommentReviewGate(contract, artifact);
+  validateHardPublicReadyTodoGate(contract, artifact);
+  validateHardCommentReviewGate(contract, artifact);
 }
 
 export async function validateArtifactFile(artifactFilePath) {

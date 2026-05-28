@@ -10,7 +10,12 @@
         "substeps": {
           "step0": {
             "name": "Data Collection",
-            "actions": ["git log analysis", "commit type distribution", "directory heatmap", "co-change analysis"]
+            "actions": [
+              "git log analysis",
+              "commit type distribution",
+              "directory heatmap",
+              "co-change analysis"
+            ]
           },
           "step1": {
             "name": "Capability Dimension Enumeration",
@@ -32,7 +37,11 @@
         "substeps": {
           "globalCheck": {
             "action": "Fetch phase searches for matching global agent",
-            "threeCriteria": ["Domain Gap", "Project Uniqueness", "Frequency"]
+            "threeCriteria": [
+              "Domain Gap",
+              "Project Uniqueness",
+              "Frequency"
+            ]
           },
           "userConfirmation": {
             "action": "Present decision result, obtain explicit confirm before Phase 3"
@@ -47,19 +56,39 @@
             "station": "Genesis",
             "mandatory": true,
             "dispatchTo": "meta-genesis",
-            "output": ["SOUL.md Draft", "Boundary Definition", "Reasoning Rules", "Stress-Test Record"],
+            "output": [
+              "SOUL.md Draft",
+              "Boundary Definition",
+              "Reasoning Rules",
+              "Stress-Test Record"
+            ],
             "abstractionCheck": "describes domain/patterns, NOT specific tasks"
           },
           "step4_artisan": {
             "station": "Artisan",
             "mandatory": true,
             "dispatchTo": "meta-artisan",
-            "output": ["Skill Loadout", "MCP / Tool Loadout", "Fallback Plan", "Capability Gap List", "Adoption Notes"]
+            "output": [
+              "Skill Loadout",
+              "MCP / Tool Loadout",
+              "Runtime Compatibility Plan",
+              "Capability Gap List",
+              "Adoption Notes"
+            ]
           },
           "onDemandTrigger": {
-            "sentinel": { "question": "Will it modify files, call external APIs, or operate databases?", "expectedAnswer": "Yes — data analysis reads/writes files and may call external data APIs" },
-            "librarian": { "question": "Does it need to remember what it did last time?", "expectedAnswer": "Yes — should accumulate analysis patterns across sessions" },
-            "conductor": { "question": "Does it need to hand off results to other Agents?", "expectedAnswer": "Possibly — may feed results to reporting agents" }
+            "sentinel": {
+              "question": "Will it modify files, call external APIs, or operate databases?",
+              "expectedAnswer": "Yes — data analysis reads/writes files and may call external data APIs"
+            },
+            "librarian": {
+              "question": "Does it need to remember what it did last time?",
+              "expectedAnswer": "Yes — should accumulate analysis patterns across sessions"
+            },
+            "conductor": {
+              "question": "Does it need to hand off results to other Agents?",
+              "expectedAnswer": "Possibly — may feed results to reporting agents"
+            }
           }
         }
       },
@@ -69,12 +98,17 @@
         "substeps": {
           "step8_review": {
             "dispatchTo": "meta-prism",
-            "checks": ["assumption audit", "replaceability test", "scope creep detection", "template-fill detection"],
+            "checks": [
+              "assumption audit",
+              "replaceability test",
+              "scope creep detection",
+              "template-fill detection"
+            ],
             "grading": "S/A/B/C/D"
           },
           "step9_revision": {
             "maxRounds": 2,
-            "fallback": "hand to user if still grade B after 2 rounds"
+            "manualEscalation": "hand to user if still grade B after 2 rounds"
           }
         }
       },
@@ -87,7 +121,12 @@
             "output": "canonical/agents/{name}.md with all station deliverables preserved"
           },
           "step11_verification": {
-            "checks": ["Five Criteria 5/5 PASS", "No death patterns", "8 modules complete", "Skipped stations justified"]
+            "checks": [
+              "Five Criteria 5/5 PASS",
+              "No death patterns",
+              "8 modules complete",
+              "Skipped stations justified"
+            ]
           },
           "step12_userConfirm": {
             "action": "Present complete output summary, only write files after explicit confirm"
@@ -95,11 +134,21 @@
         }
       }
     },
-    "expectedAgentCalls": ["meta-genesis", "meta-artisan", "meta-prism", "meta-warden"],
+    "expectedAgentCalls": [
+      "meta-genesis",
+      "meta-artisan",
+      "meta-prism",
+      "meta-warden"
+    ],
     "expectedFullFlow": {
       "phase1_discovery": {
         "dataCollection": {
-          "commands": ["git log --since='6 months ago' --oneline | wc -l", "commit type distribution", "directory heatmap", "co-change analysis"],
+          "commands": [
+            "git log --since='6 months ago' --oneline | wc -l",
+            "commit type distribution",
+            "directory heatmap",
+            "co-change analysis"
+          ],
           "output": "project activity metrics"
         },
         "dimensionEnumeration": {
@@ -130,13 +179,37 @@
         "genesis": {
           "dispatch": "Agent tool → meta-genesis",
           "abstractionPrinciple": "SOUL.md describes WHAT KIND OF AGENT, not WHAT TASKS",
-          "eightModules": ["Core Truths", "Role + Core Work", "Decision Rules", "Thinking Framework", "Anti-AI-Slop", "Output Quality", "Deliverable Flow", "Meta-Skills"],
-          "deliverables": ["SOUL.md Draft", "Boundary Definition", "Reasoning Rules", "Stress-Test Record"]
+          "eightModules": [
+            "Core Truths",
+            "Role + Core Work",
+            "Decision Rules",
+            "Thinking Framework",
+            "Anti-AI-Slop",
+            "Output Quality",
+            "Deliverable Flow",
+            "Meta-Skills"
+          ],
+          "deliverables": [
+            "SOUL.md Draft",
+            "Boundary Definition",
+            "Reasoning Rules",
+            "Stress-Test Record"
+          ]
         },
         "artisan": {
           "dispatch": "Agent tool → meta-artisan",
-          "actions": ["scan available skills", "ROI scoring", "top 5-8 recommendations"],
-          "deliverables": ["Skill Loadout", "MCP / Tool Loadout", "Fallback Plan", "Capability Gap List", "Adoption Notes"]
+          "actions": [
+            "scan available skills",
+            "ROI scoring",
+            "top 5-8 recommendations"
+          ],
+          "deliverables": [
+            "Skill Loadout",
+            "MCP / Tool Loadout",
+            "Runtime Compatibility Plan",
+            "Capability Gap List",
+            "Adoption Notes"
+          ]
         },
         "onDemandStations": {
           "sentinel": "triggered if agent modifies files or calls external APIs",
@@ -155,7 +228,10 @@
           ],
           "slopDetection": {
             "density": "empty adjectives / total words in first 200 words",
-            "thresholds": { "deduct": ">1%", "autoD": ">3%" }
+            "thresholds": {
+              "deduct": ">1%",
+              "autoD": ">3%"
+            }
           }
         },
         "revision": {
@@ -195,13 +271,34 @@
     "input": "创建一个叫 api-guardian 的 agent",
     "expectedMode": "B",
     "expectedPhases": {
-      "phase1": { "name": "Discovery and Splitting", "required": false, "reason": "Mode B skips Phase 1 — user already has clear agent name and purpose" },
-      "phase2": { "name": "Pre-Design Decision", "required": true },
-      "phase3": { "name": "Design On Demand", "required": true },
-      "phase4": { "name": "Review and Revision", "required": true },
-      "phase5": { "name": "Integration and Verification", "required": true }
+      "phase1": {
+        "name": "Discovery and Splitting",
+        "required": false,
+        "reason": "Mode B skips Phase 1 — user already has clear agent name and purpose"
+      },
+      "phase2": {
+        "name": "Pre-Design Decision",
+        "required": true
+      },
+      "phase3": {
+        "name": "Design On Demand",
+        "required": true
+      },
+      "phase4": {
+        "name": "Review and Revision",
+        "required": true
+      },
+      "phase5": {
+        "name": "Integration and Verification",
+        "required": true
+      }
     },
-    "expectedAgentCalls": ["meta-genesis", "meta-artisan", "meta-prism", "meta-warden"],
+    "expectedAgentCalls": [
+      "meta-genesis",
+      "meta-artisan",
+      "meta-prism",
+      "meta-warden"
+    ],
     "passFailCriteria": {
       "PASS": "Phase 1 correctly skipped; Phase 2 still runs global-vs-project check; Phases 3-5 execute fully; final verification includes Five Criteria + death patterns",
       "FAIL": "Phase 1 executed unnecessarily; Phase 2 global check skipped; any mandatory station (Genesis/Artisan) missing"
@@ -212,7 +309,10 @@
     "input": "帮我创建一个 code-review agent",
     "expectedMode": "A",
     "expectedPhases": {
-      "phase1": { "name": "Discovery and Splitting", "required": true },
+      "phase1": {
+        "name": "Discovery and Splitting",
+        "required": true
+      },
       "phase2": {
         "name": "Pre-Design Decision",
         "required": true,
@@ -223,9 +323,21 @@
           "frequency": "not evaluated — first criterion already fails"
         }
       },
-      "phase3": { "name": "Design On Demand", "required": false, "reason": "Pipeline terminated at Phase 2" },
-      "phase4": { "name": "Review and Revision", "required": false, "reason": "Pipeline terminated at Phase 2" },
-      "phase5": { "name": "Integration and Verification", "required": false, "reason": "Pipeline terminated at Phase 2" }
+      "phase3": {
+        "name": "Design On Demand",
+        "required": false,
+        "reason": "Pipeline terminated at Phase 2"
+      },
+      "phase4": {
+        "name": "Review and Revision",
+        "required": false,
+        "reason": "Pipeline terminated at Phase 2"
+      },
+      "phase5": {
+        "name": "Integration and Verification",
+        "required": false,
+        "reason": "Pipeline terminated at Phase 2"
+      }
     },
     "expectedAgentCalls": [],
     "passFailCriteria": {
@@ -238,7 +350,10 @@
     "input": "SOUL.md that says 'Build the about page and implement the chatbot feature'",
     "expectedMode": "B",
     "expectedPhases": {
-      "phase3": { "name": "Design On Demand", "required": true },
+      "phase3": {
+        "name": "Design On Demand",
+        "required": true
+      },
       "phase4": {
         "name": "Review and Revision",
         "required": true,
@@ -246,7 +361,11 @@
         "reason": "SOUL.md describes specific tasks ('build X', 'implement Y') rather than domains/patterns — abstraction violation"
       }
     },
-    "expectedAgentCalls": ["meta-genesis", "meta-artisan", "meta-prism"],
+    "expectedAgentCalls": [
+      "meta-genesis",
+      "meta-artisan",
+      "meta-prism"
+    ],
     "passFailCriteria": {
       "PASS": "meta-prism detects abstraction violation; assigns grade D; returned to Genesis station for redo; SOUL.md rewritten to describe domain capabilities not tasks",
       "FAIL": "Grade B or above assigned to task-describing SOUL.md; abstraction violation not detected; no redo triggered"
@@ -261,13 +380,26 @@
         "name": "Design On Demand",
         "required": true,
         "onDemandTrigger": {
-          "sentinel": { "triggered": true, "reason": "modifies files, calls external APIs, operates databases" },
-          "librarian": { "triggered": false },
-          "conductor": { "triggered": false }
+          "sentinel": {
+            "triggered": true,
+            "reason": "modifies files, calls external APIs, operates databases"
+          },
+          "librarian": {
+            "triggered": false
+          },
+          "conductor": {
+            "triggered": false
+          }
         }
       }
     },
-    "expectedAgentCalls": ["meta-genesis", "meta-artisan", "meta-sentinel", "meta-prism", "meta-warden"],
+    "expectedAgentCalls": [
+      "meta-genesis",
+      "meta-artisan",
+      "meta-sentinel",
+      "meta-prism",
+      "meta-warden"
+    ],
     "passFailCriteria": {
       "PASS": "Sentinel station triggered by API/DB access; threat model + permission matrix + hook config + rollback rules produced",
       "FAIL": "Sentinel not triggered despite external API and database operations; security deliverables missing"
@@ -282,13 +414,26 @@
         "name": "Design On Demand",
         "required": true,
         "onDemandTrigger": {
-          "sentinel": { "triggered": false },
-          "librarian": { "triggered": true, "reason": "needs to remember what it did last time and accumulate learning experience" },
-          "conductor": { "triggered": false }
+          "sentinel": {
+            "triggered": false
+          },
+          "librarian": {
+            "triggered": true,
+            "reason": "needs to remember what it did last time and accumulate learning experience"
+          },
+          "conductor": {
+            "triggered": false
+          }
         }
       }
     },
-    "expectedAgentCalls": ["meta-genesis", "meta-artisan", "meta-librarian", "meta-prism", "meta-warden"],
+    "expectedAgentCalls": [
+      "meta-genesis",
+      "meta-artisan",
+      "meta-librarian",
+      "meta-prism",
+      "meta-warden"
+    ],
     "passFailCriteria": {
       "PASS": "Librarian station triggered by cross-session memory need; memory architecture + continuity protocol + retention policy + recovery evidence produced",
       "FAIL": "Librarian not triggered despite explicit memory requirement; memory deliverables missing"
@@ -303,13 +448,26 @@
         "name": "Design On Demand",
         "required": true,
         "onDemandTrigger": {
-          "sentinel": { "triggered": false },
-          "librarian": { "triggered": false },
-          "conductor": { "triggered": true, "reason": "needs to hand off results to other Agents and coordinate execution order" }
+          "sentinel": {
+            "triggered": false
+          },
+          "librarian": {
+            "triggered": false
+          },
+          "conductor": {
+            "triggered": true,
+            "reason": "needs to hand off results to other Agents and coordinate execution order"
+          }
         }
       }
     },
-    "expectedAgentCalls": ["meta-genesis", "meta-artisan", "meta-conductor", "meta-prism", "meta-warden"],
+    "expectedAgentCalls": [
+      "meta-genesis",
+      "meta-artisan",
+      "meta-conductor",
+      "meta-prism",
+      "meta-warden"
+    ],
     "passFailCriteria": {
       "PASS": "Conductor station triggered by multi-agent handoff need; dispatch board + card deck + worker task board + handoff plan produced",
       "FAIL": "Conductor not triggered despite explicit multi-agent coordination; orchestration deliverables missing"
@@ -330,7 +488,11 @@
         }
       }
     },
-    "expectedAgentCalls": ["meta-genesis", "meta-artisan", "meta-prism"],
+    "expectedAgentCalls": [
+      "meta-genesis",
+      "meta-artisan",
+      "meta-prism"
+    ],
     "passFailCriteria": {
       "PASS": "AI-Slop density calculated as >3%; automatic grade D assigned; SOUL.md returned to Genesis for rewrite; empty adjectives identified by name",
       "FAIL": "Density not calculated; grade above D assigned despite >3% slop; no redo triggered"
@@ -352,7 +514,11 @@
         }
       }
     },
-    "expectedAgentCalls": ["meta-genesis", "meta-artisan", "meta-prism"],
+    "expectedAgentCalls": [
+      "meta-genesis",
+      "meta-artisan",
+      "meta-prism"
+    ],
     "passFailCriteria": {
       "PASS": "Replaceability test executed; name-swap detected as passing (meaning SOUL.md lacks domain depth); grade D assigned; returned to Genesis",
       "FAIL": "Replaceability test not run; generic SOUL.md accepted as passing quality"
@@ -366,10 +532,21 @@
       "phase4": {
         "name": "Review and Revision",
         "required": true,
-        "emptyAdjectivesDetected": ["advanced", "powerful", "seamless", "elegant", "innovative", "outstanding"]
+        "emptyAdjectivesDetected": [
+          "advanced",
+          "powerful",
+          "seamless",
+          "elegant",
+          "innovative",
+          "outstanding"
+        ]
       }
     },
-    "expectedAgentCalls": ["meta-genesis", "meta-artisan", "meta-prism"],
+    "expectedAgentCalls": [
+      "meta-genesis",
+      "meta-artisan",
+      "meta-prism"
+    ],
     "passFailCriteria": {
       "PASS": "Empty adjectives from the canonical list identified: advanced, powerful, seamless, elegant, innovative, outstanding; slop density calculated; appropriate grade deduction applied",
       "FAIL": "Empty adjectives not detected; no density calculation; SOUL.md accepted without deduction"
@@ -390,7 +567,11 @@
         }
       }
     },
-    "expectedAgentCalls": ["meta-genesis", "meta-artisan", "meta-prism"],
+    "expectedAgentCalls": [
+      "meta-genesis",
+      "meta-artisan",
+      "meta-prism"
+    ],
     "passFailCriteria": {
       "PASS": "Exactly 2 revision rounds attempted; after round 2 still B, decision handed to user; no third automatic round",
       "FAIL": "More than 2 revision rounds attempted; or user not consulted after 2 rounds; or revision loop continues indefinitely"
@@ -405,18 +586,64 @@
         "name": "Design On Demand",
         "required": true,
         "stationDeliverables": {
-          "warden": ["Participation Summary", "Gate Decisions", "Escalation Decisions", "Final Synthesis"],
-          "genesis": ["SOUL.md Draft", "Boundary Definition", "Reasoning Rules", "Stress-Test Record"],
-          "artisan": ["Skill Loadout", "MCP / Tool Loadout", "Fallback Plan", "Capability Gap List", "Adoption Notes"],
-          "sentinel": ["Threat Model", "Permission Matrix", "Hook Configuration", "Rollback Rules"],
-          "librarian": ["Memory Architecture", "Continuity Protocol", "Retention Policy", "Recovery Evidence"],
-          "conductor": ["Dispatch Board", "Card Deck", "Worker Task Board", "Handoff Plan"],
-          "prism": ["Assertion Report", "Verification Closure Packet", "Drift Findings", "Closure Conditions"],
-          "scout": ["Capability Baseline", "Candidate Comparison", "Security Notes", "Adoption Brief"]
+          "warden": [
+            "Participation Summary",
+            "Gate Decisions",
+            "Escalation Decisions",
+            "Final Synthesis"
+          ],
+          "genesis": [
+            "SOUL.md Draft",
+            "Boundary Definition",
+            "Reasoning Rules",
+            "Stress-Test Record"
+          ],
+          "artisan": [
+            "Skill Loadout",
+            "MCP / Tool Loadout",
+            "Runtime Compatibility Plan",
+            "Capability Gap List",
+            "Adoption Notes"
+          ],
+          "sentinel": [
+            "Threat Model",
+            "Permission Matrix",
+            "Hook Configuration",
+            "Rollback Rules"
+          ],
+          "librarian": [
+            "Memory Architecture",
+            "Continuity Protocol",
+            "Retention Policy",
+            "Recovery Evidence"
+          ],
+          "conductor": [
+            "Dispatch Board",
+            "Card Deck",
+            "Worker Task Board",
+            "Handoff Plan"
+          ],
+          "prism": [
+            "Assertion Report",
+            "Verification Closure Packet",
+            "Drift Findings",
+            "Closure Conditions"
+          ],
+          "scout": [
+            "Capability Baseline",
+            "Candidate Comparison",
+            "Security Notes",
+            "Adoption Brief"
+          ]
         }
       }
     },
-    "expectedAgentCalls": ["meta-genesis", "meta-artisan", "meta-prism", "meta-warden"],
+    "expectedAgentCalls": [
+      "meta-genesis",
+      "meta-artisan",
+      "meta-prism",
+      "meta-warden"
+    ],
     "passFailCriteria": {
       "PASS": "Every participating station's deliverables are explicitly present and detailed enough for another operator to continue without guessing",
       "FAIL": "Any participating station missing deliverables; deliverables present but vague prose instead of explicit artifacts"
@@ -437,7 +664,12 @@
         }
       }
     },
-    "expectedAgentCalls": ["meta-genesis", "meta-artisan", "meta-prism", "meta-warden"],
+    "expectedAgentCalls": [
+      "meta-genesis",
+      "meta-artisan",
+      "meta-prism",
+      "meta-warden"
+    ],
     "passFailCriteria": {
       "PASS": "Iron Rule respected: domains split despite high-coupling data; user judgment overrides data evidence; splitting proposal updated accordingly",
       "FAIL": "System insists on merging despite user veto; Iron Rule violated; data evidence prioritized over user judgment"
@@ -452,14 +684,31 @@
         "name": "Integration and Verification",
         "required": true,
         "finalChecklist": {
-          "fiveCriteria": { "required": "5/5 PASS", "failAction": "return to Step 9 revision" },
-          "deathPatterns": { "required": "no Stew-All, no Shattered", "failAction": "return to Step 2 regrouping" },
-          "eightModules": { "required": "all 8 complete", "failAction": "return to Step 3 to supplement" },
-          "skipJustification": { "required": "skipped stations have clear justification", "failAction": "run the skipped station" }
+          "fiveCriteria": {
+            "required": "5/5 PASS",
+            "failAction": "return to Step 9 revision"
+          },
+          "deathPatterns": {
+            "required": "no Stew-All, no Shattered",
+            "failAction": "return to Step 2 regrouping"
+          },
+          "eightModules": {
+            "required": "all 8 complete",
+            "failAction": "return to Step 3 to supplement"
+          },
+          "skipJustification": {
+            "required": "skipped stations have clear justification",
+            "failAction": "run the skipped station"
+          }
         }
       }
     },
-    "expectedAgentCalls": ["meta-genesis", "meta-artisan", "meta-prism", "meta-warden"],
+    "expectedAgentCalls": [
+      "meta-genesis",
+      "meta-artisan",
+      "meta-prism",
+      "meta-warden"
+    ],
     "passFailCriteria": {
       "PASS": "Five Criteria 5/5 all PASS; no death patterns detected; all 8 SOUL.md modules present and complete; skipped stations have documented justification; user confirmation obtained before file write",
       "FAIL": "Any of Five Criteria fails without triggering revision; death pattern present but not caught; modules missing without supplement; skipped stations have no justification"

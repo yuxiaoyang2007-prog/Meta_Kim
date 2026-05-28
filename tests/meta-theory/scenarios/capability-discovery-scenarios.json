@@ -21,13 +21,13 @@
     "input": "Find me a skill for testing Python code",
     "capabilityTypes": ["SKILL", "AGENT"],
     "expectedDiscovery": {
-      "method": "5-step chain: local -> index -> findskill -> expert -> generic",
+      "method": "5-step chain: local -> index -> findskill -> expert -> capability gap packet",
       "scoring": "ROI formula: (Task Coverage × Frequency) / (Context Cost + Learning Curve)",
       "expectedSkills": ["python-testing"],
       "expectedAgents": []
     },
     "passFailCriteria": {
-      "PASS": "All 5 steps documented; ROI calculated; best-fit skill selected; findskill called if local insufficient",
+      "PASS": "All 5 steps documented; ROI calculated; best-fit skill selected; findskill called if local insufficient; unresolved gaps block or return to Thinking",
       "FAIL": "Single-step discovery; ROI not calculated; wrong skill selected"
     }
   },
@@ -104,7 +104,7 @@
       "platforms": ["claudeCode", "codex"]
     },
     "passFailCriteria": {
-      "PASS": "discover-global-capabilities.mjs executed; blockchain-developer discovered from global index; cross-platform fallback used",
+      "PASS": "discover-global-capabilities.mjs executed; blockchain-developer discovered from global index; cross-platform capability inventory used",
       "FAIL": "Only local capabilities scanned; external platforms ignored"
     }
   },
@@ -134,7 +134,7 @@
       "expectedGap": "Kubernetes audit capability gap"
     },
     "passFailCriteria": {
-      "PASS": "All discovery steps exhausted; no match found; gap logged to config/capability-index/; Type B creation queued or temporary fallback assigned",
+      "PASS": "All discovery steps exhausted; no match found; gap logged to config/capability-index/; owner creation or upgrade queued, or execution blocked with capabilityGapPacket",
       "FAIL": "Gap silently ignored; meta-theory self-executes; no evolution writeback"
     }
   },

@@ -67,10 +67,11 @@ trigger: "Capability gaps, external tool needs, when installed skills are insuff
 Before searching externally, Scout must name the `coreProblem` in one sentence: what capability gap, external claim, or ecosystem uncertainty must be resolved.
 
 - If local baseline already covers the need, stop and report the existing owner instead of searching wider.
-- If missing information blocks a focused search, ask the smallest blocking clarification; otherwise proceed with explicit assumptions.
+- If missing information blocks a focused search, ask the fewest outcome-branching questions whose answers change search target, source quality bar, adoption risk, or acceptance. Otherwise proceed with explicit assumptions.
 - If the user asks for latest/current/source-backed facts, or the claim may have changed, external research is mandatory and must cite current evidence.
 - Scout may perform read-only inspection, source retrieval, and non-destructive verification needed for evidence, but must not execute the user's business task.
 - Scout recommends adoption or evidence paths only; it does not execute the user's business task or directly modify canonical sources.
+- Every key evidence item must state its decision impact: route, scope, owner, risk, acceptance, blocker, or return stage. A source list without decision impact is not Fetch evidence.
 
 ## Decision Rules
 
@@ -78,6 +79,7 @@ Before searching externally, Scout must name the `coreProblem` in one sentence: 
 2. IF candidate has known CVEs or unmaintained (>6 months no commits) → downgrade to Monitor or Reject regardless of ROI
 3. IF ROI calculation lacks quantitative data (star count, download numbers, coverage %) → mark recommendation as "low confidence"
 4. IF candidate requires Warden approval for adoption → prepare full adoption brief with rollback plan before handoff
+5. IF no owner or capability can satisfy the need → emit a capability gap; do not recommend a generic fallback agent or temporary owner.
 
 ## Workflow
 

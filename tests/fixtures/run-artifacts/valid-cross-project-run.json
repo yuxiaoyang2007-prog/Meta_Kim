@@ -94,7 +94,10 @@
     "trueUserIntent": "Extract a shared auth pattern library by analyzing auth implementations across multiple registered projects; deliver one consolidated pattern module.",
     "successCriteria": "Shared auth pattern module compiles; both source projects verified as correctly referenced; review finds no cross-project contamination.",
     "nonGoals": "No changes to existing project-specific auth modules; no production deploy.",
-    "intentPacketVersion": "v1"
+    "intentPacketVersion": "v1",
+    "realIntent": "Extract a shared auth pattern library by analyzing auth implementations across multiple registered projects; deliver one consolidated pattern module.",
+    "blockingUnknowns": [],
+    "noQuotaClarification": "No core-blocking clarification remains; do not ask filler questions."
   },
   "intentGatePacket": {
     "ambiguitiesResolved": true,
@@ -249,10 +252,12 @@
       "mergeOwner": "meta-warden",
       "verifySteps": [
         {
+          "id": "task-cross-001-verify-1",
           "step": "extract shared auth pattern module from source projects",
           "verify": "shared auth pattern module references both source projects correctly"
         },
         {
+          "id": "task-cross-001-verify-2",
           "step": "screen shared artifact for project-specific secrets",
           "verify": "no project-specific secrets found in shared artifact"
         }
@@ -271,7 +276,37 @@
       "collisionPolicy": "no_overlap",
       "preDecisionOptionFrameRef": "preDecisionOptionFrame",
       "userChoiceState": "explicit_auto_proceed",
-      "finalizationGate": "after_user_choice_or_explicit_auto_proceed"
+      "finalizationGate": "after_user_choice_or_explicit_auto_proceed",
+      "coreProblem": "Produce shared-auth-pattern-extraction without guessing.",
+      "scopeFiles": [
+        "src/shared/auth-patterns.ts",
+        "tests/shared/auth-patterns.test.ts"
+      ],
+      "workType": "code",
+      "nonGoals": [
+        "No unrelated scope expansion."
+      ],
+      "acceptanceCriteria": [
+        "Declared deliverable exists and verify steps pass."
+      ],
+      "expertLensRefs": [
+        "code"
+      ],
+      "evidenceRefs": [
+        "contentEvidencePacket.decisionImpactMap[0]"
+      ],
+      "capabilityRequirements": [
+        "Run-scoped owner and capability binding selected before execution."
+      ],
+      "toolRequirements": [
+        "Use only tools allowed by the worker task packet."
+      ],
+      "handoffContract": {
+        "handoffTo": "meta-prism",
+        "handoffWhen": "after worker output and evidence are complete",
+        "handoffPayload": "produced artifacts, fileCompletionList, workerExecutionEvidence",
+        "acceptanceSignal": "review owner can verify all acceptance criteria"
+      }
     }
   ],
   "workerResultPackets": [
@@ -284,7 +319,55 @@
         "tests/shared/auth-patterns.test.ts"
       ],
       "handoffTarget": "meta-prism",
-      "blockingIssues": []
+      "blockingIssues": [],
+      "fileCompletionList": [
+        {
+          "path": "src/shared/auth-patterns.ts",
+          "action": "edit",
+          "scope": "Produced src/shared/auth-patterns.ts",
+          "status": "completed"
+        },
+        {
+          "path": "tests/shared/auth-patterns.test.ts",
+          "action": "edit",
+          "scope": "Produced tests/shared/auth-patterns.test.ts",
+          "status": "completed"
+        }
+      ],
+      "workerExecutionEvidence": [
+        {
+          "verifyStepRef": "task-cross-001-verify-1",
+          "expectedResult": "shared auth pattern module references both source projects correctly",
+          "observedResult": "shared auth pattern module references both source projects correctly",
+          "workingDirectory": ".",
+          "stderrTail": "",
+          "command": "fixture-verify task-cross-001 1",
+          "actualOutput": "",
+          "passClaim": "shared auth pattern module references both source projects correctly",
+          "status": "verified",
+          "successMarkerFormat": "exit-code-only",
+          "exitCode": 0,
+          "commandRanAt": "2026-05-26T00:00:00.000Z",
+          "runBy": "meta-conductor",
+          "runAt": "2026-05-26T00:00:00.000Z"
+        },
+        {
+          "verifyStepRef": "task-cross-001-verify-2",
+          "expectedResult": "no project-specific secrets found in shared artifact",
+          "observedResult": "no project-specific secrets found in shared artifact",
+          "workingDirectory": ".",
+          "stderrTail": "",
+          "command": "fixture-verify task-cross-001 2",
+          "actualOutput": "",
+          "passClaim": "no project-specific secrets found in shared artifact",
+          "status": "verified",
+          "successMarkerFormat": "exit-code-only",
+          "exitCode": 0,
+          "commandRanAt": "2026-05-26T00:00:00.000Z",
+          "runBy": "meta-conductor",
+          "runAt": "2026-05-26T00:00:00.000Z"
+        }
+      ]
     }
   ],
   "reviewPacket": {
@@ -1040,9 +1123,19 @@
         "impacts": [
           "preDecisionOptionFrame.candidateOptions[0]",
           "dispatchEnvelopePacket.ownerSelection"
-        ]
+        ],
+        "decisionChanged": "Evidence changes the Thinking route, owner selection, and acceptance criteria before execution.",
+        "stageAffected": "Thinking"
       }
-    ]
+    ],
+    "evidence": [
+      "Fetch evidence collected for complex_dev"
+    ],
+    "capabilityDiscovery": [
+      "auth_pattern_extraction",
+      "auth_refresh_hardening"
+    ],
+    "capabilityGap": "none"
   },
   "preDecisionOptionFrame": {
     "decisionTrigger": "non_trivial_executable_decision",
@@ -1072,7 +1165,11 @@
           "meta-prism",
           "meta-artisan"
         ],
-        "candidateTaskShape": "post-decision dispatch packets"
+        "candidateTaskShape": "post-decision dispatch packets",
+        "evidenceRefs": [
+          "contentEvidencePacket.decisionImpactMap[0]"
+        ],
+        "decisionImpact": "Uses Fetch evidence to choose the route, owners, and acceptance standard before dispatch."
       },
       {
         "optionId": "B",
@@ -1089,7 +1186,11 @@
           "meta-prism",
           "meta-artisan"
         ],
-        "candidateTaskShape": "review-first packet"
+        "candidateTaskShape": "review-first packet",
+        "evidenceRefs": [
+          "contentEvidencePacket.decisionImpactMap[0]"
+        ],
+        "decisionImpact": "Uses Fetch evidence to choose the route, owners, and acceptance standard before dispatch."
       }
     ],
     "recommendedDefault": "A",
@@ -1097,7 +1198,9 @@
     "nativeChoiceSurface": "conversation_fallback",
     "choiceGateSkip": "explicit_auto_proceed",
     "solutionChoiceState": "explicit_auto_proceed",
-    "reviewOwner": "meta-prism"
+    "reviewOwner": "meta-prism",
+    "skipSource": "user_explicit_auto_proceed",
+    "skipSafetyRationale": "User explicitly allowed auto-proceed after evidence was collected and options were framed."
   },
   "productCompletenessPacket": {
     "outcome": "shared-auth-pattern-extraction",

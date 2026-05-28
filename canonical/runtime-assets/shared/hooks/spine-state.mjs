@@ -84,15 +84,33 @@ const DEFAULT_READ_ONLY_VERIFIER_COMMANDS = [
   "wc",
 ];
 
+const DEFAULT_READ_ONLY_INSPECTION_COMMANDS = [
+  "git status",
+  "git diff --stat",
+  "git diff --check",
+  "git diff -- ",
+  "git rev-parse",
+  "rg ",
+  "rg --files",
+  "ls",
+  "Get-ChildItem",
+  "Get-Content",
+  "Select-String",
+];
+
 export const STAGE_META_AGENT_MAP = {
   critical: {
-    required: ["meta-warden"],
-    label: "Critical (Warden scope clarification)",
+    required: [],
+    label: "Critical (scope clarification)",
+    readOnlyInspectionEnabled: true,
+    readOnlyInspectionCommands: DEFAULT_READ_ONLY_INSPECTION_COMMANDS,
   },
   fetch: {
     required: [],
     label: "Fetch (capability discovery)",
     requiresFetchRecord: true,
+    readOnlyInspectionEnabled: true,
+    readOnlyInspectionCommands: DEFAULT_READ_ONLY_INSPECTION_COMMANDS,
   },
   thinking: {
     required: ["meta-conductor"],
@@ -575,6 +593,38 @@ function hasNonEmptyArray(value) {
   return Array.isArray(value) && value.length > 0;
 }
 
+const WORKER_WORK_ORDER_STRING_FIELDS = [
+  "coreProblem",
+  "todayTask",
+  "output",
+  "deliverableLink",
+  "workType",
+  "qualityBar",
+  "referenceDirection",
+  "lengthExpectation",
+  "visualOrAssetPlan",
+  "preDecisionOptionFrameRef",
+  "finalizationGate",
+];
+
+const WORKER_WORK_ORDER_ARRAY_FIELDS = [
+  "scopeFiles",
+  "nonGoals",
+  "acceptanceCriteria",
+  "expertLensRefs",
+  "evidenceRefs",
+  "capabilityRequirements",
+  "toolRequirements",
+  "verifySteps",
+];
+
+const WORKER_HANDOFF_CONTRACT_FIELDS = [
+  "handoffTo",
+  "handoffWhen",
+  "handoffPayload",
+  "acceptanceSignal",
+];
+
 const PRE_EXECUTION_PACKET_STATUS_FIELDS = {
   productCompletenessPacket: "completenessStatus",
   experienceQualityPacket: "experienceStatus",
@@ -833,15 +883,25 @@ function collectCapabilityNodeBindingGaps(state) {
         "businessRoleId",
         "roleDisplayName",
         "roleInstanceId",
-        "todayTask",
-        "output",
-        "verifySteps",
       ]) {
         const value = packet[field];
-        if (field === "verifySteps") {
-          if (!hasNonEmptyArray(value)) missing.push(`${context}.${field}`);
-        } else if (!isNonEmptyString(value)) {
+        if (!isNonEmptyString(value)) {
           missing.push(`${context}.${field}`);
+        }
+      }
+      for (const field of WORKER_WORK_ORDER_STRING_FIELDS) {
+        if (!isNonEmptyString(packet[field])) missing.push(`${context}.${field}`);
+      }
+      for (const field of WORKER_WORK_ORDER_ARRAY_FIELDS) {
+        if (!hasNonEmptyArray(packet[field])) missing.push(`${context}.${field}`);
+      }
+      if (!isObject(packet.handoffContract)) {
+        missing.push(`${context}.handoffContract`);
+      } else {
+        for (const field of WORKER_HANDOFF_CONTRACT_FIELDS) {
+          if (!isNonEmptyString(packet.handoffContract[field])) {
+            missing.push(`${context}.handoffContract.${field}`);
+          }
         }
       }
       const roleKey = `${packet.ownerAgent}::${packet.businessRoleId}`;
@@ -976,12 +1036,28 @@ function getPreDecisionOptionFrame(state) {
   );
 }
 
+const ALLOWED_CHOICE_GATE_SKIPS = new Set([
+  "trivial",
+  "pure_read_only_queryBypass",
+  "explicit_auto_proceed",
+]);
+
 function hasChoiceGateSkip(state) {
   const frame = getPreDecisionOptionFrame(state);
-  return !!(
+  const skip =
     state?.choiceGateSkip ||
     frame?.choiceGateSkip ||
-    state?.intentGatePacket?.choiceGateSkip
+    state?.intentGatePacket?.choiceGateSkip;
+  if (!ALLOWED_CHOICE_GATE_SKIPS.has(skip)) return false;
+  const skipSource = state?.skipSource || frame?.skipSource;
+  const skipSafetyRationale =
+    state?.skipSafetyRationale || frame?.skipSafetyRationale;
+  return (
+    typeof skipSource === "string" &&
+    skipSource.trim().length > 0 &&
+    typeof skipSafetyRationale === "string" &&
+    skipSafetyRationale.trim().length > 0 &&
+    !/fallback/i.test(skipSafetyRationale)
   );
 }
 

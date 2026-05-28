@@ -8,7 +8,7 @@
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { readJson, readFile } from "./_helpers.mjs";
+import { loadMetaTheoryCorpus, readJson, readFile } from "./_helpers.mjs";
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 数据加载（在async describe块中一次性加载，避免await问题）
@@ -19,7 +19,7 @@ const [
   dispatchScenarios,
   cardDeckScenarios,
   evolutionScenarios,
-  skillContent,
+  corpus,
   capabilityReport,
   devGov,
   conductor,
@@ -31,7 +31,7 @@ const [
   readJson("tests/meta-theory/scenarios/dispatch-scenarios.json"),
   readJson("tests/meta-theory/scenarios/card-deck-scenarios.json"),
   readJson("tests/meta-theory/scenarios/evolution-scenarios.json"),
-  readFile("canonical/skills/meta-theory/SKILL.md"),
+  loadMetaTheoryCorpus(),
   readFile("canonical/skills/meta-theory/references/meta-theory.md"),
   readFile("canonical/skills/meta-theory/references/dev-governance.md"),
   readFile("canonical/agents/meta-conductor.md"),
@@ -39,6 +39,8 @@ const [
   readFile("canonical/agents/meta-warden.md"),
   readJson("config/contracts/workflow-contract.json"),
 ]);
+
+const skillContent = corpus.combined;
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Stage 1: Critical — Blocking Clarification
@@ -119,18 +121,20 @@ describe("Thinking → Execution: Unified Confirmation", () => {
     assert.match(skillContent, /DO NOT.*Critical\/Fetch\/Thinking\/Review/s);
   });
 
-  test("确认卡包含4+问题，每题3-4个产品化选项", () => {
+  test("确认卡只包含会改变结果分叉的产品化问题", () => {
     const block = skillContent.slice(
-      skillContent.indexOf("1. Outcome Confirmation"),
+      skillContent.indexOf("Possible question dimensions:"),
       skillContent.indexOf("Wait for user response before proceeding to Execution."),
     );
-    const questions = [...block.matchAll(/^\d+\.\s+.+Confirmation$/gm)];
-    assert.ok(questions.length >= 4, `Need 4+ questions, got ${questions.length}`);
+    const questions = [...block.matchAll(/^\d+\.\s+.+Confirmation - ask only when.+$/gm)];
+    assert.ok(questions.length >= 1, "Need outcome-branching question examples");
+    assert.match(skillContent, /no question quota/i);
+    assert.match(skillContent, /Each visible question must change an execution branch/i);
     for (let i = 0; i < questions.length; i++) {
       const start = questions[i].index ?? 0;
       const end = i + 1 < questions.length ? (questions[i + 1].index ?? block.length) : block.length;
       const options = [...block.slice(start, end).matchAll(/^\s+- Option [A-D]:/gm)];
-      assert.ok(options.length >= 3 && options.length <= 4);
+      assert.ok(options.length >= 2);
     }
     assert.match(skillContent, /understandable to non-technical users/i);
   });
@@ -580,9 +584,9 @@ describe("End-to-End: Complete 8-Stage Spine Integration", () => {
       );
     }
     // 验证stage spine中Critical在Evolution前面（检查stage序列模式）
-    // SKILL.md line 17: Critical → Fetch → Thinking → Execution → Review → Meta-Review → Verification → Evolution
+    // SKILL.md keeps the compact ASCII spine while references may render it differently.
     const spinePattern =
-      /Critical.*→.*Fetch.*→.*Thinking.*→.*Execution.*→.*Review.*→.*Meta-Review.*→.*Verification.*→.*Evolution/i;
+      /Critical.*(?:→|->).*Fetch.*(?:→|->).*Thinking.*(?:→|->).*Execution.*(?:→|->).*Review.*(?:→|->).*Meta-Review.*(?:→|->).*Verification.*(?:→|->).*Evolution/i;
     assert.ok(
       spinePattern.test(skillContent),
       "SKILL.md must contain the full 8-stage spine sequence with Critical before Evolution",

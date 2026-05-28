@@ -287,14 +287,51 @@ describe("Agent Dispatch — Part B: Dispatch Rule Verification", async () => {
     );
   });
 
-  test("Capability gap resolution ladder documented (existing -> Type B -> temporary fallback)", async () => {
+  test("Capability gap resolution ladder blocks instead of temporary fallback", async () => {
     await ensureLoaded();
     const hasExistingOwner = /existing owner/i.test(skillContent);
-    const hasTypeB = /Type B creat/i.test(skillContent);
-    const hasTempFallback = /temporary.*fallback/i.test(skillContent);
+    const hasOwnerCreation = /owner upgrade|project-local creation|create.*owner/i.test(
+      skillContent,
+    );
+    const hasCapabilityGapBlock = /block.*capabilityGapPacket|capabilityGapPacket/i.test(
+      skillContent,
+    );
     assert.ok(
-      hasExistingOwner && hasTypeB && hasTempFallback,
-      "SKILL.md must document the capability gap resolution ladder: existing owner -> Type B creation -> temporary fallback"
+      hasExistingOwner && hasOwnerCreation && hasCapabilityGapBlock,
+      "SKILL.md must document the capability gap ladder: existing owner -> owner upgrade/create -> block/defer with capabilityGapPacket"
+    );
+    assert.doesNotMatch(
+      skillContent,
+      /Capability gap ladder:.*temporary fallback/i,
+      "Capability gap ladder must not reward temporary fallback owners"
+    );
+  });
+
+  test("Stage 4 templates never dispatch Type: general-purpose", async () => {
+    await ensureLoaded();
+    const conductorContent = await readFile("canonical/agents/meta-conductor.md");
+    const playbookProtocol = await readFile(
+      "docs/protocols/meta-conductor-agent-teams-playbook-integration.md",
+    );
+    const conductorStage4 = conductorContent.match(
+      /## Stage 4: Execution[\s\S]+?## Worker Per-File Write-Completion Contract/,
+    )?.[0] ?? conductorContent;
+    const stage4Templates = `${conductorStage4}\n${playbookProtocol}`;
+
+    assert.match(
+      stage4Templates,
+      /Capability Binding/i,
+      "Stage 4 templates must require a capability binding before dispatch",
+    );
+    assert.doesNotMatch(
+      stage4Templates,
+      /(?:Skill\/Type[\s\S]{0,160}|Capability Binding[\s\S]{0,160})Type:\s*general-purpose/i,
+      "Stage 4 templates must not present general-purpose as a valid execution owner",
+    );
+    assert.match(
+      skillContent,
+      /Stage 4 owner prohibition/i,
+      "SKILL.md must define the Stage 4 owner prohibition at the source",
     );
   });
 

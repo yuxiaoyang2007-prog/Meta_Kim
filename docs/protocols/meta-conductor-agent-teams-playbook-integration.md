@@ -45,11 +45,11 @@ Compatibility parser may also accept localized scenario labels through Unicode e
 Canonical table:
 
 ```text
-| ID | Role | Responsibility | Model | subagent_type | Skill/Type |
-|----|------|----------------|-------|---------------|------------|
-| 1 | backend | implement OAuth2 endpoints and JWT generation | sonnet | general-purpose | Type: general-purpose |
-| 2 | security | audit authentication and token handling | opus | general-purpose | Type: general-purpose |
-| 3 | database | design user tables and indexes | sonnet | general-purpose | Skill: supabase-admin-rls-auth-mismatch |
+| ID | Role | Responsibility | Model | Owner Mode | Capability Binding |
+|----|------|----------------|-------|------------|--------------------|
+| 1 | backend | implement OAuth2 endpoints and JWT generation | sonnet | reuse_existing_owner | Capability: backend-api |
+| 2 | security | audit authentication and token handling | opus | reuse_existing_owner | Capability: security-review |
+| 3 | database | design user tables and indexes | sonnet | reuse_existing_owner | Skill: supabase-admin-rls-auth-mismatch |
 ```
 
 Parsing requirements:
@@ -60,8 +60,10 @@ Parsing requirements:
 | Role | second table cell | `backend` |
 | Responsibility | third table cell | `implement OAuth2 endpoints` |
 | Model | `opus`, `sonnet`, or `haiku` | `sonnet` |
-| subagent_type | `general-purpose` or `skill-based` | `general-purpose` |
-| Skill/Type | `Skill: <name>` or `Type: general-purpose` | `Skill: supabase-admin-rls-auth-mismatch` |
+| Owner Mode | `reuse_existing_owner`, `upgrade_existing_owner`, or `create_owner_first` | `reuse_existing_owner` |
+| Capability Binding | `Capability: <id>`, `Skill: <name>`, or `Gap: capabilityGapPacket` | `Skill: supabase-admin-rls-auth-mismatch` |
+
+`general-purpose` is not a valid execution owner or capability binding. If a host or playbook emits it, Conductor treats it as parse compatibility evidence only and returns to Thinking unless Fetch evidence maps the lane to a real owner and capability.
 
 ### Dispatch Board
 
@@ -210,10 +212,10 @@ Conductor does not:
 ```text
 Selected scenario: Scenario 3 (Plan + Review)
 
-| ID | Role | Responsibility | Model | subagent_type | Skill/Type |
-|----|------|----------------|-------|---------------|------------|
-| 1 | backend | implement API endpoints | sonnet | general-purpose | Type: general-purpose |
-| 2 | test | validate API contract and regression path | sonnet | general-purpose | Type: general-purpose |
+| ID | Role | Responsibility | Model | Owner Mode | Capability Binding |
+|----|------|----------------|-------|------------|--------------------|
+| 1 | backend | implement API endpoints | sonnet | reuse_existing_owner | Capability: backend-api |
+| 2 | test | validate API contract and regression path | sonnet | reuse_existing_owner | Capability: regression-test |
 
 Collaboration mode: Subagent
 Expected agent count: 2

@@ -74,7 +74,7 @@ When this repository is opened in Codex:
 
 - `AGENTS.md` is this resident project guide.
 - `.codex/agents/*.toml` contains Codex custom-agent mirrors for the Meta_Kim team. Codex is the only target here that uses agent TOML; `worker.toml` and `explorer.toml` are fallback adapters for built-in Codex roles, and `frontend.toml`, `backend.toml`, `test.toml`, `review.toml`, `analysis.toml`, `verify.toml`, and `docs.toml` are business-role adapters for hosts that honor named custom agents. None of these adapters become durable Meta_Kim owners.
-- `.agents/skills/meta-theory/` is the Codex project skill mirror; `.codex/skills/meta-theory/` is kept as a compatibility mirror for older installs.
+- `.agents/skills/meta-theory/` is the Codex project skill mirror; `.codex/skills/meta-theory/` is kept as a compatibility mirror for older installs. Both are generated projections. The canonical source is `canonical/skills/meta-theory/SKILL.md`.
 - `.codex/hooks.json` and `.codex/hooks/` carry Codex-compatible project hook wiring.
 - `codex/config.toml.example` is generated from `canonical/runtime-assets/codex/config.toml.example`.
 
@@ -109,7 +109,7 @@ Capability-index fetch order:
 config/capability-index/
 -> .claude/.codex/.cursor/openclaw capability-index mirrors
 -> .meta-kim/state/{profile}/capability-index/
--> explicit fallback
+-> explicit compatibility degradation or capabilityGapPacket
 ```
 
 Hardcoding a specific agent name before discovery is a shortcut, not the canonical method.
@@ -125,7 +125,7 @@ Capability-first has a mechanical hook path on Claude Code, Codex, and Cursor, b
 
 Override knob (all hook-equipped runtimes): `META_KIM_CAPABILITY_GATE=progressive|block|warn|off` (default `progressive`; set `block` env for immediate hard deny). Set `warn` to emit stderr warnings without denying, or `off` to disable the gate entirely. Runtime-payload schema selector: `META_KIM_HOOK_RUNTIME=claude|codex|cursor`.
 
-Canonical hook source: `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs`. Full matrix and limits: `docs/cross-runtime-meta-enforcement.md`.
+Canonical hook source: `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs`. The current runtime matrix and limits are documented in this Mechanical Enforcement section; do not add a separate source-of-truth document for the same rule.
 
 ## Meta-Theory Activation
 
@@ -139,13 +139,30 @@ Critical -> Fetch -> Thinking
 
 That means:
 
-- clarify blockers before dispatch when the request is ambiguous
-- perform capability discovery before naming execution owners
-- enumerate at least two viable solution paths for non-trivial work
-- decide ownership, sequencing, parallel groups, merge owner, review owner, and verification owner before execution
-- dispatch execution work to agents or skills instead of collapsing all work into the main thread
+- Critical locks the real outcome, pain/value, audience, success standard, non-goals, and only asks questions that change execution
+- Fetch gathers evidence and capability facts that change the route, risk, owner, scope, or acceptance criteria
+- Thinking selects expert lenses, compares viable paths, rejects weak paths, resolves owners/capabilities, and writes worker work orders before Execution
+- Review checks whether Critical, Fetch, and Thinking were good enough before judging final output polish
+- Execution work is dispatched to agents, skills, commands, MCP capabilities, runtime tools, or workers selected by Thinking instead of collapsing into the main thread
 
 For Codex, explicit meta-theory activation is also explicit permission to use subagents. The main thread scopes, delegates, reviews, and synthesizes; it does not become the all-purpose executor for complex work.
+
+### Production Correctness Before Execution
+
+Meta-theory work must be correct before production starts, not rescued by Review or Verification after the fact.
+
+Before editing files, inspect the current worktree and source files that will be changed: `git status --short`, `git diff --stat`, targeted diffs, targeted source reads, and repo-scoped search. This read-before-edit step belongs to Critical/Fetch. A hook that blocks read-only inspection is a governance defect to route to Sentinel/Conductor, not a reason to work blind.
+
+Required internal stage records:
+
+- Critical: `realIntent`, `successCriteria`, `nonGoals`, `blockingUnknowns`, `noQuotaClarification`
+- Fetch: `evidence`, `decisionImpactMap`, `capabilityDiscovery`, `capabilityGap`, `contradictionLog`
+- Thinking: `designFrame`, `workType`, `expertLens`, `consideredLanes`, `omittedLanesWithReason`, `workerTaskPackets`, `dependencyPolicy`
+- Review: checks upstream Critical/Fetch/Thinking quality before result polish
+
+Normal chat output for these stages must be localized, compact, and human-readable. Packet field names such as `realIntent`, `decisionImpactMap`, or `workerTaskPackets` may appear when useful, but they must be paired with human labels instead of being dumped as unexplained English keys.
+
+Governance-quality fallback is forbidden. Missing intent, evidence, design, owner, capability, dependency readiness, or worker work order means `block`, `return_to_stage`, or `capabilityGapPacket`. Runtime compatibility fallback may remain for host limitations such as a chat card instead of a popup, but it does not count as governance readiness.
 
 ## Business Flow Before Execution
 
@@ -165,9 +182,11 @@ For executable work, plan the business flow before writing code or changing file
 
 Not every task needs every lane, but omitted lanes should be intentional. The business-flow blueprint should explain:
 
+- what user pain/value and success standard the run serves
 - what capability is needed
 - which existing agent / skill / tool was found
 - whether an owner is reused, upgraded, or newly created
+- which expert lenses are relevant and which are explicitly not applicable
 - which lanes can run in parallel
 - who merges the outputs
 - how the result will be reviewed and verified
@@ -335,5 +354,5 @@ For maintainers:
 1. `README.md` or `README.zh-CN.md`
 2. `AGENTS.md`
 3. `CLAUDE.md` when touching Claude Code behavior
-4. `docs/runtime-capability-matrix.md` when changing cross-runtime trigger, hook, review, verification, stop, or writeback behavior
+4. This `AGENTS.md` Mechanical Enforcement section when changing cross-runtime trigger, hook, review, verification, stop, or writeback behavior
 5. `canonical/skills/meta-theory/references/dev-governance.md` for the long-form governed execution contract

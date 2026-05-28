@@ -6,6 +6,44 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.4.2] - 2026-05-28
+
+### 修复
+
+- **Planning files 8 阶段全覆盖** — 更新 `planning-files.md` 覆盖完整 spine（Critical → Fetch → Thinking → Execution → Review → Meta-Review → Verification → Evolution），而不仅限于 Stage 3。每个阶段现在都有明确的 planning file 更新职责。
+- **SKILL.md 引用对齐** — 更新 planning-files 引用描述，反映 8 阶段覆盖。
+
+### 变更
+
+- 版本升级：2.4.1 → 2.4.2。
+
+## [2.4.1] - 2026-05-28
+
+### 修复
+
+- **Meta-theory 交付可信度** — 将 `/meta-theory` 收敛为渐进式 dispatcher，长流程细节下沉到 references，并让 Critical / Fetch / Thinking / Review 的可见阶段反馈保持极简、人能看懂、跟随用户目标语言；内部 packet 字段名可显示，但必须配人话标签。
+- **验证证据链加固** — `verifySteps[].id` 必须绑定 `workerExecutionEvidence[].verifyStepRef`；`json-output` 必须真实可解析；`fixEvidence` 结构化；`accepted_risk` 必须有负责人和复查触发；`skipped` worker 证据不能再冒充 verified 或 public-ready。
+- **跨 runtime 提示词 / rules 对齐** — Conductor、Artisan、Cursor rules 和 runtime prompts 已对齐：只有 2+ 独立并行 lane 才用 agent-team playbook；能力发现按 runtime 感知；Cursor 生成提示词不再重复标题和警告。
+- **发布文档清理** — 修正已删除 runtime matrix 文档的陈旧链接；ECC 仓库统一为 `affaan-m/ECC`；同步新版本的包元数据。
+
+### 变更
+
+- 版本升级：2.4.0 -> 2.4.1。
+- 补充 rules 与 scripts 的维护入口，方便用户判断哪些规则和脚本当前有效，不再靠猜。
+
+## [2.4.0] - 2026-05-27
+
+### 修复
+
+- **ECC 安装策略修正** — ECC 现在指向 `affaan-m/ECC` 和 `ecc@ecc`；`codex`、`opencode`、`qwen` 等 home target 使用 ECC 原生 CLI 的 `core` profile；安装更新会清理旧的 `everything-claude-code` fallback 目录；`cursor`、`zed`、`gemini`、`codebuddy`、`antigravity`、`joycode` 等 project-local target 会提示在项目根目录运行 ECC，而不是误装到 npm 缓存或 `skills/` fallback。Codex 当前会得到上游 `refactor-cleaner` agent，但不会有 `/refactor-clean` slash command，因为上游 ECC 的 Codex target 不包含 `commands-core`。
+- **H-001** — README.md 徽章链接已使用 https://（已验证，无需修改）
+- **M-002** — MCP Memory Service 端点使用 MCP_MEMORY_URL 环境变量（已验证，无需修改）
+- **M-003** — 版本号不一致 - 统一为 2.4.0
+
+### 变更
+
+- 版本升级：2.3.2 → 2.4.0
+
 ## [2.3.2] - 2026-05-26
 
 ### 修复

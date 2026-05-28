@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Global sync: canonical meta-theory skill + Meta_Kim Claude runtime hook assets into runtime homes.
- * Flags: --check, --print-targets, --skip-global-hooks (skip Claude hooks copy + settings merge).
+ * Flags: --check, --print-targets, --with-global-hooks (opt into Claude hooks copy + settings merge).
  */
 
 import { createHash } from "node:crypto";
@@ -53,6 +53,8 @@ const sourceSkillFile = path.join(sourceDir, "SKILL.md");
 const checkOnly = process.argv.includes("--check");
 const printTargetsOnly = process.argv.includes("--print-targets");
 const skipGlobalHooks = process.argv.includes("--skip-global-hooks");
+const withGlobalHooks =
+  process.argv.includes("--with-global-hooks") && !skipGlobalHooks;
 const cliArgs = process.argv.slice(2);
 
 const repoHooksDir = path.join(canonicalRuntimeAssetsDir, "claude", "hooks");
@@ -360,7 +362,7 @@ async function runCheck() {
     }
   }
 
-  if (selectedTargetIds.includes("claude") && !skipGlobalHooks) {
+  if (selectedTargetIds.includes("claude") && withGlobalHooks) {
     const repoHooksFp = await fingerprintDir(repoHooksDir);
     const globalHooksPath = globalMetaKimHooksDir();
     const globalHooksFp = await fingerprintDir(globalHooksPath);
@@ -375,6 +377,10 @@ async function runCheck() {
     if (!hooksInSync) {
       failed = true;
     }
+  } else if (selectedTargetIds.includes("claude")) {
+    console.log(
+      `${C.yellow}⊘${C.reset} ${C.dim}Claude Code global hooks skipped (use --with-global-hooks to check them): ${globalMetaKimHooksDir()}${C.reset}`,
+    );
   }
 
   if (selectedTargetIds.includes("codex")) {
@@ -428,7 +434,7 @@ async function runSync() {
     );
   }
 
-  if (selectedTargetIds.includes("claude") && !skipGlobalHooks) {
+  if (selectedTargetIds.includes("claude") && withGlobalHooks) {
     await copyCanonicalHooksToGlobal();
     console.log(
       `${C.green}✓${C.reset} ${C.dim}Synced Claude Code global hooks: ${globalMetaKimHooksDir()}${C.reset}`,
@@ -436,7 +442,7 @@ async function runSync() {
     await syncClaudeGlobalSettingsHooks();
   } else {
     console.log(
-      `${C.yellow}⊘${C.reset} ${C.dim}Skipped Claude Code global hooks.${C.reset}`,
+      `${C.yellow}⊘${C.reset} ${C.dim}Skipped Claude Code global hooks (opt in with --with-global-hooks).${C.reset}`,
     );
   }
 
@@ -488,7 +494,7 @@ function printTargets() {
     `- ${path.join(runtimeHomes.codex.dir, "commands", "meta-theory.md")}`,
   );
   console.log("");
-  console.log("Claude Code hooks (unless --skip-global-hooks):");
+  console.log("Claude Code hooks (only with --with-global-hooks):");
   console.log(`- Scripts: ${globalMetaKimHooksDir()}`);
   console.log(
     `- Merged into: ${path.join(runtimeHomes.claude.dir, "settings.json")}`,

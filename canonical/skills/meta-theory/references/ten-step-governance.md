@@ -302,4 +302,4 @@ Prism judges output quality. **Who judges Prism’s judgment?**
 - Mark deltas vs last similar review
 - Accept Warden’s standard adjustments
 
-See `.claude/agents/meta-prism.md` “reviewed-party protocol.”
+See the canonical `meta-prism` agent definition's reviewed-party protocol, then use the current runtime mirror only as an adapter.

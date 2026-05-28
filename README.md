@@ -63,7 +63,8 @@ Recommended reading order:
 
 1. This file, `README.md`
 2. `AGENTS.md`
-3. `docs/runtime-capability-matrix.md`
+3. `CLAUDE.md` when working on Claude Code behavior
+4. `canonical/runtime-assets/cursor/rules/meta-enforcement.mdc` when working on Cursor rules
 
 ### Usage Paths
 
@@ -734,6 +735,23 @@ The three memory layers work together toward two core goals:
 | `npm run meta:verify:all` | Full validation, including runtime smoke checks |
 | `npm run meta:doctor:governance` | Governance health check |
 
+### Where the active rules live
+
+| Surface | Current source |
+| --- | --- |
+| Repository / Codex rules | `AGENTS.md` |
+| Claude Code rules | `CLAUDE.md` |
+| Meta-theory skill | `canonical/skills/meta-theory/SKILL.md` |
+| Meta-theory details | `canonical/skills/meta-theory/references/` |
+| Cursor declarative backup rule | `canonical/runtime-assets/cursor/rules/meta-enforcement.mdc` |
+| Runtime mirrors | `.claude/`, `.codex/`, `.cursor/`, `openclaw/` after `npm run meta:sync` |
+
+When in doubt, edit canonical sources first, then run `npm run meta:sync` and `npm run meta:check`.
+
+### How to tell which scripts are useful
+
+Start with `package.json` scripts. The supported maintenance paths are the `meta:*` commands documented above; most helper files under `scripts/` exist because those commands call them. Use `npm run meta:status`, `npm run meta:check`, and `npm run meta:verify:all` for normal operation. Inspect an individual helper only when a `package.json` script or test points to it.
+
 ### Skills and dependencies
 
 | Command | Purpose |
@@ -744,21 +762,23 @@ The three memory layers work together toward two core goals:
 | `npm run discover:global` | Scan global capabilities |
 | `npm run meta:sync:global` | Sync meta-theory to the user-level runtime |
 
-#### Plugin-marketplace skills (Superpowers, Everything Claude Code, cli-anything)
+#### Native dependency installs (Superpowers, ECC, cli-anything)
 
 Superpowers has native plugin entry points in Claude Code, Codex, and Cursor. Meta_Kim no longer treats the old Codex / Cursor `skills/superpowers` fallback as a correct plugin install; update runs remove the legacy fallback written by older Meta_Kim versions and tell users to use the host-native plugin entry point.
+
+ECC uses the upstream `affaan-m/ECC` package and plugin identity. Claude Code installs through `ecc@ecc`; home-based targets such as Codex, opencode, and Qwen use ECC's own CLI installer with the `core` profile. Project-local ECC targets such as Cursor, Zed, Gemini, CodeBuddy, Antigravity, and JoyCode must be installed from each project root with the upstream ECC command, so Meta_Kim cleans old fallback directories and prints the exact command instead of installing into the wrong global or npm-cache directory.
 
 For plugin bundles without a native host plugin entry point, the installer still falls back to a sparse-checkout of the upstream bundle's runtime-specific subtree:
 
 | Runtime | Preferred subdir chain |
 | --- | --- |
 | Claude Code | native `claude plugin install <spec>@<marketplace>` (skills without `claudePlugin` fall back to `skills/`) |
-| Codex | Superpowers uses the Codex Plugins pane or `/plugins`; other bundles fall back through `.codex/` → `.codex-plugin/` → `skills/` |
-| Cursor | Superpowers uses `/add-plugin superpowers` or Cursor's plugin marketplace; other bundles fall back through `.cursor/` → `.cursor-plugin/` → `skills/` |
+| Codex | Superpowers uses the Codex Plugins pane or `/plugins`; ECC uses `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target codex` and currently installs the `refactor-cleaner` agent, not the `/refactor-clean` slash command because upstream ECC does not expose `commands-core` for Codex; other bundles fall back through `.codex/` → `.codex-plugin/` → `skills/` |
+| Cursor | Superpowers uses `/add-plugin superpowers` or Cursor's plugin marketplace; ECC is project-local: run `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target cursor` from the project root; other bundles fall back through `.cursor/` → `.cursor-plugin/` → `skills/` |
 | OpenClaw | `skills/` |
-| opencode | `.opencode/` → `skills/` |
+| opencode | ECC uses `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target opencode`; other bundles fall back through `.opencode/` → `skills/` |
 
-The extracted tree lands in `~/.<runtime>/skills/<id>/`. Run `npm run meta:deps:install:claude-plugins` for the Claude marketplace path only, or `npm run meta:deps:install:all-runtimes` to cover every runtime at once. Upgrading from an older install? Legacy full-repo clones are auto-detected by the `.claude-plugin/` marker at the target root and re-extracted on the next run; old Codex/Cursor `skills/superpowers` fallbacks are removed and replaced with native-plugin instructions.
+Sparse-checkout fallback trees land in `~/.<runtime>/skills/<id>/`; native ECC installs do not. Run `npm run meta:deps:install:claude-plugins` for the Claude marketplace path only, or `npm run meta:deps:install:all-runtimes` to cover every supported home runtime at once. Upgrading from an older install? Legacy full-repo clones are auto-detected by the `.claude-plugin/` marker at the target root and re-extracted on the next run; old Codex/Cursor `skills/superpowers`, `skills/ecc`, and `skills/everything-claude-code` fallbacks are removed or replaced with native-install instructions.
 
 ### Advanced ops
 
@@ -856,8 +876,9 @@ Meta_Kim uses MCP (Model Context Protocol) to expand the capability boundary of 
 
 - [README.zh-CN.md](README.zh-CN.md)
 - [AGENTS.md](AGENTS.md)
+- [CLAUDE.md](CLAUDE.md)
 - [config/contracts/workflow-contract.json](config/contracts/workflow-contract.json)
-- [docs/runtime-capability-matrix.md](docs/runtime-capability-matrix.md)
+- [canonical/runtime-assets/cursor/rules/meta-enforcement.mdc](canonical/runtime-assets/cursor/rules/meta-enforcement.mdc)
 
 ---
 
@@ -881,7 +902,7 @@ Meta_Kim is MIT licensed. The following optional skill repositories are installe
 | [KimYx0207/findskill](https://github.com/KimYx0207/findskill) | MIT |
 | [KimYx0207/HookPrompt](https://github.com/KimYx0207/HookPrompt) | MIT |
 | [obra/superpowers](https://github.com/obra/superpowers) | MIT |
-| [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code) | MIT |
+| [affaan-m/ECC](https://github.com/affaan-m/ECC) | MIT |
 | [OthmanAdi/planning-with-files](https://github.com/OthmanAdi/planning-with-files) | MIT |
 | [HKUDS/CLI-Anything](https://github.com/HKUDS/CLI-Anything) | Apache 2.0 |
 | [garrytan/gstack](https://github.com/garrytan/gstack) | MIT |

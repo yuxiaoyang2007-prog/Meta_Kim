@@ -67,10 +67,11 @@ trigger: "Evolution stage signals, SOUL.md drift detection, pattern reuse thresh
 Before building an evolution packet, Chrysalis must name the `coreProblem` in one sentence: what recurring pattern, boundary drift, capability gap, or scar is worth making permanent.
 
 - If the signal is one-off, local, or not reusable, set `writebackDecision: none` and explain why.
-- If missing information blocks a responsible writeback proposal, ask the smallest blocking clarification; otherwise proceed with explicit assumptions.
+- If missing information blocks a responsible writeback proposal, ask the fewest outcome-branching questions whose answers change permanence, target, evidence threshold, recursive risk, or acceptance. Otherwise proceed with explicit assumptions.
 - If the signal depends on current external facts, tool ecosystem state, or third-party behavior, require Fetch/Scout evidence before proposing permanence.
 - Chrysalis may perform read-only inspection and non-destructive verification needed to validate evolution signals, but must not design target-specific final content.
 - If a proposal affects user-visible behavior, agent boundaries, or canonical policy, route through Warden's gate and user confirmation where required; never directly edit canonical sources.
+- Production-correctness evolution must identify the failed upstream stage and the selected `workType`/`expertLens`; do not turn a one-off fallback, generic owner, or missing worker task packet into permanent policy.
 
 ## Workflow
 
@@ -501,6 +502,6 @@ Canonical reference: `canonical/skills/meta-theory/SKILL.md` defines the 5 meta-
 2. **Capability Index** — Search the runtime's capability index for matching agent/skill patterns before searching externally.
 3. **findskill Search** — Only if local and index results are insufficient, invoke `findskill` to search external ecosystems. Query format: describe the capability gap in 1-2 sentences.
 4. **Provider-Agnostic Runtime Match** — If findskill returns no strong match, consult the current runtime's capability catalogs without converting any concrete child skill into a long-term dependency.
-5. **Generic Fallback** — Only use generic prompts or broad subagent types as last resort.
+5. **Compatibility Degradation Only** — If a runtime surface is missing, record degradation; do not use generic prompts or broad subagent types as governance-quality fallback.
 
 **Rule**: A Skill found locally always takes priority over one found externally. Document which step in the chain resolved the discovery.

@@ -102,16 +102,36 @@
       ]
     },
     {
-      "id": "everything-claude-code",
-      "repo": "affaan-m/everything-claude-code",
-      "claudePlugin": "everything-claude-code@ecc",
-      "installMethod": "pluginMarketplace",
+      "id": "ecc",
+      "repo": "affaan-m/ECC",
+      "claudePlugin": "ecc@ecc",
+      "installMethod": "upstreamCli",
+      "upstreamPackage": "ecc-universal@2.0.0-rc.1",
+      "upstreamProfile": "core",
+      "legacyNames": ["everything-claude-code"],
+      "platformSupport": {
+        "claude": { "status": "native", "adapter": "claude-plugin" },
+        "codex": { "status": "native", "adapter": "ecc-home-installer" },
+        "cursor": { "status": "native", "adapter": "ecc-project-installer" },
+        "opencode": { "status": "native", "adapter": "ecc-home-installer" },
+        "qwen": { "status": "native", "adapter": "ecc-home-installer" },
+        "zed": { "status": "native", "adapter": "ecc-project-installer" },
+        "gemini": { "status": "native", "adapter": "ecc-project-installer" },
+        "codebuddy": { "status": "native", "adapter": "ecc-project-installer" },
+        "antigravity": { "status": "native", "adapter": "ecc-project-installer" },
+        "joycode": { "status": "native", "adapter": "ecc-project-installer" }
+      },
       "targets": [
         "claude",
         "codex",
-        "openclaw",
         "cursor",
-        "opencode"
+        "opencode",
+        "qwen",
+        "zed",
+        "gemini",
+        "codebuddy",
+        "antigravity",
+        "joycode"
       ]
     },
     {

@@ -569,7 +569,7 @@ describe("05 — Type B Agent Creation Pipeline", async () => {
       assert.deepEqual(deliverables.artisan, [
         "Skill Loadout",
         "MCP / Tool Loadout",
-        "Fallback Plan",
+        "Runtime Compatibility Plan",
         "Capability Gap List",
         "Adoption Notes",
       ]);

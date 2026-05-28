@@ -27,13 +27,18 @@ describe("release documentation semantics", () => {
     }
   });
 
-  test("runtime coverage audit uses current Codex and Cursor skill paths", () => {
-    const raw = readFileSync(
-      path.join(root, "docs", "runtime-coverage-audit.md"),
+  test("runtime coverage guidance uses current Codex and Cursor skill paths", () => {
+    const agents = readFileSync(path.join(root, "AGENTS.md"), "utf8");
+    const syncConfig = readFileSync(
+      path.join(root, "config", "sync.json"),
       "utf8",
     );
+    const raw = `${agents}\n${syncConfig}`;
 
-    assert.match(raw, /\| 项目级 Skill \| .*`\.agents\/skills\/`.*`\.codex\/skills\/`.*`\.cursor\/skills\/`/);
+    assert.match(raw, /`\.agents\/skills\/`/);
+    assert.match(raw, /`\.codex\/skills\/`/);
+    assert.match(raw, /`\.cursor\/skills\/meta-theory\/`|"\.cursor\/skills"/);
     assert.match(raw, /`\.agents\/skills\/meta-theory\/SKILL\.md`/);
+    assert.doesNotMatch(raw, /docs\/runtime-coverage-audit\.md/);
   });
 });

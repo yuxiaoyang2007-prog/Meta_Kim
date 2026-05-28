@@ -72,6 +72,13 @@ export const SCAR_IMPACT_LEVELS = ["none", "degraded", "recovered", "critical"];
 export const REFERENCE_FILES = [
   "meta-theory.md",
   "dev-governance.md",
+  "path-selection.md",
+  "spine-state.md",
+  "runtime-codex.md",
+  "owner-resolution.md",
+  "verification-evidence.md",
+  "planning-files.md",
+  "evolution-writeback.md",
   "rhythm-orchestration.md",
   "intent-amplification.md",
   // Legacy file name kept as a compatibility alias for the 11-phase workflow reference.
@@ -139,11 +146,15 @@ export async function readJson(relativePath) {
 /** Canonical skill + references — use for assertions whose content lives across files. */
 export async function loadMetaTheoryCorpus() {
   const skill = await readFile("canonical/skills/meta-theory/SKILL.md");
-  const devGov = await readFile("canonical/skills/meta-theory/references/dev-governance.md");
-  const metaTheory = await readFile("canonical/skills/meta-theory/references/meta-theory.md");
-  const createAgent = await readFile("canonical/skills/meta-theory/references/create-agent.md");
-  const combined = `${skill}\n${devGov}\n${metaTheory}\n${createAgent}`;
-  return { skill, devGov, metaTheory, createAgent, combined };
+  const references = {};
+  for (const file of REFERENCE_FILES) {
+    references[file] = await readFile(`canonical/skills/meta-theory/references/${file}`);
+  }
+  const devGov = references["dev-governance.md"];
+  const metaTheory = references["meta-theory.md"];
+  const createAgent = references["create-agent.md"];
+  const combined = [skill, ...REFERENCE_FILES.map((file) => references[file])].join("\n");
+  return { skill, devGov, metaTheory, createAgent, references, combined };
 }
 
 export async function fileExists(relativePath) {

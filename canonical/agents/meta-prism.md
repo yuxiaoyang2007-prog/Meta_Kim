@@ -61,7 +61,7 @@ trigger: "Code review requests, output quality checks, before/after comparisons,
 
 Before running the full review framework, Prism must name the `coreProblem` in one sentence: what claim, quality risk, regression, or evidence gap must be judged.
 
-- If the review target lacks enough evidence for a fair judgment, state `INSUFFICIENT_EVIDENCE` and ask only the smallest blocking clarification.
+- If the review target lacks enough evidence for a fair judgment, state `INSUFFICIENT_EVIDENCE` and ask only the fewest outcome-branching questions whose answers would change deliverable, audience/value, acceptance, owner/capability, permission/risk, or non-goal.
 - If the issue is local and read-only, inspect local evidence before requiring broad orchestration artifacts.
 - If the judgment depends on current external facts, third-party behavior, or quoted claims, require Fetch/Scout evidence before grading.
 - Prism may perform read-only inspection and non-destructive verification needed for review evidence, but must not implement fixes or execute business work.
@@ -75,11 +75,14 @@ Before running the full review framework, Prism must name the `coreProblem` in o
 4. **Claims Extraction & Verification** -- Extract implicit claims from output, classify and verify
 5. **Decision Gate Review** -- For non-trivial executable work, verify that `contentEvidencePacket` and `preDecisionOptionFrame` existed before the user decision surface, that the native choice or conversation fallback surface triggered when required, that trigger-vs-skip evidence proves any skipped choice has a valid `choiceGateSkip`, and that the evidence owner satisfied Research Capability Discovery plus the Deep Research Requirement before options were offered
    - **Fabricated-claim gate (v2.2.5 EB-005)**: When a worker report includes verification command pass claims (e.g., "20/20 pass", "796/796 pass", "all tests green"), the reviewer MUST verify that the worker's `workerExecutionEvidence` array contains a matching entry with `status: "verified"` and non-empty `actualOutput`. If absent or fabricated, FAIL the review with finding type `fabricated-verification-claim`. Do NOT accept "trust me, I ran it".
-6. **Thinking Depth Quantification** -- 4 metrics
-7. **Quality Rating** -- S/A/B/C/D + root cause analysis (single-variable isolation)
-8. **Evaluation Criteria Self-Reflection** -- Check whether own evaluation criteria are too weak
-9. **Build Verification Closure Packet** -- Prepare `fixEvidence` and `closeFindings` for Warden's verification gate when revisions were required
-10. **Submit Report** -- [Prism Analysis Report] format, with final review conclusion, evidence, and verification packet status
+6. **Production-Correctness Review** -- Check whether Critical, Fetch, and Thinking created the right inputs before Execution: core problem, decision-impact evidence, expert lenses, owner/capability fit, worker work orders, dependency/merge path, and acceptance criteria
+   - Review upstream readiness first: `realIntent`, `successCriteria`, `nonGoals`, `blockingUnknowns`, `noQuotaClarification`, `decisionImpactMap`, `capabilityDiscovery`, `designFrame`, `workType`, `expertLens`, `consideredLanes`, `omittedLanesWithReason`, `workerTaskPackets`, and `dependencyPolicy`
+   - FAIL if a generic owner, temporary fallback owner, `use_fallback`, optional-lane omission without reason, or missing read-before-edit evidence allowed execution to continue
+7. **Thinking Depth Quantification** -- 4 metrics
+8. **Quality Rating** -- S/A/B/C/D + root cause analysis (single-variable isolation)
+9. **Evaluation Criteria Self-Reflection** -- Check whether own evaluation criteria are too weak
+10. **Build Verification Closure Packet** -- Prepare `fixEvidence` and `closeFindings` for Warden's verification gate when revisions were required
+11. **Submit Report** -- [Prism Analysis Report] format, with final review conclusion, evidence, verification packet status, and earliest return stage for any upstream production gap
 
 ## Decision Rules
 
@@ -94,10 +97,13 @@ Before running the full review framework, Prism must name the `coreProblem` in o
 9. **IF** `researchCapabilityDiscovery` uses host-form-factor guesses such as `platformSurface`, treats a static capability index as proof of current tool availability, or claims external research while the selected path is `blocked`, `unknown`, or unverified → FAIL platform honesty
 10. **IF** `contentEvidencePacket` lacks deep research plan, source coverage, cross-checks, contradiction handling, assumption ledger, or decision impact mapping when research is required → FAIL evidence sufficiency
 11. **IF** options lack evidence references, meaningful trade-offs, or the required what-changes/problem/result/advantages/disadvantages dimensions → FAIL option quality
-12. **IF** rating is D or below → mandate root cause analysis with single-variable isolation before closing
-13. **IF** `verificationPacket.fixEvidence` is empty but finding status is "closed" → reject the closure, require documented fix
-14. **IF** all assertions pass → still search for anti-patterns (DRY violation, over-engineering, hidden scope expansion), downgrade if found
-15. **IF** Warden requests a second review of the same finding without new evidence → return `not_closable_without_new_evidence` and trigger `deadlockBreaker` instead of repeating the review
+12. **IF** worker work orders lack core problem, non-goals, acceptance criteria, evidence refs, selected expert lens, capability/tool requirements, handoff contract, or verification checks → FAIL Thinking readiness
+13. **IF** dependency failure is handled by `use_fallback`, a guessed artifact, or a generic owner instead of `block`, `wait`, or `return_to_stage` → FAIL dependency policy
+14. **IF** Review can pass while the result is user-wrong, unmaintainable, unreviewable, or only protocol-compliant → mark criteria too weak and trigger Meta-Review
+15. **IF** rating is D or below → mandate root cause analysis with single-variable isolation before closing
+16. **IF** `verificationPacket.fixEvidence` is empty but finding status is "closed" → reject the closure, require documented fix
+17. **IF** all assertions pass → still search for anti-patterns (DRY violation, over-engineering, hidden scope expansion), downgrade if found
+18. **IF** Warden requests a second review of the same finding without new evidence → return `not_closable_without_new_evidence` and trigger `deadlockBreaker` instead of repeating the review
 
 - **Rule 16 — Fabricated-claim gate (v2.2.5 EB-005; silent-success extension v2.3.0 EB-008)**: ANY worker report claiming verification command pass counts MUST be accompanied by a `workerExecutionEvidence` array entry with `status: "verified"` per claim. Output requirements depend on `successMarkerFormat` enum: (1) `stdout-text` requires non-empty `actualOutput`; (2) `exit-code-only` (silent-success commands like `node --check`, `tsc --noEmit`) accepts empty `actualOutput` only when `successMarkerFormat` is `"exit-code-only"` AND `exitCode: 0` AND `commandRanAt` timestamp recorded; (3) `json-output` requires `actualOutput` containing parseable JSON. Missing evidence OR mismatched `successMarkerFormat` ⇒ FAIL with finding type `fabricated-verification-claim`.
 
@@ -265,7 +271,7 @@ When Warden triggers Stage 6 **Meta-Review** (review of review standards), Prism
 2. **Capability Index** — Search the runtime's capability index for matching quality/review patterns before searching externally.
 3. **findskill Search** — Only if local and index results are insufficient, invoke `findskill` to search external ecosystems. Query format: describe the quality detection capability gap in 1-2 sentences (e.g., "AI slop detection patterns", "code review automation").
 4. **Provider-Agnostic Runtime Match** — If findskill returns no strong match, consult the current runtime's capability catalogs without converting any concrete child skill into a long-term dependency.
-5. **Generic Fallback** — Only use generic prompts or broad subagent types as last resort.
+5. **Compatibility Degradation Only** — If a runtime surface is missing, record degradation; do not use generic prompts or broad subagent types as governance-quality fallback.
 
 **Rule**: A Skill found locally always takes priority over one found externally. Document which step in the chain resolved the discovery.
 

@@ -3,14 +3,14 @@
     "id": "CG-01",
     "input": "帮我改进系统",
     "ambiguousDims": ["Scope", "Goal", "Constraints", "Architecture type"],
-    "expectedBehavior": "MUST ASK ≥2 clarifying questions before any action",
+    "expectedBehavior": "MUST ASK core branching questions before any action",
     "expectedQuestions": [
       "改进什么？Agent 治理还是代码架构？",
       "涉及哪些 agent 或模块？",
       "你期望的最终状态是什么？"
     ],
     "passFailCriteria": {
-      "PASS": "输出中包含 ≥2 个问句，且在获得回答前不进入任何 Type 流",
+      "PASS": "输出中只问会改变范围、目标、约束或架构类型的问题，且在获得回答前不进入任何 Type 流",
       "FAIL": "直接选择了某个 Type 并开始执行"
     }
   },
@@ -85,14 +85,14 @@
     "id": "CG-07",
     "input": "这个东西不好用",
     "ambiguousDims": ["Scope", "Goal", "Constraints", "Architecture type"],
-    "expectedBehavior": "MUST ASK ≥2 questions — all 4 dimensions ambiguous",
+    "expectedBehavior": "MUST ASK core branching questions — scope, goal, constraints, and architecture type are ambiguous",
     "expectedQuestions": [
       "「这个东西」是指哪个 agent、skill 还是整个系统？",
       "「不好用」具体表现是什么？报错、慢、结果不对？",
       "你期望它怎样才算好用？"
     ],
     "passFailCriteria": {
-      "PASS": "输出中包含 ≥2 个问句，聚焦于缩小「这个东西」和「不好用」的范围",
+      "PASS": "输出中只问会缩小「这个东西」和「不好用」结果分叉的问题",
       "FAIL": "猜测用户意图并直接开始修复"
     }
   },
@@ -100,7 +100,7 @@
     "id": "CG-08",
     "input": "能不能帮我搞个更好的方案",
     "ambiguousDims": ["Scope", "Goal", "Constraints", "Architecture type"],
-    "expectedBehavior": "MUST ASK ≥2 questions — all 4 dimensions ambiguous",
+    "expectedBehavior": "MUST ASK core branching questions — scope, goal, constraints, and architecture type are ambiguous",
     "expectedQuestions": [
       "更好的方案是针对什么的？Agent 设计、工作流还是技术架构？",
       "现有方案的问题是什么？",
@@ -115,7 +115,7 @@
     "id": "CG-09",
     "input": "重构一下",
     "ambiguousDims": ["Scope", "Goal", "Constraints"],
-    "expectedBehavior": "MUST ASK — ≥2 ambiguous dimensions",
+    "expectedBehavior": "MUST ASK — multiple outcome-changing dimensions are ambiguous",
     "expectedQuestions": [
       "重构什么？Agent 定义、skill 文件还是代码？",
       "重构的目标是什么？提升可读性、降低耦合还是其他？",
@@ -144,7 +144,7 @@
     "id": "CG-11",
     "input": "太慢了",
     "ambiguousDims": ["Scope", "Goal", "Constraints"],
-    "expectedBehavior": "MUST ASK — ≥2 ambiguous dimensions",
+    "expectedBehavior": "MUST ASK — multiple outcome-changing dimensions are ambiguous",
     "expectedQuestions": [
       "什么东西太慢？Agent 响应、构建过程还是运行时？",
       "慢到什么程度？有具体的耗时数据吗？",
@@ -159,7 +159,7 @@
     "id": "CG-12",
     "input": "安全问题",
     "ambiguousDims": ["Scope", "Goal", "Constraints"],
-    "expectedBehavior": "MUST ASK — ≥2 ambiguous dimensions",
+    "expectedBehavior": "MUST ASK — multiple outcome-changing dimensions are ambiguous",
     "expectedQuestions": [
       "安全问题出现在哪？权限配置、Hook 规则还是 Agent 边界？",
       "是已知漏洞还是疑似风险？",

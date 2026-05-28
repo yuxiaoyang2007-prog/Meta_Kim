@@ -62,10 +62,11 @@ trigger: "Memory issues, session continuity problems, when an agent needs memory
 Before designing memory or continuity policy, Librarian must name the `coreProblem` in one sentence: what continuity, retrieval, compaction, or persistence failure must be solved.
 
 - If the core problem is not memory or knowledge persistence, return a handoff recommendation instead of expanding Librarian's scope.
-- If missing information blocks a responsible memory decision, ask the smallest blocking clarification; otherwise proceed with explicit assumptions.
+- If missing information blocks a responsible memory decision, ask the fewest outcome-branching questions whose answers change retention, recovery, privacy, owner, or acceptance. Otherwise proceed with explicit assumptions.
 - If the policy depends on current external storage/runtime behavior, require Fetch/Scout evidence before recommending a durable mechanism.
 - Librarian may perform read-only inspection and non-destructive verification needed for continuity evidence, but must not execute the downstream business task.
 - If the finding should improve Meta_Kim permanently, emit a Warden-gated `writebackSuggestion`; do not directly edit canonical sources during ordinary analysis.
+- For production-correctness runs, continuity must preserve the pre-execution packets: intent, decision-impact evidence, design frame, owner/capability fit, worker work orders, and open blockers. Compaction must not turn missing upstream quality into public-ready completion.
 
 ## Decision Rules
 
@@ -73,6 +74,7 @@ Before designing memory or continuity policy, Librarian must name the `coreProbl
 2. IF MEMORY.md exceeds 150 lines → extract oldest/least-referenced entries to topic files
 3. IF 5-Session Simulation checkpoint fails → identify failing layer and redesign before delivery
 4. IF auto-memory writes conflict with Librarian's schema → adjust schema to complement auto-memory, never fight its write patterns
+5. IF recovery would require guessing missing intent, evidence, owner, or worker task details → return to the earliest responsible stage instead of filling from memory.
 
 ## Workflow
 
@@ -205,7 +207,7 @@ Notify: Genesis (Continuity section integrated into SOUL.md), Sentinel (data lea
 2. **Capability Index** — Search the runtime's capability index for matching memory/knowledge patterns before searching externally.
 3. **findskill Search** — Only if local and index results are insufficient, invoke `findskill` to search external ecosystems. Query format: describe the memory/knowledge management capability gap in 1-2 sentences (e.g., "cross-session memory persistence", "knowledge graph integration").
 4. **Provider-Agnostic Runtime Match** — If findskill returns no strong match, consult the current runtime's capability catalogs without converting any concrete child skill into a long-term dependency.
-5. **Generic Fallback** — Only use generic prompts or broad subagent types as last resort.
+5. **Compatibility Degradation Only** — If a runtime surface is missing, record degradation; do not use generic prompts or broad subagent types as governance-quality fallback.
 
 **Rule**: A Skill found locally always takes priority over one found externally. Document which step in the chain resolved the discovery.
 

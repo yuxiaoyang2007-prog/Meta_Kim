@@ -106,8 +106,16 @@
           },
           "installMethod": {
             "type": "string",
-            "enum": ["pluginMarketplace", "gitClone", "gitCloneInstallScript", "subdirExtraction", "manual"],
-            "description": "How this skill is installed on target platforms. pluginMarketplace=Claude Code plugin marketplace; gitClone=plain git clone; gitCloneInstallScript=git clone then run setup script; subdirExtraction=git clone with subdir extraction; manual=copy files manually per README"
+            "enum": ["pluginMarketplace", "gitClone", "gitCloneInstallScript", "subdirExtraction", "manual", "upstreamCli"],
+            "description": "How this skill is installed on target platforms. pluginMarketplace=Claude Code plugin marketplace; upstreamCli=delegate to the dependency's own installer for non-Claude native runtime adapters; gitClone=plain git clone; gitCloneInstallScript=git clone then run setup script; subdirExtraction=git clone with subdir extraction; manual=copy files manually per README"
+          },
+          "upstreamPackage": {
+            "type": "string",
+            "description": "npm package used when installMethod is upstreamCli"
+          },
+          "upstreamProfile": {
+            "type": "string",
+            "description": "profile passed to the upstream installer when installMethod is upstreamCli"
           },
           "legacyNames": {
             "type": "array",
@@ -121,7 +129,19 @@
             "description": "Which runtimes this skill applies to. If omitted, applies to all runtimes.",
             "items": {
               "type": "string",
-              "enum": ["claude", "codex", "openclaw", "cursor", "opencode"]
+              "enum": [
+                "claude",
+                "codex",
+                "openclaw",
+                "cursor",
+                "opencode",
+                "qwen",
+                "zed",
+                "gemini",
+                "codebuddy",
+                "antigravity",
+                "joycode"
+              ]
             }
           },
           "hookSubdirs": {

@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meta-kim.dev/contracts/validation-rule.schema.json",
+  "title": "Meta_Kim Validation Rule Schema",
+  "description": "Schema for individual validation rule files in config/contracts/validation-rules/",
+  "type": "object",
+  "required": ["ruleId", "severity", "category", "condition", "errorMessageKey"],
+  "additionalProperties": false,
+  "properties": {
+    "ruleId": {
+      "type": "string",
+      "pattern": "^[A-Z0-9-]+$",
+      "description": "Unique rule identifier (e.g., EB-005-fabricated-verification, PRIN-01-configurable)"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low"],
+      "description": "Rule severity level determines enforcement action"
+    },
+    "category": {
+      "type": "string",
+      "description": "Rule category for grouping (evidence-integrity, protocol-compliance, principle-violation, naming-convention, or custom)"
+    },
+    "source": {
+      "type": "string",
+      "description": "Origin document, agent, or RFC (e.g., 'meta-prism Decision Rule 16', 'workflow-contract.json')"
+    },
+    "introducedIn": {
+      "type": "string",
+      "description": "Version when rule was introduced (e.g., 'v2.2.5')"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable rule description"
+    },
+    "condition": {
+      "type": "object",
+      "required": ["type"],
+      "description": "Validation condition definition",
+      "oneOf": [
+        {"$ref": "#/definitions/fieldArrayCheck"},
+        {"$ref": "#/definitions/enumValue"},
+        {"$ref": "#/definitions/structural"},
+        {"$ref": "#/definitions/patternScan"},
+        {"$ref": "#/definitions/duplicationCheck"},
+        {"$ref": "#/definitions/requiredFields"},
+        {"$ref": "#/definitions/formatCheck"},
+        {"$ref": "#/definitions/coverageCheck"},
+        {"$ref": "#/definitions/conditionalRequired"},
+        {"$ref": "#/definitions/jsonParseable"}
+      ]
+    },
+    "errorMessageKey": {
+      "type": "string",
+      "description": "Key in validation-contract.json errorMessages.messages"
+    },
+    "fixAction": {
+      "type": "string",
+      "description": "Human-readable fix instruction shown in error messages"
+    },
+    "closes": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "EB IDs or issue trackers this rule closes (e.g., ['EB-005'])"
+    }
+  },
+  "definitions": {
+    "fieldArrayCheck": {
+      "type": "object",
+      "required": ["type", "targetField", "predicate", "checks"],
+      "properties": {
+        "type": {"const": "field-array-check"},
+        "targetField": {"type": "string", "description": "Field path to array (e.g., 'workerExecutionEvidence')"},
+        "predicate": {"type": "string", "enum": ["all", "some", "none"]},
+        "checks": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/checkCondition"}
+        }
+      }
+    },
+    "enumValue": {
+      "type": "object",
+      "required": ["type", "targetField", "allowedValues"],
+      "properties": {
+        "type": {"const": "enum-value"},
+        "targetField": {"type": "string", "description": "Field path (supports [*] for array elements)"},
+        "allowedValues": {"type": "array", "items": {"type": "string"}},
+        "enforcement": {"type": "string", "enum": ["strict", "warn"]}
+      }
+    },
+    "structural": {
+      "type": "object",
+      "required": ["type", "check"],
+      "properties": {
+        "type": {"const": "structural"},
+        "check": {"type": "string", "enum": ["no-nested-choice-surface", "no-duplicate-keys", "no-circular-ref"]},
+        "targetPacket": {"type": "string"},
+        "forbiddenPattern": {"type": "string"},
+        "canonicalLocation": {"type": "string"},
+        "nestedLocationBehavior": {"type": "string", "enum": ["block", "warn-only", "auto-migrate"]}
+      }
+    },
+    "patternScan": {
+      "type": "object",
+      "required": ["type", "forbiddenPatterns"],
+      "properties": {
+        "type": {"const": "pattern-scan"},
+        "forbiddenPatterns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["pattern"],
+            "properties": {
+              "pattern": {"type": "string"},
+              "description": {"type": "string"},
+              "fileExtensions": {"type": "array", "items": {"type": "string"}},
+              "allowedContexts": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        "scanScope": {"type": "string", "description": "File path pattern (e.g., 'canonical/**/*.md')"}
+      }
+    },
+    "duplicationCheck": {
+      "type": "object",
+      "required": ["type", "check"],
+      "properties": {
+        "type": {"const": "duplication-check"},
+        "check": {"const": "no-duplicate-definitions"},
+        "scanScope": {"type": "string"},
+        "exceptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "reason": {"type": "string"},
+              "pattern": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "requiredFields": {
+      "type": "object",
+      "required": ["type", "targetPacket", "requiredFields"],
+      "properties": {
+        "type": {"const": "required-fields"},
+        "targetPacket": {"type": "string"},
+        "requiredFields": {"type": "array", "items": {"type": "string"}},
+        "forbiddenValues": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {"type": "array", "items": {"type": "string"}},
+              {"type": "string"}
+            ]
+          }
+        }
+      }
+    },
+    "formatCheck": {
+      "type": "object",
+      "required": ["type", "targetField"],
+      "properties": {
+        "type": {"const": "format-check"},
+        "targetField": {"type": "string"},
+        "forbiddenPatterns": {"type": "array", "items": {"type": "string"}},
+        "allowedPattern": {"type": "string"},
+        "examples": {
+          "type": "object",
+          "properties": {
+            "valid": {"type": "array", "items": {"type": "string"}},
+            "invalid": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "coverageCheck": {
+      "type": "object",
+      "required": ["type", "sourceField", "targetField"],
+      "properties": {
+        "type": {"const": "coverage-check"},
+        "sourceField": {"type": "string", "description": "Field requiring coverage"},
+        "targetField": {"type": "string", "description": "Field providing coverage"},
+        "requirement": {"type": "string", "enum": ["every", "some"]},
+        "coverageFields": {"type": "array", "items": {"type": "string"}},
+        "validStatuses": {"type": "array", "items": {"type": "string"}},
+        "requiredWhenSkippedOrFailed": {"type": "string"}
+      }
+    },
+    "conditionalRequired": {
+      "type": "object",
+      "required": ["type", "triggerConditions"],
+      "properties": {
+        "type": {"const": "conditional-required"},
+        "triggerConditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["condition", "then"],
+            "properties": {
+              "condition": {"type": "string"},
+              "then": {"type": "string"}
+            }
+          }
+        },
+        "requiredFields": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "jsonParseable": {
+      "type": "object",
+      "required": ["type", "field"],
+      "properties": {
+        "type": {"const": "json-parseable"},
+        "field": {"type": "string", "description": "Field containing JSON string"}
+      }
+    },
+    "checkCondition": {
+      "type": "object",
+      "oneOf": [
+        {
+          "required": ["field", "operator", "value"],
+          "properties": {
+            "field": {"type": "string"},
+            "operator": {"type": "string", "enum": ["eq", "ne", "gt", "lt", "gte", "lte", "contains", "matches"]},
+            "value": true
+          }
+        },
+        {
+          "required": ["type", "condition", "then"],
+          "properties": {
+            "type": {"const": "conditional"},
+            "condition": {"$ref": "#/definitions/checkCondition"},
+            "then": {"$ref": "#/definitions/checkCondition"}
+          }
+        },
+        {
+          "required": ["type", "conjunction", "checks"],
+          "properties": {
+            "type": {"const": "conjunction"},
+            "conjunction": {"type": "string", "enum": ["and", "or"]},
+            "checks": {"type": "array", "items": {"$ref": "#/definitions/checkCondition"}}
+          }
+        },
+        {
+          "required": ["type", "field"],
+          "properties": {
+            "type": {"const": "notEmpty"},
+            "field": {"type": "string"}
+          }
+        },
+        {
+          "required": ["type", "field"],
+          "properties": {
+            "type": {"const": "json-parseable"},
+            "field": {"type": "string"}
+          }
+        }
+      ]
+    }
+  }
+}

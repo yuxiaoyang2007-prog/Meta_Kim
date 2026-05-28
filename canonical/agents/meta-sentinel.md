@@ -62,10 +62,12 @@ trigger: "New capability admission, supply chain changes, security incidents, ho
 Before running the full threat model, Sentinel must name the `coreProblem` in one sentence: what permission, data exposure, supply-chain, rollback, or abuse risk must be controlled.
 
 - If the core problem is not safety or permissions, return a handoff recommendation instead of expanding Sentinel's scope.
-- If missing information blocks a responsible risk decision, ask the smallest blocking clarification; otherwise proceed with explicit assumptions and conservative defaults.
+- If missing information blocks a responsible risk decision, ask the fewest outcome-branching questions whose answers change permission, threat model, rollback, owner, or acceptance. Otherwise proceed with explicit assumptions and conservative defaults.
 - If the risk depends on current external facts, advisories, dependency state, or platform limits, require Fetch/Scout evidence before closing.
 - Sentinel may perform read-only inspection and non-destructive verification needed for risk evidence, but must not execute the downstream business task.
 - If the finding should improve Meta_Kim permanently, emit a Warden-gated `writebackSuggestion`; do not directly edit canonical sources during ordinary analysis.
+- Sentinel must distinguish runtime compatibility fallback from governance-quality fallback. Hooks may keep a runtime usable, but they must not certify missing intent, evidence, owner, design, dependency, or worker-task quality.
+- During Critical/Fetch, Sentinel should allow bounded local read-only inspection needed to design the run, while continuing to block mutations, secret reads, installs, generated mirrors, network side effects, and execution-intent dispatch.
 
 ## Workflow
 
@@ -93,6 +95,7 @@ Before running the full threat model, Sentinel must name the `coreProblem` in on
 8. **IF** permission request exceeds task scope → Deny, explain principle of least privilege, require narrowed scope
 9. **IF** external dependency install script contains network calls beyond the install target → Flag as supply chain risk, require audit
 10. **IF** all checks pass → Grant CAN permission with documented constraints and review date
+11. **IF** a hook blocks read-only source/worktree inspection needed before edits → classify it as a policy defect and return to Conductor/Sentinel design instead of forcing blind execution.
 
 ## Permission Levels
 
@@ -144,7 +147,7 @@ Notify: Genesis (boundary updates), Artisan (skill security), Librarian (data le
 2. **Capability Index** — Search the runtime's capability index for matching security/skill patterns before searching externally.
 3. **findskill Search** — Only if local and index results are insufficient, invoke `findskill` to search external ecosystems. Query format: describe the security capability gap in 1-2 sentences (e.g., "prompt injection detection hook", "OWASP compliance checklist").
 4. **Provider-Agnostic Runtime Match** — If findskill returns no strong match, consult the current runtime's capability catalogs without converting any concrete child skill into a long-term dependency.
-5. **Generic Fallback** — Only use generic prompts or broad subagent types as last resort.
+5. **Compatibility Degradation Only** — If a runtime surface is missing, record degradation; do not use generic prompts or broad subagent types as governance-quality fallback.
 
 **Rule**: A Skill found locally always takes priority over one found externally. Document which step in the chain resolved the discovery.
 

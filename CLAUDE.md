@@ -10,7 +10,7 @@ If you only keep six rules in mind:
 - `canonical/agents/`, `canonical/skills/meta-theory/`, `canonical/runtime-assets/`, `config/contracts/`, and `config/capability-index/` are the durable sources of truth.
 - `.claude/` is a runtime projection generated from canonical assets. Sync it instead of hand-forking it.
 - When `meta-theory` is active, the main Claude thread dispatches; it does not execute complex work directly.
-- Capability-first dispatch is **mechanically enforced** in Claude Code via the `enforce-agent-dispatch.mjs` PreToolUse hook (deny payload). Codex and Cursor v1.7+ now have the same hook projected; see `docs/cross-runtime-meta-enforcement.md` for the four-runtime matrix.
+- Capability-first dispatch is **mechanically enforced** in Claude Code via the `enforce-agent-dispatch.mjs` PreToolUse hook (deny payload). Codex and Cursor v1.7+ use the same projected hook; OpenClaw remains declarative. The current matrix lives in `AGENTS.md` under Mechanical Enforcement.
 - User-visible worker names must be coarse English business role-family names such as `frontend`, `backend`, or `test`, not scoped work items or host-generated personal nicknames. Localized trigger words may be recognized as input, but durable governance files stay English.
 
 ## What This Repository Is
@@ -140,7 +140,7 @@ Behavior:
 - **Override env var**: `META_KIM_CAPABILITY_GATE`. Values: `progressive`, `block`, `warn` (stderr warning only), `off` (gate disabled). Default: `progressive` (warn for the grace window, then block); `block` restores immediate deny. Use `warn` or `off` only for debugging — production runs should keep `progressive` (or `block` for strict environments).
 - **Other env vars**: `META_KIM_HOOK_RUNTIME` (one of `claude` / `codex` / `cursor`) selects the deny payload schema when the same hook is projected to a different runtime.
 
-The same hook script is now projected to Codex (`.codex/hooks/`) and Cursor v1.7+ (`.cursor/hooks/`) via `sync-runtimes.mjs`. See `docs/cross-runtime-meta-enforcement.md` for the four-runtime mechanical-deny matrix and OpenClaw's declarative-only gap.
+The same hook script is now projected to Codex (`.codex/hooks/`) and Cursor v1.7+ (`.cursor/hooks/`) via `sync-runtimes.mjs`. `AGENTS.md` is the current source for the four-runtime mechanical-deny matrix and OpenClaw's declarative-only gap.
 
 ## Business Flow Before Execution
 
@@ -359,7 +359,7 @@ For maintainers:
 1. `README.md` or `README.zh-CN.md`
 2. `AGENTS.md` for cross-runtime and Codex-facing rules
 3. `CLAUDE.md` for Claude Code hook and Agent-tool behavior
-4. `docs/runtime-capability-matrix.md` when changing trigger, hook, review, verification, stop, or writeback behavior
+4. The Mechanical Enforcement and Maintenance Loop sections in `AGENTS.md` when changing trigger, hook, review, verification, stop, or writeback behavior
 5. `canonical/skills/meta-theory/references/dev-governance.md` for the long-form governed execution contract
 
 ## graphify

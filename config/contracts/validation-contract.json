@@ -1,0 +1,431 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meta-kim.dev/contracts/validation-contract.schema.json",
+  "title": "Meta_Kim Validation Contract",
+  "description": "Declarative validation rules extracted from hardcoded prompts. Replaces 60% of agent-embedded validation logic with a single source of truth.",
+  "version": "1.0.0",
+  "introducedIn": "v2.4.0",
+  "closes": ["EB-005", "EB-008", "EB-004"],
+  "meta": {
+    "purpose": "Extract validation rules from agent prompts into declarative contract. Enables: (1) Single source of truth for validation logic, (2) Testable validation without LLM, (3) Easy rule updates without prompt changes, (4) Multi-language error messages.",
+    "migrationPath": "Phase 1: Create contract + validator runner. Phase 2: Migrate EB-005/EB-008/EB-004 rules. Phase 3: Add rule testing framework. Phase 4: Declarative rule extensions.",
+    "extensionMechanism": "New rules added via config/contracts/validation-rules/*.json. Each rule file declares: ruleId, severity, check condition, error message key."
+  },
+  "ruleRegistry": {
+    "description": "Central registry of all validation rules. Each rule has a unique ID, severity, check definition, and error message.",
+    "rules": {
+      "EB-005-fabricated-verification": {
+        "id": "EB-005-fabricated-verification",
+        "severity": "critical",
+        "category": "evidence-integrity",
+        "source": "meta-prism Decision Rule 16",
+        "introducedIn": "v2.2.5",
+        "description": "Workers claiming verification pass counts must provide workerExecutionEvidence with status='verified' and actualOutput. Empty evidence or fabricated claims = FAIL.",
+        "condition": {
+          "type": "field-array-check",
+          "targetField": "workerExecutionEvidence",
+          "predicate": "all",
+          "checks": [
+            {
+              "field": "status",
+              "operator": "eq",
+              "value": "verified"
+            },
+            {
+              "type": "conditional",
+              "condition": {
+                "field": "successMarkerFormat",
+                "operator": "eq",
+                "value": "stdout-text"
+              },
+              "then": {
+                "field": "actualOutput",
+                "operator": "notEmpty"
+              }
+            },
+            {
+              "type": "conditional",
+              "condition": {
+                "field": "successMarkerFormat",
+                "operator": "eq",
+                "value": "exit-code-only"
+              },
+              "then": {
+                "conjunction": "and",
+                "checks": [
+                  {
+                    "field": "exitCode",
+                    "operator": "eq",
+                    "value": 0
+                  },
+                  {
+                    "field": "commandRanAt",
+                    "operator": "notEmpty"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "conditional",
+              "condition": {
+                "field": "successMarkerFormat",
+                "operator": "eq",
+                "value": "json-output"
+              },
+              "then": {
+                "type": "json-parseable",
+                "field": "actualOutput"
+              }
+            }
+          ]
+        },
+        "errorMessageKey": "EB-005-fabricated-verification",
+        "fixAction": "Add workerExecutionEvidence entry with actual command output, exitCode, commandRanAt timestamp, and correct successMarkerFormat."
+      },
+      "EB-008-silent-success-ambiguity": {
+        "id": "EB-008-silent-success-ambiguity",
+        "severity": "high",
+        "category": "evidence-integrity",
+        "source": "meta-prism Decision Rule 16 (extended)",
+        "introducedIn": "v2.3.0",
+        "description": "Distinguish silent-success commands (node --check, tsc --noEmit) from fabricated empty evidence via successMarkerFormat enum.",
+        "condition": {
+          "type": "enum-value",
+          "targetField": "workerExecutionEvidence[*].successMarkerFormat",
+          "allowedValues": ["stdout-text", "exit-code-only", "json-output"],
+          "enforcement": "strict"
+        },
+        "errorMessageKey": "EB-008-silent-success-ambiguity",
+        "fixAction": "Set successMarkerFormat to 'exit-code-only' for silent-success commands, 'stdout-text' for output-producing commands, or 'json-output' for JSON results."
+      },
+      "EB-004-nested-pre-decision-frame": {
+        "id": "EB-004-nested-pre-decision-frame",
+        "severity": "low",
+        "category": "protocol-compliance",
+        "source": "spine-state.mjs preDecisionOptionFrame nesting issue",
+        "introducedIn": "v2.3.0",
+        "description": "preDecisionOptionFrame must be normalized to avoid nested spine state. choiceSurfaceState should live in ONE location.",
+        "condition": {
+          "type": "structural",
+          "check": "no-nested-choice-surface",
+          "targetPacket": "preDecisionOptionFrame",
+          "forbiddenPattern": "preDecisionOptionFrame.*choiceSurfaceState.*spine.*choiceSurfaceState",
+          "canonicalLocation": "spine.state.choiceSurfaceState",
+          "nestedLocationBehavior": "warn-only"
+        },
+        "errorMessageKey": "EB-004-nested-pre-decision-frame",
+        "fixAction": "Run scripts/migrate-spine-state-eb004.mjs to normalize nested preDecisionOptionFrame structure."
+      },
+      "PRIN-01-configurable": {
+        "id": "PRIN-01-configurable",
+        "severity": "medium",
+        "category": "principle-violation",
+        "source": "meta-prism Principle Violation Assertions",
+        "description": "Agent output must use configuration-driven behavior, not hardcoded values.",
+        "condition": {
+          "type": "pattern-scan",
+          "forbiddenPatterns": [
+            {
+              "pattern": "(?<!config\\.)['\"]value['\"]\\s*=",
+              "description": "Hardcoded 'value' string in logic"
+            },
+            {
+              "pattern": "(process\\.env\\.[A-Z_]+)\\s*\\|\\|\\s*['\"][^'\"]+['\"]",
+              "description": "Environment variable with hardcoded fallback"
+            }
+          ],
+          "allowedContexts": ["test fixtures", "example files"]
+        },
+        "errorMessageKey": "PRIN-01-configurable",
+        "fixAction": "Reference config.value or environment variable lookup instead of hardcoded literal."
+      },
+      "PRIN-02-single-source": {
+        "id": "PRIN-02-single-source",
+        "severity": "medium",
+        "category": "principle-violation",
+        "source": "meta-prism Principle Violation Assertions",
+        "description": "Each data/logic item has exactly one authoritative source.",
+        "condition": {
+          "type": "duplication-check",
+          "check": "no-duplicate-definitions",
+          "scanScope": "config/, canonical/agents/*.md",
+          "exceptions": [
+            {
+              "reason": "runtime projection",
+              "pattern": "canonical/* -> .claude/* mirrors"
+            }
+          ]
+        },
+        "errorMessageKey": "PRIN-02-single-source",
+        "fixAction": "Consolidate duplicate definitions into single source; import/reference from other locations."
+      },
+      "dispatch-envelope-completeness": {
+        "id": "dispatch-envelope-completeness",
+        "severity": "high",
+        "category": "protocol-compliance",
+        "source": "workflow-contract.json dispatchEnvelopePacket",
+        "description": "dispatchEnvelopePacket must have all required fields before worker dispatch.",
+        "condition": {
+          "type": "required-fields",
+          "targetPacket": "dispatchEnvelopePacket",
+          "requiredFields": [
+            "ownerAgent",
+            "businessRoleId",
+            "roleDisplayName",
+            "roleInstanceId",
+            "taskRef",
+            "allowedCapabilities",
+            "route",
+            "ownerSelection",
+            "memoryMode",
+            "reviewOwner",
+            "verificationOwner",
+            "userChoiceState",
+            "finalizationGate"
+          ],
+          "forbiddenValues": {
+            "roleDisplayName": ["agent-019e56a9", "^[A-Z][a-z]+$"],
+            "allowedCapabilities": ["[]"]
+          }
+        },
+        "errorMessageKey": "dispatch-envelope-completeness",
+        "fixAction": "Populate all required dispatchEnvelopePacket fields before worker dispatch."
+      },
+      "role-display-name-business-readable": {
+        "id": "role-display-name-business-readable",
+        "severity": "medium",
+        "category": "naming-convention",
+        "source": "agentBlueprintPacket namingPolicy",
+        "description": "roleDisplayName must be business-readable role-family names, not runtime aliases.",
+        "condition": {
+          "type": "format-check",
+          "targetField": "roleDisplayName",
+          "forbiddenPatterns": [
+            "^agent-[0-9a-f-]+$",
+            "^[A-Z][a-z]+$",
+            "[-_/\\\\:]"
+          ],
+          "allowedPattern": "^[a-z]+(-[a-z]+)*$",
+          "examples": {
+            "valid": ["frontend", "backend", "test", "review", "analysis"],
+            "invalid": ["agent-019e56a9", "Frontend", "front-end/page", "backend:api"]
+          }
+        },
+        "errorMessageKey": "role-display-name-business-readable",
+        "fixAction": "Use coarse English business role-family name. Put scope in roleInstanceId/shardScope/task text."
+      },
+      "worker-task-file-completion-list": {
+        "id": "worker-task-file-completion-list",
+        "severity": "high",
+        "category": "evidence-integrity",
+        "source": "workerResultPacket fileCompletionList",
+        "description": "Workers must report every promised file with explicit status in fileCompletionList.",
+        "condition": {
+          "type": "coverage-check",
+          "sourceField": "scopeFiles",
+          "targetField": "fileCompletionList",
+          "requirement": "every",
+          "coverageFields": ["path", "action", "status"],
+          "validStatuses": ["completed", "skipped", "failed"],
+          "requiredWhenSkippedOrFailed": "skipReason"
+        },
+        "errorMessageKey": "worker-task-file-completion-list",
+        "fixAction": "Populate fileCompletionList with one entry per file in scopeFiles. Include skipReason for skipped/failed entries."
+      },
+      "capability-gap-packet-required": {
+        "id": "capability-gap-packet-required",
+        "severity": "high",
+        "category": "protocol-compliance",
+        "source": "workflow-contract.json capabilityGapPacket requirement",
+        "description": "capabilityGapPacket required when owner creation/upgrade needed or role coverage fails.",
+        "condition": {
+          "type": "conditional-required",
+          "triggerConditions": [
+            {
+              "condition": "taskClassification.upgradeReasons includes 'owner_creation_required'",
+              "then": "require capabilityGapPacket"
+            },
+            {
+              "condition": "agentBlueprintPacket.roleCoverageGate === 'fail' AND agentBlueprintPacket.missingRoles is not empty",
+              "then": "require capabilityGapPacket"
+            },
+            {
+              "condition": "agentBlueprintPacket.roles[*].ownerResolution in ['create_owner_first', 'upgrade_existing_owner']",
+              "then": "require capabilityGapPacket"
+            }
+          ],
+          "requiredFields": [
+            "gapId",
+            "requestedCapability",
+            "currentAgentsChecked",
+            "insufficiencyReason",
+            "resolutionAction",
+            "requestedBy",
+            "approvedBy"
+          ]
+        },
+        "errorMessageKey": "capability-gap-packet-required",
+        "fixAction": "Create capabilityGapPacket with required fields when owner creation/upgrade is needed."
+      }
+    }
+  },
+  "errorMessages": {
+    "description": "Multi-language error messages. Keys reference rule IDs.",
+    "messages": {
+      "EB-005-fabricated-verification": {
+        "en-US": "Fabricated verification claim detected. Worker reported test pass counts without workerExecutionEvidence entry containing actualOutput. Command: {command}, Claimed: {passClaim}",
+        "zh-CN": "检测到伪造验证声明。Worker 报告测试通过数量但未提供包含 actualOutput 的 workerExecutionEvidence 条目。命令：{command}，声明：{passClaim}",
+        "technical": "workerResultPacket.workerExecutionEvidence missing entry with command='{command}' AND status='verified' AND non-empty actualOutput (when successMarkerFormat='stdout-text')."
+      },
+      "EB-008-silent-success-ambiguity": {
+        "en-US": "Ambiguous silent-success evidence. Command '{command}' has empty actualOutput but successMarkerFormat is not 'exit-code-only'. Cannot distinguish fabricated empty evidence from legitimate silent success.",
+        "zh-CN": "静默成功证据歧义。命令 '{command}' 的 actualOutput 为空但 successMarkerFormat 不是 'exit-code-only'。无法区分伪造的空证据与合法的静默成功。",
+        "technical": "workerExecutionEvidence entry for command '{command}' has empty actualOutput but successMarkerFormat='{provided}'. Expected 'exit-code-only' with exitCode=0 and commandRanAt timestamp."
+      },
+      "EB-004-nested-pre-decision-frame": {
+        "en-US": "Nested preDecisionOptionFrame detected. choiceSurfaceState appears in both spine state and preDecisionOptionFrame. Use scripts/migrate-spine-state-eb004.mjs to normalize.",
+        "zh-CN": "检测到嵌套的 preDecisionOptionFrame。choiceSurfaceState 同时出现在 spine state 和 preDecisionOptionFrame 中。使用 scripts/migrate-spine-state-eb004.mjs 归一化。",
+        "technical": "preDecisionOptionFrame.choiceSurfaceState duplicates spine.state.choiceSurfaceState. Normalize to single location."
+      },
+      "PRIN-01-configurable": {
+        "en-US": "Configurable principle violation: Hardcoded value '{value}' found at {location}. Use config.{key} or environment variable instead.",
+        "zh-CN": "可配置原则违规：在 {location} 发现硬编码值 '{value}'。应使用 config.{key} 或环境变量替代。",
+        "technical": "Hardcoded literal violates PRIN-01. Expected config lookup."
+      },
+      "PRIN-02-single-source": {
+        "en-US": "Single source principle violation: '{key}' defined in multiple locations: {locations}. Consolidate to single source.",
+        "zh-CN": "单一来源原则违规：'{key}' 在多处定义：{locations}。合并为单一来源。",
+        "technical": "Duplicate definition violates PRIN-02. Define once, import elsewhere."
+      },
+      "dispatch-envelope-completeness": {
+        "en-US": "dispatchEnvelopePacket missing required fields: {missingFields}. Cannot dispatch worker without complete envelope.",
+        "zh-CN": "dispatchEnvelopePacket 缺少必需字段：{missingFields}。无法在不完整的信封下调度 worker。",
+        "technical": "Missing requiredFields: {missingFields}. Reference workflow-contract.json::protocols.dispatchEnvelopePacket.requiredFields."
+      },
+      "role-display-name-business-readable": {
+        "en-US": "roleDisplayName '{name}' violates business-readable naming convention. Must be coarse role-family name (e.g., 'frontend', 'backend'), not runtime alias ID or PascalCase.",
+        "zh-CN": "roleDisplayName '{name}' 违反业务可读命名规范。必须是粗粒度角色族名称（如 'frontend', 'backend'），不能是运行时别名 ID 或 PascalCase。",
+        "technical": "roleDisplayName must match /^[a-z]+(-[a-z]+)*$/. Use roleInstanceId/shardScope for scope detail."
+      },
+      "worker-task-file-completion-list": {
+        "en-US": "workerTaskPacket promised {promisedCount} files in scopeFiles but fileCompletionList only reports {reportedCount}. Missing entries for: {missingPaths}.",
+        "zh-CN": "workerTaskPromise 在 scopeFiles 中承诺 {promisedCount} 个文件但 fileCompletionList 仅报告 {reportedCount} 个。缺少条目：{missingPaths}。",
+        "technical": "fileCompletionList coverage incomplete. Each scopeFiles entry requires corresponding fileCompletionList entry with path/action/status."
+      },
+      "capability-gap-packet-required": {
+        "en-US": "capabilityGapPacket required but missing. Trigger condition: {trigger}. Conditions requiring gap packet: {conditions}",
+        "zh-CN": "capabilityGapPacket 必需但缺失。触发条件：{trigger}。需要 gap 包的条件：{conditions}",
+        "technical": "Missing capabilityGapPacket when ownerResolution=create_owner_first OR roleCoverageGate=fail with missingRoles OR upgradeReasons includes owner_creation_required."
+      }
+    }
+  },
+  "severityLevels": {
+    "critical": {
+      "description": "Must block workflow. Cannot proceed without fix.",
+      "action": "block"
+    },
+    "high": {
+      "description": "Should fail review. Requires fix before public-ready.",
+      "action": "fail-review"
+    },
+    "medium": {
+      "description": "Warning with degradation notice. Fix recommended.",
+      "action": "warn"
+    },
+    "low": {
+      "description": "Info only. Migration path provided.",
+      "action": "info"
+    }
+  },
+  "ruleCategories": {
+    "evidence-integrity": {
+      "description": "Rules verifying that claims are backed by actual evidence.",
+      "rules": ["EB-005-fabricated-verification", "EB-008-silent-success-ambiguity", "worker-task-file-completion-list"]
+    },
+    "protocol-compliance": {
+      "description": "Rules verifying workflow protocol adherence.",
+      "rules": ["EB-004-nested-pre-decision-frame", "dispatch-envelope-completeness", "capability-gap-packet-required"]
+    },
+    "principle-violation": {
+      "description": "Rules checking Meta_Kim constitutional principles.",
+      "rules": ["PRIN-01-configurable", "PRIN-02-single-source"]
+    },
+    "naming-convention": {
+      "description": "Rules enforcing naming standards.",
+      "rules": ["role-display-name-business-readable"]
+    }
+  },
+  "extensionMechanism": {
+    "description": "How to add new validation rules without modifying this contract file.",
+    "ruleFilePattern": "config/contracts/validation-rules/*.json",
+    "ruleFileSchema": {
+      "type": "object",
+      "required": ["ruleId", "severity", "category", "condition", "errorMessageKey"],
+      "properties": {
+        "ruleId": {
+          "type": "string",
+          "pattern": "^[A-Z0-9-]+$",
+          "description": "Unique rule identifier"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low"]
+        },
+        "category": {
+          "type": "string",
+          "description": "One of ruleCategories keys or new category"
+        },
+        "condition": {
+          "type": "object",
+          "description": "Validation condition definition (see conditionTypes)"
+        },
+        "errorMessageKey": {
+          "type": "string",
+          "description": "Key in errorMessages.messages"
+        },
+        "fixAction": {
+          "type": "string",
+          "description": "Human-readable fix instruction"
+        }
+      }
+    },
+    "conditionTypes": {
+      "field-array-check": "Validate array elements match predicates",
+      "enum-value": "Check field value against allowed enum",
+      "structural": "Check structural patterns (no nesting, no duplication)",
+      "pattern-scan": "Scan for forbidden regex patterns",
+      "duplication-check": "Check for duplicate definitions",
+      "required-fields": "Ensure all required fields present",
+      "format-check": "Validate field format against regex",
+      "coverage-check": "Ensure source list fully covered by target",
+      "conditional-required": "Require packet based on trigger conditions",
+      "json-parseable": "Verify string contains valid JSON"
+    }
+  },
+  "validatorBinding": {
+    "description": "Which validators enforce these rules.",
+    "validators": {
+      "validate-run-artifact": {
+        "script": "scripts/validate-run-artifact.mjs",
+        "enforces": ["EB-005-fabricated-verification", "EB-008-silent-success-ambiguity", "worker-task-file-completion-list", "dispatch-envelope-completeness", "role-display-name-business-readable", "capability-gap-packet-required"],
+        "phase": "narrative-tier-v2.3.0",
+        "futureBinding": "deferred-to-v2.4.0-R8"
+      },
+      "meta-prism": {
+        "agent": "canonical/agents/meta-prism.md",
+        "enforces": ["EB-005-fabricated-verification", "EB-008-silent-success-ambiguity", "PRIN-01", "PRIN-02", "PRIN-03", "PRIN-04", "PRIN-05"],
+        "phase": "review-stage"
+      },
+      "enforce-agent-dispatch": {
+        "hook": "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
+        "enforces": ["dispatch-envelope-completeness", "role-display-name-business-readable"],
+        "phase": "pre-dispatch"
+      },
+      "spine-state-validator": {
+        "script": "scripts/migrate-spine-state-eb004.mjs",
+        "enforces": ["EB-004-nested-pre-decision-frame"],
+        "phase": "migration-helper"
+      }
+    }
+  }
+}

@@ -268,13 +268,13 @@
       {
         "step": 3,
         "agent": null,
-        "description": "Decision: recurring gap → trigger Type B pipeline; one-off → temporary fallback owner with justification"
+        "description": "Decision: recurring gap → trigger Type B pipeline; one-off → block or return to Thinking with capabilityGapPacket"
       }
     ],
     "forbiddenBehavior": "meta-theory self-executes the audit; gap left unresolved with no owner-resolution",
     "passFailCriteria": {
-      "PASS": "Capability gap detected, owner-resolution branch entered: either Type B creation triggered for recurring need or temporary fallback owner assigned with explicit justification",
-      "FAIL": "meta-theory attempts the audit itself; no fallback mechanism invoked; gap silently ignored"
+      "PASS": "Capability gap detected, owner-resolution branch entered: either Type B creation triggered for recurring need or execution blocked with capabilityGapPacket",
+      "FAIL": "meta-theory attempts the audit itself; gap silently ignored or replaced by a temporary fallback owner"
     }
   },
   {

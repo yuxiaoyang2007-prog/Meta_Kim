@@ -1,6 +1,6 @@
-# Decision Template (4-Dimension Options)
+# Decision Template (Outcome-Branching Options)
 
-Use this template when multiple viable solutions exist with distinct trade-offs. Each question must have 3-4 options, and each option must be understandable to non-technical users.
+Use this template when multiple viable solutions exist with distinct trade-offs. Ask only questions whose answer changes execution, scope, risk, owner, or acceptance. Each visible question must have at least two materially different options, and each option must be understandable to non-technical users.
 
 ## Format
 
@@ -22,15 +22,15 @@ Use this template when multiple viable solutions exist with distinct trade-offs.
     "options": [
       {
         "label": "{Option A}",
-        "description": "{What changes}: {description}. {Problem solved}: {description}. {Advantages}: {description}. {Disadvantages}: {description}"
+        "description": "{What changes}: {description}. {Problem solved}: {description}. {Expected result}: {description}. {Advantages}: {description}. {Disadvantages}: {description}"
       },
       {
         "label": "{Option B}",
-        "description": "{Same 4-dimension format}"
+        "description": "{Same product-readable format}"
       },
       {
         "label": "{Option C}",
-        "description": "{Same 4-dimension format}"
+        "description": "{Same product-readable format}"
       }
     ],
     "multiSelect": false
@@ -69,3 +69,9 @@ Use this template when multiple viable solutions exist with distinct trade-offs.
 - 2+ viable solutions exist with clear trade-offs
 - Product/Business direction must be clarified
 - Security or rollback risk requires explicit acknowledgment
+
+## When Not to Use
+
+- The answer would not change the deliverable, owner, scope, risk, or acceptance
+- The assistant can proceed with an explicit assumption and document it
+- The question exists only to satisfy a question count

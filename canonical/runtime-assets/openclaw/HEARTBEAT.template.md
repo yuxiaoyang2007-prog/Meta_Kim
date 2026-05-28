@@ -18,7 +18,7 @@ If you cannot record the search outcome, **refuse** to execute and respond:
 
 This is not a soft preference. This is the OpenClaw-equivalent of the mechanical PreToolUse deny that Claude / Codex / Cursor enforce. Treat it as a hard contract.
 
-Cross-reference: see `docs/cross-runtime-meta-enforcement.md` for the full capability matrix and `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` for the mechanical sibling.
+Cross-reference: see `AGENTS.md` for the cross-runtime enforcement matrix and `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` for the mechanical sibling.
 
 ## Default Heartbeat Policy
 

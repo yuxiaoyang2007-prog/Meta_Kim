@@ -988,7 +988,7 @@ async function buildRepoCapabilityIndex() {
       "repo canonical capability index",
       "runtime mirror",
       "local global inventory",
-      "fallback general agent with capability gap record",
+      "capability gap packet and return to Thinking",
     ],
     summary: {
       totalAgents: capabilities.agents.length,

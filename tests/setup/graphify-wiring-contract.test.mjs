@@ -132,25 +132,17 @@ describe("graphify idempotent wiring (contract)", () => {
     assert.match(src, /continue;/);
   });
 
-  test("install and update validation skip local graphify gate but release validation keeps it", () => {
+  test("install uses scoped validation and release validation keeps graphify check", () => {
     const setupSrc = readFileSync(path.join(root, "setup.mjs"), "utf8");
-    const validateSrc = readFileSync(
-      path.join(root, "scripts/validate-project.mjs"),
-      "utf8",
+    const pkg = JSON.parse(
+      readFileSync(path.join(root, "package.json"), "utf8"),
     );
 
     assert.match(
       setupSrc,
       /"scripts\/validate-project\.mjs"[\s\S]*\["--context", "install"\]/,
     );
-    assert.match(validateSrc, /META_KIM_VALIDATE_SKIP_GRAPHIFY/);
-    assert.match(validateSrc, /"install"/);
-    assert.match(validateSrc, /"update"/);
-    assert.match(
-      validateSrc,
-      /graphify gate skipped for install\/update validation/,
-    );
-    assert.match(validateSrc, /await validateGraphifyGate\(\)/);
+    assert.match(pkg.scripts["meta:verify:all"], /meta:graphify:check/);
   });
 
   test("graphify-out remains a local generated artifact, not a package file", () => {

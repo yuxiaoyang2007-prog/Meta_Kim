@@ -33,7 +33,19 @@ export const localOverridesPath = path.join(
   ".meta-kim",
   "local.overrides.json",
 );
-export const supportedTargetIds = ["claude", "codex", "openclaw", "cursor"];
+export const supportedTargetIds = [
+  "claude",
+  "codex",
+  "openclaw",
+  "cursor",
+  "opencode",
+  "qwen",
+  "zed",
+  "gemini",
+  "codebuddy",
+  "antigravity",
+  "joycode",
+];
 
 const runtimeProfileCatalog = {
   claude: {
@@ -273,7 +285,7 @@ export async function loadRuntimeProfiles(manifest = null) {
   const declaredTargets =
     resolvedManifest.supportedTargets?.length > 0
       ? normalizeTargets(resolvedManifest.supportedTargets)
-      : [...supportedTargetIds];
+      : Object.keys(runtimeProfileCatalog);
   const profiles = {};
 
   for (const targetId of declaredTargets) {
@@ -381,6 +393,34 @@ const runtimeHomeSpecs = {
   cursor: {
     envKeys: ["META_KIM_CURSOR_HOME", "CURSOR_HOME"],
     defaultDir: ".cursor",
+  },
+  opencode: {
+    envKeys: ["META_KIM_OPENCODE_HOME", "OPENCODE_HOME"],
+    defaultDir: ".opencode",
+  },
+  qwen: {
+    envKeys: ["META_KIM_QWEN_HOME", "QWEN_HOME"],
+    defaultDir: ".qwen",
+  },
+  zed: {
+    envKeys: ["META_KIM_ZED_HOME", "ZED_HOME"],
+    defaultDir: ".zed",
+  },
+  gemini: {
+    envKeys: ["META_KIM_GEMINI_HOME", "GEMINI_HOME"],
+    defaultDir: ".gemini",
+  },
+  codebuddy: {
+    envKeys: ["META_KIM_CODEBUDDY_HOME", "CODEBUDDY_HOME"],
+    defaultDir: ".codebuddy",
+  },
+  antigravity: {
+    envKeys: ["META_KIM_ANTIGRAVITY_HOME", "ANTIGRAVITY_HOME"],
+    defaultDir: ".agent",
+  },
+  joycode: {
+    envKeys: ["META_KIM_JOYCODE_HOME", "JOYCODE_HOME"],
+    defaultDir: ".joycode",
   },
 };
 

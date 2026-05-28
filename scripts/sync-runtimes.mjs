@@ -1105,9 +1105,21 @@ async function collectSkillFiles(rootDir, currentDir = rootDir, bucket = []) {
     if (entry.isDirectory()) {
       await collectSkillFiles(rootDir, entryPath, bucket);
     } else if (entry.isFile()) {
+      if (entry.name.includes(".tmp.") || entry.name.endsWith(".tmp")) {
+        continue;
+      }
+      let content;
+      try {
+        content = await fs.readFile(entryPath, "utf8");
+      } catch (error) {
+        if (error.code === "ENOENT") {
+          continue;
+        }
+        throw error;
+      }
       bucket.push({
         relativePath: path.relative(rootDir, entryPath).replace(/\\/g, "/"),
-        content: await fs.readFile(entryPath, "utf8"),
+        content,
       });
     }
   }
@@ -1164,6 +1176,10 @@ function escapeTomlBasicMultiline(value) {
 
 function escapeTomlBasicString(value) {
   return String(value ?? "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 const CODEX_NICKNAME_CANDIDATES_BY_AGENT = {
@@ -1416,28 +1432,32 @@ export function buildCursorAgent(agent) {
     .replace(/\\/g, "\\\\")
     .replace(/"/g, '\\"')
     .replace(/\r?\n/g, "\\n");
+  const body = String(agent.body ?? "");
+  const bodyHasTitle = new RegExp(`^#\\s+${escapeRegExp(agent.title)}\\s*$`, "m").test(body);
+  const bodyHasGovernanceWarning = /GOVERNANCE LAYER AGENT\s+—\s+NOT FOR DIRECT EXECUTION/.test(body);
+  const generatedPreamble = [
+    bodyHasTitle ? null : `# ${agent.title}`,
+    bodyHasGovernanceWarning ? null : `> ${agent.summary}`,
+    `<!-- Generated from ${agent.sourceFile} by npm run sync:runtimes. Edit canonical source first. -->`,
+    `You are the Cursor agent mirror of Meta_Kim agent \`${agent.id}\`.`,
+    `Primary responsibility: ${agent.description}`,
+    "Stay inside your own responsibility boundary.",
+    "If the task crosses agent boundaries, hand the decision back to the parent session or recommend the correct sibling meta agent.",
+    "Use the portable meta-theory skill when it helps, but do not claim ownership of another agent's deliverable.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   return `---
 name: ${agent.id}
 description: "${description}"
 ---
 
-# ${agent.title}
-
-> ${agent.summary}
-
-<!-- Generated from ${agent.sourceFile} by npm run sync:runtimes. Edit canonical source first. -->
-
-You are the Cursor agent mirror of Meta_Kim agent \`${agent.id}\`.
-Primary responsibility: ${agent.description}
-
-Stay inside your own responsibility boundary.
-If the task crosses agent boundaries, hand the decision back to the parent session or recommend the correct sibling meta agent.
-Use the portable meta-theory skill when it helps, but do not claim ownership of another agent's deliverable.
+${generatedPreamble}
 
 ---
 
-${agent.body}
+${body}
 `;
 }
 

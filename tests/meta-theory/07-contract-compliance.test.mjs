@@ -401,6 +401,20 @@ describe("workflow-contract.json — schema compliance", async () => {
     assert.doesNotMatch(JSON.stringify(integration), /frontend_agent/);
     assert.doesNotMatch(JSON.stringify(integration), /backend_agent/);
     assert.doesNotMatch(JSON.stringify(integration), /"minPaths":3/);
+    assert.equal(integration.consumerContract.onTimeout, "block");
+  });
+
+  test("production correctness policy is source-first and no-quota", () => {
+    const policy = contract.runDiscipline?.qualityFirstPolicy ?? {};
+    assert.equal(policy.clarificationPolicy?.questionCountPolicy, "no_quota_ask_only_outcome_branching");
+    assert.equal("maxBlockingQuestions" in (policy.clarificationPolicy ?? {}), false);
+    assert.equal(policy.readBeforeEditPolicy?.requiredBeforeMutation, true);
+    assert.ok(policy.readBeforeEditPolicy?.allowedDuringCriticalFetch?.includes("git_status"));
+    assert.ok(policy.stageRequiredOutputs?.critical?.includes("realIntent"));
+    assert.ok(policy.stageRequiredOutputs?.fetch?.includes("decisionImpactMap"));
+    assert.ok(policy.stageRequiredOutputs?.thinking?.includes("workerTaskPackets"));
+    assert.ok(policy.dependencyPolicy?.criticalDependencyFailureActions?.includes("return_to_stage"));
+    assert.ok(policy.dependencyPolicy?.forbiddenActions?.includes("use_fallback"));
   });
 
   test("card governance model is explicit", () => {
@@ -489,7 +503,10 @@ describe("workflow-contract.json — schema compliance", async () => {
     const template = await readJson(
       "canonical/runtime-assets/openclaw/openclaw.template.json",
     );
-    const docs = await readFile("docs/cross-runtime-meta-enforcement.md");
+    const agentsGuide = await readFile("AGENTS.md");
+    const heartbeatTemplate = await readFile(
+      "canonical/runtime-assets/openclaw/HEARTBEAT.template.md",
+    );
 
     assert.match(mapping, /openclaw:[\s\S]*command:new/);
     assert.doesNotMatch(mapping, /openclaw:[\s\S]*before_tool_call/);
@@ -498,7 +515,8 @@ describe("workflow-contract.json — schema compliance", async () => {
       undefined,
       "OpenClaw template must not claim an installed before_tool_call gate",
     );
-    assert.match(docs, /OpenClaw[\s\S]*declarative/i);
+    assert.match(agentsGuide, /OpenClaw[\s\S]*declarative/i);
+    assert.match(heartbeatTemplate, /OpenClaw has no PreToolUse hook surface/i);
   });
 
   test("silence / skip / interrupt / shell policies are explicit", () => {
@@ -822,23 +840,27 @@ describe("workflow-contract.json — schema compliance", async () => {
     ]) {
       assert.ok(fields.includes(field), `intentGatePacket missing ${field}`);
     }
-    const soft =
-      contract.runDiscipline?.runArtifactValidation?.softPublicReadyTodoGate;
+    const publicReadyGate =
+      contract.runDiscipline?.runArtifactValidation?.publicReadyTodoGate;
     assert.ok(
-      soft?.environmentVariable,
-      "softPublicReadyTodoGate.environmentVariable",
+      publicReadyGate?.environmentVariable,
+      "publicReadyTodoGate.environmentVariable",
     );
-    assert.equal(soft?.environmentValue, "1");
+    assert.doesNotMatch(publicReadyGate.environmentVariable, /SOFT/);
+    assert.equal(publicReadyGate?.environmentValue, "1");
+    assert.equal(publicReadyGate?.defaultMode, "hard");
     const comment =
-      contract.runDiscipline?.runArtifactValidation?.softCommentReviewGate;
+      contract.runDiscipline?.runArtifactValidation?.commentReviewGate;
     assert.ok(
       comment?.environmentVariable,
-      "softCommentReviewGate.environmentVariable",
+      "commentReviewGate.environmentVariable",
     );
+    assert.doesNotMatch(comment.environmentVariable, /SOFT/);
     assert.equal(comment?.environmentValue, "1");
+    assert.equal(comment?.defaultMode, "hard");
     assert.ok(
       comment?.summaryBooleanField,
-      "softCommentReviewGate.summaryBooleanField",
+      "commentReviewGate.summaryBooleanField",
     );
   });
 
@@ -1079,6 +1101,69 @@ describe("workflow-contract.json — schema compliance", async () => {
       assert.ok(
         evolutionFields.includes(field),
         `evolutionWritebackPacket missing ${field}`,
+      );
+    }
+  });
+
+  test("quality policy requires ten-x path reasoning and user-facing closure rationale", () => {
+    const quality = contract.runDiscipline?.qualityFirstPolicy ?? {};
+    const thinkingOutputs = quality.stageRequiredOutputs?.thinking ?? [];
+    for (const field of [
+      "minimalFixPath",
+      "tenXPathShift",
+      "chosenRationale",
+      "omittedTenXWithReason",
+    ]) {
+      assert.ok(
+        thinkingOutputs.includes(field),
+        `Thinking required outputs missing ${field}`,
+      );
+    }
+
+    const summary = quality.userFacingSummaryContract ?? {};
+    assert.equal(summary.required, true);
+    for (const field of [
+      "whyChanged",
+      "whatChanged",
+      "userImpact",
+      "verificationEvidence",
+      "remainingLimits",
+    ]) {
+      assert.ok(
+        summary.requiredFields?.includes(field),
+        `userFacingSummaryContract missing ${field}`,
+      );
+    }
+  });
+
+  test("quality policy requires compact user-facing stage feedback", () => {
+    const feedback = contract.runDiscipline?.qualityFirstPolicy?.userFacingStageFeedbackContract ?? {};
+    assert.equal(feedback.required, true);
+    assert.equal(feedback.maxBulletsPerStage, 3);
+    assert.equal(feedback.hideProtocolIdsByDefault, true);
+    assert.equal(feedback.debugOnlyFullPackets, true);
+    assert.equal(feedback.hideInternalFieldNamesByDefault, false);
+    assert.equal(feedback.internalFieldNamesRequireHumanLabels, true);
+    assert.equal(feedback.localizedStagePurposeRequired, true);
+
+    for (const stage of ["Critical", "Fetch", "Thinking", "Review"]) {
+      assert.ok(
+        feedback.requiredStages?.includes(stage),
+        `userFacingStageFeedbackContract missing ${stage}`,
+      );
+    }
+
+    for (const field of ["stage", "plainVerdict", "decisionImpact", "nextAction"]) {
+      assert.ok(
+        feedback.requiredFields?.includes(field),
+        `userFacingStageFeedbackContract missing ${field}`,
+      );
+    }
+
+    for (const field of ["surfaceRequest", "realIntent", "workerTaskPackets"]) {
+      assert.ok(
+        feedback.humanLabeledInternalFieldExamples?.includes(field),
+        `userFacingStageFeedbackContract must require human labels for ${field}`,
       );
     }
   });

@@ -60,7 +60,7 @@ const EXPECTED_AGENT_WEAPON_MARKERS = {
     "## Required Deliverables",
     "Skill Loadout",
     "MCP / Tool Loadout",
-    "Fallback Plan",
+    "Runtime Compatibility Plan",
     "Capability Gap List",
     "Adoption Notes",
   ],
@@ -297,6 +297,66 @@ async function validateWorkflowContract() {
     "workflow-contract.json protocolFirst must be enabled.",
   );
 
+  const qualityFirst = contract.runDiscipline?.qualityFirstPolicy ?? {};
+  assert(
+    qualityFirst.clarificationPolicy?.askOnlyIfAnswerChangesExecution === true &&
+      qualityFirst.clarificationPolicy?.forbidQuestionQuotaFilling === true &&
+      qualityFirst.clarificationPolicy?.questionCountPolicy ===
+        "no_quota_ask_only_outcome_branching" &&
+      !("maxBlockingQuestions" in (qualityFirst.clarificationPolicy ?? {})),
+    "workflow-contract.json qualityFirstPolicy must forbid filler clarification questions.",
+  );
+  assert(
+    qualityFirst.readBeforeEditPolicy?.requiredBeforeMutation === true &&
+      qualityFirst.readBeforeEditPolicy?.allowedDuringCriticalFetch?.includes(
+        "git_status",
+      ) &&
+      qualityFirst.readBeforeEditPolicy?.blockedBeforeThinkingReadiness?.includes(
+        "mutation",
+      ),
+    "workflow-contract.json qualityFirstPolicy must require read-before-edit evidence before mutation.",
+  );
+  const stageOutputs = qualityFirst.stageRequiredOutputs ?? {};
+  for (const [stage, field] of [
+    ["critical", "realIntent"],
+    ["critical", "noQuotaClarification"],
+    ["fetch", "decisionImpactMap"],
+    ["fetch", "capabilityDiscovery"],
+    ["thinking", "designFrame"],
+    ["thinking", "workerTaskPackets"],
+    ["thinking", "dependencyPolicy"],
+    ["review", "fallbackBoundary"],
+  ]) {
+    assert(
+      stageOutputs[stage]?.includes(field),
+      `workflow-contract.json qualityFirstPolicy.stageRequiredOutputs.${stage} must include ${field}.`,
+    );
+  }
+  assert(
+    qualityFirst.dependencyPolicy?.criticalDependencyFailureActions?.includes(
+      "return_to_stage",
+    ) &&
+      qualityFirst.dependencyPolicy?.forbiddenActions?.includes("use_fallback"),
+    "workflow-contract.json qualityFirstPolicy.dependencyPolicy must block fallback dependency handling.",
+  );
+  for (const stage of ["critical", "fetch", "thinking", "execution", "review"]) {
+    assert(
+      typeof qualityFirst.stageQualityContract?.[stage] === "string" &&
+        qualityFirst.stageQualityContract[stage].length > 0,
+      `workflow-contract.json qualityFirstPolicy.stageQualityContract must define ${stage}.`,
+    );
+  }
+  for (const workType of ["content", "product", "code", "research", "design"]) {
+    assert(
+      qualityFirst.expertLensCatalog?.some((entry) => entry.workType === workType),
+      `workflow-contract.json qualityFirstPolicy.expertLensCatalog must include ${workType}.`,
+    );
+  }
+  assert(
+    qualityFirst.promptPrecisionPolicy?.compactNotationAllowed === true,
+    "workflow-contract.json qualityFirstPolicy must allow compact internal prompt notation.",
+  );
+
   const requiredPackets = protocolFirst.requiredPackets ?? [];
   for (const packet of [
     "taskClassification",
@@ -496,6 +556,19 @@ async function validateWorkflowContract() {
     "workflow-contract.json businessFlowBlueprintPacket must distinguish incomplete coverage from intentional scope reduction.",
   );
 
+  const runArtifactValidation = contract.runDiscipline?.runArtifactValidation ?? {};
+  assert(
+    runArtifactValidation.publicReadyTodoGate?.defaultMode === "hard" &&
+      runArtifactValidation.commentReviewGate?.defaultMode === "hard",
+    "workflow-contract.json run artifact quality gates must be hard by default.",
+  );
+  assert(
+    !JSON.stringify(contract.protocols?.workerTaskPacket ?? {}).includes(
+      "use_fallback",
+    ),
+    "workflow-contract.json workerTaskPacket dependency contract must not allow use_fallback.",
+  );
+
   for (const [protocolName, expectedFields] of [
     [
       "productCompletenessPacket",
@@ -544,6 +617,8 @@ async function validateWorkflowContract() {
   const workerFields = contract.protocols?.workerTaskPacket?.requiredFields ?? [];
   for (const field of [
     "todayTask",
+    "scopeFiles",
+    "workType",
     "qualityBar",
     "referenceDirection",
     "verifySteps",
@@ -766,7 +841,7 @@ async function validateCapabilityIndex() {
   assert(
     Array.isArray(index.fetchOrder) &&
       index.fetchOrder.join(" -> ") ===
-        "repo canonical capability index -> runtime mirror -> local global inventory -> fallback general agent with capability gap record",
+        "repo canonical capability index -> runtime mirror -> local global inventory -> capability gap packet and return to Thinking",
     "capability index fetchOrder must be canonical -> mirror -> local inventory -> fallback.",
   );
 
@@ -884,6 +959,13 @@ async function validatePortableSkill() {
   const referenceFiles = await listCanonicalSkillReferences();
   const skillSourcePath = canonicalSkillPath;
   const skillSource = await fs.readFile(skillSourcePath, "utf8");
+  const referenceSources = await Promise.all(
+    referenceFiles.map(async (referenceFile) => {
+      const referencePath = path.join(canonicalSkillReferencesDir, referenceFile);
+      return fs.readFile(referencePath, "utf8");
+    }),
+  );
+  const portableSkillCorpus = [skillSource, ...referenceSources].join("\n");
 
   for (const expected of [
     "name: meta-theory",
@@ -904,7 +986,7 @@ async function validatePortableSkill() {
     "Required Conductor deliverables",
   ]) {
     assert(
-      skillSource.includes(marker),
+      portableSkillCorpus.includes(marker),
       `Portable skill is missing station-deliverable marker ${marker}.`,
     );
   }

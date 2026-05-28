@@ -351,6 +351,10 @@ function loadSkillsManifest() {
         ...(skill.installRoot ? { installRoot: skill.installRoot } : {}),
         ...(skill.pluginHookCompat ? { pluginHookCompat: true } : {}),
         ...(skill.installMethod ? { installMethod: skill.installMethod } : {}),
+        ...(skill.upstreamPackage
+          ? { upstreamPackage: skill.upstreamPackage }
+          : {}),
+        ...(skill.upstreamProfile ? { upstreamProfile: skill.upstreamProfile } : {}),
         ...(skill.legacyNames ? { legacyNames: skill.legacyNames } : {}),
         ...(skill.hookSubdirs ? { hookSubdirs: skill.hookSubdirs } : {}),
         ...(skill.hookConfigFiles
@@ -397,6 +401,7 @@ function applySkillsIdFilter(skillRepos, filterIds) {
 const manifestLoad = loadSkillsManifest();
 let SKILL_REPOS = manifestLoad.skillRepos;
 const skillsArg = parseSkillsArg(cliArgs);
+const skillsFilterActive = skillsArg !== null;
 if (skillsArg !== null && skillsArg.length > 0) {
   const { repos, unknownIds } = applySkillsIdFilter(SKILL_REPOS, skillsArg);
   for (const id of unknownIds) {
@@ -429,6 +434,13 @@ function resolveHomes() {
     codex: resolveRuntimeHomeDir("codex"),
     openclaw: resolveRuntimeHomeDir("openclaw"),
     cursor: resolveRuntimeHomeDir("cursor"),
+    opencode: resolveRuntimeHomeDir("opencode"),
+    qwen: resolveRuntimeHomeDir("qwen"),
+    zed: resolveRuntimeHomeDir("zed"),
+    gemini: resolveRuntimeHomeDir("gemini"),
+    codebuddy: resolveRuntimeHomeDir("codebuddy"),
+    antigravity: resolveRuntimeHomeDir("antigravity"),
+    joycode: resolveRuntimeHomeDir("joycode"),
   };
 }
 
@@ -446,6 +458,14 @@ function skillInstallRootSegment(spec) {
 
 function resolveSkillTargetDir(runtimeHome, spec) {
   return path.join(runtimeHome, skillInstallRootSegment(spec), spec.id);
+}
+
+function usesGenericSkillInstall(spec) {
+  return (
+    !spec.claudePlugin &&
+    spec.installMethod !== "pluginMarketplace" &&
+    spec.installMethod !== "upstreamCli"
+  );
 }
 
 /** Legacy Codex ~/.agents mirror: skills/ vs plugins/ sibling layout. */
@@ -1553,7 +1573,7 @@ async function installAllSkillsForRuntime(label, runtimeHome, runtimeId) {
   };
 
   for (const spec of SKILL_REPOS) {
-    if (spec.claudePlugin || spec.installMethod === "pluginMarketplace")
+    if (!usesGenericSkillInstall(spec))
       continue; // plugin bundles handled by installPluginBundlesForNonClaudeRuntimes
     if (spec.targets && !spec.targets.includes(runtimeId)) {
       continue;
@@ -1586,7 +1606,7 @@ async function installAllSkillsForRuntime(label, runtimeHome, runtimeId) {
   const hasManifestSkillCreator = SKILL_REPOS.some(
     (spec) => spec.id === "skill-creator",
   );
-  if (!hasManifestSkillCreator) {
+  if (!skillsFilterActive && !hasManifestSkillCreator) {
     emitHeader();
     await installSkillCreator(skillsRoot);
   }
@@ -1599,8 +1619,7 @@ async function installAllSkillsForRuntime(label, runtimeHome, runtimeId) {
 }
 
 // ── Plugin bundles for non-Claude runtimes ────────────────────────────────
-// Upstream pluginMarketplace packages (e.g. obra/superpowers,
-// affaan-m/everything-claude-code) ship runtime-specific subtrees such as
+// Upstream pluginMarketplace packages (e.g. obra/superpowers) ship runtime-specific subtrees such as
 // `.codex/`, `.cursor-plugin/`, `.opencode/`. For non-Claude runtimes we
 // sparse-checkout the preferred subdir into `~/.<runtime>/skills/<id>/`.
 // Claude runtime is still handled by installClaudePlugins() via the native
@@ -1661,6 +1680,117 @@ async function cleanupNativePluginSkillFallback(runtimeHome, runtimeId, spec) {
   }
 }
 
+const ECC_HOME_INSTALL_TARGETS = new Set(["codex", "opencode", "qwen"]);
+const ECC_PROJECT_INSTALL_TARGETS = new Set([
+  "cursor",
+  "zed",
+  "gemini",
+  "codebuddy",
+  "antigravity",
+  "joycode",
+]);
+
+function upstreamCliTargetMode(runtimeId) {
+  if (ECC_HOME_INSTALL_TARGETS.has(runtimeId)) return "home";
+  if (ECC_PROJECT_INSTALL_TARGETS.has(runtimeId)) return "project";
+  return null;
+}
+
+function upstreamCliArgsForTarget(spec, runtimeId) {
+  const pkg = spec.upstreamPackage || `${spec.id}@latest`;
+  const profile = spec.upstreamProfile || "core";
+  return [
+    "--yes",
+    "--package",
+    pkg,
+    "ecc",
+    "install",
+    "--profile",
+    profile,
+    "--target",
+    runtimeId,
+  ];
+}
+
+function formatNpxCommand(args) {
+  return `npx ${args.join(" ")}`;
+}
+
+async function installUpstreamCliSpecs(runtimeHomes, activeTargets) {
+  if (skipPlugins) return;
+  const specs = SKILL_REPOS.filter((s) => s.installMethod === "upstreamCli");
+  if (specs.length === 0) return;
+
+  let hasOutput = false;
+  const emitHeader = () => {
+    if (hasOutput) return;
+    hasOutput = true;
+    console.log(`\n${C.bold}${AMBER}Upstream native installers${C.reset}`);
+  };
+
+  for (const spec of specs) {
+    const specTargets = spec.targets || [];
+    for (const runtimeId of activeTargets) {
+      if (!specTargets.includes(runtimeId)) continue;
+      const runtimeHome = runtimeHomes[runtimeId];
+      if (!runtimeHome) continue;
+
+      await cleanupLegacySkillNames(runtimeHome, spec);
+      await cleanupDisabledSkillResidue(runtimeHome, spec.id);
+
+      if (runtimeId === "claude" && spec.claudePlugin) {
+        continue;
+      }
+
+      const targetMode = upstreamCliTargetMode(runtimeId);
+      if (!targetMode) continue;
+
+      const args = upstreamCliArgsForTarget(spec, runtimeId);
+      const commandText = formatNpxCommand(args);
+
+      emitHeader();
+      if (targetMode === "project") {
+        const message = `${spec.id}: run from each ${runtimeId} project root: ${commandText}`;
+        if (dryRun) {
+          console.log(t.dryRun(message));
+        } else {
+          console.warn(`${C.yellow}⚠${C.reset} ${message}`);
+        }
+        continue;
+      }
+
+      if (dryRun) {
+        console.log(t.dryRun(commandText));
+        continue;
+      }
+
+      console.log(
+        `${C.cyan}→${C.reset} ${spec.id}: upstream native install for ${runtimeId}`,
+      );
+      const result = spawnSync("npx", args, {
+        cwd: os.homedir(),
+        encoding: "utf8",
+        shell: shouldUseCliShell(os.platform()),
+        stdio: "inherit",
+      });
+      if (result.status !== 0) {
+        installFailures.push({
+          skillLabel: `${spec.id} (${runtimeId})`,
+          repoUrl: spec.repo,
+          error: new Error(`upstream installer exited ${result.status}`),
+          classification: {
+            code: "upstream_installer_failed",
+            severity: "error",
+            summary: "The dependency's native installer failed.",
+            remediation:
+              `Run ${commandText} directly to see the upstream installer output.`,
+          },
+        });
+      }
+    }
+  }
+}
+
 function printNativePluginInstallHint(runtimeId, pluginId) {
   if (runtimeId === "codex") {
     console.log(
@@ -1681,7 +1811,9 @@ async function installPluginBundlesForNonClaudeRuntimes(
 ) {
   if (skipPlugins) return;
   const pluginBundleSpecs = SKILL_REPOS.filter(
-    (s) => s.claudePlugin || s.installMethod === "pluginMarketplace",
+    (s) =>
+      s.installMethod !== "upstreamCli" &&
+      (s.claudePlugin || s.installMethod === "pluginMarketplace"),
   );
   if (pluginBundleSpecs.length === 0) return;
 
@@ -1884,7 +2016,7 @@ async function installClaudePlugins() {
   // Registry: marketplace-id -> GitHub repo URL (marketplace.json's "name" field
   // becomes the marketplace-id used in "plugin@marketplace" spec).
   const MARKETPLACE_URLS = {
-    ecc: "https://github.com/affaan-m/everything-claude-code",
+    ecc: "https://github.com/affaan-m/ECC",
     "superpowers-marketplace":
       "https://github.com/obra/superpowers-marketplace",
   };
@@ -2054,6 +2186,30 @@ async function installClaudePlugins() {
     // If file missing or corrupt, fall through with fresh structure
   }
 
+  for (const repoSpec of SKILL_REPOS.filter((s) => s.claudePlugin)) {
+    const canonicalSpec = repoSpec.claudePlugin;
+    for (const legacyName of repoSpec.legacyNames || []) {
+      for (const key of Object.keys(installedPluginsFile.plugins)) {
+        if (key === canonicalSpec) continue;
+        if (!key.startsWith(`${legacyName}@`)) continue;
+        console.warn(
+          `${C.yellow}⚠${C.reset} ${repoSpec.id}: removing stale Claude plugin record ${key}`,
+        );
+        delete installedPluginsFile.plugins[key];
+      }
+    }
+  }
+  try {
+    await fs.mkdir(path.dirname(installedPluginsPath), { recursive: true });
+    await fs.writeFile(
+      installedPluginsPath,
+      JSON.stringify(installedPluginsFile, null, 2),
+      "utf8",
+    );
+  } catch {
+    // Non-fatal; Claude can recreate this file during plugin install.
+  }
+
   // Flat lookup by bare name (first matching record across all full keys)
   function getInstalledRecord(bareName) {
     const key = Object.keys(installedPluginsFile.plugins).find((k) =>
@@ -2120,8 +2276,7 @@ async function installClaudePlugins() {
     // spec format is "bareName@marketplace" — resolve repo from skills.json manifest
     const pluginRepoMap = {
       superpowers: "obra/superpowers",
-      ecc: "affaan-m/everything-claude-code",
-      "everything-claude-code": "affaan-m/everything-claude-code",
+      ecc: "affaan-m/ECC",
       "code-simplifier": "claude-plugins-official/code-simplifier",
       "rust-analyzer-lsp": "claude-plugins-official/rust-analyzer-lsp",
       "claude-md-management": "claude-plugins-official/claude-md-management",
@@ -2409,29 +2564,32 @@ async function cleanupClaudeNativePluginSkillResidue(homes, activeTargets) {
 
   const specs = SKILL_REPOS.filter((spec) => spec.claudePlugin);
   for (const spec of specs) {
-    const targetDir = path.join(homes.claude, "skills", spec.id);
-    if (!(await detectPluginBundleSkillResidue(targetDir))) {
-      continue;
-    }
-
-    assertUnderHome(targetDir);
-    console.warn(
-      `${C.yellow}⚠${C.reset} ${spec.id}: removing legacy Claude plugin bundle residue from skills discovery path`,
-    );
-    console.warn(`${C.dim}  ${targetDir}${C.reset}`);
-    if (dryRun) {
-      console.log(t.dryRun(`remove legacy plugin residue: ${targetDir}`));
-      continue;
-    }
-
-    try {
-      await rmDirWithRetry(targetDir);
-    } catch (error) {
-      if (isWindowsLockError(error)) {
-        console.warn(`${C.yellow}⚠${C.reset} ${t.warnStagingLocked(targetDir)}`);
+    const candidateNames = [spec.id, ...(spec.legacyNames || [])];
+    for (const candidateName of candidateNames) {
+      const targetDir = path.join(homes.claude, "skills", candidateName);
+      if (!(await detectPluginBundleSkillResidue(targetDir))) {
         continue;
       }
-      throw error;
+
+      assertUnderHome(targetDir);
+      console.warn(
+        `${C.yellow}⚠${C.reset} ${spec.id}: removing legacy Claude plugin bundle residue from skills discovery path`,
+      );
+      console.warn(`${C.dim}  ${targetDir}${C.reset}`);
+      if (dryRun) {
+        console.log(t.dryRun(`remove legacy plugin residue: ${targetDir}`));
+        continue;
+      }
+
+      try {
+        await rmDirWithRetry(targetDir);
+      } catch (error) {
+        if (isWindowsLockError(error)) {
+          console.warn(`${C.yellow}⚠${C.reset} ${t.warnStagingLocked(targetDir)}`);
+          continue;
+        }
+        throw error;
+      }
     }
   }
 }
@@ -2810,7 +2968,7 @@ async function installSkillsToMultipleRuntimes(
     // functions can skip cloning and Phase 2 can copy from that location.
     const alreadyExists = new Map();
     for (const spec of SKILL_REPOS) {
-      if (spec.claudePlugin || spec.installMethod === "pluginMarketplace")
+      if (!usesGenericSkillInstall(spec))
         continue; // plugin bundles handled separately
       const applicableRuntimes = targetRuntimeIds.filter(
         (id) => !spec.targets || spec.targets.includes(id),
@@ -2829,6 +2987,7 @@ async function installSkillsToMultipleRuntimes(
     const limitClone = createConcurrencyLimiter(MAX_CONCURRENT_CLONES);
 
     const stagePromises = SKILL_REPOS.filter((spec) => {
+      if (!usesGenericSkillInstall(spec)) return false;
       const needs = targetRuntimeIds.filter(
         (id) => !spec.targets || spec.targets.includes(id),
       );
@@ -2898,7 +3057,7 @@ async function installSkillsToMultipleRuntimes(
       };
 
       for (const spec of SKILL_REPOS) {
-        if (spec.claudePlugin || spec.installMethod === "pluginMarketplace")
+        if (!usesGenericSkillInstall(spec))
           continue; // plugin bundles handled separately
         if (spec.targets && !spec.targets.includes(runtimeId)) {
           continue;
@@ -2949,7 +3108,7 @@ async function installSkillsToMultipleRuntimes(
       const hasManifestSkillCreator = SKILL_REPOS.some(
         (s) => s.id === "skill-creator",
       );
-      if (!hasManifestSkillCreator) {
+      if (!skillsFilterActive && !hasManifestSkillCreator) {
         emitHeader();
         await installSkillCreator(skillsRoot);
       }
@@ -2988,7 +3147,13 @@ async function main() {
     };
 
     const targetRuntimeIds = activeTargets.filter(
-      (id) => homes[id] !== undefined,
+      (id) =>
+        homes[id] !== undefined &&
+        SKILL_REPOS.some(
+          (spec) =>
+            usesGenericSkillInstall(spec) &&
+            (!spec.targets || spec.targets.includes(id)),
+        ),
     );
 
     if (targetRuntimeIds.length === 1) {
@@ -3011,6 +3176,7 @@ async function main() {
       await cleanupClaudeNativePluginSkillResidue(homes, activeTargets);
     }
   }
+  await installUpstreamCliSpecs(homes, activeTargets);
   await installPluginBundlesForNonClaudeRuntimes(homes, activeTargets);
 
   // Optional: graphify (code knowledge graph)

@@ -83,7 +83,10 @@
     "trueUserIntent": "Harden refresh-token handling so secrets never live inline in source; one consolidated deliverable for the auth module.",
     "successCriteria": "Tests pass with env-only secrets; review finding finding-001 can be verified_closed; run artifact validates with npm run validate:run.",
     "nonGoals": "No unrelated auth flows (login UI, OAuth providers); no production deploy in this run.",
-    "intentPacketVersion": "v1"
+    "intentPacketVersion": "v1",
+    "realIntent": "Harden refresh-token handling so secrets never live inline in source; one consolidated deliverable for the auth module.",
+    "blockingUnknowns": [],
+    "noQuotaClarification": "No core-blocking clarification remains; do not ask filler questions."
   },
   "intentGatePacket": {
     "ambiguitiesResolved": true,
@@ -278,10 +281,12 @@
       "mergeOwner": "meta-warden",
       "verifySteps": [
         {
+          "id": "task-001-verify-1",
           "step": "replace inline secret fallback with env lookup",
           "verify": "no hardcoded secret in refresh.ts"
         },
         {
+          "id": "task-001-verify-2",
           "step": "update refresh.test.ts for new env-based path",
           "verify": "test suite passes"
         }
@@ -300,7 +305,37 @@
       "collisionPolicy": "no_overlap",
       "preDecisionOptionFrameRef": "preDecisionOptionFrame",
       "userChoiceState": "explicit_auto_proceed",
-      "finalizationGate": "after_user_choice_or_explicit_auto_proceed"
+      "finalizationGate": "after_user_choice_or_explicit_auto_proceed",
+      "coreProblem": "Produce auth-refresh-hardening without guessing.",
+      "scopeFiles": [
+        "src/auth/refresh.ts",
+        "tests/auth/refresh.test.ts"
+      ],
+      "workType": "code",
+      "nonGoals": [
+        "No unrelated scope expansion."
+      ],
+      "acceptanceCriteria": [
+        "Declared deliverable exists and verify steps pass."
+      ],
+      "expertLensRefs": [
+        "code"
+      ],
+      "evidenceRefs": [
+        "contentEvidencePacket.decisionImpactMap[0]"
+      ],
+      "capabilityRequirements": [
+        "Run-scoped owner and capability binding selected before execution."
+      ],
+      "toolRequirements": [
+        "Use only tools allowed by the worker task packet."
+      ],
+      "handoffContract": {
+        "handoffTo": "meta-prism",
+        "handoffWhen": "after worker output and evidence are complete",
+        "handoffPayload": "produced artifacts, fileCompletionList, workerExecutionEvidence",
+        "acceptanceSignal": "review owner can verify all acceptance criteria"
+      }
     },
     {
       "taskPacketId": "task-002",
@@ -319,10 +354,12 @@
       "mergeOwner": "meta-prism",
       "verifySteps": [
         {
+          "id": "task-002-verify-1",
           "step": "replace inline secret fallback with env lookup",
           "verify": "no hardcoded secret in refresh.ts"
         },
         {
+          "id": "task-002-verify-2",
           "step": "update refresh.test.ts for new env-based path",
           "verify": "test suite passes"
         }
@@ -341,7 +378,36 @@
       "collisionPolicy": "no_overlap",
       "preDecisionOptionFrameRef": "preDecisionOptionFrame",
       "userChoiceState": "explicit_auto_proceed",
-      "finalizationGate": "after_user_choice_or_explicit_auto_proceed"
+      "finalizationGate": "after_user_choice_or_explicit_auto_proceed",
+      "coreProblem": "Produce auth-refresh-hardening without guessing.",
+      "scopeFiles": [
+        "tests/auth/refresh.test.ts"
+      ],
+      "workType": "code",
+      "nonGoals": [
+        "No unrelated scope expansion."
+      ],
+      "acceptanceCriteria": [
+        "Declared deliverable exists and verify steps pass."
+      ],
+      "expertLensRefs": [
+        "code"
+      ],
+      "evidenceRefs": [
+        "contentEvidencePacket.decisionImpactMap[0]"
+      ],
+      "capabilityRequirements": [
+        "Run-scoped owner and capability binding selected before execution."
+      ],
+      "toolRequirements": [
+        "Use only tools allowed by the worker task packet."
+      ],
+      "handoffContract": {
+        "handoffTo": "meta-prism",
+        "handoffWhen": "after worker output and evidence are complete",
+        "handoffPayload": "produced artifacts, fileCompletionList, workerExecutionEvidence",
+        "acceptanceSignal": "review owner can verify all acceptance criteria"
+      }
     }
   ],
   "workerResultPackets": [
@@ -354,7 +420,55 @@
         "tests/auth/refresh.test.ts"
       ],
       "handoffTarget": "meta-prism",
-      "blockingIssues": []
+      "blockingIssues": [],
+      "fileCompletionList": [
+        {
+          "path": "src/auth/refresh.ts",
+          "action": "edit",
+          "scope": "Produced src/auth/refresh.ts",
+          "status": "completed"
+        },
+        {
+          "path": "tests/auth/refresh.test.ts",
+          "action": "edit",
+          "scope": "Produced tests/auth/refresh.test.ts",
+          "status": "completed"
+        }
+      ],
+      "workerExecutionEvidence": [
+        {
+          "verifyStepRef": "task-001-verify-1",
+          "expectedResult": "no hardcoded secret in refresh.ts",
+          "observedResult": "no hardcoded secret in refresh.ts",
+          "workingDirectory": ".",
+          "stderrTail": "",
+          "command": "fixture-verify task-001 1",
+          "actualOutput": "",
+          "passClaim": "no hardcoded secret in refresh.ts",
+          "status": "verified",
+          "successMarkerFormat": "exit-code-only",
+          "exitCode": 0,
+          "commandRanAt": "2026-05-26T00:00:00.000Z",
+          "runBy": "meta-conductor",
+          "runAt": "2026-05-26T00:00:00.000Z"
+        },
+        {
+          "verifyStepRef": "task-001-verify-2",
+          "expectedResult": "test suite passes",
+          "observedResult": "test suite passes",
+          "workingDirectory": ".",
+          "stderrTail": "",
+          "command": "fixture-verify task-001 2",
+          "actualOutput": "",
+          "passClaim": "test suite passes",
+          "status": "verified",
+          "successMarkerFormat": "exit-code-only",
+          "exitCode": 0,
+          "commandRanAt": "2026-05-26T00:00:00.000Z",
+          "runBy": "meta-conductor",
+          "runAt": "2026-05-26T00:00:00.000Z"
+        }
+      ]
     },
     {
       "taskPacketId": "task-002",
@@ -364,7 +478,49 @@
         "tests/auth/refresh.test.ts"
       ],
       "handoffTarget": "meta-prism",
-      "blockingIssues": []
+      "blockingIssues": [],
+      "fileCompletionList": [
+        {
+          "path": "tests/auth/refresh.test.ts",
+          "action": "edit",
+          "scope": "Produced tests/auth/refresh.test.ts",
+          "status": "completed"
+        }
+      ],
+      "workerExecutionEvidence": [
+        {
+          "verifyStepRef": "task-002-verify-1",
+          "expectedResult": "no hardcoded secret in refresh.ts",
+          "observedResult": "no hardcoded secret in refresh.ts",
+          "workingDirectory": ".",
+          "stderrTail": "",
+          "command": "fixture-verify task-002 1",
+          "actualOutput": "",
+          "passClaim": "no hardcoded secret in refresh.ts",
+          "status": "verified",
+          "successMarkerFormat": "exit-code-only",
+          "exitCode": 0,
+          "commandRanAt": "2026-05-26T00:00:00.000Z",
+          "runBy": "meta-conductor",
+          "runAt": "2026-05-26T00:00:00.000Z"
+        },
+        {
+          "verifyStepRef": "task-002-verify-2",
+          "expectedResult": "test suite passes",
+          "observedResult": "test suite passes",
+          "workingDirectory": ".",
+          "stderrTail": "",
+          "command": "fixture-verify task-002 2",
+          "actualOutput": "",
+          "passClaim": "test suite passes",
+          "status": "verified",
+          "successMarkerFormat": "exit-code-only",
+          "exitCode": 0,
+          "commandRanAt": "2026-05-26T00:00:00.000Z",
+          "runBy": "meta-conductor",
+          "runAt": "2026-05-26T00:00:00.000Z"
+        }
+      ]
     }
   ],
   "reviewPacket": {
@@ -417,7 +573,18 @@
       "tests/auth/refresh.test.ts passes with env-only secret flow"
     ],
     "fixEvidence": [
-      "src/auth/refresh.ts removed inline secret fallback"
+      {
+        "findingId": "finding-001",
+        "actionId": "fix-001",
+        "verifiedBy": "meta-prism",
+        "verificationMethod": "artifact-inspection",
+        "evidenceRefs": [
+          "src/auth/refresh.ts no longer contains inline fallback secret"
+        ],
+        "resultArtifactRef": "src/auth/refresh.ts",
+        "result": "verified_closed",
+        "failureDisposition": "reopen finding on verification failure"
+      }
     ],
     "revisionResponses": [
       {
@@ -1155,9 +1322,19 @@
         "impacts": [
           "preDecisionOptionFrame.candidateOptions[0]",
           "dispatchEnvelopePacket.ownerSelection"
-        ]
+        ],
+        "decisionChanged": "Evidence changes the Thinking route, owner selection, and acceptance criteria before execution.",
+        "stageAffected": "Thinking"
       }
-    ]
+    ],
+    "evidence": [
+      "Fetch evidence collected for complex_dev"
+    ],
+    "capabilityDiscovery": [
+      "auth_refresh_hardening",
+      "verification_notes"
+    ],
+    "capabilityGap": "none"
   },
   "preDecisionOptionFrame": {
     "decisionTrigger": "non_trivial_executable_decision",
@@ -1187,7 +1364,11 @@
           "meta-prism",
           "meta-artisan"
         ],
-        "candidateTaskShape": "post-decision dispatch packets"
+        "candidateTaskShape": "post-decision dispatch packets",
+        "evidenceRefs": [
+          "contentEvidencePacket.decisionImpactMap[0]"
+        ],
+        "decisionImpact": "Uses Fetch evidence to choose the route, owners, and acceptance standard before dispatch."
       },
       {
         "optionId": "B",
@@ -1204,7 +1385,11 @@
           "meta-prism",
           "meta-artisan"
         ],
-        "candidateTaskShape": "review-first packet"
+        "candidateTaskShape": "review-first packet",
+        "evidenceRefs": [
+          "contentEvidencePacket.decisionImpactMap[0]"
+        ],
+        "decisionImpact": "Uses Fetch evidence to choose the route, owners, and acceptance standard before dispatch."
       }
     ],
     "recommendedDefault": "A",
@@ -1212,7 +1397,9 @@
     "nativeChoiceSurface": "conversation_fallback",
     "choiceGateSkip": "explicit_auto_proceed",
     "solutionChoiceState": "explicit_auto_proceed",
-    "reviewOwner": "meta-prism"
+    "reviewOwner": "meta-prism",
+    "skipSource": "user_explicit_auto_proceed",
+    "skipSafetyRationale": "User explicitly allowed auto-proceed after evidence was collected and options were framed."
   },
   "productCompletenessPacket": {
     "outcome": "auth-refresh-hardening",
