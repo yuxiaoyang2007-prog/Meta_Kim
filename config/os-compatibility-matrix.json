@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "lastVerifiedAt": "2026-05-28",
+  "operatingSystems": [
+    {
+      "id": "macos",
+      "homeDirectory": "$HOME",
+      "configPaths": {
+        "claude": "~/.claude",
+        "codex": "~/.codex",
+        "openclaw": "~/.openclaw",
+        "cursor": "~/.cursor"
+      },
+      "shellType": "zsh/bash",
+      "pathSeparator": "/",
+      "commandQuoting": "POSIX shell quoting; quote paths with single quotes when possible.",
+      "nodeVersion": ">=22.13.0",
+      "pythonCommand": "python3",
+      "gitAvailability": "required",
+      "packageManager": "npm/pnpm/yarn/bun detected from project",
+      "symlinkBehavior": "supported; may require permissions for protected locations",
+      "permissionBehavior": "POSIX permissions; executable bit matters for shell hooks",
+      "daemonServiceBehavior": "launchd or background shell process",
+      "browserAutomationBehavior": "supported when browser dependencies are installed",
+      "mcpServerStartup": "stdio and background HTTP supported",
+      "hookExecutionShell": "host shell or configured command interpreter",
+      "environmentVariableSyntax": "NAME=value command or export NAME=value",
+      "localGlobalInstallPath": {
+        "local": "project runtime folders",
+        "global": "~/.<runtime>"
+      }
+    },
+    {
+      "id": "windows",
+      "homeDirectory": "%USERPROFILE%",
+      "configPaths": {
+        "claude": "%USERPROFILE%/.claude",
+        "codex": "%USERPROFILE%/.codex",
+        "openclaw": "%USERPROFILE%/.openclaw",
+        "cursor": "%USERPROFILE%/.cursor"
+      },
+      "shellType": "PowerShell/CMD/Git Bash; detect current host",
+      "pathSeparator": "\\",
+      "commandQuoting": "Prefer PowerShell arrays/native cmdlets; quote with double quotes and avoid shell-built destructive paths.",
+      "nodeVersion": ">=22.13.0",
+      "pythonCommand": "py, python, or explicit LOCALAPPDATA Programs Python path; Windows Store shim is unsafe",
+      "gitAvailability": "required; Git for Windows commonly used",
+      "packageManager": "npm/pnpm/yarn/bun detected by command availability",
+      "symlinkBehavior": "may require developer mode or elevation",
+      "permissionBehavior": "ACL-based; executable bit is not sufficient signal",
+      "daemonServiceBehavior": "PowerShell background process, Windows service, or scheduled task",
+      "browserAutomationBehavior": "supported with Windows browser paths; headless dependencies differ",
+      "mcpServerStartup": "stdio supported; long-running HTTP needs process supervision",
+      "hookExecutionShell": "PowerShell or command configured by runtime; script extensions matter",
+      "environmentVariableSyntax": "$env:NAME=\"value\"",
+      "localGlobalInstallPath": {
+        "local": "project runtime folders",
+        "global": "%USERPROFILE%/.<runtime>"
+      }
+    },
+    {
+      "id": "linux",
+      "homeDirectory": "$HOME",
+      "configPaths": {
+        "claude": "~/.claude",
+        "codex": "~/.codex",
+        "openclaw": "~/.openclaw",
+        "cursor": "~/.cursor"
+      },
+      "shellType": "bash/zsh",
+      "pathSeparator": "/",
+      "commandQuoting": "POSIX shell quoting; quote paths with single quotes when possible.",
+      "nodeVersion": ">=22.13.0",
+      "pythonCommand": "python3",
+      "gitAvailability": "required",
+      "packageManager": "npm/pnpm/yarn/bun installed on host",
+      "symlinkBehavior": "supported; executable bit and ownership matter",
+      "permissionBehavior": "POSIX permissions; executable bit matters for shell hooks",
+      "daemonServiceBehavior": "systemd when available or background shell process",
+      "browserAutomationBehavior": "supported when browser dependencies are installed",
+      "mcpServerStartup": "stdio and background HTTP supported",
+      "hookExecutionShell": "host shell or configured command interpreter",
+      "environmentVariableSyntax": "NAME=value command or export NAME=value",
+      "localGlobalInstallPath": {
+        "local": "project runtime folders",
+        "global": "~/.<runtime>"
+      }
+    },
+    {
+      "id": "wsl2",
+      "homeDirectory": "$HOME inside distro",
+      "configPaths": {
+        "claude": "~/.claude",
+        "codex": "~/.codex",
+        "openclaw": "~/.openclaw",
+        "cursor": "~/.cursor or Windows-host integration"
+      },
+      "shellType": "bash/zsh inside Linux distro",
+      "pathSeparator": "/",
+      "commandQuoting": "POSIX shell quoting; beware /mnt/c path boundaries.",
+      "nodeVersion": ">=22.13.0 inside distro",
+      "pythonCommand": "python3",
+      "gitAvailability": "required inside distro",
+      "packageManager": "npm/pnpm/yarn/bun installed inside distro",
+      "symlinkBehavior": "Linux behavior inside distro; Windows mount behavior differs",
+      "permissionBehavior": "Linux permissions inside distro; Windows filesystem mounts may differ",
+      "daemonServiceBehavior": "systemd when enabled or background shell process",
+      "browserAutomationBehavior": "supported but may need Windows browser bridge or Linux browser install",
+      "mcpServerStartup": "stdio supported inside distro; Windows-host clients need path bridge",
+      "hookExecutionShell": "distro shell",
+      "environmentVariableSyntax": "NAME=value command or export NAME=value",
+      "localGlobalInstallPath": {
+        "local": "project runtime folders inside distro",
+        "global": "~/.<runtime> inside distro"
+      }
+    }
+  ]
+}

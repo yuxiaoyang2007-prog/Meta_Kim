@@ -99,10 +99,6 @@ describe("sync-runtimes / inferProjectCategory", () => {
       CATEGORIES.D,
     );
     assert.equal(
-      inferProjectCategory(p(".codex/skills/meta-theory/SKILL.md"), REPO),
-      CATEGORIES.D,
-    );
-    assert.equal(
       inferProjectCategory(p(".cursor/skills/meta-theory/SKILL.md"), REPO),
       CATEGORIES.D,
     );
@@ -113,6 +109,10 @@ describe("sync-runtimes / inferProjectCategory", () => {
     assert.equal(
       inferProjectCategory(p(".agents/skills/meta-theory/SKILL.md"), REPO),
       CATEGORIES.D,
+    );
+    assert.equal(
+      inferProjectCategory(p(".codex/skills/meta-theory/SKILL.md"), REPO),
+      null,
     );
   });
 

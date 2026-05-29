@@ -97,6 +97,10 @@ describe("installPluginBundlesForNonClaudeRuntimes (dry-run e2e)", () => {
     assert.match(plain, /npx --yes --package ecc-universal@2\.0\.0-rc\.1 ecc install --profile core --target codex/);
     assert.match(
       plain,
+      /ensure .*\.codex.*config\.toml has \[features\]\.default_mode_request_user_input = true/,
+    );
+    assert.match(
+      plain,
       /ecc: run from each cursor project root: npx --yes --package ecc-universal@2\.0\.0-rc\.1 ecc install --profile core --target cursor/,
     );
     assert.doesNotMatch(
@@ -137,8 +141,7 @@ describe("installPluginBundlesForNonClaudeRuntimes (dry-run e2e)", () => {
     const { status, out } = runDryRun();
     assert.equal(status, 0);
     const plain = stripAnsi(out);
-    assert.match(plain, /Codex native plugin required/);
-    assert.match(plain, /search "superpowers"/);
+    assert.match(plain, /codex plugin add superpowers@openai-curated/);
     assert.doesNotMatch(
       plain,
       /git sparse-checkout https:\/\/github\.com\/obra\/superpowers\.git:\.codex ->/,
@@ -151,6 +154,7 @@ describe("installPluginBundlesForNonClaudeRuntimes (dry-run e2e)", () => {
     const plain = stripAnsi(out);
     assert.match(plain, /Cursor native plugin required/);
     assert.match(plain, /\/add-plugin superpowers/);
+    assert.match(plain, /does not currently expose a non-interactive plugin install command/);
     assert.doesNotMatch(
       plain,
       /git sparse-checkout https:\/\/github\.com\/obra\/superpowers\.git:\.cursor ->/,

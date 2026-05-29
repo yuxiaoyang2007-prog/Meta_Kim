@@ -171,6 +171,63 @@ export function validateSkillFrontmatter(raw) {
   return { ok: true, code: "ok", message: "frontmatter valid" };
 }
 
+function quoteYamlDouble(value) {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+export function quoteUnsafeFrontmatterScalars(raw) {
+  const frontmatter = extractFrontmatter(raw);
+  if (!frontmatter) return { content: raw, fixes: [] };
+
+  const fixes = [];
+  const lines = frontmatter.split(/\r?\n/);
+  let expectsIndentedBlock = false;
+  const patchedLines = lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return line;
+
+    const isIndented = /^[ \t]+/.test(line);
+    if (expectsIndentedBlock) {
+      if (isIndented) return line;
+      expectsIndentedBlock = false;
+    }
+    if (isIndented || trimmed.startsWith("- ")) return line;
+
+    const keyValueMatch = line.match(/^([A-Za-z0-9_.-]+):(.*)$/);
+    if (!keyValueMatch) return line;
+
+    const value = keyValueMatch[2].trim();
+    if (!value) return line;
+    if (BLOCK_SCALAR_TOKENS.has(value)) {
+      expectsIndentedBlock = true;
+      return line;
+    }
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'")) ||
+      value.startsWith("[") ||
+      value.startsWith("{")
+    ) {
+      return line;
+    }
+    if (!/: /.test(value)) return line;
+
+    fixes.push({ key: keyValueMatch[1], value });
+    return `${keyValueMatch[1]}: ${quoteYamlDouble(value)}`;
+  });
+
+  if (fixes.length === 0) return { content: raw, fixes };
+  const newline = raw.includes("\r\n") ? "\r\n" : "\n";
+  const patchedFrontmatter = patchedLines.join(newline);
+  return {
+    content: raw.replace(
+      /^---\r?\n[\s\S]*?\r?\n---/,
+      `---${newline}${patchedFrontmatter}${newline}---`,
+    ),
+    fixes,
+  };
+}
+
 async function pathExists(filePath) {
   try {
     await fs.access(filePath);
@@ -432,6 +489,7 @@ export async function sanitizeInstalledSkillTree(
   const files = await listSkillFiles(targetDir);
   const invalidFiles = [];
   const hookPathFixes = [];
+  const frontmatterFixes = [];
 
   for (const filePath of files) {
     const relToTarget = path.relative(targetDir, filePath).replace(/\\/g, "/");
@@ -439,8 +497,23 @@ export async function sanitizeInstalledSkillTree(
       shouldSkipHarnessPackageSkillDoc(relToTarget);
 
     const raw = await fs.readFile(filePath, "utf8");
-    const validation = validateSkillFrontmatter(raw);
+    let validation = validateSkillFrontmatter(raw);
+    if (validation.code === "invalid_unquoted_colon") {
+      const { content: patched, fixes } = quoteUnsafeFrontmatterScalars(raw);
+      const patchedValidation = validateSkillFrontmatter(patched);
+      if (fixes.length > 0 && patchedValidation.ok) {
+        frontmatterFixes.push({ filePath, fixes });
+        if (!dryRun) {
+          await fs.writeFile(filePath, patched, "utf8");
+        }
+        validation = patchedValidation;
+      }
+    }
     if (validation.ok) {
+      const disabledPath = buildDisabledSkillPath(filePath);
+      if (!dryRun && (await pathExists(disabledPath))) {
+        await fs.rm(disabledPath, { force: true });
+      }
       // Valid YAML: check for known broken hook command paths and patch in-place.
       const { content: patched, fixes } = applyHookPathFixes(raw);
       if (fixes.length > 0) {
@@ -480,6 +553,7 @@ export async function sanitizeInstalledSkillTree(
     quarantined: invalidFiles.length,
     invalidFiles,
     hookPathFixes,
+    frontmatterFixes,
     patchedFiles: hookPathFixes.length,
   };
 }

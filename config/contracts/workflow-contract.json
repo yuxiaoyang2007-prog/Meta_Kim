@@ -18,7 +18,7 @@
     "stageSemantics": {
       "critical": {
         "primaryAction": "clarify_intent_first",
-        "description": "Clarify true intent, scope, constraints, permissions, safety, and language before Fetch, planning, or execution confirmation."
+        "description": "Evaluate whether the user's expression satisfies the intent completeness framework; clarify missing dimensions that change routing, scope, risk, acceptance, owner, permission, or non-goal before Fetch, planning, or execution confirmation."
       },
       "fetch": {
         "primaryAction": "research_and_confirm_problem_with_candidate_solutions",
@@ -237,6 +237,7 @@
       "clarificationPolicy": {
         "questionCountPolicy": "no_quota_ask_only_outcome_branching",
         "askOnlyIfAnswerChangesExecution": true,
+        "evaluateAgainstIntentFrameBeforeAssumption": true,
         "forbidQuestionQuotaFilling": true,
         "questionMustTarget": [
           "wrong_goal_risk",
@@ -244,6 +245,40 @@
           "wrong_permission_or_safety_risk",
           "wrong_deliverable_or_scope_risk"
         ]
+      },
+      "intentCompletenessFramework": {
+        "required": true,
+        "judgmentTarget": "user_expression_completeness_not_true_human_intent",
+        "outputPacket": "intentFrameAssessment",
+        "onBlockingMissingDimension": "critical_clarification_allowed",
+        "principle": "Critical does not claim to know true human intent. It checks whether the user's stated expression provides enough information for the next governance decision; low-risk assumptions may be recorded, but blocking gaps must be asked through the native choice surface or localized chat card.",
+        "requiredDimensions": [
+          "desiredOutcome",
+          "targetAudienceOrUserValue",
+          "successCriteria",
+          "scopeBoundary",
+          "constraintsPermissionsSafety",
+          "evidenceFreshnessNeeds",
+          "outputFormatOrDeliverySurface"
+        ],
+        "dimensionStatusEnum": [
+          "stated",
+          "inferred_low_risk",
+          "missing_non_blocking",
+          "missing_blocking"
+        ],
+        "blockingRule": "If a missing or conflicting dimension changes route, scope, risk, acceptance, owner, permission, or non-goal, set choiceSurfaceState=critical_clarification_allowed and ask the fewest outcome-branching questions before Fetch/Thinking/Execution.",
+        "nonBlockingRule": "If the dimension can be inferred without changing route, scope, risk, acceptance, owner, permission, or non-goal, record the defaultAssumption and proceed with correction-friendly wording.",
+        "intentFrameAssessment": {
+          "requiredFields": [
+            "dimension",
+            "status",
+            "evidenceFromUserText",
+            "defaultAssumption",
+            "wouldChangeExecution",
+            "clarificationQuestion"
+          ]
+        }
       },
       "readBeforeEditPolicy": {
         "requiredBeforeMutation": true,
@@ -272,6 +307,7 @@
           "realIntent",
           "userPainValue",
           "successCriteria",
+          "intentFrameAssessment",
           "undecidedUserChoices",
           "nonGoals",
           "blockingUnknowns",
@@ -634,10 +670,10 @@
         "implementation": "Workspace-per-agent model; requires proper workspace configuration."
       },
       "cursor": {
-        "primarySurface": "native_mode_picker",
+        "primarySurface": "alwaysApply_rule_chat_card",
         "fallbackSurfaces": ["conversation_fallback"],
-        "triggerDescription": "Use Cursor native custom modes/mode picker and project rules for Critical, Fetch, Thinking, and Review selection; dynamic popup support is runtime-dependent.",
-        "implementation": "Custom Modes / mode picker UI; fallback to conversation card."
+        "triggerDescription": "Use Cursor alwaysApply project rules as the stable trigger for Meta_Kim choice behavior: when a branch-changing decision is required, render a localized chat decision card and wait for the user. Cursor preToolUse with failClosed is the stable hard tool gate, while beforeSubmitPrompt can support prompt adapters. Do not claim an arbitrary Cursor-native modal/question popup unless the active host exposes one.",
+        "implementation": "Sync canonical/runtime-assets/cursor/rules/meta-choice-surface.mdc to .cursor/rules/meta-choice-surface.mdc during install/update; sync .cursor/hooks.json with preToolUse failClosed for execution gating. Record normal choices as conversation_fallback unless a verified Cursor-native question surface is present."
       }
     },
     "silencePolicy": {
@@ -722,7 +758,7 @@
           "completed"
         ],
         "defaultState": "not_allowed",
-        "criticalClarificationRule": "Allowed only during Critical when Fetch cannot proceed safely; may clarify intent, scope, permissions, safety, or language; must not present execution options.",
+        "criticalClarificationRule": "Allowed during Critical when the intent frame is missing or conflicting and the answer changes route, scope, risk, acceptance, owner, permission, or non-goal; may clarify outcome, audience/value, success criteria, scope, permissions, safety, evidence freshness, output format, or language; must not present execution options.",
         "executionConfirmationRule": "Allowed only after contentEvidencePacket and preDecisionOptionFrame exist, before Execution; must present evidence-backed candidate paths and a recommended default.",
         "forbiddenPrematureTriggers": [
           "popup_test_request",

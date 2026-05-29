@@ -87,7 +87,7 @@ After global install (`node setup.mjs` or `npx`), what works where:
 GitHub <a href="https://github.com/KimYx0207">KimYx0207</a> |
 X <a href="https://x.com/KimYx0207">@KimYx0207</a> |
 Website <a href="https://www.aiking.dev/">aiking.dev</a> |
-WeChat Official Account: <strong>Lao Jin Guides You Through AI</strong>
+WeChat Official Account: <strong>老金带你玩AI</strong>
 
 Feishu knowledge base:
 <a href="https://my.feishu.cn/wiki/OhQ8wqntFihcI1kWVDlcNdpznFf">long-term updates</a>
@@ -165,6 +165,10 @@ When the request is vague, ask clarifying questions instead of guessing. This st
 **Fetch - search existing capabilities before inventing new ones**
 
 Search whether existing agents, skills, tools, or MCP integrations already cover the need. The core idea here is **capability-first**: define the capability first, then search for the owner that declares it, then dispatch to the best match. Capability-index lookup goes `config/capability-index/` -> runtime mirror -> local inventory -> fallback. Do not start by hardcoding a specific agent name.
+
+**Governance Decision Engine**
+
+Meta_Kim is not only the 8-stage spine. It first identifies the governance trigger, checks runtime and OS capability, checks dependency capability, separates owner from weapon, filters by Win/Mac/runtime support, asks the user only for branch-changing choices, executes deterministic parts, verifies whether the user goal actually landed, and writes reusable learning back. Reference-only projects are absorbed into Meta_Kim data, not silently promoted into dependencies; see `config/governance/decision-pattern-catalog.json`.
 
 **Thinking - define boundaries, owners, sequence, deliverables, risks, and stop conditions**
 
@@ -487,7 +491,7 @@ Meta_Kim currently maps to four platforms:
 | Platform | Status | Mapping style |
 | --- | --- | --- |
 | **Claude Code** | Fully supported | `.claude/agents/*.md` + `SKILL.md` + hooks + MCP |
-| **Codex** | Fully supported | `.codex/agents/*.toml` + `.agents/skills/` + compatibility `.codex/skills/` + commands + hooks |
+| **Codex** | Fully supported | `.codex/agents/*.toml` + `.agents/skills/` + commands + hooks |
 | **OpenClaw** | Fully supported | `openclaw/` directory structure + workspaces + hooks |
 | **Cursor** | Fully supported | `.cursor/agents/*.md` + skills + hooks + MCP |
 
@@ -519,12 +523,14 @@ But there is an important caveat: the four runtimes are not equal. Claude Code c
 | Capability surface | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
 | **Agents** | Native agents/subagents, mature at both project and user scope | Strong custom agents/subagents | Workspace-style agents, supports agent-to-agent | Lightweight agent projection |
-| **Skills / references** | Native skills, references, and a mature global ecosystem | `.agents/skills/` is the project skill root; `.codex/skills/` remains a compatibility mirror | Workspace skills and installable skills | Lighter skill/reference support |
+| **Skills / references** | Native skills, references, and a mature global ecosystem | `.agents/skills/` is the project skill root | Workspace skills and installable skills | Lighter skill/reference support |
 | **Hooks / automation** | Project hooks + settings.json + plugin ecosystem | Trusted `.codex/hooks.json` project/user hooks | Workspace boot/hook-style capabilities | `.cursor/hooks.json` lowerCamel lifecycle hooks |
 | **MCP / configuration** | Full native MCP and config surface | Can connect via runtime adapters and MCP | Clear workspace config | Can use MCP, but the surface is lighter |
 | **Governance loop capacity** | **Highest** | High, but below Claude Code | High, but different in form | Lightest |
 
 The reason is not sentiment. Claude Code natively supports agents, skills, references, hooks, settings, MCP, plugins, and global capability discovery, which makes the whole loop - dealing -> contracts -> gates -> automation guardrails -> writeback - easier to carry end to end.
+
+Choice surfaces are runtime-specific. Claude Code should use `AskUserQuestion`; Codex should use `request_user_input` when `~/.codex/config.toml` has `[features].default_mode_request_user_input = true`; Cursor uses an `alwaysApply` project rule to trigger a chat decision card plus `preToolUse failClosed` for tool gating; OpenClaw uses workspace/chat cards unless a plugin approval hook is explicitly installed.
 
 ### Four-layer repository structure
 
@@ -744,6 +750,7 @@ The three memory layers work together toward two core goals:
 | Meta-theory skill | `canonical/skills/meta-theory/SKILL.md` |
 | Meta-theory details | `canonical/skills/meta-theory/references/` |
 | Cursor declarative backup rule | `canonical/runtime-assets/cursor/rules/meta-enforcement.mdc` |
+| Cursor choice-surface fallback rule | `canonical/runtime-assets/cursor/rules/meta-choice-surface.mdc` |
 | Runtime mirrors | `.claude/`, `.codex/`, `.cursor/`, `openclaw/` after `npm run meta:sync` |
 
 When in doubt, edit canonical sources first, then run `npm run meta:sync` and `npm run meta:check`.

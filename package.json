@@ -1,6 +1,6 @@
 {
   "name": "meta-kim",
-  "version": "2.4.2",
+  "version": "2.6.0",
   "description": "Governance layer for AI coding: meta agents, workflow contract, meta-theory; canonical in canonical/, with generated Claude/Codex/OpenClaw/Cursor projections.",
   "private": true,
   "type": "module",
@@ -55,7 +55,25 @@
     "meta:verify:all:live": "npm run discover:global && npm run meta:check && npm run meta:graphify:check && npm run meta:check:global:release && node scripts/eval-meta-agents.mjs --require-all-runtimes --live && npm run meta:test:setup && npm run meta:test:meta-theory",
     "meta:setup:install": "node setup.mjs",
     "meta:setup:update": "node setup.mjs --update",
-    "meta:setup:check": "node setup.mjs --check"
+    "meta:setup:check": "node setup.mjs --check",
+    "meta:runtime:probe": "node scripts/probe-runtime-capabilities.mjs",
+    "meta:runtime:check": "node scripts/probe-runtime-capabilities.mjs --check",
+    "meta:os:probe": "node scripts/probe-os-compatibility.mjs",
+    "meta:os:check": "node scripts/probe-os-compatibility.mjs --check",
+    "meta:deps:discover": "node scripts/discover-dependency-capabilities.mjs",
+    "meta:deps:check": "node scripts/discover-dependency-capabilities.mjs --check",
+    "meta:capabilities:index": "node scripts/build-capability-inventory.mjs",
+    "meta:capabilities:route": "node scripts/select-execution-route.mjs",
+    "meta:lens:select": "node scripts/select-lenses.mjs",
+    "meta:governance:validate": "node scripts/validate-governance-contracts.mjs",
+    "meta:route:validate": "node scripts/validate-capability-routing.mjs",
+    "meta:runtime:validate": "node scripts/validate-runtime-matrix.mjs",
+    "meta:intent:validate": "node scripts/validate-intent-amplification.mjs",
+    "meta:prompt:validate": "node scripts/validate-prompt-executability.mjs",
+    "meta:foundational:validate": "node scripts/validate-foundational-capabilities.mjs",
+    "meta:deps:compat": "node scripts/validate-dependency-compatibility.mjs",
+    "meta:test:governance": "node scripts/run-node-tests.mjs \"tests/governance/*.test.mjs\"",
+    "meta:verify:governance": "npm run meta:governance:validate && npm run meta:runtime:validate && npm run meta:os:check && npm run meta:deps:check && npm run meta:deps:compat && npm run meta:route:validate && npm run meta:intent:validate && npm run meta:prompt:validate && npm run meta:foundational:validate && npm run meta:test:governance"
   },
   "keywords": [
     "claude-code",
@@ -91,7 +109,7 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^8.4.1",
-    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.25.76"
   }
 }

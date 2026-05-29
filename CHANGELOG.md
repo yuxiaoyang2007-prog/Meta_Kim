@@ -6,6 +6,83 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.6.0] - 2026-05-29
+
+### Added
+
+- **Executable governance validators** — Added prompt executability, foundational capability preservation, and dependency compatibility validators, then wired them into `meta:verify:governance`.
+- **Governance regression coverage** — Added behavior tests for agent boundaries, reference contracts, strict intent validation, route completeness, public-ready gates, Kim_Decision routing, hardcoded path prevention, and scar/evolution rules.
+- **Dependency and capability indexes** — Extended dependency discovery and capability inventory output with runtime support, OS support, invocation paths, verification methods, writeback keys, route eligibility, and preservation metadata.
+
+### Changed
+
+- **Meta-theory dispatcher** — Reworked the canonical meta-theory skill into a compact dispatcher that routes by Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verification -> Evolution instead of acting as a theory bundle.
+- **Reference contracts and agent SOPs** — Converted the meta-theory references and all nine governance agents into executable contracts with triggers, required inputs, output packets, pass/fail gates, escalation, verification, writeback, and preserve rules.
+- **Route and intent validation** — Upgraded execution route selection from keyword routing to owner + weapon + dependency + runtime + OS + verification scoring, and added strict run-artifact validation for intent acceptance.
+- **Runtime and OS compatibility** — Added Linux coverage alongside macOS, Windows, and WSL2, while preserving Claude Code, Codex, Cursor, and OpenClaw native/partial/unknown capability boundaries.
+- Version bump: 2.5.0 -> 2.6.0.
+
+### Fixed
+
+- **Kim_Decision state machine** — Kim_Decision is now preserved as a discovered decision protocol/skill candidate/reference state machine, not hardcoded as a local path, not disabled permanently, and never used as a code executor.
+- **Foundational capability protection** — Prompt cleanup now has validator-backed protection against removing skills, WebSearch/Browser/Research, Shell/Filesystem/Patch, MCP, Memory, Graph, Hooks, scripts, runtime tools, and native platform abilities.
+- **Public-ready gate hardening** — Public-ready now requires verification evidence, intent acceptance, no unresolved high/critical findings, and a writeback decision.
+
+### Verification
+
+- `npm run meta:validate`
+- `npm run meta:runtime:validate`
+- `npm run meta:os:check`
+- `npm run meta:deps:discover`
+- `npm run meta:deps:check`
+- `npm run meta:deps:compat`
+- `npm run meta:capabilities:index`
+- `npm run meta:capabilities:route -- --task "fuzzy product monetization task" --runtime codex --os windows --json`
+- `npm run meta:lens:select -- --taskShape strategy_product_decision --realIntent "choose shortest correct path" --json`
+- `npm run meta:governance:validate`
+- `npm run meta:route:validate`
+- `npm run meta:intent:validate -- --template`
+- `npm run meta:intent:validate -- --strict --input tests/fixtures/run-artifacts/valid-run.json`
+- `npm run meta:prompt:validate`
+- `npm run meta:foundational:validate`
+- `npm run meta:test:governance`
+- `npm run meta:verify:governance`
+
+## [2.5.0] - 2026-05-28
+
+### Added
+
+- **Governance decision engine** — Added runtime capability, OS compatibility, dependency capability, weapon routing, trigger-action, intent amplification, choice surface, dynamic lens, and decision-pattern governance contracts.
+- **Capability discovery and routing scripts** — Added probes, discovery, inventory, routing, lens selection, and governance validators so Meta_Kim can find owner + weapon + runtime + OS + verification paths before execution.
+- **Governance regression tests** — Added tests for trigger/action contracts, runtime matrix rules, dependency registry boundaries, weapon routing, dynamic lens selection, intent acceptance, and capability routing.
+- **Governance docs** — Added user-facing documentation for runtime capability, dependency discovery, owner/weapon routing, trigger-action governance, intent amplification, dynamic lens discovery, choice surfaces, and internal decision patterns.
+
+### Changed
+
+- **Kim_Decision boundary correction** — Kim_Decision is no longer modeled as a Meta_Kim dependency. Useful decision-engine patterns are represented as Meta_Kim-owned data under the decision-pattern catalog and used only as reference material.
+- **Meta-theory execution rules** — Tightened `AGENTS.md`, README, and the meta-theory skill so non-query tasks search capabilities first, platform work checks runtime/OS matrices, public-ready depends on verification plus intent acceptance, and evolution must write back or record a reason.
+- Version bump: 2.4.3 → 2.5.0.
+
+### Verification
+
+- `npm run meta:verify:governance`
+- `npm run meta:validate`
+- `npm run meta:sync`
+- `npm run meta:graphify:rebuild`
+
+## [2.4.3] - 2026-05-28
+
+### Fixed
+
+- **Codex project skill root cleanup** — Codex project skills now sync only to `.agents/skills/`, matching the current project-level Codex skill location and avoiding duplicate `meta-theory` entries.
+- **Legacy `.codex/skills` migration** — Update/sync runs remove the old Meta_Kim-managed `.codex/skills/meta-theory` mirror and delete `.codex/skills` only when it becomes empty, preserving any user-owned skills.
+- **Install and verification alignment** — Setup checks, runtime validation, footprint reporting, generated Codex command docs, and multilingual README guidance now point at `.agents/skills/` as the single project skill root.
+- **Dependency security baseline** — Raised `@modelcontextprotocol/sdk` to `^1.29.0`; fresh installs resolve patched transitive packages for the npm audit findings in the local install tree.
+
+### Changed
+
+- Version bump: 2.4.2 → 2.4.3.
+
 ## [2.4.2] - 2026-05-28
 
 ### Fixed

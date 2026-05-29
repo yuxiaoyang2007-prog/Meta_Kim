@@ -1063,14 +1063,10 @@ async function validateSyncConfiguration() {
   );
 
   assert(
-    profiles.codex.projection.outputPaths.skillsDir === ".codex/skills" &&
+    profiles.codex.projection.outputPaths.skillsDir === ".agents/skills" &&
       profiles.codex.projection.outputPaths.skillRoot ===
-        ".codex/skills/meta-theory" &&
-      profiles.codex.projection.outputPaths.projectSkillsDir ===
-        ".agents/skills" &&
-      profiles.codex.projection.outputPaths.projectSkillRoot ===
         ".agents/skills/meta-theory",
-    "Codex runtime profile must declare both the compatibility .codex/skills root and the official project .agents/skills root.",
+    "Codex runtime profile must use .agents/skills as the only project skill root.",
   );
   assert(
     profiles.claude.projection.outputPaths.skillsDir === ".claude/skills" &&

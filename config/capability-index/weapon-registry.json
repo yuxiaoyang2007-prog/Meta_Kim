@@ -1,0 +1,400 @@
+{
+  "schemaVersion": 1,
+  "weapons": [
+    {
+      "id": "runtime-capability-matrix",
+      "type": "file_set",
+      "name": "Runtime Capability Matrix",
+      "description": "Runtime support, trigger, evidence, and OS compatibility registry.",
+      "triggerConditions": [
+        "platform capability needed",
+        "hooks/skills/MCP/subagents/sandbox/approval involved"
+      ],
+      "taskShapes": [
+        "platform_governance",
+        "platform_hook_install"
+      ],
+      "inputContract": {
+        "requires": [
+          "runtime or capability question"
+        ]
+      },
+      "outputContract": {
+        "produces": [
+          "platformCapabilityPacket",
+          "runtimeSupportGapReport"
+        ]
+      },
+      "ownerCandidates": [
+        "meta-scout",
+        "meta-sentinel",
+        "meta-artisan"
+      ],
+      "dependencyProjects": [],
+      "runtimeSupport": {
+        "claude_code": "native",
+        "codex": "native",
+        "openclaw": "partial",
+        "cursor": "partial"
+      },
+      "osSupport": {
+        "macos": "supported",
+        "windows": "supported",
+        "wsl2": "supported",
+        "linux": "supported"
+      },
+      "howToTrigger": {
+        "explicit": "Read config/runtime-capability-matrix.json",
+        "implicit": "Fetch when platform claims affect route",
+        "config": "config/runtime-capability-matrix.json",
+        "hook": null
+      },
+      "risk": {
+        "canMutateFiles": false,
+        "canExecuteShell": false,
+        "canUseNetwork": false,
+        "canReadSecrets": false,
+        "requiresApproval": false,
+        "requiresTrustReview": false
+      },
+      "verification": {
+        "command": "npm run meta:runtime:validate",
+        "artifact": "config/runtime-capability-matrix.json",
+        "passCondition": "All platforms and critical capabilities have support/confidence/trigger/evidence."
+      }
+    },
+    {
+      "id": "os-compatibility-matrix",
+      "type": "file_set",
+      "name": "OS Compatibility Matrix",
+      "description": "Win/Mac/WSL2 path, shell, hook, package-manager, and service compatibility registry.",
+      "triggerConditions": [
+        "task mentions Windows",
+        "task mentions macOS",
+        "runtime install path matters"
+      ],
+      "taskShapes": [
+        "windows_setup_task",
+        "platform_governance"
+      ],
+      "inputContract": {
+        "requires": [
+          "target OS or auto"
+        ]
+      },
+      "outputContract": {
+        "produces": [
+          "osCompatibilityReport"
+        ]
+      },
+      "ownerCandidates": [
+        "meta-sentinel",
+        "meta-scout"
+      ],
+      "dependencyProjects": [],
+      "runtimeSupport": {
+        "claude_code": "native",
+        "codex": "native",
+        "openclaw": "partial",
+        "cursor": "partial"
+      },
+      "osSupport": {
+        "macos": "supported",
+        "windows": "supported",
+        "wsl2": "supported",
+        "linux": "supported"
+      },
+      "howToTrigger": {
+        "explicit": "Read config/os-compatibility-matrix.json",
+        "implicit": "Fetch when OS affects route",
+        "config": "config/os-compatibility-matrix.json",
+        "hook": null
+      },
+      "risk": {
+        "canMutateFiles": false,
+        "canExecuteShell": false,
+        "canUseNetwork": false,
+        "canReadSecrets": false,
+        "requiresApproval": false,
+        "requiresTrustReview": false
+      },
+      "verification": {
+        "command": "npm run meta:os:check",
+        "artifact": ".meta-kim/state/default/os-compatibility-probe.json",
+        "passCondition": "Probe is compatible with matrix for current host."
+      }
+    },
+    {
+      "id": "dependency-project-registry",
+      "type": "dependency_project",
+      "name": "Dependency Project Registry",
+      "description": "Searchable registry of dependency projects, capability cards, interfaces, scoring, and reuse policy.",
+      "triggerConditions": [
+        "external capability may help",
+        "user mentions dependency project",
+        "owner score is low"
+      ],
+      "taskShapes": [
+        "fuzzy_strategy_task",
+        "product_monetization_task",
+        "third_party_integration"
+      ],
+      "inputContract": {
+        "requires": [
+          "task shape",
+          "dependency name optional"
+        ]
+      },
+      "outputContract": {
+        "produces": [
+          "rankedDependencyCandidates",
+          "capabilityGapPacket"
+        ]
+      },
+      "ownerCandidates": [
+        "meta-scout",
+        "meta-artisan",
+        "meta-librarian"
+      ],
+      "dependencyProjects": [
+        "agent-teams-playbook",
+        "meta-kim-runtime"
+      ],
+      "runtimeSupport": {
+        "claude_code": "native",
+        "codex": "native",
+        "openclaw": "partial",
+        "cursor": "partial"
+      },
+      "osSupport": {
+        "macos": "supported",
+        "windows": "supported",
+        "wsl2": "supported",
+        "linux": "supported"
+      },
+      "howToTrigger": {
+        "explicit": "npm run meta:deps:discover",
+        "implicit": "Fetch before owner selection",
+        "config": "config/capability-index/dependency-project-registry.json",
+        "hook": null
+      },
+      "risk": {
+        "canMutateFiles": false,
+        "canExecuteShell": true,
+        "canUseNetwork": true,
+        "canReadSecrets": false,
+        "requiresApproval": false,
+        "requiresTrustReview": true
+      },
+      "verification": {
+        "command": "npm run meta:deps:check",
+        "artifact": ".meta-kim/state/default/dependency-capability-index.json",
+        "passCondition": "Dependency projects have capability cards and no reference-only project is treated as invokable."
+      }
+    },
+    {
+      "id": "meta-kim-decision-patterns",
+      "type": "file_set",
+      "name": "Meta_Kim Decision Patterns",
+      "description": "Internal stage-bound decision patterns for intent lock, evidence labeling, path mapping, minimum test, and pass/kill review.",
+      "triggerConditions": [
+        "fuzzy strategy",
+        "product monetization",
+        "minimum test",
+        "pass/kill gate",
+        "intent analysis"
+      ],
+      "taskShapes": [
+        "fuzzy_strategy_task",
+        "product_monetization_task"
+      ],
+      "inputContract": {
+        "requires": [
+          "surface decision",
+          "constraints"
+        ],
+        "optional": [
+          "evidence",
+          "audience"
+        ]
+      },
+      "outputContract": {
+        "produces": [
+          "intent frame",
+          "evidence labels",
+          "path candidates",
+          "minimum test",
+          "pass signal",
+          "kill signal"
+        ]
+      },
+      "ownerCandidates": [
+        "meta-warden",
+        "meta-conductor",
+        "meta-artisan",
+        "meta-prism"
+      ],
+      "dependencyProjects": [],
+      "runtimeSupport": {
+        "claude_code": "native",
+        "codex": "native",
+        "openclaw": "native",
+        "cursor": "native"
+      },
+      "osSupport": {
+        "macos": "supported",
+        "windows": "supported",
+        "wsl2": "supported",
+        "linux": "supported"
+      },
+      "howToTrigger": {
+        "explicit": "Read config/governance/decision-pattern-catalog.json",
+        "implicit": "Critical/Fetch/Thinking/Review for fuzzy or decision-heavy tasks",
+        "config": "config/governance/decision-pattern-catalog.json",
+        "hook": null
+      },
+      "risk": {
+        "canMutateFiles": false,
+        "canExecuteShell": false,
+        "canUseNetwork": false,
+        "canReadSecrets": false,
+        "requiresApproval": false,
+        "requiresTrustReview": false
+      },
+      "verification": {
+        "command": "npm run meta:route:validate",
+        "artifact": "route output",
+        "passCondition": "Recalled for fuzzy strategy/product tasks as internal Meta_Kim data, never as external dependency or implementation owner."
+      }
+    },
+    {
+      "id": "select-execution-route",
+      "type": "script",
+      "name": "Execution Route Selector",
+      "description": "Ranks owner + weapon + dependency + runtime + OS + verification route candidates.",
+      "triggerConditions": [
+        "Thinking path selection",
+        "owner/weapon/dependency required"
+      ],
+      "taskShapes": [
+        "platform_governance",
+        "engineering_execution",
+        "strategy_product_decision"
+      ],
+      "inputContract": {
+        "requires": [
+          "--task"
+        ],
+        "optional": [
+          "--runtime",
+          "--os",
+          "--json"
+        ]
+      },
+      "outputContract": {
+        "produces": [
+          "rankedRoutes",
+          "recommendedRoute",
+          "decisionCard",
+          "capabilityGapPacket",
+          "verificationPlan"
+        ]
+      },
+      "ownerCandidates": [
+        "meta-conductor",
+        "meta-artisan"
+      ],
+      "dependencyProjects": [],
+      "runtimeSupport": {
+        "claude_code": "native",
+        "codex": "native",
+        "openclaw": "partial",
+        "cursor": "partial"
+      },
+      "osSupport": {
+        "macos": "supported",
+        "windows": "supported",
+        "wsl2": "supported",
+        "linux": "supported"
+      },
+      "howToTrigger": {
+        "explicit": "node scripts/select-execution-route.mjs --task \"...\" --json",
+        "implicit": "Thinking before Execution",
+        "config": "weapon/dependency/runtime registries",
+        "hook": null
+      },
+      "risk": {
+        "canMutateFiles": false,
+        "canExecuteShell": false,
+        "canUseNetwork": false,
+        "canReadSecrets": false,
+        "requiresApproval": false,
+        "requiresTrustReview": false
+      },
+      "verification": {
+        "command": "npm run meta:route:validate",
+        "artifact": "route JSON",
+        "passCondition": "Every executable route has owner, weapon, verification owner, runtime, OS, and score band."
+      }
+    },
+    {
+      "id": "governance-validators",
+      "type": "validator",
+      "name": "Governance Validators",
+      "description": "Validate trigger/action, runtime matrix, routing, intent, dependencies, and lens policy.",
+      "triggerConditions": [
+        "before public-ready",
+        "after governance config changes"
+      ],
+      "taskShapes": [
+        "platform_governance"
+      ],
+      "inputContract": {
+        "requires": [
+          "config registries"
+        ]
+      },
+      "outputContract": {
+        "produces": [
+          "verificationResult"
+        ]
+      },
+      "ownerCandidates": [
+        "meta-prism",
+        "meta-warden"
+      ],
+      "dependencyProjects": [],
+      "runtimeSupport": {
+        "claude_code": "native",
+        "codex": "native",
+        "openclaw": "partial",
+        "cursor": "partial"
+      },
+      "osSupport": {
+        "macos": "supported",
+        "windows": "supported",
+        "wsl2": "supported",
+        "linux": "supported"
+      },
+      "howToTrigger": {
+        "explicit": "npm run meta:verify:governance",
+        "implicit": "Verification before done claim",
+        "config": "package.json scripts",
+        "hook": null
+      },
+      "risk": {
+        "canMutateFiles": false,
+        "canExecuteShell": true,
+        "canUseNetwork": false,
+        "canReadSecrets": false,
+        "requiresApproval": false,
+        "requiresTrustReview": false
+      },
+      "verification": {
+        "command": "npm run meta:verify:governance",
+        "artifact": "command output",
+        "passCondition": "All governance checks pass."
+      }
+    }
+  ]
+}

@@ -112,6 +112,11 @@ describe("capability index inheritance chain", () => {
       manifest.generatedTargets?.codex?.includes(".agents/skills"),
       "Codex project skill projection must include the official .agents/skills root.",
     );
+    assert.equal(
+      manifest.generatedTargets?.codex?.includes(".codex/skills"),
+      false,
+      "Codex project skill projection must not regenerate the legacy .codex/skills root.",
+    );
 
     for (const runtimeId of ["claude", "codex", "openclaw", "cursor"]) {
       const projection = resolveRuntimeProjection(runtimeId, "project");
@@ -132,9 +137,14 @@ describe("capability index inheritance chain", () => {
 
     const codexProjection = resolveRuntimeProjection("codex", "project");
     assert.equal(
-      codexProjection.projectSkillsDir.endsWith(path.join(".agents", "skills")),
+      codexProjection.skillsDir.endsWith(path.join(".agents", "skills")),
       true,
       "Codex project projection must expose .agents/skills as the project skill root.",
+    );
+    assert.equal(
+      "projectSkillsDir" in codexProjection,
+      false,
+      "Codex project projection must not expose a second project skill root.",
     );
   });
 

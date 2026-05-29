@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "candidatePoolMinimum": 30,
+  "selectedLensMin": 3,
+  "selectedLensMax": 7,
+  "seedFallbackRule": "Use seed catalog only when dynamic discovery finds fewer than 30 effective candidates or when task evidence explicitly requires a seed.",
+  "forbiddenUse": [
+    "decorative language",
+    "book-name dumping",
+    "fixed default list",
+    "celebrity mimicry",
+    "lens without decision impact"
+  ],
+  "selectionScoring": {
+    "taskShapeFit": 25,
+    "decisionImpact": 25,
+    "evidenceFit": 15,
+    "riskReduction": 15,
+    "outputImpact": 15,
+    "freshnessOrSpecificity": 5
+  },
+  "mustChangeAtLeastOne": [
+    "problemDefinition",
+    "pathSelection",
+    "riskRecognition",
+    "userChoiceOptions",
+    "acceptanceMetrics",
+    "executionAction"
+  ],
+  "taskShapeHints": {
+    "strategy_product_decision": ["positioning", "business-model", "pricing", "pmf", "retention", "distribution", "constraint", "competition"],
+    "platform_governance": ["runtime-capability", "security-boundary", "rollback", "observability", "dependency-risk", "verification"],
+    "engineering_execution": ["module-boundary", "complexity", "testability", "rollback", "observability", "platform-risk"],
+    "content_creation": ["narrative", "audience-psychology", "evidence", "scene", "conversion-action"],
+    "design_experience": ["ux", "interaction", "cognitive-load", "trust", "choice-architecture", "emotion"]
+  },
+  "evidenceContract": {
+    "selectedLensRequires": ["id", "sourceName", "reason", "question", "decisionImpact", "outputImpact"],
+    "omittedLensRequires": ["id", "omittedReason"],
+    "usageEvidenceRequires": ["changedDecisionDimension", "before", "after"]
+  },
+  "regressionRule": "For product/strategy fuzzy tasks, selected lenses must influence path or acceptance; seeds must not all be selected by default."
+}

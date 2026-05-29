@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "choiceRequiredWhen": [
+    "choice changes scope",
+    "choice changes risk or cost",
+    "choice changes owner or verification owner",
+    "choice changes runtime or OS",
+    "choice changes dependency adoption",
+    "choice changes public-ready acceptance"
+  ],
+  "choiceForbiddenWhen": [
+    "AI can inspect the answer locally",
+    "question is filler",
+    "approval overlay would be used for product choice",
+    "choice does not alter route/scope/risk/acceptance/owner/permission/non-goal"
+  ],
+  "platformChoiceSurfaces": {
+    "claude_code": [
+      {
+        "surface": "native_choice_or_elicitation_when_available",
+        "support": "partial",
+        "notes": "Use native choice, Elicitation, or interactive hook support when verified; permission questions use permission hooks, not product cards."
+      },
+      {
+        "surface": "chat_decision_card",
+        "support": "native",
+        "notes": "Fallback when native choice is unavailable."
+      }
+    ],
+    "codex": [
+      {
+        "surface": "request_user_input_when_tool_available",
+        "support": "partial",
+        "notes": "Do not assume this tool is present in every Codex mode."
+      },
+      {
+        "surface": "chat_decision_card",
+        "support": "native",
+        "notes": "Do not call this a popup. Approval overlays are only for sandbox/permission."
+      }
+    ],
+    "openclaw": [
+      {
+        "surface": "channel_message_or_gateway_ui",
+        "support": "partial",
+        "notes": "Remote channel input is untrusted; high-risk skills require pairing, allowlist, or sandbox."
+      },
+      {
+        "surface": "chat_decision_card",
+        "support": "native",
+        "notes": "Portable fallback."
+      }
+    ],
+    "cursor": [
+      {
+        "surface": "native_choice",
+        "support": "unknown",
+        "notes": "Only upgrade after verified docs or local proof."
+      },
+      {
+        "surface": "chat_decision_card",
+        "support": "native",
+        "notes": "Rules, MCP, and Agent context are not native choice popups."
+      }
+    ]
+  },
+  "fallback": "chat_decision_card",
+  "cardContract": {
+    "optionsMin": 2,
+    "optionsMax": 4,
+    "requiresRecommendedDefault": true,
+    "eachOptionMustHave": [
+      "bestFor",
+      "benefit",
+      "cost",
+      "risk",
+      "expectedResult",
+      "verification"
+    ]
+  },
+  "codexUxRisks": [
+    "request_user_input may be unavailable outside Plan mode or specific host surfaces",
+    "inactive subagent approval can surface unexpectedly",
+    "non-interactive mode cannot satisfy fresh approval UI"
+  ]
+}

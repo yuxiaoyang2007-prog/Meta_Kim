@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Internal Meta_Kim decision data distilled from inspected reference material and Meta_Kim boundaries. These patterns are not external dependencies and do not authorize invoking Kim_Decision or any other project.",
+  "sourceBoundary": {
+    "referenceOnly": ["Kim_Decision external/local reference discovered through META_KIM_DEP_ROOTS, sibling scan, installed skills, registry, or GitHub evidence"],
+    "notADependency": true,
+    "notInvokable": true,
+    "notOwner": true,
+    "notWeapon": true,
+    "distillationRule": "Absorb reusable decision concepts into Meta_Kim stage data; do not copy another project's workflow shape or make it a callable provider."
+  },
+  "stagePatterns": [
+    {
+      "id": "critical-real-intent-lock",
+      "stage": "critical",
+      "owner": "meta-warden",
+      "pattern": "Lock the actual decision or artifact before expanding the frame.",
+      "useWhen": ["surface request is fuzzy", "success criteria are missing", "the task could branch into product, code, strategy, or governance work"],
+      "outputs": ["realIntent", "subject", "currentState", "targetState", "successCriteria", "nonGoals", "blockingUnknowns"],
+      "rejects": ["persona-style advice", "guessing hidden intent", "asking questions that do not change execution"],
+      "verification": "intentPacket explains what changes, for whom, how success is tested, and which unknowns block execution."
+    },
+    {
+      "id": "fetch-evidence-labeling",
+      "stage": "fetch",
+      "owner": "meta-conductor",
+      "pattern": "Classify evidence by certainty and decision impact before it drives route selection.",
+      "useWhen": ["platform claims", "dependency claims", "current facts", "user-provided assumptions"],
+      "outputs": ["confirmed", "userProvided", "inference", "unconfirmed", "decisionImpactMap", "contradictionLog"],
+      "rejects": ["README-only certainty", "unlabeled inference", "external project claim without inspection status"],
+      "verification": "Every material claim has source, confidence, and route/risk/acceptance impact."
+    },
+    {
+      "id": "thinking-subject-path-map",
+      "stage": "thinking",
+      "owner": "meta-conductor",
+      "pattern": "Map the subject from current state to target state through candidate paths before dispatch.",
+      "useWhen": ["multiple paths exist", "minimal fix and shortest correct path differ", "ten-x route may change the outcome"],
+      "outputs": ["pathCandidates", "selectedPath", "whyThisPath", "omittedPathsWithReason"],
+      "rejects": ["menu without judgment", "impressive path with weak verification", "path selection before Fetch"],
+      "verification": "Selected path beats alternatives on goal fit, time to proof, risk, reversibility, automation potential, and verification strength."
+    },
+    {
+      "id": "thinking-minimum-test",
+      "stage": "thinking",
+      "owner": "meta-artisan",
+      "pattern": "Define the smallest action that can change the decision before scaling execution.",
+      "useWhen": ["uncertainty remains", "dependency/routing confidence is below execution threshold", "product or strategy claim needs proof"],
+      "outputs": ["firstAction", "testAssumption", "passSignal", "killSignal", "timebox"],
+      "rejects": ["trivial task mislabeled as test", "test without kill condition", "large build before proof"],
+      "verification": "The first action has input, action, output, pass signal, kill signal, and timebox."
+    },
+    {
+      "id": "review-pass-kill-gate",
+      "stage": "review",
+      "owner": "meta-prism",
+      "pattern": "A stage reached is not a stage passed; review must decide pass, revise, kill, or return to evidence.",
+      "useWhen": ["execution completed", "public-ready could be claimed", "workflow output exists but user goal may not be done"],
+      "outputs": ["reviewPacket.findings", "passDecision", "killOrReturnSignal", "verificationRequired"],
+      "rejects": ["self-congratulatory review", "file-exists-only review", "command-pass equals user-goal-done"],
+      "verification": "Review can reproduce evidence and closes or blocks every critical/high finding."
+    }
+  ]
+}

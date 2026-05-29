@@ -43,11 +43,7 @@ const STAGE_PATTERNS = {
   Evolution:     /\b(Evolution|进化|writeback|evolutionWriteback)\b/gi,
 };
 
-const FINDING_PATTERNS = [
-  /(?:finding|findingId)[^\n]{0,80}(?:CRITICAL|HIGH|MEDIUM|LOW)[^\n]{0,120}/gi,
-  /(?:severity)[^\n]{0,40}(?:CRITICAL|HIGH|MEDIUM|LOW)[^\n]{0,120}/gi,
-  /(?:open.*finding|unresolved.*finding)[^\n]{0,120}/gi,
-];
+const FINDING_SEVERITIES = new Set(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 async function readTranscript(transcriptPath, maxLines = 600) {
@@ -90,34 +86,100 @@ function detectCompletedStages(text) {
   return [...new Set(completed)];
 }
 
+function isObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function normalizeStructuredFinding(finding) {
+  if (!isObject(finding)) return null;
+
+  const findingId = nonEmptyString(finding.findingId)
+    ? finding.findingId.trim()
+    : nonEmptyString(finding.id)
+      ? finding.id.trim()
+      : "";
+  const severity = nonEmptyString(finding.severity)
+    ? finding.severity.trim().toUpperCase()
+    : "";
+  const closeState = nonEmptyString(finding.closeState)
+    ? finding.closeState.trim()
+    : "";
+
+  if (!findingId || !FINDING_SEVERITIES.has(severity)) return null;
+  if (!nonEmptyString(finding.owner)) return null;
+  if (!nonEmptyString(finding.sourceProject)) return null;
+  if (!nonEmptyString(finding.requiredAction)) return null;
+  if (!closeState || /^closed$/i.test(closeState)) return null;
+
+  return {
+    id: findingId,
+    findingId,
+    severity,
+    owner: finding.owner.trim(),
+    sourceProject: finding.sourceProject.trim(),
+    summary: nonEmptyString(finding.summary)
+      ? finding.summary.trim()
+      : nonEmptyString(finding.description)
+        ? finding.description.trim()
+        : finding.requiredAction.trim(),
+    requiredAction: finding.requiredAction.trim(),
+    fixArtifact: nonEmptyString(finding.fixArtifact) ? finding.fixArtifact.trim() : null,
+    verifiedBy: nonEmptyString(finding.verifiedBy) ? finding.verifiedBy.trim() : null,
+    closeState,
+  };
+}
+
+function pushStructuredFindings(target, candidates, seen) {
+  if (!Array.isArray(candidates)) return;
+  for (const candidate of candidates) {
+    const normalized = normalizeStructuredFinding(candidate);
+    if (!normalized || seen.has(normalized.findingId)) continue;
+    seen.add(normalized.findingId);
+    target.push(normalized);
+  }
+}
+
+function collectStructuredFindings(node, target, seen) {
+  if (Array.isArray(node)) {
+    for (const item of node) collectStructuredFindings(item, target, seen);
+    return;
+  }
+  if (!isObject(node)) return;
+
+  pushStructuredFindings(target, node.reviewPacket?.findings, seen);
+  pushStructuredFindings(target, node.compactionPacket?.openFindings, seen);
+
+  for (const value of Object.values(node)) {
+    if (isObject(value) || Array.isArray(value)) {
+      collectStructuredFindings(value, target, seen);
+    }
+  }
+}
+
+function extractJsonLineObjects(text) {
+  const objects = [];
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) continue;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (isObject(parsed)) objects.push(parsed);
+    } catch {
+      // Transcript prose can contain braces; ignore non-JSON lines.
+    }
+  }
+  return objects;
+}
+
 function extractFindings(text) {
   const findings = [];
   const seen = new Set();
-  for (const pattern of FINDING_PATTERNS) {
-    let match;
-    try { match = pattern.exec(text); } catch { continue; }
-    // Reset lastIndex for global regex
-    pattern.lastIndex = 0;
-    while (match !== null) {
-      const raw = match[0].slice(0, 200).trim();
-      if (!seen.has(raw)) {
-        seen.add(raw);
-        let severity = "MEDIUM";
-        if (/CRITICAL/i.test(raw)) severity = "CRITICAL";
-        else if (/HIGH/i.test(raw)) severity = "HIGH";
-        else if (/LOW/i.test(raw)) severity = "LOW";
-        findings.push({
-          id: `F${findings.length + 1}`,
-          severity,
-          description: raw,
-          reviewOwner: "meta-prism",
-          verifiedBy: null,
-          closeState: "open",
-        });
-      }
-      try { match = pattern.exec(text); } catch { match = null; }
-      if (findings.length >= 10) break;
-    }
+  for (const object of extractJsonLineObjects(text)) {
+    collectStructuredFindings(object, findings, seen);
     if (findings.length >= 10) break;
   }
   return findings;
@@ -147,12 +209,7 @@ async function writeCompaction({ stage, completed, findings, runRef, profile }) 
       resumeFrom: stage,
       stepNumber: stageIdx + 1,
     },
-    openFindings: findings.map((f) => ({
-      ...f,
-      findingId: f.id,
-      sourceFile: null,
-      line: null,
-    })),
+    openFindings: findings.map((f) => ({ ...f, sourceFile: null, line: null })),
     pendingRevisions: findings.map((f) => ({
       findingId: f.id,
       plannedFix: null,

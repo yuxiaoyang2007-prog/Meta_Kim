@@ -643,6 +643,125 @@ describe("MCP memory cross-runtime hooks", () => {
     }
   });
 
+  test("Claude stop compaction ignores unstructured finding-like prose from transcripts", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-compaction-noise-"));
+    const transcriptPath = path.join(tempDir, "transcript.jsonl");
+    const profile = `test-noise-${process.pid}-${Date.now()}`;
+    const compactionRoot = path.join(tempDir, ".meta-kim", "state", profile);
+
+    try {
+      writeFileSync(
+        transcriptPath,
+        [
+          "Critical and Fetch were mentioned in a long skill description so the session is governed.",
+          "Review text says findings; high to max: broader coverage is useful, but this is not a reviewPacket.",
+          "OpenClaw, and Cursor. This skill should be used when HIGH quality orchestration is needed.",
+          "Thinking mentioned meta-prism and closeFindings as documentation examples, not open findings.",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const hookPath = path.join(
+        repoRoot,
+        "canonical",
+        "runtime-assets",
+        "claude",
+        "hooks",
+        "stop-compaction.mjs",
+      );
+      const result = spawnSync(
+        process.execPath,
+        [hookPath],
+        {
+          input: JSON.stringify({ transcript_path: transcriptPath }),
+          encoding: "utf8",
+          env: { ...process.env, META_KIM_PROFILE: profile },
+          cwd: tempDir,
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+
+      const latestPath = path.join(compactionRoot, "compaction", "latest.json");
+      const packet = JSON.parse(readFileSync(latestPath, "utf8"));
+
+      assert.deepEqual(packet.openFindings, []);
+      assert.deepEqual(packet.pendingRevisions, []);
+      assert.equal(packet.verifyGateState, "verified");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(compactionRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("Claude stop compaction preserves structured reviewPacket findings", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-compaction-structured-"));
+    const transcriptPath = path.join(tempDir, "transcript.jsonl");
+    const profile = `test-structured-${process.pid}-${Date.now()}`;
+    const compactionRoot = path.join(tempDir, ".meta-kim", "state", profile);
+
+    try {
+      writeFileSync(
+        transcriptPath,
+        [
+          "Critical Fetch Thinking Review governed run with enough transcript text for the hook.",
+          JSON.stringify({
+            reviewPacket: {
+              findings: [
+                {
+                  findingId: "F-structured-1",
+                  severity: "HIGH",
+                  owner: "meta-prism",
+                  sourceProject: "Meta_Kim",
+                  summary: "Structured review finding should survive compaction.",
+                  requiredAction: "Keep only schema-backed open findings.",
+                  fixArtifact: "canonical/runtime-assets/claude/hooks/stop-compaction.mjs",
+                  verifiedBy: "meta-prism",
+                  closeState: "open",
+                },
+              ],
+            },
+          }),
+          "Verification remains pending until closeFindings and fixEvidence exist.",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const hookPath = path.join(
+        repoRoot,
+        "canonical",
+        "runtime-assets",
+        "claude",
+        "hooks",
+        "stop-compaction.mjs",
+      );
+      const result = spawnSync(
+        process.execPath,
+        [hookPath],
+        {
+          input: JSON.stringify({ transcript_path: transcriptPath }),
+          encoding: "utf8",
+          env: { ...process.env, META_KIM_PROFILE: profile },
+          cwd: tempDir,
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+
+      const latestPath = path.join(compactionRoot, "compaction", "latest.json");
+      const packet = JSON.parse(readFileSync(latestPath, "utf8"));
+
+      assert.equal(packet.openFindings.length, 1);
+      assert.equal(packet.openFindings[0].findingId, "F-structured-1");
+      assert.equal(packet.openFindings[0].sourceProject, "Meta_Kim");
+      assert.equal(packet.openFindings[0].requiredAction, "Keep only schema-backed open findings.");
+      assert.equal(packet.verifyGateState, "pending_verify");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(compactionRoot, { recursive: true, force: true });
+    }
+  });
+
   test("Claude stop compaction sanitizes META_KIM_PROFILE into repo-local state", () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-profile-"));
     const transcriptPath = path.join(tempDir, "transcript.jsonl");

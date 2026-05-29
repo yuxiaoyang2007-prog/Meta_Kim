@@ -64,7 +64,7 @@ function recordSafe(fn) {
  * the manifest with ambiguous entries.
  *
  * Category semantics (see install-manifest.mjs CATEGORY_LABELS):
- *   D = Project runtime skills   (.claude/skills, .codex/skills, ...)
+ *   D = Project runtime skills   (.claude/skills, .agents/skills, ...)
  *   E = Project runtime hooks    (.claude/hooks, .codex/hooks, .cursor/hooks, openclaw/hooks)
  *   F = Project runtime agents   (.claude/agents, .codex/agents, .cursor/agents)
  *   G = Project settings + MCP   (.claude/settings.json, .mcp.json, .codex/*.toml)
@@ -101,7 +101,6 @@ export function inferProjectCategory(filePath, rootDir = repoRoot) {
   }
   if (
     rel.startsWith(".claude/skills/") ||
-    rel.startsWith(".codex/skills/") ||
     rel.startsWith(".agents/skills/") ||
     rel.startsWith(".cursor/skills/") ||
     rel.startsWith("openclaw/skills/") ||
@@ -117,7 +116,10 @@ export function inferProjectCategory(filePath, rootDir = repoRoot) {
   ) {
     return CATEGORIES.G;
   }
-  if (rel === "openclaw/openclaw.template.json" || rel.startsWith(".codex/")) {
+  if (
+    rel === "openclaw/openclaw.template.json" ||
+    (rel.startsWith(".codex/") && !rel.startsWith(".codex/skills/"))
+  ) {
     return CATEGORIES.G;
   }
   return null;
@@ -630,8 +632,10 @@ function resolveProjectionDirs(scope) {
     // Codex
     codexSkillsDir: codex.skillsDir,
     codexSkillRoot: codex.skillRoot,
-    codexProjectSkillsDir: codex.projectSkillsDir,
-    codexProjectSkillRoot: codex.projectSkillRoot,
+    codexLegacySkillRoot: globalScope ? null : codex.legacySkillRoot,
+    codexLegacySkillsDir: globalScope
+      ? null
+      : path.join(repoRoot, ".codex", "skills"),
     codexLegacySkillFile: globalScope ? null : codex.legacySkillFile,
     codexLegacySkillReferencesDir: globalScope
       ? null
@@ -681,8 +685,6 @@ function resolveProjectionDirs(scope) {
       codexAgents: codex.display.agentsDir,
       codexSkillsRoot: codex.display.skillsDir,
       codexSkills: codex.display.skillRoot,
-      codexProjectSkillsRoot: codex.display.projectSkillsDir,
-      codexProjectSkill: codex.display.projectSkillRoot,
       codexHooks: globalScope ? null : codex.display.hooksDir,
       codexHooksFile: globalScope ? null : codex.display.hooksFile,
       codexCommands: codex.display.commandsDir,
@@ -1547,6 +1549,36 @@ async function removeGeneratedPath(filePath) {
   return { changed: true };
 }
 
+async function removeDirIfEmpty(dirPath) {
+  if (!dirPath) return { changed: false };
+
+  let entries;
+  try {
+    entries = await fs.readdir(dirPath);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return { changed: false };
+    }
+    throw error;
+  }
+
+  if (entries.length > 0) {
+    return { changed: false };
+  }
+
+  if (checkOnly) {
+    staleFiles.push({
+      path: dirPath,
+      category: inferProjectCategory(dirPath),
+      action: "delete",
+    });
+    return { changed: true };
+  }
+
+  await fs.rmdir(dirPath);
+  return { changed: true };
+}
+
 async function syncCapabilityIndexMirrors(dirs, selectedTargets, changedFiles) {
   const canonicalContent = await tryReadCanonical(
     path.join(canonicalCapabilityIndexDir, "meta-kim-capabilities.json"),
@@ -1628,13 +1660,13 @@ function buildRuntimeSkillMap(targetId) {
       { pattern: /\.claude\/skills\//g, replacement: "canonical/skills/" },
     ],
     codex: [
-      // Skill references: canonical/ → .codex/skills/meta-theory/references/
+      // Skill references: canonical/ → .agents/skills/meta-theory/references/
       {
         pattern: /canonical\/skills\/meta-theory\/references\//g,
-        replacement: ".codex/skills/meta-theory/references/",
+        replacement: ".agents/skills/meta-theory/references/",
       },
-      // Skill root: canonical/skills/ → .codex/skills/
-      { pattern: /canonical\/skills\//g, replacement: ".codex/skills/" },
+      // Skill root: canonical/skills/ → .agents/skills/
+      { pattern: /canonical\/skills\//g, replacement: ".agents/skills/" },
       {
         pattern: /canonical\/agents\/([A-Za-z0-9_*{}<>-]+)\.md/g,
         replacement: ".codex/agents/$1.toml",
@@ -1649,7 +1681,7 @@ function buildRuntimeSkillMap(targetId) {
         replacement: ".codex/capability-index/",
       },
       // Legacy .claude/skills/ references in source → platform-specific path
-      { pattern: /\.claude\/skills\//g, replacement: ".codex/skills/" },
+      { pattern: /\.claude\/skills\//g, replacement: ".agents/skills/" },
     ],
     openclaw: [
       // Skill references: canonical/ → openclaw/skills/meta-theory/references/
@@ -2237,6 +2269,12 @@ Examples:
     ) {
       changedFiles.push(".codex/skills/references");
     }
+    if ((await removeGeneratedPath(dirs.codexLegacySkillRoot)).changed) {
+      changedFiles.push(".codex/skills/meta-theory");
+    }
+    if ((await removeDirIfEmpty(dirs.codexLegacySkillsDir)).changed) {
+      changedFiles.push(".codex/skills");
+    }
 
     await syncRuntimeSkills(
       "codex",
@@ -2245,15 +2283,6 @@ Examples:
       canonicalSkills,
       changedFiles,
     );
-    if (scope !== "global" && dirs.codexProjectSkillsDir) {
-      await syncRuntimeSkills(
-        "codex",
-        dirs.codexProjectSkillsDir,
-        dp.codexProjectSkillsRoot,
-        canonicalSkills,
-        changedFiles,
-      );
-    }
     const codexConfigExample = await tryReadCanonical(
       canonicalCodexConfigExamplePath,
     );

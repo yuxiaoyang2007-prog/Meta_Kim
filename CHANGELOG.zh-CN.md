@@ -6,6 +6,83 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.6.0] - 2026-05-29
+
+### 新增
+
+- **可执行治理校验器** — 新增 prompt executability、foundational capability preservation、dependency compatibility 三类 validator，并接入 `meta:verify:governance`。
+- **治理回归覆盖** — 新增 agent boundary、reference contract、strict intent validation、route completeness、public-ready gate、Kim_Decision 路由、硬编码路径防护、scar/evolution 等行为测试。
+- **依赖与能力索引** — dependency discovery 和 capability inventory 输出现在包含 runtime support、OS support、invocation path、verification method、writeback key、route eligibility 和 preservation metadata。
+
+### 变更
+
+- **Meta-theory dispatcher** — 将 canonical meta-theory skill 重构为紧凑 dispatcher，按 Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verification -> Evolution 路由，而不是继续作为理论合集。
+- **Reference contract 与 Agent SOP** — 将 meta-theory references 和 9 个治理 agent 转为可执行合同：包含 trigger、required inputs、output packet、pass/fail、escalation、verification、writeback、preserve。
+- **Route 与 intent 验证升级** — execution route selection 从关键词路由升级为 owner + weapon + dependency + runtime + OS + verification 评分；intent acceptance 支持真实 run artifact strict validation。
+- **Runtime / OS 兼容性** — 在 macOS、Windows、WSL2 之外补上 Linux 覆盖，并保留 Claude Code、Codex、Cursor、OpenClaw 的 native/partial/unknown 能力边界。
+- 版本升级：2.5.0 -> 2.6.0。
+
+### 修复
+
+- **Kim_Decision 状态机** — Kim_Decision 现在作为 discovered decision protocol / skill candidate / reference 状态机保留，不硬编码本机路径，不永久禁用，也不会被当作 code executor。
+- **底层元能力保护** — prompt cleanup 现在由 validator 防止误删 skills、WebSearch/Browser/Research、Shell/Filesystem/Patch、MCP、Memory、Graph、Hooks、scripts、runtime tools 和平台原生能力。
+- **public-ready gate 加硬** — public-ready 必须具备 verification evidence、intent acceptance、无未关闭 high/critical findings，以及 writeback decision。
+
+### 验证
+
+- `npm run meta:validate`
+- `npm run meta:runtime:validate`
+- `npm run meta:os:check`
+- `npm run meta:deps:discover`
+- `npm run meta:deps:check`
+- `npm run meta:deps:compat`
+- `npm run meta:capabilities:index`
+- `npm run meta:capabilities:route -- --task "fuzzy product monetization task" --runtime codex --os windows --json`
+- `npm run meta:lens:select -- --taskShape strategy_product_decision --realIntent "choose shortest correct path" --json`
+- `npm run meta:governance:validate`
+- `npm run meta:route:validate`
+- `npm run meta:intent:validate -- --template`
+- `npm run meta:intent:validate -- --strict --input tests/fixtures/run-artifacts/valid-run.json`
+- `npm run meta:prompt:validate`
+- `npm run meta:foundational:validate`
+- `npm run meta:test:governance`
+- `npm run meta:verify:governance`
+
+## [2.5.0] - 2026-05-28
+
+### 新增
+
+- **治理决策引擎** — 新增 runtime capability、OS compatibility、dependency capability、weapon routing、trigger-action、intent amplification、choice surface、dynamic lens、decision-pattern 等治理契约。
+- **能力发现与路由脚本** — 新增 probe、discovery、inventory、routing、lens selection 和 governance validators，让 Meta_Kim 在执行前能找到 owner + weapon + runtime + OS + verification 路径。
+- **治理回归测试** — 新增 trigger/action 契约、runtime matrix 规则、dependency registry 边界、weapon routing、dynamic lens selection、intent acceptance、capability routing 等测试。
+- **治理文档** — 新增 runtime capability、dependency discovery、owner/weapon routing、trigger-action governance、intent amplification、dynamic lens discovery、choice surface 和 internal decision patterns 文档。
+
+### 变更
+
+- **Kim_Decision 边界纠正** — Kim_Decision 不再被建模为 Meta_Kim 依赖。可复用的 decision-engine 部分沉淀为 Meta_Kim 自有 decision-pattern catalog，只作为参考材料使用。
+- **Meta-theory 执行规则收紧** — 更新 `AGENTS.md`、README 和 meta-theory skill：非纯问答任务先做 capability search；平台任务查 runtime/OS matrix；public-ready 必须通过 verification + intent acceptance；Evolution 必须 writeback 或记录 none-with-reason。
+- 版本升级：2.4.3 → 2.5.0。
+
+### 验证
+
+- `npm run meta:verify:governance`
+- `npm run meta:validate`
+- `npm run meta:sync`
+- `npm run meta:graphify:rebuild`
+
+## [2.4.3] - 2026-05-28
+
+### 修复
+
+- **Codex 项目 skill 根目录清理** — Codex 项目 skill 现在只同步到 `.agents/skills/`，对齐当前 Codex 项目级 skill 位置，避免重复出现 `meta-theory`。
+- **旧 `.codex/skills` 迁移** — 安装 / 更新 / 同步会移除旧的 Meta_Kim 管理镜像 `.codex/skills/meta-theory`，并且只在 `.codex/skills` 变为空时删除该目录，保留用户自己的 skill。
+- **安装与校验路径对齐** — setup check、runtime validation、footprint、生成的 Codex command 文档和多语言 README 都改为以 `.agents/skills/` 作为唯一项目 skill 根。
+- **依赖安全基线** — 将 `@modelcontextprotocol/sdk` 提升到 `^1.29.0`；新安装会解析到已修复本地 audit 问题的传递依赖版本。
+
+### 变更
+
+- 版本升级：2.4.2 → 2.4.3。
+
 ## [2.4.2] - 2026-05-28
 
 ### 修复

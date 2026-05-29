@@ -499,7 +499,7 @@ flowchart TB
 | 能力面 | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
 | **agent** | native agents/subagents、プロジェクト級とユーザー級が成熟 | custom agents/subagents が強力 | workspace 型 agent、agent-to-agent 対応 | agent 投影は使えるが軽量 |
-| **skill / references** | native skill、references、グローバル skill エコシステムが充実 | `.codex/skills/` と相性が良い | workspace skill + installable skill | `.cursor/skills/` による軽量接続 |
+| **skill / references** | native skill、references、グローバル skill エコシステムが充実 | `.agents/skills/` がプロジェクト skill ルート | workspace skill + installable skill | `.cursor/skills/` による軽量接続 |
 | **hook / 自動化** | project hooks + settings.json + 拡張エコシステム | リポジトリ級の native hook 面はない | workspace boot / hook 的な能力あり | 統治 hook は最も軽い |
 | **MCP / 設定** | native MCP と設定面が充実 | runtime adapter と MCP を接続可能 | workspace config が明確 | MCP は接続可能だが全体は軽量 |
 | **統治閉ループの受け皿** | **最も高い** | 高いが Claude Code よりは下 | 高いが形態が異なる | 最も軽い |

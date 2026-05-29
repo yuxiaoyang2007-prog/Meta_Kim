@@ -83,6 +83,19 @@ describe("SKILL.md structural integrity", async () => {
       );
     });
 
+    test("skill version remains 3.0.0 and does not add direct websearch tooling", () => {
+      assert.equal(
+        frontmatter.version,
+        "3.0.0",
+        "meta-theory skill version must not be confused with package release version",
+      );
+      assert.doesNotMatch(
+        raw,
+        /^\s+-\s+websearch\s*$/im,
+        "meta-theory skill must route current-fact research through governance owners instead of adding a direct websearch tool",
+      );
+    });
+
     test("author is non-empty", () => {
       assert.ok(
         frontmatter.author && frontmatter.author.length > 0,
@@ -245,6 +258,27 @@ describe("SKILL.md structural integrity", async () => {
       assert.match(raw, /field name|internal keys/i);
       assert.match(raw, /human label|human-readable label|user-facing output/i);
       assert.match(raw, /Record internally/i);
+    });
+
+    test("SKILL.md routes meta-theory activation through Warden entry gate and evidence owners", () => {
+      assert.match(raw, /Warden Entry Gate/i);
+      assert.match(raw, /\/meta-theory[\s\S]{0,160}meta-warden/i);
+      assert.match(raw, /meta-warden[\s\S]{0,180}entry gate/i);
+      assert.match(raw, /meta-conductor[\s\S]{0,220}evidence lane/i);
+      assert.match(raw, /meta-scout[\s\S]{0,220}external evidence/i);
+      assert.match(raw, /meta-prism[\s\S]{0,220}Critical[\s\S]{0,120}Fetch[\s\S]{0,120}Thinking/i);
+    });
+
+    test("Fetch rules require material-claim extraction and blocked current-fact handling", () => {
+      assert.match(raw, /material claims/i);
+      assert.match(raw, /version/i);
+      assert.match(raw, /price/i);
+      assert.match(raw, /third-party|platform|tool/i);
+      assert.match(raw, /contentEvidencePacket\.researchRequired\s*=\s*true/i);
+      assert.match(raw, /researchCapabilityDiscovery/i);
+      assert.match(raw, /web_search|url_fetch|docs_lookup|browser_open/i);
+      assert.match(raw, /blocked|user_fallback/i);
+      assert.doesNotMatch(raw, /Key Information Extraction And Online Verification/i);
     });
   });
 

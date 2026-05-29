@@ -19,6 +19,11 @@ import {
   resolveTargetContext,
   resolveRuntimeHomeInfo,
 } from "./meta-kim-sync-config.mjs";
+import {
+  CODEX_REQUEST_USER_INPUT_FEATURE,
+  ensureCodexRequestUserInputFeature,
+  hasCodexRequestUserInputFeature,
+} from "./codex-config-merge.mjs";
 import { CATEGORIES, openRecorder } from "./install-manifest.mjs";
 import { validateSkillFrontmatter } from "./install-skill-sanitizer.mjs";
 
@@ -218,6 +223,44 @@ async function copyCodexMetaTheoryCommand() {
   return targetPath;
 }
 
+async function ensureCodexGlobalConfigChoiceSurface() {
+  const configPath = path.join(runtimeHomes.codex.dir, "config.toml");
+  assertHomeBound(configPath);
+  await fs.mkdir(path.dirname(configPath), { recursive: true });
+
+  const prev = (await pathExists(configPath))
+    ? await fs.readFile(configPath, "utf8")
+    : "";
+  const next = ensureCodexRequestUserInputFeature(prev);
+
+  if (prev === next) {
+    console.log(
+      `${C.green}✓${C.reset} ${C.dim}Codex ${CODEX_REQUEST_USER_INPUT_FEATURE} already enabled: ${configPath}${C.reset}`,
+    );
+    return configPath;
+  }
+
+  if (prev) {
+    const bak = `${configPath}.meta-kim.bak`;
+    assertHomeBound(bak);
+    await fs.copyFile(configPath, bak);
+    console.log(`Backed up previous Codex config to ${bak}`);
+  }
+
+  await fs.writeFile(configPath, next, "utf8");
+  recordSafe((rec) =>
+    rec.recordSettingsMerge(configPath, [CODEX_REQUEST_USER_INPUT_FEATURE], {
+      source: "sync-global-meta-theory",
+      purpose: "codex-global-config-choice-surface",
+      category: CATEGORIES.C,
+    }),
+  );
+  console.log(
+    `${C.green}✓${C.reset} ${C.dim}Enabled Codex ${CODEX_REQUEST_USER_INPUT_FEATURE}: ${configPath}${C.reset}`,
+  );
+  return configPath;
+}
+
 async function removeIfExists(targetPath) {
   assertHomeBound(targetPath);
   if (!(await pathExists(targetPath))) {
@@ -400,6 +443,18 @@ async function runCheck() {
     if (!commandInSync) {
       failed = true;
     }
+
+    const configPath = path.join(runtimeHomes.codex.dir, "config.toml");
+    const configRaw = (await pathExists(configPath))
+      ? await fs.readFile(configPath, "utf8")
+      : "";
+    const featureEnabled = hasCodexRequestUserInputFeature(configRaw);
+    console.log(
+      `${featureEnabled ? `${C.green}✓${C.reset}` : `${C.yellow}⊘${C.reset}`} ${C.dim}Codex ${CODEX_REQUEST_USER_INPUT_FEATURE}: ${configPath}${C.reset}`,
+    );
+    if (!featureEnabled) {
+      failed = true;
+    }
   }
 
   process.exitCode = failed ? 1 : 0;
@@ -451,6 +506,7 @@ async function runSync() {
     console.log(
       `${C.green}✓${C.reset} ${C.dim}Synced Codex /meta-theory command: ${commandPath}${C.reset}`,
     );
+    await ensureCodexGlobalConfigChoiceSurface();
   }
 
   if (manifestRecorder) {
@@ -492,6 +548,9 @@ function printTargets() {
   console.log("Codex slash command (when codex is an active target):");
   console.log(
     `- ${path.join(runtimeHomes.codex.dir, "commands", "meta-theory.md")}`,
+  );
+  console.log(
+    `- ${path.join(runtimeHomes.codex.dir, "config.toml")} ([features].${CODEX_REQUEST_USER_INPUT_FEATURE} = true)`,
   );
   console.log("");
   console.log("Claude Code hooks (only with --with-global-hooks):");

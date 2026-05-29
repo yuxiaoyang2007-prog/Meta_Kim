@@ -55,7 +55,7 @@ Treat these as generated mirrors or runtime adapters unless the task explicitly 
 - `.claude/capability-index/`
 - `.codex/agents/*.toml`
 - `.agents/skills/`
-- `.codex/skills/`
+- `.codex/skills/` legacy compatibility mirrors, when present for cleanup
 - `.codex/capability-index/`
 - `.cursor/agents/*.md`
 - `.cursor/skills/meta-theory/`
@@ -74,7 +74,7 @@ When this repository is opened in Codex:
 
 - `AGENTS.md` is this resident project guide.
 - `.codex/agents/*.toml` contains Codex custom-agent mirrors for the Meta_Kim team. Codex is the only target here that uses agent TOML; `worker.toml` and `explorer.toml` are fallback adapters for built-in Codex roles, and `frontend.toml`, `backend.toml`, `test.toml`, `review.toml`, `analysis.toml`, `verify.toml`, and `docs.toml` are business-role adapters for hosts that honor named custom agents. None of these adapters become durable Meta_Kim owners.
-- `.agents/skills/meta-theory/` is the Codex project skill mirror; `.codex/skills/meta-theory/` is kept as a compatibility mirror for older installs. Both are generated projections. The canonical source is `canonical/skills/meta-theory/SKILL.md`.
+- `.agents/skills/meta-theory/SKILL.md` is the Codex project skill mirror. Project-local `.codex/skills/meta-theory/` was a legacy compatibility mirror and should be removed by sync when present. The canonical source is `canonical/skills/meta-theory/SKILL.md`.
 - `.codex/hooks.json` and `.codex/hooks/` carry Codex-compatible project hook wiring.
 - `codex/config.toml.example` is generated from `canonical/runtime-assets/codex/config.toml.example`.
 
@@ -90,6 +90,8 @@ Cross-runtime format boundary:
 ## Capability-First Dispatch
 
 Meta_Kim does not start with "call agent X". It starts with "what capability is needed?"
+
+For every non-query governed task, run capability search before execution. If the task touches runtime behavior, inspect `config/runtime-capability-matrix.json`. If it touches macOS, Windows, or WSL2, inspect `config/os-compatibility-matrix.json`. If it touches external reusable capability, inspect `config/capability-index/dependency-project-registry.json`. Reference-only projects are not dependencies; distill useful ideas into Meta_Kim stage data such as `config/governance/decision-pattern-catalog.json`.
 
 Use this order:
 
@@ -179,6 +181,19 @@ For executable work, plan the business flow before writing code or changing file
 - tests / QA
 - release / install path
 - feedback and evolution
+
+Hard rules before Execution:
+
+- Fuzzy goals require intent amplification and an acceptance record.
+- Multi-path work requires best-path selection.
+- Multi-lens judgment uses dynamic lens discovery; user-mentioned books, people, or theories are seeds/fallbacks, not a fixed list.
+- Execution requires owner + weapon + verification owner.
+- Dependency projects require input/output contracts before use.
+- Codex subagents require explicit request or explicit governed task need, and hooks require trust review.
+- OpenClaw skills require third-party risk and sandbox review.
+- Cursor capabilities remain unknown/partial until verified; do not mark them native from projection files alone.
+- Public-ready requires verification plus intent acceptance; workflow completion alone is not user-goal completion.
+- Evolution must write back or record none-with-reason.
 
 Not every task needs every lane, but omitted lanes should be intentional. The business-flow blueprint should explain:
 

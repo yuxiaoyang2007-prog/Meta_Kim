@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "surfaceRequest": "",
+  "realIntent": "",
+  "subject": "",
+  "currentState": "",
+  "targetState": "",
+  "constraints": [],
+  "successCriteria": [],
+  "nonGoals": [],
+  "evidence": {
+    "confirmed": [],
+    "userProvided": [],
+    "inference": [],
+    "unconfirmed": []
+  },
+  "selectedLens": [],
+  "pathCandidates": [
+    {
+      "id": "minimal_fix",
+      "description": "",
+      "score": 0,
+      "pros": [],
+      "cons": [],
+      "risk": [],
+      "timeToFirstProof": "",
+      "verification": ""
+    },
+    {
+      "id": "shortest_correct_path",
+      "description": "",
+      "score": 0,
+      "pros": [],
+      "cons": [],
+      "risk": [],
+      "timeToFirstProof": "",
+      "verification": ""
+    },
+    {
+      "id": "ten_x_path_shift",
+      "description": "",
+      "score": 0,
+      "pros": [],
+      "cons": [],
+      "risk": [],
+      "timeToFirstProof": "",
+      "verification": ""
+    }
+  ],
+  "selectedPath": "",
+  "whyThisPath": "",
+  "firstAction": {
+    "actor": "",
+    "input": "",
+    "action": "",
+    "output": "",
+    "passSignal": "",
+    "killSignal": "",
+    "timebox": ""
+  },
+  "doneCondition": "",
+  "intentAmplificationScore": 0,
+  "publicReadyScore": 0,
+  "userGoalDone": false,
+  "publicReadyRequires": ["intentAmplificationScore>=90", "publicReadyScore>=90", "verificationEvidence", "userGoalDone=true"],
+  "scoreBands": [
+    {
+      "min": 0,
+      "max": 59,
+      "status": "blocked_clarify_or_fetch_only"
+    },
+    {
+      "min": 60,
+      "max": 74,
+      "status": "evidence_or_minimum_test_only"
+    },
+    {
+      "min": 75,
+      "max": 89,
+      "status": "executable_not_public_ready"
+    },
+    {
+      "min": 90,
+      "max": 100,
+      "status": "may_claim_user_goal_done_with_verification"
+    }
+  ]
+}

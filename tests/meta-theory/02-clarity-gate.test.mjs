@@ -49,7 +49,9 @@ describe("Clarity Gate unified execution confirmation", async () => {
 
   test("Critical clarification is separate from execution confirmation", () => {
     assert.match(skillContent, /Critical clarification/i);
-    assert.match(skillContent, /too unclear or risky to Fetch/i);
+    assert.match(skillContent, /intent completeness framework/i);
+    assert.match(skillContent, /not.*true human intent/i);
+    assert.match(skillContent, /critical_clarification_allowed/i);
     assert.match(skillContent, /before executing a dispatch plan/i);
     assert.doesNotMatch(skillContent, /IMMEDIATELY invoke the native question tool/i);
   });
@@ -311,6 +313,30 @@ describe("Clarity Gate unified execution confirmation", async () => {
     assert.equal(codexPolicy.claudeNativeChoiceSurfaceUnchanged, true);
   });
 
+  test("Cursor choice surface uses stable alwaysApply chat-card fallback", async () => {
+    const cursorSurface =
+      workflowContractJson.runDiscipline?.runtimeNativeChoiceSurfaces?.cursor;
+    assert.ok(cursorSurface, "Cursor choice surface policy must exist");
+    assert.equal(cursorSurface.primarySurface, "alwaysApply_rule_chat_card");
+    assert.ok(
+      cursorSurface.fallbackSurfaces?.includes("conversation_fallback"),
+      "Cursor must fall back to conversation cards",
+    );
+    const cursorPolicyText = `${cursorSurface.triggerDescription} ${cursorSurface.implementation}`;
+    assert.match(cursorPolicyText, /alwaysApply/i);
+    assert.match(cursorPolicyText, /chat decision card/i);
+    assert.match(cursorPolicyText, /preToolUse/i);
+    assert.match(cursorPolicyText, /failClosed/i);
+    assert.match(cursorPolicyText, /native modal|popup/i);
+
+    const cursorRule = await readFile(
+      "canonical/runtime-assets/cursor/rules/meta-choice-surface.mdc",
+    );
+    assert.match(cursorRule, /alwaysApply: true/);
+    assert.match(cursorRule, /Do not call this a popup/i);
+    assert.match(cursorRule, /conversation_fallback/);
+  });
+
   test("Choice Surface Gate forbids premature popup or execution confirmation", () => {
     const combined = `${skillContent}\n${workflowContract}\n${devGov}`;
     const gate =
@@ -333,7 +359,8 @@ describe("Clarity Gate unified execution confirmation", async () => {
     assert.match(combined, /FORBIDDEN: premature choice surface/i);
     assert.match(combined, /test a popup|interactive box|popup_test_request/i);
     assert.match(combined, /Critical[\s\S]*Fetch[\s\S]*Thinking/);
-    assert.match(combined, /Fetch cannot proceed safely/i);
+    assert.match(combined, /intent frame/i);
+    assert.match(combined, /changes route, scope, risk, acceptance, owner, permission, or non-goal/i);
     assert.match(combined, /must not present execution options/i);
     assert.match(combined, /contentEvidencePacket[\s\S]*preDecisionOptionFrame/);
     assert.match(combined, /No candidate paths means no execution confirmation/i);

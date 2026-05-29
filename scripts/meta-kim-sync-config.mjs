@@ -99,10 +99,8 @@ const runtimeProfileCatalog = {
       ],
       outputPaths: {
         agentsDir: ".codex/agents",
-        skillsDir: ".codex/skills",
-        skillRoot: ".codex/skills/meta-theory",
-        projectSkillsDir: ".agents/skills",
-        projectSkillRoot: ".agents/skills/meta-theory",
+        skillsDir: ".agents/skills",
+        skillRoot: ".agents/skills/meta-theory",
         hooksDir: ".codex/hooks",
         hooksFile: ".codex/hooks.json",
         commandsDir: ".codex/commands",
@@ -448,10 +446,9 @@ const runtimeProjectionLayouts = {
   codex: {
     project: {
       agentsDir: [".codex", "agents"],
-      skillsDir: [".codex", "skills"],
-      skillRoot: [".codex", "skills", "meta-theory"],
-      projectSkillsDir: [".agents", "skills"],
-      projectSkillRoot: [".agents", "skills", "meta-theory"],
+      skillsDir: [".agents", "skills"],
+      skillRoot: [".agents", "skills", "meta-theory"],
+      legacySkillRoot: [".codex", "skills", "meta-theory"],
       legacySkillFile: [".codex", "skills", "meta-theory.md"],
       legacySkillReferencesDir: [".codex", "skills", "references"],
       hooksDir: [".codex", "hooks"],

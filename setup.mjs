@@ -394,7 +394,7 @@ ${r ? `Raw error: ${r}` : ""}
     syncClaudeMcp: "Claude Code .mcp.json",
     syncCodexAgents: (n, total = META_AGENTS.length) =>
       `Codex agents: ${n}/${total} .toml files`,
-    syncCodexSkills: "Codex skills/meta-theory/SKILL.md",
+    syncCodexSkills: "Codex .agents/skills/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw workspaces: ${n}/${META_AGENTS.length} agents — each folder has the 9 required .md files (BOOT, SOUL, …)`,
     syncOpenclawSkill: "OpenClaw shared meta-theory",
@@ -853,7 +853,7 @@ ${r ? `原始错误：${r}` : ""}
     syncClaudeMcp: "Claude Code .mcp.json",
     syncCodexAgents: (n, total = META_AGENTS.length) =>
       `Codex 智能体: ${n}/${total} .toml 文件`,
-    syncCodexSkills: "Codex 技能/meta-theory/SKILL.md",
+    syncCodexSkills: "Codex .agents/skills/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw 工作区：${n}/${META_AGENTS.length} 个智能体，各目录 9 个必备 Markdown 已齐（含 BOOT、SOUL 等；不含子文件夹里的额外文件）`,
     syncOpenclawSkill: "OpenClaw 共享 meta-theory",
@@ -1314,7 +1314,7 @@ ${r ? `生エラー：${r}` : ""}
     syncClaudeMcp: "Claude Code .mcp.json",
     syncCodexAgents: (n, total = META_AGENTS.length) =>
       `Codex エージェント: ${n}/${total} .toml ファイル`,
-    syncCodexSkills: "Codex スキル/meta-theory/SKILL.md",
+    syncCodexSkills: "Codex .agents/skills/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw ワークスペース: ${n}/${META_AGENTS.length} エージェント — 各フォルダに必須の .md 9 件（BOOT、SOUL など）`,
     syncOpenclawSkill: "OpenClaw 共有 meta-theory",
@@ -1791,7 +1791,7 @@ ${r ? `원본 오류：${r}` : ""}
     syncClaudeMcp: "Claude Code .mcp.json",
     syncCodexAgents: (n, total = META_AGENTS.length) =>
       `Codex 에이전트: ${n}/${total} .toml 파일`,
-    syncCodexSkills: "Codex 스킬/meta-theory/SKILL.md",
+    syncCodexSkills: "Codex .agents/skills/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw 워크스페이스: ${n}/${META_AGENTS.length} 에이전트 — 각 폴더에 필수 .md 9개(BOOT, SOUL 등)`,
     syncOpenclawSkill: "OpenClaw 공유 meta-theory",
@@ -3106,14 +3106,14 @@ function checkSync(
 
     const codexSkillPath = join(
       PROJECT_DIR,
-      ".codex",
+      ".agents",
       "skills",
       "meta-theory",
       "SKILL.md",
     );
     if (existsSync(codexSkillPath)) ok(t.syncCodexSkills);
     else {
-      fail(t.syncMissing(".codex/skills/meta-theory/SKILL.md"));
+      fail(t.syncMissing(".agents/skills/meta-theory/SKILL.md"));
       allOk = false;
     }
   }

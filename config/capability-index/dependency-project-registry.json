@@ -1,0 +1,990 @@
+{
+  "schemaVersion": 1,
+  "projects": [
+    {
+      "id": "agent-teams-playbook",
+      "name": "agent-teams-playbook",
+      "source": {
+        "type": "github",
+        "uri": "https://github.com/KimYx0207/agent-teams-playbook",
+        "localPath": null,
+        "inspectionStatus": "external_reference",
+        "lastInspectedAt": null
+      },
+      "capabilityCard": {
+        "oneLine": "Parallel agent-team orchestration playbook.",
+        "taskShapes": [
+          "multi_lane_execution"
+        ],
+        "triggerConditions": [
+          "2+ independent worker lanes"
+        ],
+        "inputContract": {
+          "requires": [
+            "bounded work lanes"
+          ]
+        },
+        "outputContract": {
+          "produces": [
+            "parallelization advice",
+            "worker split"
+          ]
+        },
+        "notFor": [
+          "Critical/Fetch replacement"
+        ],
+        "knownRisks": [
+          "external skill must be installed"
+        ],
+        "verificationMethods": [
+          "config/skills.json entry",
+          "discover global capabilities"
+        ],
+        "canDo": [
+          "multi_lane_execution"
+        ],
+        "canNotDo": [
+          "Critical/Fetch replacement"
+        ],
+        "verificationMethod": "config/skills.json entry",
+        "risk": [
+          "external skill must be installed"
+        ],
+        "routeEligibility": "external_reference",
+        "writebackKey": "dependency:agent-teams-playbook"
+      },
+      "interface": {
+        "invokeAs": "reference",
+        "preferredWeaponId": "agent-teams-playbook-skill",
+        "fallbackWeaponId": null,
+        "requiredFiles": [],
+        "requiredEnv": [],
+        "requiredRuntime": [
+          "claude_code",
+          "codex",
+          "openclaw",
+          "cursor"
+        ],
+        "invocationPath": null
+      },
+      "scoring": {
+        "taskFit": 78,
+        "inputOutputClarity": 75,
+        "runtimeAvailability": 70,
+        "verificationStrength": 65,
+        "reusePotential": 80,
+        "risk": 25,
+        "overall": 74
+      },
+      "reusePolicy": {
+        "reuseWhenScoreAbove": 80,
+        "requiresHumanConfirmationAboveRisk": "medium",
+        "writebackOnUse": true,
+        "recordUsageStats": true
+      },
+      "evolution": {
+        "usageCount": 0,
+        "successCount": 0,
+        "failureCount": 0,
+        "lastFailureReason": null,
+        "nextRunHints": []
+      },
+      "runtimeSupport": {
+        "claude_code": "partial",
+        "codex": "partial",
+        "cursor": "partial",
+        "openclaw": "partial"
+      },
+      "osSupport": {
+        "macos": "partial",
+        "windows": "partial",
+        "linux": "partial",
+        "wsl2": "partial"
+      },
+      "supportEvidence": {
+        "source": "repo_claim",
+        "confidence": "repo_claim",
+        "verificationCommand": "npm run meta:deps:compat",
+        "lastVerifiedAt": null
+      }
+    },
+    {
+      "id": "meta-kim-runtime",
+      "name": "meta-kim-runtime MCP",
+      "source": {
+        "type": "mcp",
+        "uri": null,
+        "localPath": "scripts/mcp/meta-runtime-server.mjs",
+        "inspectionStatus": "inspected",
+        "lastInspectedAt": "2026-05-28"
+      },
+      "capabilityCard": {
+        "oneLine": "Local MCP exposing Meta_Kim agent and runtime capability metadata.",
+        "taskShapes": [
+          "capability_inventory",
+          "agent_lookup"
+        ],
+        "triggerConditions": [
+          "need meta agent list",
+          "need runtime capability facts"
+        ],
+        "inputContract": {
+          "requires": [
+            "MCP tool call"
+          ]
+        },
+        "outputContract": {
+          "produces": [
+            "agent definitions",
+            "runtime capabilities"
+          ]
+        },
+        "notFor": [
+          "external research"
+        ],
+        "knownRisks": [
+          "project path portability"
+        ],
+        "verificationMethods": [
+          "npm run meta:test:mcp"
+        ],
+        "canDo": [
+          "capability_inventory",
+          "agent_lookup"
+        ],
+        "canNotDo": [
+          "external research"
+        ],
+        "verificationMethod": "npm run meta:test:mcp",
+        "risk": [
+          "project path portability"
+        ],
+        "routeEligibility": "callable",
+        "writebackKey": "dependency:meta-kim-runtime"
+      },
+      "interface": {
+        "invokeAs": "mcp",
+        "preferredWeaponId": "meta-kim-runtime-mcp",
+        "fallbackWeaponId": "capability-index-file",
+        "requiredFiles": [
+          "scripts/mcp/meta-runtime-server.mjs"
+        ],
+        "requiredEnv": [],
+        "requiredRuntime": [
+          "claude_code",
+          "codex",
+          "cursor"
+        ],
+        "invocationPath": "meta-kim-runtime-mcp"
+      },
+      "scoring": {
+        "taskFit": 88,
+        "inputOutputClarity": 90,
+        "runtimeAvailability": 85,
+        "verificationStrength": 90,
+        "reusePotential": 88,
+        "risk": 20,
+        "overall": 87
+      },
+      "reusePolicy": {
+        "reuseWhenScoreAbove": 80,
+        "requiresHumanConfirmationAboveRisk": "medium",
+        "writebackOnUse": true,
+        "recordUsageStats": true
+      },
+      "evolution": {
+        "usageCount": 0,
+        "successCount": 0,
+        "failureCount": 0,
+        "lastFailureReason": null,
+        "nextRunHints": []
+      },
+      "runtimeSupport": {
+        "claude_code": "partial",
+        "codex": "partial",
+        "cursor": "partial",
+        "openclaw": "unknown"
+      },
+      "osSupport": {
+        "macos": "partial",
+        "windows": "partial",
+        "linux": "partial",
+        "wsl2": "partial"
+      },
+      "supportEvidence": {
+        "source": "repo_claim",
+        "confidence": "repo_claim",
+        "verificationCommand": "npm run meta:deps:compat",
+        "lastVerifiedAt": null
+      }
+    },
+    {
+      "id": "findskill",
+      "name": "findskill",
+      "source": {
+        "type": "github",
+        "uri": "${skillOwner}/findskill",
+        "localPath": null,
+        "inspectionStatus": "external_reference",
+        "lastInspectedAt": null
+      },
+      "capabilityCard": {
+        "oneLine": "Dependency capability for findskill.",
+        "canDo": [
+          "external_capability"
+        ],
+        "canNotDo": [
+          "automatic execution without trust review"
+        ],
+        "inputContract": {
+          "requires": [
+            "matched task shape",
+            "trust review when third-party"
+          ]
+        },
+        "outputContract": {
+          "produces": [
+            "skill-specific artifact or reference evidence"
+          ]
+        },
+        "triggerConditions": [
+          "findskill"
+        ],
+        "verificationMethod": "npm run meta:deps:compat",
+        "risk": [
+          "third_party_skill_requires_trust_review"
+        ],
+        "routeEligibility": "external_reference",
+        "notFor": [
+          "automatic execution without trust review"
+        ],
+        "taskShapes": [
+          "external_capability"
+        ],
+        "writebackKey": "dependency:findskill",
+        "verificationMethods": [
+          "npm run meta:deps:compat"
+        ]
+      },
+      "interface": {
+        "invokeAs": "reference",
+        "invocationPath": null,
+        "preferredWeaponId": "findskill-skill",
+        "requiredFiles": [],
+        "requiredEnv": [],
+        "requiredRuntime": [
+          "claude_code",
+          "codex",
+          "cursor",
+          "openclaw"
+        ]
+      },
+      "scoring": {
+        "overall": 62
+      },
+      "reusePolicy": {
+        "reuseWhenScoreAbove": 80,
+        "requiresHumanConfirmationAboveRisk": "medium",
+        "writebackOnUse": true,
+        "recordUsageStats": true
+      },
+      "evolution": {
+        "usageCount": 0,
+        "successCount": 0,
+        "failureCount": 0,
+        "lastFailureReason": null,
+        "nextRunHints": []
+      },
+      "runtimeSupport": {
+        "claude_code": "partial",
+        "codex": "partial",
+        "cursor": "partial",
+        "openclaw": "partial"
+      },
+      "osSupport": {
+        "macos": "partial",
+        "windows": "partial",
+        "linux": "partial",
+        "wsl2": "partial"
+      },
+      "supportEvidence": {
+        "source": "repo_claim",
+        "confidence": "repo_claim",
+        "verificationCommand": "npm run meta:deps:compat",
+        "lastVerifiedAt": null
+      }
+    },
+    {
+      "id": "hookprompt",
+      "name": "hookprompt",
+      "source": {
+        "type": "github",
+        "uri": "${skillOwner}/HookPrompt",
+        "localPath": null,
+        "inspectionStatus": "external_reference",
+        "lastInspectedAt": null
+      },
+      "capabilityCard": {
+        "oneLine": "Dependency capability for hookprompt.",
+        "canDo": [
+          "prompt-submission-optimization"
+        ],
+        "canNotDo": [
+          "automatic execution without trust review"
+        ],
+        "inputContract": {
+          "requires": [
+            "matched task shape",
+            "trust review when third-party"
+          ]
+        },
+        "outputContract": {
+          "produces": [
+            "skill-specific artifact or reference evidence"
+          ]
+        },
+        "triggerConditions": [
+          "hookprompt"
+        ],
+        "verificationMethod": "npm run meta:deps:compat",
+        "risk": [
+          "third_party_skill_requires_trust_review"
+        ],
+        "routeEligibility": "external_reference",
+        "notFor": [
+          "automatic execution without trust review"
+        ],
+        "taskShapes": [
+          "prompt-submission-optimization"
+        ],
+        "writebackKey": "dependency:hookprompt",
+        "verificationMethods": [
+          "npm run meta:deps:compat"
+        ]
+      },
+      "interface": {
+        "invokeAs": "reference",
+        "invocationPath": null,
+        "preferredWeaponId": "hookprompt-skill",
+        "requiredFiles": [],
+        "requiredEnv": [],
+        "requiredRuntime": [
+          "claude_code",
+          "codex",
+          "cursor",
+          "openclaw"
+        ]
+      },
+      "scoring": {
+        "overall": 62
+      },
+      "reusePolicy": {
+        "reuseWhenScoreAbove": 80,
+        "requiresHumanConfirmationAboveRisk": "medium",
+        "writebackOnUse": true,
+        "recordUsageStats": true
+      },
+      "evolution": {
+        "usageCount": 0,
+        "successCount": 0,
+        "failureCount": 0,
+        "lastFailureReason": null,
+        "nextRunHints": []
+      },
+      "runtimeSupport": {
+        "claude_code": "partial",
+        "codex": "partial",
+        "cursor": "partial",
+        "openclaw": "unknown"
+      },
+      "osSupport": {
+        "macos": "partial",
+        "windows": "partial",
+        "linux": "partial",
+        "wsl2": "partial"
+      },
+      "supportEvidence": {
+        "source": "repo_claim",
+        "confidence": "repo_claim",
+        "verificationCommand": "npm run meta:deps:compat",
+        "lastVerifiedAt": null
+      }
+    },
+    {
+      "id": "superpowers",
+      "name": "superpowers",
+      "source": {
+        "type": "github",
+        "uri": "obra/superpowers",
+        "localPath": null,
+        "inspectionStatus": "external_reference",
+        "lastInspectedAt": null
+      },
+      "capabilityCard": {
+        "oneLine": "Dependency capability for superpowers.",
+        "canDo": [
+          "external_capability"
+        ],
+        "canNotDo": [
+          "automatic execution without trust review"
+        ],
+        "inputContract": {
+          "requires": [
+            "matched task shape",
+            "trust review when third-party"
+          ]
+        },
+        "outputContract": {
+          "produces": [
+            "skill-specific artifact or reference evidence"
+          ]
+        },
+        "triggerConditions": [
+          "superpowers"
+        ],
+        "verificationMethod": "npm run meta:deps:compat",
+        "risk": [
+          "third_party_skill_requires_trust_review"
+        ],
+        "routeEligibility": "external_reference",
+        "notFor": [
+          "automatic execution without trust review"
+        ],
+        "taskShapes": [
+          "external_capability"
+        ],
+        "writebackKey": "dependency:superpowers",
+        "verificationMethods": [
+          "npm run meta:deps:compat"
+        ]
+      },
+      "interface": {
+        "invokeAs": "reference",
+        "invocationPath": null,
+        "preferredWeaponId": "superpowers-skill",
+        "requiredFiles": [],
+        "requiredEnv": [],
+        "requiredRuntime": [
+          "claude_code",
+          "codex",
+          "cursor",
+          "openclaw"
+        ]
+      },
+      "scoring": {
+        "overall": 62
+      },
+      "reusePolicy": {
+        "reuseWhenScoreAbove": 80,
+        "requiresHumanConfirmationAboveRisk": "medium",
+        "writebackOnUse": true,
+        "recordUsageStats": true
+      },
+      "evolution": {
+        "usageCount": 0,
+        "successCount": 0,
+        "failureCount": 0,
+        "lastFailureReason": null,
+        "nextRunHints": []
+      },
+      "runtimeSupport": {
+        "claude_code": "partial",
+        "codex": "partial",
+        "cursor": "partial",
+        "openclaw": "partial"
+      },
+      "osSupport": {
+        "macos": "partial",
+        "windows": "partial",
+        "linux": "partial",
+        "wsl2": "partial"
+      },
+      "supportEvidence": {
+        "source": "repo_claim",
+        "confidence": "repo_claim",
+        "verificationCommand": "npm run meta:deps:compat",
+        "lastVerifiedAt": null
+      }
+    },
+    {
+      "id": "ecc",
+      "name": "ecc",
+      "source": {
+        "type": "github",
+        "uri": "affaan-m/ECC",
+        "localPath": null,
+        "inspectionStatus": "external_reference",
+        "lastInspectedAt": null
+      },
+      "capabilityCard": {
+        "oneLine": "Dependency capability for ecc.",
+        "canDo": [
+          "external_capability"
+        ],
+        "canNotDo": [
+          "automatic execution without trust review"
+        ],
+        "inputContract": {
+          "requires": [
+            "matched task shape",
+            "trust review when third-party"
+          ]
+        },
+        "outputContract": {
+          "produces": [
+            "skill-specific artifact or reference evidence"
+          ]
+        },
+        "triggerConditions": [
+          "ecc"
+        ],
+        "verificationMethod": "npm run meta:deps:compat",
+        "risk": [
+          "third_party_skill_requires_trust_review"
+        ],
+        "routeEligibility": "external_reference",
+        "notFor": [
+          "automatic execution without trust review"
+        ],
+        "taskShapes": [
+          "external_capability"
+        ],
+        "writebackKey": "dependency:ecc",
+        "verificationMethods": [
+          "npm run meta:deps:compat"
+        ]
+      },
+      "interface": {
+        "invokeAs": "reference",
+        "invocationPath": null,
+        "preferredWeaponId": "ecc-skill",
+        "requiredFiles": [],
+        "requiredEnv": [],
+        "requiredRuntime": [
+          "claude_code",
+          "codex",
+          "cursor",
+          "openclaw"
+        ]
+      },
+      "scoring": {
+        "overall": 62
+      },
+      "reusePolicy": {
+        "reuseWhenScoreAbove": 80,
+        "requiresHumanConfirmationAboveRisk": "medium",
+        "writebackOnUse": true,
+        "recordUsageStats": true
+      },
+      "evolution": {
+        "usageCount": 0,
+        "successCount": 0,
+        "failureCount": 0,
+        "lastFailureReason": null,
+        "nextRunHints": []
+      },
+      "runtimeSupport": {
+        "claude_code": "partial",
+        "codex": "partial",
+        "cursor": "partial",
+        "openclaw": "unknown"
+      },
+      "osSupport": {
+        "macos": "partial",
+        "windows": "partial",
+        "linux": "partial",
+        "wsl2": "partial"
+      },
+      "supportEvidence": {
+        "source": "repo_claim",
+        "confidence": "repo_claim",
+        "verificationCommand": "npm run meta:deps:compat",
+        "lastVerifiedAt": null
+      }
+    },
+    {
+      "id": "planning-with-files",
+      "name": "planning-with-files",
+      "source": {
+        "type": "github",
+        "uri": "OthmanAdi/planning-with-files",
+        "localPath": null,
+        "inspectionStatus": "external_reference",
+        "lastInspectedAt": null
+      },
+      "capabilityCard": {
+        "oneLine": "Dependency capability for planning-with-files.",
+        "canDo": [
+          "external_capability"
+        ],
+        "canNotDo": [
+          "automatic execution without trust review"
+        ],
+        "inputContract": {
+          "requires": [
+            "matched task shape",
+            "trust review when third-party"
+          ]
+        },
+        "outputContract": {
+          "produces": [
+            "skill-specific artifact or reference evidence"
+          ]
+        },
+        "triggerConditions": [
+          "planning-with-files"
+        ],
+        "verificationMethod": "npm run meta:deps:compat",
+        "risk": [
+          "third_party_skill_requires_trust_review"
+        ],
+        "routeEligibility": "external_reference",
+        "notFor": [
+          "automatic execution without trust review"
+        ],
+        "taskShapes": [
+          "external_capability"
+        ],
+        "writebackKey": "dependency:planning-with-files",
+        "verificationMethods": [
+          "npm run meta:deps:compat"
+        ]
+      },
+      "interface": {
+        "invokeAs": "reference",
+        "invocationPath": null,
+        "preferredWeaponId": "planning-with-files-skill",
+        "requiredFiles": [],
+        "requiredEnv": [],
+        "requiredRuntime": [
+          "claude_code",
+          "codex",
+          "cursor",
+          "openclaw"
+        ]
+      },
+      "scoring": {
+        "overall": 62
+      },
+      "reusePolicy": {
+        "reuseWhenScoreAbove": 80,
+        "requiresHumanConfirmationAboveRisk": "medium",
+        "writebackOnUse": true,
+        "recordUsageStats": true
+      },
+      "evolution": {
+        "usageCount": 0,
+        "successCount": 0,
+        "failureCount": 0,
+        "lastFailureReason": null,
+        "nextRunHints": []
+      },
+      "runtimeSupport": {
+        "claude_code": "partial",
+        "codex": "partial",
+        "cursor": "partial",
+        "openclaw": "partial"
+      },
+      "osSupport": {
+        "macos": "partial",
+        "windows": "partial",
+        "linux": "partial",
+        "wsl2": "partial"
+      },
+      "supportEvidence": {
+        "source": "repo_claim",
+        "confidence": "repo_claim",
+        "verificationCommand": "npm run meta:deps:compat",
+        "lastVerifiedAt": null
+      }
+    },
+    {
+      "id": "cli-anything",
+      "name": "cli-anything",
+      "source": {
+        "type": "github",
+        "uri": "HKUDS/CLI-Anything",
+        "localPath": null,
+        "inspectionStatus": "external_reference",
+        "lastInspectedAt": null
+      },
+      "capabilityCard": {
+        "oneLine": "Dependency capability for cli-anything.",
+        "canDo": [
+          "external_capability"
+        ],
+        "canNotDo": [
+          "automatic execution without trust review"
+        ],
+        "inputContract": {
+          "requires": [
+            "matched task shape",
+            "trust review when third-party"
+          ]
+        },
+        "outputContract": {
+          "produces": [
+            "skill-specific artifact or reference evidence"
+          ]
+        },
+        "triggerConditions": [
+          "cli-anything"
+        ],
+        "verificationMethod": "npm run meta:deps:compat",
+        "risk": [
+          "third_party_skill_requires_trust_review"
+        ],
+        "routeEligibility": "external_reference",
+        "notFor": [
+          "automatic execution without trust review"
+        ],
+        "taskShapes": [
+          "external_capability"
+        ],
+        "writebackKey": "dependency:cli-anything",
+        "verificationMethods": [
+          "npm run meta:deps:compat"
+        ]
+      },
+      "interface": {
+        "invokeAs": "reference",
+        "invocationPath": null,
+        "preferredWeaponId": "cli-anything-skill",
+        "requiredFiles": [],
+        "requiredEnv": [],
+        "requiredRuntime": [
+          "claude_code",
+          "codex",
+          "cursor",
+          "openclaw"
+        ]
+      },
+      "scoring": {
+        "overall": 62
+      },
+      "reusePolicy": {
+        "reuseWhenScoreAbove": 80,
+        "requiresHumanConfirmationAboveRisk": "medium",
+        "writebackOnUse": true,
+        "recordUsageStats": true
+      },
+      "evolution": {
+        "usageCount": 0,
+        "successCount": 0,
+        "failureCount": 0,
+        "lastFailureReason": null,
+        "nextRunHints": []
+      },
+      "runtimeSupport": {
+        "claude_code": "partial",
+        "codex": "partial",
+        "cursor": "partial",
+        "openclaw": "partial"
+      },
+      "osSupport": {
+        "macos": "partial",
+        "windows": "partial",
+        "linux": "partial",
+        "wsl2": "partial"
+      },
+      "supportEvidence": {
+        "source": "repo_claim",
+        "confidence": "repo_claim",
+        "verificationCommand": "npm run meta:deps:compat",
+        "lastVerifiedAt": null
+      }
+    },
+    {
+      "id": "gstack",
+      "name": "gstack",
+      "source": {
+        "type": "github",
+        "uri": "garrytan/gstack",
+        "localPath": null,
+        "inspectionStatus": "external_reference",
+        "lastInspectedAt": null
+      },
+      "capabilityCard": {
+        "oneLine": "Dependency capability for gstack.",
+        "canDo": [
+          "external_capability"
+        ],
+        "canNotDo": [
+          "automatic execution without trust review"
+        ],
+        "inputContract": {
+          "requires": [
+            "matched task shape",
+            "trust review when third-party"
+          ]
+        },
+        "outputContract": {
+          "produces": [
+            "skill-specific artifact or reference evidence"
+          ]
+        },
+        "triggerConditions": [
+          "gstack"
+        ],
+        "verificationMethod": "npm run meta:deps:compat",
+        "risk": [
+          "third_party_skill_requires_trust_review"
+        ],
+        "routeEligibility": "external_reference",
+        "notFor": [
+          "automatic execution without trust review"
+        ],
+        "taskShapes": [
+          "external_capability"
+        ],
+        "writebackKey": "dependency:gstack",
+        "verificationMethods": [
+          "npm run meta:deps:compat"
+        ]
+      },
+      "interface": {
+        "invokeAs": "reference",
+        "invocationPath": null,
+        "preferredWeaponId": "gstack-skill",
+        "requiredFiles": [],
+        "requiredEnv": [],
+        "requiredRuntime": [
+          "claude_code",
+          "codex",
+          "cursor",
+          "openclaw"
+        ]
+      },
+      "scoring": {
+        "overall": 62
+      },
+      "reusePolicy": {
+        "reuseWhenScoreAbove": 80,
+        "requiresHumanConfirmationAboveRisk": "medium",
+        "writebackOnUse": true,
+        "recordUsageStats": true
+      },
+      "evolution": {
+        "usageCount": 0,
+        "successCount": 0,
+        "failureCount": 0,
+        "lastFailureReason": null,
+        "nextRunHints": []
+      },
+      "runtimeSupport": {
+        "claude_code": "partial",
+        "codex": "partial",
+        "cursor": "partial",
+        "openclaw": "partial"
+      },
+      "osSupport": {
+        "macos": "partial",
+        "windows": "partial",
+        "linux": "partial",
+        "wsl2": "partial"
+      },
+      "supportEvidence": {
+        "source": "repo_claim",
+        "confidence": "repo_claim",
+        "verificationCommand": "npm run meta:deps:compat",
+        "lastVerifiedAt": null
+      }
+    },
+    {
+      "id": "skill-creator",
+      "name": "skill-creator",
+      "source": {
+        "type": "github",
+        "uri": "anthropics/skills",
+        "localPath": null,
+        "inspectionStatus": "external_reference",
+        "lastInspectedAt": null
+      },
+      "capabilityCard": {
+        "oneLine": "Dependency capability for skill-creator.",
+        "canDo": [
+          "external_capability"
+        ],
+        "canNotDo": [
+          "automatic execution without trust review"
+        ],
+        "inputContract": {
+          "requires": [
+            "matched task shape",
+            "trust review when third-party"
+          ]
+        },
+        "outputContract": {
+          "produces": [
+            "skill-specific artifact or reference evidence"
+          ]
+        },
+        "triggerConditions": [
+          "skill-creator"
+        ],
+        "verificationMethod": "npm run meta:deps:compat",
+        "risk": [
+          "third_party_skill_requires_trust_review"
+        ],
+        "routeEligibility": "external_reference",
+        "notFor": [
+          "automatic execution without trust review"
+        ],
+        "taskShapes": [
+          "external_capability"
+        ],
+        "writebackKey": "dependency:skill-creator",
+        "verificationMethods": [
+          "npm run meta:deps:compat"
+        ]
+      },
+      "interface": {
+        "invokeAs": "reference",
+        "invocationPath": null,
+        "preferredWeaponId": "skill-creator-skill",
+        "requiredFiles": [],
+        "requiredEnv": [],
+        "requiredRuntime": [
+          "claude_code",
+          "codex",
+          "cursor",
+          "openclaw"
+        ]
+      },
+      "scoring": {
+        "overall": 62
+      },
+      "reusePolicy": {
+        "reuseWhenScoreAbove": 80,
+        "requiresHumanConfirmationAboveRisk": "medium",
+        "writebackOnUse": true,
+        "recordUsageStats": true
+      },
+      "evolution": {
+        "usageCount": 0,
+        "successCount": 0,
+        "failureCount": 0,
+        "lastFailureReason": null,
+        "nextRunHints": []
+      },
+      "runtimeSupport": {
+        "claude_code": "partial",
+        "codex": "partial",
+        "cursor": "partial",
+        "openclaw": "partial"
+      },
+      "osSupport": {
+        "macos": "partial",
+        "windows": "partial",
+        "linux": "partial",
+        "wsl2": "partial"
+      },
+      "supportEvidence": {
+        "source": "repo_claim",
+        "confidence": "repo_claim",
+        "verificationCommand": "npm run meta:deps:compat",
+        "lastVerifiedAt": null
+      }
+    }
+  ]
+}

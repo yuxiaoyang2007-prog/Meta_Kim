@@ -331,7 +331,6 @@ function scanGlobalSettingsMerge(findings) {
 function scanProjectSkills(findings, repoRoot) {
   const candidates = [
     path.join(repoRoot, ".claude", "skills", "meta-theory"),
-    path.join(repoRoot, ".codex", "skills", "meta-theory"),
     path.join(repoRoot, "openclaw", "skills", "meta-theory"),
     path.join(repoRoot, ".cursor", "skills", "meta-theory"),
     path.join(repoRoot, ".agents", "skills", "meta-theory"),

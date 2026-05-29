@@ -83,3 +83,6 @@ lib/
 
 # ========== Ignored docs ==========
 docs/architecture.zh-CN.md
+docs/governance/
+docs/protocols/
+docs/meta-kim-current-settings-zh/

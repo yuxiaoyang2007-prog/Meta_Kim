@@ -407,14 +407,56 @@ describe("workflow-contract.json — schema compliance", async () => {
   test("production correctness policy is source-first and no-quota", () => {
     const policy = contract.runDiscipline?.qualityFirstPolicy ?? {};
     assert.equal(policy.clarificationPolicy?.questionCountPolicy, "no_quota_ask_only_outcome_branching");
+    assert.equal(policy.clarificationPolicy?.evaluateAgainstIntentFrameBeforeAssumption, true);
     assert.equal("maxBlockingQuestions" in (policy.clarificationPolicy ?? {}), false);
     assert.equal(policy.readBeforeEditPolicy?.requiredBeforeMutation, true);
     assert.ok(policy.readBeforeEditPolicy?.allowedDuringCriticalFetch?.includes("git_status"));
     assert.ok(policy.stageRequiredOutputs?.critical?.includes("realIntent"));
+    assert.ok(policy.stageRequiredOutputs?.critical?.includes("intentFrameAssessment"));
     assert.ok(policy.stageRequiredOutputs?.fetch?.includes("decisionImpactMap"));
     assert.ok(policy.stageRequiredOutputs?.thinking?.includes("workerTaskPackets"));
     assert.ok(policy.dependencyPolicy?.criticalDependencyFailureActions?.includes("return_to_stage"));
     assert.ok(policy.dependencyPolicy?.forbiddenActions?.includes("use_fallback"));
+  });
+
+  test("Critical clarification is framework-based instead of mind-reading", () => {
+    const policy = contract.runDiscipline?.qualityFirstPolicy ?? {};
+    const frame = policy.intentCompletenessFramework ?? {};
+
+    assert.equal(frame.required, true);
+    assert.equal(frame.judgmentTarget, "user_expression_completeness_not_true_human_intent");
+    assert.equal(frame.outputPacket, "intentFrameAssessment");
+    assert.equal(frame.onBlockingMissingDimension, "critical_clarification_allowed");
+
+    for (const dimension of [
+      "desiredOutcome",
+      "targetAudienceOrUserValue",
+      "successCriteria",
+      "scopeBoundary",
+      "constraintsPermissionsSafety",
+      "evidenceFreshnessNeeds",
+      "outputFormatOrDeliverySurface",
+    ]) {
+      assert.ok(
+        frame.requiredDimensions?.includes(dimension),
+        `intentCompletenessFramework missing ${dimension}`,
+      );
+    }
+
+    const assessment = frame.intentFrameAssessment ?? {};
+    for (const field of [
+      "dimension",
+      "status",
+      "evidenceFromUserText",
+      "defaultAssumption",
+      "wouldChangeExecution",
+      "clarificationQuestion",
+    ]) {
+      assert.ok(
+        assessment.requiredFields?.includes(field),
+        `intentFrameAssessment missing ${field}`,
+      );
+    }
   });
 
   test("card governance model is explicit", () => {

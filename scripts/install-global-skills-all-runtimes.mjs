@@ -47,6 +47,11 @@ import {
   readManifest,
 } from "./install-manifest.mjs";
 import {
+  CODEX_REQUEST_USER_INPUT_FEATURE,
+  ensureCodexRequestUserInputFeature,
+  hasCodexRequestUserInputFeature,
+} from "./codex-config-merge.mjs";
+import {
   detectManagedInstallConflict,
   detectLegacySubdirInstall,
   detectPluginBundleSkillResidue,
@@ -1774,35 +1779,132 @@ async function installUpstreamCliSpecs(runtimeHomes, activeTargets) {
         stdio: "inherit",
       });
       if (result.status !== 0) {
-        installFailures.push({
-          skillLabel: `${spec.id} (${runtimeId})`,
+        recordInstallFailure({
+          skillId: `${spec.id} (${runtimeId})`,
+          targetDir: runtimeHome,
           repoUrl: spec.repo,
-          error: new Error(`upstream installer exited ${result.status}`),
-          classification: {
-            code: "upstream_installer_failed",
-            severity: "error",
-            summary: "The dependency's native installer failed.",
-            remediation:
-              `Run ${commandText} directly to see the upstream installer output.`,
-          },
+          category: "unknown",
+          failureText: `upstream installer exited ${result.status}`,
+          fallback: "none",
+          reason: `Run ${commandText} directly to see the upstream installer output.`,
         });
       }
     }
   }
 }
 
+async function ensureCodexChoiceSurfaceAfterInstall(runtimeHomes, activeTargets) {
+  if (!activeTargets.includes("codex") || !runtimeHomes.codex) return;
+
+  const configPath = path.join(runtimeHomes.codex, "config.toml");
+  if (dryRun) {
+    console.log(
+      t.dryRun(
+        `ensure ${configPath} has [features].${CODEX_REQUEST_USER_INPUT_FEATURE} = true`,
+      ),
+    );
+    return;
+  }
+
+  await fs.mkdir(path.dirname(configPath), { recursive: true });
+  const previous = (await pathExists(configPath))
+    ? await fs.readFile(configPath, "utf8")
+    : "";
+
+  if (hasCodexRequestUserInputFeature(previous)) {
+    console.log(
+      `${C.green}✓${C.reset} ${C.dim}Codex ${CODEX_REQUEST_USER_INPUT_FEATURE} preserved: ${configPath}${C.reset}`,
+    );
+    return;
+  }
+
+  const next = ensureCodexRequestUserInputFeature(previous);
+  if (previous) {
+    const backupPath = `${configPath}.meta-kim.bak`;
+    await fs.copyFile(configPath, backupPath);
+    console.log(
+      `${C.yellow}↻${C.reset} ${C.dim}Backed up Codex config before restoring choice surface: ${backupPath}${C.reset}`,
+    );
+  }
+
+  await fs.writeFile(configPath, next, "utf8");
+  console.log(
+    `${C.green}✓${C.reset} ${C.dim}Restored Codex ${CODEX_REQUEST_USER_INPUT_FEATURE}: ${configPath}${C.reset}`,
+  );
+}
+
 function printNativePluginInstallHint(runtimeId, pluginId) {
   if (runtimeId === "codex") {
     console.log(
-      `${C.yellow}⊘${C.reset} ${C.dim}Codex native plugin required: open /plugins or the Codex app Plugins pane, search "${pluginId}", then install it.${C.reset}`,
+      `${C.yellow}⊘${C.reset} ${C.dim}Codex native plugin required: run "codex plugin add ${pluginId}@openai-curated" or install it from /plugins.${C.reset}`,
     );
     return;
   }
   if (runtimeId === "cursor") {
     console.log(
-      `${C.yellow}⊘${C.reset} ${C.dim}Cursor native plugin required: run /add-plugin ${pluginId} in Cursor Agent chat, or install it from Cursor's plugin marketplace.${C.reset}`,
+      `${C.yellow}⊘${C.reset} ${C.dim}Cursor native plugin required: run /add-plugin ${pluginId} in Cursor Agent chat, or install it from Cursor's plugin marketplace. Cursor ${C.reset}${C.dim}CLI ${C.reset}${C.dim}does not currently expose a non-interactive plugin install command.${C.reset}`,
     );
   }
+}
+
+function codexPluginInstalled(pluginId, marketplaceId = "openai-curated") {
+  const result = spawnSync("codex", ["plugin", "list"], {
+    encoding: "utf8",
+    shell: shouldUseCliShell(os.platform()),
+  });
+  if (result.status !== 0) return false;
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+  const escapedPlugin = pluginId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedMarketplace = marketplaceId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(
+    `${escapedPlugin}@${escapedMarketplace}\\s+installed`,
+    "i",
+  ).test(output);
+}
+
+function installCodexNativePlugin(pluginId) {
+  const marketplaceId = "openai-curated";
+  if (dryRun) {
+    console.log(t.dryRun(`codex plugin add ${pluginId}@${marketplaceId}`));
+    return true;
+  }
+
+  const versionProbe = spawnSync("codex", ["--version"], {
+    encoding: "utf8",
+    shell: shouldUseCliShell(os.platform()),
+  });
+  if (versionProbe.status !== 0) {
+    printNativePluginInstallHint("codex", pluginId);
+    return false;
+  }
+
+  if (codexPluginInstalled(pluginId, marketplaceId)) {
+    console.log(
+      `${C.green}✓${C.reset} ${C.dim}Codex plugin ${pluginId}@${marketplaceId} already installed${C.reset}`,
+    );
+    return true;
+  }
+
+  spawnSync("codex", ["plugin", "marketplace", "upgrade", marketplaceId], {
+    encoding: "utf8",
+    shell: shouldUseCliShell(os.platform()),
+    stdio: "inherit",
+  });
+  const result = spawnSync(
+    "codex",
+    ["plugin", "add", `${pluginId}@${marketplaceId}`],
+    {
+      encoding: "utf8",
+      shell: shouldUseCliShell(os.platform()),
+      stdio: "inherit",
+    },
+  );
+  if (result.status === 0) return true;
+
+  console.warn(
+    `${C.yellow}⚠${C.reset} ${C.dim}Optional Codex native plugin install failed: codex plugin add ${pluginId}@${marketplaceId}. Install it from /plugins or rerun the command manually.${C.reset}`,
+  );
+  return false;
 }
 
 async function installPluginBundlesForNonClaudeRuntimes(
@@ -1845,7 +1947,11 @@ async function installPluginBundlesForNonClaudeRuntimes(
       if (nativePluginId) {
         emitHeader();
         await cleanupNativePluginSkillFallback(runtimeHome, runtimeId, spec);
-        printNativePluginInstallHint(runtimeId, nativePluginId);
+        if (runtimeId === "codex") {
+          installCodexNativePlugin(nativePluginId);
+        } else {
+          printNativePluginInstallHint(runtimeId, nativePluginId);
+        }
         continue;
       }
       // Claude runtime with a native claudePlugin spec: already handled by
@@ -2835,6 +2941,13 @@ async function stageSkillFromSubdir(
     return true;
   }
 
+  if (dryRun) {
+    console.log(
+      t.dryRun(`stage sparse ${repoUrl} (${subdirPath}) -> ${stagedPath}`),
+    );
+    return true;
+  }
+
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "meta-kim-skill-"));
   try {
     await runGitAsync(
@@ -3178,6 +3291,7 @@ async function main() {
   }
   await installUpstreamCliSpecs(homes, activeTargets);
   await installPluginBundlesForNonClaudeRuntimes(homes, activeTargets);
+  await ensureCodexChoiceSurfaceAfterInstall(homes, activeTargets);
 
   // Optional: graphify (code knowledge graph)
   if (!pluginsOnly) {

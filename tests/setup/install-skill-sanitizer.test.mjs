@@ -12,6 +12,7 @@ import {
   detectLegacySubdirInstall,
   detectPluginBundleSkillResidue,
   getSkillDescriptionLength,
+  quoteUnsafeFrontmatterScalars,
   sanitizeInstalledSkillTree,
   shouldSkipBundledRuntimePath,
   shouldSkipDocsSkillDoc,
@@ -109,6 +110,28 @@ description: Verification loop for Laravel projects: env checks and deploy readi
     const result = validateSkillFrontmatter(raw);
     assert.equal(result.ok, false);
     assert.equal(result.code, "invalid_unquoted_colon");
+  });
+
+  test("can quote unquoted colon-space scalar values before install", () => {
+    const raw = `---
+name: design-html
+description: Design finalization: generates production-quality HTML/CSS.
+---
+`;
+
+    const { content, fixes } = quoteUnsafeFrontmatterScalars(raw);
+
+    assert.deepEqual(fixes, [
+      {
+        key: "description",
+        value: "Design finalization: generates production-quality HTML/CSS.",
+      },
+    ]);
+    assert.equal(validateSkillFrontmatter(content).ok, true);
+    assert.match(
+      content,
+      /description: "Design finalization: generates production-quality HTML\/CSS\."/,
+    );
   });
 });
 

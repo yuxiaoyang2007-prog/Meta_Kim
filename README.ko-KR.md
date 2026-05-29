@@ -503,7 +503,7 @@ flowchart TB
 | 역량 표면 | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
 | **Agent** | 네이티브 agents/subagents, 프로젝트 및 사용자 범위 모두 성숙 | 강력한 custom agents/subagents | 워크스페이스형 agent, agent-to-agent 지원 | 경량 agent 투영 |
-| **스킬 / 참조** | 네이티브 스킬, 참조, 성숙한 글로벌 생태계 | `.codex/skills/` 잘 작동 | 워크스페이스 스킬 + 설치 가능 스킬 | `.cursor/skills/` 기반의 가벼운 스킬/참조 지원 |
+| **스킬 / 참조** | 네이티브 스킬, 참조, 성숙한 글로벌 생태계 | `.agents/skills/`가 프로젝트 skill 루트 | 워크스페이스 스킬 + 설치 가능 스킬 | `.cursor/skills/` 기반의 가벼운 스킬/참조 지원 |
 | **Hook / 자동화** | 프로젝트 hook + settings.json + 플러그인 생태계 | 저장소 수준 네이티브 hook 파일 표면 없음 | 워크스페이스 boot/hook 스타일 역량 | 가장 약한 네이티브 거버넌스 hook |
 | **MCP / 설정** | 완전한 네이티브 MCP 및 설정 표면 | 런타임 어댑터와 MCP로 연결 가능 | 명확한 워크스페이스 설정 | MCP 사용 가능하지만 표면이 가벼움 |
 | **거버넌스 루프 수용력** | **가장 높음** | 높지만 Claude Code보다는 낮음 | 높지만 형태가 다름 | 가장 가벼움 |
