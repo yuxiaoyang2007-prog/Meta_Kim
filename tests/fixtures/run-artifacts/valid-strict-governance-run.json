@@ -1,0 +1,67 @@
+{
+  "realIntent": "Make Meta_Kim governance executable and verifiable after v2.6.0.",
+  "subject": "Meta_Kim governance upgrade",
+  "currentState": "Validators exist but Hook progression and real fixture gates need evidence.",
+  "targetState": "Governance routes are executable only with owner, weapon, runtime, OS, verification, preflight, warning classification, and writeback evidence.",
+  "successCriteria": [
+    "Hook progression validator passes.",
+    "Real route fixtures pass.",
+    "Strict intent run artifact passes."
+  ],
+  "evidence": {
+    "confirmed": [
+      "scripts/validate-hook-progression.mjs",
+      "tests/governance/real-route-fixture.test.mjs"
+    ],
+    "userProvided": [
+      "User required Hook progression, warning classification, and real behavior tests."
+    ],
+    "inference": [
+      "Public-ready must stay false when warnings or hook blocks are unresolved."
+    ],
+    "unconfirmed": []
+  },
+  "pathCandidates": [
+    {
+      "id": "complete-governance-upgrade",
+      "score": 92
+    },
+    {
+      "id": "validate-only",
+      "score": 60
+    }
+  ],
+  "selectedPath": "complete-governance-upgrade",
+  "whyThisPath": "It fixes the missing Hook progression and real fixture gates instead of relying on documentation claims.",
+  "selectedPathBeatsRejectedRoutesReason": "The validate-only route would leave a known public-ready blocker unresolved.",
+  "shortestCorrectPathSelected": true,
+  "tenXPathShiftSelected": false,
+  "tenXPathShiftRejectedReason": "The task is a governance hardening pass, not a product or architecture expansion.",
+  "firstAction": {
+    "actor": "meta-conductor",
+    "input": "Fetch evidence showing missing Hook progression validator and package script.",
+    "action": "Add policy, validator, tests, and package verification chain.",
+    "output": "Hook progression validation artifacts.",
+    "passSignal": "npm run meta:hook:validate exits 0 and hook-progression tests pass.",
+    "killSignal": "Validator accepts vague hook output, unchanged retry, or unclassified warning.",
+    "timebox": "current run"
+  },
+  "doneCondition": "Verify by command evidence from meta:hook:validate, meta:test:governance, route fixtures, and strict intent validation.",
+  "verificationEvidence": [
+    {
+      "command": "node scripts/validate-hook-progression.mjs",
+      "artifact": "config/governance/hook-progression-policy.json"
+    },
+    {
+      "command": "node scripts/validate-intent-amplification.mjs --strict --input tests/fixtures/run-artifacts/valid-strict-governance-run.json",
+      "artifact": "tests/fixtures/run-artifacts/valid-strict-governance-run.json"
+    }
+  ],
+  "intentAmplificationScore": 94,
+  "publicReadyScore": 91,
+  "userGoalDone": true,
+  "publicReady": true,
+  "writebackDecision": "writeback",
+  "routeScore": 92,
+  "reviewFindings": []
+}

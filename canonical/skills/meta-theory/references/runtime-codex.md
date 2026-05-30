@@ -58,6 +58,14 @@ Respect user choices (after questioning). Base the analysis on the user's actual
 
 `queryBypass: true` means pure read-only query. It does not allow mutation, install, write, delete, or state-changing shell commands.
 
+## Hook progression
+
+Codex hooks are the last fuse after preflight. Before mutation, Conductor must confirm the route has real intent, Fetch evidence, owner, weapon, runtime, OS, dependency eligibility, verification owner, verification method, rollback path, warning classification, and writeback decision reservation. Hook output that blocks an action must name `returnToStage`, `repairOwner`, `repairAction`, `allowedNextAction`, and `forbiddenRetry`.
+
+`hookRepairMode` starts on the second same-reason block. It reads the hook output, fixes the missing packet or stage design, and retries only with a changed action. The same blocked action must not be retried unchanged. A third same-hook block stops Execution, emits `hookFailurePacket`, and blocks public-ready.
+
+`hookBlockRate` is measured as hook blocks divided by attempted mutating actions. `hookBlockRate <= 5%` is acceptable, `>5%` requires Evolution review, and `>15%` blocks public-ready. Read-only Fetch, repo search, dependency discovery, capability scan, and validator dry runs must not be blocked by Hook progression policy.
+
 
 ## Use when
 

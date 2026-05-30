@@ -1,6 +1,6 @@
 ---
 name: meta-theory
-version: 4.0.0
+version: 3.0.0
 author: KimYx0207
 user-invocable: true
 trigger: "元理论|执行元理论|跑元理论|meta theory|run meta theory|execute meta theory|meta-theory|agent governance|intent amplification|governance|治理|重构|多文件|跨模块|debug|fix|验证|verification"
@@ -32,6 +32,92 @@ Activate when the user calls `/meta-theory`, names meta-theory, asks for governa
 ## Canonical spine
 
 Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verification -> Evolution.
+
+You are the DISPATCHER, not the executor. Use Agent tool / `Agent(...)` dispatch only after Fetch evidence and Thinking owner resolution prove the route.
+
+Fetch-first capability matching principle: Fetch gathers evidence, then Thinking performs capability match, never hardcoded agent-name matching. Gate 1: Clarity Check blocks unclear intent before Fetch. Gate 2: Dispatch-Not-Execute blocks self-execution and requires a named owner, weapon, and verification owner.
+
+## Architecture Type Pre-judgment
+
+Important: Architecture Type Distinction. Meta Architecture means agent governance, collaboration relationships, and responsibility boundaries. Project Technical Architecture means code organization, tech stack, and design patterns; redirect that lane to an architect or backend-architect capability when the needed owner is technical implementation rather than Meta_Kim governance.
+
+## Dynamic Flow Selection
+
+- Type A: prompt/reference/contract hardening.
+- Type B: agent/skill/owner creation or upgrade.
+- Type C: external capability, tool, MCP, dependency, or web evidence discovery.
+- Type D: review, verification, rollback, public-ready, or warning closure.
+- Type E: orchestration, planning files, business-flow, and cross-runtime release.
+
+## Stage map
+
+| # | Stage | Action |
+|---|---|---|
+| 1 | Critical | clarify intent first, lock user pain, value, success criteria, non-goals, permissions, and Architecture Type |
+| 2 | Fetch | gather online/web and local evidence, confirm the problem, extract material claims, and list candidate solutions with sources |
+| 3 | Thinking | determine needed execution capabilities across agents, skills, commands, MCP capabilities, and tools; match existing capabilities; create or upgrade only for gaps; plan DAG/parallel/serial lanes with `mergeOwner` |
+| 4 | Execution | run multi-agent work using skills, commands, MCP capabilities, and tools from Thinking artifacts |
+| 5 | Review | meta-prism checks upstream Critical, Fetch, Thinking, and result quality |
+| 6 | Meta-Review | meta-warden verifies Review standard and public-ready gate |
+| 7 | Verification | run real tests with fresh evidence and `verificationPacket.fixEvidence` |
+| 8 | Evolution | after Warden approval, directly edit the target agent definition or SOUL.md for meta-agent lessons; execution-agent gaps use `capabilityGapPacket` + Type B pipeline |
+
+## Type A: Prompt / Reference / Contract Hardening
+
+Dispatch to `meta-prism` for prompt executability review and `meta-warden` for final gate. The main thread is not the executor. Use Agent tool dispatch when the task has more than a direct query or >3 sentences of change. Output: reviewed contract diff, `workerResultPackets[].fileCompletionList`, workerExecutionEvidence, and verification evidence.
+
+## Type B: Agent / Skill / Owner Creation Or Upgrade
+
+Dispatch to `meta-genesis` for identity/prompt architecture, `meta-artisan` for capability loadout, then `meta-prism` and `meta-warden` for review. Optional: `meta-sentinel`, `meta-librarian`, `meta-conductor`. Existing owner wins; owner upgrade or project-local creation is allowed only when Fetch proves a gap. Execution-agent evolution uses this Type B pipeline, not direct edit.
+
+## Type C: External Capability / Tool / Dependency Discovery
+
+Fetch scans local capability index, runtime mirrors, local runtime inventory, MCP, package scripts, installed skills, global capabilities, `findskill`, external capability discovery, specialist ecosystem search such as everything-claude-code, and `meta-scout` external evidence. Optional owners: `meta-prism`, `meta-sentinel`, `meta-scout`. Use Agent tool dispatch only after Thinking binds an owner; the DISPATCHER does not execute discovery side effects. If no callable owner exists, return to Thinking with `capabilityGapPacket`; do not use temporary fallback.
+
+## Type D: Review / Verification / Rollback / Public-Ready
+
+Dispatch to `meta-prism` and `meta-warden`; optional `meta-scout`, `meta-sentinel`, `meta-chrysalis`. Stage 4 owner prohibition: never dispatch Type: general-purpose, runtime alias, or governance agent as implementation worker. Public-ready requires verification evidence, userGoalDone, warning classification, and Warden gate.
+
+## Type E: Orchestration / Business Flow / Release
+
+Dispatch to `meta-conductor` for business-flow blueprint and parallel lane orchestration, then `meta-warden` for synthesis. Thinking to Execution may use `agent-teams-playbook` only when there are 2+ independent parallel worker lanes / two or more parallel worker lane candidates. Independent sub-tasks must be parallelized when safe; avoid fake parallelism.
+
+## Dispatch Self-Check
+
+Before Stage 4, record Protocol-first Dispatch: `runHeader`, `dispatchBoard`, `businessFlowBlueprintPacket`, `agentBlueprintPacket`, and `workerTaskPackets`. Stage 4 may not start before protocol artifacts are ready. `agentInvocationState`: `idle -> discovered -> matched -> dispatched -> returned/escalated`. `workerTaskPackets` must include `dependsOn`, `parallelGroup`, and `mergeOwner`. Option Exploration is MANDATORY in Stage 3: compare ≥2 solution paths with Pros / Cons or Decision Record and rejected alternatives. Apply Skip-Level Self-Reflection Gate and Escalation Signals before dispatch.
+
+## Fetch Evidence Inventory
+
+Research -> Inventory -> Thinking Handoff. Thinking determines needed execution capabilities, then match existing capabilities, then create or upgrade only for gaps. Fetch material claims include version, price, third-party, platform, and tool assertions. If current facts matter, set `contentEvidencePacket.researchRequired = true`, run `researchCapabilityDiscovery`, and prefer `web_search`, `url_fetch`, `docs_lookup`, or `browser_open`. If research is blocked, return `blocked` with `user_fallback` rather than guessing. Run Command discovery by package.json script scan and npm run inventory. Apply DRY conflict detection: overlap detect, duplicate reject, and keep one owner per capability. Skill selection ROI = (Task Coverage x Usage Frequency) / (Context Cost + Learning Curve).
+
+## Warden Entry Gate
+
+`/meta-theory` enters through `meta-warden` entry gate, then `meta-conductor` owns the evidence lane and sequencing, `meta-scout` owns external evidence, and `meta-prism` audits Critical, Fetch, and Thinking quality before output polish. All meta agents are dispatch targets: `meta-warden`, `meta-conductor`, `meta-scout`, `meta-artisan`, `meta-genesis`, `meta-sentinel`, `meta-librarian`, `meta-prism`, `meta-chrysalis`.
+
+## Product Reasoning Contract
+
+Translate the surface request into the real product problem. Compare minimal fix against ten-x path challenge and path shift. Final user-facing closure states chosen rationale, why changed / why change, what changed, where changed, user impact, and verification.
+
+## Human-Readable Stage Feedback
+
+Stage updates must be compact, human, and in the resolved user language. Record internally with packet field name / internal keys and debug traces, but show human label and human-readable label in user-facing output. Mention Critical, Fetch, Thinking, Review only when the stage status matters. Keep token use low and avoid dumping raw packet fields unless the user asks for debug.
+
+Public status surface uses `runStatusEnvelope`, `publicLabels`, `.meta-kim/state/{profile}/active-run.json`, and `.meta-kim/state/{profile}/runs/{runId}/status.json`. Apply runtime/tool selected output language first, then latest input language. Do not hardcode labels. The public notice must not expose internal protocol fields such as `Preflight` or `conversation_fallback` unless debug is requested.
+
+## Business-flow capability matrix
+
+Fetch expands executable deliverables into a Business-flow capability matrix covering product, UX, UI, frontend, backend, database, motion, accessibility, browser QA, performance, feedback, and evolution lanes. Thinking selects owners, dependencies, and merge owner per lane.
+
+## Evolution target map
+
+| Gap type | Evolution target |
+|---|---|
+| prompt gap | canonical skill or reference contract |
+| agent boundary gap | target agent definition / SOUL.md |
+| capability gap | `capabilityGapPacket` then Type B owner upgrade |
+| dependency gap | dependency registry and compatibility validator |
+| runtime/OS gap | runtime matrix or OS matrix |
+| warning/hook scar | validator, hook policy, regression test |
 
 ## Stage packet table
 
@@ -151,3 +237,11 @@ Meta_Kim adds boundaries around Claude Code, Codex, Cursor, and OpenClaw native 
 ## No dependency deletion due to low score
 
 Low-score, unknown, partial, uninstalled, external, high-risk, or reference-only dependencies stay registered. They may be blocked from execution, marked for probe, downgraded to evidence/reference, or assigned upgrade suggestions.
+
+## No Hook loop
+
+Hooks are last-resort fuses, not the main governance engine. Execution must pass preflight before mutation: intent, evidence, capability discovery, runtime, OS, owner, weapon, dependency route eligibility, verification owner, rollback path, warning classification, and reserved writeback decision. A Hook block must include `returnToStage`, `repairOwner`, `repairAction`, `allowedNextAction`, and `forbiddenRetry`. The same Hook reason may block once; the second same-reason block enters `hookRepairMode`; a third same-hook block stops Execution and creates `hookFailurePacket`. Never retry the same blocked action unchanged.
+
+## Real testing and warning classification
+
+Script validation is necessary but not sufficient. Public-ready requires real route fixtures, strict run artifact validation, dependency discovery output, runtime/OS probe output, and warning review. Warnings must be classified as `BLOCKING_WARNING`, `FIXABLE_WARNING`, `ENVIRONMENT_WARNING`, `EXPECTED_WARNING`, `DEPRECATED_WARNING`, or `NOISE_WARNING`. Unclassified warnings, unresolved Hook blocks, unresolved high/critical findings, missing verification evidence, or missing `userGoalDone` keep `publicReady=false`.

@@ -65,6 +65,7 @@ findings.md
 # ========== Terminal / Shell Cache Files ==========
 *.omp.cache
 pwsh.*.omp.cache
+pip/
 
 
 # ========== Root-level images (docs/images/ is tracked) ==========

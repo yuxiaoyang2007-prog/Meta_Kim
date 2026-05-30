@@ -27,6 +27,7 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
 
   const refactor = route("complex code refactor");
   assert.ok(refactor.recommendedRoute || refactor.capabilityGapPacket);
+  assert.ok(refactor.capabilityGapPacket || !/^meta-/.test(refactor.recommendedRoute?.owner ?? ""), "Pure code execution must not route governance agent as implementation worker");
 
   const hook = route("platform hook install");
   assert.ok(hook.candidateWeapons.includes("runtime-capability-matrix"));

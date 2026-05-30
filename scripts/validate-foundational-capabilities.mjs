@@ -53,6 +53,7 @@ const REQUIRED_SCRIPTS = [
   "meta:foundational:validate",
   "meta:prompt:validate",
   "meta:deps:compat",
+  "meta:hook:validate",
   "meta:verify:governance",
 ];
 

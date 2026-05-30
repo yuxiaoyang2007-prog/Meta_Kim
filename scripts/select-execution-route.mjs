@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { OS_TARGETS, RUNTIMES, classifyTaskShape, exists, readJson, repoPath, scoreRoute, stateDir, supportScore } from "./governance-lib.mjs";
+import { GOVERNANCE_OWNERS, OS_TARGETS, RUNTIMES, classifyTaskShape, exists, readJson, repoPath, scoreRoute, stateDir, supportScore } from "./governance-lib.mjs";
 
 function argValue(name, fallback = null) {
   const index = process.argv.indexOf(name);
@@ -87,6 +87,7 @@ function routeForWeapon(weapon) {
   const dep = dependencyIds.length ? candidateDependencies.find((candidate) => dependencyIds.includes(candidate.id)) ?? null : null;
   const runtimeValue = weapon.runtimeSupport?.[runtime] ?? "unknown";
   const osValue = weapon.osSupport?.[osTarget] ?? "unknown";
+  const selectedOwner = weapon.ownerCandidates?.[0] ?? null;
   const blockedReasons = [];
   if (!weapon.ownerCandidates?.length) blockedReasons.push("owner missing");
   if (!weapon.id) blockedReasons.push("weapon missing");
@@ -94,6 +95,7 @@ function routeForWeapon(weapon) {
   if (osValue === "unsupported") blockedReasons.push("OS unsupported");
   if (weapon.ownerCandidates?.some((owner) => owner === "general-purpose")) blockedReasons.push("general-purpose fallback");
   if (weapon.ownerCandidates?.some((owner) => /runtimeInstanceAlias|nickname/i.test(owner))) blockedReasons.push("runtime alias as durable owner");
+  if (taskShape === "engineering_execution" && selectedOwner && GOVERNANCE_OWNERS.includes(selectedOwner)) blockedReasons.push("governance agent as implementation worker");
   if (dep && !dependencyExecutable(dep)) {
     if (dep.routeEligibility === "reference_only" || dep.invokeAs === "reference") blockedReasons.push("dependency reference_only");
     if (!dep.invocationPath) blockedReasons.push("dependency missing invocationPath");
@@ -125,7 +127,7 @@ function routeForWeapon(weapon) {
   });
   return {
     id: `${weapon.id}:${runtime}:${osTarget}`,
-    owner: weapon.ownerCandidates?.[0] ?? null,
+    owner: selectedOwner,
     weapon: weapon.id,
     dependency: dep?.id ?? null,
     dependencyProject: dep?.id ?? null,
@@ -154,11 +156,11 @@ function routeForWeapon(weapon) {
 }
 
 const rankedRoutes = candidateWeapons.map(routeForWeapon).sort((a, b) => b.score - a.score);
-const recommendedRoute = rankedRoutes.find((route) => route.score >= 85) ?? rankedRoutes[0] ?? null;
-const capabilityGapPacket = recommendedRoute && recommendedRoute.score >= 50 ? null : {
+const recommendedRoute = rankedRoutes.find((route) => route.score >= 85) ?? rankedRoutes.find((route) => route.score >= 70) ?? null;
+const capabilityGapPacket = recommendedRoute ? null : {
   gap: "No route has enough owner + weapon + dependency + runtime + OS + verification support.",
   taskShape,
-  missing: recommendedRoute?.blockedReasons?.length ? recommendedRoute.blockedReasons : ["owner_weapon_dependency_route"],
+  missing: rankedRoutes[0]?.blockedReasons?.length ? rankedRoutes[0].blockedReasons : ["owner_weapon_dependency_route"],
   returnToStage: "Thinking",
 };
 const userChoiceNeeded = Boolean(recommendedRoute && recommendedRoute.score >= 70 && recommendedRoute.score < 85);

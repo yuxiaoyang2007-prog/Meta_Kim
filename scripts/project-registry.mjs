@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { importDatabaseSync } from "./sqlite-runtime.mjs";
 
 function normalizeRepoPath(repoPath) {
   return path.resolve(repoPath);
@@ -28,7 +29,7 @@ export function getProjectRegistryPaths({ homeDir = os.homedir() } = {}) {
 }
 
 async function openProjectRegistry(projectRegistryPath) {
-  const { DatabaseSync } = await import("node:sqlite");
+  const DatabaseSync = await importDatabaseSync();
   await fs.mkdir(path.dirname(projectRegistryPath), { recursive: true });
   const db = new DatabaseSync(projectRegistryPath);
   db.exec(`

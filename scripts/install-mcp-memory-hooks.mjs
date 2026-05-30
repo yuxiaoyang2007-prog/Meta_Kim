@@ -21,10 +21,11 @@
  *   8. Warn if MCP server not responding on http://localhost:8000
  *
  * Usage:
- *   node scripts/install-mcp-memory-hooks.mjs           # Install (idempotent, auto-fixes invalid paths)
- *   node scripts/install-mcp-memory-hooks.mjs --check   # Dry-run: verify only, no side effects
- *   node scripts/install-mcp-memory-hooks.mjs --force   # Force-update Python paths even if current is valid
- *   node scripts/install-mcp-memory-hooks.mjs --remove  # Uninstall hooks (keeps files)
+ *   node scripts/install-mcp-memory-hooks.mjs                         # Install all runtime hooks
+ *   node scripts/install-mcp-memory-hooks.mjs --targets codex,cursor   # Install selected runtime hooks
+ *   node scripts/install-mcp-memory-hooks.mjs --check                  # Dry-run: verify only, no side effects
+ *   node scripts/install-mcp-memory-hooks.mjs --force                  # Force-update Python paths even if current is valid
+ *   node scripts/install-mcp-memory-hooks.mjs --remove                 # Uninstall hooks (keeps files)
  *
  * Exit codes:
  *   0  success
@@ -119,6 +120,8 @@ const CODEX_HOME = join(homedir(), ".codex");
 const CURSOR_HOME = join(homedir(), ".cursor");
 const OPENCLAW_HOME = join(homedir(), ".openclaw");
 const CROSS_RUNTIME_HOOK_FILE = "meta-kim-memory-save.mjs";
+const VALID_TARGETS = new Set(["claude", "codex", "cursor", "openclaw"]);
+const DEFAULT_TARGETS = ["claude", "codex", "cursor", "openclaw"];
 
 // ── Formatting helpers ──────────────────────────────────
 
@@ -145,6 +148,27 @@ function fail(msg) {
 
 // Global flag for force-update mode
 let FORCE_UPDATE = false;
+
+function parseTargets(argv) {
+  const valueFromEquals = argv.find((arg) => arg.startsWith("--targets="));
+  const equalsValue = valueFromEquals ? valueFromEquals.slice("--targets=".length) : "";
+  const targetIndex = argv.indexOf("--targets");
+  const flagValue =
+    targetIndex >= 0 && argv[targetIndex + 1] && !argv[targetIndex + 1].startsWith("--")
+      ? argv[targetIndex + 1]
+      : "";
+  const raw = equalsValue || flagValue;
+  if (!raw) return DEFAULT_TARGETS;
+  const parsed = raw
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => VALID_TARGETS.has(item));
+  return parsed.length > 0 ? [...new Set(parsed)] : DEFAULT_TARGETS;
+}
+
+function targetListText(targets) {
+  return targets.join(", ");
+}
 
 function run(cmd, args, opts = {}) {
   return spawnSync(cmd, args, {
@@ -863,20 +887,29 @@ function installOpenClawMemoryHook() {
   return true;
 }
 
-function installCrossRuntimeMemoryHooks() {
-  const codexHook = copyCrossRuntimeMemoryHook(CODEX_HOME);
-  const cursorHook = copyCrossRuntimeMemoryHook(CURSOR_HOME);
-  const codexOk = codexHook ? registerCodexMemoryHook(codexHook) : false;
-  const cursorOk = cursorHook ? registerCursorMemoryHook(cursorHook) : false;
-  const openclawOk = installOpenClawMemoryHook();
-  return codexOk && cursorOk && openclawOk;
+function installCrossRuntimeMemoryHooks(targets) {
+  const results = [];
+  if (targets.includes("codex")) {
+    const codexHook = copyCrossRuntimeMemoryHook(CODEX_HOME);
+    results.push(codexHook ? registerCodexMemoryHook(codexHook) : false);
+  }
+  if (targets.includes("cursor")) {
+    const cursorHook = copyCrossRuntimeMemoryHook(CURSOR_HOME);
+    results.push(cursorHook ? registerCursorMemoryHook(cursorHook) : false);
+  }
+  if (targets.includes("openclaw")) {
+    results.push(installOpenClawMemoryHook());
+  }
+  return results.length === 0 || results.every(Boolean);
 }
 
-function removeCrossRuntimeMemoryHooks() {
+function removeCrossRuntimeMemoryHooks(targets) {
   for (const [runtimeHome, hooksFile, eventNames] of [
     [CODEX_HOME, "hooks.json", ["SessionStart", "UserPromptSubmit", "Stop"]],
     [CURSOR_HOME, "hooks.json", ["beforeSubmitPrompt", "stop"]],
   ]) {
+    if (runtimeHome === CODEX_HOME && !targets.includes("codex")) continue;
+    if (runtimeHome === CURSOR_HOME && !targets.includes("cursor")) continue;
     const hooksJson = join(runtimeHome, hooksFile);
     if (!existsSync(hooksJson)) continue;
     const settings = readJsonFile(hooksJson, null);
@@ -904,32 +937,41 @@ function removeCrossRuntimeMemoryHooks() {
   }
 
   const openclawHookDir = join(OPENCLAW_HOME, "hooks", "mcp-memory-service");
-  if (existsSync(openclawHookDir)) {
+  if (targets.includes("openclaw") && existsSync(openclawHookDir)) {
     rmSync(openclawHookDir, { recursive: true, force: true });
   }
 }
 
 // ── Commands ────────────────────────────────────────────
 
-async function install() {
+async function install(targets) {
   console.log(`\n${bold("Installing MCP Memory runtime hooks...")}\n`);
+  info(`Targets: ${targetListText(targets)}`);
 
-  ensureDir(HOOKS_TARGET_DIR);
+  let sessionStartOk = true;
+  let stopOk = true;
 
-  const hookCopied = copyHookFile();
-  if (!hookCopied) {
-    console.log(
-      `\n${red("Installation aborted: hook file could not be placed.")}\n`,
-    );
-    process.exit(2);
+  if (targets.includes("claude")) {
+    ensureDir(HOOKS_TARGET_DIR);
+
+    const hookCopied = copyHookFile();
+    if (!hookCopied) {
+      console.log(
+        `\n${red("Installation aborted: hook file could not be placed.")}\n`,
+      );
+      process.exit(2);
+    }
+
+    seedConfigIfMissing();
+    copyStopHookFile();
+    await copyCommandsDir();
+    sessionStartOk = registerSessionStartHook();
+    stopOk = registerStopHook();
+  } else {
+    ok("Claude MCP memory hooks skipped (claude not selected)");
   }
 
-  seedConfigIfMissing();
-  copyStopHookFile();
-  await copyCommandsDir();
-  const sessionStartOk = registerSessionStartHook();
-  const stopOk = registerStopHook();
-  const crossRuntimeOk = installCrossRuntimeMemoryHooks();
+  const crossRuntimeOk = installCrossRuntimeMemoryHooks(targets);
 
   console.log("");
   info("Checking MCP Memory Service health...");
@@ -951,57 +993,60 @@ async function install() {
     warn(
       "Some hooks were not registered — restart runtimes or review hook config",
     );
-    console.log(
-      `\n${yellow("Done with warnings.")} Restart Claude Code / Codex / Cursor / OpenClaw to load hooks.\n`,
-    );
+    console.log(`\n${yellow("Done with warnings.")} Restart selected runtimes to load hooks.\n`);
     process.exit(1);
   }
 
   console.log(
-    `\n${green("Done!")} Restart Claude Code / Codex / Cursor / OpenClaw for hooks to take effect.\n`,
+    `\n${green("Done!")} Restart selected runtimes for hooks to take effect.\n`,
   );
 }
 
-function check() {
+function check(targets) {
   console.log(`\n${bold("Checking MCP Memory hook installation...")}\n`);
+  info(`Targets: ${targetListText(targets)}`);
 
   const sourceExists = existsSync(CANONICAL_HOOK_SOURCE);
-  sourceExists
-    ? ok(`Canonical source present: ${CANONICAL_HOOK_SOURCE}`)
-    : fail(`Canonical source MISSING: ${CANONICAL_HOOK_SOURCE}`);
+  if (targets.includes("claude")) {
+    sourceExists
+      ? ok(`Canonical source present: ${CANONICAL_HOOK_SOURCE}`)
+      : fail(`Canonical source MISSING: ${CANONICAL_HOOK_SOURCE}`);
 
-  const targetExists = existsSync(HOOK_TARGET);
-  targetExists
-    ? ok(`Hook installed: ${HOOK_TARGET}`)
-    : warn(`Hook not installed at ${HOOK_TARGET}`);
+    const targetExists = existsSync(HOOK_TARGET);
+    targetExists
+      ? ok(`Hook installed: ${HOOK_TARGET}`)
+      : warn(`Hook not installed at ${HOOK_TARGET}`);
 
-  if (sourceExists && targetExists) {
-    const inSync = filesEqual(CANONICAL_HOOK_SOURCE, HOOK_TARGET);
-    inSync
-      ? ok("Hook content in sync with canonical")
-      : warn("Hook content DIFFERS from canonical (run install to update)");
-  }
+    if (sourceExists && targetExists) {
+      const inSync = filesEqual(CANONICAL_HOOK_SOURCE, HOOK_TARGET);
+      inSync
+        ? ok("Hook content in sync with canonical")
+        : warn("Hook content DIFFERS from canonical (run install to update)");
+    }
 
-  const configExists = existsSync(CONFIG_TARGET);
-  configExists
-    ? ok(`Config present: ${CONFIG_TARGET}`)
-    : warn(`Config missing: ${CONFIG_TARGET}`);
+    const configExists = existsSync(CONFIG_TARGET);
+    configExists
+      ? ok(`Config present: ${CONFIG_TARGET}`)
+      : warn(`Config missing: ${CONFIG_TARGET}`);
 
-  const settingsExists = existsSync(CLAUDE_SETTINGS);
-  if (settingsExists) {
-    try {
-      const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
-      const registered = (settings.hooks?.SessionStart ?? []).some((b) =>
-        b?.hooks?.some((h) => h?.command?.includes("mcp_memory_global.py")),
-      );
-      registered
-        ? ok("SessionStart hook registered in settings.json")
-        : warn("SessionStart hook NOT registered");
-    } catch {
-      warn("Could not parse settings.json");
+    const settingsExists = existsSync(CLAUDE_SETTINGS);
+    if (settingsExists) {
+      try {
+        const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
+        const registered = (settings.hooks?.SessionStart ?? []).some((b) =>
+          b?.hooks?.some((h) => h?.command?.includes("mcp_memory_global.py")),
+        );
+        registered
+          ? ok("SessionStart hook registered in settings.json")
+          : warn("SessionStart hook NOT registered");
+      } catch {
+        warn("Could not parse settings.json");
+      }
+    } else {
+      warn(`settings.json not found: ${CLAUDE_SETTINGS}`);
     }
   } else {
-    warn(`settings.json not found: ${CLAUDE_SETTINGS}`);
+    ok("Claude MCP memory checks skipped (claude not selected)");
   }
 
   for (const [label, runtimeHome, hooksFile, eventNames] of [
@@ -1013,6 +1058,8 @@ function check() {
     ],
     ["Cursor", CURSOR_HOME, "hooks.json", ["beforeSubmitPrompt", "stop"]],
   ]) {
+    const targetId = label.toLowerCase();
+    if (!targets.includes(targetId)) continue;
     const hookFile = join(runtimeHome, "hooks", CROSS_RUNTIME_HOOK_FILE);
     existsSync(hookFile)
       ? ok(`${label} memory hook installed: ${hookFile}`)
@@ -1037,10 +1084,12 @@ function check() {
   }
 
   const openclawHookDir = join(OPENCLAW_HOME, "hooks", "mcp-memory-service");
-  existsSync(join(openclawHookDir, "HOOK.md")) &&
-  existsSync(join(openclawHookDir, "handler.ts"))
-    ? ok(`OpenClaw MCP memory hook installed: ${openclawHookDir}`)
-    : warn(`OpenClaw MCP memory hook missing: ${openclawHookDir}`);
+  if (targets.includes("openclaw")) {
+    existsSync(join(openclawHookDir, "HOOK.md")) &&
+    existsSync(join(openclawHookDir, "handler.ts"))
+      ? ok(`OpenClaw MCP memory hook installed: ${openclawHookDir}`)
+      : warn(`OpenClaw MCP memory hook missing: ${openclawHookDir}`);
+  }
 
   const health = checkServerHealthStatus();
   if (health === "healthy") {
@@ -1056,14 +1105,17 @@ function check() {
   console.log("");
 }
 
-function remove() {
+function remove(targets) {
   console.log(
-    `\n${bold("Removing MCP Memory Claude Code hook registration...")}\n`,
+    `\n${bold("Removing MCP Memory hook registration...")}\n`,
   );
+  info(`Targets: ${targetListText(targets)}`);
 
-  removeSessionStartHook();
-  removeStopHook();
-  removeCrossRuntimeMemoryHooks();
+  if (targets.includes("claude")) {
+    removeSessionStartHook();
+    removeStopHook();
+  }
+  removeCrossRuntimeMemoryHooks(targets);
   info(`Hook file retained (manual delete: rm "${HOOK_TARGET}")`);
   info(
     `Stop hook files retained (manual delete: rm "${STOP_HOOK_TARGET}" "${MEMORY_SAVE_HOOK_TARGET}")`,
@@ -1078,6 +1130,7 @@ function remove() {
 // ── Main ────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
+const targets = parseTargets(args);
 
 // Handle --force flag (must be checked before other flags)
 if (args.includes("--force")) {
@@ -1088,11 +1141,11 @@ if (args.includes("--force")) {
 }
 
 if (args.includes("--check")) {
-  check();
+  check(targets);
 } else if (args.includes("--remove")) {
-  remove();
+  remove(targets);
 } else {
-  install().catch((err) => {
+  install(targets).catch((err) => {
     console.error(`Installation failed: ${err.message}`);
     process.exit(1);
   });

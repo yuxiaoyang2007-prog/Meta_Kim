@@ -12,6 +12,7 @@ import {
   MIN_NODE_VERSION,
   isSupportedNodeVersion,
 } from "./node-runtime-requirements.mjs";
+import { importDatabaseSync } from "./sqlite-runtime.mjs";
 import { validateArtifactFile } from "./validate-run-artifact.mjs";
 
 const DEFAULT_SOURCE = "tests/fixtures/run-artifacts";
@@ -93,7 +94,7 @@ async function openDb(runIndexPath) {
 
   let DatabaseSync;
   try {
-    ({ DatabaseSync } = await import("node:sqlite"));
+    DatabaseSync = await importDatabaseSync();
   } catch (error) {
     throw new Error(
       `Failed to load node:sqlite on Node ${process.versions.node}. ` +

@@ -1,0 +1,125 @@
+{
+  "version": "1.0.0",
+  "purpose": "Keep hooks as last-resort fuses, not the primary governance engine.",
+  "role": "last_resort_fuse",
+  "preflightFirst": true,
+  "hookMustNotReplacePreflight": true,
+  "readOnlyFetchPolicy": {
+    "mustNotBlock": true,
+    "allowedActions": [
+      "read_file",
+      "repo_search",
+      "git_status",
+      "git_diff_stat",
+      "config_scan",
+      "capability_scan",
+      "dependency_discovery",
+      "validator_dry_run"
+    ]
+  },
+  "requiredPreflightChecks": [
+    "realIntent",
+    "successCriteria",
+    "nonGoals",
+    "fetchEvidence",
+    "capabilityDiscovery",
+    "runtimeMatrix",
+    "osMatrix",
+    "dependencyRegistry",
+    "weaponRegistry",
+    "owner",
+    "weapon",
+    "dependencyRouteEligibility",
+    "runtimeSupportNotUnsupported",
+    "osSupportNotUnsupported",
+    "verificationOwner",
+    "verificationPlan",
+    "rollbackPath",
+    "noPrematurePublicReady",
+    "foundationalCapabilitiesPreserved",
+    "runtimeNativeAbilitiesPreserved",
+    "choiceResolvedOrSafelySkipped",
+    "warningsClassified",
+    "noUnresolvedHighCriticalFindings",
+    "acceptedRiskHasOwnerReasonRevisit",
+    "writebackDecisionReserved"
+  ],
+  "blockOutputRequiredFields": [
+    "hookId",
+    "blockReason",
+    "severity",
+    "blockedAction",
+    "blockedStage",
+    "missingRequirement",
+    "requiredPacket",
+    "returnToStage",
+    "repairOwner",
+    "repairAction",
+    "allowedNextAction",
+    "forbiddenRetry",
+    "exampleFix",
+    "whetherUserApprovalCanOverride",
+    "whetherThisBlocksPublicReady"
+  ],
+  "warningClassificationRequired": true,
+  "warningClasses": [
+    "BLOCKING_WARNING",
+    "FIXABLE_WARNING",
+    "ENVIRONMENT_WARNING",
+    "EXPECTED_WARNING",
+    "DEPRECATED_WARNING",
+    "NOISE_WARNING"
+  ],
+  "progression": {
+    "maxSameReasonConsecutiveBlocksBeforeRepairMode": 1,
+    "sameReasonSecondBlockAction": "enter_hookRepairMode",
+    "maxSameHookBlocksBeforeStop": 2,
+    "maxRunHookBlocksBeforeGovernanceFailure": 3,
+    "unchangedRetryForbidden": true,
+    "hookFailurePacketRequiredWhenSameHookBlocksExceed": 2,
+    "hookBlockMustNotBeSilent": true
+  },
+  "hookRepairMode": {
+    "required": true,
+    "steps": [
+      "read_hook_output",
+      "identify_root_cause",
+      "return_to_stage",
+      "modify_preflight_or_packet",
+      "retry_with_changed_action_only"
+    ],
+    "forbidden": [
+      "retry_same_command_unchanged",
+      "ignore_block_reason",
+      "classify_block_as_non_blocking_without_evidence"
+    ]
+  },
+  "hookFailurePacket": {
+    "requiredFields": [
+      "hookId",
+      "repeatedReason",
+      "attemptedActions",
+      "returnToStage",
+      "repairOwner",
+      "repairAction",
+      "publicReadyImpact"
+    ]
+  },
+  "hookBlockRate": {
+    "idealMax": 0,
+    "acceptableMax": 0.05,
+    "warningMax": 0.15,
+    "publicReadyBlockAbove": 0.15,
+    "publicReadyBlockWhenUnresolvedRepeatedBlock": true,
+    "publicReadyBlockWhenWarningsUnclassified": true
+  },
+  "publicReadyGate": {
+    "blocksWhen": [
+      "hookBlockRateAboveThreshold",
+      "unresolvedHookBlock",
+      "unchangedRetryAfterHookBlock",
+      "hookWarningUnclassified",
+      "preflightMissingOrBypassed"
+    ]
+  }
+}

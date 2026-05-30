@@ -6,6 +6,30 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.6.1] - 2026-05-29
+
+### Added
+
+- **Hook progression policy** — Added a validator-backed policy that keeps hooks as last-resort fuses, requires structured block output, classifies warnings, and prevents unchanged retry loops.
+- **Governance regression fixtures** — Added real route, strict run artifact, warning classification, and hook progression tests for public-ready governance evidence.
+- **SQLite runtime helper** — Added a shared SQLite import helper that suppresses only the known `node:sqlite` experimental warning while preserving other warnings.
+
+### Changed
+
+- **Targeted MCP memory hook install** — Setup and the memory hook installer now honor active runtime targets, so Codex/Cursor/OpenClaw installs do not require Claude settings.
+- **Execution route selection** — Engineering execution routes now reject governance agents as implementation workers and return honest capability gaps when no executable owner path is ready.
+- Version bump: 2.6.0 -> 2.6.1.
+
+### Verification
+
+- `npm run meta:sync`
+- `npm run discover:global`
+- `npm run meta:check`
+- `npm run meta:check:global`
+- `npm run meta:verify:governance`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:verify:all`
+
 ## [2.6.0] - 2026-05-29
 
 ### Added

@@ -55,6 +55,8 @@ const REQUIRED_SKILL_TERMS = [
   "No deletion of foundational capabilities",
   "No removal of runtime native abilities",
   "No dependency deletion due to low score",
+  "No Hook loop",
+  "Real testing and warning classification",
 ];
 
 function lineCount(text) {

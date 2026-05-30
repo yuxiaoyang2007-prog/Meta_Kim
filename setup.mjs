@@ -3984,7 +3984,7 @@ function resolvePythonForMemoryService(detectedPython) {
   return { python: venvLauncher, venvCreated: true, venvDir };
 }
 
-async function runMcpMemoryHookInstaller() {
+async function runMcpMemoryHookInstaller(activeTargets = DEFAULT_TARGETS.map((target) => target.id)) {
   const hookScript = join(
     PROJECT_DIR,
     "scripts",
@@ -3999,6 +3999,7 @@ async function runMcpMemoryHookInstaller() {
     process.execPath,
     PROJECT_DIR,
     "scripts/install-mcp-memory-hooks.mjs",
+    ["--targets", activeTargets.join(",")],
   );
   let result;
   await withProgress(t.mcpMemoryHookInstalling, async () => {
@@ -4407,7 +4408,7 @@ function configureBootAutoStart(memoryBin) {
   }
 }
 
-async function installMcpMemoryServiceStep(inUpdateMode = false) {
+async function installMcpMemoryServiceStep(inUpdateMode = false, activeTargets = DEFAULT_TARGETS.map((target) => target.id)) {
   heading(t.stepMcpMemory);
 
   // Detect Python — reuse same detection as graphify for consistency
@@ -4540,7 +4541,7 @@ async function installMcpMemoryServiceStep(inUpdateMode = false) {
   // Step 4.7 — auto-install runtime memory hooks so the full pipeline
   // (pip package → .mcp.json → hook files → runtime registration →
   // health check) runs from a single `node setup.mjs` invocation.
-  await runMcpMemoryHookInstaller();
+  await runMcpMemoryHookInstaller(activeTargets);
 
   // Step 4.8 — start the HTTP server in background and configure boot auto-start
   await startMcpMemoryServiceBackground(resolved);
@@ -5148,7 +5149,7 @@ async function runInstall() {
   await withProgress(
     t.stepLabel(stepNum, t.progressInstallMcpMemory),
     async () => {
-      await installMcpMemoryServiceStep();
+      await installMcpMemoryServiceStep(false, activeTargets);
     },
   );
 
@@ -5210,7 +5211,7 @@ async function runUpdate() {
 
   // ── 2.5 [Optional] MCP Memory Service (Layer 3) ─────────────────
   console.log("");
-  await installMcpMemoryServiceStep(true);
+  await installMcpMemoryServiceStep(true, activeTargets);
 
   // ── 2.8. Clean up legacy skill files ───────────────────────────────
   const legacyCount = cleanupLegacySkills(updateScope);

@@ -918,6 +918,54 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.match(source, /settings\.hooks\.stop/);
   });
 
+  test("installer honors selected targets without requiring Claude settings", () => {
+    const tempHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-memory-targets-"));
+    try {
+      const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+      const result = spawnSync(
+        process.execPath,
+        [installer, "--targets", "codex"],
+        {
+          cwd: repoRoot,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            HOME: tempHome,
+            USERPROFILE: tempHome,
+          },
+          timeout: 10000,
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /Targets: codex/);
+      assert.match(result.stdout, /Claude MCP memory hooks skipped/);
+      assert.doesNotMatch(result.stdout, /settings\.json not found/);
+      assert.equal(existsSync(path.join(tempHome, ".claude")), false);
+      assert.equal(
+        existsSync(path.join(tempHome, ".codex", "hooks", "meta-kim-memory-save.mjs")),
+        true,
+      );
+      const codexHooks = JSON.parse(
+        readFileSync(path.join(tempHome, ".codex", "hooks.json"), "utf8"),
+      );
+      assert.ok(codexHooks.hooks.SessionStart);
+      assert.ok(codexHooks.hooks.UserPromptSubmit);
+      assert.ok(codexHooks.hooks.Stop);
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  test("setup passes active targets to the MCP memory hook installer", () => {
+    const source = readRepoFile("setup.mjs");
+
+    assert.match(source, /runMcpMemoryHookInstaller\(activeTargets\)/);
+    assert.match(source, /\["--targets", activeTargets\.join\(",\"\)\]/);
+    assert.match(source, /installMcpMemoryServiceStep\(true, activeTargets\)/);
+    assert.match(source, /installMcpMemoryServiceStep\(false, activeTargets\)/);
+  });
+
   test("installer uses PATH-resolved node for shell-portable hook commands", () => {
     const source = readRepoFile("scripts", "install-mcp-memory-hooks.mjs");
 
