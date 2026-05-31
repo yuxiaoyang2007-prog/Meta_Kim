@@ -1,0 +1,516 @@
+{
+  "$schema": "./contracts/runtime-compatibility-catalog.schema.json",
+  "schemaVersion": 1,
+  "lastReviewedAt": "2026-05-30",
+  "decisionBoundary": {
+    "noAutoPromotionFromDependencyInstall": true,
+    "noAutoPromotionFromGenericSkillPath": true,
+    "formalRuntimeSource": "config/sync.json supportedTargets plus runtimeProfileCatalog/runtimeProjectionLayouts in scripts/meta-kim-sync-config.mjs"
+  },
+  "tierDefinitions": {
+    "runtime_projection": "Meta_Kim has a formal repo projection, runtime profile, projection layout, sync manifest entry, and validation coverage.",
+    "dependency_install_target": "A dependency installer can target the product, but Meta_Kim does not own a formal runtime projection for it.",
+    "candidate_probe": "External docs or user demand suggest compatibility, but Meta_Kim needs a probe, adapter design, and validation before promotion."
+  },
+  "promotionRules": {
+    "requiredForRuntimeProjection": [
+      "sync manifest supported target",
+      "runtime profile catalog entry",
+      "project and global projection layout",
+      "generated target paths",
+      "runtime sync tests",
+      "install or no-install policy",
+      "official docs or local runtime probe evidence"
+    ]
+  },
+  "products": [
+    {
+      "id": "claude",
+      "label": "Claude Code",
+      "tier": "runtime_projection",
+      "formalProjection": {
+        "inSyncManifest": true,
+        "hasRuntimeProfile": true,
+        "hasProjectionLayout": true,
+        "isDefaultTarget": true
+      },
+      "genericCompatibility": {
+        "skillPath": ".claude/skills/{skill-name}/SKILL.md",
+        "agentPath": ".claude/agents/{agent}.md",
+        "hookConfig": ".claude/settings.json",
+        "mcpConfig": ".mcp.json",
+        "status": "verified_current"
+      },
+      "dependencyInstall": {
+        "ecc": {
+          "support": "native",
+          "mode": "claude_plugin",
+          "evidenceRef": "config/skills.json skills[id=ecc].claudePlugin"
+        }
+      },
+      "evidence": [
+        {
+          "type": "local_file",
+          "ref": "config/sync.json",
+          "claim": "Claude is a supported and default sync target."
+        },
+        {
+          "type": "local_file",
+          "ref": "scripts/meta-kim-sync-config.mjs",
+          "claim": "Claude has a runtime profile and projection layout."
+        }
+      ],
+      "decision": "Keep as a formal Meta_Kim runtime projection.",
+      "nextAction": "Maintain by changing canonical sources and running meta:sync plus meta:check."
+    },
+    {
+      "id": "codex",
+      "label": "Codex",
+      "tier": "runtime_projection",
+      "formalProjection": {
+        "inSyncManifest": true,
+        "hasRuntimeProfile": true,
+        "hasProjectionLayout": true,
+        "isDefaultTarget": true
+      },
+      "genericCompatibility": {
+        "skillPath": ".agents/skills/{skill-name}/SKILL.md",
+        "agentPath": ".codex/agents/{agent}.toml",
+        "hookConfig": ".codex/hooks.json",
+        "mcpConfig": "codex/config.toml.example",
+        "status": "verified_current"
+      },
+      "dependencyInstall": {
+        "ecc": {
+          "support": "native",
+          "mode": "home_installer",
+          "evidenceRef": "config/skills.json skills[id=ecc].platformSupport.codex"
+        }
+      },
+      "evidence": [
+        {
+          "type": "local_file",
+          "ref": "config/sync.json",
+          "claim": "Codex is a supported and default sync target."
+        },
+        {
+          "type": "local_file",
+          "ref": "scripts/meta-kim-sync-config.mjs",
+          "claim": "Codex has a runtime profile and projection layout."
+        }
+      ],
+      "decision": "Keep as a formal Meta_Kim runtime projection.",
+      "nextAction": "Preserve .agents/skills as the project skill root and keep Codex hook validation current."
+    },
+    {
+      "id": "openclaw",
+      "label": "OpenClaw",
+      "tier": "runtime_projection",
+      "formalProjection": {
+        "inSyncManifest": true,
+        "hasRuntimeProfile": true,
+        "hasProjectionLayout": true,
+        "isDefaultTarget": true
+      },
+      "genericCompatibility": {
+        "skillPath": "openclaw/skills/{skill-name}/SKILL.md",
+        "agentPath": "openclaw/workspaces/{agent}/SOUL.md",
+        "hookConfig": "openclaw/openclaw.template.json",
+        "mcpConfig": "openclaw/openclaw.template.json",
+        "status": "partial"
+      },
+      "dependencyInstall": {
+        "ecc": {
+          "support": "not_applicable",
+          "mode": "not_applicable",
+          "evidenceRef": "config/skills.json skills[id=ecc].targets"
+        }
+      },
+      "evidence": [
+        {
+          "type": "local_file",
+          "ref": "config/sync.json",
+          "claim": "OpenClaw is a supported and default sync target."
+        },
+        {
+          "type": "local_file",
+          "ref": "AGENTS.md",
+          "claim": "OpenClaw enforcement is currently declarative-only with an upgrade path."
+        }
+      ],
+      "decision": "Keep as a formal projection while marking native enforcement as partial.",
+      "nextAction": "Do not describe OpenClaw hook enforcement as native until a plugin adapter exists."
+    },
+    {
+      "id": "cursor",
+      "label": "Cursor",
+      "tier": "runtime_projection",
+      "formalProjection": {
+        "inSyncManifest": true,
+        "hasRuntimeProfile": true,
+        "hasProjectionLayout": true,
+        "isDefaultTarget": true
+      },
+      "genericCompatibility": {
+        "skillPath": ".cursor/skills/{skill-name}/SKILL.md",
+        "agentPath": ".cursor/agents/{agent}.md",
+        "hookConfig": ".cursor/hooks.json",
+        "mcpConfig": ".cursor/mcp.json",
+        "status": "verified_current"
+      },
+      "dependencyInstall": {
+        "ecc": {
+          "support": "native",
+          "mode": "project_installer",
+          "evidenceRef": "config/skills.json skills[id=ecc].platformSupport.cursor"
+        }
+      },
+      "evidence": [
+        {
+          "type": "local_file",
+          "ref": "config/sync.json",
+          "claim": "Cursor is a supported and default sync target."
+        },
+        {
+          "type": "local_file",
+          "ref": "scripts/meta-kim-sync-config.mjs",
+          "claim": "Cursor has a runtime profile and projection layout."
+        }
+      ],
+      "decision": "Keep as a formal Meta_Kim runtime projection.",
+      "nextAction": "Maintain Cursor hook and MCP mirrors through sync validation."
+    },
+    {
+      "id": "opencode",
+      "label": "OpenCode",
+      "tier": "dependency_install_target",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": "~/.opencode/skills/{skill-name}/SKILL.md",
+        "agentPath": null,
+        "hookConfig": null,
+        "mcpConfig": null,
+        "status": "partial"
+      },
+      "dependencyInstall": {
+        "ecc": {
+          "support": "native",
+          "mode": "home_installer",
+          "evidenceRef": "config/skills.json skills[id=ecc].platformSupport.opencode"
+        }
+      },
+      "evidence": [
+        {
+          "type": "local_file",
+          "ref": "config/skills.json",
+          "claim": "ECC targets OpenCode through its upstream CLI installer."
+        },
+        {
+          "type": "command_output",
+          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "claim": "ECC install help lists opencode as a supported target."
+        }
+      ],
+      "decision": "Keep as an install target only; do not treat as a formal Meta_Kim projection.",
+      "nextAction": "Add a formal profile and sync tests only if Meta_Kim owns an OpenCode projection."
+    },
+    {
+      "id": "qwen",
+      "label": "Qwen Code",
+      "tier": "dependency_install_target",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": null,
+        "agentPath": null,
+        "hookConfig": null,
+        "mcpConfig": null,
+        "status": "needs_probe"
+      },
+      "dependencyInstall": {
+        "ecc": {
+          "support": "native",
+          "mode": "home_installer",
+          "evidenceRef": "config/skills.json skills[id=ecc].platformSupport.qwen"
+        }
+      },
+      "evidence": [
+        {
+          "type": "local_file",
+          "ref": "config/skills.json",
+          "claim": "ECC targets Qwen through its upstream CLI installer."
+        },
+        {
+          "type": "command_output",
+          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "claim": "ECC install help lists qwen as a supported target."
+        }
+      ],
+      "decision": "Keep as an ECC install target; generic runtime compatibility still needs a probe.",
+      "nextAction": "Probe Qwen skill, agent, hook, and MCP surfaces before promotion."
+    },
+    {
+      "id": "zed",
+      "label": "Zed",
+      "tier": "dependency_install_target",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": null,
+        "agentPath": null,
+        "hookConfig": null,
+        "mcpConfig": null,
+        "status": "needs_probe"
+      },
+      "dependencyInstall": {
+        "ecc": {
+          "support": "native",
+          "mode": "project_installer",
+          "evidenceRef": "config/skills.json skills[id=ecc].platformSupport.zed"
+        }
+      },
+      "evidence": [
+        {
+          "type": "local_file",
+          "ref": "config/skills.json",
+          "claim": "ECC targets Zed through its upstream CLI installer."
+        },
+        {
+          "type": "command_output",
+          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "claim": "ECC install help lists zed as a supported target."
+        }
+      ],
+      "decision": "Keep as an ECC install target; do not promote without a Meta_Kim projection.",
+      "nextAction": "Probe Zed runtime surfaces before any sync manifest change."
+    },
+    {
+      "id": "gemini",
+      "label": "Gemini CLI",
+      "tier": "dependency_install_target",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": null,
+        "agentPath": null,
+        "hookConfig": null,
+        "mcpConfig": null,
+        "status": "needs_probe"
+      },
+      "dependencyInstall": {
+        "ecc": {
+          "support": "native",
+          "mode": "project_installer",
+          "evidenceRef": "config/skills.json skills[id=ecc].platformSupport.gemini"
+        }
+      },
+      "evidence": [
+        {
+          "type": "local_file",
+          "ref": "config/skills.json",
+          "claim": "ECC targets Gemini through its upstream CLI installer."
+        },
+        {
+          "type": "command_output",
+          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "claim": "ECC install help lists gemini as a supported target."
+        }
+      ],
+      "decision": "Keep as an ECC install target; generic runtime compatibility still needs a probe.",
+      "nextAction": "Probe Gemini runtime surfaces before any formal promotion."
+    },
+    {
+      "id": "codebuddy",
+      "label": "CodeBuddy",
+      "tier": "dependency_install_target",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": null,
+        "agentPath": null,
+        "hookConfig": null,
+        "mcpConfig": null,
+        "status": "needs_probe"
+      },
+      "dependencyInstall": {
+        "ecc": {
+          "support": "native",
+          "mode": "project_installer",
+          "evidenceRef": "config/skills.json skills[id=ecc].platformSupport.codebuddy"
+        }
+      },
+      "evidence": [
+        {
+          "type": "local_file",
+          "ref": "config/skills.json",
+          "claim": "ECC targets CodeBuddy through its upstream CLI installer."
+        },
+        {
+          "type": "command_output",
+          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "claim": "ECC install help lists codebuddy as a supported target."
+        }
+      ],
+      "decision": "Keep as an ECC install target; do not promote without a Meta_Kim projection.",
+      "nextAction": "Probe CodeBuddy runtime surfaces before any sync manifest change."
+    },
+    {
+      "id": "antigravity",
+      "label": "Antigravity",
+      "tier": "dependency_install_target",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": null,
+        "agentPath": null,
+        "hookConfig": null,
+        "mcpConfig": null,
+        "status": "needs_probe"
+      },
+      "dependencyInstall": {
+        "ecc": {
+          "support": "native",
+          "mode": "project_installer",
+          "evidenceRef": "config/skills.json skills[id=ecc].platformSupport.antigravity"
+        }
+      },
+      "evidence": [
+        {
+          "type": "local_file",
+          "ref": "config/skills.json",
+          "claim": "ECC targets Antigravity through its upstream CLI installer."
+        },
+        {
+          "type": "command_output",
+          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "claim": "ECC install help lists antigravity as a supported target."
+        }
+      ],
+      "decision": "Keep as an ECC install target; do not promote without a Meta_Kim projection.",
+      "nextAction": "Probe Antigravity runtime surfaces before any sync manifest change."
+    },
+    {
+      "id": "joycode",
+      "label": "JoyCode",
+      "tier": "dependency_install_target",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": null,
+        "agentPath": null,
+        "hookConfig": null,
+        "mcpConfig": null,
+        "status": "needs_probe"
+      },
+      "dependencyInstall": {
+        "ecc": {
+          "support": "native",
+          "mode": "project_installer",
+          "evidenceRef": "config/skills.json skills[id=ecc].platformSupport.joycode"
+        }
+      },
+      "evidence": [
+        {
+          "type": "local_file",
+          "ref": "config/skills.json",
+          "claim": "ECC targets JoyCode through its upstream CLI installer."
+        },
+        {
+          "type": "command_output",
+          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "claim": "ECC install help lists joycode as a supported target."
+        }
+      ],
+      "decision": "Keep as an ECC install target; do not promote without a Meta_Kim projection.",
+      "nextAction": "Probe JoyCode runtime surfaces before any sync manifest change."
+    },
+    {
+      "id": "qoder",
+      "label": "Qoder CLI",
+      "tier": "candidate_probe",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": "~/.qoder/skills/{skill-name}/SKILL.md; .qoder/skills/{skill-name}/SKILL.md",
+        "agentPath": "~/.qoder/agents/{agent}.md; .qoder/agents/{agent}.md",
+        "hookConfig": "~/.qoder/settings.json; .qoder/settings.json; .qoder/settings.local.json",
+        "mcpConfig": "qodercli mcp add; ~/.qoder/settings.json; .qoder/settings.local.json; .mcp.json",
+        "status": "verified_current"
+      },
+      "dependencyInstall": {
+        "ecc": {
+          "support": "not_supported",
+          "mode": "not_applicable",
+          "evidenceRef": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help"
+        }
+      },
+      "evidence": [
+        {
+          "type": "github_issue",
+          "ref": "https://github.com/KimYx0207/Meta_Kim/issues/7",
+          "claim": "Open issue requests qodercli compatibility."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.qoder.com/en/cli/Skills.md",
+          "claim": "Qoder skills are folders containing SKILL.md under user or project .qoder/skills."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.qoder.com/en/cli/subagent.md",
+          "claim": "Qoder subagents use markdown files under user or project .qoder/agents."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.qoder.com/en/cli/hooks.md",
+          "claim": "Qoder hooks are configured in settings.json and can block via exit code 2 for supported events."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.qoder.com/en/cli/mcp-servers.md",
+          "claim": "Qoder MCP servers can be configured with qodercli mcp add or .mcp.json/project settings."
+        },
+        {
+          "type": "command_output",
+          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "claim": "ECC install help does not list qoder as a supported target."
+        }
+      ],
+      "decision": "Admit Qoder as candidate_probe only: official docs prove compatible primitives, but Meta_Kim lacks profile/layout/sync validation and ECC currently omits qoder.",
+      "nextAction": "Use a generic adapter probe first; promote only after adding a profile, projection layout, generated target paths, sync tests, and install policy."
+    }
+  ]
+}

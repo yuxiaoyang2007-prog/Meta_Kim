@@ -6,6 +6,28 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.6.2] - 2026-05-30
+
+### Added
+
+- **Decision cross-validation gate** — Added a meta-theory gate requiring PR, issue, release, compatibility, public-ready, and skill-prioritization decisions to record evidence snapshot time, source-state matrix, confidence labels, counterevidence, contradiction log, falsification checks, and replay commands.
+- **Risk-to-skill binding pattern** — Added an internal decision pattern that binds PR/issue/release work to one primary risk lane and at most one secondary lane before choosing the next executable gate.
+- **Adversarial review regression tests** — Added governance tests that lock the cross-validation gate, risk-to-skill binding, and stale-state rejection behavior.
+
+### Changed
+
+- **Decision-pattern weapon coverage** — Extended the Meta_Kim decision-pattern weapon to cover PR/issue triage, skill prioritization, and public-ready decisions.
+- Version bump: 2.6.1 -> 2.6.2.
+
+### Verification
+
+- `node --test tests/governance/decision-cross-validation.test.mjs`
+- `npm run meta:verify:governance`
+- `npm run meta:verify:all`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
 ## [2.6.1] - 2026-05-29
 
 ### Added

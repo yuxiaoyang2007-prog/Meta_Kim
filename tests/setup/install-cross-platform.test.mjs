@@ -98,6 +98,7 @@ describe("install platform config", () => {
     assert.ok(eccSkill.targets.includes("codex"));
     assert.ok(eccSkill.targets.includes("cursor"));
     assert.ok(eccSkill.targets.includes("opencode"));
+    assert.equal(eccSkill.targets.includes("qoder"), false);
   });
 
   test("legacy setup fallback only applies when requested", () => {

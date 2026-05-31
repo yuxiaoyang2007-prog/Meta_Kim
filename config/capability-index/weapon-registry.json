@@ -196,13 +196,16 @@
       "id": "meta-kim-decision-patterns",
       "type": "file_set",
       "name": "Meta_Kim Decision Patterns",
-      "description": "Internal stage-bound decision patterns for intent lock, evidence labeling, path mapping, minimum test, and pass/kill review.",
+      "description": "Internal stage-bound decision patterns for intent lock, evidence labeling, path mapping, risk-to-skill binding, minimum test, pass/kill review, and adversarial cross-validation.",
       "triggerConditions": [
         "fuzzy strategy",
         "product monetization",
         "minimum test",
         "pass/kill gate",
-        "intent analysis"
+        "intent analysis",
+        "PR or issue triage",
+        "skill prioritization",
+        "public-ready decision"
       ],
       "taskShapes": [
         "fuzzy_strategy_task",

@@ -169,6 +169,7 @@ describe("capability index inheritance chain", () => {
         mcpServers: {
           "repo:repo-mcp:meta-kim-runtime": {
             id: "meta-kim-runtime",
+            size: 237,
             modified: "2026-05-20T05:24:46.853Z",
           },
         },
@@ -182,6 +183,7 @@ describe("capability index inheritance chain", () => {
         mcpServers: {
           "repo:repo-mcp:meta-kim-runtime": {
             id: "meta-kim-runtime",
+            size: 220,
             modified: "2026-05-24T09:13:38.181Z",
           },
         },
@@ -191,7 +193,7 @@ describe("capability index inheritance chain", () => {
     assert.deepEqual(
       preserveGeneratedAtWhenUnchanged(next, existing),
       existing,
-      "pure regeneration must not dirty canonical capability index timestamps",
+      "pure regeneration must not dirty canonical capability index timestamps or stat sizes",
     );
     assert.equal(
       preserveGeneratedAtWhenUnchanged(

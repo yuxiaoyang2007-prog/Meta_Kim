@@ -12,7 +12,8 @@ docs/research/
 │   ├── claude-code.md
 │   ├── codex.md
 │   ├── openclaw.md
-│   └── cursor.md
+│   ├── cursor.md
+│   └── qoder.md
 └── dependencies/                (per-skill dependency research)
     ├── agent-teams-playbook.md
     ├── findskill.md
@@ -27,7 +28,7 @@ docs/research/
 
 ## Research Methodology
 
-Three-stage deep research conducted on 2026-04-13:
+Three-stage deep research conducted on 2026-04-13. Qoder candidate research was added on 2026-05-30:
 
 1. **Stage 1 - Platform Research**: Official documentation analysis for each target platform's skill system, format requirements, path conventions, and capability boundaries.
 
@@ -52,3 +53,6 @@ Three-stage deep research conducted on 2026-04-13:
 | Codex | `~/.codex/skills/` | Y | Y | N | N |
 | OpenClaw | `~/.openclaw/skills/` | Y | Y | N | Y |
 | Cursor | `~/.cursor/skills/` | Y | Y | N | Y |
+| Qoder | `~/.qoder/skills/` | Y | Unknown | N | Y |
+
+Qoder is tracked as a candidate probe, not a formal Meta_Kim runtime projection.

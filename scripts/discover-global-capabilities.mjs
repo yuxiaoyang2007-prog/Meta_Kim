@@ -1069,6 +1069,7 @@ export function capabilityIndexWithoutVolatileFields(index) {
 
     delete value.generatedAt;
     delete value.modified;
+    delete value.size;
     for (const child of Object.values(value)) {
       stripVolatile(child);
     }

@@ -15,7 +15,8 @@
  *   --skills=id,...   install only these manifest skill ids (omit = all)
  *
  * Env (optional): META_KIM_CLAUDE_HOME, CLAUDE_HOME, META_KIM_CODEX_HOME,
- * CODEX_HOME, META_KIM_OPENCLAW_HOME, OPENCLAW_HOME, META_KIM_SKILL_IDS
+ * CODEX_HOME, META_KIM_OPENCLAW_HOME, OPENCLAW_HOME, META_KIM_QODER_HOME,
+ * QODER_HOME, META_KIM_SKILL_IDS
  */
 
 import { execFileSync, execSync, spawnSync, spawn } from "node:child_process";
@@ -446,6 +447,7 @@ function resolveHomes() {
     codebuddy: resolveRuntimeHomeDir("codebuddy"),
     antigravity: resolveRuntimeHomeDir("antigravity"),
     joycode: resolveRuntimeHomeDir("joycode"),
+    qoder: resolveRuntimeHomeDir("qoder"),
   };
 }
 
@@ -1634,6 +1636,7 @@ const PLUGIN_BUNDLE_SUBDIR_PREF = {
   codex: [".codex", ".codex-plugin", "skills"],
   cursor: [".cursor", ".cursor-plugin", "skills"],
   opencode: [".opencode", "skills"],
+  qoder: [".qoder", "skills"],
   openclaw: ["skills"],
 };
 
@@ -1919,7 +1922,7 @@ async function installPluginBundlesForNonClaudeRuntimes(
   );
   if (pluginBundleSpecs.length === 0) return;
 
-  const NON_CLAUDE = ["codex", "cursor", "opencode", "openclaw"];
+  const NON_CLAUDE = ["codex", "cursor", "opencode", "qoder", "openclaw"];
   // Extend with "claude" ONLY for specs lacking claudePlugin — those cannot be
   // installed via `claude plugin install` and need the sparse-checkout fallback
   // even on Claude runtime (e.g. cli-anything).

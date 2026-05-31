@@ -78,6 +78,18 @@ After global install (`node setup.mjs` or `npx`), what works where:
 | OpenClaw | Workspace agents + Plugin SDK hooks (28 events) | Requires `auth.json` configured |
 | Cursor | Agent projections + skill mirrors + hooks + MCP | Lightweight; mainly read + review |
 
+### Platform Support Tiers
+
+Meta_Kim now tracks platform support in tiers instead of treating every compatible surface as a full runtime projection.
+
+| Tier | Products | What it means |
+|---|---|---|
+| Formal runtime projections | Claude Code, Codex, OpenClaw, Cursor | Canonical governance is projected into runtime-specific files and checked by `npm run meta:sync` / `npm run meta:check`. |
+| Native dependency install targets | opencode, Qwen, Zed, Gemini, CodeBuddy, Antigravity, JoyCode | ECC supports these through its upstream installer, but Meta_Kim does not claim a full runtime projection until profile, layout, sync, and tests exist. |
+| Candidate probes | Qoder CLI | Official Qoder docs expose skills, subagents, hooks, and MCP surfaces. Meta_Kim records it as a candidate probe, not a formal supported runtime yet. |
+
+Source of truth: `config/runtime-compatibility-catalog.json`.
+
 ---
 
 ## Contact
@@ -783,7 +795,10 @@ For plugin bundles without a native host plugin entry point, the installer still
 | Codex | Superpowers uses the Codex Plugins pane or `/plugins`; ECC uses `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target codex` and currently installs the `refactor-cleaner` agent, not the `/refactor-clean` slash command because upstream ECC does not expose `commands-core` for Codex; other bundles fall back through `.codex/` → `.codex-plugin/` → `skills/` |
 | Cursor | Superpowers uses `/add-plugin superpowers` or Cursor's plugin marketplace; ECC is project-local: run `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target cursor` from the project root; other bundles fall back through `.cursor/` → `.cursor-plugin/` → `skills/` |
 | OpenClaw | `skills/` |
-| opencode | ECC uses `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target opencode`; other bundles fall back through `.opencode/` → `skills/` |
+| opencode | ECC uses `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target opencode`; other bundles fall back through `.opencode/` -> `skills/` |
+| Qwen | ECC uses `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target qwen` |
+| Zed, Gemini, CodeBuddy, Antigravity, JoyCode | ECC is project-local: run `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target <target>` from each project root |
+| Qoder CLI | Candidate probe only: generic bundle probing can look for `.qoder/` -> `skills/`, but ECC is not run for Qoder because upstream `ecc install --help` does not list `qoder` |
 
 Sparse-checkout fallback trees land in `~/.<runtime>/skills/<id>/`; native ECC installs do not. Run `npm run meta:deps:install:claude-plugins` for the Claude marketplace path only, or `npm run meta:deps:install:all-runtimes` to cover every supported home runtime at once. Upgrading from an older install? Legacy full-repo clones are auto-detected by the `.claude-plugin/` marker at the target root and re-extracted on the next run; old Codex/Cursor `skills/superpowers`, `skills/ecc`, and `skills/everything-claude-code` fallbacks are removed or replaced with native-install instructions.
 
@@ -842,7 +857,7 @@ Together, they cost far less than asking AI to reread the entire project from sc
 
 ### Q: Which platforms are supported?
 
-Claude Code, Codex, OpenClaw, and Cursor are all fully supported. The core logic lives in `canonical/` and is projected into each platform through sync scripts. In theory, any platform that supports agents and agent-to-agent communication can be mapped in.
+Claude Code, Codex, OpenClaw, and Cursor are formal runtime projections. ECC additionally supports native install targets for opencode, Qwen, Zed, Gemini, CodeBuddy, Antigravity, and JoyCode. Qoder CLI is tracked as a candidate probe because its official docs expose compatible skills, subagents, hooks, and MCP surfaces, but it is not yet a formal Meta_Kim runtime projection. The exact support boundary lives in `config/runtime-compatibility-catalog.json`.
 
 ### Q: Is the installation complicated?
 

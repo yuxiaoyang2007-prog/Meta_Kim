@@ -59,6 +59,40 @@
       "outputs": ["reviewPacket.findings", "passDecision", "killOrReturnSignal", "verificationRequired"],
       "rejects": ["self-congratulatory review", "file-exists-only review", "command-pass equals user-goal-done"],
       "verification": "Review can reproduce evidence and closes or blocks every critical/high finding."
+    },
+    {
+      "id": "thinking-risk-skill-binding",
+      "stage": "thinking",
+      "owner": "meta-conductor",
+      "pattern": "Bind PR, issue, or release work to the highest-risk capability lane before choosing a learning or execution skill.",
+      "useWhen": ["user asks how to prioritize skill improvement", "PR or issue evidence is being triaged", "multiple repeated failure types compete"],
+      "outputs": ["riskType", "primarySkill", "secondarySkill", "evidenceBoundary", "failureCostTieBreak", "deferredSkillsWithReason", "nextExecutableGate"],
+      "decisionRules": [
+        "runtime/setup/install/sync change -> cross-runtime contract design",
+        "localized routing, stage feedback, or choice surface change -> multilingual QA",
+        "review finding, changelog, release note, or progress closure -> review closure discipline",
+        "hook, dispatch, state, validator, warning, or route progression change -> state-machine failure modeling",
+        "tie-break by failure cost: install/runtime breakage, wrong execution or repeated hook blocks, incomplete public closure, localized route failure"
+      ],
+      "rejects": ["four skills treated as equal priority", "skill advice without PR, issue, run, or review evidence", "learning plan not tied to the next executable gate"],
+      "verification": "Decision names one primary skill lane, at most one secondary lane, the evidence that forced it, and the gate where it will be used next."
+    },
+    {
+      "id": "review-adversarial-cross-validation",
+      "stage": "review",
+      "owner": "meta-prism",
+      "pattern": "Cross-check decision claims against current state, counterevidence, and replayable commands before public closure.",
+      "useWhen": ["PR or issue state can change", "recommendation must survive external review", "public-ready or closure claim is about to be made", "user challenges whether the decision is rigorous enough"],
+      "outputs": ["evidenceSnapshotAt", "sourceStateMatrix", "confidenceLabels", "counterEvidence", "contradictionLog", "falsificationChecks", "replayCommands", "reviewVerdict"],
+      "minimumChecks": [
+        "current-state recheck for PRs, issues, releases, versions, platform support, or external claims",
+        "source triangulation or explicit single-source limitation",
+        "counterevidence and alternative-reading scan",
+        "claim-to-source mapping for every material recommendation",
+        "fresh verification command or artifact for local repository claims"
+      ],
+      "rejects": ["stale open PR state", "single-source certainty", "unlabeled inference", "unverifiable verified claim", "command-pass equals user-goal-done"],
+      "verification": "An independent reviewer can replay the commands or source links and either reproduce the verdict or identify which contradiction changes the route."
     }
   ]
 }

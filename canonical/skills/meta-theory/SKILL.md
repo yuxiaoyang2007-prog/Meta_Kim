@@ -98,6 +98,14 @@ Research -> Inventory -> Thinking Handoff. Thinking determines needed execution 
 
 Translate the surface request into the real product problem. Compare minimal fix against ten-x path challenge and path shift. Final user-facing closure states chosen rationale, why changed / why change, what changed, where changed, user impact, and verification.
 
+## Decision Cross-Validation Gate
+
+For PR, issue, release, compatibility, public-ready, or skill-prioritization decisions, the answer must survive adversarial cross-validation before it is treated as done. Record the evidence snapshot time, source state matrix, confidence labels, counterevidence, contradiction log, falsification checks, and replay commands. Re-check current external state when it can change, such as open PRs, open issues, comments, labels, review state, release status, package versions, or platform support.
+
+Decision recommendations must bind one primary risk lane and at most one secondary lane to the next executable gate. For example, runtime/setup/install/sync changes bind to cross-runtime contract design; localized routing or choice-surface changes bind to multilingual QA; review finding or release-closure work binds to review closure discipline; hook/dispatch/state/validator changes bind to state-machine failure modeling. When two lanes compete, choose by failure cost: user install/runtime breakage, wrong execution or repeated hook blocks, incomplete public closure, then localized user route failure.
+
+Fail the gate if the decision relies on stale PR/issue state, a single source with no countercheck, unlabeled inference, unverifiable "verified" claims, command-pass equals user-goal-done, or four equal priorities with no next action. A cross-validatable decision must let an independent reviewer replay the evidence and either reach the same conclusion or see exactly which contradiction changed the route.
+
 ## Human-Readable Stage Feedback
 
 Stage updates must be compact, human, and in the resolved user language. Record internally with packet field name / internal keys and debug traces, but show human label and human-readable label in user-facing output. Mention Critical, Fetch, Thinking, Review only when the stage status matters. Keep token use low and avoid dumping raw packet fields unless the user asks for debug.

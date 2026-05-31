@@ -10,6 +10,7 @@ If you only keep six rules in mind:
 - `canonical/agents/`, `canonical/skills/meta-theory/`, `canonical/runtime-assets/`, `config/contracts/`, and `config/capability-index/` are the durable sources of truth.
 - `.claude/` is a runtime projection generated from canonical assets. Sync it instead of hand-forking it.
 - When `meta-theory` is active, the main Claude thread dispatches; it does not execute complex work directly.
+- Critical, Fetch, Thinking, and Review must make the run executable before mutation; hooks are final safeguards, not the primary design path.
 - Capability-first dispatch is **mechanically enforced** in Claude Code via the `enforce-agent-dispatch.mjs` PreToolUse hook (deny payload). Codex and Cursor v1.7+ use the same projected hook; OpenClaw remains declarative. The current matrix lives in `AGENTS.md` under Mechanical Enforcement.
 - User-visible worker names must be coarse English business role-family names such as `frontend`, `backend`, or `test`, not scoped work items or host-generated personal nicknames. Localized trigger words may be recognized as input, but durable governance files stay English.
 
@@ -88,9 +89,13 @@ The main thread is not the all-in-one executor for complex work.
 Hard rules:
 
 1. Analysis, code changes, design work, review, and verification should be owned by dispatched agents when the task is non-trivial.
-2. The PreToolUse hook `enforce-agent-dispatch.mjs` can block execution tools when spine state is active and no agent has been dispatched.
-3. If a hook blocks you, follow the dispatch protocol. Do not work around it.
-4. A "simple task" is not an excuse to bypass governance when the task touches multiple files, multiple capabilities, or cross-runtime behavior.
+2. Critical locks the actual user outcome, value, success criteria, scope, permissions, and non-goals before the route expands.
+3. Fetch gathers evidence and capability facts that change route, risk, owner, scope, acceptance, or verification.
+4. Thinking chooses owners, lanes, dependencies, work orders, review owner, verification owner, and rollback path before mutation.
+5. Review checks Critical, Fetch, and Thinking readiness before output polish; it is not a late rescue stage for missing design.
+6. The PreToolUse hook `enforce-agent-dispatch.mjs` can block execution tools when spine state is active and no agent has been dispatched.
+7. If a hook blocks you, follow the dispatch protocol and return to the responsible stage. Do not work around it.
+8. A "simple task" is not an excuse to bypass governance when the task touches multiple files, multiple capabilities, or cross-runtime behavior.
 
 ## Dispatch Flow
 
@@ -141,6 +146,8 @@ Behavior:
 - **Other env vars**: `META_KIM_HOOK_RUNTIME` (one of `claude` / `codex` / `cursor`) selects the deny payload schema when the same hook is projected to a different runtime.
 
 The same hook script is now projected to Codex (`.codex/hooks/`) and Cursor v1.7+ (`.cursor/hooks/`) via `sync-runtimes.mjs`. `AGENTS.md` is the current source for the four-runtime mechanical-deny matrix and OpenClaw's declarative-only gap.
+
+Hook enforcement is a final safety boundary after Critical, Fetch, Thinking, and Review have done their work. Repeated hook blocks mean the upstream design or packet state is incomplete; return to the earliest broken stage instead of retrying the same action.
 
 ## Business Flow Before Execution
 

@@ -123,6 +123,17 @@ describe("installPluginBundlesForNonClaudeRuntimes (dry-run e2e)", () => {
     );
   });
 
+  test("Qoder target is accepted for probes but not treated as an ECC target", () => {
+    const { status, out } = runFullDryRun(["--skills", "ecc", "--targets", "qoder"]);
+    assert.equal(status, 0);
+    const plain = stripAnsi(out);
+    assert.doesNotMatch(plain, /Unknown runtime target: qoder/);
+    assert.doesNotMatch(
+      plain,
+      /ecc install --profile core --target qoder/,
+    );
+  });
+
   test("ECC filtered installs do not trigger generic skill fallback", () => {
     const { status, out } = runFullDryRun(["--skills", "ecc", "--targets", "zed"]);
     assert.equal(status, 0);

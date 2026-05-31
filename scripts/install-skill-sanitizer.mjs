@@ -273,6 +273,7 @@ export async function detectPluginBundleSkillResidue(targetDir) {
     ".codex",
     ".cursor",
     ".opencode",
+    ".qoder",
     "openclaw",
   ];
 

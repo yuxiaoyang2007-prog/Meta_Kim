@@ -45,6 +45,7 @@ export const supportedTargetIds = [
   "codebuddy",
   "antigravity",
   "joycode",
+  "qoder",
 ];
 
 const runtimeProfileCatalog = {
@@ -419,6 +420,10 @@ const runtimeHomeSpecs = {
   joycode: {
     envKeys: ["META_KIM_JOYCODE_HOME", "JOYCODE_HOME"],
     defaultDir: ".joycode",
+  },
+  qoder: {
+    envKeys: ["META_KIM_QODER_HOME", "QODER_HOME"],
+    defaultDir: ".qoder",
   },
 };
 

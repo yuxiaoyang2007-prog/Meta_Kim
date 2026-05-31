@@ -78,6 +78,18 @@ npm run meta:validate
 | OpenClaw | Workspace agent + Plugin SDK hooks（28 个事件） | 需要配置 `auth.json` |
 | Cursor | Agent 投影 + skill 镜像 + hooks + MCP | 最轻量；适合阅读和轻量操作 |
 
+### 平台支持分层
+
+Meta_Kim 现在把平台支持分成几层，而不是把所有“看起来兼容”的平台都说成完整 runtime 投影。
+
+| 层级 | 产品 | 含义 |
+|---|---|---|
+| 正式 runtime 投影 | Claude Code、Codex、OpenClaw、Cursor | canonical 治理层会同步成对应 runtime 文件，并由 `npm run meta:sync` / `npm run meta:check` 校验。 |
+| 原生依赖安装目标 | opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode | ECC 上游安装器支持这些目标，但 Meta_Kim 不会在没有 profile、layout、sync、测试前宣称完整 runtime 投影。 |
+| 候选 probe | Qoder CLI | Qoder 官方文档确认它有 skills、subagents、hooks、MCP 表面；Meta_Kim 先记录为候选兼容，不宣称正式支持。 |
+
+事实源：`config/runtime-compatibility-catalog.json`。
+
 ---
 
 ## 联系方式
@@ -777,7 +789,10 @@ Superpowers 在 Claude Code、Codex 和 Cursor 都有原生 plugin 入口。Meta
 | Codex | Superpowers 走 Codex 插件 UI 或 `/plugins`；其他 bundle 再按 `.codex/` → `.codex-plugin/` → `skills/` 回退 |
 | Cursor | Superpowers 走 `/add-plugin superpowers` 或 Cursor 插件市场；其他 bundle 再按 `.cursor/` → `.cursor-plugin/` → `skills/` 回退 |
 | OpenClaw | `skills/` |
-| opencode | `.opencode/` → `skills/` |
+| opencode | ECC 使用 `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target opencode`；其他 bundle 按 `.opencode/` → `skills/` 回退 |
+| Qwen | ECC 使用 `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target qwen` |
+| Zed、Gemini、CodeBuddy、Antigravity、JoyCode | ECC 是项目本地安装：在每个项目根目录运行 `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target <target>` |
+| Qoder CLI | 仅 candidate probe：通用 bundle 探测可以看 `.qoder/` → `skills/`，但 ECC 不会对 Qoder 执行安装，因为上游 `ecc install --help` 当前没有 `qoder` |
 
 抽取结果装到 `~/.<runtime>/skills/<id>/`。只装 Claude 市场 plugin：`npm run meta:deps:install:claude-plugins`；一次覆盖全 runtime：`npm run meta:deps:install:all-runtimes`。**升级用户无需手动清理**：老版本的整 repo clone 残留会通过目标目录下的 `.claude-plugin/` 标志自动识别；旧版 Codex/Cursor `skills/superpowers` fallback 也会在更新时移除，并提示安装原生插件。
 
@@ -835,7 +850,7 @@ Meta_Kim 把产物写到 3 个地方：
 
 ### Q：支持哪些平台？
 
-目前完整支持 Claude Code、Codex、OpenClaw、Cursor 四个平台。核心逻辑在 `canonical/` 目录，通过同步脚本投影到各平台。只要一个平台支持 agent 和 agent 间通信，理论上就能映射上去。
+Claude Code、Codex、OpenClaw、Cursor 是正式 runtime 投影。ECC 另外原生支持 opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode 这些安装目标。Qoder CLI 目前是 candidate probe：官方文档确认它有 skills、subagents、hooks、MCP 表面，但 Meta_Kim 还没有把它升级成正式 runtime 投影。精确边界见 `config/runtime-compatibility-catalog.json`。
 
 ### Q：安装复杂吗？
 

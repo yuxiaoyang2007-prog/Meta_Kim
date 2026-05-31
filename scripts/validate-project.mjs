@@ -264,6 +264,8 @@ async function validateRequiredFiles() {
     "canonical/runtime-assets/openclaw/openclaw.template.json",
     "config/contracts/sync-manifest.schema.json",
     "config/contracts/runtime-profile.schema.json",
+    "config/contracts/runtime-compatibility-catalog.schema.json",
+    "config/runtime-compatibility-catalog.json",
     "config/contracts/workflow-contract.json",
     CANONICAL_CAPABILITY_INDEX_RELATIVE,
     "scripts/mcp/meta-runtime-server.mjs",
@@ -1092,6 +1094,126 @@ async function validateSyncConfiguration() {
   );
 }
 
+function sortedJson(values) {
+  return JSON.stringify([...values].sort());
+}
+
+async function validateRuntimeCompatibilityCatalog() {
+  const catalog = JSON.parse(
+    await fs.readFile(
+      path.join(repoRoot, "config", "runtime-compatibility-catalog.json"),
+      "utf8",
+    ),
+  );
+  const manifest = await loadSyncManifest();
+  const skillsManifest = JSON.parse(
+    await fs.readFile(path.join(repoRoot, "config", "skills.json"), "utf8"),
+  );
+
+  assert(
+    (catalog.schemaVersion ?? 0) >= 1,
+    "runtime compatibility catalog schemaVersion must be >= 1.",
+  );
+  assert(
+    catalog.decisionBoundary?.noAutoPromotionFromDependencyInstall === true &&
+      catalog.decisionBoundary?.noAutoPromotionFromGenericSkillPath === true,
+    "runtime compatibility catalog must forbid automatic promotion from dependency installs or generic paths.",
+  );
+
+  const products = catalog.products ?? [];
+  assert(
+    Array.isArray(products) && products.length >= 1,
+    "runtime compatibility catalog must declare products.",
+  );
+  const productIds = products.map((product) => product.id);
+  assert(
+    new Set(productIds).size === productIds.length,
+    "runtime compatibility catalog product ids must be unique.",
+  );
+  const byId = new Map(products.map((product) => [product.id, product]));
+  const supportedTargets = new Set(manifest.supportedTargets ?? []);
+  const defaultTargets = new Set(
+    manifest.defaultTargets ?? manifest.supportedTargets ?? [],
+  );
+  const projectionIds = products
+    .filter((product) => product.tier === "runtime_projection")
+    .map((product) => product.id);
+
+  assert(
+    sortedJson(projectionIds) === sortedJson(supportedTargets),
+    "runtime_projection catalog products must exactly match config/sync.json supportedTargets.",
+  );
+
+  for (const product of products) {
+    const formal = product.formalProjection ?? {};
+    if (product.tier === "runtime_projection") {
+      assert(
+        supportedTargets.has(product.id),
+        `runtime_projection ${product.id} must be in config/sync.json supportedTargets.`,
+      );
+      assert(
+        formal.inSyncManifest === true &&
+          formal.hasRuntimeProfile === true &&
+          formal.hasProjectionLayout === true,
+        `runtime_projection ${product.id} must declare formal projection evidence.`,
+      );
+      assert(
+        formal.isDefaultTarget === defaultTargets.has(product.id),
+        `runtime_projection ${product.id} default-target flag must match config/sync.json.`,
+      );
+      continue;
+    }
+
+    assert(
+      !supportedTargets.has(product.id) && !defaultTargets.has(product.id),
+      `${product.id} must not be in config/sync.json until promoted to runtime_projection.`,
+    );
+    assert(
+      formal.inSyncManifest === false &&
+        formal.hasRuntimeProfile === false &&
+        formal.hasProjectionLayout === false &&
+        formal.isDefaultTarget === false,
+      `${product.id} must not claim formal projection fields before promotion.`,
+    );
+  }
+
+  const ecc = skillsManifest.skills?.find((skill) => skill.id === "ecc");
+  assert(ecc, "config/skills.json must declare ecc.");
+  const eccTargets = new Set(ecc.targets ?? []);
+  for (const target of eccTargets) {
+    const product = byId.get(target);
+    assert(
+      product,
+      `runtime compatibility catalog is missing ECC target ${target}.`,
+    );
+    assert(
+      product.dependencyInstall?.ecc?.support === "native",
+      `runtime compatibility catalog must mark ECC target ${target} as native.`,
+    );
+  }
+
+  const qoder = byId.get("qoder");
+  assert(qoder, "runtime compatibility catalog must include qoder.");
+  assert(
+    qoder.tier === "candidate_probe" &&
+      qoder.dependencyInstall?.ecc?.support === "not_supported" &&
+      qoder.genericCompatibility?.status === "verified_current",
+    "qoder must remain a verified generic candidate, not a formal projection or ECC target.",
+  );
+  assert(
+    !eccTargets.has("qoder") && !supportedTargets.has("qoder"),
+    "qoder must not be in ECC targets or sync supportedTargets until promoted.",
+  );
+  assert(
+    (qoder.evidence ?? []).some(
+      (entry) => entry.type === "github_issue" && entry.ref.includes("/issues/7"),
+    ) &&
+      (qoder.evidence ?? []).filter((entry) => entry.type === "official_docs")
+        .length >= 4,
+    "qoder candidate must be anchored to issue #7 and official Qoder docs.",
+  );
+}
+
 
 async function validateSkillsManifest() {
   const manifest = JSON.parse(
@@ -1221,6 +1343,7 @@ async function main() {
   // 3. Sync manifest and runtime target catalog
   step(current++, TOTAL, t.val.step03, t.val.step03Detail);
   await validateSyncConfiguration();
+  await validateRuntimeCompatibilityCatalog();
   pass(t.val.step03Pass);
 
   // 4. Canonical agent definitions

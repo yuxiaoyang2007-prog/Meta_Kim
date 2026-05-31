@@ -65,6 +65,18 @@ npm run meta:validate
 2. `AGENTS.md`
 3. `docs/runtime-capability-matrix.md`
 
+### プラットフォーム対応の層
+
+Meta_Kim は、互換性のある面をすべて「完全対応」とは呼びません。対応状況を次の層で管理します。
+
+| 層 | 製品 | 意味 |
+|---|---|---|
+| 正式 runtime projection | Claude Code、Codex、OpenClaw、Cursor | canonical の統治層を runtime 固有ファイルへ投影し、`npm run meta:sync` / `npm run meta:check` で検証します。 |
+| ネイティブ依存インストール対象 | opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode | ECC の upstream installer は対応していますが、Meta_Kim の正式 runtime projection ではありません。 |
+| candidate probe | Qoder CLI | Qoder 公式ドキュメントでは skills、subagents、hooks、MCP が確認できます。Meta_Kim では候補として追跡し、正式対応とは扱いません。 |
+
+事実のソース: `config/runtime-compatibility-catalog.json`。
+
 ---
 
 ## 連絡先
@@ -732,6 +744,9 @@ flowchart TB
 | Cursor | `.cursor/` → `.cursor-plugin/` → `skills/` |
 | OpenClaw | `skills/` |
 | opencode | `.opencode/` → `skills/` |
+| Qwen | ECC は `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target qwen` を使います |
+| Zed、Gemini、CodeBuddy、Antigravity、JoyCode | ECC は project-local です。各プロジェクトルートで `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target <target>` を実行します |
+| Qoder CLI | candidate probe のみです。`.qoder/` → `skills/` の探索は可能ですが、upstream ECC が `qoder` を列挙していないため ECC install は実行しません |
 
 抽出結果は `~/.<runtime>/skills/<id>/` に配置される。Claude marketplace plugin のみをインストールするには `npm run meta:deps:install:claude-plugins`、全 runtime を一括カバーするには `npm run meta:deps:install:all-runtimes`。**アップグレード時に手動クリーンアップは不要**：旧版の full-repo clone 残留はターゲットディレクトリ直下の `.claude-plugin/` マーカーで自動検出され、次回実行時に再抽出される。
 
@@ -790,7 +805,7 @@ Meta_Kim は 3 ヶ所に書き込みます：
 
 ### Q: どのプラットフォームに対応していますか?
 
-現在は Claude Code、Codex、OpenClaw、Cursor の 4 つを完全にサポートしています。中核ロジックは `canonical/` にあり、同期スクリプトで各プラットフォームに投影します。agent と agent 間通信をサポートするプラットフォームなら、理論上は拡張できます。
+正式な runtime projection は Claude Code、Codex、OpenClaw、Cursor です。ECC はさらに opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode を native install target として扱います。Qoder CLI は candidate probe です。公式ドキュメントで skills、subagents、hooks、MCP は確認できますが、Meta_Kim の正式 runtime projection ではありません。正確な境界は `config/runtime-compatibility-catalog.json` を参照してください。
 
 ### Q: インストールは難しいですか?
 

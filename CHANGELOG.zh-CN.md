@@ -6,6 +6,28 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.6.2] - 2026-05-30
+
+### 新增
+
+- **决策交叉验证 gate** — meta-theory 新增决策交叉验证入口，要求 PR、issue、release、兼容性、public-ready 和技能优先级决策记录 evidence snapshot time、source-state matrix、confidence labels、counterevidence、contradiction log、falsification checks 和 replay commands。
+- **风险到技能绑定模式** — 新增内部 decision pattern：PR / issue / release 工作必须先绑定一个主风险 lane，最多一个副 lane，再进入下一个可执行 gate。
+- **对抗式 review 回归测试** — 新增 governance tests，锁住 cross-validation gate、risk-to-skill binding 和 stale-state rejection 行为。
+
+### 变更
+
+- **Decision-pattern weapon 覆盖扩展** — Meta_Kim decision-pattern weapon 现在覆盖 PR/issue triage、skill prioritization 和 public-ready decision。
+- 版本升级：2.6.1 -> 2.6.2。
+
+### 验证
+
+- `node --test tests/governance/decision-cross-validation.test.mjs`
+- `npm run meta:verify:governance`
+- `npm run meta:verify:all`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
 ## [2.6.0] - 2026-05-29
 
 ### 新增

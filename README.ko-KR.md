@@ -65,6 +65,18 @@ npm run meta:validate
 2. `AGENTS.md`
 3. `docs/runtime-capability-matrix.md`
 
+### 플랫폼 지원 계층
+
+Meta_Kim은 호환 가능한 표면을 모두 "완전 지원"이라고 부르지 않습니다. 지원 상태를 계층으로 관리합니다.
+
+| 계층 | 제품 | 의미 |
+|---|---|---|
+| 공식 runtime projection | Claude Code, Codex, OpenClaw, Cursor | canonical 거버넌스를 runtime별 파일로 투영하고 `npm run meta:sync` / `npm run meta:check`로 검증합니다. |
+| 네이티브 의존성 설치 대상 | opencode, Qwen, Zed, Gemini, CodeBuddy, Antigravity, JoyCode | ECC upstream installer는 지원하지만, Meta_Kim의 공식 runtime projection은 아닙니다. |
+| candidate probe | Qoder CLI | Qoder 공식 문서에서 skills, subagents, hooks, MCP 표면을 확인했습니다. Meta_Kim은 후보로 추적하며 공식 지원으로 보지 않습니다. |
+
+사실 소스: `config/runtime-compatibility-catalog.json`.
+
 ---
 
 ## 연락처
@@ -734,6 +746,9 @@ flowchart TB
 | Cursor | `.cursor/` → `.cursor-plugin/` → `skills/` |
 | OpenClaw | `skills/` |
 | opencode | `.opencode/` → `skills/` |
+| Qwen | ECC는 `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target qwen`을 사용합니다 |
+| Zed, Gemini, CodeBuddy, Antigravity, JoyCode | ECC는 project-local입니다. 각 프로젝트 루트에서 `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target <target>`를 실행합니다 |
+| Qoder CLI | candidate probe 전용입니다. `.qoder/` → `skills/` 탐색은 가능하지만 upstream ECC가 `qoder`를 나열하지 않으므로 ECC install은 실행하지 않습니다 |
 
 추출 결과는 `~/.<runtime>/skills/<id>/`에 배치됨. Claude marketplace plugin만 설치하려면 `npm run meta:deps:install:claude-plugins`, 모든 런타임을 한 번에 커버하려면 `npm run meta:deps:install:all-runtimes`. **업그레이드 시 수동 정리 불필요**: 이전 버전의 full-repo clone 잔존물은 대상 디렉터리 루트의 `.claude-plugin/` 마커로 자동 감지되어 다음 실행 시 재추출됨.
 
@@ -791,7 +806,7 @@ Meta_Kim은 3 곳에 기록합니다:
 
 ### 어떤 플랫폼을 지원하나요?
 
-현재 Claude Code, Codex, OpenClaw, Cursor 4개 플랫폼을 완전 지원합니다. 핵심 논리는 `canonical/` 디렉터리에 있으며 동기화 스크립트로 각 플랫폼에 투영합니다. 플랫폼이 agent와 agent 간 통신을 지원한다면 이론적으로 매핑 가능합니다.
+공식 runtime projection은 Claude Code, Codex, OpenClaw, Cursor입니다. ECC는 추가로 opencode, Qwen, Zed, Gemini, CodeBuddy, Antigravity, JoyCode를 native install target으로 지원합니다. Qoder CLI는 candidate probe입니다. 공식 문서에서 skills, subagents, hooks, MCP 표면을 확인했지만 아직 Meta_Kim의 공식 runtime projection은 아닙니다. 정확한 경계는 `config/runtime-compatibility-catalog.json`에 있습니다.
 
 ### 설치가 복잡한가요?
 

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-29T08:59:57.898Z",
+  "generatedAt": "2026-05-30T12:29:28.749Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -185,8 +185,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-sentinel.md",
-        "size": 22981,
-        "modified": "2026-05-28T18:47:28.787Z",
+        "size": 23260,
+        "modified": "2026-05-30T12:24:41.998Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -208,7 +208,7 @@
         "namespace": "canonical",
         "path": "canonical/skills/meta-theory/SKILL.md",
         "size": 19423,
-        "modified": "2026-05-29T08:59:36.702Z"
+        "modified": "2026-05-29T09:44:27.415Z"
       },
       "repo:canonical-reference:create-agent": {
         "id": "create-agent",
@@ -526,7 +526,7 @@
         "namespace": "repo-mcp",
         "path": ".mcp.json",
         "size": 220,
-        "modified": "2026-05-29T07:14:36.874Z"
+        "modified": "2026-05-29T09:04:22.691Z"
       }
     },
     "mcpTools": {
@@ -536,7 +536,7 @@
         "namespace": "repo-mcp",
         "path": ".mcp.json",
         "size": 220,
-        "modified": "2026-05-29T07:14:36.874Z"
+        "modified": "2026-05-29T09:04:22.691Z"
       },
       "repo:repo-mcp:meta-kim-runtime:get_meta_agent": {
         "id": "meta-kim-runtime:get_meta_agent",
@@ -544,7 +544,7 @@
         "namespace": "repo-mcp",
         "path": ".mcp.json",
         "size": 220,
-        "modified": "2026-05-29T07:14:36.874Z"
+        "modified": "2026-05-29T09:04:22.691Z"
       },
       "repo:repo-mcp:meta-kim-runtime:get_meta_runtime_capabilities": {
         "id": "meta-kim-runtime:get_meta_runtime_capabilities",
@@ -552,7 +552,7 @@
         "namespace": "repo-mcp",
         "path": ".mcp.json",
         "size": 220,
-        "modified": "2026-05-29T07:14:36.874Z"
+        "modified": "2026-05-29T09:04:22.691Z"
       }
     },
     "plugins": {},

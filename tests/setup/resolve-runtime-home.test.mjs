@@ -1,6 +1,6 @@
 /**
  * Tests for resolveRuntimeHome() — runtime home directory resolution.
- * Covers: env var override, default home fallbacks for claude/codex/openclaw/cursor.
+ * Covers: env var override and default home fallbacks for formal plus candidate runtimes.
  */
 
 import { test, describe } from "node:test";
@@ -20,6 +20,7 @@ function resolveRuntimeHomeUnderTest(runtimeId) {
     codex: ["META_KIM_CODEX_HOME", "CODEX_HOME"],
     openclaw: ["META_KIM_OPENCLAW_HOME", "OPENCLAW_HOME"],
     cursor: ["META_KIM_CURSOR_HOME", "CURSOR_HOME"],
+    qoder: ["META_KIM_QODER_HOME", "QODER_HOME"],
   };
   const keys = envKeys[runtimeId] || [runtimeId.toUpperCase() + "_HOME"];
   for (const key of keys) {
@@ -29,6 +30,7 @@ function resolveRuntimeHomeUnderTest(runtimeId) {
   const defaults = {
     codex: ".codex",
     openclaw: ".openclaw",
+    qoder: ".qoder",
   };
   const dir = defaults[runtimeId] || "." + runtimeId;
   return "HOME→" + OS_HOME + "/" + dir;
@@ -92,6 +94,37 @@ describe("resolveRuntimeHome()", () => {
     try {
       const result = resolveRuntimeHomeUnderTest("cursor");
       assert.ok(result.includes("/.cursor"), result);
+    } finally {
+      restore();
+    }
+  });
+
+  test("returns env-overridden path for META_KIM_QODER_HOME", () => {
+    const restore = mockEnv({ META_KIM_QODER_HOME: "/custom/qoder" });
+    try {
+      const result = resolveRuntimeHomeUnderTest("qoder");
+      assert.match(result, /^META_KIM_QODER_HOME→/);
+      assert.ok(result.includes("/custom/qoder"), result);
+    } finally {
+      restore();
+    }
+  });
+
+  test("falls back to QODER_HOME for qoder", () => {
+    const restore = mockEnv({ QODER_HOME: "/fallback/qoder" });
+    try {
+      const result = resolveRuntimeHomeUnderTest("qoder");
+      assert.match(result, /^QODER_HOME→/);
+    } finally {
+      restore();
+    }
+  });
+
+  test("falls back to home/.qoder for qoder when no env", () => {
+    const restore = mockEnv({});
+    try {
+      const result = resolveRuntimeHomeUnderTest("qoder");
+      assert.ok(result.includes("/.qoder"), result);
     } finally {
       restore();
     }
