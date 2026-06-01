@@ -158,6 +158,16 @@ Concrete choices belong in run artifacts: `capabilitySearchResult`, `matchedCapa
 
 Genesis owns the durable boundary. Artisan owns provider compatibility and selection rules. Fetch owns the current-run concrete selection.
 
+### Execution Agent Abstraction Boundary
+
+An execution agent is reusable only when its identity names a capability class, not a one-run address or task. `executionAgentCard` may contain purpose, capabilities, non-capabilities, abstract dependencies, inputs, and outputs. It must not contain concrete repo paths, files, tickets, one-run commands, `todayTask`, `scopeFiles`, `deliverableLink`, `verifySteps`, or worker completion checklists.
+
+Concrete work belongs in `workerTaskPacket`: file lists, shard scope, current task text, acceptance criteria, verification steps, deliverable links, and merge rules. If the only way to describe the agent is "the agent that edits this file / fixes this page / handles this ticket," the factory must stop and return to Thinking. The correct route is usually direct reuse of an existing owner plus a concrete worker task packet, not durable agent creation.
+
+Before creating or upgrading an execution agent, Fetch must produce checked-owner evidence from repo canonical capability index, runtime mirrors, project runtime agents, local global inventory, skills, commands, hooks, rules/prompts, tools, plugins, and MCP capabilities. The factory may proceed only when `capabilityGapPacket.currentAgentsChecked` and `currentProvidersChecked` list those candidates and explain why reuse is insufficient.
+
+Reference pattern from `gstack`: a large reusable capability surface can be represented as generated `SKILL.md` providers with host-specific projection metadata, not as many durable execution-agent identities. `agents/openai.yaml`-style metadata is an interface card for discovery, not a worker identity. Meta_Kim should therefore prefer provider reuse or provider projection before creating a new execution agent; create the agent only when the missing thing is a recurring owner boundary that cannot be represented by an existing agent, skill, command, MCP tool, runtime tool, or plugin.
+
 ### Phase 4 — Review and Revision
 
 Run **meta-prism** review. Map **S/A Pass** (grades S or A count as Pass), treat **B** and **C** as Revise, and use **D redo** when the design is shallow or template-only.

@@ -30,13 +30,21 @@ for (const osName of ["macos", "windows", "linux", "wsl2"]) {
 }
 
 const cursor = supportMap(platformMap.get("cursor"));
-for (const cap of ["hook", "native choice surface", "subagent"]) {
+for (const cap of ["native choice surface"]) {
   assert(cursor.get(cap)?.support !== "native", `Cursor ${cap} must not be native without evidence`);
 }
+assert(cursor.get("hook")?.support === "native", "Cursor hooks must be native now that official docs verify preToolUse/postToolUse");
+assert(cursor.get("hook")?.confidence === "verified_docs", "Cursor hooks must cite official docs evidence");
+assert(cursor.get("subagent")?.support === "native", "Cursor subagents must be native now that official docs verify .cursor/agents");
+assert(cursor.get("subagent")?.confidence === "verified_docs", "Cursor subagents must cite official docs evidence");
 
 const codex = platformMap.get("codex");
 assert(JSON.stringify(codex).includes("explicitly requested"), "Codex subagent constraint must require explicit trigger");
 assert(JSON.stringify(codex).includes("trust review"), "Codex hooks must mention trust review");
+const openclaw = supportMap(platformMap.get("openclaw"));
+assert(openclaw.get("hook")?.confidence === "verified_docs", "OpenClaw hooks must cite official docs evidence");
+assert(JSON.stringify(platformMap.get("openclaw")).includes("typed plugin hooks"), "OpenClaw typed plugin hook boundary must be recorded");
+assert(JSON.stringify(platformMap.get("openclaw")).includes("not a hard sandbox"), "OpenClaw workspace-vs-sandbox boundary must be recorded");
 assert(JSON.stringify(platformMap.get("openclaw")).includes("Third-party skills"), "OpenClaw third-party skill risk must be recorded");
 
 console.log("runtime capability matrix valid");

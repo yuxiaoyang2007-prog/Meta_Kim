@@ -6,17 +6,17 @@ alwaysApply: true
 
 <!-- Canonical source: canonical/runtime-assets/cursor/rules/meta-enforcement.mdc
      Synced to .cursor/rules/meta-enforcement.mdc by `npm run meta:sync`.
-     Cursor v1.7+ supports real preToolUse hooks that can mechanically deny
+     Cursor's official Hooks surface supports real preToolUse hooks that can mechanically deny
      tool calls (exit code 2 + stderr, or stdout JSON with
      {"permission":"deny",...}, with failClosed:true for crash-default-deny).
      The primary mechanical enforcement lives in
      .cursor/hooks/enforce-agent-dispatch.mjs. This MDC rule is the
      declarative backup that survives if the hook is misconfigured, disabled,
-     or running on an older Cursor build. -->
+     or running in a host where hooks are unavailable. -->
 
 # Meta-Agent Execution Boundary (Cursor Declarative Backup)
 
-Cursor v1.7+ **does** expose a real tool-call deny protocol via `preToolUse`
+Cursor's official Hooks surface **does** expose a real tool-call deny protocol via `preToolUse`
 hooks, equivalent in effect to Claude Code's
 `hookSpecificOutput.permissionDecision: "deny"`. A hook can deny a tool call
 by either:
@@ -33,7 +33,7 @@ than allow. The canonical mechanical enforcement now lives in
 
 **This MDC rule is the declarative backup.** It applies on every prompt
 (`alwaysApply: true`) and keeps the meta-agent boundary intact when the
-hook is misconfigured, disabled, on an older Cursor build, or otherwise
+hook is misconfigured, disabled, unavailable in the active host, or otherwise
 unavailable. Hook-first, MDC-as-safety-net.
 
 ## Hard rules (apply at every turn)
@@ -65,7 +65,7 @@ The mechanical enforcement layer (`.cursor/hooks/enforce-agent-dispatch.mjs`)
 is the primary line of defence and aligns Cursor with Claude Code's
 PreToolUse deny behaviour. This MDC rule remains because:
 
-- hooks may be disabled, misconfigured, or unavailable on older Cursor builds;
+- hooks may be disabled, misconfigured, or unavailable in the active Cursor host;
 - a declarative rule that loads on every prompt cannot be bypassed by a
   config edit;
 - defence-in-depth keeps the four-runtime governance behaviour aligned even
@@ -92,7 +92,7 @@ Meta-Review finding.
 - `canonical/agents/meta-*.md` — canonical meta-agent definitions
   (each with `executionBlock: true`)
 - `.cursor/hooks/enforce-agent-dispatch.mjs` — **primary mechanical
-  enforcement** on Cursor v1.7+ (synced from
+  enforcement** on Cursor's official Hooks surface (synced from
   `canonical/runtime-assets/cursor/hooks/`)
 - `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` —
   the equivalent mechanical enforcement on Claude Code

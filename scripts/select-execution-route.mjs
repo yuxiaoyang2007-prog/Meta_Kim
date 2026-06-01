@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { GOVERNANCE_OWNERS, OS_TARGETS, RUNTIMES, classifyTaskShape, exists, readJson, repoPath, scoreRoute, stateDir, supportScore } from "./governance-lib.mjs";
+import { GOVERNANCE_OWNERS, OS_TARGETS, RUNTIMES, classifyTaskShape, exists, readJson, repoPath, scoreRoute, stateDir, supportScore, toPosix } from "./governance-lib.mjs";
 
 function argValue(name, fallback = null) {
   const index = process.argv.indexOf(name);
@@ -24,7 +24,10 @@ const taskText = String(task ?? "").toLowerCase();
 
 const weapons = (await readJson("config/capability-index/weapon-registry.json")).weapons ?? [];
 const registryDependencies = (await readJson("config/capability-index/dependency-project-registry.json")).projects ?? [];
+const repoCapabilityIndex = await readJson("config/capability-index/meta-kim-capabilities.json");
+const workflowContract = await readJson("config/contracts/workflow-contract.json");
 const capabilityInventory = await readStateJson("capability-inventory.json", { capabilities: [] });
+const globalCapabilityInventory = await readStateJson(path.join("capability-index", "global-capabilities.json"), { byCapabilityType: { agents: {} }, byPlatform: {} });
 const dependencyIndex = await readStateJson("dependency-capability-index.json", { discoveredDependencyProjects: [] });
 const choicePolicy = await readJson("config/governance/choice-surface-policy.json");
 const intentContract = await readJson("config/governance/intent-amplification-contract.json");
@@ -46,6 +49,281 @@ function fitsTask(entry) {
   if (taskShape === "fuzzy_complex_task") return true;
   return textContains(entry, terms) || /fuzzy|complex|governance|治理|复杂/.test(taskText);
 }
+
+function capabilityEntries(index, type) {
+  return Object.values(index?.byCapabilityType?.[type] ?? {});
+}
+
+function uniqueById(items) {
+  const seen = new Set();
+  const unique = [];
+  for (const item of items) {
+    if (!item?.id || seen.has(item.id)) continue;
+    seen.add(item.id);
+    unique.push(item);
+  }
+  return unique;
+}
+
+function compactAgent(entry, source) {
+  const layer = entry.layer ?? (String(entry.id ?? "").startsWith("meta-") ? "meta" : "execution");
+  const sourceRef = entry.sourcePath ?? entry.relativePath ?? (entry.platformId ? `${entry.platformId}:${entry.id}` : entry.id);
+  return {
+    id: entry.id,
+    layer,
+    source,
+    sourceRef: toPosix(sourceRef),
+    executionBlock: entry.executionBlock ?? layer === "meta",
+  };
+}
+
+function compactCapabilityProvider(entry, source, type = entry.type ?? "skills") {
+  const sourceRef = entry.sourcePath ?? entry.relativePath ?? (entry.platformId ? `${entry.platformId}:${entry.id}` : entry.path ?? entry.id);
+  return {
+    id: entry.id,
+    type,
+    source,
+    platformId: entry.platformId ?? null,
+    sourceRef: toPosix(sourceRef),
+  };
+}
+
+async function scanProjectFiles({ runtime: runtimeName, dir, type, source, extensions, recursive = false, maxDepth = 2 }) {
+  const providers = [];
+  const root = repoPath(dir);
+  if (!(await exists(root))) return providers;
+
+  async function visit(absDir, relDir, depth) {
+    const entries = await fs.readdir(absDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const absPath = path.join(absDir, entry.name);
+      const relPath = path.join(relDir, entry.name);
+      if (entry.isDirectory()) {
+        if (recursive && depth < maxDepth) await visit(absPath, relPath, depth + 1);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (!extensions.some((extension) => entry.name.endsWith(extension))) continue;
+      const id = relPath.replace(/\.[^.]+$/, "").replace(/\\/g, "/");
+      providers.push({
+        id,
+        type,
+        source,
+        runtime: runtimeName,
+        sourceRef: toPosix(path.join(dir, relPath)),
+      });
+    }
+  }
+
+  await visit(root, "", 0);
+  return providers;
+}
+
+async function projectRuntimeAgents() {
+  const dirs = [
+    { runtime: "claude_code", dir: ".claude/agents", extension: ".md" },
+    { runtime: "codex", dir: ".codex/agents", extension: ".toml" },
+    { runtime: "cursor", dir: ".cursor/agents", extension: ".md" },
+  ];
+  const agents = [];
+  for (const { runtime: runtimeName, dir, extension } of dirs) {
+    const absDir = repoPath(dir);
+    if (!(await exists(absDir))) continue;
+    const entries = await fs.readdir(absDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(extension)) continue;
+      const id = entry.name.slice(0, -extension.length);
+      const layer = id.startsWith("meta-") ? "meta" : "execution";
+      agents.push({
+        id,
+        layer,
+        source: "project_runtime_agent_inventory",
+        runtime: runtimeName,
+        sourceRef: toPosix(path.join(dir, entry.name)),
+        executionBlock: layer === "meta",
+      });
+    }
+  }
+  return agents;
+}
+
+async function projectSkillProviders() {
+  const dirs = [
+    { runtime: "codex", dir: ".agents/skills", marker: "SKILL.md" },
+    { runtime: "claude_code", dir: ".claude/skills", marker: "SKILL.md" },
+    { runtime: "cursor", dir: ".cursor/skills", marker: "SKILL.md" },
+    { runtime: "openclaw", dir: "openclaw/skills", marker: "SKILL.md" },
+  ];
+  const providers = [];
+  for (const { runtime: runtimeName, dir, marker } of dirs) {
+    const absDir = repoPath(dir);
+    if (!(await exists(absDir))) continue;
+    const entries = await fs.readdir(absDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const skillFile = path.join(dir, entry.name, marker);
+      if (!(await exists(repoPath(skillFile)))) continue;
+      providers.push({
+        id: entry.name,
+        type: "skills",
+        source: "project_runtime_skill_inventory",
+        runtime: runtimeName,
+        sourceRef: toPosix(skillFile),
+      });
+    }
+  }
+  return providers;
+}
+
+async function projectCapabilityProviders() {
+  const providerSpecs = [
+    { runtime: "claude_code", dir: ".claude/hooks", type: "hooks", source: "project_runtime_hook_inventory", extensions: [".js", ".mjs", ".cjs", ".ts", ".py", ".sh"] },
+    { runtime: "codex", dir: ".codex/hooks", type: "hooks", source: "project_runtime_hook_inventory", extensions: [".js", ".mjs", ".cjs", ".ts", ".py", ".sh"] },
+    { runtime: "cursor", dir: ".cursor/hooks", type: "hooks", source: "project_runtime_hook_inventory", extensions: [".js", ".mjs", ".cjs", ".ts", ".py", ".sh"] },
+    { runtime: "openclaw", dir: "openclaw/hooks", type: "hooks", source: "project_runtime_hook_inventory", extensions: [".js", ".mjs", ".cjs", ".ts", ".py", ".sh"] },
+    { runtime: "claude_code", dir: ".claude/commands", type: "commands", source: "project_runtime_command_inventory", extensions: [".md", ".toml", ".yaml", ".yml"], recursive: true },
+    { runtime: "codex", dir: ".codex/commands", type: "commands", source: "project_runtime_command_inventory", extensions: [".md", ".toml", ".yaml", ".yml"], recursive: true },
+    { runtime: "cursor", dir: ".cursor/rules", type: "rules", source: "project_runtime_rule_inventory", extensions: [".mdc", ".md"], recursive: true },
+    { runtime: "codex", dir: ".codex/prompts", type: "prompts", source: "project_runtime_prompt_inventory", extensions: [".md", ".txt", ".yaml", ".yml"], recursive: true },
+    { runtime: "claude_code", dir: ".claude/prompts", type: "prompts", source: "project_runtime_prompt_inventory", extensions: [".md", ".txt", ".yaml", ".yml"], recursive: true },
+    { runtime: "cursor", dir: ".cursor/prompts", type: "prompts", source: "project_runtime_prompt_inventory", extensions: [".md", ".txt", ".yaml", ".yml"], recursive: true },
+  ];
+  const providers = [];
+  for (const spec of providerSpecs) {
+    providers.push(...await scanProjectFiles(spec));
+  }
+  for (const file of [
+    { id: "repo-mcp", type: "mcpServers", source: "project_runtime_mcp_inventory", runtime: "shared", sourceRef: ".mcp.json" },
+    { id: "cursor-mcp", type: "mcpServers", source: "project_runtime_mcp_inventory", runtime: "cursor", sourceRef: ".cursor/mcp.json" },
+    { id: "codex-config-mcp", type: "mcpServers", source: "project_runtime_mcp_inventory", runtime: "codex", sourceRef: ".codex/config.toml" },
+  ]) {
+    if (await exists(repoPath(file.sourceRef))) providers.push(file);
+  }
+  return providers;
+}
+
+const repoCanonicalAgents = capabilityEntries(repoCapabilityIndex, "agents").map((entry) => compactAgent(entry, "repo_canonical_capability_index"));
+const localGlobalAgents = capabilityEntries(globalCapabilityInventory, "agents").map((entry) => compactAgent(entry, "local_global_agent_inventory"));
+const projectRuntimeAgentCandidates = await projectRuntimeAgents();
+const repoCanonicalSkillProviders = capabilityEntries(repoCapabilityIndex, "skills").map((entry) => compactCapabilityProvider(entry, "repo_canonical_capability_index", "skills"));
+const projectRuntimeSkillProviders = await projectSkillProviders();
+const repoCanonicalCapabilityProviders = [
+  ...repoCanonicalSkillProviders,
+  ...["commands", "hooks", "mcpServers", "mcpTools", "plugins", "rules", "prompts"].flatMap((type) =>
+    capabilityEntries(repoCapabilityIndex, type).map((entry) => compactCapabilityProvider(entry, "repo_canonical_capability_index", type)),
+  ),
+];
+const projectRuntimeCapabilityProviders = [
+  ...projectRuntimeSkillProviders,
+  ...await projectCapabilityProviders(),
+];
+const localGlobalCapabilityProviders = ["skills", "commands", "hooks", "plugins", "mcpServers", "mcpTools", "rules", "prompts"].flatMap((type) =>
+  capabilityEntries(globalCapabilityInventory, type)
+    .slice(0, 15)
+    .map((entry) => compactCapabilityProvider(entry, `local_global_${type}_inventory`, type)),
+);
+const localGlobalSkillProviders = localGlobalCapabilityProviders;
+const capabilityProviderCoverage = {
+  repoCanonical: Object.fromEntries(["skills", "commands", "hooks", "mcpServers", "mcpTools", "plugins", "rules", "prompts"].map((type) => [type, capabilityEntries(repoCapabilityIndex, type).length])),
+  projectRuntimeLightScan: Object.fromEntries(["skills", "commands", "hooks", "mcpServers", "rules", "prompts"].map((type) => [type, projectRuntimeCapabilityProviders.filter((provider) => provider.type === type).length])),
+  localGlobalCached: Object.fromEntries(["agents", "skills", "commands", "hooks", "plugins", "mcpServers", "mcpTools", "rules", "prompts"].map((type) => [type, capabilityEntries(globalCapabilityInventory, type).length])),
+};
+const globalInventoryGeneratedAt = globalCapabilityInventory.generatedAt ?? null;
+const globalInventoryAgeMinutes = globalInventoryGeneratedAt
+  ? Math.max(0, Math.round((Date.now() - Date.parse(globalInventoryGeneratedAt)) / 60000))
+  : null;
+const GLOBAL_INVENTORY_STALE_AFTER_MINUTES = 14 * 24 * 60;
+const globalInventoryStale =
+  globalInventoryAgeMinutes === null || globalInventoryAgeMinutes > GLOBAL_INVENTORY_STALE_AFTER_MINUTES;
+const globalInventoryFreshness = {
+  mode: "cached_global_inventory_plus_project_light_scan",
+  fullScanWhen: [
+    "install",
+    "update",
+    "explicit_user_refresh",
+    "missing_required_provider",
+    "stale_cache",
+    "scheduled_refresh_older_than_14_days",
+    "high_risk_provider_route",
+  ],
+  perRunBehavior: "read cached global inventory, do lightweight project scan, require full refresh when cache is missing or older than 14 days",
+  generatedAt: globalInventoryGeneratedAt,
+  ageMinutes: globalInventoryAgeMinutes,
+  staleAfterMinutes: GLOBAL_INVENTORY_STALE_AFTER_MINUTES,
+  staleAfterDays: 14,
+  stale: globalInventoryStale,
+  refreshRequiredBeforeExecution: globalInventoryStale,
+  refreshCommand: "npm run discover:global",
+  userHint: globalInventoryAgeMinutes === null
+    ? "Capability cache is missing; this run should first update with npm run discover:global so newly added capabilities can be matched."
+    : globalInventoryStale
+      ? "The last full capability scan is over 2 weeks old; this run should first update with npm run discover:global to match newly added user content and reach the best capability route."
+      : null,
+};
+const governanceStagePolicy = workflowContract.protocols?.agentBlueprintPacket?.governanceStageCoveragePolicy ?? {};
+const governanceStages = Object.fromEntries(
+  ["Critical", "Fetch", "Thinking", "Review"].map((stage) => [
+    stage,
+    {
+      requiredAgents: governanceStagePolicy.stageRequiredAgents?.[stage] ?? [],
+      allowedAgents: governanceStagePolicy.stageAllowedAgents?.[stage] ?? [],
+      evidenceSource: "config/contracts/workflow-contract.json#/protocols/agentBlueprintPacket/governanceStageCoveragePolicy",
+    },
+  ]),
+);
+const governanceStageOwners = [...new Set(Object.values(governanceStages).flatMap((stage) => [...stage.requiredAgents, ...stage.allowedAgents]))];
+const candidateExistingExecutionOwners = [
+  ...projectRuntimeAgentCandidates,
+  ...localGlobalAgents,
+]
+  .filter((agent) => agent.layer !== "meta" && agent.executionBlock !== true)
+  .map((agent) => agent.id);
+const ownerDiscoveryPacket = {
+  searchOrder: workflowContract.runDiscipline?.executionOwnership?.existingOwnerEvidenceOrder ?? [
+    "repo_canonical_capability_index",
+    "runtime_mirror_indexes",
+    "project_runtime_agent_inventory",
+    "local_global_agent_inventory",
+    "available_capability_providers_skills_tools_mcp",
+  ],
+  governanceStages,
+  repoCanonicalAgents: repoCanonicalAgents.slice(0, 20),
+  projectRuntimeAgents: projectRuntimeAgentCandidates.slice(0, 30),
+  localGlobalAgents: localGlobalAgents.slice(0, 30),
+  repoCanonicalSkillProviders: repoCanonicalSkillProviders.slice(0, 30),
+  projectRuntimeSkillProviders: projectRuntimeSkillProviders.slice(0, 40),
+  localGlobalSkillProviders,
+  repoCanonicalCapabilityProviders: repoCanonicalCapabilityProviders.slice(0, 60),
+  projectRuntimeCapabilityProviders: projectRuntimeCapabilityProviders.slice(0, 80),
+  localGlobalCapabilityProviders,
+  capabilityProviderCoverage,
+  globalInventoryFreshness,
+  candidateReusableCapabilityProviders: uniqueById([
+    ...repoCanonicalCapabilityProviders,
+    ...projectRuntimeCapabilityProviders,
+    ...localGlobalCapabilityProviders,
+  ]).map((provider) => provider.id).slice(0, 100),
+  candidateExistingExecutionOwners: [...new Set(candidateExistingExecutionOwners)].slice(0, 40),
+  governanceStageOwners,
+  evidenceRefs: [
+    "config/capability-index/meta-kim-capabilities.json",
+    ".codex/agents",
+    ".claude/agents",
+    ".cursor/agents",
+    ".agents/skills",
+    ".claude/skills",
+    ".cursor/skills",
+    "openclaw/skills",
+    ".claude/hooks",
+    ".codex/hooks",
+    ".cursor/rules",
+    ".mcp.json",
+    ".cursor/mcp.json",
+    ".codex/config.toml",
+    ".meta-kim/state/default/capability-index/global-capabilities.json",
+    "config/contracts/workflow-contract.json",
+  ],
+};
 
 const dependencyRecords = [
   ...registryDependencies.map((dep) => ({
@@ -160,6 +438,9 @@ const recommendedRoute = rankedRoutes.find((route) => route.score >= 85) ?? rank
 const capabilityGapPacket = recommendedRoute ? null : {
   gap: "No route has enough owner + weapon + dependency + runtime + OS + verification support.",
   taskShape,
+  currentAgentsChecked: [...new Set([...ownerDiscoveryPacket.candidateExistingExecutionOwners, ...ownerDiscoveryPacket.governanceStageOwners])].slice(0, 60),
+  currentProvidersChecked: ownerDiscoveryPacket.candidateReusableCapabilityProviders.slice(0, 80),
+  ownerDiscoveryRef: "ownerDiscoveryPacket",
   missing: rankedRoutes[0]?.blockedReasons?.length ? rankedRoutes[0].blockedReasons : ["owner_weapon_dependency_route"],
   returnToStage: "Thinking",
 };
@@ -186,7 +467,8 @@ const output = {
     scoreThreshold: intentContract.scoreBands?.find((band) => band.status?.includes("may_claim"))?.min ?? 90,
     reason: "Route may change based on real intent, success criteria, and userGoalDone evidence.",
   },
-  candidateOwners: [...new Set(candidateWeapons.flatMap((weapon) => weapon.ownerCandidates ?? []))],
+  ownerDiscoveryPacket,
+  candidateOwners: [...new Set([...candidateWeapons.flatMap((weapon) => weapon.ownerCandidates ?? []), ...ownerDiscoveryPacket.candidateExistingExecutionOwners])],
   candidateWeapons: candidateWeapons.map((weapon) => weapon.id),
   candidateDependencies: candidateDependencies.map((dep) => dep.id),
   candidateDependencyProjects: candidateDependencies.map((dep) => dep.id),

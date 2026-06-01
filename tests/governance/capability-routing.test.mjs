@@ -12,6 +12,54 @@ function route(task, runtime = "auto", os = "auto") {
 test("routing fixtures recall internal patterns and platform/OS matrices", () => {
   const fuzzy = route("fuzzy strategy task");
   assert.ok(fuzzy.candidateWeapons.includes("meta-kim-decision-patterns"));
+  assert.ok(
+    fuzzy.ownerDiscoveryPacket?.governanceStages?.Critical?.requiredAgents?.includes("meta-warden"),
+    "Critical stage governance owner discovery must be visible",
+  );
+  assert.ok(
+    fuzzy.ownerDiscoveryPacket?.governanceStages?.Fetch?.requiredAgents?.includes("meta-artisan"),
+    "Fetch stage governance owner discovery must be visible",
+  );
+  assert.ok(
+    Array.isArray(fuzzy.ownerDiscoveryPacket?.projectRuntimeAgents),
+    "project runtime agents must be listed even when none are selected",
+  );
+  assert.ok(
+    fuzzy.ownerDiscoveryPacket?.searchOrder?.includes("local_global_agent_inventory"),
+    "local global inventory must be part of owner discovery",
+  );
+  assert.ok(
+    fuzzy.ownerDiscoveryPacket?.searchOrder?.includes("available_capability_providers_skills_tools_mcp"),
+    "skill/tool/MCP providers must be checked before agent creation",
+  );
+  assert.ok(
+    fuzzy.ownerDiscoveryPacket?.projectRuntimeSkillProviders?.some((provider) => provider.id === "meta-theory"),
+    "project-local skill providers must be visible in owner discovery",
+  );
+  assert.ok(
+    fuzzy.ownerDiscoveryPacket?.projectRuntimeCapabilityProviders?.some((provider) => provider.type === "hooks"),
+    "project-local hook providers must be visible in owner discovery",
+  );
+  assert.ok(
+    fuzzy.ownerDiscoveryPacket?.projectRuntimeCapabilityProviders?.some((provider) => provider.type === "rules"),
+    "project-local rule/prompt providers must be visible in owner discovery",
+  );
+  assert.ok(
+    fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.localGlobalCached?.plugins >= 1,
+    "cached global plugin providers must be counted without per-run full scan",
+  );
+  assert.equal(
+    fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.mode,
+    "cached_global_inventory_plus_project_light_scan",
+    "per-run routing must use cached global inventory plus light project scan",
+  );
+  assert.equal(fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.staleAfterMinutes, 20160);
+  assert.equal(fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.staleAfterDays, 14);
+  assert.equal(typeof fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.refreshRequiredBeforeExecution, "boolean");
+  assert.ok(
+    fuzzy.ownerDiscoveryPacket?.candidateReusableCapabilityProviders?.length > 0,
+    "reusable capability providers must be listed before create/upgrade",
+  );
   if (fuzzy.candidateDependencyProjects.includes("kim-decision")) {
     assert.equal(fuzzy.rankedRoutes.some((route) => route.dependencyProject === "kim-decision" && route.scoreBand === "execute"), false);
   }

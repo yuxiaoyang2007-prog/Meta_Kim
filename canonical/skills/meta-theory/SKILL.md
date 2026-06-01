@@ -84,11 +84,26 @@ Dispatch to `meta-conductor` for business-flow blueprint and parallel lane orche
 
 ## Dispatch Self-Check
 
-Before Stage 4, record Protocol-first Dispatch: `runHeader`, `dispatchBoard`, `businessFlowBlueprintPacket`, `agentBlueprintPacket`, and `workerTaskPackets`. Stage 4 may not start before protocol artifacts are ready. `agentInvocationState`: `idle -> discovered -> matched -> dispatched -> returned/escalated`. `workerTaskPackets` must include `dependsOn`, `parallelGroup`, and `mergeOwner`. Option Exploration is MANDATORY in Stage 3: compare ≥2 solution paths with Pros / Cons or Decision Record and rejected alternatives. Apply Skip-Level Self-Reflection Gate and Escalation Signals before dispatch.
+Before Stage 4, record Protocol-first Dispatch: `runHeader`, `dispatchBoard`, `businessFlowBlueprintPacket`, `agentBlueprintPacket`, `ownerDiscoveryPacket`, and `workerTaskPackets`. Stage 4 may not start before protocol artifacts are ready. `agentInvocationState`: `idle -> discovered -> matched -> dispatched -> returned/escalated`. `workerTaskPackets` must include `dependsOn`, `parallelGroup`, and `mergeOwner`. `ownerDiscoveryPacket` must list repo canonical owners, runtime mirror owners, project runtime agents, local global agents, reusable skill/command/hook/rule/prompt/MCP/plugin/tool providers, and the Critical / Fetch / Thinking / Review governance-stage owners checked before any create or upgrade decision. Option Exploration is MANDATORY in Stage 3: compare ≥2 solution paths with Pros / Cons or Decision Record and rejected alternatives. Apply Skip-Level Self-Reflection Gate and Escalation Signals before dispatch.
 
 ## Fetch Evidence Inventory
 
 Research -> Inventory -> Thinking Handoff. Thinking determines needed execution capabilities, then match existing capabilities, then create or upgrade only for gaps. Fetch material claims include version, price, third-party, platform, and tool assertions. If current facts matter, set `contentEvidencePacket.researchRequired = true`, run `researchCapabilityDiscovery`, and prefer `web_search`, `url_fetch`, `docs_lookup`, or `browser_open`. If research is blocked, return `blocked` with `user_fallback` rather than guessing. Run Command discovery by package.json script scan and npm run inventory. Apply DRY conflict detection: overlap detect, duplicate reject, and keep one owner per capability. Skill selection ROI = (Task Coverage x Usage Frequency) / (Context Cost + Learning Curve).
+
+Fetch discovery minimum checklist: before Thinking, search at least these locations (even if results are empty):
+- `~/.claude/agents/` and `.claude/agents/` (global and project-local agents)
+- `.claude/skills/` (project-local skills)
+- `.mcp.json` / MCP server inventory
+- `config/capability-index/*.json`
+- `package.json` scripts
+
+Pass condition: `fetchPacket.capabilityDiscovery.searchLog` exists with checked sources and results.
+
+Fetch angle decomposition: for research or analysis tasks (when `contentEvidencePacket.researchRequired = true`), decompose the core question into N semantically distinct search angles before searching. Each angle must target a different aspect; rephrasing the same angle is forbidden. Output: `contentEvidencePacket.searchAngles = [{angle, keywords, expectedCoverage}]`. Default N=3; increase for complex multi-domain questions.
+
+Execution-agent identity must stay abstract and provider-first. Durable `executionAgentCard` content may describe a reusable capability class, boundaries, abstract dependencies, inputs, and outputs; it must not contain repo paths, file lists, tickets, one-run work instructions, `todayTask`, `scopeFiles`, `deliverableLink`, or `verifySteps`. Match existing agents, skills, commands, hooks, rules/prompts, MCP tools, runtime tools, and plugins before creating or upgrading an execution agent. Put concrete work in `workerTaskPackets`, `capabilityBindings`, and `orchestrationTaskBoardPacket` only. If a card cannot be written without concrete task binding, return to Thinking and reuse an existing owner/provider or emit `capabilityGapPacket`.
+
+Capability scan UX: full global scans happen on install, update, explicit refresh, missing cache, cache older than 14 days, missing required provider, or high-risk provider routes. Normal execution reads cached global inventory, performs a lightweight project scan, shows only counts/top candidates/source refs, and avoids dumping full provider definitions into chat. If the last full scan is older than 2 weeks, tell the user this run will update first to match newly added content and reach the best capability route, then refresh before execution.
 
 ## Warden Entry Gate
 
@@ -111,6 +126,8 @@ Fail the gate if the decision relies on stale PR/issue state, a single source wi
 Stage updates must be compact, human, and in the resolved user language. Record internally with packet field name / internal keys and debug traces, but show human label and human-readable label in user-facing output. Mention Critical, Fetch, Thinking, Review only when the stage status matters. Keep token use low and avoid dumping raw packet fields unless the user asks for debug.
 
 Public status surface uses `runStatusEnvelope`, `publicLabels`, `.meta-kim/state/{profile}/active-run.json`, and `.meta-kim/state/{profile}/runs/{runId}/status.json`. Apply runtime/tool selected output language first, then latest input language. Do not hardcode labels. The public notice must not expose internal protocol fields such as `Preflight` or `conversation_fallback` unless debug is requested.
+
+Interactive execution communication: during multi-stage work, the dispatcher must report progress to the user at natural transition points — not only at the pre-decision gate. Report triggers: (1) Fetch complete — brief evidence summary and route impact, (2) Thinking complete — chosen path and trade-offs, (3) each Execution phase complete — what was done and what remains, (4) Review findings that change scope — surface them immediately, (5) route-changing discovery mid-execution — pause and inform. Each report is a compact notice (max 3 bullets), not a full packet dump. If the discovery changes scope, owner, or risk, upgrade the notice to a Decision card requiring user input. This "communicate while working" pattern keeps the user informed and in control without requiring them to ask for status.
 
 ## Business-flow capability matrix
 
@@ -171,15 +188,18 @@ Dependencies are retained and routed by state, not deleted by score.
 
 ## Execution gate
 
-Execution may start only when all are true:
+Execution may start only when all are true (or degraded mode is explicitly active with recorded degradation reason):
 
 - `realIntent`, success criteria, non-goals, and blocking unknowns are recorded.
 - Fetch evidence and capability discovery are complete enough for the chosen path.
+- Existing-owner discovery has checked repo canonical index, runtime mirrors, project runtime agents, local global agent inventory, and available skill/command/hook/rule/prompt/MCP/plugin/tool providers; skipped sources must appear as blockers or no-impact evidence.
 - Route score is `>=85`, or a branch-changing user choice accepts a `70-84` route.
 - Owner is not `general-purpose`, not a runtime alias, and not a governance agent acting as implementation worker.
 - Weapon is callable and compatible with target runtime and OS.
 - Dependency is not `reference_only`, not `external_reference`, not missing invocation path, and not missing verification method when used for execution.
 - Verification owner, verification method, rollback/risk boundary, and expected evidence are known.
+
+Worker output schema validation: when `workerTaskPacket.output` defines an expected structure, the dispatcher (or receiving agent) must validate the worker result against that structure before accepting it. On mismatch, the worker retries (up to 2 attempts) before reporting failure. Record `workerResultPacket.schemaValidationAttempts = [{attempt, passed, violationDetail}]`. This prevents format drift between Thinking's output contract and Execution's actual return.
 
 ## Review gate
 
@@ -191,6 +211,8 @@ Review must check upstream chain before output polish:
 - Execution evidence is reproducible.
 - No foundational capability or runtime-native ability was deleted or downgraded.
 - No reference-only dependency entered execution.
+
+Adversarial verify pattern: when Review runs for `regulated_path` or when the user requests cross-check, spawn N independent skeptic reviewers (default N=3). Each skeptic receives a different lens (correctness, security, completeness) and must explicitly try to refute each finding. A finding survives only if a majority (>= ceil(N/2) refutations fail). Record per-finding vote tallies in `reviewPacket.findings[].adversarialVotes = [{lens, verdict, refutationEvidence}]`. In degraded mode, the main thread applies the same checklist with `degradedFlag: true` and records self-assessment as one vote (not a majority).
 
 ## Verification gate
 
@@ -249,6 +271,23 @@ Low-score, unknown, partial, uninstalled, external, high-risk, or reference-only
 ## No Hook loop
 
 Hooks are last-resort fuses, not the main governance engine. Execution must pass preflight before mutation: intent, evidence, capability discovery, runtime, OS, owner, weapon, dependency route eligibility, verification owner, rollback path, warning classification, and reserved writeback decision. A Hook block must include `returnToStage`, `repairOwner`, `repairAction`, `allowedNextAction`, and `forbiddenRetry`. The same Hook reason may block once; the second same-reason block enters `hookRepairMode`; a third same-hook block stops Execution and creates `hookFailurePacket`. Never retry the same blocked action unchanged.
+
+## Degraded Mode
+
+When Agent dispatch is unavailable or no matching owner exists after capability discovery, the spine enters degraded mode instead of silently skipping stages.
+
+Required actions:
+- Record `capabilityGapPacket` with `currentAgentsChecked` and `currentProvidersChecked`.
+- Record `degradationReason`: `tool_limitation`, `no_matching_owner`, or `permission_blocked`.
+- Downgrade `surfaceState` to `internal-ready`; never claim `public-ready` in degraded mode.
+- Log which spine stages execute in degraded mode vs fully executed.
+- Review and Verification stages: read the relevant meta-agent definition for criteria, apply the same checklist, and record `degradedFlag: true` with `reviewerRole: "main-thread-degraded"`.
+- Verification: add `humanAcceptanceRequired: true` when no independent verification owner exists.
+
+Forbidden:
+- Silently skip any stage.
+- Claim `public-ready` while in degraded mode.
+- Self-execute when Thinking assigned a different owner (unless degraded mode explicitly overrides and records the override reason).
 
 ## Real testing and warning classification
 

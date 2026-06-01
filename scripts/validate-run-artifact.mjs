@@ -758,6 +758,72 @@ function validateRoleDisplayName(name, context) {
   );
 }
 
+function flattenStringValues(value, context = "value", results = []) {
+  if (typeof value === "string") {
+    results.push({ context, value });
+    return results;
+  }
+  if (Array.isArray(value)) {
+    for (const [index, item] of value.entries()) {
+      flattenStringValues(item, `${context}[${index}]`, results);
+    }
+    return results;
+  }
+  if (value && typeof value === "object") {
+    for (const [key, item] of Object.entries(value)) {
+      flattenStringValues(item, `${context}.${key}`, results);
+    }
+  }
+  return results;
+}
+
+function looksLikePathBinding(text) {
+  return /(?:[A-Za-z]:[\\/]|\\\\[^\s]+|(?:^|[\s"'`])(?:~|\.{1,2})[\\/]|(?:^|[\s"'`])\/(?:Users|home|mnt|var|tmp|etc)\b|(?:^|[\s"'`])(?:src|app|pages|components|canonical|config|scripts|tests|docs)[\\/]|[\w.-]+\.(?:js|mjs|cjs|ts|tsx|jsx|py|md|json|toml|ya?ml|css|html|sql|sh|ps1)\b)/i.test(
+    text,
+  );
+}
+
+function looksLikeSingleRunTaskBinding(text) {
+  const hasTaskVerb =
+    /\b(fix|patch|update|modify|rewrite|edit|delete|remove|add|change|migrate|implement)\b/i.test(
+      text,
+    );
+  const hasConcreteObject =
+    /\b(ticket|issue|bug|pr|page|screen|endpoint|route|file|component|button|modal|checkout|login|signup|auth|settings)\b/i.test(
+      text,
+    );
+  const hasRunMarker =
+    /\b(today|this run|this task|one-off|single-run|current request)\b/i.test(
+      text,
+    );
+  return hasTaskVerb && (hasConcreteObject || hasRunMarker);
+}
+
+function validateExecutionAgentCardAbstraction(contract, packet, context) {
+  const policy = contract.protocols?.executionAgentCard?.abstractionPolicy ?? {};
+  const forbiddenFields = new Set(policy.forbiddenDurableFields ?? []);
+
+  for (const key of Object.keys(packet ?? {})) {
+    ensure(
+      !forbiddenFields.has(key),
+      `${context}.${key} is a worker-task field and must not be persisted in executionAgentCard durable identity.`,
+    );
+  }
+
+  validateRoleDisplayName(packet.roleDisplayName, `${context}.roleDisplayName`);
+
+  for (const item of flattenStringValues(packet, context)) {
+    ensure(
+      !looksLikePathBinding(item.value),
+      `${item.context} must not bind execution-agent identity to a concrete file path or address; put concrete scope in workerTaskPackets.scopeFiles or capabilityBindings.`,
+    );
+    ensure(
+      !looksLikeSingleRunTaskBinding(item.value),
+      `${item.context} must describe a reusable capability class, not a single-run task; put concrete work in workerTaskPackets.todayTask.`,
+    );
+  }
+}
+
 function valuesAsStrings(value) {
   if (Array.isArray(value)) {
     return value.map((item) => String(item));
@@ -2509,6 +2575,7 @@ function validateExecutionAgentCardWhenRequired(contract, artifact) {
     packet.outputs.length >= 1,
     "executionAgentCard.outputs must contain at least one output.",
   );
+  validateExecutionAgentCardAbstraction(contract, packet, "executionAgentCard");
 }
 
 function validateHardPublicReadyTodoGate(contract, artifact) {

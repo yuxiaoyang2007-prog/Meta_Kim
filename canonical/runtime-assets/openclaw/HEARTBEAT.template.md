@@ -3,7 +3,7 @@
 
 ## Capability-First Mandatory Refusal (OpenClaw)
 
-OpenClaw has no PreToolUse hook surface. The four-runtime governance contract (Claude / Codex / Cursor / OpenClaw) requires `fetchRecord.capabilitySearchPerformed = true` before any Agent dispatch in regulated runs. Other runtimes enforce this mechanically. OpenClaw enforces this through this rule:
+OpenClaw has internal command/lifecycle hooks and typed plugin hooks, but this Meta_Kim projection has not installed a typed plugin adapter for tool-call denial. The four-runtime governance contract (Claude / Codex / Cursor / OpenClaw) requires `fetchRecord.capabilitySearchPerformed = true` before any Agent dispatch in regulated runs. Claude Code, Codex, and Cursor can enforce the dispatch gate mechanically through tool hooks. OpenClaw enforces the same rule here through workspace instructions until a typed plugin policy hook is installed.
 
 **Before dispatching any execution worker or running any execution-layer task in OpenClaw, you must:**
 
@@ -16,7 +16,9 @@ If you cannot record the search outcome, **refuse** to execute and respond:
 
 > "OpenClaw capability-first refusal: I cannot dispatch without fetchRecord evidence. Please run capability discovery first or escalate to meta-warden."
 
-This is not a soft preference. This is the OpenClaw-equivalent of the mechanical PreToolUse deny that Claude / Codex / Cursor enforce. Treat it as a hard contract.
+This is not a soft preference. This is the OpenClaw-equivalent of the mechanical tool-call deny that Claude / Codex / Cursor enforce. Treat it as a hard contract.
+
+Official OpenClaw workspace note: the workspace is the default cwd and context home, not a hard sandbox. Absolute paths can still reach host files unless sandboxing is configured. Do not treat workspace placement as a security boundary.
 
 Cross-reference: see `AGENTS.md` for the cross-runtime enforcement matrix and `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` for the mechanical sibling.
 

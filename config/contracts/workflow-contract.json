@@ -68,13 +68,28 @@
         "description": "Run multi-agent execution through matched agents and their selected skills, commands, MCP capabilities, and tools from the Thinking dispatch plan."
       },
       "review": {
-        "primaryAction": "capability_matched_output_review"
+        "primaryAction": "capability_matched_output_review",
+        "degradedPolicy": {
+          "when": "no Agent dispatch available or no matching review owner",
+          "path": "read meta-agent definition for review criteria, apply same checklist, record degradedFlag=true",
+          "forbidden": ["silently skip", "claim public-ready in degraded mode"]
+        }
       },
       "meta_review": {
-        "primaryAction": "review_standard_verification"
+        "primaryAction": "review_standard_verification",
+        "degradedPolicy": {
+          "when": "no Agent dispatch available or no matching meta-review owner",
+          "path": "read meta-warden criteria, apply same checklist, record degradedFlag=true",
+          "forbidden": ["silently skip", "claim public-ready in degraded mode"]
+        }
       },
       "verification": {
-        "primaryAction": "run_real_tests_with_fresh_evidence"
+        "primaryAction": "run_real_tests_with_fresh_evidence",
+        "degradedPolicy": {
+          "when": "no independent verification owner available",
+          "path": "main-thread runs verifySteps with degradedFlag=true, humanAcceptanceRequired=true",
+          "forbidden": ["claim verified without human acceptance", "claim public-ready in degraded mode"]
+        }
       },
       "evolution": {
         "primaryAction": "writeback_or_explicit_none",
@@ -921,6 +936,32 @@
       "executionRequiresAgentOwner": true,
       "anonymousExecutionForbidden": true,
       "existingOwnerPreferred": true,
+      "existingOwnerDiscoveryRequired": true,
+      "existingOwnerEvidenceOrder": [
+        "repo_canonical_capability_index",
+        "runtime_mirror_indexes",
+        "project_runtime_agent_inventory",
+        "local_global_agent_inventory",
+        "available_capability_providers_skills_tools_mcp"
+      ],
+      "capabilityDiscoveryRuntimePolicy": {
+        "defaultMode": "cached_global_inventory_plus_project_light_scan",
+        "fullScanWhen": [
+          "install",
+          "update",
+          "explicit_user_refresh",
+          "missing_required_provider",
+          "stale_cache",
+          "scheduled_refresh_older_than_14_days",
+          "high_risk_provider_route"
+        ],
+        "perRunBehavior": "Every governed execution reads the cached global capability inventory and performs a lightweight project scan for agents, skills, commands, hooks, rules/prompts, and MCP config references. It must not run a full global filesystem scan on every dispatch; it must require a full refresh first when the cache is missing or older than 14 days.",
+        "staleAfterMinutes": 20160,
+        "staleAfterDays": 14,
+        "refreshCommand": "npm run discover:global",
+        "userPromptPolicy": "If the cache is missing or older than 14 days, show one compact user notice: because no full scan has run for 2 weeks, this run will update first to match newly added user content and reach the best capability route. If route-changing evidence is absent, show the refresh command and continue only when the current route is still safe. For owner/provider creation, stale or missing cache returns to Fetch before creation.",
+        "tokenPolicy": "Route output may expose counts, top candidates, and source references, but must not dump full provider definitions into chat or worker packets unless selected for the current run."
+      },
       "createOwnerBeforeExecutionWhen": [
         "recurring_capability_gap",
         "project_specific_domain_gap",
@@ -1546,8 +1587,16 @@
         "decisionImpactMap",
         "researchRequired",
         "researchSkipReason",
-        "evidenceLaneValidatedBy"
+        "evidenceLaneValidatedBy",
+        "searchAngles"
       ],
+      "searchAngles": {
+        "description": "Fetch angle decomposition: semantically distinct search angles for research tasks. Required when researchRequired=true.",
+        "requiredWhen": "contentEvidencePacket.researchRequired = true",
+        "angleRequiredFields": ["angle", "keywords", "expectedCoverage"],
+        "defaultCount": 3,
+        "constraint": "angles must be semantically distinct; rephrasing the same angle is forbidden"
+      },
       "evidenceScopeEnum": [
         "local_project",
         "external_research",
@@ -2233,7 +2282,16 @@
           "Thinking",
           "Review"
         ],
-        "description": "Fetch inventories global agents, skills, tools, and capability indexes as evidence while confirming the problem and candidate solutions. Thinking resolves the owner/loadout from that evidence. A global agent that already satisfies the orchestration node is used directly and is not copied into the user project. Only agents that need project-specific modification, persistent capability changes, or recurring local ownership are copied into the downstream project as project-local agents, under governance review. agentCopyPolicy=copy_to_project_for_modification is valid only with ownerSource=project_local and ownerResolution=upgrade_existing_owner; agentCopyPolicy=create_project_local_agent is valid only with ownerSource=project_local and ownerResolution=create_owner_first."
+        "requiredEvidenceOrder": [
+          "repo_canonical_capability_index",
+          "runtime_mirror_indexes",
+          "project_runtime_agent_inventory",
+          "local_global_agent_inventory",
+          "available_capability_providers_skills_tools_mcp"
+        ],
+        "creationBlockedUntilExistingAgentsChecked": true,
+        "checkedAgentsMustBeNamedInCapabilityGapPacket": true,
+        "description": "Fetch inventories global agents, project/runtime agents, skills, commands, hooks, rules/prompts, MCP capabilities, plugins, runtime tools, and capability indexes as evidence while confirming the problem and candidate solutions. Thinking resolves the owner/loadout from that evidence. Per-run discovery reads the cached global inventory plus lightweight project scans; full global scans are reserved for install, update, explicit refresh, stale/missing cache, or high-risk provider routes. A global agent or provider that already satisfies the orchestration node is used directly and is not copied into the user project. Only agents that need project-specific modification, persistent capability changes, or recurring local ownership are copied into the downstream project as project-local agents, under governance review. agentCopyPolicy=copy_to_project_for_modification is valid only with ownerSource=project_local and ownerResolution=upgrade_existing_owner; agentCopyPolicy=create_project_local_agent is valid only with ownerSource=project_local and ownerResolution=create_owner_first."
       },
       "ownerAgentPublicRepoRule": {
         "allowedOwnerAgents": [
@@ -2394,6 +2452,39 @@
         "external_private",
         "project_local"
       ],
+      "abstractionPolicy": {
+        "durableIdentityMustDescribeCapabilityClass": true,
+        "concreteWorkOrderFieldsForbidden": true,
+        "pathLikeBindingsForbidden": true,
+        "singleRunTaskBindingForbidden": true,
+        "forbiddenDurableFields": [
+          "todayTask",
+          "coreProblem",
+          "scopeFiles",
+          "deliverableLink",
+          "verifySteps",
+          "fileCompletionList",
+          "runtimeInstanceAlias",
+          "shardScope",
+          "taskTodoState"
+        ],
+        "concreteDetailsBelongIn": [
+          "workerTaskPackets",
+          "capabilityBindings",
+          "orchestrationTaskBoardPacket"
+        ],
+        "providerFirstAgentLast": true,
+        "providerExamples": [
+          "skills",
+          "commands",
+          "hooks",
+          "rules/prompts",
+          "MCP tools",
+          "runtime tools",
+          "plugins"
+        ],
+        "description": "executionAgentCard may define a reusable capability class, boundaries, abstract dependencies, inputs, and outputs. It must not freeze a repo path, file list, issue/ticket, one-run instruction, or worker verification checklist into long-term agent identity. Capability providers such as skills, commands, MCP tools, runtime tools, and plugins must be matched before creating or upgrading an execution agent; agent creation is the last resort for a recurring owner gap."
+      },
       "description": "Packet for execution-agent creation or upgrade in user projects and external/private registries. It is not used for direct global reuse. Public Meta_Kim does not use this as durable owner state; public owner creation or upgrade is represented by governance meta-owner decisions plus run-scoped matchedCapabilities / capabilityBindings, with matchedSkills accepted only as legacy compatibility evidence."
     },
     "cardDecision": {
@@ -2500,7 +2591,7 @@
         "userChoiceState",
         "finalizationGate"
       ],
-      "description": "Execution task packet dispatched to a worker agent. It is a complete work order, not a vague assignment: coreProblem, todayTask, nonGoals, output, acceptanceCriteria, qualityBar, expertLensRefs, evidenceRefs, capabilityRequirements, toolRequirements, handoffContract, and verifySteps must be clear before work starts. ownerMode is the worker-task mode and uses existing-owner or create-owner-first; agentBlueprintPacket.roles[].ownerResolution remains the broader owner-resolution field with reuse_existing_owner, upgrade_existing_owner, or create_owner_first. The three core orchestration fields are dependsOn (upstream dependency, see dependencyContract), parallelGroup (parallel grouping), and mergeOwner (merge owner). roleDisplayName is the user-visible short English business role name; runtimeInstanceAlias records only transient host nicknames and must not replace the business role name. verifySteps provides atomic completion criteria for Verification. This packet may not finalize before userChoiceState records a user choice or an explicit auto-proceed / choiceGateSkip allowed by preDecisionOptionFrame. Workers MUST populate fileCompletionList in their output when scopeFiles is declared, listing every promised file with explicit status; this closes EB-001 from v2.2.2 review.",
+      "description": "Execution task packet dispatched to a worker agent. It is a complete work order, not a vague assignment: coreProblem, todayTask, nonGoals, output, acceptanceCriteria, qualityBar, expertLensRefs, evidenceRefs, capabilityRequirements, toolRequirements, handoffContract, and verifySteps must be clear before work starts. ownerMode is the worker-task mode and uses existing-owner or create-owner-first; agentBlueprintPacket.roles[].ownerResolution remains the broader owner-resolution field with reuse_existing_owner, upgrade_existing_owner, or create_owner_first. The three core orchestration fields are dependsOn (upstream dependency, see dependencyContract), parallelGroup (parallel grouping), and mergeOwner (merge owner). roleDisplayName is the user-visible short English business role name; runtimeInstanceAlias records only transient host nicknames and must not replace the business role name. Concrete files, paths, tickets, and one-run work content belong here or in capabilityBindings, never in executionAgentCard durable identity. verifySteps provides atomic completion criteria for Verification. This packet may not finalize before userChoiceState records a user choice or an explicit auto-proceed / choiceGateSkip allowed by preDecisionOptionFrame. Workers MUST populate fileCompletionList in their output when scopeFiles is declared, listing every promised file with explicit status; this closes EB-001 from v2.2.2 review.",
       "ownerModeEnum": [
         "existing-owner",
         "create-owner-first"
@@ -2689,7 +2780,15 @@
         "fixArtifact",
         "verifiedBy",
         "closeState"
-      ]
+      ],
+      "adversarialVotes": {
+        "description": "Per-finding adversarial vote records when adversarial verify is active. Each vote is one skeptic's attempt to refute the finding.",
+        "requiredWhen": "regulated_path or user requests cross-check",
+        "voteRequiredFields": ["lens", "verdict", "refutationEvidence"],
+        "lensEnum": ["correctness", "security", "completeness"],
+        "verdictEnum": ["survived", "refuted"],
+        "survivalRule": "finding survives only if majority (>= ceil(N/2)) of votes have verdict=survived"
+      }
     },
     "revisionResponse": {
       "requiredFields": [

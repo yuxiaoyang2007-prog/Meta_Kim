@@ -177,7 +177,7 @@ function deny(reason) {
   const message = `[Meta_Kim Spine] ${reason}`;
 
   if (runtime === "cursor") {
-    // Cursor v1.7+ contract: JSON on stdout with permission/user_message/agent_message,
+    // Cursor hook contract: JSON on stdout with permission/user_message/agent_message,
     // plus exit code 2 and stderr text for older shells.
     process.stdout.write(
       JSON.stringify({

@@ -4,15 +4,33 @@ Capability-first dispatch order:
 
 1. canonical capability index
 2. runtime mirror indexes
-3. local runtime inventory
-4. available skills and tools
-5. external discovery when allowed
+3. project runtime agent inventory
+4. local global agent inventory
+5. available capability providers: skills, commands, hooks, rules/prompts, MCP tools, runtime tools, plugins
+6. external discovery when allowed
 
 ## Ladder
 
 existing owner -> owner upgrade -> create owner -> `capabilityGapPacket`.
 
-Do not use temporary fallback owners. Do not persist concrete child skills into long-term agent identity; keep concrete skill selection run-scoped.
+Degraded path: when no Agent dispatch exists and no owner matches, record `capabilityGapPacket` with `currentAgentsChecked`, `currentProvidersChecked`, and `degradationReason`. Enter `controlState=degraded`. The dispatcher may self-execute only with `degradedFlag: true` and `surfaceState=internal-ready`.
+
+Do not use temporary fallback owners. Do not persist concrete child skills into long-term agent identity; keep concrete skill/provider selection run-scoped.
+
+## Existing agent discovery evidence
+
+Before `upgrade_existing_owner`, `create_owner_first`, `upgrade_execution_agent`, or `create_execution_agent`, Thinking must receive an `ownerDiscoveryPacket` from Fetch. It must name the checked repo canonical owners, runtime mirror owners, project runtime agents such as `.codex/agents/*.toml`, local global inventory agents, and reusable capability providers such as skills, commands, hooks, rules/prompts, MCP tools, runtime tools, and plugins. Empty or unavailable sources are still evidence and must be recorded with a blocker or no-impact reason.
+
+Critical, Fetch, Thinking, and Review governance nodes are covered by the governance-stage policy in `workflow-contract.json`; they are not execution agents. Execution agents may be reused directly only when the discovery evidence shows a fitting global or project-local owner. A skill or tool provider may satisfy the capability without requiring a new owner. If no fitting owner or provider exists, write the checked owners/providers into `capabilityGapPacket.currentAgentsChecked` before factory work starts.
+
+## Scan cadence and UX
+
+Use a two-speed discovery model:
+
+- Full global scan: run on install, update, explicit user refresh, missing cache, cache older than 14 days, missing required provider evidence, or high-risk provider routes. Persist results to the local global capability inventory.
+- Per-run scan: do not full-scan the machine. Read the cached global inventory, perform a lightweight project scan of known runtime directories and config files, and expose only counts, top candidates, source refs, and refresh hints.
+
+If cache freshness could change the route, show one short user-facing hint with the refresh command. If the last full scan is older than 2 weeks, tell the user this run will update first to match newly added content and reach the best capability route, then refresh before execution. Do not dump the full provider catalog into chat or worker packets; load full definitions only after Thinking selects a provider for the current run.
 
 ## Agent Teams Playbook
 
@@ -26,6 +44,7 @@ Use when a task needs owner, weapon, dependency, runtime, OS, or verification ro
 
 - `intentPacket`
 - `fetchPacket.capabilityDiscovery`
+- `ownerDiscoveryPacket`
 - weapon registry
 - dependency registry
 - runtime and OS matrices
@@ -33,6 +52,7 @@ Use when a task needs owner, weapon, dependency, runtime, OS, or verification ro
 ## Do
 
 - `meta-conductor` searches owner candidates in canonical index, runtime mirrors, local inventory, installed skills/tools, then external discovery.
+- `meta-conductor` separates stage governance owners from execution owners; Critical/Fetch/Thinking/Review coverage proves governance readiness, not implementation ownership.
 - `meta-artisan` matches weapon and invocation path.
 - `meta-scout` labels dependency evidence and support confidence.
 - Output owner + weapon + dependency + runtime + OS + verification owner.
@@ -45,13 +65,14 @@ Use when a task needs owner, weapon, dependency, runtime, OS, or verification ro
 
 ## Required packet
 
-`ownerResolutionPacket`: `candidateOwners`, `candidateWeapons`, `candidateDependencies`, `runtimeFilterResult`, `osFilterResult`, `rankedRoutes`, `recommendedRoute`, `blockedReasons`, `capabilityGapPacket`.
+`ownerResolutionPacket`: `ownerDiscoveryPacket`, `candidateOwners`, `candidateWeapons`, `candidateDependencies`, `runtimeFilterResult`, `osFilterResult`, `rankedRoutes`, `recommendedRoute`, `blockedReasons`, `capabilityGapPacket`.
 
 ## Pass
 
 - `recommendedRoute.score >= 85`.
 - owner, weapon, runtime, OS, verificationOwner, and verificationMethod are non-empty.
 - callable dependency has invocationPath and verificationMethod.
+- create/upgrade routes include checked existing agents and the reason each did not fit.
 
 ## Fail
 

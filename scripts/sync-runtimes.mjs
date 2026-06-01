@@ -1701,7 +1701,8 @@ function buildRuntimeSkillMap(targetId) {
         pattern: /canonical\/agents\//g,
         replacement: "openclaw/workspaces/{workspace}/AGENTS.md#",
       },
-      // Hooks: OpenClaw uses Plugin SDK hooks under openclaw/hooks/
+      // Hooks: OpenClaw internal hooks live under openclaw/hooks/.
+      // Tool-blocking policy requires a typed plugin hook adapter.
       { pattern: /\.claude\/hooks\//g, replacement: "openclaw/hooks/" },
       // Capability index: preserve subdirectory structure
       {
@@ -2614,7 +2615,7 @@ Examples:
       }
       // Sync the dispatch-enforcement gate + its bash-readonly classifier from
       // the Claude canonical hooks directory. deny() output adapts to Cursor's
-      // v1.7+ JSON schema at runtime via META_KIM_HOOK_RUNTIME / argv inspection.
+      // official Cursor hook JSON schema at runtime via META_KIM_HOOK_RUNTIME / argv inspection.
       const cursorEnforceDispatchHookContent = await tryReadCanonical(
         canonicalClaudeEnforceDispatchHookPath,
       );

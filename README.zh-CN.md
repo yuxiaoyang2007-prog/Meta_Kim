@@ -75,8 +75,8 @@ npm run meta:validate
 | Meta_Kim 仓库 + Claude Code | 完整治理（CLAUDE.md 提供 8-stage spine、门、分发规则） | — |
 | 任意其他项目 + Claude Code | Hooks（安全拦截、格式化、记忆保存）+ `/meta-theory` skill | 说"run meta theory"或输入 `/meta-theory` |
 | Codex | AGENTS.md 规则 + 9 个自定义 agent + `/meta-theory` 命令 | 输入"run meta theory"或 `/meta-theory` |
-| OpenClaw | Workspace agent + Plugin SDK hooks（28 个事件） | 需要配置 `auth.json` |
-| Cursor | Agent 投影 + skill 镜像 + hooks + MCP | 最轻量；适合阅读和轻量操作 |
+| OpenClaw | Workspace agent + internal lifecycle hooks；工具阻断需要 typed plugin adapter | 需要配置 OpenClaw config/auth |
+| Cursor | 官方 subagents、`.cursor/rules`、hooks、MCP 镜像 | 最轻量；适合阅读和轻量操作 |
 
 ### 平台支持分层
 
@@ -503,8 +503,8 @@ Meta_Kim 当前已经映射了 4 个平台：
 | --- | --- | --- |
 | **Claude Code** | 完整支持 | `.claude/agents/*.md` + `SKILL.md` + hooks + MCP |
 | **Codex** | 完整支持 | `.codex/agents/*.toml` + `.agents/skills/` + commands + hooks |
-| **OpenClaw** | 完整支持 | `openclaw/` 目录结构 + workspaces + hooks |
-| **Cursor** | 完整支持 | `.cursor/agents/*.md` + skills + hooks + MCP |
+| **OpenClaw** | 正式投影；执行阻断仍是 partial | `openclaw/` workspaces + skills + internal hooks；阻断策略需要 typed plugin |
+| **Cursor** | 正式投影；轻量 runtime | `.cursor/agents/*.md` + `.cursor/rules/*.mdc` + skills + hooks + MCP |
 
 主源层由 `canonical/agents/`、`canonical/skills/meta-theory/`、`config/contracts/`、`config/capability-index/` 组成，再通过同步脚本（`npm run meta:sync`）镜像 / 投影到不同平台的文件结构。
 
@@ -514,8 +514,8 @@ flowchart TB
 
     CANONICAL --> |npm run meta:sync| CLAUDE[".claude/<br/>Claude Code<br/>agents + skills + hooks"]
     CANONICAL --> |npm run meta:sync| CODEX[".codex/ + .agents/<br/>Codex<br/>agents.toml + skills + hooks"]
-    CANONICAL --> |npm run meta:sync| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills + hooks"]
-    CANONICAL --> |npm run meta:sync| CURSOR[".cursor/<br/>Cursor<br/>agents + skills + hooks + MCP"]
+    CANONICAL --> |npm run meta:sync| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills + internal hooks"]
+    CANONICAL --> |npm run meta:sync| CURSOR[".cursor/<br/>Cursor<br/>agents + rules + skills + hooks + MCP"]
 
     NEW[新平台...] -.-> |配置映射| CANONICAL
 
@@ -533,9 +533,9 @@ flowchart TB
 
 | 能力面 | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
-| **agent** | 原生 agents/subagents，项目级与用户级都成熟 | custom agents/subagents 很强 | workspace 型 agent，支持 agent-to-agent | agent 投影可用，较轻 |
+| **agent** | 原生 agents/subagents，项目级与用户级都成熟 | custom agents/subagents 很强 | workspace 型 agent，支持 agent-to-agent | 官方 `.cursor/agents` subagents 可用，但作为治理宿主仍较轻 |
 | **skill/references** | 原生 skill、references、全局技能生态完整 | `.agents/skills/` 是项目 skill 根 | workspace skill + installable skill | skill/references 接入较轻 |
-| **hook/自动化** | 项目级 hooks + settings.json + 插件生态 | 可信 `.codex/hooks.json` 项目/用户 hooks | Workspace boot / Plugin SDK hook 能力 | `.cursor/hooks.json` lowerCamel lifecycle hooks |
+| **hook/自动化** | 项目级 hooks + settings.json + 插件生态 | 可信 `.codex/hooks.json` 项目/用户 hooks | internal lifecycle hooks；阻断/取消策略需要 typed plugin hooks | `.cursor/hooks.json` lowerCamel lifecycle hooks，支持 `preToolUse` / `failClosed` |
 | **MCP/配置** | 原生 MCP 与配置面完整 | 可接 runtime adapter 与 MCP | workspace config 明确 | 可接 MCP，但整体较轻 |
 | **治理闭环承载力** | **最高** | 高，但低于 Claude Code | 高，但形态不同 | 最轻 |
 

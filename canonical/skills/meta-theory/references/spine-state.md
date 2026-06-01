@@ -19,11 +19,20 @@ Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verificat
 ## Hidden Skeleton
 
 - `stageState`: current spine stage.
-- `controlState`: normal, skip, interrupt, override, iteration, intentional_silence.
+- `controlState`: normal, skip, interrupt, override, iteration, intentional_silence, degraded.
 - `gateState`: pending, pass, fail, rework, blocked.
 - `surfaceState`: silent, notice, decision.
 
 Protocol packets live in `config/contracts/workflow-contract.json`.
+
+## Degraded Mode Pass Conditions
+
+When `controlState=degraded`:
+- Fetch pass requires `capabilityDiscovery.searchLog` with checked sources and results (even empty).
+- Thinking pass requires `capabilityGapPacket` with `currentAgentsChecked` and `degradationReason`.
+- Review pass requires `degradedFlag: true` and `reviewerRole: "main-thread-degraded"`.
+- Verification pass requires `degradedFlag: true` and `humanAcceptanceRequired: true`.
+- `surfaceState` must stay `internal-ready`; `public-ready` is forbidden in degraded mode.
 
 
 ## Use when

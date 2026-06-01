@@ -615,6 +615,78 @@ async function validateWorkflowContract() {
     governanceStagePolicy.skillSelectionScope === "run_scoped",
     "workflow-contract.json governanceStageCoveragePolicy must keep concrete skill selection run-scoped.",
   );
+  const globalReusePolicy = agentBlueprint.globalAgentReusePolicy ?? {};
+  for (const source of [
+    "repo_canonical_capability_index",
+    "runtime_mirror_indexes",
+    "project_runtime_agent_inventory",
+    "local_global_agent_inventory",
+    "available_capability_providers_skills_tools_mcp",
+  ]) {
+    assert(
+      globalReusePolicy.requiredEvidenceOrder?.includes(source),
+      `workflow-contract.json globalAgentReusePolicy must require ${source}.`,
+    );
+  }
+  assert(
+    globalReusePolicy.creationBlockedUntilExistingAgentsChecked === true,
+    "workflow-contract.json globalAgentReusePolicy must block creation until existing agents are checked.",
+  );
+
+  const discoveryPolicy =
+    contract.runDiscipline?.executionOwnership?.capabilityDiscoveryRuntimePolicy ?? {};
+  assert(
+    discoveryPolicy.defaultMode === "cached_global_inventory_plus_project_light_scan",
+    "workflow-contract.json capability discovery must default to cached global inventory plus project light scan.",
+  );
+  assert(
+    discoveryPolicy.fullScanWhen?.includes("explicit_user_refresh") &&
+      discoveryPolicy.fullScanWhen?.includes("stale_cache") &&
+      discoveryPolicy.fullScanWhen?.includes("scheduled_refresh_older_than_14_days") &&
+      discoveryPolicy.fullScanWhen?.includes("high_risk_provider_route"),
+    "workflow-contract.json capability discovery full-scan triggers must be explicit.",
+  );
+  assert(
+    discoveryPolicy.staleAfterMinutes === 20160 && discoveryPolicy.staleAfterDays === 14,
+    "workflow-contract.json capability discovery cache must become stale after 14 days.",
+  );
+  assert(
+    /must not run a full global filesystem scan on every dispatch/i.test(
+      discoveryPolicy.perRunBehavior ?? "",
+    ),
+    "workflow-contract.json capability discovery must forbid per-dispatch full scans.",
+  );
+  assert(
+    /older than 14 days/i.test(discoveryPolicy.perRunBehavior ?? "") &&
+      /2 weeks/i.test(discoveryPolicy.userPromptPolicy ?? "") &&
+      /update first/i.test(discoveryPolicy.userPromptPolicy ?? ""),
+    "workflow-contract.json capability discovery must define the 2-week refresh notice UX.",
+  );
+  assert(
+    /must not dump full provider definitions/i.test(discoveryPolicy.tokenPolicy ?? ""),
+    "workflow-contract.json capability discovery must protect token budget.",
+  );
+
+  const executionAgentCard =
+    contract.protocols?.executionAgentCard?.abstractionPolicy ?? {};
+  assert(
+    executionAgentCard.concreteWorkOrderFieldsForbidden === true,
+    "workflow-contract.json executionAgentCard must forbid work-order fields in durable identity.",
+  );
+  assert(
+    executionAgentCard.pathLikeBindingsForbidden === true,
+    "workflow-contract.json executionAgentCard must forbid path-like durable bindings.",
+  );
+  assert(
+    executionAgentCard.providerFirstAgentLast === true,
+    "workflow-contract.json executionAgentCard must require provider-first, agent-last creation.",
+  );
+  for (const field of ["todayTask", "scopeFiles", "deliverableLink", "verifySteps"]) {
+    assert(
+      executionAgentCard.forbiddenDurableFields?.includes(field),
+      `workflow-contract.json executionAgentCard.abstractionPolicy must forbid ${field}.`,
+    );
+  }
 
   const workerFields = contract.protocols?.workerTaskPacket?.requiredFields ?? [];
   for (const field of [
@@ -1083,14 +1155,17 @@ async function validateSyncConfiguration() {
   );
   assert(
     profiles.cursor.projection.assetTypes.includes("hooks") &&
+      profiles.cursor.projection.assetTypes.includes("rules") &&
       profiles.cursor.projection.outputPaths.hooksDir === ".cursor/hooks" &&
-      profiles.cursor.projection.outputPaths.hooksFile === ".cursor/hooks.json",
-    "Cursor runtime profile must declare hook output paths.",
+      profiles.cursor.projection.outputPaths.hooksFile === ".cursor/hooks.json" &&
+      profiles.cursor.projection.outputPaths.rulesDir === ".cursor/rules",
+    "Cursor runtime profile must declare hook and rule output paths.",
   );
   assert(
     (manifest.generatedTargets?.cursor ?? []).includes(".cursor/hooks") &&
-      (manifest.generatedTargets?.cursor ?? []).includes(".cursor/hooks.json"),
-    "config/sync.json must advertise generated Cursor lifecycle hook paths.",
+      (manifest.generatedTargets?.cursor ?? []).includes(".cursor/hooks.json") &&
+      (manifest.generatedTargets?.cursor ?? []).includes(".cursor/rules"),
+    "config/sync.json must advertise generated Cursor lifecycle hook and rule paths.",
   );
 }
 
@@ -1211,6 +1286,37 @@ async function validateRuntimeCompatibilityCatalog() {
       (qoder.evidence ?? []).filter((entry) => entry.type === "official_docs")
         .length >= 4,
     "qoder candidate must be anchored to issue #7 and official Qoder docs.",
+  );
+
+  const cursor = byId.get("cursor");
+  assert(cursor, "runtime compatibility catalog must include cursor.");
+  assert(
+    cursor.genericCompatibility?.agentPath === ".cursor/agents/{agent}.md" &&
+      cursor.genericCompatibility?.hookConfig === ".cursor/hooks.json" &&
+      (cursor.evidence ?? []).some(
+        (entry) => entry.type === "official_docs" && entry.ref.includes("cursor.com/docs/subagents"),
+      ) &&
+      (cursor.evidence ?? []).some(
+        (entry) => entry.type === "official_docs" && entry.ref.includes("cursor.com/docs/hooks"),
+      ) &&
+      (cursor.evidence ?? []).some(
+        (entry) => entry.type === "official_docs" && entry.ref.includes("cursor.com/docs/rules"),
+      ),
+    "Cursor runtime projection must cite official subagent, hook, and rule docs.",
+  );
+
+  const openclaw = byId.get("openclaw");
+  assert(openclaw, "runtime compatibility catalog must include openclaw.");
+  assert(
+    openclaw.genericCompatibility?.status === "partial" &&
+      /typed plugin/i.test(openclaw.nextAction ?? "") &&
+      (openclaw.evidence ?? []).some(
+        (entry) => entry.type === "official_docs" && entry.ref.includes("docs.openclaw.ai/concepts/agent"),
+      ) &&
+      (openclaw.evidence ?? []).some(
+        (entry) => entry.type === "official_docs" && entry.ref.includes("docs.openclaw.ai/automation/hooks"),
+      ),
+    "OpenClaw runtime projection must preserve the official workspace/hook boundary and partial tool-blocking status.",
   );
 }
 

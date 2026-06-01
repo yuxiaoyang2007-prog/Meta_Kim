@@ -6,6 +6,58 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.8.0] - 2026-06-01
+
+### 新增
+
+- **降级模式协议（Degraded Mode）** — Agent dispatch 不可用或无匹配 owner 时，spine 进入 `controlState=degraded` 而非静默跳过阶段。要求记录 `capabilityGapPacket`、`degradationReason`，且 `surfaceState` 保持 `internal-ready`。降级模式下禁止声称 `public-ready`。
+- **Fetch 发现清单** — Fetch 阶段在进入 Thinking 前必须搜索至少 6 个位置（全局 agents、项目 agents、skills、MCP 配置、capability index、package scripts）。通过条件：`capabilityDiscovery.searchLog` 存在。
+- **对抗验证模式（Adversarial Verify）** — `regulated_path` 的 Review 阶段生成 N=3 个独立怀疑者，各自用不同视角（正确性、安全性、完整性）尝试反驳每个 finding。仅多数反驳失败时 finding 存活。投票记录在 `adversarialVotes` 字段。
+- **Fetch 角度分解** — 研究类任务（`researchRequired=true`）在搜索前将问题拆分为 N 个语义不同的搜索角度，记录在 `searchAngles` 字段。默认 N=3。
+- **Worker 输出 schema 验证** — `workerTaskPacket.output` 定义了预期结构时，dispatcher 对 worker 返回结果做格式校验。不匹配则重试（最多 2 次）。记录在 `schemaValidationAttempts`。
+- **执行中交互沟通** — 多阶段任务中，dispatcher 在 5 个自然过渡点向用户报告进度：Fetch 完成、Thinking 完成、每阶段完成、scope 变更、路线变更。每次最多 3 条摘要。scope 或路线变化时升级为 Decision 卡片。
+
+### 变更
+
+- **spine-state.md** — controlState 枚举增加 `degraded`；增加降级模式各阶段通过条件。
+- **dev-governance.md** — 增加降级模式段落和交互沟通段落。
+- **owner-resolution.md** — 增加无 Agent dispatch 时的降级 owner 解析路径。
+- **workflow-contract.json** — review/meta_review/verification 增加 `degradedPolicy`；reviewFinding 增加 `adversarialVotes`；contentEvidencePacket 增加 `searchAngles`。
+- 版本升级：2.7.0 -> 2.8.0。
+
+### 验证
+
+- `npm run meta:validate` — 7/7 通过
+- `npm run meta:sync` — 4 个 runtime 同步完成（claude、codex、openclaw、cursor）
+- `npm run meta:check` — 全绿，无过期 projection
+
+## [2.7.0] - 2026-06-01
+
+### 新增
+
+- **两速能力发现模型** — 新增 Codex 可用的发现策略：安装、更新、用户明确刷新、缓存缺失或过期、缺少必要 provider、高风险 provider 路由时才做全局全扫；普通 governed run 读取全局缓存并轻扫当前项目。
+- **Provider-first owner 路由** — owner discovery 从 agents / skills 扩展到 commands、hooks、rules/prompts、MCP capabilities、runtime tools 和 plugins，创建或升级 execution agent 前必须先匹配已有 provider。
+- **能力扫描 UX 契约** — 新增刷新提示与 token 控制：运行时只暴露覆盖数量、top candidates 和 source refs，不把完整 provider catalog 倒进上下文。
+- **Codex 实机发布冒烟** — 验证当前 Codex CLI 可以在只读非交互模式下加载 Meta_Kim、项目说明、skills 和 hooks。
+
+### 变更
+
+- **Execution route selection** — `select-execution-route` 现在输出 provider coverage、cache freshness、full-scan triggers，并在 capability gap packet 中记录已检查的 provider 证据。
+- **Meta-theory 执行纪律** — Critical、Fetch、Thinking、Review 现在要求执行或创建 agent 前必须具备 existing owner/provider discovery evidence。
+- **Execution-agent card 抽象边界** — durable execution-agent card 保持能力类别抽象；具体文件、ticket、单次任务和 verification steps 只能进入 worker task packets。
+- 版本升级：2.6.2 -> 2.7.0。
+
+### 验证
+
+- `codex --version`
+- `codex doctor`
+- `codex -a never exec --ephemeral --sandbox read-only -C D:/KimProject/Meta_Kim "Codex实机冒烟测试：不要修改文件，不要运行外部命令。读取项目说明后，用一句中文回答你能看到Meta_Kim项目且当前任务是发布前验证。"`
+- `npm run meta:sync`
+- `npm run meta:sync:global`
+- `npm run meta:check:global:release`
+- `npm run meta:verify:all`
+- `git diff --check`
+
 ## [2.6.2] - 2026-05-30
 
 ### 新增

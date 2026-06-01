@@ -75,8 +75,8 @@ After global install (`node setup.mjs` or `npx`), what works where:
 | Meta_Kim repo with Claude Code | Full governance via CLAUDE.md (8-stage spine, gates, dispatch rules) | — |
 | Any other project with Claude Code | Hooks (safety, format, memory save) + `/meta-theory` skill | Say "run meta theory" or type `/meta-theory` |
 | Codex | AGENTS.md rules + 9 custom agents + `/meta-theory` command | Type "run meta theory" or `/meta-theory` |
-| OpenClaw | Workspace agents + Plugin SDK hooks (28 events) | Requires `auth.json` configured |
-| Cursor | Agent projections + skill mirrors + hooks + MCP | Lightweight; mainly read + review |
+| OpenClaw | Workspace agents + internal lifecycle hooks; tool-blocking policy needs a typed plugin adapter | Requires OpenClaw config/auth |
+| Cursor | Official subagents, `.cursor/rules`, hooks, and MCP mirrors | Lightweight; mainly read + review |
 
 ### Platform Support Tiers
 
@@ -504,8 +504,8 @@ Meta_Kim currently maps to four platforms:
 | --- | --- | --- |
 | **Claude Code** | Fully supported | `.claude/agents/*.md` + `SKILL.md` + hooks + MCP |
 | **Codex** | Fully supported | `.codex/agents/*.toml` + `.agents/skills/` + commands + hooks |
-| **OpenClaw** | Fully supported | `openclaw/` directory structure + workspaces + hooks |
-| **Cursor** | Fully supported | `.cursor/agents/*.md` + skills + hooks + MCP |
+| **OpenClaw** | Formal projection; enforcement partial | `openclaw/` workspaces + skills + internal hooks; typed plugin needed for blocking policy |
+| **Cursor** | Formal projection; lightweight runtime | `.cursor/agents/*.md` + `.cursor/rules/*.mdc` + skills + hooks + MCP |
 
 The canonical source layer is `canonical/agents/`, `canonical/skills/meta-theory/`, `config/contracts/`, and `config/capability-index/`. The repository mirrors that layer into platform-specific projections through `npm run meta:sync`.
 
@@ -515,8 +515,8 @@ flowchart TB
 
     CANONICAL --> |npm run meta:sync| CLAUDE[".claude/<br/>Claude Code<br/>agents + skills + hooks"]
     CANONICAL --> |npm run meta:sync| CODEX[".codex/ + .agents/<br/>Codex<br/>agents.toml + skills + hooks"]
-    CANONICAL --> |npm run meta:sync| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills + hooks"]
-    CANONICAL --> |npm run meta:sync| CURSOR[".cursor/<br/>Cursor<br/>agents + skills + hooks + MCP"]
+    CANONICAL --> |npm run meta:sync| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills + internal hooks"]
+    CANONICAL --> |npm run meta:sync| CURSOR[".cursor/<br/>Cursor<br/>agents + rules + skills + hooks + MCP"]
 
     NEW[New platform...] -.-> |config mapping| CANONICAL
 
@@ -534,15 +534,15 @@ But there is an important caveat: the four runtimes are not equal. Claude Code c
 
 | Capability surface | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
-| **Agents** | Native agents/subagents, mature at both project and user scope | Strong custom agents/subagents | Workspace-style agents, supports agent-to-agent | Lightweight agent projection |
+| **Agents** | Native agents/subagents, mature at both project and user scope | Strong custom agents/subagents | Workspace-style agents, supports agent-to-agent | Official subagents under `.cursor/agents`, still lighter as a governance host |
 | **Skills / references** | Native skills, references, and a mature global ecosystem | `.agents/skills/` is the project skill root | Workspace skills and installable skills | Lighter skill/reference support |
-| **Hooks / automation** | Project hooks + settings.json + plugin ecosystem | Trusted `.codex/hooks.json` project/user hooks | Workspace boot/hook-style capabilities | `.cursor/hooks.json` lowerCamel lifecycle hooks |
+| **Hooks / automation** | Project hooks + settings.json + plugin ecosystem | Trusted `.codex/hooks.json` project/user hooks | Internal lifecycle hooks; typed plugin hooks needed for blocking/canceling policy | `.cursor/hooks.json` lowerCamel lifecycle hooks with `preToolUse` / `failClosed` |
 | **MCP / configuration** | Full native MCP and config surface | Can connect via runtime adapters and MCP | Clear workspace config | Can use MCP, but the surface is lighter |
 | **Governance loop capacity** | **Highest** | High, but below Claude Code | High, but different in form | Lightest |
 
 The reason is not sentiment. Claude Code natively supports agents, skills, references, hooks, settings, MCP, plugins, and global capability discovery, which makes the whole loop - dealing -> contracts -> gates -> automation guardrails -> writeback - easier to carry end to end.
 
-Choice surfaces are runtime-specific. Claude Code should use `AskUserQuestion`; Codex should use `request_user_input` when `~/.codex/config.toml` has `[features].default_mode_request_user_input = true`; Cursor uses an `alwaysApply` project rule to trigger a chat decision card plus `preToolUse failClosed` for tool gating; OpenClaw uses workspace/chat cards unless a plugin approval hook is explicitly installed.
+Choice surfaces are runtime-specific. Claude Code should use `AskUserQuestion`; Codex should use `request_user_input` when `~/.codex/config.toml` has `[features].default_mode_request_user_input = true`; Cursor uses an `alwaysApply` project rule to trigger a chat decision card plus official `preToolUse` / `failClosed` hooks for tool gating; OpenClaw uses workspace/chat cards unless a typed plugin approval hook is explicitly installed.
 
 ### Four-layer repository structure
 

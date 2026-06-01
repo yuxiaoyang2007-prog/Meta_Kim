@@ -558,7 +558,8 @@ describe("workflow-contract.json — schema compliance", async () => {
       "OpenClaw template must not claim an installed before_tool_call gate",
     );
     assert.match(agentsGuide, /OpenClaw[\s\S]*declarative/i);
-    assert.match(heartbeatTemplate, /OpenClaw has no PreToolUse hook surface/i);
+    assert.match(heartbeatTemplate, /typed plugin adapter for tool-call denial/i);
+    assert.match(heartbeatTemplate, /not a hard sandbox/i);
   });
 
   test("silence / skip / interrupt / shell policies are explicit", () => {
@@ -804,6 +805,56 @@ describe("workflow-contract.json — schema compliance", async () => {
         `executionAgentCard missing ${field}`,
       );
     }
+
+    const abstractionPolicy =
+      contract.protocols?.executionAgentCard?.abstractionPolicy ?? {};
+    assert.equal(
+      abstractionPolicy.concreteWorkOrderFieldsForbidden,
+      true,
+      "executionAgentCard must forbid work-order fields in durable identity",
+    );
+    assert.equal(
+      abstractionPolicy.pathLikeBindingsForbidden,
+      true,
+      "executionAgentCard must forbid path-like durable bindings",
+    );
+    assert.equal(
+      abstractionPolicy.providerFirstAgentLast,
+      true,
+      "executionAgentCard must require provider-first, agent-last creation",
+    );
+    for (const field of ["todayTask", "scopeFiles", "deliverableLink", "verifySteps"]) {
+      assert.ok(
+        abstractionPolicy.forbiddenDurableFields?.includes(field),
+        `executionAgentCard abstraction policy must forbid ${field}`,
+      );
+    }
+  });
+
+  test("capability discovery uses cached global inventory plus project light scan", () => {
+    const policy =
+      contract.runDiscipline?.executionOwnership?.capabilityDiscoveryRuntimePolicy ?? {};
+    assert.equal(
+      policy.defaultMode,
+      "cached_global_inventory_plus_project_light_scan",
+    );
+    for (const trigger of [
+      "install",
+      "update",
+      "explicit_user_refresh",
+      "stale_cache",
+      "scheduled_refresh_older_than_14_days",
+      "high_risk_provider_route",
+    ]) {
+      assert.ok(policy.fullScanWhen?.includes(trigger), `missing ${trigger}`);
+    }
+    assert.equal(policy.staleAfterMinutes, 20160);
+    assert.equal(policy.staleAfterDays, 14);
+    assert.match(policy.perRunBehavior ?? "", /must not run a full global filesystem scan on every dispatch/i);
+    assert.match(policy.perRunBehavior ?? "", /older than 14 days/i);
+    assert.match(policy.userPromptPolicy ?? "", /2 weeks/i);
+    assert.match(policy.userPromptPolicy ?? "", /update first/i);
+    assert.match(policy.tokenPolicy ?? "", /must not dump full provider definitions/i);
   });
 
   test("local state + compaction policy are explicit", () => {

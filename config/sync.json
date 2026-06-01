@@ -56,7 +56,8 @@
       ".cursor/hooks",
       ".cursor/hooks.json",
       ".cursor/capability-index",
-      ".cursor/mcp.json"
+      ".cursor/mcp.json",
+      ".cursor/rules"
     ]
   }
 }

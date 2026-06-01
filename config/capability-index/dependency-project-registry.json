@@ -801,30 +801,41 @@
         "type": "github",
         "uri": "garrytan/gstack",
         "localPath": null,
-        "inspectionStatus": "external_reference",
-        "lastInspectedAt": null
+        "inspectionStatus": "inspected_reference",
+        "lastInspectedAt": "2026-06-01"
       },
       "capabilityCard": {
-        "oneLine": "Dependency capability for gstack.",
+        "oneLine": "Reference capability catalog for generated SKILL.md providers, host projections, browser/QA/review workflows, and agent-facing metadata.",
         "canDo": [
-          "external_capability"
+          "model capability-provider-first design",
+          "show generated SKILL.md catalog patterns",
+          "show host-specific projection config for Claude, Codex, Cursor, and OpenClaw",
+          "provide reference evidence for keeping concrete work in skill/runtime context instead of durable agent identity"
         ],
         "canNotDo": [
-          "automatic execution without trust review"
+          "automatic execution without trust review",
+          "serve as a durable Meta_Kim execution owner",
+          "replace Meta_Kim Critical, Fetch, Thinking, Review, or Verification stages"
         ],
         "inputContract": {
           "requires": [
             "matched task shape",
-            "trust review when third-party"
+            "trust review when third-party",
+            "reference-only extraction plan"
           ]
         },
         "outputContract": {
           "produces": [
-            "skill-specific artifact or reference evidence"
+            "reference evidence about skill catalog shape",
+            "host projection comparison notes",
+            "capability-provider design patterns"
           ]
         },
         "triggerConditions": [
-          "gstack"
+          "gstack",
+          "skill catalog design",
+          "capability provider before execution agent",
+          "host projection pattern"
         ],
         "verificationMethod": "npm run meta:deps:compat",
         "risk": [
@@ -832,10 +843,13 @@
         ],
         "routeEligibility": "external_reference",
         "notFor": [
-          "automatic execution without trust review"
+          "automatic execution without trust review",
+          "direct agent creation without existing provider discovery"
         ],
         "taskShapes": [
-          "external_capability"
+          "external_capability",
+          "capability_catalog_reference",
+          "runtime_projection_reference"
         ],
         "writebackKey": "dependency:gstack",
         "verificationMethods": [
@@ -884,10 +898,15 @@
         "wsl2": "partial"
       },
       "supportEvidence": {
-        "source": "repo_claim",
-        "confidence": "repo_claim",
-        "verificationCommand": "npm run meta:deps:compat",
-        "lastVerifiedAt": null
+        "source": "gh_readonly_inspection",
+        "confidence": "verified_local",
+        "verificationCommand": "gh repo view garrytan/gstack --json nameWithOwner,description,url,defaultBranchRef && gh api repos/garrytan/gstack/git/trees/HEAD?recursive=1 --jq '.tree[].path'",
+        "lastVerifiedAt": "2026-06-01",
+        "evidence": [
+          "Repository description presents gstack as 23 opinionated tools for CEO, Designer, Eng Manager, Release Manager, Doc Engineer, and QA roles.",
+          "Tree inspection found many generated SKILL.md / SKILL.md.tmpl providers and only agents/openai.yaml as interface metadata.",
+          "Host configs under hosts/ define Codex, Claude, Cursor, and OpenClaw projection rules, path rewrites, frontmatter policy, and suppressed resolvers."
+        ]
       }
     },
     {

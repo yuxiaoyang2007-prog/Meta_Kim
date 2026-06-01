@@ -5,7 +5,7 @@
     "repo_projection",
     "official_doc_references"
   ],
-  "lastVerifiedAt": "2026-05-28",
+  "lastVerifiedAt": "2026-06-01",
   "capabilityNames": [
     "agent",
     "subagent",
@@ -3267,17 +3267,17 @@
     },
     {
       "platform": "openclaw",
-      "summary": "Workspace-oriented runtime. Repo projection provides workspaces, skills, template MCP, and managed hook assets; Windows recommended path is WSL2 for many workflows.",
+      "summary": "Workspace-oriented runtime. Official docs verify agent workspaces, isolated multi-agent routing, SKILL.md skills, internal lifecycle hooks, and typed plugin hooks; Meta_Kim tool-blocking enforcement remains declarative until a typed plugin adapter exists.",
       "capabilities": [
         {
           "platform": "openclaw",
           "capability": "agent",
           "support": "native",
-          "confidence": "verified_local",
+          "confidence": "verified_docs",
           "trigger": {
             "userTrigger": "User explicitly requests agent or a governed task requires it.",
             "autoTrigger": "Meta_Kim may select agent only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "openclaw runtime projection and registry configuration.",
+            "configTrigger": "agents.defaults.workspace or agents.list[].workspace in openclaw.json / Meta_Kim template.",
             "hookTrigger": "None unless the runtime maps it to a lifecycle event."
           },
           "configLocations": {
@@ -3316,22 +3316,23 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": "openclaw/openclaw.template.json; openclaw/workspaces; openclaw/skills; openclaw/hooks",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "openclaw --version"
+            "source": "official_docs",
+            "sourceRef": "https://docs.openclaw.ai/concepts/agent.md; https://docs.openclaw.ai/concepts/multi-agent.md; openclaw/openclaw.template.json",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "OpenClaw documents agent workspace and multi-agent routing."
           },
-          "notes": "OpenClaw third-party skills require risk review; distinguish host tools from sandbox tools."
+          "notes": "An OpenClaw agent is a workspace/state/session scope; workspace cwd is not a hard sandbox unless sandboxing is configured."
         },
         {
           "platform": "openclaw",
           "capability": "subagent",
           "support": "partial",
-          "confidence": "repo_claim",
+          "confidence": "verified_docs",
           "trigger": {
             "userTrigger": "User explicitly requests subagent or a governed task requires it.",
             "autoTrigger": "Meta_Kim may select subagent only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "openclaw runtime projection and registry configuration.",
+            "configTrigger": "OpenClaw sessions/background tasks/agent routing when configured.",
             "hookTrigger": "None unless the runtime maps it to a lifecycle event."
           },
           "configLocations": {
@@ -3370,22 +3371,23 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": "openclaw/openclaw.template.json; openclaw/workspaces; openclaw/skills; openclaw/hooks",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "openclaw --version"
+            "source": "official_docs",
+            "sourceRef": "https://docs.openclaw.ai/concepts/context-engine; https://docs.openclaw.ai/automation/tasks",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "OpenClaw documents subagent/background-task concepts, but Meta_Kim still routes durable owners through workspace agents."
           },
-          "notes": "OpenClaw third-party skills require risk review; distinguish host tools from sandbox tools."
+          "notes": "Treat subagent-like work as partial until the target host exposes an invocation path and verification evidence."
         },
         {
           "platform": "openclaw",
           "capability": "custom agent",
           "support": "native",
-          "confidence": "verified_local",
+          "confidence": "verified_docs",
           "trigger": {
             "userTrigger": "User explicitly requests custom agent or a governed task requires it.",
             "autoTrigger": "Meta_Kim may select custom agent only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "openclaw runtime projection and registry configuration.",
+            "configTrigger": "agents.list[] with workspace/agentDir/bindings.",
             "hookTrigger": "None unless the runtime maps it to a lifecycle event."
           },
           "configLocations": {
@@ -3424,22 +3426,23 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": "openclaw/openclaw.template.json; openclaw/workspaces; openclaw/skills; openclaw/hooks",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "openclaw --version"
+            "source": "official_docs",
+            "sourceRef": "https://docs.openclaw.ai/cli/agents.md; https://docs.openclaw.ai/concepts/multi-agent.md",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "OpenClaw documents adding/listing agents and routing bindings."
           },
-          "notes": "OpenClaw third-party skills require risk review; distinguish host tools from sandbox tools."
+          "notes": "Each custom agent needs an isolated workspace and state/session boundary; do not reuse agentDir across agents."
         },
         {
           "platform": "openclaw",
           "capability": "skill",
           "support": "native",
-          "confidence": "verified_local",
+          "confidence": "verified_docs",
           "trigger": {
             "userTrigger": "User explicitly requests skill or a governed task requires it.",
             "autoTrigger": "Meta_Kim may select skill only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "openclaw runtime projection and registry configuration.",
+            "configTrigger": "openclaw/skills/*/SKILL.md or configured shared skill roots.",
             "hookTrigger": "None unless the runtime maps it to a lifecycle event."
           },
           "configLocations": {
@@ -3480,12 +3483,13 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": "openclaw/openclaw.template.json; openclaw/workspaces; openclaw/skills; openclaw/hooks",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "openclaw --version"
+            "source": "official_docs",
+            "sourceRef": "https://docs.openclaw.ai/clawhub/skill-format.md; openclaw/skills/meta-theory/SKILL.md",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "OpenClaw documents SKILL.md skill folders and runtime metadata."
           },
-          "notes": "OpenClaw third-party skills require risk review; distinguish host tools from sandbox tools. Third-party skills must be read before enabling and should prefer sandbox."
+          "notes": "Third-party skills require read-before-enable, allowlist, and sandbox review."
         },
         {
           "platform": "openclaw",
@@ -3598,13 +3602,13 @@
         {
           "platform": "openclaw",
           "capability": "hook",
-          "support": "partial",
-          "confidence": "repo_claim",
+          "support": "native",
+          "confidence": "verified_docs",
           "trigger": {
             "userTrigger": "User explicitly requests hook or a governed task requires it.",
             "autoTrigger": "Meta_Kim may select hook only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "openclaw runtime projection and registry configuration.",
-            "hookTrigger": "openclaw lifecycle hook when verified/configured."
+            "configTrigger": "openclaw/openclaw.template.json internal hook entries and hook directories.",
+            "hookTrigger": "Internal hooks cover command/lifecycle automation; typed plugin hooks are required for blocking/canceling policy."
           },
           "configLocations": {
             "macos": [
@@ -3644,12 +3648,13 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": "openclaw/openclaw.template.json; openclaw/workspaces; openclaw/skills; openclaw/hooks",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "openclaw --version"
+            "source": "official_docs",
+            "sourceRef": "https://docs.openclaw.ai/automation/hooks.md; openclaw/hooks/mcp-memory-service/HOOK.md",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "OpenClaw documents internal hooks and distinguishes typed plugin hooks for blocking policy."
           },
-          "notes": "OpenClaw third-party skills require risk review; distinguish host tools from sandbox tools."
+          "notes": "Meta_Kim has a managed lifecycle memory hook; it does not yet install a typed plugin tool-blocking adapter."
         },
         {
           "platform": "openclaw",
@@ -4417,11 +4422,11 @@
           "platform": "openclaw",
           "capability": "project rule file",
           "support": "native",
-          "confidence": "verified_local",
+          "confidence": "verified_docs",
           "trigger": {
             "userTrigger": "User explicitly requests project rule file or a governed task requires it.",
             "autoTrigger": "Meta_Kim may select project rule file only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "openclaw runtime projection and registry configuration.",
+            "configTrigger": "AGENTS.md, SOUL.md, BOOTSTRAP.md, HEARTBEAT.md in the active workspace.",
             "hookTrigger": "None unless the runtime maps it to a lifecycle event."
           },
           "configLocations": {
@@ -4460,12 +4465,13 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": "openclaw/openclaw.template.json; openclaw/workspaces; openclaw/skills; openclaw/hooks",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "openclaw --version"
+            "source": "official_docs",
+            "sourceRef": "https://docs.openclaw.ai/concepts/agent.md; https://docs.openclaw.ai/concepts/agent-workspace.md",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "OpenClaw injects workspace bootstrap files into Project Context."
           },
-          "notes": "OpenClaw third-party skills require risk review; distinguish host tools from sandbox tools."
+          "notes": "Workspace files are context and default cwd inputs; they do not provide host isolation by themselves."
         },
         {
           "platform": "openclaw",
@@ -4795,12 +4801,12 @@
           "platform": "openclaw",
           "capability": "automation trigger",
           "support": "native",
-          "confidence": "verified_local",
+          "confidence": "verified_docs",
           "trigger": {
             "userTrigger": "User explicitly requests automation trigger or a governed task requires it.",
             "autoTrigger": "Meta_Kim may select automation trigger only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "openclaw runtime projection and registry configuration.",
-            "hookTrigger": "openclaw lifecycle hook when verified/configured."
+            "configTrigger": "openclaw hooks, standing orders, tasks, or scheduler configuration.",
+            "hookTrigger": "command:new, command:reset, command:stop, session:compact:after for the managed memory bridge."
           },
           "configLocations": {
             "macos": [
@@ -4838,18 +4844,19 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": "openclaw/openclaw.template.json; openclaw/workspaces; openclaw/skills; openclaw/hooks",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "openclaw --version"
+            "source": "official_docs",
+            "sourceRef": "https://docs.openclaw.ai/automation/hooks.md; https://docs.openclaw.ai/automation/tasks",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "OpenClaw documents hooks and background automation."
           },
-          "notes": "OpenClaw third-party skills require risk review; distinguish host tools from sandbox tools."
+          "notes": "Automation is native, while policy-level tool blocking needs typed plugin hook installation."
         },
         {
           "platform": "openclaw",
           "capability": "human confirmation trigger",
-          "support": "native",
-          "confidence": "verified_local",
+          "support": "partial",
+          "confidence": "repo_claim",
           "trigger": {
             "userTrigger": "User explicitly requests human confirmation trigger or a governed task requires it.",
             "autoTrigger": "Meta_Kim may select human confirmation trigger only after Fetch and Thinking identify it as a valid route component.",
@@ -4897,24 +4904,24 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "openclaw --version"
           },
-          "notes": "OpenClaw third-party skills require risk review; distinguish host tools from sandbox tools."
+          "notes": "Use channel/workspace chat confirmation unless a plugin approval hook is explicitly installed."
         }
       ]
     },
     {
       "platform": "cursor",
-      "summary": "Light governance projection platform until native agents/hooks/choice surfaces are verified by official docs or local proof.",
+      "summary": "Official Cursor docs verify rules, MCP, hooks, and subagents; Meta_Kim still treats Cursor as a lighter governance projection and keeps arbitrary choice UI as a chat-card fallback until a native popup is proven.",
       "capabilities": [
         {
           "platform": "cursor",
           "capability": "agent",
-          "support": "partial",
-          "confidence": "repo_claim",
+          "support": "native",
+          "confidence": "verified_docs",
           "trigger": {
             "userTrigger": "User explicitly requests agent or a governed task requires it.",
-            "autoTrigger": "Meta_Kim may select agent only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "cursor runtime projection and registry configuration.",
-            "hookTrigger": "None unless the runtime maps it to a lifecycle event."
+            "autoTrigger": "Capability-first owner selection after Fetch/Thinking.",
+            "configTrigger": ".cursor/agents/*.md plus Cursor Agent mode",
+            "hookTrigger": "preToolUse can govern tools when .cursor/hooks.json is configured."
           },
           "configLocations": {
             "macos": [
@@ -4952,23 +4959,24 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": ".cursor/mcp.json; .cursor/hooks.json; .cursor/rules; .cursor/agents; .cursor/skills",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "cursor --version"
+            "source": "official_docs",
+            "sourceRef": "https://cursor.com/docs/subagents; https://cursor.com/docs/rules; .cursor/agents",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "Cursor documents Agent/Subagent customization and project rules."
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor agent projection is an official runtime surface, but durable Meta_Kim ownership remains canonical."
         },
         {
           "platform": "cursor",
           "capability": "subagent",
-          "support": "unknown",
-          "confidence": "unverified",
+          "support": "native",
+          "confidence": "verified_docs",
           "trigger": {
-            "userTrigger": "User explicitly requests subagent or a governed task requires it.",
-            "autoTrigger": "Meta_Kim may select subagent only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "cursor runtime projection and registry configuration.",
-            "hookTrigger": "None unless the runtime maps it to a lifecycle event."
+            "userTrigger": "Use Cursor subagent surface or allow governed dispatch after Thinking selects a capability-matched owner.",
+            "autoTrigger": "Governed dispatch only after ownerDiscoveryPacket and workerTaskPackets are ready.",
+            "configTrigger": ".cursor/agents/*.md with YAML frontmatter.",
+            "hookTrigger": "preToolUse can gate tool use for subagent work when configured."
           },
           "configLocations": {
             "macos": [
@@ -5008,23 +5016,24 @@
             ]
           },
           "evidence": {
-            "source": "unknown",
-            "sourceRef": "needs official/local verification",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "cursor --version"
+            "source": "official_docs",
+            "sourceRef": "https://cursor.com/docs/subagents; .cursor/agents",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "Cursor documents subagent files under .cursor/agents with YAML frontmatter."
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Subagents are reusable role adapters; per-run files, tickets, and paths stay in worker task packets."
         },
         {
           "platform": "cursor",
           "capability": "custom agent",
-          "support": "partial",
-          "confidence": "repo_claim",
+          "support": "native",
+          "confidence": "verified_docs",
           "trigger": {
-            "userTrigger": "User explicitly requests custom agent or a governed task requires it.",
-            "autoTrigger": "Meta_Kim may select custom agent only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "cursor runtime projection and registry configuration.",
-            "hookTrigger": "None unless the runtime maps it to a lifecycle event."
+            "userTrigger": "Name a Cursor custom agent/subagent or allow capability-first dispatch.",
+            "autoTrigger": "Capability-first owner selection after existing-agent discovery.",
+            "configTrigger": ".cursor/agents/*.md with YAML frontmatter.",
+            "hookTrigger": "preToolUse tool governance when .cursor/hooks.json is active."
           },
           "configLocations": {
             "macos": [
@@ -5062,12 +5071,13 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": ".cursor/mcp.json; .cursor/hooks.json; .cursor/rules; .cursor/agents; .cursor/skills",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "cursor --version"
+            "source": "official_docs",
+            "sourceRef": "https://cursor.com/docs/subagents; .cursor/agents",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "Cursor documents project subagents/custom agents as markdown files."
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Project custom agents are runtime adapters; canonical owners remain in canonical/agents."
         },
         {
           "platform": "cursor",
@@ -5238,13 +5248,13 @@
         {
           "platform": "cursor",
           "capability": "hook",
-          "support": "partial",
-          "confidence": "repo_claim",
+          "support": "native",
+          "confidence": "verified_docs",
           "trigger": {
             "userTrigger": "User explicitly requests hook or a governed task requires it.",
             "autoTrigger": "Meta_Kim may select hook only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "cursor runtime projection and registry configuration.",
-            "hookTrigger": "Cursor hooks.json lifecycle events such as beforeSubmitPrompt and preToolUse when configured."
+            "configTrigger": ".cursor/hooks.json",
+            "hookTrigger": "Cursor hook events such as preToolUse and postToolUse, with failClosed for security-critical hooks."
           },
           "configLocations": {
             "macos": [
@@ -5286,22 +5296,23 @@
             ]
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": ".cursor/hooks.json; scripts/runtime-hook-mapping.mjs; canonical/runtime-assets/cursor/rules/meta-enforcement.mdc",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "cursor --version"
+            "source": "official_docs",
+            "sourceRef": "https://cursor.com/docs/hooks; .cursor/hooks.json; scripts/runtime-hook-mapping.mjs",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "Cursor documents preToolUse/postToolUse hooks and failClosed."
           },
-          "notes": "Cursor hook wiring is projected and stable enough for lifecycle/tool governance, but Meta_Kim must still avoid treating Cursor as having a verified arbitrary native question popup."
+          "notes": "Cursor hooks are official for tool/lifecycle governance; Meta_Kim still uses chat-card fallback for ordinary user choices."
         },
         {
           "platform": "cursor",
           "capability": "MCP",
           "support": "native",
-          "confidence": "verified_local",
+          "confidence": "verified_docs",
           "trigger": {
             "userTrigger": "User explicitly requests MCP or a governed task requires it.",
             "autoTrigger": "Meta_Kim may select MCP only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "cursor runtime projection and registry configuration.",
+            "configTrigger": ".cursor/mcp.json or Cursor MCP configuration.",
             "hookTrigger": "None unless the runtime maps it to a lifecycle event."
           },
           "configLocations": {
@@ -5340,12 +5351,13 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": ".cursor/mcp.json; .cursor/hooks.json; .cursor/rules; .cursor/agents; .cursor/skills",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "cursor --version"
+            "source": "official_docs",
+            "sourceRef": "https://cursor.com/docs/mcp; .cursor/mcp.json",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "Cursor documents MCP configuration with mcp.json."
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "MCP is an official Cursor surface; server commands still need trust and path portability review."
         },
         {
           "platform": "cursor",
@@ -5782,12 +5794,13 @@
             ]
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": "canonical/runtime-assets/cursor/rules/meta-choice-surface.mdc; .cursor/hooks.json",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "cursor --version"
+            "source": "official_docs",
+            "sourceRef": "canonical/runtime-assets/cursor/rules/meta-choice-surface.mdc; https://cursor.com/docs/hooks",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "Cursor tool hooks are verified; arbitrary native choice popup remains unverified."
           },
-          "notes": "Stable Cursor choice behavior is an alwaysApply chat decision card fallback, not a verified native popup."
+          "notes": "Stable choice behavior remains an alwaysApply chat decision card fallback, not a verified native popup."
         },
         {
           "platform": "cursor",
@@ -6067,11 +6080,11 @@
           "platform": "cursor",
           "capability": "project rule file",
           "support": "native",
-          "confidence": "verified_local",
+          "confidence": "verified_docs",
           "trigger": {
             "userTrigger": "User explicitly requests project rule file or a governed task requires it.",
             "autoTrigger": "Meta_Kim may select project rule file only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "cursor runtime projection and registry configuration.",
+            "configTrigger": ".cursor/rules/*.mdc and AGENTS.md context.",
             "hookTrigger": "None unless the runtime maps it to a lifecycle event."
           },
           "configLocations": {
@@ -6110,12 +6123,13 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": ".cursor/mcp.json; .cursor/hooks.json; .cursor/rules; .cursor/agents; .cursor/skills",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "cursor --version"
+            "source": "official_docs",
+            "sourceRef": "https://cursor.com/docs/rules; .cursor/rules/*.mdc",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "Cursor documents project rules in .cursor/rules as .mdc files and AGENTS.md."
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Project rules are official Cursor guidance surfaces and remain generated from canonical runtime assets."
         },
         {
           "platform": "cursor",
@@ -6446,13 +6460,13 @@
         {
           "platform": "cursor",
           "capability": "automation trigger",
-          "support": "partial",
-          "confidence": "repo_claim",
+          "support": "native",
+          "confidence": "verified_docs",
           "trigger": {
             "userTrigger": "User explicitly requests automation trigger or a governed task requires it.",
             "autoTrigger": "Meta_Kim may select automation trigger only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "cursor runtime projection and registry configuration.",
-            "hookTrigger": "cursor lifecycle hook when verified/configured."
+            "configTrigger": ".cursor/hooks.json",
+            "hookTrigger": "beforeSubmitPrompt/sessionStart/preToolUse/postToolUse/stop when configured by Meta_Kim."
           },
           "configLocations": {
             "macos": [
@@ -6490,12 +6504,13 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": ".cursor/mcp.json; .cursor/hooks.json; .cursor/rules; .cursor/agents; .cursor/skills",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "cursor --version"
+            "source": "official_docs",
+            "sourceRef": "https://cursor.com/docs/hooks; .cursor/hooks.json",
+            "lastVerifiedAt": "2026-06-01",
+            "verificationCommand": "official docs fetch on 2026-06-01",
+            "claim": "Cursor hooks provide lifecycle/tool automation."
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Automation is native through hooks, but runtime-specific event names and security posture must be preserved."
         },
         {
           "platform": "cursor",
@@ -6566,11 +6581,16 @@
     "openclaw": [
       "Windows native support should be treated separately from WSL2.",
       "Third-party skills require read-before-enable, allowlist, and sandbox preference.",
-      "Register onboard, doctor, and skills verify as verification commands when available."
+      "Register onboard, doctor, and skills verify as verification commands when available.",
+      "OpenClaw workspace is the default cwd/context home, not a hard sandbox unless sandboxing is enabled.",
+      "Internal hooks automate command/lifecycle events; blocking/canceling tools or messages requires typed plugin hooks.",
+      "Meta_Kim currently installs a lifecycle memory hook, not a typed plugin tool-blocking adapter."
     ],
     "cursor": [
       "Do not mark hooks or native choice as native without official or local proof.",
-      "Treat Cursor as a light governance projection platform until verified."
+      "Treat Cursor as a light governance projection platform until verified.",
+      "Cursor subagents under .cursor/agents and hooks under .cursor/hooks.json are official surfaces.",
+      "Cursor arbitrary native choice popup remains unverified; use chat decision card fallback for human choices."
     ]
   }
 }

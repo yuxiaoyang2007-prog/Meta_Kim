@@ -14,9 +14,19 @@ test("real route fixtures emit complete executable route or honest gap", () => {
     const result = spawnSync(process.execPath, ["scripts/select-execution-route.mjs", "--task", task, "--runtime", runtime, "--os", os, "--json"], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const output = JSON.parse(result.stdout);
-    for (const field of ["taskShape", "candidateOwners", "candidateWeapons", "runtimeFilterResult", "osFilterResult", "rankedRoutes", "rejectedRoutes", "verificationPlan"]) {
+    for (const field of ["taskShape", "ownerDiscoveryPacket", "candidateOwners", "candidateWeapons", "runtimeFilterResult", "osFilterResult", "rankedRoutes", "rejectedRoutes", "verificationPlan"]) {
       assert(output[field] !== undefined, `${task} missing ${field}`);
     }
+    assert(output.ownerDiscoveryPacket.governanceStages.Critical.requiredAgents.includes("meta-warden"), `${task} missing Critical owner discovery`);
+    assert(Array.isArray(output.ownerDiscoveryPacket.projectRuntimeAgents), `${task} missing project runtime agent inventory`);
+    assert(Array.isArray(output.ownerDiscoveryPacket.projectRuntimeSkillProviders), `${task} missing project runtime skill provider inventory`);
+    assert(Array.isArray(output.ownerDiscoveryPacket.localGlobalSkillProviders), `${task} missing local/global skill provider inventory`);
+    assert(Array.isArray(output.ownerDiscoveryPacket.projectRuntimeCapabilityProviders), `${task} missing project runtime capability provider inventory`);
+    assert(Array.isArray(output.ownerDiscoveryPacket.localGlobalCapabilityProviders), `${task} missing local/global capability provider inventory`);
+    assert(output.ownerDiscoveryPacket.globalInventoryFreshness?.mode === "cached_global_inventory_plus_project_light_scan", `${task} missing scan cadence policy`);
+    assert(output.ownerDiscoveryPacket.globalInventoryFreshness?.staleAfterDays === 14, `${task} missing 2-week scan cadence`);
+    assert(typeof output.ownerDiscoveryPacket.globalInventoryFreshness?.refreshRequiredBeforeExecution === "boolean", `${task} missing refresh-before-execution flag`);
+    assert(output.ownerDiscoveryPacket.candidateReusableCapabilityProviders?.length > 0, `${task} missing reusable capability provider candidates`);
     assert(output.recommendedRoute || output.capabilityGapPacket, `${task} needs route or gap`);
     assert(!output.rankedRoutes.some((route) => route.owner === "general-purpose"), `${task} used general-purpose owner`);
     assert(!output.rankedRoutes.some((route) => route.score >= 85 && route.blockedReasons?.length), `${task} executable route has blockers`);

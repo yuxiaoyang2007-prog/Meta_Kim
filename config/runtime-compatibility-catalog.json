@@ -1,7 +1,7 @@
 {
   "$schema": "./contracts/runtime-compatibility-catalog.schema.json",
   "schemaVersion": 1,
-  "lastReviewedAt": "2026-05-30",
+  "lastReviewedAt": "2026-06-01",
   "decisionBoundary": {
     "noAutoPromotionFromDependencyInstall": true,
     "noAutoPromotionFromGenericSkillPath": true,
@@ -136,10 +136,20 @@
           "type": "local_file",
           "ref": "AGENTS.md",
           "claim": "OpenClaw enforcement is currently declarative-only with an upgrade path."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.openclaw.ai/concepts/agent.md",
+          "claim": "OpenClaw workspace bootstrap injects AGENTS.md, SOUL.md, and BOOTSTRAP.md from the active workspace."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.openclaw.ai/automation/hooks.md",
+          "claim": "OpenClaw internal hooks cover command/lifecycle automation; blocking/canceling policy belongs to typed plugin hooks."
         }
       ],
-      "decision": "Keep as a formal projection while marking native enforcement as partial.",
-      "nextAction": "Do not describe OpenClaw hook enforcement as native until a plugin adapter exists."
+      "decision": "Keep as a formal projection while marking tool-blocking enforcement as partial.",
+      "nextAction": "Do not describe OpenClaw internal hooks as PreToolUse-style blocking; add a typed plugin adapter before claiming mechanical tool denial."
     },
     {
       "id": "cursor",
@@ -175,10 +185,25 @@
           "type": "local_file",
           "ref": "scripts/meta-kim-sync-config.mjs",
           "claim": "Cursor has a runtime profile and projection layout."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://cursor.com/docs/subagents",
+          "claim": "Cursor project subagents are markdown files under .cursor/agents with YAML frontmatter."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://cursor.com/docs/hooks",
+          "claim": "Cursor hooks include preToolUse/postToolUse and failClosed for security-critical hooks."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://cursor.com/docs/rules",
+          "claim": "Cursor project rules use .cursor/rules .mdc files and AGENTS.md guidance."
         }
       ],
-      "decision": "Keep as a formal Meta_Kim runtime projection.",
-      "nextAction": "Maintain Cursor hook and MCP mirrors through sync validation."
+      "decision": "Keep as a formal Meta_Kim runtime projection with official subagent/rule/hook/MCP surfaces.",
+      "nextAction": "Maintain Cursor hook, MCP, rules, and subagent mirrors through sync validation while keeping native choice popup unverified."
     },
     {
       "id": "opencode",

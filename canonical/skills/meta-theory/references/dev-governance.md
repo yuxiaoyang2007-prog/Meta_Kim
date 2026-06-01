@@ -93,6 +93,18 @@ Hidden skeleton:
 
 Skip / interrupt / override must return to the main chain. `controlState=skip` skips a stage only with a recorded reason; interrupt pauses the stage; iteration re-enters the stage after failed verification. Intentional-silence means no card because intervention has no clear gain.
 
+## Degraded Mode
+
+When Agent dispatch is unavailable or no matching owner exists after capability discovery, the spine enters `controlState=degraded`:
+
+- Fetch must still run discovery and record `capabilityDiscovery.searchLog`. Skipping discovery is forbidden even in degraded mode.
+- Thinking must still resolve owners and record `capabilityGapPacket`. If no owner matches, `degradationReason` explains why.
+- Review: read the relevant meta-agent definition (e.g. `meta-prism` for review criteria), apply the same checklist, record `reviewPacket` with `degradedFlag: true` and `reviewerRole: "main-thread-degraded"`.
+- Meta-Review: same pattern as Review, reading `meta-warden` criteria.
+- Verification: run verifySteps with `degradedFlag: true`, add `humanAcceptanceRequired: true` when no independent verification owner exists.
+- `surfaceState` stays `internal-ready`. Claiming `public-ready` in degraded mode is forbidden.
+- The dispatcher may self-execute in degraded mode only with explicit `degradationReason` and `degradedFlag: true` recorded before mutation.
+
 ## User Interaction Policy
 
 Decision vs Notice bifurcation:
@@ -103,6 +115,19 @@ Decision vs Notice bifurcation:
 Non-trivial execution needs one consolidated Decision after Fetch and Thinking, unless the skip is `trivial`, pure read-only `queryBypass`, or explicit auto-proceed with rationale.
 
 Codex visible multi-option choice rule: visible Decisions include at least two options and a recommended default.
+
+## Interactive Execution Communication
+
+During multi-stage work, the dispatcher must communicate at natural transition points — not only at the pre-decision gate. This "communicate while working" pattern is mandatory for non-trivial tasks.
+
+Report triggers:
+- Fetch complete: brief evidence summary + route impact.
+- Thinking complete: chosen path + trade-offs + why alternatives were rejected.
+- Each Execution phase complete: what was done + what remains + any blockers.
+- Review findings that change scope: surface immediately as a Decision card.
+- Route-changing discovery mid-execution: pause and inform before continuing.
+
+Each report is a compact notice (max 3 bullets). If a discovery changes scope, owner, or risk, upgrade to a Decision requiring user input. The user should never need to ask "what's happening?" during a non-trivial run.
 
 ## Fetch And Thinking Boundary
 
