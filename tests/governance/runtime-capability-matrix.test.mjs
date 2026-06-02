@@ -15,9 +15,19 @@ test("runtime matrix covers platforms and critical constraints", async () => {
       assert.notEqual(capability.support === "native" && capability.confidence === "unverified", true);
     }
   }
-  const cursor = JSON.stringify(platforms.get("cursor"));
-  assert.doesNotMatch(cursor, /"native"\s*,\s*"hook"/);
+  const capabilityMap = (platform) =>
+    new Map((platform.capabilities ?? []).map((capability) => [capability.capability, capability]));
+  const cursor = capabilityMap(platforms.get("cursor"));
+  assert.equal(cursor.get("hook")?.support, "native");
+  assert.equal(cursor.get("hook")?.confidence, "verified_docs");
+  assert.equal(cursor.get("subagent")?.support, "native");
+  assert.equal(cursor.get("subagent")?.confidence, "verified_docs");
+  assert.notEqual(cursor.get("native choice surface")?.support, "native");
+  const openclaw = capabilityMap(platforms.get("openclaw"));
+  assert.notEqual(openclaw.get("popup / overlay / approval UI")?.support, "native");
   assert.match(JSON.stringify(platforms.get("codex")), /explicitly requested/);
   assert.match(JSON.stringify(platforms.get("codex")), /trust review/);
   assert.match(JSON.stringify(platforms.get("openclaw")), /Third-party skills/);
+  assert.match(JSON.stringify(platforms.get("openclaw")), /typed plugin hooks/);
+  assert.match(JSON.stringify(platforms.get("openclaw")), /not a hard sandbox/);
 });

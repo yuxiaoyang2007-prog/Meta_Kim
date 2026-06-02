@@ -92,7 +92,7 @@ Before running the full review framework, Prism must name the `coreProblem` in o
 4. **IF** assertion can pass with clearly wrong output → flag as weak assertion for Meta-Review, downgrade rating
 5. **IF** evidence is self-referential (artifact claims its own validity) → reject as circular, require external verification (git log, command output, disk state)
 6. **IF** non-trivial executable work used a user choice surface before `contentEvidencePacket` and `preDecisionOptionFrame` existed → FAIL protocol compliance
-7. **IF** `choiceGateSkip` is present but not limited to trivial, pure read-only/queryBypass, or explicit auto-proceed with rationale → FAIL trigger/skip review
+7. **IF** `choiceGateSkip` is present but not limited to trivial, no-branching choice, or explicit auto-proceed with rationale → FAIL trigger/skip review
 8. **IF** `contentEvidencePacket` lacks `researchCapabilityDiscovery` with actual runtime/tool inventory sources, retrieval capability proof, selected research path, gap handling, and Conductor validation when research is required → FAIL evidence sufficiency
 9. **IF** `researchCapabilityDiscovery` uses host-form-factor guesses such as `platformSurface`, treats a static capability index as proof of current tool availability, or claims external research while the selected path is `blocked`, `unknown`, or unverified → FAIL platform honesty
 10. **IF** `contentEvidencePacket` lacks deep research plan, source coverage, cross-checks, contradiction handling, assumption ledger, or decision impact mapping when research is required → FAIL evidence sufficiency

@@ -84,6 +84,20 @@ const DEFAULT_READ_ONLY_VERIFIER_COMMANDS = [
   "wc",
 ];
 
+// Fetch may gather evidence with targeted, read-only baseline verification
+// commands. These commands are narrower than general execution and exist to
+// let the operator inspect current health before route selection.
+const DEFAULT_FETCH_READ_ONLY_VERIFIER_COMMANDS = [
+  "node --test",
+  "node scripts/run-node-tests.mjs",
+  "npm test",
+  "npm run ",
+  "pnpm test",
+  "pnpm run ",
+  "yarn test",
+  "yarn ",
+];
+
 const DEFAULT_READ_ONLY_INSPECTION_COMMANDS = [
   "git status",
   "git diff --stat",
@@ -111,28 +125,30 @@ export const STAGE_META_AGENT_MAP = {
     requiresFetchRecord: true,
     readOnlyInspectionEnabled: true,
     readOnlyInspectionCommands: DEFAULT_READ_ONLY_INSPECTION_COMMANDS,
+    readOnlyVerifierEnabled: true,
+    readOnlyVerifierCommands: DEFAULT_FETCH_READ_ONLY_VERIFIER_COMMANDS,
   },
   thinking: {
-    required: ["meta-conductor"],
-    label: "Thinking (Conductor dispatch board)",
+    required: [],
+    label: "Thinking (route and loadout selection)",
     requiresFetchRecord: true,
   },
   execution: { required: [], label: "Execution", requiresAgentDispatch: true },
   review: {
-    required: ["meta-prism"],
-    label: "Review (Prism quality forensics)",
+    required: [],
+    label: "Review (quality forensics)",
     readOnlyVerifierEnabled: true,
     readOnlyVerifierCommands: DEFAULT_READ_ONLY_VERIFIER_COMMANDS,
   },
   meta_review: {
-    required: ["meta-warden"],
-    label: "Meta-Review (Warden standards check)",
+    required: [],
+    label: "Meta-Review (standards check)",
     readOnlyVerifierEnabled: true,
     readOnlyVerifierCommands: DEFAULT_READ_ONLY_VERIFIER_COMMANDS,
   },
   verification: {
-    required: ["meta-warden"],
-    label: "Verification (Warden closure)",
+    required: [],
+    label: "Verification (closure)",
     readOnlyVerifierEnabled: true,
     readOnlyVerifierCommands: DEFAULT_READ_ONLY_VERIFIER_COMMANDS,
   },
@@ -304,11 +320,18 @@ export function createInitialState({ taskClassification, triggerReason }) {
     triggerReason: triggerReason || "user_invocation",
     dispatchedAgents: [],
     dispatchChain: {},
+    controlState: "normal",
+    gateState: "pending",
+    surfaceState: "silent",
     choiceSurfaceState: "not_allowed",
     queryBypass: false,
     executionStarted: false,
-    // Simple mode: allows hook skipping for lightweight tasks
-    simpleMode: false,
+    criticalFetchLoopCount: 0,
+    criticalFetchLoopMax: 3,
+    intentCard: null,
+    intentConfirmationState: null,
+    intentConfirmationTimestamp: null,
+    intentCorrectionPayload: null,
     // Audit trail for skipped hooks
     skippedHooks: [],
   };
@@ -457,6 +480,25 @@ export function completeStage(state, stageName) {
   return newState;
 }
 
+export function incrementCriticalFetchLoop(state) {
+  const count = (state.criticalFetchLoopCount || 0) + 1;
+  const max = state.criticalFetchLoopMax || 3;
+  return {
+    ...state,
+    criticalFetchLoopCount: count,
+    criticalFetchLoopBudgetExhausted: count >= max,
+  };
+}
+
+export function recordIntentConfirmation(state, confirmationState, correctionPayload) {
+  return {
+    ...state,
+    intentConfirmationState: confirmationState,
+    intentConfirmationTimestamp: new Date().toISOString(),
+    intentCorrectionPayload: correctionPayload || null,
+  };
+}
+
 /**
  * Record a dispatch into spine state.
  *
@@ -593,6 +635,239 @@ function hasNonEmptyArray(value) {
   return Array.isArray(value) && value.length > 0;
 }
 
+function nonEmptyObject(value) {
+  return isObject(value) && Object.keys(value).length > 0;
+}
+
+function firstString(...values) {
+  return values.find((value) => isNonEmptyString(value));
+}
+
+function hasSignalValue(value) {
+  return isNonEmptyString(value) || hasNonEmptyArray(value);
+}
+
+function hasAnySignal(object, keys) {
+  if (!isObject(object)) return false;
+  return keys.some((key) => hasSignalValue(object[key]));
+}
+
+function hasIntentSignal(state) {
+  const intentKeys = ["realIntent", "intent", "outcome", "coreProblem"];
+  const successKeys = ["successCriteria", "acceptanceCriteria", "qualityBar"];
+  const records = [
+    state,
+    state?.intentPacket,
+    state?.intentGatePacket,
+    state?.criticalRecord,
+  ];
+  return records.some(
+    (record) =>
+      hasAnySignal(record, intentKeys) && hasAnySignal(record, successKeys),
+  );
+}
+
+function hasThinkingRouteSignal(state) {
+  if (nonEmptyObject(state?.dispatchBoard)) return true;
+  if (hasNonEmptyArray(state?.workerTaskPackets)) return true;
+  if (hasNonEmptyArray(state?.agentBlueprintPacket?.roles)) return true;
+  const flow = state?.businessFlowBlueprintPacket;
+  if (
+    hasNonEmptyArray(flow?.requiredLanes) ||
+    hasNonEmptyArray(flow?.optionalLanes)
+  ) {
+    return true;
+  }
+  if (nonEmptyObject(state?.ownerDiscoveryPacket)) return true;
+  if (nonEmptyObject(state?.routeScoreBreakdown)) return true;
+  return false;
+}
+
+function hasMemorySignal(state) {
+  return !!firstString(
+    state?.memoryMode,
+    state?.memoryPolicy,
+    state?.memoryStrategy,
+    state?.memoryPlan,
+    state?.dispatchEnvelopePacket?.memoryMode,
+    state?.dispatchEnvelopePacket?.memoryPolicy,
+    state?.dispatchEnvelopePacket?.memoryStrategy,
+    state?.fetchRecord?.memoryMode,
+    state?.fetchRecord?.memoryStrategy,
+    state?.ownerDiscoveryPacket?.memoryMode,
+    state?.ownerDiscoveryPacket?.memoryStrategy,
+  );
+}
+
+function hasReviewStandardSignal(state) {
+  if (
+    firstString(
+      state?.reviewStandard,
+      state?.reviewPlan,
+      state?.qualityBar,
+      state?.dispatchEnvelopePacket?.reviewStandard,
+      state?.dispatchEnvelopePacket?.reviewOwner,
+      state?.dispatchBoard?.reviewStandard,
+      state?.dispatchBoard?.reviewerAgent,
+    )
+  ) {
+    return true;
+  }
+
+  if (hasNonEmptyArray(state?.workerTaskPackets)) {
+    return state.workerTaskPackets.some((packet) =>
+      firstString(
+        packet?.reviewStandard,
+        packet?.qualityBar,
+        packet?.finalizationGate,
+        packet?.handoffTarget,
+        packet?.handoffContract?.handoffTo,
+      ),
+    );
+  }
+
+  return false;
+}
+
+function supportStatus(value) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function containsUnsupportedStatus(value) {
+  if (typeof value === "string") {
+    return /^(known[-_ ]unsupported|unsupported|not_supported|blocked|deny|denied)$/.test(
+      supportStatus(value),
+    );
+  }
+  if (Array.isArray(value)) return value.some(containsUnsupportedStatus);
+  if (isObject(value)) {
+    if (containsUnsupportedStatus(value.status)) return true;
+    return Object.values(value).some(containsUnsupportedStatus);
+  }
+  return false;
+}
+
+function hasKnownUnsupportedRuntimeOrOs(state) {
+  return [
+    state?.runtimeSupport,
+    state?.osSupport,
+    state?.runtimeSupportStatus,
+    state?.osSupportStatus,
+    state?.runtimeCompatibility,
+    state?.osCompatibility,
+    state?.runtimeMatrix,
+    state?.osMatrix,
+    state?.dispatchEnvelopePacket?.runtimeSupport,
+    state?.dispatchEnvelopePacket?.osSupport,
+    state?.dispatchBoard?.runtimeSupport,
+    state?.dispatchBoard?.osSupport,
+    state?.ownerDiscoveryPacket?.runtimeSupport,
+    state?.ownerDiscoveryPacket?.osSupport,
+  ].some(containsUnsupportedStatus);
+}
+
+function hasCapabilityProviderEvidence(state) {
+  const fetchRecord = state?.fetchRecord;
+  if (
+    hasNonEmptyArray(fetchRecord?.capabilityMatches) ||
+    hasNonEmptyArray(fetchRecord?.matchedCapabilities) ||
+    hasNonEmptyArray(fetchRecord?.providerMatches) ||
+    hasNonEmptyArray(fetchRecord?.capabilityProviders)
+  ) {
+    return true;
+  }
+
+  const ownerDiscovery = state?.ownerDiscoveryPacket;
+  const providerFields = [
+    ownerDiscovery?.candidateReusableCapabilityProviders,
+    ownerDiscovery?.reusableCapabilityProviders,
+    ownerDiscovery?.capabilityProviders,
+    ownerDiscovery?.candidateSkills,
+    ownerDiscovery?.candidateCommands,
+    ownerDiscovery?.candidateMcpTools,
+    ownerDiscovery?.candidateTools,
+    ownerDiscovery?.candidatePrompts,
+  ];
+  if (providerFields.some(hasNonEmptyArray)) return true;
+
+  const laneGroups = [
+    state?.businessFlowBlueprintPacket?.requiredLanes,
+    state?.businessFlowBlueprintPacket?.optionalLanes,
+  ].filter(Array.isArray);
+  return laneGroups.some((lanes) =>
+    lanes.some((lane) =>
+      hasNonEmptyArray(lane?.candidateSkills) ||
+      hasNonEmptyArray(lane?.candidateCapabilities) ||
+      hasNonEmptyArray(lane?.candidateCommands) ||
+      hasNonEmptyArray(lane?.candidateMcpTools) ||
+      hasNonEmptyArray(lane?.candidateTools) ||
+      hasNonEmptyArray(lane?.candidatePrompts) ||
+      hasNonEmptyArray(lane?.candidateOwners),
+    ),
+  );
+}
+
+function hasExecutionOwnerEvidence(state) {
+  if (firstString(state?.dispatchBoard?.ownerAgent, state?.dispatchBoard?.owner)) {
+    return true;
+  }
+  if (hasNonEmptyArray(state?.workerTaskPackets)) {
+    return state.workerTaskPackets.some((packet) =>
+      firstString(packet?.ownerAgent, packet?.owner, packet?.roleDisplayName),
+    );
+  }
+  if (hasNonEmptyArray(state?.agentBlueprintPacket?.roles)) {
+    return state.agentBlueprintPacket.roles.some((role) =>
+      firstString(role?.ownerAgent, role?.owner, role?.roleDisplayName),
+    );
+  }
+  return !!firstString(
+    state?.ownerDiscoveryPacket?.selectedOwner,
+    state?.ownerDiscoveryPacket?.ownerAgent,
+    state?.selectedOwner,
+    state?.ownerAgent,
+  );
+}
+
+function hasLoadoutEvidence(state) {
+  if (hasNonEmptyArray(state?.capabilityBindings)) return true;
+  if (
+    firstString(
+      state?.dispatchBoard?.weapon,
+      state?.dispatchBoard?.selectedWeapon,
+      state?.selectedWeapon,
+      state?.abstractPrompt,
+      state?.promptRef,
+      state?.dispatchEnvelopePacket?.abstractPrompt,
+      state?.dispatchEnvelopePacket?.promptRef,
+    )
+  ) {
+    return true;
+  }
+
+  if (hasNonEmptyArray(state?.workerTaskPackets)) {
+    return state.workerTaskPackets.some((packet) =>
+      hasNonEmptyArray(packet?.capabilityRequirements) ||
+      hasNonEmptyArray(packet?.toolRequirements) ||
+      hasNonEmptyArray(packet?.skillRequirements) ||
+      hasNonEmptyArray(packet?.commandRequirements) ||
+      hasNonEmptyArray(packet?.mcpRequirements) ||
+      firstString(packet?.abstractPrompt, packet?.promptRef, packet?.weapon),
+    );
+  }
+
+  if (hasNonEmptyArray(state?.agentBlueprintPacket?.roles)) {
+    return state.agentBlueprintPacket.roles.some((role) =>
+      hasNonEmptyArray(role?.matchedSkills) ||
+      hasNonEmptyArray(role?.matchedCapabilities) ||
+      hasNonEmptyArray(role?.capabilityBindings) ||
+      firstString(role?.abstractPrompt, role?.promptRef, role?.weapon),
+    );
+  }
+
+  return false;
+}
+
 const WORKER_WORK_ORDER_STRING_FIELDS = [
   "coreProblem",
   "todayTask",
@@ -655,27 +930,27 @@ const REQUIRED_PRE_EXECUTION_PACKETS = [
 function collectPreExecutionReadinessGaps(state) {
   const missing = [];
 
-  for (const packetName of REQUIRED_PRE_EXECUTION_PACKETS) {
-    const packet = state?.[packetName];
-    if (!isObject(packet)) {
-      missing.push(packetName);
-      continue;
-    }
-
-    const statusField = PRE_EXECUTION_PACKET_STATUS_FIELDS[packetName];
-    if (!statusField) continue;
-
-    const allowed = PRE_EXECUTION_ALLOWED_STATUSES[packetName] || [];
-    if (!allowed.includes(packet[statusField])) {
-      missing.push(`${packetName}.${statusField}`);
-    }
+  if (!hasIntentSignal(state)) {
+    missing.push("intent signal (intentPacket or realIntent + successCriteria)");
+  }
+  if (!hasFetchEvidence(state)) {
+    missing.push("Fetch evidence");
+  }
+  if (!hasThinkingRouteSignal(state)) {
+    missing.push("Thinking route plan");
+  }
+  if (!hasMemorySignal(state)) {
+    missing.push("memory strategy");
+  }
+  if (!hasReviewStandardSignal(state)) {
+    missing.push("Review standard");
   }
 
   return missing;
 }
 
 export function checkPreExecutionReadiness(state) {
-  if (!state || state.queryBypass || state.simpleMode) {
+  if (!state || state.queryBypass) {
     return {
       met: true,
       missing: [],
@@ -689,8 +964,8 @@ export function checkPreExecutionReadiness(state) {
     missing,
     reason:
       missing.length === 0
-        ? "pre-execution design-time packets are complete"
-        : "Pre-execution readiness requires complete design-time dispatch, product, experience, test, structure, permission, side-effect, and rollback packets before execution.",
+        ? "minimum key-behavior pre-execution evidence is present"
+        : "Pre-execution readiness requires the key behavior evidence only: intent, Fetch evidence, Thinking route/loadout, and memory strategy. Optional packet fields belong to validators, not hook blocking.",
   };
 }
 
@@ -704,218 +979,32 @@ function collectCapabilityNodeBindingGaps(state) {
     if (fetchRecord.capabilitySearchPerformed !== true) {
       missing.push("fetchRecord.capabilitySearchPerformed=true");
     }
-    if (
-      !hasNonEmptyArray(fetchRecord.capabilityMatches) &&
-      !hasNonEmptyArray(fetchRecord.matchedCapabilities)
-    ) {
-      missing.push("fetchRecord.capabilityMatches or fetchRecord.matchedCapabilities");
-    }
   }
 
-  const flow = state?.businessFlowBlueprintPacket;
-  if (!isObject(flow)) {
-    missing.push("businessFlowBlueprintPacket");
-  } else {
-    const laneGroups = [
-      ["requiredLanes", flow.requiredLanes],
-      ["optionalLanes", flow.optionalLanes],
-    ];
-    const lanes = [];
-    for (const [groupName, group] of laneGroups) {
-      if (!Array.isArray(group)) {
-        missing.push(`businessFlowBlueprintPacket.${groupName}`);
-        continue;
-      }
-      for (const [index, lane] of group.entries()) {
-        lanes.push(lane);
-        const context = `businessFlowBlueprintPacket.${groupName}[${index}]`;
-        if (!isObject(lane)) {
-          missing.push(context);
-          continue;
-        }
-        for (const field of [
-          "laneId",
-          "capabilityNeed",
-          "capabilitySearchQuery",
-          "selectedOwner",
-          "selectionReason",
-          "coverageStatus",
-        ]) {
-          if (!isNonEmptyString(lane[field])) missing.push(`${context}.${field}`);
-        }
-        if (!hasNonEmptyArray(lane.candidateOwners)) {
-          missing.push(`${context}.candidateOwners`);
-        }
-        if (
-          !hasNonEmptyArray(lane.candidateSkills) &&
-          !hasNonEmptyArray(lane.candidateCapabilities)
-        ) {
-          missing.push(`${context}.candidateSkills or candidateCapabilities`);
-        }
-      }
-    }
-    if (lanes.length === 0) {
-      missing.push("businessFlowBlueprintPacket.requiredLanes or optionalLanes");
-    }
+  if (!hasCapabilityProviderEvidence(state)) {
+    missing.push("capability provider evidence (agent, skill, command, MCP, tool, or prompt)");
   }
-
-  const agentBlueprint = state?.agentBlueprintPacket;
-  const roleKeys = new Set();
-  if (!isObject(agentBlueprint)) {
-    missing.push("agentBlueprintPacket");
-  } else if (!hasNonEmptyArray(agentBlueprint.roles)) {
-    missing.push("agentBlueprintPacket.roles");
-  } else {
-    for (const [index, role] of agentBlueprint.roles.entries()) {
-      const context = `agentBlueprintPacket.roles[${index}]`;
-      if (!isObject(role)) {
-        missing.push(context);
-        continue;
-      }
-      for (const field of [
-        "businessRoleId",
-        "roleDisplayName",
-        "ownerAgent",
-        "ownerSource",
-        "agentCopyPolicy",
-        "ownerResolution",
-        "skillSelectionScope",
-      ]) {
-        if (!isNonEmptyString(role[field])) missing.push(`${context}.${field}`);
-      }
-      if (!hasNonEmptyArray(role.assignedResponsibilitySlice)) {
-        missing.push(`${context}.assignedResponsibilitySlice`);
-      }
-      if (!hasNonEmptyArray(role.governanceStageNodes)) {
-        missing.push(`${context}.governanceStageNodes`);
-      }
-      if (
-        !hasNonEmptyArray(role.matchedSkills) &&
-        !hasNonEmptyArray(role.matchedCapabilities)
-      ) {
-        missing.push(`${context}.matchedCapabilities or matchedSkills`);
-      }
-      if (hasNonEmptyArray(role.matchedSkills)) {
-        for (const [skillIndex, skill] of role.matchedSkills.entries()) {
-          const skillContext = `${context}.matchedSkills[${skillIndex}]`;
-          for (const field of [
-            "matchId",
-            "capabilitySlot",
-            "providerId",
-            "skillId",
-            "source",
-            "selectionReason",
-            "selectionScope",
-          ]) {
-            if (!isNonEmptyString(skill?.[field])) missing.push(`${skillContext}.${field}`);
-          }
-        }
-      }
-      if (hasNonEmptyArray(role.matchedCapabilities)) {
-        for (const [capabilityIndex, capability] of role.matchedCapabilities.entries()) {
-          const capabilityContext = `${context}.matchedCapabilities[${capabilityIndex}]`;
-          for (const field of [
-            "matchId",
-            "capabilitySlot",
-            "bindingType",
-            "bindingRef",
-            "source",
-            "selectionReason",
-            "selectionScope",
-          ]) {
-            if (!isNonEmptyString(capability?.[field])) {
-              missing.push(`${capabilityContext}.${field}`);
-            }
-          }
-        }
-        if (!hasNonEmptyArray(role.capabilityBindings)) {
-          missing.push(`${context}.capabilityBindings`);
-        } else {
-          for (const [bindingIndex, binding] of role.capabilityBindings.entries()) {
-            const bindingContext = `${context}.capabilityBindings[${bindingIndex}]`;
-            for (const field of [
-              "bindingId",
-              "capabilitySlot",
-              "bindingType",
-              "bindingRef",
-              "source",
-              "evidenceRef",
-            ]) {
-              if (!isNonEmptyString(binding?.[field])) {
-                missing.push(`${bindingContext}.${field}`);
-              }
-            }
-          }
-          for (const [capabilityIndex, capability] of role.matchedCapabilities.entries()) {
-            const hasBinding = role.capabilityBindings.some(
-              (binding) =>
-                binding.capabilitySlot === capability.capabilitySlot &&
-                binding.bindingType === capability.bindingType &&
-                binding.bindingRef === capability.bindingRef,
-            );
-            if (!hasBinding) {
-              missing.push(
-                `${context}.matchedCapabilities[${capabilityIndex}].capabilityBinding`,
-              );
-            }
-          }
-        }
-      }
-      if (isNonEmptyString(role.ownerAgent) && isNonEmptyString(role.businessRoleId)) {
-        roleKeys.add(`${role.ownerAgent}::${role.businessRoleId}`);
-      }
-    }
+  if (!hasExecutionOwnerEvidence(state)) {
+    missing.push("execution owner");
   }
-
-  const workerTaskPackets = state?.workerTaskPackets;
-  if (!hasNonEmptyArray(workerTaskPackets)) {
-    missing.push("workerTaskPackets");
-  } else {
-    for (const [index, packet] of workerTaskPackets.entries()) {
-      const context = `workerTaskPackets[${index}]`;
-      if (!isObject(packet)) {
-        missing.push(context);
-        continue;
-      }
-      for (const field of [
-        "taskPacketId",
-        "ownerAgent",
-        "businessRoleId",
-        "roleDisplayName",
-        "roleInstanceId",
-      ]) {
-        const value = packet[field];
-        if (!isNonEmptyString(value)) {
-          missing.push(`${context}.${field}`);
-        }
-      }
-      for (const field of WORKER_WORK_ORDER_STRING_FIELDS) {
-        if (!isNonEmptyString(packet[field])) missing.push(`${context}.${field}`);
-      }
-      for (const field of WORKER_WORK_ORDER_ARRAY_FIELDS) {
-        if (!hasNonEmptyArray(packet[field])) missing.push(`${context}.${field}`);
-      }
-      if (!isObject(packet.handoffContract)) {
-        missing.push(`${context}.handoffContract`);
-      } else {
-        for (const field of WORKER_HANDOFF_CONTRACT_FIELDS) {
-          if (!isNonEmptyString(packet.handoffContract[field])) {
-            missing.push(`${context}.handoffContract.${field}`);
-          }
-        }
-      }
-      const roleKey = `${packet.ownerAgent}::${packet.businessRoleId}`;
-      if (!roleKeys.has(roleKey)) {
-        missing.push(`${context}.agentBlueprintRoleBinding`);
-      }
-    }
+  if (!hasLoadoutEvidence(state)) {
+    missing.push("owner loadout (skill, command, MCP, tool, or abstract prompt)");
+  }
+  if (!hasMemorySignal(state)) {
+    missing.push("memory strategy");
+  }
+  if (!hasReviewStandardSignal(state)) {
+    missing.push("Review standard");
+  }
+  if (hasKnownUnsupportedRuntimeOrOs(state)) {
+    missing.push("runtime/OS support not known-unsupported");
   }
 
   return missing;
 }
 
 export function checkCapabilityNodeBindings(state) {
-  if (!state || state.queryBypass || state.simpleMode) {
+  if (!state || state.queryBypass) {
     return { met: true, missing: [], reason: "capability node binding gate bypassed" };
   }
 
@@ -925,8 +1014,8 @@ export function checkCapabilityNodeBindings(state) {
     missing,
     reason:
       missing.length === 0
-        ? "capability node bindings present"
-        : "Execution requires every orchestration node to carry capability search evidence, selected owner, run-scoped skill/tool evidence, and worker task binding.",
+        ? "minimum capability owner/loadout bindings present"
+        : "Execution requires key capability evidence only: capability search, selected owner, usable loadout across skill/command/MCP/tool/prompt, and memory strategy. Exhaustive per-field work-order validation belongs to validators.",
   };
 }
 
@@ -941,11 +1030,10 @@ export function checkStageRequirements(state) {
   const missing = req.required.filter((a) => !dispatched.includes(a));
 
   if (req.requiresAgentDispatch && state.dispatchedAgents.length === 0) {
-    return {
-      met: false,
-      missing: ["at least one agent via Agent tool"],
-      reason: `Stage "${stage}" requires at least one agent dispatch before execution.`,
-    };
+    const nodeBindingGate = checkCapabilityNodeBindings(state);
+    if (!nodeBindingGate.met) {
+      return nodeBindingGate;
+    }
   }
 
   // Verify fetchRecord exists when stage requires it
@@ -1038,7 +1126,7 @@ function getPreDecisionOptionFrame(state) {
 
 const ALLOWED_CHOICE_GATE_SKIPS = new Set([
   "trivial",
-  "pure_read_only_queryBypass",
+  "no_branching_choice",
   "explicit_auto_proceed",
 ]);
 
@@ -1062,7 +1150,7 @@ function hasChoiceGateSkip(state) {
 }
 
 export function checkChoiceSurfaceGate(state) {
-  if (!state || state.queryBypass || state.simpleMode) {
+  if (!state || state.queryBypass) {
     return { met: true, missing: [], reason: "choice surface gate bypassed" };
   }
 
@@ -1167,14 +1255,6 @@ export function isReadOnlyTool(toolName) {
     "ReadMcpResourceTool",
   ];
   return readOnlyTools.includes(toolName);
-}
-
-/**
- * Enable or disable simple mode in spine state
- * Simple mode allows selective hook skipping for lightweight tasks
- */
-export function setSimpleMode(state, enabled) {
-  return { ...state, simpleMode: !!enabled };
 }
 
 /**

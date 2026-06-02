@@ -768,6 +768,10 @@ async function scanPlatform(platformId, platform) {
       hooks: [],
       plugins: [],
       commands: [],
+      rules: [],
+      prompts: [],
+      mcpServers: [],
+      mcpTools: [],
     },
     errors: [],
   };
@@ -896,6 +900,44 @@ async function collectRepoCanonicalCapabilities() {
     path.join(repoRoot, "canonical", "runtime-assets", "codex", "commands"),
   );
   const mcpDiscovery = await scanMcpConfig(path.join(repoRoot, ".mcp.json"));
+  const skillsManifest = await readJsonIfExists(
+    path.join(repoRoot, "config", "skills.json"),
+  );
+  const pluginCapabilities = (skillsManifest?.skills ?? [])
+    .filter((skill) => {
+      const pluginIds = [
+        skill.claudePlugin,
+        skill.codexPlugin,
+        skill.cursorPlugin,
+      ].filter(Boolean);
+      return (
+        skill.installMethod === "pluginMarketplace" ||
+        pluginIds.length > 0 ||
+        skill.pluginHookCompat
+      );
+    })
+    .map((skill) => {
+      const pluginIds = [
+        skill.claudePlugin,
+        skill.codexPlugin,
+        skill.cursorPlugin,
+      ].filter(Boolean);
+      const isPlugin =
+        skill.installMethod === "pluginMarketplace" || pluginIds.length > 0;
+      return {
+        id: skill.id,
+        type: isPlugin ? "plugins" : "pluginBundles",
+        namespace: isPlugin ? "plugin-marketplace" : "plugin-bundle",
+        path: "config/skills.json",
+        runtimeTargets: skill.targets ?? [],
+        installMethod: skill.installMethod ?? "subdirExtraction",
+        providerRegistryId: isPlugin
+          ? `plugin-marketplace-${skill.id}`
+          : `plugin-bundle-${skill.id}`,
+        pluginIds,
+        evidence: `config/skills.json skills[id=${skill.id}]`,
+      };
+    });
 
   // Determine agent layer: meta (governance) vs execution (work)
   function determineAgentLayer(id, namespace) {
@@ -961,7 +1003,9 @@ async function collectRepoCanonicalCapabilities() {
     mcpTools: mcpDiscovery.tools.map((item) =>
       toRepoCapability(item, "mcpTools", "repo-mcp"),
     ),
-    plugins: [],
+    plugins: pluginCapabilities,
+    rules: [],
+    prompts: [],
     commands: [...claudeCommands, ...codexCommands].map((item) =>
       toRepoCapability(item, "commands", "canonical-runtime-assets"),
     ),
@@ -996,7 +1040,7 @@ async function buildRepoCapabilityIndex() {
       totalHooks: capabilities.hooks.length,
       totalMcpServers: capabilities.mcpServers.length,
       totalMcpTools: capabilities.mcpTools.length,
-      totalPlugins: 0,
+      totalPlugins: capabilities.plugins.length,
       totalCommands: capabilities.commands.length,
     },
     ...metaSkillProviderContract,
@@ -1031,7 +1075,14 @@ async function buildRepoCapabilityIndex() {
           cap,
         ]),
       ),
-      plugins: {},
+      plugins: Object.fromEntries(
+        capabilities.plugins.map((cap) => [
+          `manifest:${cap.namespace}:${cap.id}`,
+          cap,
+        ]),
+      ),
+      rules: {},
+      prompts: {},
       commands: Object.fromEntries(
         capabilities.commands.map((cap) => [
           `repo:${cap.namespace}:${cap.id}`,
@@ -1117,6 +1168,8 @@ async function buildGlobalCapabilityInventory(scannedResults, profile) {
       totalMcpTools: 0,
       totalPlugins: 0,
       totalCommands: 0,
+      totalRules: 0,
+      totalPrompts: 0,
     },
     byPlatform: {},
     byCapabilityType: {
@@ -1127,6 +1180,8 @@ async function buildGlobalCapabilityInventory(scannedResults, profile) {
       mcpTools: {},
       plugins: {},
       commands: {},
+      rules: {},
+      prompts: {},
     },
   };
 

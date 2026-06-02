@@ -257,7 +257,6 @@ Claude Code has project hooks generated from canonical runtime assets. The expec
 
 - `node .claude/hooks/activate-meta-theory-spine.mjs`
 - `node .claude/hooks/block-dangerous-bash.mjs`
-- `node .claude/hooks/pre-git-push-confirm.mjs`
 - `node .claude/hooks/enforce-agent-dispatch.mjs`
 - `node .claude/hooks/post-format.mjs`
 - `node .claude/hooks/post-typecheck.mjs`

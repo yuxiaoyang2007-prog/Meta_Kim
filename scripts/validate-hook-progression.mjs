@@ -50,7 +50,8 @@ function validatePolicy(policy) {
   assert(policy.hookMustNotReplacePreflight === true, "Hook must not replace preflight");
   assert(policy.readOnlyFetchPolicy?.mustNotBlock === true, "Read-only Fetch must not be blocked");
   hasAll(policy.readOnlyFetchPolicy?.allowedActions ?? [], ["read_file", "repo_search", "git_status", "config_scan", "capability_scan", "dependency_discovery"], "readOnlyFetchPolicy.allowedActions");
-  hasAll(policy.requiredPreflightChecks ?? [], ["realIntent", "successCriteria", "fetchEvidence", "capabilityDiscovery", "runtimeMatrix", "osMatrix", "owner", "weapon", "verificationOwner", "verificationPlan", "rollbackPath", "warningsClassified", "writebackDecisionReserved"], "requiredPreflightChecks");
+  hasAll(policy.requiredPreflightChecks ?? [], ["realIntent", "successCriteria", "fetchEvidence", "capabilityDiscovery", "owner", "ownerLoadout", "abstractPrompt", "memoryStrategy", "runtimeMatrix", "osMatrix", "reviewStandard"], "requiredPreflightChecks");
+  hasAll(policy.optionalValidatorChecks ?? [], ["nonGoals", "dependencyRegistry", "weaponRegistry", "weapon", "verificationOwner", "verificationPlan", "rollbackPath", "warningsClassified", "writebackDecisionReserved"], "optionalValidatorChecks");
   hasAll(policy.blockOutputRequiredFields ?? [], REQUIRED_BLOCK_FIELDS, "blockOutputRequiredFields");
   assert(policy.warningClassificationRequired === true, "Hook warning classification must be required");
   hasAll(policy.warningClasses ?? [], REQUIRED_WARNING_CLASSES, "warningClasses");

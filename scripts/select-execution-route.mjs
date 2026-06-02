@@ -223,10 +223,13 @@ const localGlobalCapabilityProviders = ["skills", "commands", "hooks", "plugins"
     .map((entry) => compactCapabilityProvider(entry, `local_global_${type}_inventory`, type)),
 );
 const localGlobalSkillProviders = localGlobalCapabilityProviders;
+const runtimeToolProviders = (capabilityInventory.capabilities ?? [])
+  .filter((capability) => capability.type === "runtime_tool")
+  .map((entry) => compactCapabilityProvider(entry, "local_runtime_capability_inventory", "runtimeTools"));
 const capabilityProviderCoverage = {
-  repoCanonical: Object.fromEntries(["skills", "commands", "hooks", "mcpServers", "mcpTools", "plugins", "rules", "prompts"].map((type) => [type, capabilityEntries(repoCapabilityIndex, type).length])),
-  projectRuntimeLightScan: Object.fromEntries(["skills", "commands", "hooks", "mcpServers", "rules", "prompts"].map((type) => [type, projectRuntimeCapabilityProviders.filter((provider) => provider.type === type).length])),
-  localGlobalCached: Object.fromEntries(["agents", "skills", "commands", "hooks", "plugins", "mcpServers", "mcpTools", "rules", "prompts"].map((type) => [type, capabilityEntries(globalCapabilityInventory, type).length])),
+  repoCanonical: Object.fromEntries(["skills", "commands", "hooks", "mcpServers", "mcpTools", "plugins", "rules", "prompts", "runtimeTools"].map((type) => [type, capabilityEntries(repoCapabilityIndex, type).length])),
+  projectRuntimeLightScan: Object.fromEntries(["skills", "commands", "hooks", "mcpServers", "rules", "prompts", "runtimeTools"].map((type) => [type, type === "runtimeTools" ? runtimeToolProviders.length : projectRuntimeCapabilityProviders.filter((provider) => provider.type === type).length])),
+  localGlobalCached: Object.fromEntries(["agents", "skills", "commands", "hooks", "plugins", "mcpServers", "mcpTools", "rules", "prompts", "runtimeTools"].map((type) => [type, type === "runtimeTools" ? runtimeToolProviders.length : capabilityEntries(globalCapabilityInventory, type).length])),
 };
 const globalInventoryGeneratedAt = globalCapabilityInventory.generatedAt ?? null;
 const globalInventoryAgeMinutes = globalInventoryGeneratedAt
@@ -279,12 +282,20 @@ const candidateExistingExecutionOwners = [
   .filter((agent) => agent.layer !== "meta" && agent.executionBlock !== true)
   .map((agent) => agent.id);
 const ownerDiscoveryPacket = {
-  searchOrder: workflowContract.runDiscipline?.executionOwnership?.existingOwnerEvidenceOrder ?? [
+  discoveryPrinciple: "provider_first_evidence_owner_last_binding",
+  searchOrder: [
+    "available_capability_providers_skills_tools_mcp",
+    "runtime_tool_provider_inventory",
     "repo_canonical_capability_index",
     "runtime_mirror_indexes",
     "project_runtime_agent_inventory",
     "local_global_agent_inventory",
-    "available_capability_providers_skills_tools_mcp",
+  ],
+  ownerBindingOrder: workflowContract.runDiscipline?.executionOwnership?.existingOwnerEvidenceOrder ?? [
+    "repo_canonical_capability_index",
+    "runtime_mirror_indexes",
+    "project_runtime_agent_inventory",
+    "local_global_agent_inventory",
   ],
   governanceStages,
   repoCanonicalAgents: repoCanonicalAgents.slice(0, 20),
@@ -296,12 +307,14 @@ const ownerDiscoveryPacket = {
   repoCanonicalCapabilityProviders: repoCanonicalCapabilityProviders.slice(0, 60),
   projectRuntimeCapabilityProviders: projectRuntimeCapabilityProviders.slice(0, 80),
   localGlobalCapabilityProviders,
+  runtimeToolProviders: runtimeToolProviders.slice(0, 40),
   capabilityProviderCoverage,
   globalInventoryFreshness,
   candidateReusableCapabilityProviders: uniqueById([
     ...repoCanonicalCapabilityProviders,
     ...projectRuntimeCapabilityProviders,
     ...localGlobalCapabilityProviders,
+    ...runtimeToolProviders,
   ]).map((provider) => provider.id).slice(0, 100),
   candidateExistingExecutionOwners: [...new Set(candidateExistingExecutionOwners)].slice(0, 40),
   governanceStageOwners,
@@ -317,6 +330,8 @@ const ownerDiscoveryPacket = {
     ".claude/hooks",
     ".codex/hooks",
     ".cursor/rules",
+    "config/runtime-capability-matrix.json",
+    ".meta-kim/state/default/capability-inventory.json",
     ".mcp.json",
     ".cursor/mcp.json",
     ".codex/config.toml",
@@ -366,6 +381,10 @@ function routeForWeapon(weapon) {
   const runtimeValue = weapon.runtimeSupport?.[runtime] ?? "unknown";
   const osValue = weapon.osSupport?.[osTarget] ?? "unknown";
   const selectedOwner = weapon.ownerCandidates?.[0] ?? null;
+  const existingOwnerMatched = selectedOwner
+    ? ownerDiscoveryPacket.candidateExistingExecutionOwners.includes(selectedOwner) ||
+      ownerDiscoveryPacket.governanceStageOwners.includes(selectedOwner)
+    : false;
   const blockedReasons = [];
   if (!weapon.ownerCandidates?.length) blockedReasons.push("owner missing");
   if (!weapon.id) blockedReasons.push("weapon missing");
@@ -429,6 +448,14 @@ function routeForWeapon(weapon) {
       osSupport: osValue,
       dependencyFit,
     },
+    ownerBinding: {
+      selectedOwner,
+      source: "weapon_owner_candidates",
+      existingOwnerMatched,
+      bindingStage: "Thinking",
+      providerEvidenceRef: "ownerDiscoveryPacket.candidateReusableCapabilityProviders",
+      ownerDiscoveryRef: "ownerDiscoveryPacket",
+    },
     blockedReasons,
   };
 }
@@ -459,6 +486,16 @@ const decisionCard = userChoiceNeeded ? {
     verification: route.verificationMethod ?? "manual review"
   }))
 } : null;
+const routeExecutionGate = {
+  canPreviewRoute: true,
+  canEnterExecution: !globalInventoryFreshness.refreshRequiredBeforeExecution,
+  blockedBy: globalInventoryFreshness.refreshRequiredBeforeExecution ? ["global_capability_inventory_refresh_required"] : [],
+  returnToStage: globalInventoryFreshness.refreshRequiredBeforeExecution ? "Fetch" : null,
+  refreshCommand: globalInventoryFreshness.refreshRequiredBeforeExecution ? globalInventoryFreshness.refreshCommand : null,
+  reason: globalInventoryFreshness.refreshRequiredBeforeExecution
+    ? "Cached provider evidence is missing or older than 14 days; route preview is allowed, but Execution must refresh capability discovery first."
+    : "Cached provider evidence is fresh enough for execution routing.",
+};
 
 const output = {
   taskShape,
@@ -480,6 +517,7 @@ const output = {
   osFilterResult: { requested: osArg, applied: osTarget, unsupported: !OS_TARGETS.includes(osTarget) },
   rankedRoutes,
   recommendedRoute,
+  routeExecutionGate,
   userChoiceNeeded,
   decisionCard,
   dispatchBoardDraft: recommendedRoute ? { owner: "meta-conductor", route: recommendedRoute.id, mergeOwner: "meta-warden" } : null,

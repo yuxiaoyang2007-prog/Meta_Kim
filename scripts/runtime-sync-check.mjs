@@ -39,7 +39,6 @@ export const SHARED_HOOK_FILES = [
   "skip-reminder.mjs",
   "block-dangerous-bash.mjs",
   "activate-meta-theory-spine.mjs",
-  "pre-git-push-confirm.mjs",
   "post-format.mjs",
   "post-typecheck.mjs",
   "post-console-log-warn.mjs",

@@ -62,6 +62,8 @@ These files are best-effort readability shims, not canonical durable Meta_Kim ex
 
 OpenAI Codex GitHub issues have reported cases where project named subagents or `.codex/agents/*.toml` config are not loaded in some CLI/Desktop/tool-backed sessions, causing the host to fall back to generic runtime aliases. Meta_Kim therefore treats Codex nicknames as best-effort only and still records host aliases only as `runtimeInstanceAlias`.
 
+Meta_Kim treats Codex subagents and project hooks as partial host capabilities: use them only when the user explicitly requests multi-agent/subagent work or a governed task truly needs delegation, and require trust review before relying on project hook behavior. Durable run artifacts must bind to business role names and verified capability evidence, not incidental Codex instance aliases.
+
 Codex Desktop sidebar naming is not a Meta_Kim release gate unless the host actually honors project `.codex/agents/*.toml`. A screenshot that still shows `Popper (worker)` or `Zeno (explorer)` after sync means the host is using runtime instance aliases; task boards and run artifacts must still show `roleDisplayName` such as `frontend`, `backend`, `test`, `review`, `analysis`, `verify`, or `docs`.
 
 ### Differences from Claude Code

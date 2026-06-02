@@ -51,16 +51,40 @@ Important: Architecture Type Distinction. Meta Architecture means agent governan
 
 ## Stage map
 
-| # | Stage | Action |
+| # | Stage | Action | Interaction |
+|---|---|---|---|
+| 1 | Critical | clarify intent first, lock user pain, value, success criteria, non-goals, permissions, and Architecture Type; for wishful or ambiguous input, enter Critical-Fetch intent loop: translate intent -> read context -> enrich intent -> present IntentCard for user confirmation (up to `criticalFetchLoopMax` rounds) | If a required intent dimension is missing and the answer changes route, scope, risk, or non-goal, set `choiceSurfaceState = critical_clarification_allowed` and ask before proceeding. Do not present execution options during Critical. Present an IntentCard after context-enriched intent translation; user confirms or corrects through the runtime adapter's verified choice surface, or a chat decision card fallback. |
+| 2 | Fetch | gather online/web and local evidence, confirm the problem, extract material claims, run targeted read-only baseline verification when it changes the route, and list candidate solutions with sources | If evidence suggests multiple valid paths with different trade-offs, surface the options in the user's language before Thinking. |
+| 3 | Thinking | determine needed execution capabilities across agents, skills, commands, MCP capabilities, and tools; match existing capabilities; create or upgrade only for gaps; plan DAG/parallel/serial lanes with `mergeOwner` | Present at least 2 candidate paths with a recommended default. Ask the user to confirm the chosen path before Execution. |
+| 4 | Execution | run multi-agent work using skills, commands, MCP capabilities, and tools from Thinking artifacts | No interaction unless route-changing discovery occurs mid-execution — then pause and inform. |
+| 5 | Review | meta-prism checks upstream Critical, Fetch, Thinking, and result quality | If review finds issues that require user preference (quality vs speed trade-off), ask before proceeding. |
+| 6 | Meta-Review | meta-warden verifies Review standard and public-ready gate | No interaction. Internal governance check. |
+| 7 | Verification | run real tests with fresh evidence and `verificationPacket.fixEvidence` | No interaction. Run checks and record evidence. |
+| 8 | Evolution | after Warden approval, directly edit the target agent definition or SOUL.md for meta-agent lessons; execution-agent gaps use `capabilityGapPacket` + Type B pipeline | No interaction. Record writeback decision. |
+
+## User Interaction
+
+**MANDATORY**: Use the current runtime adapter's verified native choice surface at key decision points. Keep the canonical card contract platform-neutral; renderer-specific schemas and tool names belong in runtime references such as `runtime-claude.md` or `runtime-codex.md`, not in the generic contract. If the native surface is unavailable or returns empty, fall back to a localized chat decision card and wait for the user's explicit reply.
+
+**When to ask:**
+
+| Stage | When to Ask | Example |
 |---|---|---|
-| 1 | Critical | clarify intent first, lock user pain, value, success criteria, non-goals, permissions, and Architecture Type |
-| 2 | Fetch | gather online/web and local evidence, confirm the problem, extract material claims, and list candidate solutions with sources |
-| 3 | Thinking | determine needed execution capabilities across agents, skills, commands, MCP capabilities, and tools; match existing capabilities; create or upgrade only for gaps; plan DAG/parallel/serial lanes with `mergeOwner` |
-| 4 | Execution | run multi-agent work using skills, commands, MCP capabilities, and tools from Thinking artifacts |
-| 5 | Review | meta-prism checks upstream Critical, Fetch, Thinking, and result quality |
-| 6 | Meta-Review | meta-warden verifies Review standard and public-ready gate |
-| 7 | Verification | run real tests with fresh evidence and `verificationPacket.fixEvidence` |
-| 8 | Evolution | after Warden approval, directly edit the target agent definition or SOUL.md for meta-agent lessons; execution-agent gaps use `capabilityGapPacket` + Type B pipeline |
+| Critical | Intent dimension missing, answer changes route/scope/risk/non-goal | "This could be a quick fix or a full rewrite. Which direction?" |
+| Fetch | Evidence shows multiple paths with different trade-offs | "I found approach A (faster) and B (more thorough). Which?" |
+| Thinking | Choosing between solution paths with different scope/cost | "Minimal fix: 2 hours. Ten-x shift: 2 days. Your call?" |
+| Review | Issues found that need user preference to resolve | "Quality concern: rebuild or patch?" |
+
+**Question format:**
+- 2–4 meaningful options with clear trade-offs
+- One recommended default labeled clearly
+- User's language, not internal packet field names
+- Stop and wait — do not proceed until the user answers
+
+**Do not ask:**
+- Ritual questions or stage-by-stage confirmation spam
+- Just because the work is read-only; ask only when read-only analysis still exposes route-changing choices
+- Questions during Meta-Review, Verification, or Evolution (these are mechanical checks)
 
 ## Type A: Prompt / Reference / Contract Hardening
 
@@ -83,8 +107,7 @@ Dispatch to `meta-prism` and `meta-warden`; optional `meta-scout`, `meta-sentine
 Dispatch to `meta-conductor` for business-flow blueprint and parallel lane orchestration, then `meta-warden` for synthesis. Thinking to Execution may use `agent-teams-playbook` only when there are 2+ independent parallel worker lanes / two or more parallel worker lane candidates. Independent sub-tasks must be parallelized when safe; avoid fake parallelism.
 
 ## Dispatch Self-Check
-
-Before Stage 4, record Protocol-first Dispatch: `runHeader`, `dispatchBoard`, `businessFlowBlueprintPacket`, `agentBlueprintPacket`, `ownerDiscoveryPacket`, and `workerTaskPackets`. Stage 4 may not start before protocol artifacts are ready. `agentInvocationState`: `idle -> discovered -> matched -> dispatched -> returned/escalated`. `workerTaskPackets` must include `dependsOn`, `parallelGroup`, and `mergeOwner`. `ownerDiscoveryPacket` must list repo canonical owners, runtime mirror owners, project runtime agents, local global agents, reusable skill/command/hook/rule/prompt/MCP/plugin/tool providers, and the Critical / Fetch / Thinking / Review governance-stage owners checked before any create or upgrade decision. Option Exploration is MANDATORY in Stage 3: compare ≥2 solution paths with Pros / Cons or Decision Record and rejected alternatives. Apply Skip-Level Self-Reflection Gate and Escalation Signals before dispatch.
+Before Stage 4, record the minimum Protocol-first Dispatch evidence: intent, Fetch evidence, a Thinking route, selected owner, owner loadout, memory strategy, and Review standard. Preferred artifacts are `runHeader`, `dispatchBoard`, `businessFlowBlueprintPacket`, `agentBlueprintPacket`, `ownerDiscoveryPacket`, and `workerTaskPackets`, but hooks must not require every optional field before useful work can continue. `agentInvocationState`: `idle -> discovered -> matched -> dispatched -> returned/escalated`. `workerTaskPackets` should include `dependsOn`, `parallelGroup`, and `mergeOwner` when the task has multiple lanes; single-lane work may record a compact task node. `ownerDiscoveryPacket` should list repo canonical owners, runtime mirror owners, project runtime agents, local global agents, reusable skill/command/hook/rule/prompt/MCP/plugin/tool providers, and the Critical / Fetch / Thinking / Review governance-stage owners checked before any create or upgrade decision. Option Exploration is MANDATORY when materially different paths exist: compare ≥2 solution paths with Pros / Cons or Decision Record, or record `no_branching_choice` with evidence. Apply Skip-Level Self-Reflection Gate and Escalation Signals before dispatch.
 
 ## Fetch Evidence Inventory
 
@@ -188,16 +211,17 @@ Dependencies are retained and routed by state, not deleted by score.
 
 ## Execution gate
 
-Execution may start only when all are true (or degraded mode is explicitly active with recorded degradation reason):
+Execution may start only when the key behavior gate is true (or degraded mode is explicitly active with recorded degradation reason). Hooks enforce this minimum; fuller packet shape is validated by validators and Review:
 
 - `realIntent`, success criteria, non-goals, and blocking unknowns are recorded.
 - Fetch evidence and capability discovery are complete enough for the chosen path.
-- Existing-owner discovery has checked repo canonical index, runtime mirrors, project runtime agents, local global agent inventory, and available skill/command/hook/rule/prompt/MCP/plugin/tool providers; skipped sources must appear as blockers or no-impact evidence.
-- Route score is `>=85`, or a branch-changing user choice accepts a `70-84` route.
+- Existing-owner discovery has checked enough available agents, skills, commands, MCP tools, runtime tools, and prompt/rule providers to justify the selected owner/loadout; skipped sources appear as blockers or no-impact evidence.
+- Route score is `>=85`, or a branch-changing user choice accepts a `70-84` route; simple single-path work may record `no_branching_choice`.
 - Owner is not `general-purpose`, not a runtime alias, and not a governance agent acting as implementation worker.
-- Weapon is callable and compatible with target runtime and OS.
-- Dependency is not `reference_only`, not `external_reference`, not missing invocation path, and not missing verification method when used for execution.
-- Verification owner, verification method, rollback/risk boundary, and expected evidence are known.
+- Owner has a usable loadout: skill, command, MCP capability, runtime tool, normal tool, or abstract prompt.
+- Runtime/OS support is not known-unsupported; unknown or partial support is recorded with a probe/degraded route.
+- Memory strategy exists (`project_only`, `cross_project_readonly`, `none-with-reason`, or equivalent).
+- Review standard is known. Verification owner, rollback, dependency eligibility, and detailed packet fields are required for public-ready, not as universal hook blockers.
 
 Worker output schema validation: when `workerTaskPacket.output` defines an expected structure, the dispatcher (or receiving agent) must validate the worker result against that structure before accepting it. On mismatch, the worker retries (up to 2 attempts) before reporting failure. Record `workerResultPacket.schemaValidationAttempts = [{attempt, passed, violationDetail}]`. This prevents format drift between Thinking's output contract and Execution's actual return.
 
@@ -229,6 +253,7 @@ Load only references needed for the run:
 - `path-selection.md`: route scoring and path bands.
 - `owner-resolution.md`: owner + weapon + dependency route.
 - `runtime-codex.md`: Codex-specific sandbox, approval, subagent, hook, and choice behavior.
+- `runtime-claude.md`: Claude Code-specific native question surface, Agent / Skill / Command / prompt / MCP dispatch, and no-self-execution behavior.
 - `verification-evidence.md`: verified claim and public-ready evidence.
 - `intent-amplification.md`: real intent, first action, pass/kill, userGoalDone.
 - `evolution-writeback.md`: writeback, scars, reuse keys.
@@ -270,7 +295,7 @@ Low-score, unknown, partial, uninstalled, external, high-risk, or reference-only
 
 ## No Hook loop
 
-Hooks are last-resort fuses, not the main governance engine. Execution must pass preflight before mutation: intent, evidence, capability discovery, runtime, OS, owner, weapon, dependency route eligibility, verification owner, rollback path, warning classification, and reserved writeback decision. A Hook block must include `returnToStage`, `repairOwner`, `repairAction`, `allowedNextAction`, and `forbiddenRetry`. The same Hook reason may block once; the second same-reason block enters `hookRepairMode`; a third same-hook block stops Execution and creates `hookFailurePacket`. Never retry the same blocked action unchanged.
+Hooks are last-resort fuses, not the main governance engine. Execution must pass the key behavior preflight before mutation: intent, evidence, capability discovery, runtime/OS not known-unsupported, owner, owner loadout across skill/command/MCP/tool/prompt, memory strategy, and Review standard. Detailed dependency eligibility, rollback, verification owner, warning classification, and writeback reservation are validator/public-ready gates unless their absence makes execution unsafe. A Hook block must include `returnToStage`, `repairOwner`, `repairAction`, `allowedNextAction`, and `forbiddenRetry`. The same Hook reason may block once; the second same-reason block enters `hookRepairMode`; a third same-hook block stops Execution and creates `hookFailurePacket`. Never retry the same blocked action unchanged.
 
 ## Degraded Mode
 

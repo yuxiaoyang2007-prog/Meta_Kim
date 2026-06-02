@@ -2834,10 +2834,10 @@ async function runQuickDeploy() {
 
   await withProgress(t.progressSyncMeta, () => {
     const targets = platformId === "all" ? "claude" : platformId;
-    const syncResult = runNodeScript("scripts/sync-global-meta-theory.mjs", [
-      "--targets",
-      targets,
-    ]);
+    const syncResult = runNodeScript(
+      "scripts/sync-global-meta-theory.mjs",
+      metaTheoryGlobalSyncArgs(targets),
+    );
     return syncResult.status === 0;
   });
 
@@ -3379,6 +3379,15 @@ function runNodeScript(scriptRelative, extraArgs = [], envOverrides = {}) {
     },
   };
   return spawnSync(spawnConfig.command, spawnConfig.args, mergedOptions);
+}
+
+function metaTheoryGlobalSyncArgs(targets) {
+  const targetList = Array.isArray(targets) ? targets.join(",") : String(targets);
+  const syncArgs = ["--targets", targetList];
+  if (targetList.split(",").includes("claude")) {
+    syncArgs.push("--with-global-hooks");
+  }
+  return syncArgs;
 }
 
 // ── Legacy skill file cleanup ────────────────────────────
@@ -5119,10 +5128,10 @@ async function runInstall() {
     // 同步全局 meta-theory
     stepNum++;
     await withProgress(t.stepLabel(stepNum, t.progressSyncMeta), () => {
-      const syncResult = runNodeScript("scripts/sync-global-meta-theory.mjs", [
-        "--targets",
-        activeTargets.join(","),
-      ]);
+      const syncResult = runNodeScript(
+        "scripts/sync-global-meta-theory.mjs",
+        metaTheoryGlobalSyncArgs(activeTargets),
+      );
       if (syncResult.status !== 0) {
         warn(t.warnMetaTheorySyncFailed);
       }
@@ -5270,7 +5279,7 @@ async function runUpdate() {
   if (wantMetaTheory) {
     const updateSyncResult = runNodeScript(
       "scripts/sync-global-meta-theory.mjs",
-      ["--targets", activeTargets.join(",")],
+      metaTheoryGlobalSyncArgs(activeTargets),
     );
     if (updateSyncResult.status === 0) ok(t.updateMetaTheoryDone);
     else warn(t.warnMetaTheoryUpdateFailed);

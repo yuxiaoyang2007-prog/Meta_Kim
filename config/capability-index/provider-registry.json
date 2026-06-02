@@ -1,0 +1,4460 @@
+{
+  "$schema": "../contracts/capability-provider.schema.json",
+  "schemaVersion": 1,
+  "providerTypes": [
+    "runtime_native",
+    "canonical_agent",
+    "canonical_skill",
+    "external_skill",
+    "plugin_marketplace",
+    "plugin_bundle",
+    "mcp_server",
+    "hook_script",
+    "command",
+    "rule_file",
+    "dependency_project",
+    "memory_provider",
+    "graph_provider"
+  ],
+  "stateModel": {
+    "successStates": [
+      "unknown",
+      "declared",
+      "projected",
+      "installed",
+      "trusted",
+      "discoverable",
+      "invokable",
+      "context_effective",
+      "enforcement_effective",
+      "verified"
+    ],
+    "failureStates": [
+      "missing_projection",
+      "missing_global_install",
+      "untrusted",
+      "not_discoverable",
+      "not_invokable",
+      "output_not_consumed",
+      "degraded",
+      "blocked_for_execution"
+    ]
+  },
+  "runtimes": [
+    "claude_code",
+    "codex",
+    "cursor",
+    "openclaw"
+  ],
+  "operatingSystems": [
+    "macos",
+    "windows",
+    "linux",
+    "wsl2"
+  ],
+  "installLayers": [
+    "runtime_native",
+    "canonical_source",
+    "project_projection",
+    "global_home",
+    "plugin_marketplace",
+    "plugin_bundle",
+    "mcp_config",
+    "command_path",
+    "rule_projection",
+    "dependency_registry",
+    "memory_service",
+    "graph_index"
+  ],
+  "mappingPolicy": {
+    "skillsManifest": {
+      "sourceRef": "config/skills.json",
+      "required": true,
+      "notes": "Every skill manifest id must map to at least one provider."
+    },
+    "dependencyProjectRegistry": {
+      "sourceRef": "config/capability-index/dependency-project-registry.json",
+      "required": true,
+      "notes": "Every dependency project id must map to at least one provider; this does not imply execution eligibility."
+    },
+    "runtimeCapabilityMatrix": {
+      "sourceRef": "config/runtime-capability-matrix.json",
+      "required": true,
+      "notes": "Every formal runtime projection must have a runtime_native provider."
+    },
+    "weaponRegistry": {
+      "sourceRef": "config/capability-index/weapon-registry.json",
+      "required": true,
+      "notes": "Every weapon id must map to a provider or provider group with a verification command."
+    }
+  },
+  "providers": [
+    {
+      "id": "runtime-native-claude-code",
+      "providerType": "runtime_native",
+      "summary": "Claude Code formal runtime projection and native capability surface.",
+      "sourceOfTruth": "config/runtime-capability-matrix.json",
+      "mappings": {
+        "runtimeMatrixPlatforms": [
+          "claude_code"
+        ],
+        "capabilityInventoryTypes": [
+          "runtime_tool"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "runtime_native",
+          "project_projection",
+          "global_home"
+        ],
+        "trigger": "Claude Code project/global runtime config",
+        "outputConsumption": "runtime_call"
+      },
+      "verification": {
+        "method": "matrix and runtime sync validation",
+        "command": "npm run meta:check:runtimes"
+      },
+      "risk": {
+        "trustReview": "native_runtime",
+        "notes": [
+          "Do not replace native capabilities with Meta_Kim abstractions."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "runtime_native": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {
+          "claude_code": {
+            "state": "verified",
+            "status": "verified",
+            "installLayers": {
+              "runtime_native": "verified",
+              "project_projection": "verified",
+              "global_home": "partial"
+            },
+            "os": {
+              "macos": "partial",
+              "windows": "partial",
+              "linux": "partial",
+              "wsl2": "partial"
+            }
+          }
+        }
+      },
+      "providerKind": "runtime_native",
+      "capabilities": [
+        "Claude Code formal runtime projection and native capability surface.",
+        "runtime_tool"
+      ],
+      "source": {
+        "sourceOfTruth": "config/runtime-capability-matrix.json",
+        "mappings": {
+          "runtimeMatrixPlatforms": [
+            "claude_code"
+          ],
+          "capabilityInventoryTypes": [
+            "runtime_tool"
+          ]
+        }
+      },
+      "trust": {
+        "review": "native_runtime",
+        "required": false
+      },
+      "installMethod": "runtimeNative",
+      "installLayers": [
+        "runtime_native",
+        "project_projection",
+        "global_home"
+      ],
+      "exposedArtifacts": [
+        "config/runtime-capability-matrix.json"
+      ],
+      "activationEvents": [
+        "Claude Code project/global runtime config"
+      ],
+      "outputContracts": {
+        "consumption": "runtime_call",
+        "mustEnterModelContext": false,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "native_runtime",
+        "notes": [
+          "Do not replace native capabilities with Meta_Kim abstractions."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "runtime_native": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "activationEvent": "Claude Code project/global runtime config",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "codex": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "runtime_native": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "activationEvent": "Claude Code project/global runtime config",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "cursor": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "runtime_native": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "activationEvent": "Claude Code project/global runtime config",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "runtime_native": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "activationEvent": "Claude Code project/global runtime config",
+          "outputContract": "runtime_call",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Do not replace native capabilities with Meta_Kim abstractions."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Do not replace native capabilities with Meta_Kim abstractions."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Do not replace native capabilities with Meta_Kim abstractions."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "Do not replace native capabilities with Meta_Kim abstractions."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-sentinel",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:runtime-native-claude-code"
+    },
+    {
+      "id": "runtime-native-codex",
+      "providerType": "runtime_native",
+      "summary": "Codex formal runtime projection, AGENTS rules, hooks, agents, commands, and MCP TOML baseline.",
+      "sourceOfTruth": "config/runtime-capability-matrix.json",
+      "mappings": {
+        "runtimeMatrixPlatforms": [
+          "codex"
+        ],
+        "capabilityInventoryTypes": [
+          "runtime_tool"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "runtime_native",
+          "project_projection",
+          "global_home"
+        ],
+        "trigger": "Codex project AGENTS.md and .codex config",
+        "outputConsumption": "runtime_call"
+      },
+      "verification": {
+        "method": "matrix and runtime sync validation",
+        "command": "npm run meta:check:runtimes"
+      },
+      "risk": {
+        "trustReview": "native_runtime",
+        "notes": [
+          "Hook coverage is runtime-version dependent; do not treat it as an all-tool policy engine."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "runtime_native": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {
+          "codex": {
+            "state": "verified",
+            "status": "verified",
+            "installLayers": {
+              "runtime_native": "verified",
+              "project_projection": "verified",
+              "global_home": "partial"
+            },
+            "os": {
+              "macos": "partial",
+              "windows": "partial",
+              "linux": "partial",
+              "wsl2": "partial"
+            }
+          }
+        }
+      },
+      "providerKind": "runtime_native",
+      "capabilities": [
+        "Codex formal runtime projection, AGENTS rules, hooks, agents, commands, and MCP TOML baseline.",
+        "runtime_tool"
+      ],
+      "source": {
+        "sourceOfTruth": "config/runtime-capability-matrix.json",
+        "mappings": {
+          "runtimeMatrixPlatforms": [
+            "codex"
+          ],
+          "capabilityInventoryTypes": [
+            "runtime_tool"
+          ]
+        }
+      },
+      "trust": {
+        "review": "native_runtime",
+        "required": false
+      },
+      "installMethod": "runtimeNative",
+      "installLayers": [
+        "runtime_native",
+        "project_projection",
+        "global_home"
+      ],
+      "exposedArtifacts": [
+        "config/runtime-capability-matrix.json"
+      ],
+      "activationEvents": [
+        "Codex project AGENTS.md and .codex config"
+      ],
+      "outputContracts": {
+        "consumption": "runtime_call",
+        "mustEnterModelContext": false,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "native_runtime",
+        "notes": [
+          "Hook coverage is runtime-version dependent; do not treat it as an all-tool policy engine."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "runtime_native": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "activationEvent": "Codex project AGENTS.md and .codex config",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "codex": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "runtime_native": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "activationEvent": "Codex project AGENTS.md and .codex config",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "cursor": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "runtime_native": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "activationEvent": "Codex project AGENTS.md and .codex config",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "runtime_native": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "activationEvent": "Codex project AGENTS.md and .codex config",
+          "outputContract": "runtime_call",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Hook coverage is runtime-version dependent; do not treat it as an all-tool policy engine."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Hook coverage is runtime-version dependent; do not treat it as an all-tool policy engine."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Hook coverage is runtime-version dependent; do not treat it as an all-tool policy engine."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "Hook coverage is runtime-version dependent; do not treat it as an all-tool policy engine."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-sentinel",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:runtime-native-codex"
+    },
+    {
+      "id": "runtime-native-cursor",
+      "providerType": "runtime_native",
+      "summary": "Cursor formal projection through agents, skills, hooks, rules, and MCP config.",
+      "sourceOfTruth": "config/runtime-capability-matrix.json",
+      "mappings": {
+        "runtimeMatrixPlatforms": [
+          "cursor"
+        ],
+        "capabilityInventoryTypes": [
+          "runtime_tool"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "runtime_native",
+          "project_projection",
+          "global_home",
+          "rule_projection"
+        ],
+        "trigger": "Cursor project hooks/rules/MCP",
+        "outputConsumption": "runtime_call"
+      },
+      "verification": {
+        "method": "matrix and runtime sync validation",
+        "command": "npm run meta:check:runtimes"
+      },
+      "risk": {
+        "trustReview": "native_runtime",
+        "notes": [
+          "Cursor capabilities remain partial until verified by runtime probes."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "runtime_native": "partial",
+            "project_projection": "verified",
+            "global_home": "partial",
+            "rule_projection": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "needs_probe"
+          }
+        },
+        "runtimes": {
+          "cursor": {
+            "state": "projected",
+            "status": "partial",
+            "installLayers": {
+              "runtime_native": "partial",
+              "project_projection": "verified",
+              "global_home": "partial",
+              "rule_projection": "verified"
+            },
+            "os": {
+              "macos": "partial",
+              "windows": "partial",
+              "linux": "partial",
+              "wsl2": "needs_probe"
+            }
+          }
+        }
+      },
+      "providerKind": "runtime_native",
+      "capabilities": [
+        "Cursor formal projection through agents, skills, hooks, rules, and MCP config.",
+        "runtime_tool"
+      ],
+      "source": {
+        "sourceOfTruth": "config/runtime-capability-matrix.json",
+        "mappings": {
+          "runtimeMatrixPlatforms": [
+            "cursor"
+          ],
+          "capabilityInventoryTypes": [
+            "runtime_tool"
+          ]
+        }
+      },
+      "trust": {
+        "review": "native_runtime",
+        "required": false
+      },
+      "installMethod": "runtimeNative",
+      "installLayers": [
+        "runtime_native",
+        "project_projection",
+        "global_home",
+        "rule_projection"
+      ],
+      "exposedArtifacts": [
+        "config/runtime-capability-matrix.json"
+      ],
+      "activationEvents": [
+        "Cursor project hooks/rules/MCP"
+      ],
+      "outputContracts": {
+        "consumption": "runtime_call",
+        "mustEnterModelContext": false,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "native_runtime",
+        "notes": [
+          "Cursor capabilities remain partial until verified by runtime probes."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "runtime_native": "partial",
+            "project_projection": "verified",
+            "global_home": "partial",
+            "rule_projection": "verified"
+          },
+          "activationEvent": "Cursor project hooks/rules/MCP",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "codex": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "runtime_native": "partial",
+            "project_projection": "verified",
+            "global_home": "partial",
+            "rule_projection": "verified"
+          },
+          "activationEvent": "Cursor project hooks/rules/MCP",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "cursor": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "runtime_native": "partial",
+            "project_projection": "verified",
+            "global_home": "partial",
+            "rule_projection": "verified"
+          },
+          "activationEvent": "Cursor project hooks/rules/MCP",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "runtime_native": "partial",
+            "project_projection": "verified",
+            "global_home": "partial",
+            "rule_projection": "verified"
+          },
+          "activationEvent": "Cursor project hooks/rules/MCP",
+          "outputContract": "runtime_call",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Cursor capabilities remain partial until verified by runtime probes."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Cursor capabilities remain partial until verified by runtime probes."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Cursor capabilities remain partial until verified by runtime probes."
+          ]
+        },
+        "wsl2": {
+          "status": "needs_probe",
+          "risks": [
+            "Cursor capabilities remain partial until verified by runtime probes."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-sentinel",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:runtime-native-cursor"
+    },
+    {
+      "id": "runtime-native-openclaw",
+      "providerType": "runtime_native",
+      "summary": "OpenClaw formal projection with workspace agents and lifecycle hooks; tool blocking remains degraded until a typed plugin adapter exists.",
+      "sourceOfTruth": "config/runtime-capability-matrix.json",
+      "mappings": {
+        "runtimeMatrixPlatforms": [
+          "openclaw"
+        ],
+        "capabilityInventoryTypes": [
+          "runtime_tool"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "runtime_native",
+          "project_projection",
+          "plugin_bundle"
+        ],
+        "trigger": "OpenClaw workspace/template projection",
+        "outputConsumption": "runtime_call"
+      },
+      "verification": {
+        "method": "matrix and runtime sync validation",
+        "command": "npm run meta:check:runtimes"
+      },
+      "risk": {
+        "trustReview": "native_runtime_degraded",
+        "notes": [
+          "Internal hooks are lifecycle automation, not PreToolUse-style blocking."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "typed plugin policy adapter not installed",
+          "installLayers": {
+            "runtime_native": "partial",
+            "project_projection": "verified",
+            "plugin_bundle": "needs_probe"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "needs_probe"
+          }
+        },
+        "runtimes": {
+          "openclaw": {
+            "state": "degraded",
+            "status": "degraded",
+            "reason": "typed plugin policy adapter not installed",
+            "installLayers": {
+              "runtime_native": "partial",
+              "project_projection": "verified",
+              "plugin_bundle": "needs_probe"
+            },
+            "os": {
+              "macos": "partial",
+              "windows": "partial",
+              "linux": "partial",
+              "wsl2": "needs_probe"
+            }
+          }
+        }
+      },
+      "providerKind": "runtime_native",
+      "capabilities": [
+        "OpenClaw formal projection with workspace agents and lifecycle hooks; tool blocking remains degraded until a typed plugin adapter exists.",
+        "runtime_tool"
+      ],
+      "source": {
+        "sourceOfTruth": "config/runtime-capability-matrix.json",
+        "mappings": {
+          "runtimeMatrixPlatforms": [
+            "openclaw"
+          ],
+          "capabilityInventoryTypes": [
+            "runtime_tool"
+          ]
+        }
+      },
+      "trust": {
+        "review": "native_runtime_degraded",
+        "required": false
+      },
+      "installMethod": "runtimeNative",
+      "installLayers": [
+        "runtime_native",
+        "project_projection",
+        "plugin_bundle"
+      ],
+      "exposedArtifacts": [
+        "config/runtime-capability-matrix.json"
+      ],
+      "activationEvents": [
+        "OpenClaw workspace/template projection"
+      ],
+      "outputContracts": {
+        "consumption": "runtime_call",
+        "mustEnterModelContext": false,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "native_runtime_degraded",
+        "notes": [
+          "Internal hooks are lifecycle automation, not PreToolUse-style blocking."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "degraded",
+          "status": "degraded",
+          "installLayers": {
+            "runtime_native": "partial",
+            "project_projection": "verified",
+            "plugin_bundle": "needs_probe"
+          },
+          "activationEvent": "OpenClaw workspace/template projection",
+          "outputContract": "runtime_call",
+          "reason": "typed plugin policy adapter not installed"
+        },
+        "codex": {
+          "state": "degraded",
+          "status": "degraded",
+          "installLayers": {
+            "runtime_native": "partial",
+            "project_projection": "verified",
+            "plugin_bundle": "needs_probe"
+          },
+          "activationEvent": "OpenClaw workspace/template projection",
+          "outputContract": "runtime_call",
+          "reason": "typed plugin policy adapter not installed"
+        },
+        "cursor": {
+          "state": "degraded",
+          "status": "degraded",
+          "installLayers": {
+            "runtime_native": "partial",
+            "project_projection": "verified",
+            "plugin_bundle": "needs_probe"
+          },
+          "activationEvent": "OpenClaw workspace/template projection",
+          "outputContract": "runtime_call",
+          "reason": "typed plugin policy adapter not installed"
+        },
+        "openclaw": {
+          "state": "degraded",
+          "status": "degraded",
+          "installLayers": {
+            "runtime_native": "partial",
+            "project_projection": "verified",
+            "plugin_bundle": "needs_probe"
+          },
+          "activationEvent": "OpenClaw workspace/template projection",
+          "outputContract": "runtime_call",
+          "reason": "typed plugin policy adapter not installed"
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Internal hooks are lifecycle automation, not PreToolUse-style blocking."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Internal hooks are lifecycle automation, not PreToolUse-style blocking."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Internal hooks are lifecycle automation, not PreToolUse-style blocking."
+          ]
+        },
+        "wsl2": {
+          "status": "needs_probe",
+          "risks": [
+            "Internal hooks are lifecycle automation, not PreToolUse-style blocking."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "degraded",
+          "codex": "degraded",
+          "cursor": "degraded",
+          "openclaw": "degraded"
+        },
+        "reason": "typed plugin policy adapter not installed"
+      },
+      "owner": "meta-sentinel",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:runtime-native-openclaw"
+    },
+    {
+      "id": "canonical-agent-meta-warden",
+      "providerType": "canonical_agent",
+      "summary": "Canonical Warden governance owner and final synthesis gate.",
+      "sourceOfTruth": "canonical/agents/meta-warden.md",
+      "mappings": {
+        "capabilityInventoryTypes": [
+          "agent"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "canonical_source",
+          "project_projection"
+        ],
+        "trigger": "governed run entry and Warden gate",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "runtime sync and agent tests",
+        "command": "npm run meta:test:meta-theory"
+      },
+      "risk": {
+        "trustReview": "canonical_source"
+      },
+      "support": {
+        "default": {
+          "state": "projected",
+          "status": "verified",
+          "installLayers": {
+            "canonical_source": "verified",
+            "project_projection": "verified"
+          },
+          "os": {
+            "macos": "verified",
+            "windows": "verified",
+            "linux": "verified",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "canonical_agent",
+      "capabilities": [
+        "Canonical Warden governance owner and final synthesis gate.",
+        "agent"
+      ],
+      "source": {
+        "sourceOfTruth": "canonical/agents/meta-warden.md",
+        "mappings": {
+          "capabilityInventoryTypes": [
+            "agent"
+          ]
+        }
+      },
+      "trust": {
+        "review": "canonical_source",
+        "required": false
+      },
+      "installMethod": "canonicalSource",
+      "installLayers": [
+        "canonical_source",
+        "project_projection"
+      ],
+      "exposedArtifacts": [
+        "canonical/agents/meta-warden.md"
+      ],
+      "activationEvents": [
+        "governed run entry and Warden gate"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "canonical_source",
+        "notes": []
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "projected",
+          "status": "verified",
+          "installLayers": {
+            "canonical_source": "verified",
+            "project_projection": "verified"
+          },
+          "activationEvent": "governed run entry and Warden gate",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "projected",
+          "status": "verified",
+          "installLayers": {
+            "canonical_source": "verified",
+            "project_projection": "verified"
+          },
+          "activationEvent": "governed run entry and Warden gate",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "projected",
+          "status": "verified",
+          "installLayers": {
+            "canonical_source": "verified",
+            "project_projection": "verified"
+          },
+          "activationEvent": "governed run entry and Warden gate",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "projected",
+          "status": "verified",
+          "installLayers": {
+            "canonical_source": "verified",
+            "project_projection": "verified"
+          },
+          "activationEvent": "governed run entry and Warden gate",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "verified",
+          "risks": []
+        },
+        "windows": {
+          "status": "verified",
+          "risks": []
+        },
+        "linux": {
+          "status": "verified",
+          "risks": []
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": []
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:canonical-agent-meta-warden"
+    },
+    {
+      "id": "canonical-skill-meta-theory",
+      "providerType": "canonical_skill",
+      "summary": "Canonical meta-theory dispatcher skill.",
+      "sourceOfTruth": "canonical/skills/meta-theory/SKILL.md",
+      "mappings": {
+        "capabilityInventoryTypes": [
+          "skill"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "canonical_source",
+          "project_projection",
+          "global_home"
+        ],
+        "trigger": "meta-theory skill trigger words",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "meta-theory tests",
+        "command": "npm run meta:test:meta-theory"
+      },
+      "risk": {
+        "trustReview": "canonical_source"
+      },
+      "support": {
+        "default": {
+          "state": "projected",
+          "status": "verified",
+          "installLayers": {
+            "canonical_source": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "os": {
+            "macos": "verified",
+            "windows": "verified",
+            "linux": "verified",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "canonical_skill",
+      "capabilities": [
+        "Canonical meta-theory dispatcher skill.",
+        "skill"
+      ],
+      "source": {
+        "sourceOfTruth": "canonical/skills/meta-theory/SKILL.md",
+        "mappings": {
+          "capabilityInventoryTypes": [
+            "skill"
+          ]
+        }
+      },
+      "trust": {
+        "review": "canonical_source",
+        "required": false
+      },
+      "installMethod": "globalHome",
+      "installLayers": [
+        "canonical_source",
+        "project_projection",
+        "global_home"
+      ],
+      "exposedArtifacts": [
+        "canonical/skills/meta-theory/SKILL.md"
+      ],
+      "activationEvents": [
+        "meta-theory skill trigger words"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "canonical_source",
+        "notes": []
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "projected",
+          "status": "verified",
+          "installLayers": {
+            "canonical_source": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "activationEvent": "meta-theory skill trigger words",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "projected",
+          "status": "verified",
+          "installLayers": {
+            "canonical_source": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "activationEvent": "meta-theory skill trigger words",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "projected",
+          "status": "verified",
+          "installLayers": {
+            "canonical_source": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "activationEvent": "meta-theory skill trigger words",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "projected",
+          "status": "verified",
+          "installLayers": {
+            "canonical_source": "verified",
+            "project_projection": "verified",
+            "global_home": "partial"
+          },
+          "activationEvent": "meta-theory skill trigger words",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "verified",
+          "risks": []
+        },
+        "windows": {
+          "status": "verified",
+          "risks": []
+        },
+        "linux": {
+          "status": "verified",
+          "risks": []
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": []
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:canonical-skill-meta-theory"
+    },
+    {
+      "id": "external-skill-agent-teams-playbook",
+      "providerType": "external_skill",
+      "summary": "Third-party multi-agent orchestration skill package.",
+      "sourceOfTruth": "config/skills.json",
+      "mappings": {
+        "skillsJsonIds": [
+          "agent-teams-playbook"
+        ],
+        "dependencyProjectIds": [
+          "agent-teams-playbook"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "global_home",
+          "dependency_registry"
+        ],
+        "trigger": "agent-teams-playbook skill selection",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "dependency compatibility",
+        "command": "npm run meta:deps:compat"
+      },
+      "risk": {
+        "trustReview": "third_party_skill"
+      },
+      "support": {
+        "default": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "external_skill",
+      "capabilities": [
+        "Third-party multi-agent orchestration skill package.",
+        "agent-teams-playbook",
+        "agent-teams-playbook"
+      ],
+      "source": {
+        "sourceOfTruth": "config/skills.json",
+        "mappings": {
+          "skillsJsonIds": [
+            "agent-teams-playbook"
+          ],
+          "dependencyProjectIds": [
+            "agent-teams-playbook"
+          ]
+        }
+      },
+      "trust": {
+        "review": "third_party_skill",
+        "required": true
+      },
+      "installMethod": "globalHome",
+      "installLayers": [
+        "global_home",
+        "dependency_registry"
+      ],
+      "exposedArtifacts": [
+        "config/skills.json",
+        "config/skills.json#agent-teams-playbook",
+        "dependency-project-registry.json#agent-teams-playbook"
+      ],
+      "activationEvents": [
+        "agent-teams-playbook skill selection"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "third_party_skill",
+        "notes": []
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "agent-teams-playbook skill selection",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "agent-teams-playbook skill selection",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "agent-teams-playbook skill selection",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "agent-teams-playbook skill selection",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": []
+        },
+        "windows": {
+          "status": "partial",
+          "risks": []
+        },
+        "linux": {
+          "status": "partial",
+          "risks": []
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": []
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:external-skill-agent-teams-playbook"
+    },
+    {
+      "id": "external-skill-findskill",
+      "providerType": "external_skill",
+      "summary": "Third-party skill discovery package.",
+      "sourceOfTruth": "config/skills.json",
+      "mappings": {
+        "skillsJsonIds": [
+          "findskill"
+        ],
+        "dependencyProjectIds": [
+          "findskill"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "global_home",
+          "dependency_registry"
+        ],
+        "trigger": "findskill capability discovery",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "dependency compatibility",
+        "command": "npm run meta:deps:compat"
+      },
+      "risk": {
+        "trustReview": "third_party_skill"
+      },
+      "support": {
+        "default": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "external_skill",
+      "capabilities": [
+        "Third-party skill discovery package.",
+        "findskill",
+        "findskill"
+      ],
+      "source": {
+        "sourceOfTruth": "config/skills.json",
+        "mappings": {
+          "skillsJsonIds": [
+            "findskill"
+          ],
+          "dependencyProjectIds": [
+            "findskill"
+          ]
+        }
+      },
+      "trust": {
+        "review": "third_party_skill",
+        "required": true
+      },
+      "installMethod": "globalHome",
+      "installLayers": [
+        "global_home",
+        "dependency_registry"
+      ],
+      "exposedArtifacts": [
+        "config/skills.json",
+        "config/skills.json#findskill",
+        "dependency-project-registry.json#findskill"
+      ],
+      "activationEvents": [
+        "findskill capability discovery"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "third_party_skill",
+        "notes": []
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "findskill capability discovery",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "findskill capability discovery",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "findskill capability discovery",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "findskill capability discovery",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": []
+        },
+        "windows": {
+          "status": "partial",
+          "risks": []
+        },
+        "linux": {
+          "status": "partial",
+          "risks": []
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": []
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:external-skill-findskill"
+    },
+    {
+      "id": "external-skill-hookprompt",
+      "providerType": "external_skill",
+      "summary": "HookPrompt prompt-submission optimization skill.",
+      "sourceOfTruth": "config/skills.json",
+      "mappings": {
+        "skillsJsonIds": [
+          "hookprompt"
+        ],
+        "dependencyProjectIds": [
+          "hookprompt"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "global_home",
+          "dependency_registry"
+        ],
+        "trigger": "prompt submit hook",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "provider validator hook chain check",
+        "command": "npm run meta:providers:validate -- --strict-global-hooks"
+      },
+      "risk": {
+        "trustReview": "third_party_hook",
+        "notes": [
+          "Hook output must be consumed as model context, not only a UI warning."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {
+          "openclaw": {
+            "state": "degraded",
+            "status": "degraded",
+            "reason": "workspace instruction fallback only",
+            "installLayers": {
+              "global_home": "unsupported",
+              "dependency_registry": "verified"
+            },
+            "os": {
+              "macos": "partial",
+              "windows": "partial",
+              "linux": "partial",
+              "wsl2": "needs_probe"
+            }
+          }
+        }
+      },
+      "providerKind": "external_skill",
+      "capabilities": [
+        "HookPrompt prompt-submission optimization skill.",
+        "hookprompt",
+        "hookprompt"
+      ],
+      "source": {
+        "sourceOfTruth": "config/skills.json",
+        "mappings": {
+          "skillsJsonIds": [
+            "hookprompt"
+          ],
+          "dependencyProjectIds": [
+            "hookprompt"
+          ]
+        }
+      },
+      "trust": {
+        "review": "third_party_hook",
+        "required": true
+      },
+      "installMethod": "globalHome",
+      "installLayers": [
+        "global_home",
+        "dependency_registry"
+      ],
+      "exposedArtifacts": [
+        "config/skills.json",
+        "config/skills.json#hookprompt",
+        "dependency-project-registry.json#hookprompt"
+      ],
+      "activationEvents": [
+        "prompt submit hook"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "third_party_hook",
+        "notes": [
+          "Hook output must be consumed as model context, not only a UI warning."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "prompt submit hook",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "prompt submit hook",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "prompt submit hook",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "degraded",
+          "status": "degraded",
+          "installLayers": {
+            "global_home": "unsupported",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "prompt submit hook",
+          "outputContract": "model_context",
+          "reason": "workspace instruction fallback only"
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Hook output must be consumed as model context, not only a UI warning."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Hook output must be consumed as model context, not only a UI warning."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Hook output must be consumed as model context, not only a UI warning."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "Hook output must be consumed as model context, not only a UI warning."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "degraded"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:external-skill-hookprompt"
+    },
+    {
+      "id": "external-skill-planning-with-files",
+      "providerType": "external_skill",
+      "summary": "Planning files skill used for resumable task state.",
+      "sourceOfTruth": "config/skills.json",
+      "mappings": {
+        "skillsJsonIds": [
+          "planning-with-files"
+        ],
+        "dependencyProjectIds": [
+          "planning-with-files"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "global_home",
+          "plugin_bundle",
+          "dependency_registry"
+        ],
+        "trigger": "planning files hooks and SKILL.md",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "dependency compatibility and provider validator",
+        "command": "npm run meta:providers:validate"
+      },
+      "risk": {
+        "trustReview": "third_party_skill",
+        "notes": [
+          "Windows PowerShell and symlink/junction behavior must remain explicit."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "plugin_bundle": "partial",
+            "dependency_registry": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "external_skill",
+      "capabilities": [
+        "Planning files skill used for resumable task state.",
+        "planning-with-files",
+        "planning-with-files"
+      ],
+      "source": {
+        "sourceOfTruth": "config/skills.json",
+        "mappings": {
+          "skillsJsonIds": [
+            "planning-with-files"
+          ],
+          "dependencyProjectIds": [
+            "planning-with-files"
+          ]
+        }
+      },
+      "trust": {
+        "review": "third_party_skill",
+        "required": true
+      },
+      "installMethod": "globalHome",
+      "installLayers": [
+        "global_home",
+        "plugin_bundle",
+        "dependency_registry"
+      ],
+      "exposedArtifacts": [
+        "config/skills.json",
+        "config/skills.json#planning-with-files",
+        "dependency-project-registry.json#planning-with-files"
+      ],
+      "activationEvents": [
+        "planning files hooks and SKILL.md"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "third_party_skill",
+        "notes": [
+          "Windows PowerShell and symlink/junction behavior must remain explicit."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "plugin_bundle": "partial",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "planning files hooks and SKILL.md",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "plugin_bundle": "partial",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "planning files hooks and SKILL.md",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "plugin_bundle": "partial",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "planning files hooks and SKILL.md",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "plugin_bundle": "partial",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "planning files hooks and SKILL.md",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Windows PowerShell and symlink/junction behavior must remain explicit."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Windows PowerShell and symlink/junction behavior must remain explicit."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Windows PowerShell and symlink/junction behavior must remain explicit."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "Windows PowerShell and symlink/junction behavior must remain explicit."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:external-skill-planning-with-files"
+    },
+    {
+      "id": "plugin-marketplace-cli-anything",
+      "providerType": "plugin_marketplace",
+      "summary": "CLI-Anything marketplace/bundle provider.",
+      "sourceOfTruth": "config/skills.json",
+      "mappings": {
+        "skillsJsonIds": [
+          "cli-anything"
+        ],
+        "dependencyProjectIds": [
+          "cli-anything"
+        ],
+        "capabilityInventoryTypes": [
+          "plugin"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "plugin_marketplace",
+          "global_home",
+          "dependency_registry"
+        ],
+        "trigger": "CLI-specific skill/plugin selection",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "provider validator plugin mapping",
+        "command": "npm run meta:providers:validate"
+      },
+      "risk": {
+        "trustReview": "third_party_plugin",
+        "notes": [
+          "Default install is not preselected; execution still needs capability routing and trust review."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_marketplace": "needs_probe",
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "plugin_marketplace",
+      "capabilities": [
+        "CLI-Anything marketplace/bundle provider.",
+        "plugin",
+        "cli-anything",
+        "cli-anything"
+      ],
+      "source": {
+        "sourceOfTruth": "config/skills.json",
+        "mappings": {
+          "skillsJsonIds": [
+            "cli-anything"
+          ],
+          "dependencyProjectIds": [
+            "cli-anything"
+          ],
+          "capabilityInventoryTypes": [
+            "plugin"
+          ]
+        }
+      },
+      "trust": {
+        "review": "third_party_plugin",
+        "required": true
+      },
+      "installMethod": "pluginMarketplace",
+      "installLayers": [
+        "plugin_marketplace",
+        "global_home",
+        "dependency_registry"
+      ],
+      "exposedArtifacts": [
+        "config/skills.json",
+        "config/skills.json#cli-anything",
+        "dependency-project-registry.json#cli-anything"
+      ],
+      "activationEvents": [
+        "CLI-specific skill/plugin selection"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "third_party_plugin",
+        "notes": [
+          "Default install is not preselected; execution still needs capability routing and trust review."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_marketplace": "needs_probe",
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "CLI-specific skill/plugin selection",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_marketplace": "needs_probe",
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "CLI-specific skill/plugin selection",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_marketplace": "needs_probe",
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "CLI-specific skill/plugin selection",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_marketplace": "needs_probe",
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "CLI-specific skill/plugin selection",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Default install is not preselected; execution still needs capability routing and trust review."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Default install is not preselected; execution still needs capability routing and trust review."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Default install is not preselected; execution still needs capability routing and trust review."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "Default install is not preselected; execution still needs capability routing and trust review."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:plugin-marketplace-cli-anything"
+    },
+    {
+      "id": "external-skill-gstack",
+      "providerType": "external_skill",
+      "summary": "GStack skill package provider.",
+      "sourceOfTruth": "config/skills.json",
+      "mappings": {
+        "skillsJsonIds": [
+          "gstack"
+        ],
+        "dependencyProjectIds": [
+          "gstack"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "global_home",
+          "dependency_registry"
+        ],
+        "trigger": "gstack skill selection",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "dependency compatibility",
+        "command": "npm run meta:deps:compat"
+      },
+      "risk": {
+        "trustReview": "third_party_skill"
+      },
+      "support": {
+        "default": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "external_skill",
+      "capabilities": [
+        "GStack skill package provider.",
+        "gstack",
+        "gstack"
+      ],
+      "source": {
+        "sourceOfTruth": "config/skills.json",
+        "mappings": {
+          "skillsJsonIds": [
+            "gstack"
+          ],
+          "dependencyProjectIds": [
+            "gstack"
+          ]
+        }
+      },
+      "trust": {
+        "review": "third_party_skill",
+        "required": true
+      },
+      "installMethod": "globalHome",
+      "installLayers": [
+        "global_home",
+        "dependency_registry"
+      ],
+      "exposedArtifacts": [
+        "config/skills.json",
+        "config/skills.json#gstack",
+        "dependency-project-registry.json#gstack"
+      ],
+      "activationEvents": [
+        "gstack skill selection"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "third_party_skill",
+        "notes": []
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "gstack skill selection",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "gstack skill selection",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "gstack skill selection",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "gstack skill selection",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": []
+        },
+        "windows": {
+          "status": "partial",
+          "risks": []
+        },
+        "linux": {
+          "status": "partial",
+          "risks": []
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": []
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:external-skill-gstack"
+    },
+    {
+      "id": "external-skill-skill-creator",
+      "providerType": "external_skill",
+      "summary": "Skill creation package provider.",
+      "sourceOfTruth": "config/skills.json",
+      "mappings": {
+        "skillsJsonIds": [
+          "skill-creator"
+        ],
+        "dependencyProjectIds": [
+          "skill-creator"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "global_home",
+          "dependency_registry"
+        ],
+        "trigger": "skill creation workflow",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "dependency compatibility",
+        "command": "npm run meta:deps:compat"
+      },
+      "risk": {
+        "trustReview": "third_party_skill"
+      },
+      "support": {
+        "default": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "external_skill",
+      "capabilities": [
+        "Skill creation package provider.",
+        "skill-creator",
+        "skill-creator"
+      ],
+      "source": {
+        "sourceOfTruth": "config/skills.json",
+        "mappings": {
+          "skillsJsonIds": [
+            "skill-creator"
+          ],
+          "dependencyProjectIds": [
+            "skill-creator"
+          ]
+        }
+      },
+      "trust": {
+        "review": "third_party_skill",
+        "required": true
+      },
+      "installMethod": "globalHome",
+      "installLayers": [
+        "global_home",
+        "dependency_registry"
+      ],
+      "exposedArtifacts": [
+        "config/skills.json",
+        "config/skills.json#skill-creator",
+        "dependency-project-registry.json#skill-creator"
+      ],
+      "activationEvents": [
+        "skill creation workflow"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "third_party_skill",
+        "notes": []
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "skill creation workflow",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "skill creation workflow",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "skill creation workflow",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "skill creation workflow",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": []
+        },
+        "windows": {
+          "status": "partial",
+          "risks": []
+        },
+        "linux": {
+          "status": "partial",
+          "risks": []
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": []
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:external-skill-skill-creator"
+    },
+    {
+      "id": "plugin-marketplace-superpowers",
+      "providerType": "plugin_marketplace",
+      "summary": "Superpowers native plugin marketplace provider for Claude Code, Codex, and Cursor.",
+      "sourceOfTruth": "config/skills.json",
+      "mappings": {
+        "skillsJsonIds": [
+          "superpowers"
+        ],
+        "dependencyProjectIds": [
+          "superpowers"
+        ],
+        "capabilityInventoryTypes": [
+          "plugin"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "plugin_marketplace",
+          "global_home"
+        ],
+        "trigger": "runtime native plugin install",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "provider validator plugin mapping",
+        "command": "npm run meta:providers:validate"
+      },
+      "risk": {
+        "trustReview": "third_party_plugin",
+        "notes": [
+          "Do not count legacy Codex/Cursor skills fallback as native plugin install."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "declared",
+          "status": "needs_probe",
+          "installLayers": {
+            "plugin_marketplace": "needs_probe",
+            "global_home": "needs_probe"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "needs_probe"
+          }
+        },
+        "runtimes": {
+          "openclaw": {
+            "state": "degraded",
+            "status": "degraded",
+            "reason": "skills fallback, no native marketplace proof",
+            "installLayers": {
+              "plugin_marketplace": "unsupported",
+              "global_home": "partial"
+            },
+            "os": {
+              "macos": "partial",
+              "windows": "partial",
+              "linux": "partial",
+              "wsl2": "needs_probe"
+            }
+          }
+        }
+      },
+      "providerKind": "plugin_marketplace",
+      "capabilities": [
+        "Superpowers native plugin marketplace provider for Claude Code, Codex, and Cursor.",
+        "plugin",
+        "superpowers",
+        "superpowers"
+      ],
+      "source": {
+        "sourceOfTruth": "config/skills.json",
+        "mappings": {
+          "skillsJsonIds": [
+            "superpowers"
+          ],
+          "dependencyProjectIds": [
+            "superpowers"
+          ],
+          "capabilityInventoryTypes": [
+            "plugin"
+          ]
+        }
+      },
+      "trust": {
+        "review": "third_party_plugin",
+        "required": true
+      },
+      "installMethod": "pluginMarketplace",
+      "installLayers": [
+        "plugin_marketplace",
+        "global_home"
+      ],
+      "exposedArtifacts": [
+        "config/skills.json",
+        "config/skills.json#superpowers",
+        "dependency-project-registry.json#superpowers"
+      ],
+      "activationEvents": [
+        "runtime native plugin install"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "third_party_plugin",
+        "notes": [
+          "Do not count legacy Codex/Cursor skills fallback as native plugin install."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "declared",
+          "status": "needs_probe",
+          "installLayers": {
+            "plugin_marketplace": "needs_probe",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "runtime native plugin install",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "declared",
+          "status": "needs_probe",
+          "installLayers": {
+            "plugin_marketplace": "needs_probe",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "runtime native plugin install",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "declared",
+          "status": "needs_probe",
+          "installLayers": {
+            "plugin_marketplace": "needs_probe",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "runtime native plugin install",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "degraded",
+          "status": "degraded",
+          "installLayers": {
+            "plugin_marketplace": "unsupported",
+            "global_home": "partial"
+          },
+          "activationEvent": "runtime native plugin install",
+          "outputContract": "model_context",
+          "reason": "skills fallback, no native marketplace proof"
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Do not count legacy Codex/Cursor skills fallback as native plugin install."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Do not count legacy Codex/Cursor skills fallback as native plugin install."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Do not count legacy Codex/Cursor skills fallback as native plugin install."
+          ]
+        },
+        "wsl2": {
+          "status": "needs_probe",
+          "risks": [
+            "Do not count legacy Codex/Cursor skills fallback as native plugin install."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "needs_probe",
+          "codex": "needs_probe",
+          "cursor": "needs_probe",
+          "openclaw": "degraded"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:plugin-marketplace-superpowers"
+    },
+    {
+      "id": "plugin-marketplace-ecc",
+      "providerType": "plugin_marketplace",
+      "summary": "ECC upstream/plugin provider for multi-runtime installation targets.",
+      "sourceOfTruth": "config/skills.json",
+      "mappings": {
+        "skillsJsonIds": [
+          "ecc"
+        ],
+        "dependencyProjectIds": [
+          "ecc"
+        ],
+        "capabilityInventoryTypes": [
+          "plugin"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "plugin_marketplace",
+          "command_path",
+          "global_home"
+        ],
+        "trigger": "claude plugin install or ecc upstream CLI",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "provider validator plugin mapping",
+        "command": "npm run meta:providers:validate"
+      },
+      "risk": {
+        "trustReview": "third_party_plugin",
+        "notes": [
+          "Install targets such as opencode/qwen are not formal Meta_Kim runtime projections."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_marketplace": "partial",
+            "command_path": "partial",
+            "global_home": "needs_probe"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {
+          "openclaw": {
+            "state": "unknown",
+            "status": "needs_probe",
+            "installLayers": {
+              "plugin_marketplace": "unsupported",
+              "command_path": "needs_probe",
+              "global_home": "needs_probe"
+            },
+            "os": {
+              "macos": "needs_probe",
+              "windows": "needs_probe",
+              "linux": "needs_probe",
+              "wsl2": "needs_probe"
+            }
+          }
+        }
+      },
+      "providerKind": "plugin_marketplace",
+      "capabilities": [
+        "ECC upstream/plugin provider for multi-runtime installation targets.",
+        "plugin",
+        "ecc",
+        "ecc"
+      ],
+      "source": {
+        "sourceOfTruth": "config/skills.json",
+        "mappings": {
+          "skillsJsonIds": [
+            "ecc"
+          ],
+          "dependencyProjectIds": [
+            "ecc"
+          ],
+          "capabilityInventoryTypes": [
+            "plugin"
+          ]
+        }
+      },
+      "trust": {
+        "review": "third_party_plugin",
+        "required": true
+      },
+      "installMethod": "pluginMarketplace",
+      "installLayers": [
+        "plugin_marketplace",
+        "command_path",
+        "global_home"
+      ],
+      "exposedArtifacts": [
+        "config/skills.json",
+        "config/skills.json#ecc",
+        "dependency-project-registry.json#ecc"
+      ],
+      "activationEvents": [
+        "claude plugin install or ecc upstream CLI"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "third_party_plugin",
+        "notes": [
+          "Install targets such as opencode/qwen are not formal Meta_Kim runtime projections."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_marketplace": "partial",
+            "command_path": "partial",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "claude plugin install or ecc upstream CLI",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_marketplace": "partial",
+            "command_path": "partial",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "claude plugin install or ecc upstream CLI",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_marketplace": "partial",
+            "command_path": "partial",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "claude plugin install or ecc upstream CLI",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "unknown",
+          "status": "needs_probe",
+          "installLayers": {
+            "plugin_marketplace": "unsupported",
+            "command_path": "needs_probe",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "claude plugin install or ecc upstream CLI",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Install targets such as opencode/qwen are not formal Meta_Kim runtime projections."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Install targets such as opencode/qwen are not formal Meta_Kim runtime projections."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Install targets such as opencode/qwen are not formal Meta_Kim runtime projections."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "Install targets such as opencode/qwen are not formal Meta_Kim runtime projections."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "needs_probe"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:plugin-marketplace-ecc"
+    },
+    {
+      "id": "plugin-bundle-planning-with-files-hooks",
+      "providerType": "plugin_bundle",
+      "summary": "Planning-with-files hook bundle compatibility layer.",
+      "sourceOfTruth": "config/skills.json",
+      "mappings": {
+        "skillsJsonIds": [
+          "planning-with-files"
+        ],
+        "capabilityInventoryTypes": [
+          "hook",
+          "plugin"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "plugin_bundle",
+          "global_home"
+        ],
+        "trigger": "Codex/Cursor planning hook bundle",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "provider validator and hook install checks",
+        "command": "npm run meta:providers:validate"
+      },
+      "risk": {
+        "trustReview": "third_party_hook",
+        "notes": [
+          "Windows symlink/junction fallback and shell runner must be validated."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_bundle": "partial",
+            "global_home": "needs_probe"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "plugin_bundle",
+      "capabilities": [
+        "Planning-with-files hook bundle compatibility layer.",
+        "hook",
+        "plugin",
+        "planning-with-files"
+      ],
+      "source": {
+        "sourceOfTruth": "config/skills.json",
+        "mappings": {
+          "skillsJsonIds": [
+            "planning-with-files"
+          ],
+          "capabilityInventoryTypes": [
+            "hook",
+            "plugin"
+          ]
+        }
+      },
+      "trust": {
+        "review": "third_party_hook",
+        "required": true
+      },
+      "installMethod": "pluginBundle",
+      "installLayers": [
+        "plugin_bundle",
+        "global_home"
+      ],
+      "exposedArtifacts": [
+        "config/skills.json",
+        "config/skills.json#planning-with-files"
+      ],
+      "activationEvents": [
+        "Codex/Cursor planning hook bundle"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "third_party_hook",
+        "notes": [
+          "Windows symlink/junction fallback and shell runner must be validated."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_bundle": "partial",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "Codex/Cursor planning hook bundle",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_bundle": "partial",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "Codex/Cursor planning hook bundle",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_bundle": "partial",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "Codex/Cursor planning hook bundle",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "plugin_bundle": "partial",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "Codex/Cursor planning hook bundle",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Windows symlink/junction fallback and shell runner must be validated."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Windows symlink/junction fallback and shell runner must be validated."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Windows symlink/junction fallback and shell runner must be validated."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "Windows symlink/junction fallback and shell runner must be validated."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:plugin-bundle-planning-with-files-hooks"
+    },
+    {
+      "id": "mcp-server-meta-kim-runtime",
+      "providerType": "mcp_server",
+      "summary": "Local Meta_Kim runtime MCP server exposing agents and runtime capabilities.",
+      "sourceOfTruth": "scripts/mcp/meta-runtime-server.mjs",
+      "mappings": {
+        "dependencyProjectIds": [
+          "meta-kim-runtime"
+        ],
+        "capabilityInventoryTypes": [
+          "mcpServers",
+          "mcpTools"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "mcp_config",
+          "project_projection"
+        ],
+        "trigger": "MCP tool call",
+        "outputConsumption": "runtime_call"
+      },
+      "verification": {
+        "method": "MCP self-test",
+        "command": "npm run meta:test:mcp"
+      },
+      "risk": {
+        "trustReview": "local_mcp",
+        "notes": [
+          "Validate input and avoid leaking sensitive project data."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "invokable",
+          "status": "partial",
+          "installLayers": {
+            "mcp_config": "projected",
+            "project_projection": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {
+          "openclaw": {
+            "state": "unknown",
+            "status": "needs_probe",
+            "installLayers": {
+              "mcp_config": "needs_probe",
+              "project_projection": "verified"
+            },
+            "os": {
+              "macos": "needs_probe",
+              "windows": "needs_probe",
+              "linux": "needs_probe",
+              "wsl2": "needs_probe"
+            }
+          }
+        }
+      },
+      "providerKind": "mcp_server",
+      "capabilities": [
+        "Local Meta_Kim runtime MCP server exposing agents and runtime capabilities.",
+        "mcpServers",
+        "mcpTools",
+        "meta-kim-runtime"
+      ],
+      "source": {
+        "sourceOfTruth": "scripts/mcp/meta-runtime-server.mjs",
+        "mappings": {
+          "dependencyProjectIds": [
+            "meta-kim-runtime"
+          ],
+          "capabilityInventoryTypes": [
+            "mcpServers",
+            "mcpTools"
+          ]
+        }
+      },
+      "trust": {
+        "review": "local_mcp",
+        "required": true
+      },
+      "installMethod": "mcpConfig",
+      "installLayers": [
+        "mcp_config",
+        "project_projection"
+      ],
+      "exposedArtifacts": [
+        "scripts/mcp/meta-runtime-server.mjs",
+        "dependency-project-registry.json#meta-kim-runtime"
+      ],
+      "activationEvents": [
+        "MCP tool call"
+      ],
+      "outputContracts": {
+        "consumption": "runtime_call",
+        "mustEnterModelContext": false,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "local_mcp",
+        "notes": [
+          "Validate input and avoid leaking sensitive project data."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "invokable",
+          "status": "partial",
+          "installLayers": {
+            "mcp_config": "projected",
+            "project_projection": "verified"
+          },
+          "activationEvent": "MCP tool call",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "codex": {
+          "state": "invokable",
+          "status": "partial",
+          "installLayers": {
+            "mcp_config": "projected",
+            "project_projection": "verified"
+          },
+          "activationEvent": "MCP tool call",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "cursor": {
+          "state": "invokable",
+          "status": "partial",
+          "installLayers": {
+            "mcp_config": "projected",
+            "project_projection": "verified"
+          },
+          "activationEvent": "MCP tool call",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "unknown",
+          "status": "needs_probe",
+          "installLayers": {
+            "mcp_config": "needs_probe",
+            "project_projection": "verified"
+          },
+          "activationEvent": "MCP tool call",
+          "outputContract": "runtime_call",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Validate input and avoid leaking sensitive project data."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Validate input and avoid leaking sensitive project data."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Validate input and avoid leaking sensitive project data."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "Validate input and avoid leaking sensitive project data."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "needs_probe"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:mcp-server-meta-kim-runtime"
+    },
+    {
+      "id": "hook-script-codex-hookprompt-adapter",
+      "providerType": "hook_script",
+      "summary": "Codex UserPromptSubmit adapter that converts HookPrompt output into model context.",
+      "sourceOfTruth": "scripts/runtime-hook-mapping.mjs",
+      "mappings": {
+        "skillsJsonIds": [
+          "hookprompt"
+        ],
+        "capabilityInventoryTypes": [
+          "hook"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "project_projection",
+          "global_home"
+        ],
+        "trigger": "Codex UserPromptSubmit",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "global hook chain validation",
+        "command": "npm run meta:providers:validate -- --strict-global-hooks"
+      },
+      "risk": {
+        "trustReview": "hook_context",
+        "notes": [
+          "UI warnings are not equivalent to model context."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "project_projection": "verified",
+            "global_home": "needs_probe"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {
+          "codex": {
+            "state": "context_effective",
+            "status": "partial",
+            "installLayers": {
+              "project_projection": "verified",
+              "global_home": "needs_probe"
+            },
+            "os": {
+              "macos": "partial",
+              "windows": "partial",
+              "linux": "partial",
+              "wsl2": "partial"
+            }
+          }
+        }
+      },
+      "providerKind": "hook_script",
+      "capabilities": [
+        "Codex UserPromptSubmit adapter that converts HookPrompt output into model context.",
+        "hook",
+        "hookprompt"
+      ],
+      "source": {
+        "sourceOfTruth": "scripts/runtime-hook-mapping.mjs",
+        "mappings": {
+          "skillsJsonIds": [
+            "hookprompt"
+          ],
+          "capabilityInventoryTypes": [
+            "hook"
+          ]
+        }
+      },
+      "trust": {
+        "review": "hook_context",
+        "required": true
+      },
+      "installMethod": "hookConfig",
+      "installLayers": [
+        "project_projection",
+        "global_home"
+      ],
+      "exposedArtifacts": [
+        "scripts/runtime-hook-mapping.mjs",
+        "config/skills.json#hookprompt"
+      ],
+      "activationEvents": [
+        "Codex UserPromptSubmit"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "hook_context",
+        "notes": [
+          "UI warnings are not equivalent to model context."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "project_projection": "verified",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "Codex UserPromptSubmit",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "context_effective",
+          "status": "partial",
+          "installLayers": {
+            "project_projection": "verified",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "Codex UserPromptSubmit",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "project_projection": "verified",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "Codex UserPromptSubmit",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "project_projection": "verified",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "Codex UserPromptSubmit",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "UI warnings are not equivalent to model context."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "UI warnings are not equivalent to model context."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "UI warnings are not equivalent to model context."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "UI warnings are not equivalent to model context."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:hook-script-codex-hookprompt-adapter"
+    },
+    {
+      "id": "command-provider-validator",
+      "providerType": "command",
+      "summary": "Provider capability validator command.",
+      "sourceOfTruth": "scripts/validate-provider-capabilities.mjs",
+      "mappings": {
+        "capabilityInventoryTypes": [
+          "command"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "command_path"
+        ],
+        "trigger": "npm run meta:providers:validate",
+        "outputConsumption": "command_output"
+      },
+      "verification": {
+        "method": "self validation",
+        "command": "npm run meta:providers:validate"
+      },
+      "risk": {
+        "trustReview": "local_command"
+      },
+      "support": {
+        "default": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "command_path": "verified"
+          },
+          "os": {
+            "macos": "verified",
+            "windows": "verified",
+            "linux": "verified",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "command",
+      "capabilities": [
+        "Provider capability validator command.",
+        "command"
+      ],
+      "source": {
+        "sourceOfTruth": "scripts/validate-provider-capabilities.mjs",
+        "mappings": {
+          "capabilityInventoryTypes": [
+            "command"
+          ]
+        }
+      },
+      "trust": {
+        "review": "local_command",
+        "required": false
+      },
+      "installMethod": "commandPath",
+      "installLayers": [
+        "command_path"
+      ],
+      "exposedArtifacts": [
+        "scripts/validate-provider-capabilities.mjs"
+      ],
+      "activationEvents": [
+        "npm run meta:providers:validate"
+      ],
+      "outputContracts": {
+        "consumption": "command_output",
+        "mustEnterModelContext": false,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "local_command",
+        "notes": []
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "command_path": "verified"
+          },
+          "activationEvent": "npm run meta:providers:validate",
+          "outputContract": "command_output",
+          "reason": null
+        },
+        "codex": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "command_path": "verified"
+          },
+          "activationEvent": "npm run meta:providers:validate",
+          "outputContract": "command_output",
+          "reason": null
+        },
+        "cursor": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "command_path": "verified"
+          },
+          "activationEvent": "npm run meta:providers:validate",
+          "outputContract": "command_output",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "command_path": "verified"
+          },
+          "activationEvent": "npm run meta:providers:validate",
+          "outputContract": "command_output",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "verified",
+          "risks": []
+        },
+        "windows": {
+          "status": "verified",
+          "risks": []
+        },
+        "linux": {
+          "status": "verified",
+          "risks": []
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": []
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:command-provider-validator"
+    },
+    {
+      "id": "rule-file-cursor-meta-enforcement",
+      "providerType": "rule_file",
+      "summary": "Cursor rule projection for Meta_Kim enforcement.",
+      "sourceOfTruth": "canonical/runtime-assets/cursor/rules/meta-enforcement.mdc",
+      "mappings": {
+        "capabilityInventoryTypes": [
+          "rules"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "rule_projection",
+          "project_projection"
+        ],
+        "trigger": "Cursor rule context",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "runtime sync validation",
+        "command": "npm run meta:check:runtimes"
+      },
+      "risk": {
+        "trustReview": "canonical_rule"
+      },
+      "support": {
+        "default": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "rule_projection": "verified",
+            "project_projection": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "needs_probe"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "rule_file",
+      "capabilities": [
+        "Cursor rule projection for Meta_Kim enforcement.",
+        "rules"
+      ],
+      "source": {
+        "sourceOfTruth": "canonical/runtime-assets/cursor/rules/meta-enforcement.mdc",
+        "mappings": {
+          "capabilityInventoryTypes": [
+            "rules"
+          ]
+        }
+      },
+      "trust": {
+        "review": "canonical_rule",
+        "required": false
+      },
+      "installMethod": "ruleProjection",
+      "installLayers": [
+        "rule_projection",
+        "project_projection"
+      ],
+      "exposedArtifacts": [
+        "canonical/runtime-assets/cursor/rules/meta-enforcement.mdc"
+      ],
+      "activationEvents": [
+        "Cursor rule context"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "canonical_rule",
+        "notes": []
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "rule_projection": "verified",
+            "project_projection": "verified"
+          },
+          "activationEvent": "Cursor rule context",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "rule_projection": "verified",
+            "project_projection": "verified"
+          },
+          "activationEvent": "Cursor rule context",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "rule_projection": "verified",
+            "project_projection": "verified"
+          },
+          "activationEvent": "Cursor rule context",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "rule_projection": "verified",
+            "project_projection": "verified"
+          },
+          "activationEvent": "Cursor rule context",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": []
+        },
+        "windows": {
+          "status": "partial",
+          "risks": []
+        },
+        "linux": {
+          "status": "partial",
+          "risks": []
+        },
+        "wsl2": {
+          "status": "needs_probe",
+          "risks": []
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:rule-file-cursor-meta-enforcement"
+    },
+    {
+      "id": "dependency-project-registry",
+      "providerType": "dependency_project",
+      "summary": "Dependency reuse/scoring registry as a provider source, not a runtime projection.",
+      "sourceOfTruth": "config/capability-index/dependency-project-registry.json",
+      "mappings": {
+        "dependencyProjectIds": [
+          "agent-teams-playbook",
+          "meta-kim-runtime",
+          "findskill",
+          "hookprompt",
+          "superpowers",
+          "ecc",
+          "planning-with-files",
+          "cli-anything",
+          "gstack",
+          "skill-creator"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "dependency_registry"
+        ],
+        "trigger": "Fetch dependency capability search",
+        "outputConsumption": "reference_only"
+      },
+      "verification": {
+        "method": "dependency compatibility",
+        "command": "npm run meta:deps:compat"
+      },
+      "risk": {
+        "trustReview": "registry_reference",
+        "notes": [
+          "Reference-only dependencies must not enter execution routes."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "dependency_registry": "verified"
+          },
+          "os": {
+            "macos": "verified",
+            "windows": "verified",
+            "linux": "verified",
+            "wsl2": "verified"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "dependency_project",
+      "capabilities": [
+        "Dependency reuse/scoring registry as a provider source, not a runtime projection.",
+        "agent-teams-playbook",
+        "meta-kim-runtime",
+        "findskill",
+        "hookprompt",
+        "superpowers",
+        "ecc",
+        "planning-with-files",
+        "cli-anything",
+        "gstack",
+        "skill-creator"
+      ],
+      "source": {
+        "sourceOfTruth": "config/capability-index/dependency-project-registry.json",
+        "mappings": {
+          "dependencyProjectIds": [
+            "agent-teams-playbook",
+            "meta-kim-runtime",
+            "findskill",
+            "hookprompt",
+            "superpowers",
+            "ecc",
+            "planning-with-files",
+            "cli-anything",
+            "gstack",
+            "skill-creator"
+          ]
+        }
+      },
+      "trust": {
+        "review": "registry_reference",
+        "required": true
+      },
+      "installMethod": "dependency_registry",
+      "installLayers": [
+        "dependency_registry"
+      ],
+      "exposedArtifacts": [
+        "config/capability-index/dependency-project-registry.json",
+        "dependency-project-registry.json#agent-teams-playbook",
+        "dependency-project-registry.json#meta-kim-runtime",
+        "dependency-project-registry.json#findskill",
+        "dependency-project-registry.json#hookprompt",
+        "dependency-project-registry.json#superpowers",
+        "dependency-project-registry.json#ecc",
+        "dependency-project-registry.json#planning-with-files",
+        "dependency-project-registry.json#cli-anything",
+        "dependency-project-registry.json#gstack",
+        "dependency-project-registry.json#skill-creator"
+      ],
+      "activationEvents": [
+        "Fetch dependency capability search"
+      ],
+      "outputContracts": {
+        "consumption": "reference_only",
+        "mustEnterModelContext": false,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "registry_reference",
+        "notes": [
+          "Reference-only dependencies must not enter execution routes."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "Fetch dependency capability search",
+          "outputContract": "reference_only",
+          "reason": null
+        },
+        "codex": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "Fetch dependency capability search",
+          "outputContract": "reference_only",
+          "reason": null
+        },
+        "cursor": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "Fetch dependency capability search",
+          "outputContract": "reference_only",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "Fetch dependency capability search",
+          "outputContract": "reference_only",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "verified",
+          "risks": [
+            "Reference-only dependencies must not enter execution routes."
+          ]
+        },
+        "windows": {
+          "status": "verified",
+          "risks": [
+            "Reference-only dependencies must not enter execution routes."
+          ]
+        },
+        "linux": {
+          "status": "verified",
+          "risks": [
+            "Reference-only dependencies must not enter execution routes."
+          ]
+        },
+        "wsl2": {
+          "status": "verified",
+          "risks": [
+            "Reference-only dependencies must not enter execution routes."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:dependency-project-registry"
+    },
+    {
+      "id": "memory-provider-mcp-memory-service",
+      "providerType": "memory_provider",
+      "summary": "MCP Memory Service session and stop hook provider.",
+      "sourceOfTruth": "canonical/runtime-assets/shared/hooks/meta-kim-memory-save.mjs",
+      "mappings": {
+        "capabilityInventoryTypes": [
+          "hook",
+          "memory"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "memory_service",
+          "global_home",
+          "project_projection"
+        ],
+        "trigger": "SessionStart/UserPromptSubmit/Stop hooks",
+        "outputConsumption": "runtime_call"
+      },
+      "verification": {
+        "method": "MCP memory hook checks",
+        "command": "npm run meta:test:setup"
+      },
+      "risk": {
+        "trustReview": "local_memory_service",
+        "notes": [
+          "Port 8000 and Python/Node runners vary by OS."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "installed",
+          "status": "partial",
+          "installLayers": {
+            "memory_service": "needs_probe",
+            "global_home": "partial",
+            "project_projection": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "needs_probe"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "memory_provider",
+      "capabilities": [
+        "MCP Memory Service session and stop hook provider.",
+        "hook",
+        "memory"
+      ],
+      "source": {
+        "sourceOfTruth": "canonical/runtime-assets/shared/hooks/meta-kim-memory-save.mjs",
+        "mappings": {
+          "capabilityInventoryTypes": [
+            "hook",
+            "memory"
+          ]
+        }
+      },
+      "trust": {
+        "review": "local_memory_service",
+        "required": true
+      },
+      "installMethod": "globalHome",
+      "installLayers": [
+        "memory_service",
+        "global_home",
+        "project_projection"
+      ],
+      "exposedArtifacts": [
+        "canonical/runtime-assets/shared/hooks/meta-kim-memory-save.mjs"
+      ],
+      "activationEvents": [
+        "SessionStart/UserPromptSubmit/Stop hooks"
+      ],
+      "outputContracts": {
+        "consumption": "runtime_call",
+        "mustEnterModelContext": false,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "local_memory_service",
+        "notes": [
+          "Port 8000 and Python/Node runners vary by OS."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "installed",
+          "status": "partial",
+          "installLayers": {
+            "memory_service": "needs_probe",
+            "global_home": "partial",
+            "project_projection": "verified"
+          },
+          "activationEvent": "SessionStart/UserPromptSubmit/Stop hooks",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "codex": {
+          "state": "installed",
+          "status": "partial",
+          "installLayers": {
+            "memory_service": "needs_probe",
+            "global_home": "partial",
+            "project_projection": "verified"
+          },
+          "activationEvent": "SessionStart/UserPromptSubmit/Stop hooks",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "cursor": {
+          "state": "installed",
+          "status": "partial",
+          "installLayers": {
+            "memory_service": "needs_probe",
+            "global_home": "partial",
+            "project_projection": "verified"
+          },
+          "activationEvent": "SessionStart/UserPromptSubmit/Stop hooks",
+          "outputContract": "runtime_call",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "installed",
+          "status": "partial",
+          "installLayers": {
+            "memory_service": "needs_probe",
+            "global_home": "partial",
+            "project_projection": "verified"
+          },
+          "activationEvent": "SessionStart/UserPromptSubmit/Stop hooks",
+          "outputContract": "runtime_call",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Port 8000 and Python/Node runners vary by OS."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Port 8000 and Python/Node runners vary by OS."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Port 8000 and Python/Node runners vary by OS."
+          ]
+        },
+        "wsl2": {
+          "status": "needs_probe",
+          "risks": [
+            "Port 8000 and Python/Node runners vary by OS."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:memory-provider-mcp-memory-service"
+    },
+    {
+      "id": "graph-provider-graphify",
+      "providerType": "graph_provider",
+      "summary": "Graphify project knowledge graph provider.",
+      "sourceOfTruth": "scripts/graphify-cli.mjs",
+      "mappings": {
+        "capabilityInventoryTypes": [
+          "graph",
+          "graphify"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "graph_index",
+          "command_path"
+        ],
+        "trigger": "npm run meta:graphify:*",
+        "outputConsumption": "reference_only"
+      },
+      "verification": {
+        "method": "graphify check",
+        "command": "npm run meta:graphify:check"
+      },
+      "risk": {
+        "trustReview": "local_graph_index",
+        "notes": [
+          "Graph may be stale relative to HEAD and should degrade to file reads."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "installed",
+          "status": "partial",
+          "installLayers": {
+            "graph_index": "needs_probe",
+            "command_path": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "graph_provider",
+      "capabilities": [
+        "Graphify project knowledge graph provider.",
+        "graph",
+        "graphify"
+      ],
+      "source": {
+        "sourceOfTruth": "scripts/graphify-cli.mjs",
+        "mappings": {
+          "capabilityInventoryTypes": [
+            "graph",
+            "graphify"
+          ]
+        }
+      },
+      "trust": {
+        "review": "local_graph_index",
+        "required": true
+      },
+      "installMethod": "graph_index",
+      "installLayers": [
+        "graph_index",
+        "command_path"
+      ],
+      "exposedArtifacts": [
+        "scripts/graphify-cli.mjs"
+      ],
+      "activationEvents": [
+        "npm run meta:graphify:*"
+      ],
+      "outputContracts": {
+        "consumption": "reference_only",
+        "mustEnterModelContext": false,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "local_graph_index",
+        "notes": [
+          "Graph may be stale relative to HEAD and should degrade to file reads."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "installed",
+          "status": "partial",
+          "installLayers": {
+            "graph_index": "needs_probe",
+            "command_path": "verified"
+          },
+          "activationEvent": "npm run meta:graphify:*",
+          "outputContract": "reference_only",
+          "reason": null
+        },
+        "codex": {
+          "state": "installed",
+          "status": "partial",
+          "installLayers": {
+            "graph_index": "needs_probe",
+            "command_path": "verified"
+          },
+          "activationEvent": "npm run meta:graphify:*",
+          "outputContract": "reference_only",
+          "reason": null
+        },
+        "cursor": {
+          "state": "installed",
+          "status": "partial",
+          "installLayers": {
+            "graph_index": "needs_probe",
+            "command_path": "verified"
+          },
+          "activationEvent": "npm run meta:graphify:*",
+          "outputContract": "reference_only",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "installed",
+          "status": "partial",
+          "installLayers": {
+            "graph_index": "needs_probe",
+            "command_path": "verified"
+          },
+          "activationEvent": "npm run meta:graphify:*",
+          "outputContract": "reference_only",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Graph may be stale relative to HEAD and should degrade to file reads."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Graph may be stale relative to HEAD and should degrade to file reads."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Graph may be stale relative to HEAD and should degrade to file reads."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "Graph may be stale relative to HEAD and should degrade to file reads."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:graph-provider-graphify"
+    },
+    {
+      "id": "command-governance-weapons",
+      "providerType": "command",
+      "summary": "Command/script providers backing the weapon registry.",
+      "sourceOfTruth": "config/capability-index/weapon-registry.json",
+      "mappings": {
+        "weaponRegistryIds": [
+          "runtime-capability-matrix",
+          "os-compatibility-matrix",
+          "dependency-project-registry",
+          "meta-kim-decision-patterns",
+          "select-execution-route",
+          "governance-validators"
+        ],
+        "capabilityInventoryTypes": [
+          "command"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "command_path"
+        ],
+        "trigger": "package.json governance commands",
+        "outputConsumption": "command_output"
+      },
+      "verification": {
+        "method": "governance validator suite",
+        "command": "npm run meta:verify:governance"
+      },
+      "risk": {
+        "trustReview": "local_command",
+        "notes": [
+          "Command pass is not user-goal-done."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "command_path": "verified"
+          },
+          "os": {
+            "macos": "verified",
+            "windows": "verified",
+            "linux": "verified",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "command",
+      "capabilities": [
+        "Command/script providers backing the weapon registry.",
+        "command"
+      ],
+      "source": {
+        "sourceOfTruth": "config/capability-index/weapon-registry.json",
+        "mappings": {
+          "weaponRegistryIds": [
+            "runtime-capability-matrix",
+            "os-compatibility-matrix",
+            "dependency-project-registry",
+            "meta-kim-decision-patterns",
+            "select-execution-route",
+            "governance-validators"
+          ],
+          "capabilityInventoryTypes": [
+            "command"
+          ]
+        }
+      },
+      "trust": {
+        "review": "local_command",
+        "required": false
+      },
+      "installMethod": "commandPath",
+      "installLayers": [
+        "command_path"
+      ],
+      "exposedArtifacts": [
+        "config/capability-index/weapon-registry.json",
+        "weapon-registry.json#runtime-capability-matrix",
+        "weapon-registry.json#os-compatibility-matrix",
+        "weapon-registry.json#dependency-project-registry",
+        "weapon-registry.json#meta-kim-decision-patterns",
+        "weapon-registry.json#select-execution-route",
+        "weapon-registry.json#governance-validators"
+      ],
+      "activationEvents": [
+        "package.json governance commands"
+      ],
+      "outputContracts": {
+        "consumption": "command_output",
+        "mustEnterModelContext": false,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "local_command",
+        "notes": [
+          "Command pass is not user-goal-done."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "command_path": "verified"
+          },
+          "activationEvent": "package.json governance commands",
+          "outputContract": "command_output",
+          "reason": null
+        },
+        "codex": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "command_path": "verified"
+          },
+          "activationEvent": "package.json governance commands",
+          "outputContract": "command_output",
+          "reason": null
+        },
+        "cursor": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "command_path": "verified"
+          },
+          "activationEvent": "package.json governance commands",
+          "outputContract": "command_output",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "verified",
+          "status": "verified",
+          "installLayers": {
+            "command_path": "verified"
+          },
+          "activationEvent": "package.json governance commands",
+          "outputContract": "command_output",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "verified",
+          "risks": [
+            "Command pass is not user-goal-done."
+          ]
+        },
+        "windows": {
+          "status": "verified",
+          "risks": [
+            "Command pass is not user-goal-done."
+          ]
+        },
+        "linux": {
+          "status": "verified",
+          "risks": [
+            "Command pass is not user-goal-done."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "Command pass is not user-goal-done."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:command-governance-weapons"
+    }
+  ]
+}

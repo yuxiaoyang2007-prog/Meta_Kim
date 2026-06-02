@@ -74,36 +74,11 @@ The following questions are independent. Please select one option for each:
 Please respond with your choices, e.g., "1A, 2B" or "Question 1: A, Question 2: B"
 ```
 
-## AskUserQuestion Schema (Batch)
+## Runtime Adapter Payload (Batch)
 
-For platforms that support multi-question AskUserQuestion:
+For platforms that support multi-question native choice surfaces, the runtime adapter may render the independent questions as one interaction. The canonical batch remains a semantic decision list, not a renderer-specific schema.
 
-```json
-{
-  "questions": [
-    {
-      "question": "{Question 1}",
-      "header": "{Q1 Tag}",
-      "options": [
-        {"label": "A", "description": "{product-readable format}"},
-        {"label": "B", "description": "{product-readable format}"},
-        {"label": "C", "description": "{product-readable format}"}
-      ],
-      "multiSelect": false
-    },
-    {
-      "question": "{Question 2}",
-      "header": "{Q2 Tag}",
-      "options": [
-        {"label": "A", "description": "{product-readable format}"},
-        {"label": "B", "description": "{product-readable format}"},
-        {"label": "C", "description": "{product-readable format}"}
-      ],
-      "multiSelect": false
-    }
-  ]
-}
-```
+The adapter must preserve each question id, dependency group, recommended default, option count, trade-offs, and selection result. If the host cannot render all independent questions in one native surface, it must use a localized chat decision card rather than inventing a fake popup.
 
 ## When to Use
 

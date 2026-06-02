@@ -65,6 +65,7 @@ async function fileCapabilities(root, type, ownerCandidates, options = {}) {
 async function inventory() {
   const dependencies = await readJson("config/capability-index/dependency-project-registry.json");
   const weapons = await readJson("config/capability-index/weapon-registry.json");
+  const skills = await readJson("config/skills.json");
   const runtimeMatrix = await readJson("config/runtime-capability-matrix.json");
   const osMatrix = await readJson("config/os-compatibility-matrix.json");
   const records = [
@@ -119,6 +120,51 @@ async function inventory() {
       writebackKey: `weapon:${weapon.id}`,
     });
   }
+  for (const skill of skills.skills ?? []) {
+    const pluginIds = [
+      skill.claudePlugin,
+      skill.codexPlugin,
+      skill.cursorPlugin,
+    ].filter(Boolean);
+    const isPlugin =
+      skill.installMethod === "pluginMarketplace" || pluginIds.length > 0;
+    if (!isPlugin && !skill.pluginHookCompat) continue;
+    records.push({
+      id: skill.id,
+      type: isPlugin ? "plugin" : "plugin_bundle",
+      ...defaultSupport("partial", "partial"),
+      sourcePath: "config/skills.json",
+      triggerWords: [skill.id, ...(skill.capabilities ?? [])],
+      ownerCandidates: ["meta-artisan", "meta-sentinel"],
+      weaponCandidates: pluginIds,
+      dependencyCandidates: [skill.id],
+      runtimeSupport: Object.fromEntries(RUNTIMES.map((runtime) => {
+        const manifestRuntime = runtime === "claude_code" ? "claude" : runtime;
+        return [
+          runtime,
+          (skill.targets ?? []).includes(manifestRuntime) ? "partial" : "unknown",
+        ];
+      })),
+      osSupport: defaultSupport("partial", "partial").osSupport,
+      verificationMethod: "npm run meta:providers:validate",
+      risk: {
+        thirdParty: true,
+        requiresTrustReview: true,
+        installMethod: skill.installMethod ?? "subdirExtraction",
+      },
+      mustPreserve: true,
+      routeEligibility: "requires_provider_validation",
+      missingFields: [],
+      evidence: {
+        source: "local_file",
+        sourceRef: "config/skills.json",
+        confidence: "verified_local",
+      },
+      confidence: "verified_local",
+      invocationPath: pluginIds[0] ?? null,
+      writebackKey: `provider:${skill.id}`,
+    });
+  }
   return {
     generatedAt: new Date().toISOString(),
     capabilities: records,
@@ -127,6 +173,8 @@ async function inventory() {
     dependencyProjects: dependencies.projects ?? [],
     summary: {
       total: records.length,
+      totalPlugins: records.filter((record) => record.type === "plugin").length,
+      totalPluginBundles: records.filter((record) => record.type === "plugin_bundle").length,
       mustPreserve: records.filter((record) => record.mustPreserve).length,
       webSearchBrowserResearch: records.filter((record) => /web|browser|research|fetch|online/i.test(JSON.stringify(record))).length,
       memoryGraphMcpHook: records.filter((record) => /memory|graph|MCP|hook|graphify/i.test(JSON.stringify(record))).length,

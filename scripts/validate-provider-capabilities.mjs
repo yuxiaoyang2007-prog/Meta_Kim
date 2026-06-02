@@ -1,0 +1,574 @@
+#!/usr/bin/env node
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
+import { OS_TARGETS, RUNTIMES, repoPath, toPosix } from "./governance-lib.mjs";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, "..");
+const args = process.argv.slice(2);
+
+const REQUIRED_PROVIDER_TYPES = [
+  "runtime_native",
+  "canonical_agent",
+  "canonical_skill",
+  "external_skill",
+  "plugin_marketplace",
+  "plugin_bundle",
+  "mcp_server",
+  "hook_script",
+  "command",
+  "rule_file",
+  "dependency_project",
+  "memory_provider",
+  "graph_provider",
+];
+
+const SUCCESS_STATES = [
+  "unknown",
+  "declared",
+  "projected",
+  "installed",
+  "trusted",
+  "discoverable",
+  "invokable",
+  "context_effective",
+  "enforcement_effective",
+  "verified",
+];
+
+const FAILURE_STATES = [
+  "missing_projection",
+  "missing_global_install",
+  "untrusted",
+  "not_discoverable",
+  "not_invokable",
+  "output_not_consumed",
+  "degraded",
+  "blocked_for_execution",
+];
+
+const PUBLIC_STATUSES = ["verified", "degraded", "partial", "needs_probe", "blocked"];
+const INSTALL_LAYER_STATUSES = [
+  "verified",
+  "projected",
+  "installed",
+  "declared",
+  "partial",
+  "needs_probe",
+  "missing",
+  "unsupported",
+  "degraded",
+];
+const OS_STATUSES = ["verified", "partial", "needs_probe", "unsupported", "degraded"];
+const REQUIRED_PROVIDER_FIELDS = [
+  "id",
+  "providerKind",
+  "capabilities",
+  "source",
+  "trust",
+  "installMethod",
+  "runtimeAdapters",
+  "osAdapters",
+  "installLayers",
+  "exposedArtifacts",
+  "activationEvents",
+  "outputContracts",
+  "safetyBoundary",
+  "risk",
+  "verification",
+  "degradation",
+  "owner",
+  "reviewOwner",
+  "evolutionKey",
+];
+
+function argValue(name, fallback = null) {
+  const index = args.indexOf(name);
+  if (index >= 0) return args[index + 1] ?? fallback;
+  const prefix = `${name}=`;
+  const hit = args.find((arg) => arg.startsWith(prefix));
+  return hit ? hit.slice(prefix.length) : fallback;
+}
+
+const registryPath = path.resolve(
+  repoRoot,
+  argValue("--registry", "config/capability-index/provider-registry.json"),
+);
+const hooksPath = path.resolve(
+  argValue(
+    "--codex-hooks",
+    process.env.META_KIM_CODEX_HOOKS_JSON ||
+      path.join(os.homedir(), ".codex", "hooks.json"),
+  ),
+);
+const jsonOutput = args.includes("--json");
+const strictGlobalHooks = args.includes("--strict-global-hooks");
+const fixCodexHookPrompt = args.includes("--fix-codex-hookprompt");
+
+function issue({
+  severity = "error",
+  code,
+  message,
+  providerId = null,
+  providerType = null,
+  runtimeId = null,
+  osId = null,
+  installLayer = null,
+  state = null,
+  sourceRef = null,
+}) {
+  return {
+    severity,
+    code,
+    message,
+    providerId,
+    providerType,
+    runtimeId,
+    osId,
+    installLayer,
+    state,
+    sourceRef,
+  };
+}
+
+async function readJson(filePath) {
+  return JSON.parse(await fs.readFile(filePath, "utf8"));
+}
+
+async function readJsonIfExists(filePath) {
+  try {
+    return JSON.parse(await fs.readFile(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function hasCommand(json, eventName, needle) {
+  const event = json?.hooks?.[eventName];
+  if (!Array.isArray(event)) return false;
+  return event.some((block) => {
+    const hooks = Array.isArray(block?.hooks) ? block.hooks : [block];
+    return hooks.some((hook) =>
+      String(hook?.command ?? "").replace(/\\/g, "/").includes(needle),
+    );
+  });
+}
+
+function uniqueMappedIds(providers, field) {
+  const values = new Set();
+  for (const provider of providers) {
+    for (const value of provider.mappings?.[field] ?? []) values.add(value);
+  }
+  return values;
+}
+
+function expandedSupport(provider, runtimeId) {
+  return {
+    ...provider.support.default,
+    ...(provider.support.runtimes?.[runtimeId] ?? {}),
+  };
+}
+
+function validateSupport(provider, issues) {
+  for (const runtimeId of RUNTIMES) {
+    const support = expandedSupport(provider, runtimeId);
+    if (![...SUCCESS_STATES, ...FAILURE_STATES].includes(support.state)) {
+      issues.push(
+        issue({
+          code: "invalid_state",
+          providerId: provider.id,
+          providerType: provider.providerType,
+          runtimeId,
+          state: support.state,
+          message: `${provider.id} has invalid state ${support.state} for ${runtimeId}`,
+        }),
+      );
+    }
+    if (!PUBLIC_STATUSES.includes(support.status)) {
+      issues.push(
+        issue({
+          code: "invalid_status",
+          providerId: provider.id,
+          providerType: provider.providerType,
+          runtimeId,
+          state: support.status,
+          message: `${provider.id} has invalid status ${support.status} for ${runtimeId}`,
+        }),
+      );
+    }
+    for (const installLayer of provider.activation.installLayers ?? []) {
+      const layerStatus = support.installLayers?.[installLayer];
+      if (!layerStatus) {
+        issues.push(
+          issue({
+            code: "missing_install_layer_state",
+            providerId: provider.id,
+            providerType: provider.providerType,
+            runtimeId,
+            installLayer,
+            state: "unknown",
+            message: `${provider.id} missing ${runtimeId} install layer state for ${installLayer}`,
+          }),
+        );
+      } else if (!INSTALL_LAYER_STATUSES.includes(layerStatus)) {
+        issues.push(
+          issue({
+            code: "invalid_install_layer_state",
+            providerId: provider.id,
+            providerType: provider.providerType,
+            runtimeId,
+            installLayer,
+            state: layerStatus,
+            message: `${provider.id} has invalid ${runtimeId}/${installLayer} state ${layerStatus}`,
+          }),
+        );
+      }
+    }
+    for (const osId of OS_TARGETS) {
+      const osStatus = support.os?.[osId];
+      if (!OS_STATUSES.includes(osStatus)) {
+        issues.push(
+          issue({
+            code: "missing_os_state",
+            providerId: provider.id,
+            providerType: provider.providerType,
+            runtimeId,
+            osId,
+            state: osStatus ?? "unknown",
+            message: `${provider.id} missing ${runtimeId}/${osId} OS state`,
+          }),
+        );
+      }
+    }
+  }
+}
+
+async function validateCodexHookPrompt({ issues, registry }) {
+  const provider = registry.providers.find(
+    (entry) => entry.id === "hook-script-codex-hookprompt-adapter",
+  );
+  if (!provider) return;
+
+  const hooks = await readJsonIfExists(hooksPath);
+  const severity = strictGlobalHooks ? "error" : "warning";
+  if (!hooks) {
+    issues.push(
+      issue({
+        severity,
+        code: "missing_global_install",
+        providerId: provider.id,
+        providerType: provider.providerType,
+        runtimeId: "codex",
+        osId: process.platform === "win32" ? "windows" : undefined,
+        installLayer: "global_home",
+        state: "missing_global_install",
+        sourceRef: toPosix(hooksPath),
+        message: `Codex global hooks file not found at ${toPosix(hooksPath)}`,
+      }),
+    );
+    return;
+  }
+
+  const projectHooks = await readJson(repoPath(".codex/hooks.json"));
+  const projectHasAdapter = hasCommand(
+    projectHooks,
+    "UserPromptSubmit",
+    "hookprompt-adapter.mjs",
+  );
+  const globalHasAdapter = hasCommand(
+    hooks,
+    "UserPromptSubmit",
+    "hookprompt-adapter.mjs",
+  );
+
+  if (!projectHasAdapter) {
+    issues.push(
+      issue({
+        code: "missing_projection",
+        providerId: provider.id,
+        providerType: provider.providerType,
+        runtimeId: "codex",
+        installLayer: "project_projection",
+        state: "missing_projection",
+        sourceRef: ".codex/hooks.json",
+        message: "Project Codex hooks do not register hookprompt-adapter.mjs",
+      }),
+    );
+  }
+
+  if (!globalHasAdapter) {
+    issues.push(
+      issue({
+        severity,
+        code: "output_not_consumed",
+        providerId: provider.id,
+        providerType: provider.providerType,
+        runtimeId: "codex",
+        osId: process.platform === "win32" ? "windows" : undefined,
+        installLayer: "global_home",
+        state: "output_not_consumed",
+        sourceRef: toPosix(hooksPath),
+        message:
+          "Codex global UserPromptSubmit does not register hookprompt-adapter.mjs, so HookPrompt output may not enter model context globally",
+      }),
+    );
+  }
+
+  if (fixCodexHookPrompt && hooks && !globalHasAdapter) {
+    await addCodexHookPromptAdapter(hooksPath, hooks);
+    issues.push(
+      issue({
+        severity: "info",
+        code: "fixed_global_install",
+        providerId: provider.id,
+        providerType: provider.providerType,
+        runtimeId: "codex",
+        installLayer: "global_home",
+        state: "installed",
+        sourceRef: toPosix(hooksPath),
+        message: "Registered hookprompt-adapter.mjs in Codex global UserPromptSubmit hooks",
+      }),
+    );
+  }
+}
+
+async function addCodexHookPromptAdapter(filePath, hooksJson) {
+  const home = path.resolve(os.homedir());
+  const target = path.resolve(filePath);
+  if (target !== home && !target.startsWith(`${home}${path.sep}`)) {
+    throw new Error(`Refusing to modify Codex hooks outside user home: ${target}`);
+  }
+  const hooksDir = path.join(path.dirname(target), "hooks");
+  const adapter = path.join(hooksDir, "hookprompt-adapter.mjs");
+  const nodeCommand = process.execPath.includes(" ")
+    ? `"${process.execPath.replace(/\\/g, "\\\\")}"`
+    : process.execPath.replace(/\\/g, "\\\\");
+  const command = `${nodeCommand} "${adapter.replace(/\\/g, "\\\\")}"`;
+  hooksJson.hooks ??= {};
+  hooksJson.hooks.UserPromptSubmit ??= [{ hooks: [] }];
+  if (!Array.isArray(hooksJson.hooks.UserPromptSubmit)) {
+    hooksJson.hooks.UserPromptSubmit = [{ hooks: [] }];
+  }
+  const first = hooksJson.hooks.UserPromptSubmit[0] ?? { hooks: [] };
+  first.hooks ??= [];
+  first.hooks.push({ type: "command", command, timeout: 10 });
+  hooksJson.hooks.UserPromptSubmit[0] = first;
+  await fs.writeFile(target, `${JSON.stringify(hooksJson, null, 2)}\n`, "utf8");
+}
+
+function validateRegistryShape(registry, issues) {
+  for (const type of REQUIRED_PROVIDER_TYPES) {
+    if (!registry.providerTypes?.includes(type)) {
+      issues.push(issue({ code: "missing_provider_type", message: `providerTypes missing ${type}` }));
+    }
+    if (!(registry.providers ?? []).some((provider) => provider.providerType === type)) {
+      issues.push(issue({ code: "missing_provider_instance", providerType: type, message: `No provider instance for ${type}` }));
+    }
+  }
+
+  for (const state of SUCCESS_STATES) {
+    if (!registry.stateModel?.successStates?.includes(state)) {
+      issues.push(issue({ code: "missing_success_state", state, message: `stateModel missing success state ${state}` }));
+    }
+  }
+  for (const state of FAILURE_STATES) {
+    if (!registry.stateModel?.failureStates?.includes(state)) {
+      issues.push(issue({ code: "missing_failure_state", state, message: `stateModel missing failure state ${state}` }));
+    }
+  }
+
+  const ids = new Set();
+  for (const provider of registry.providers ?? []) {
+    if (ids.has(provider.id)) {
+      issues.push(issue({ code: "duplicate_provider", providerId: provider.id, message: `Duplicate provider id ${provider.id}` }));
+    }
+    ids.add(provider.id);
+    for (const field of ["sourceOfTruth", "activation", "verification", "risk", "support"]) {
+      if (!provider[field]) {
+        issues.push(issue({ code: "missing_provider_field", providerId: provider.id, providerType: provider.providerType, message: `${provider.id} missing ${field}` }));
+      }
+    }
+    for (const field of REQUIRED_PROVIDER_FIELDS) {
+      const value = provider[field];
+      const emptyArray = Array.isArray(value) && value.length === 0;
+      const emptyObject =
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        Object.keys(value).length === 0;
+      if (value === undefined || value === null || emptyArray || emptyObject) {
+        issues.push(
+          issue({
+            code: "missing_contract_field",
+            providerId: provider.id,
+            providerType: provider.providerType,
+            message: `${provider.id} missing provider contract field ${field}`,
+          }),
+        );
+      }
+    }
+    if (provider.providerKind !== provider.providerType) {
+      issues.push(
+        issue({
+          code: "provider_kind_mismatch",
+          providerId: provider.id,
+          providerType: provider.providerType,
+          message: `${provider.id} providerKind must match providerType until a migration explicitly separates them`,
+        }),
+      );
+    }
+    if (provider.outputContracts?.mustEnterModelContext && provider.activation?.outputConsumption !== "model_context") {
+      issues.push(
+        issue({
+          code: "output_contract_mismatch",
+          providerId: provider.id,
+          providerType: provider.providerType,
+          message: `${provider.id} claims model context but activation output is ${provider.activation?.outputConsumption}`,
+        }),
+      );
+    }
+    for (const runtimeId of RUNTIMES) {
+      if (!provider.runtimeAdapters?.[runtimeId]) {
+        issues.push(
+          issue({
+            code: "missing_runtime_adapter",
+            providerId: provider.id,
+            providerType: provider.providerType,
+            runtimeId,
+            message: `${provider.id} missing runtimeAdapters.${runtimeId}`,
+          }),
+        );
+      }
+    }
+    for (const osId of OS_TARGETS) {
+      if (!provider.osAdapters?.[osId]) {
+        issues.push(
+          issue({
+            code: "missing_os_adapter",
+            providerId: provider.id,
+            providerType: provider.providerType,
+            osId,
+            message: `${provider.id} missing osAdapters.${osId}`,
+          }),
+        );
+      }
+    }
+    validateSupport(provider, issues);
+  }
+}
+
+function validateSourceMappings({ registry, skills, dependencyRegistry, runtimeMatrix, weaponRegistry, issues }) {
+  const providers = registry.providers ?? [];
+  const mappedSkillIds = uniqueMappedIds(providers, "skillsJsonIds");
+  const mappedDependencyIds = uniqueMappedIds(providers, "dependencyProjectIds");
+  const mappedPlatforms = uniqueMappedIds(providers, "runtimeMatrixPlatforms");
+  const mappedWeapons = uniqueMappedIds(providers, "weaponRegistryIds");
+
+  for (const skill of skills.skills ?? []) {
+    if (!mappedSkillIds.has(skill.id)) {
+      issues.push(issue({ code: "unmapped_skill", message: `config/skills.json skill ${skill.id} missing from provider registry`, sourceRef: "config/skills.json" }));
+    }
+    const isPlugin =
+      skill.installMethod === "pluginMarketplace" ||
+      skill.claudePlugin ||
+      skill.codexPlugin ||
+      skill.cursorPlugin;
+    if (isPlugin) {
+      const pluginProvider = providers.find(
+        (provider) =>
+          ["plugin_marketplace", "plugin_bundle"].includes(provider.providerType) &&
+          provider.mappings?.skillsJsonIds?.includes(skill.id),
+      );
+      if (!pluginProvider) {
+        issues.push(issue({ code: "plugin_only_in_skills_manifest", providerType: "plugin_marketplace", message: `${skill.id} plugin exists in config/skills.json but provider registry does not know it`, sourceRef: "config/skills.json" }));
+      }
+    }
+  }
+
+  for (const project of dependencyRegistry.projects ?? []) {
+    if (!mappedDependencyIds.has(project.id)) {
+      issues.push(issue({ code: "unmapped_dependency_project", message: `dependency project ${project.id} missing from provider registry`, sourceRef: "config/capability-index/dependency-project-registry.json" }));
+    }
+  }
+
+  for (const platform of runtimeMatrix.platforms ?? []) {
+    if (!mappedPlatforms.has(platform.platform)) {
+      issues.push(issue({ code: "unmapped_runtime_platform", runtimeId: platform.platform, message: `runtime platform ${platform.platform} missing from provider registry`, sourceRef: "config/runtime-capability-matrix.json" }));
+    }
+  }
+
+  for (const weapon of weaponRegistry.weapons ?? []) {
+    if (!mappedWeapons.has(weapon.id)) {
+      issues.push(issue({ code: "unmapped_weapon", message: `weapon ${weapon.id} missing from provider registry`, sourceRef: "config/capability-index/weapon-registry.json" }));
+    }
+  }
+}
+
+async function main() {
+  const issues = [];
+  const [registry, skills, dependencyRegistry, runtimeMatrix, weaponRegistry] =
+    await Promise.all([
+      readJson(registryPath),
+      readJson(repoPath("config/skills.json")),
+      readJson(repoPath("config/capability-index/dependency-project-registry.json")),
+      readJson(repoPath("config/runtime-capability-matrix.json")),
+      readJson(repoPath("config/capability-index/weapon-registry.json")),
+    ]);
+
+  validateRegistryShape(registry, issues);
+  validateSourceMappings({
+    registry,
+    skills,
+    dependencyRegistry,
+    runtimeMatrix,
+    weaponRegistry,
+    issues,
+  });
+  await validateCodexHookPrompt({ issues, registry });
+
+  const errors = issues.filter((entry) => entry.severity === "error");
+  const warnings = issues.filter((entry) => entry.severity === "warning");
+  const infos = issues.filter((entry) => entry.severity === "info");
+  const result = {
+    ok: errors.length === 0,
+    registry: toPosix(path.relative(repoRoot, registryPath)),
+    strictGlobalHooks,
+    summary: {
+      providers: registry.providers?.length ?? 0,
+      errors: errors.length,
+      warnings: warnings.length,
+      infos: infos.length,
+    },
+    issues,
+  };
+
+  if (jsonOutput) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(
+      `provider capabilities ${result.ok ? "valid" : "invalid"}: ${result.summary.providers} providers, ${errors.length} errors, ${warnings.length} warnings`,
+    );
+    for (const entry of issues) {
+      const parts = [
+        entry.severity.toUpperCase(),
+        entry.code,
+        entry.providerId,
+        entry.runtimeId,
+        entry.osId,
+        entry.installLayer,
+        entry.state,
+      ].filter(Boolean);
+      console.log(`- [${parts.join(" / ")}] ${entry.message}`);
+    }
+  }
+
+  if (!result.ok) process.exitCode = 1;
+}
+
+main().catch((error) => {
+  console.error(error.message || error);
+  process.exitCode = 1;
+});

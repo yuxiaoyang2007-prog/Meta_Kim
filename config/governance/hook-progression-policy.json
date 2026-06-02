@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "purpose": "Keep hooks as last-resort fuses, not the primary governance engine.",
+  "purpose": "Keep hooks as last-resort fuses for key behavior only, not the primary governance engine or an exhaustive packet validator.",
   "role": "last_resort_fuse",
   "preflightFirst": true,
   "hookMustNotReplacePreflight": true,
@@ -20,14 +20,20 @@
   "requiredPreflightChecks": [
     "realIntent",
     "successCriteria",
-    "nonGoals",
     "fetchEvidence",
     "capabilityDiscovery",
+    "owner",
+    "ownerLoadout",
+    "abstractPrompt",
+    "memoryStrategy",
     "runtimeMatrix",
     "osMatrix",
+    "reviewStandard"
+  ],
+  "optionalValidatorChecks": [
+    "nonGoals",
     "dependencyRegistry",
     "weaponRegistry",
-    "owner",
     "weapon",
     "dependencyRouteEligibility",
     "runtimeSupportNotUnsupported",

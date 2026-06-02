@@ -27,7 +27,6 @@ const execFileAsync = promisify(execFile);
 /** @type {string[]} Same order as validate-project.mjs EXPECTED_CLAUDE_HOOK_COMMANDS */
 const EXPECTED_CLAUDE_HOOK_COMMANDS = [
   "node .claude/hooks/block-dangerous-bash.mjs",
-  "node .claude/hooks/pre-git-push-confirm.mjs",
   "node .claude/hooks/enforce-agent-dispatch.mjs",
   "node .claude/hooks/post-format.mjs",
   "node .claude/hooks/post-typecheck.mjs",

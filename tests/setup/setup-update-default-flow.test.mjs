@@ -69,4 +69,14 @@ describe("setup update default flow", () => {
       "askDeployDirectory() must return null before prompting for deploy directory",
     );
   });
+
+  test("install and update sync global Claude hooks for cleanup", () => {
+    assert.match(source, /function metaTheoryGlobalSyncArgs\(targets\)/);
+    assert.match(source, /syncArgs\.push\("--with-global-hooks"\)/);
+    assert.match(
+      source,
+      /runNodeScript\(\s*"scripts\/sync-global-meta-theory\.mjs",\s*metaTheoryGlobalSyncArgs\(activeTargets\)/,
+      "install/update global meta-theory sync must opt into Claude hook cleanup",
+    );
+  });
 });

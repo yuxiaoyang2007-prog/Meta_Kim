@@ -35,7 +35,7 @@
 | Basic SKILL.md | Y | Full support |
 | `allowed-tools` | Y | Tool restriction per skill |
 | `context: fork` | N | Not supported |
-| Hooks | Y | Plugin SDK 28 hooks (agent lifecycle, tool execution, message flow, subagent coordination, gateway lifecycle) |
+| Hooks | Y | Internal/plugin hook surfaces exist, but Meta_Kim currently treats tool-blocking enforcement as partial until a typed plugin hook adapter is installed |
 | Plugins | N | No marketplace |
 | Workspaces | Y | Multi-agent workspace isolation |
 
@@ -54,16 +54,19 @@ OpenClaw has a unique workspace model where each agent gets its own workspace di
 
 OpenClaw does not use Codex `.codex/agents/*.toml` files or `nickname_candidates`. Agent identity is expressed through the workspace files and registered through `openclaw/openclaw.template.json`.
 
+Workspace directories are context homes and default working directories, not hard sandboxes by themselves. Internal hooks cover lifecycle and automation surfaces; blocking or canceling tool/message execution requires typed plugin hooks and a separate adapter before Meta_Kim can claim mechanical denial parity with Claude/Cursor PreToolUse-style hooks.
+
 ### Shared Skills Layer
 
 OpenClaw loads skills from managed `~/.openclaw/skills/`, personal `~/.agents/skills/`, `<workspace>/skills/`, and configured `skills.load.extraDirs[]`. Meta_Kim keeps one repo-local copy at `openclaw/skills/` and registers it through the generated OpenClaw template instead of duplicating the skill under every workspace.
 
 ### Differences from Claude Code
 
-- Has OpenClaw internal/plugin hooks, not Claude Code hook files
+- Has OpenClaw internal/plugin hooks, not Claude Code hook files; do not describe internal hooks as tool-blocking policy unless a typed plugin adapter is present
 - No context:fork capability
 - Plugin support exists in OpenClaw; do not assume Claude marketplace compatibility
 - Has workspace-per-agent model (unique to OpenClaw)
+- Workspaces are not hard sandbox guarantees unless sandboxing is separately configured
 - Uses `skills.load.extraDirs[]` for repo-local shared skill deduplication
 - Supports both SKILL.md directory format and single-file Markdown format
 

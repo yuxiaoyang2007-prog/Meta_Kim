@@ -1064,7 +1064,7 @@ async function validatePortableSkill() {
       `Portable skill is missing station-deliverable marker ${marker}.`,
     );
   }
-  assertNoForbiddenMarkers(skillSource, skillSourcePath, ["AskUserQuestion"]);
+  assertNoForbiddenMarkers(skillSource, skillSourcePath, []);
   const frontmatterValidation = validateSkillFrontmatter(skillSource);
   assert(
     frontmatterValidation.ok,
@@ -1080,9 +1080,15 @@ async function validatePortableSkill() {
       canonicalReferencePath,
       "utf8",
     );
-    assertNoForbiddenMarkers(canonicalReference, canonicalReferencePath, [
-      "AskUserQuestion",
-    ]);
+    const allowedRuntimeMarkers =
+      referenceFile === "runtime-claude.md"
+        ? []
+        : ["AskUserQuestion"];
+    assertNoForbiddenMarkers(
+      canonicalReference,
+      canonicalReferencePath,
+      allowedRuntimeMarkers,
+    );
   }
 }
 

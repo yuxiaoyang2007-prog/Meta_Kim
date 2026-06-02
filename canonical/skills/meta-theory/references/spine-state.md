@@ -4,9 +4,32 @@ The canonical spine is:
 
 Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verification -> Evolution.
 
+## Critical-Fetch Intent Loop
+
+Critical and Fetch may form a bounded loop to translate wishful user input into structured intent:
+
+1. Critical: initial intent translation (low-confidence dimensions marked).
+2. Fetch: read project context to fill low-confidence gaps.
+3. Critical (return): update intent with context-enriched understanding.
+4. If uncertain dimensions remain and loop budget allows, repeat step 2-3.
+5. Present IntentCard for user confirmation.
+6. Lock intent, proceed to formal Fetch -> Thinking.
+
+Loop control fields:
+- `criticalFetchLoopCount`: number of Critical-Fetch round trips completed (starts at 0).
+- `criticalFetchLoopMax`: hard upper bound, default 3.
+- `intentCard`: the Intent Confirmation Card presented to the user.
+- `intentConfirmationState`: `pending` | `confirmed` | `corrected` | `skipped`.
+- `intentConfirmationTimestamp`: when the user confirmed or corrected.
+- `intentCorrectionPayload`: user's correction text when `corrected`.
+
+Pass condition for exiting the loop: `intentConfirmationState` is `confirmed` or `skipped` (with allowed skip reason), AND all Critical required outputs are filled.
+
+Adaptive termination: the dispatcher may exit the loop early when all intent dimensions reach high confidence, even if loop budget remains. Record `earlyExitReason` when this happens.
+
 ## Required Outputs
 
-- Critical: `surfaceRequest`, `realProductProblem`, `realIntent`, `userPainValue`, `successCriteria`, `intentFrameAssessment`, `undecidedUserChoices`, `nonGoals`, `blockingUnknowns`, `noQuotaClarification`.
+- Critical: `surfaceRequest`, `realProductProblem`, `realIntent`, `userPainValue`, `successCriteria`, `intentFrameAssessment`, `undecidedUserChoices`, `nonGoals`, `blockingUnknowns`, `noQuotaClarification`, `intentCard`, `intentConfirmationState`.
 - Fetch: `evidence`, `decisionImpactMap`, `capabilityDiscovery`, `capabilityGap`, `contradictionLog`.
 - Thinking: `designFrame`, `workType`, `expertLens`, `minimalFixPath`, `tenXPathShift`, `chosenRationale`, `omittedTenXWithReason`, `consideredLanes`, `omittedLanesWithReason`, `workerTaskPackets`, `dependencyPolicy`.
 - Execution: `workerResultPackets`, `fileCompletionList`, `workerExecutionEvidence`.
@@ -23,6 +46,8 @@ Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verificat
 - `gateState`: pending, pass, fail, rework, blocked.
 - `surfaceState`: silent, notice, decision.
 
+These hidden state values are runtime-state fields. Public readiness is recorded separately in summary and public surface packets; do not overload `surfaceState` with `internal-ready` or `public-ready`.
+
 Protocol packets live in `config/contracts/workflow-contract.json`.
 
 ## Degraded Mode Pass Conditions
@@ -32,7 +57,7 @@ When `controlState=degraded`:
 - Thinking pass requires `capabilityGapPacket` with `currentAgentsChecked` and `degradationReason`.
 - Review pass requires `degradedFlag: true` and `reviewerRole: "main-thread-degraded"`.
 - Verification pass requires `degradedFlag: true` and `humanAcceptanceRequired: true`.
-- `surfaceState` must stay `internal-ready`; `public-ready` is forbidden in degraded mode.
+- `surfaceState` may be `silent` or `notice` but cannot become a public-ready claim. Summary and public surface packets must stay internal-only; `public-ready` is forbidden in degraded mode.
 
 
 ## Use when

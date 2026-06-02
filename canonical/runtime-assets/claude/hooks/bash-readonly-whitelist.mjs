@@ -36,6 +36,12 @@ import path from "node:path";
  *   ["npm", "run", "typecheck"] matches "npm run typecheck -- --watch"
  */
 const COMMAND_ALLOWLIST = [
+  // Shell navigation / setup
+  // Safe as a segment in compound commands such as `cd repo && node --version`.
+  // The command only mutates shell-local cwd for the current process and does
+  // not touch repo state on disk.
+  ["cd"],
+
   // Filesystem inspection
   ["ls"],
   ["dir"],
@@ -289,6 +295,9 @@ function inspectRedirections(segment) {
     }
     if (op === ">") {
       const target = tokens[i + 1] || "";
+      if (/^&\d+$/.test(target)) {
+        continue;
+      }
       if (!isWritableTargetSafe(target)) {
         return { op: tok, target };
       }
@@ -298,20 +307,62 @@ function inspectRedirections(segment) {
 }
 
 /**
- * Split a command line into segments based on shell chaining operators that
- * Claude Code's Bash tool actually supports. We split on `|`, `||`, `&&`, `;`
- * but not on `&` alone (which we treat as backgrounding the same command).
- *
- * NOTE: this is a coarse tokenizer. Quoted strings are intentionally not
- * preserved — meta-agents should not be running shell scripts complex enough
- * for that to matter; if they do, the whole thing fails closed.
+ * Split a command line into segments based on shell chaining operators while
+ * preserving quoted strings. This keeps patterns such as `grep -E "a|b"` from
+ * being misread as a pipeline.
  */
 function splitSegments(command) {
   if (typeof command !== "string" || !command.trim()) return [];
-  return command
-    .split(/(?:\|\||&&|;|\|)/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const segments = [];
+  let current = "";
+  let quote = null;
+  let escaped = false;
+
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    const next = command[i + 1] || "";
+
+    if (escaped) {
+      current += ch;
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      current += ch;
+      escaped = true;
+      continue;
+    }
+
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+
+    if (ch === ";" || ch === "|" || ch === "&") {
+      const isDouble = (ch === "|" && next === "|") || (ch === "&" && next === "&");
+      if (ch === "&" && !isDouble) {
+        current += ch;
+        continue;
+      }
+      if (current.trim()) segments.push(current.trim());
+      current = "";
+      if (isDouble) i++;
+      continue;
+    }
+
+    current += ch;
+  }
+
+  if (current.trim()) segments.push(current.trim());
+  return segments;
 }
 
 /**

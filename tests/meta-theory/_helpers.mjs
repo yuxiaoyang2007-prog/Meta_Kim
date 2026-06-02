@@ -74,6 +74,7 @@ export const REFERENCE_FILES = [
   "dev-governance.md",
   "path-selection.md",
   "spine-state.md",
+  "runtime-claude.md",
   "runtime-codex.md",
   "owner-resolution.md",
   "verification-evidence.md",

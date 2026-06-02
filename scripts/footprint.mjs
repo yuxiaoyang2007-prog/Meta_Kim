@@ -64,16 +64,24 @@ function matchesManagedHookCommand(command, marker) {
 
 const GLOBAL_HOOK_MARKER = "hooks/meta-kim";
 const REPO_HOOK_MARKER = ".claude/hooks";
+const RETIRED_HOOK_FILES = new Set(["pre-git-push-confirm.mjs"]);
+
+function isRetiredHookCommand(command) {
+  const norm = String(command ?? "").replace(/\\\\/g, "\\").replace(/\\/g, "/");
+  return [...RETIRED_HOOK_FILES].some(
+    (file) => norm.endsWith(file) || norm.includes(`/hooks/${file}`),
+  );
+}
 
 function isGlobalMetaKimHookCommand(command) {
   return (
     matchesManagedHookCommand(command, GLOBAL_HOOK_MARKER) ||
-    matchesManagedHookCommand(command, "hooks\\meta-kim")
+    matchesManagedHookCommand(command, "hooks\\meta-kim") ||
+    isRetiredHookCommand(command)
   );
 }
 const REPO_HOOK_FILES = new Set([
   "block-dangerous-bash.mjs",
-  "pre-git-push-confirm.mjs",
   "post-format.mjs",
   "post-typecheck.mjs",
   "post-console-log-warn.mjs",
@@ -91,8 +99,10 @@ function isRepoMetaKimHookCmd(command) {
     return false;
   }
   const norm = String(command).replace(/\\\\/g, "\\").replace(/\\/g, "/");
-  return [...REPO_HOOK_FILES].some(
-    (f) => norm.endsWith(f) || norm.includes(`/hooks/${f}`),
+  return (
+    [...REPO_HOOK_FILES].some(
+      (f) => norm.endsWith(f) || norm.includes(`/hooks/${f}`),
+    ) || isRetiredHookCommand(command)
   );
 }
 

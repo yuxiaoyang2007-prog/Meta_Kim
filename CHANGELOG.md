@@ -6,6 +6,95 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.8.3] - 2026-06-02
+
+### Added
+
+- **Capability Provider Contract** — Added a provider-level contract and registry for auditing `runtime_native`, canonical/external skills, agents, hooks, commands, rules, plugins, MCP servers, dependency projects, memory providers, and graph providers across runtime, OS, and install layer.
+- **Provider lifecycle state model** — Providers now track `unknown -> declared -> projected -> installed -> trusted -> discoverable -> invokable -> context_effective / enforcement_effective -> verified`, plus concrete failure states such as `missing_global_install`, `output_not_consumed`, `degraded`, and `blocked_for_execution`.
+- **Provider validator** — Added `npm run meta:providers:validate` to report exact provider/runtime/OS/install-layer gaps, including strict global Codex HookPrompt checks.
+
+### Fixed
+
+- **Codex global HookPrompt chain repaired** — The global Codex `UserPromptSubmit` hook now includes `hookprompt-adapter.mjs` additively, preserving existing planning hooks while ensuring HookPrompt output is consumed as model context.
+- **Plugin providers are no longer invisible** — `superpowers`, `ecc`, and `cli-anything` are now represented in the capability index and provider registry; inventory output reports non-zero plugin/plugin-bundle counts.
+
+### Changed
+
+- **Dependency registry stays dependency-scoped** — Provider availability, install state, trust state, output contracts, and degradation now live in `provider-registry.json`; dependency registry remains focused on reusable project scoring and routing eligibility.
+- **OpenClaw capability honesty preserved** — OpenClaw remains degraded/partial where only workspace instructions or lifecycle hooks exist; no typed plugin tool-blocking adapter is claimed.
+- Version bump: 2.8.2 -> 2.8.3.
+
+### Verification
+
+- `npm run meta:check:runtimes`
+- `npm run meta:deps:check`
+- `npm run meta:deps:compat`
+- `npm run meta:providers:validate`
+- `node scripts/validate-provider-capabilities.mjs --strict-global-hooks`
+- `npm run meta:test:governance`
+- `npm run meta:graphify:rebuild` / `npm run meta:graphify:check`
+
+## [2.8.2] - 2026-06-02
+
+### Fixed
+
+- **Hook deadlock pressure reduced** — Runtime hooks now act as last-resort fuses for key behavior only: real intent, Fetch/capability discovery, selected owner, owner loadout across agent/skill/command/MCP/tool/prompt, memory strategy, runtime/OS support, and unsafe meta-agent mutation.
+- **Optional packet fields no longer hard-block execution** — Worker packet detail, rollback fields, verification-owner detail, warning classification, and writeback reservation remain validator / Review / public-ready concerns instead of universal hook blockers.
+- **Single-worker dispatch trace relaxed** — Agent dispatch no longer hard-denies a single worker path just because `taskPacketId` or `roleInstanceId` is absent. Multi-worker ambiguity is warned for Review instead of causing hook lockup.
+- **Codex Windows update path no longer restores macOS notifications** — `setup.mjs --update` and global sync now replace an inherited `terminal-notifier` Codex `notify` command with a Windows-safe no-op notifier on Windows, preventing installed users from reintroducing `legacy_notify program not found`.
+- **Optional Codex native plugin errors are quieter** — failed `codex plugin add superpowers@openai-curated` attempts are now reported as a single optional warning instead of leaking raw marketplace/cache errors during update.
+- **Skill update fallback is less alarming** — managed skill `git pull --ff-only` failures that are immediately repaired by re-clone fallback no longer print raw git errors before the successful fallback path.
+
+### Changed
+
+- **Meta-theory execution gate clarified** — `Critical -> Fetch -> Thinking -> Execution -> Review` now emphasizes whether the task is understood, whether a matching owner/provider/loadout exists, and whether memory strategy is explicit.
+- **Cross-runtime hook wording aligned** — Claude Code, Codex, Cursor, and OpenClaw docs now describe hook coverage honestly, including Codex version-dependent hook coverage and OpenClaw's declarative enforcement until a typed plugin adapter exists.
+- **Hook progression policy split** — `requiredPreflightChecks` now covers the minimum key behavior set; detailed completeness moved to `optionalValidatorChecks`.
+- Version bump: 2.8.1 -> 2.8.2.
+
+### Upgrade Notes
+
+- Existing clone installs should update source first with `git pull --ff-only`, then refresh installed projections with `node setup.mjs --update` or `npm run meta:sync:global`.
+- `node setup.mjs --update` refreshes the current installation projections and dependencies; it does not pull new Meta_Kim source code by itself.
+- Project-local users should run `npm run meta:sync` after pulling if they need `.claude`, `.codex`, `.cursor`, and OpenClaw mirrors regenerated from canonical sources.
+
+### Verification
+
+- `npm run meta:verify:all` — passed
+- `npm run meta:verify:governance` — passed
+- `npm run meta:check` — passed
+- `npm run meta:graphify:rebuild` / `npm run meta:graphify:check` — passed
+- `git diff --check` — passed
+
+## [2.8.1] - 2026-06-02
+
+### Fixed
+
+- **Choice surface skip policy clarified** — `queryBypass`/read-only is now a safety and path-classification boundary, not a choice-surface skip reason when branch-changing options exist. Renamed `pure_read_only_queryBypass` to `no_branching_choice` across all contracts, policies, and agent definitions.
+- **simpleMode backdoor removed** — Removed `simpleMode` flag from spine state creation, all gate checks, skip logic, and i18n strings (en/zh/ja/ko). SimpleMode was a consumer-only feature that had no producer-side initialization, creating an asymmetry that could bypass dispatch governance.
+- **queryBypass spine-state deadlock fixed** — Added deadlock breaker: `queryBypass` runs can now write `spine-state.json` itself (scoped via `isSpineStateWrite()`), otherwise clearing `queryBypass` would be impossible once active.
+- **i18n stale references cleaned** — Removed stale simple-mode references from restore instructions across all 4 locales.
+
+### Changed
+
+- **Hidden state skeleton initialized** — `createInitialState` now seeds `controlState: "normal"`, `gateState: "pending"`, `surfaceState: "silent"` in both claude and shared spine state modules.
+- **controlState/gateState/surfaceState enums unified** — `controlState` converged to `normal / skip / interrupt / override / iteration / intentional_silence / degraded`. `gateState` to `pending / pass / fail / rework / blocked`. `surfaceState` to `silent / notice / decision`. Public readiness separated from `surfaceState` into summary/public surface packets.
+- **Critical-Fetch Intent Loop added** — Wishful or ambiguous input now enters a bounded Critical-Fetch loop (up to `criticalFetchLoopMax = 3` rounds) with IntentCard confirmation. New fields: `criticalFetchLoopCount`, `intentCard`, `intentConfirmationState`, `intentCorrectionPayload`.
+- **Capability discovery routing refined** — Owner discovery now uses provider-first evidence / owner-last binding. Route output exposes `runtimeToolProviders`, `discoveryPrinciple`, `ownerBindingOrder`, and `routeExecutionGate` (stale cache may preview route but cannot enter Execution).
+- **Runtime matrix tests hardened** — Cursor hook/subagent assertions changed from weak regex to structured field checks. OpenClaw `popup / overlay / approval UI` tightened from `partial` to non-native. OpenClaw docs clarify internal hooks vs typed plugin hooks, workspace is not a hard sandbox.
+- **Decision templates renderer-neutral** — Generic decision and batch templates no longer embed runtime-specific schemas (AskUserQuestion JSON). Renderer-specific payloads live in runtime adapter contracts (`runtime-claude.md`, `runtime-codex.md`).
+- **choice-surface-policy.json expanded** — Added `intentConfirmationCard`, `choiceSurfaceAdapterContract`, and `readOnlyPolicy`.
+
+### Verification
+
+- `tests/meta-theory/11-eight-stage-spine.test.mjs` — 106/106 passed
+- `tests/meta-theory/00-capability-discovery.test.mjs` — 42/42 passed
+- `tests/meta-theory/e2e-eight-stage-live.test.mjs` — 37/37 passed
+- `tests/governance/capability-routing.test.mjs` — 1/1 passed
+- `tests/governance/runtime-capability-matrix.test.mjs` — 1/1 passed
+- `scripts/validate-capability-routing.mjs` — valid
+
 ## [2.8.0] - 2026-06-01
 
 ### Added
@@ -16,6 +105,7 @@ When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the
 - **Fetch angle decomposition** — For research tasks (`researchRequired=true`), decompose the core question into N semantically distinct search angles before searching. Recorded in `contentEvidencePacket.searchAngles`. Default N=3.
 - **Worker output schema validation** — When `workerTaskPacket.output` defines an expected structure, the dispatcher validates worker results against it. On mismatch, worker retries up to 2 times before reporting failure. Recorded in `workerResultPacket.schemaValidationAttempts`.
 - **Interactive execution communication** — During multi-stage work, the dispatcher reports progress at 5 natural transition points: Fetch complete, Thinking complete, each Execution phase complete, scope-changing findings, and route-changing discoveries. Each report is a compact notice (max 3 bullets). Scope or route changes upgrade the notice to a Decision card.
+- **Fetch baseline verification lane** — Fetch can now run targeted read-only baseline checks before route selection, including `node --test`, `node scripts/run-node-tests.mjs`, and safe package-manager scripts whose names are test/check/verify/validate/lint/typecheck shaped.
 
 ### Changed
 
@@ -24,6 +114,9 @@ When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the
 - **dev-governance.md** — Added degraded mode section with stage-specific guidance and interactive execution communication section.
 - **owner-resolution.md** — Added degraded path for owner resolution when no Agent dispatch exists.
 - **workflow-contract.json** — Added `degradedPolicy` to review, meta_review, and verification stage semantics. Added `adversarialVotes` to reviewFinding protocol. Added `searchAngles` to contentEvidencePacket protocol.
+- **Critical -> Fetch hook progression** — Active runs now advance into Fetch when the operator starts repo evidence gathering or writes planning files, so baseline tests are not incorrectly blocked as Critical-stage mutation.
+- **Read-only Bash classification** — Hook command splitting is now quote-aware, allows shell-local `cd` setup for compound probes, and treats `2>&1` as fd redirection rather than a workspace write.
+- **Runtime capability honesty regression** — Runtime-native preservation now locks Codex hook support as `partial` while allowing Cursor hook support to remain `native` when verified by the runtime matrix.
 - Version bump: 2.7.0 -> 2.8.0.
 
 ### Verification
@@ -31,6 +124,9 @@ When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the
 - `npm run meta:validate` — 7/7 checks passed
 - `npm run meta:sync` — 4 runtimes synced (claude, codex, openclaw, cursor)
 - `npm run meta:check` — all green, no stale projections
+- `npm run meta:test:setup` — 312/312 tests passed
+- `npm run meta:test:meta-theory` — 857/857 tests passed
+- `npm run meta:test:governance` — 33/33 tests passed
 
 ## [2.7.0] - 2026-06-01
 
@@ -52,7 +148,7 @@ When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the
 
 - `codex --version`
 - `codex doctor`
-- `codex -a never exec --ephemeral --sandbox read-only -C D:/KimProject/Meta_Kim "Codex实机冒烟测试：不要修改文件，不要运行外部命令。读取项目说明后，用一句中文回答你能看到Meta_Kim项目且当前任务是发布前验证。"`
+- `codex -a never exec --ephemeral --sandbox read-only -C <repo> "Codex实机冒烟测试：不要修改文件，不要运行外部命令。读取项目说明后，用一句中文回答你能看到Meta_Kim项目且当前任务是发布前验证。"`
 - `npm run meta:sync`
 - `npm run meta:sync:global`
 - `npm run meta:check:global:release`
@@ -259,7 +355,7 @@ When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the
 
 ### Fixed
 
-- **Item 1 — ECC plugin install failure on macOS (NEW)** — `config/skills.json` defensive spec changed from `ecc@ecc` to `everything-claude-code@ecc` so the install survives the upstream affaan-m/everything-claude-code → ecc plugin rename across legacy + current marketplace caches. `scripts/install-global-skills-all-runtimes.mjs` gains a marketplace refresh loop (`claude plugin marketplace update <id>`) between marketplace registration and plugin install so stale caches get refreshed before resolution. Source-of-truth: local cache evidence at `C:/Users/Kim/.claude/plugins/marketplaces/ecc/.claude-plugin/marketplace.json` (current HEAD, plugin name=ecc, version 2.0.0-rc.1) vs `.../marketplaces/everything-claude-code/.claude-plugin/marketplace.json` (legacy, plugin name=everything-claude-code). The defensive spec works against both states.
+- **Item 1 — ECC plugin install failure on macOS (NEW)** — `config/skills.json` defensive spec changed from `ecc@ecc` to `everything-claude-code@ecc` so the install survives the upstream affaan-m/everything-claude-code → ecc plugin rename across legacy + current marketplace caches. `scripts/install-global-skills-all-runtimes.mjs` gains a marketplace refresh loop (`claude plugin marketplace update <id>`) between marketplace registration and plugin install so stale caches get refreshed before resolution. Source-of-truth: local cache evidence at `~/.claude/plugins/marketplaces/ecc/.claude-plugin/marketplace.json` (current HEAD, plugin name=ecc, version 2.0.0-rc.1) vs `~/.claude/plugins/marketplaces/everything-claude-code/.claude-plugin/marketplace.json` (legacy, plugin name=everything-claude-code). The defensive spec works against both states.
 - **EB-008 (HIGH) — workerExecutionEvidence silent-success semantics** — `config/contracts/workflow-contract.json::workerExecutionEvidenceField` adds `successMarkerFormat` enum (`stdout-text` | `exit-code-only` | `json-output`) plus `exitCode` and `commandRanAt` properties. Silent-success commands (`node --check`, `tsc --noEmit`) may now record empty `actualOutput` only when `successMarkerFormat="exit-code-only"` AND `exitCode=0` AND `commandRanAt` set. Closes v2.2.5 `accepted_risk` (W1 honestly disclosed exit codes; placeholder pressure pattern `EXIT_OK\n` retired). `canonical/agents/meta-prism.md::Decision Rule 16` extended in parallel (silent-success extension v2.3.0).
 - **EB-009 (LOW) — release notes claim retracted (dogfood)** — v2.2.5 release notes claimed `validate-project.mjs:15 loadRuntimeProfiles` was unused. Re-verification shows it is actively called at `validate-project.mjs:2808` inside `validateSyncConfiguration()` plus `scripts/meta-kim-sync-config.mjs:271,333`. Import is REQUIRED. v2.2.5 release notes + CHANGELOG entries gained retraction blockquote/sub-bullets across English + Chinese mirrors. No code prune.
 - **EB-010 (MEDIUM) — sibling schema style normalized** — `config/contracts/workflow-contract.json::workerExecutionEvidenceField` reshaped from heterogeneous `fieldType`/`itemSchema`/top-level `enforcement` layout to standard JSON Schema `type`/`items`/`properties` with `_meta` sidecar. Sibling style now matches `verifyStepsField` and `fileCompletionListField`. `_meta.closes` lists `[EB-005, EB-008, EB-010]`.

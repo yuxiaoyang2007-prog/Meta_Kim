@@ -6,6 +6,95 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.8.3] - 2026-06-02
+
+### 新增
+
+- **Capability Provider Contract** — 新增 provider 级合约与注册表，用于按 runtime、OS、install layer 审计 `runtime_native`、canonical/external skill、agent、hook、command、rule、plugin、MCP server、dependency project、memory provider、graph provider。
+- **Provider 生命周期状态机** — Provider 现在记录 `unknown -> declared -> projected -> installed -> trusted -> discoverable -> invokable -> context_effective / enforcement_effective -> verified`，并记录 `missing_global_install`、`output_not_consumed`、`degraded`、`blocked_for_execution` 等失败状态。
+- **Provider validator** — 新增 `npm run meta:providers:validate`，失败时会指出具体 provider / runtime / OS / install layer 缺口，并支持严格检查 Codex 全局 HookPrompt 链路。
+
+### 修复
+
+- **修复 Codex 全局 HookPrompt 链路** — 全局 Codex `UserPromptSubmit` hook 已 add-only 接入 `hookprompt-adapter.mjs`，保留现有 planning hooks，同时确保 HookPrompt 输出进入模型上下文。
+- **Plugin provider 不再隐形** — `superpowers`、`ecc`、`cli-anything` 已进入 capability index 和 provider registry；inventory 输出现在能报告非零 plugin / plugin-bundle 数量。
+
+### 变更
+
+- **Dependency registry 保持依赖职责** — Provider 可用性、安装状态、信任状态、输出合约和降级信息进入 `provider-registry.json`；dependency registry 继续只负责可复用项目评分与路由资格。
+- **保留 OpenClaw 能力真实性** — OpenClaw 在只有 workspace instruction 或 lifecycle hooks 的位置继续标记为 degraded/partial；未声称已具备 typed plugin tool-blocking adapter。
+- 版本升级：2.8.2 -> 2.8.3。
+
+### 验证
+
+- `npm run meta:check:runtimes`
+- `npm run meta:deps:check`
+- `npm run meta:deps:compat`
+- `npm run meta:providers:validate`
+- `node scripts/validate-provider-capabilities.mjs --strict-global-hooks`
+- `npm run meta:test:governance`
+- `npm run meta:graphify:rebuild` / `npm run meta:graphify:check`
+
+## [2.8.2] - 2026-06-02
+
+### 修复
+
+- **降低 Hook 死锁压力** — 运行时 hooks 现在只作为关键行为的最后保险丝：真实意图、Fetch/能力发现、已选择 owner、owner 对应的 agent/skill/command/MCP/tool/prompt loadout、记忆策略、运行时/OS 支持，以及不安全的 meta-agent mutation。
+- **可选 packet 字段不再硬阻断执行** — Worker packet 细节、rollback 字段、verification owner 细节、warning classification 和 writeback reservation 仍由 validator / Review / public-ready gate 检查，不再作为所有 hook 的通用硬拦截条件。
+- **放宽单 worker 调度追踪** — 单 worker 路径不再因为缺少 `taskPacketId` 或 `roleInstanceId` 直接 hard deny；多 worker 场景会提醒 Review 检查追踪性，而不是造成 hook 卡死。
+- **Codex Windows 更新路径不再恢复 macOS 通知命令** — `setup.mjs --update` 和全局同步现在会在 Windows 上把继承来的 Codex `terminal-notifier` `notify` 命令替换为 Windows-safe no-op notifier，避免已安装用户重新遇到 `legacy_notify program not found`。
+- **可选 Codex 原生插件错误更安静** — `codex plugin add superpowers@openai-curated` 失败现在只输出一条可选 warning，不再在更新过程中泄漏原始 marketplace/cache 错误。
+- **技能更新 fallback 不再吓人** — managed skill 的 `git pull --ff-only` 如果马上会被 re-clone fallback 修复，现在不会先打印原始 git error 再走成功 fallback。
+
+### 变更
+
+- **澄清 meta-theory 执行门** — `Critical -> Fetch -> Thinking -> Execution -> Review` 现在重点检查任务是否想清楚、是否存在匹配 owner/provider/loadout、以及记忆策略是否明确。
+- **统一跨运行时 hook 表述** — Claude Code、Codex、Cursor、OpenClaw 文档现在如实描述 hook 覆盖范围，包括 Codex hook 的版本依赖，以及 OpenClaw 在 typed plugin adapter 安装前仍以声明式 enforcement 为主。
+- **拆分 Hook progression policy** — `requiredPreflightChecks` 只保留关键行为最低集合；详细完整性移到 `optionalValidatorChecks`。
+- 版本升级：2.8.1 -> 2.8.2。
+
+### 升级说明
+
+- 已 clone 安装的用户应先用 `git pull --ff-only` 更新源码，再运行 `node setup.mjs --update` 或 `npm run meta:sync:global` 刷新已安装投影。
+- `node setup.mjs --update` 只刷新当前安装的 projections 和依赖；它不会自动拉取新的 Meta_Kim 源码。
+- 项目本地用户拉取后如需重新生成 `.claude`、`.codex`、`.cursor` 和 OpenClaw mirrors，请运行 `npm run meta:sync`。
+
+### 验证
+
+- `npm run meta:verify:all` — 通过
+- `npm run meta:verify:governance` — 通过
+- `npm run meta:check` — 通过
+- `npm run meta:graphify:rebuild` / `npm run meta:graphify:check` — 通过
+- `git diff --check` — 通过
+
+## [2.8.1] - 2026-06-02
+
+### 修复
+
+- **决策面跳过策略澄清** — `queryBypass`/只读现在是安全和路径分类边界，不是存在分支选项时的决策面跳过理由。在所有合约、策略和 agent 定义中将 `pure_read_only_queryBypass` 重命名为 `no_branching_choice`。
+- **移除 simpleMode 后门** — 从脊柱状态创建、所有门控检查、跳过逻辑和四语言 i18n 字符串中移除 `simpleMode` 标志。simpleMode 是仅消费者功能，没有生产者侧初始化，造成了绕过调度治理的不对称。
+- **修复 queryBypass 脊柱状态死锁** — 添加死锁打破机制：`queryBypass` 运行现在可以写入 `spine-state.json` 本身（通过 `isSpineStateWrite()` 限定范围），否则一旦激活就无法清除 `queryBypass`。
+- **清理 i18n 过时引用** — 从四种语言的恢复指令中移除过时的 simple-mode 引用。
+
+### 变更
+
+- **隐藏状态骨架初始化** — `createInitialState` 现在在 claude 和 shared 脊柱状态模块中种子 `controlState: "normal"`、`gateState: "pending"`、`surfaceState: "silent"`。
+- **controlState/gateState/surfaceState 枚举统一** — `controlState` 收敛为 `normal / skip / interrupt / override / iteration / intentional_silence / degraded`。`gateState` 为 `pending / pass / fail / rework / blocked`。`surfaceState` 为 `silent / notice / decision`。公开就绪状态从 `surfaceState` 分离到摘要/公开面数据包。
+- **新增 Critical-Fetch 意图循环** — 模糊或歧义输入现在进入有界 Critical-Fetch 循环（最多 `criticalFetchLoopMax = 3` 轮），配合 IntentCard 确认。新字段：`criticalFetchLoopCount`、`intentCard`、`intentConfirmationState`、`intentCorrectionPayload`。
+- **能力发现路由优化** — 所有者发现现在使用 provider-first evidence / owner-last binding。路由输出暴露 `runtimeToolProviders`、`discoveryPrinciple`、`ownerBindingOrder` 和 `routeExecutionGate`（过期缓存可预览路由但不能进入 Execution）。
+- **运行时矩阵测试加固** — Cursor hook/subagent 断言从弱正则改为结构化字段检查。OpenClaw `popup / overlay / approval UI` 从 `partial` 收紧为非原生。OpenClaw 文档澄清内部 hooks 与 typed plugin hooks 的区别，workspace 不是硬沙箱。
+- **决策模板渲染器中立** — 通用决策和批量模板不再嵌入运行时特定 schema（AskUserQuestion JSON）。渲染器特定 payload 放在运行时适配器合约中（`runtime-claude.md`、`runtime-codex.md`）。
+- **choice-surface-policy.json 扩展** — 新增 `intentConfirmationCard`、`choiceSurfaceAdapterContract` 和 `readOnlyPolicy`。
+
+### 验证
+
+- `tests/meta-theory/11-eight-stage-spine.test.mjs` — 106/106 通过
+- `tests/meta-theory/00-capability-discovery.test.mjs` — 42/42 通过
+- `tests/meta-theory/e2e-eight-stage-live.test.mjs` — 37/37 通过
+- `tests/governance/capability-routing.test.mjs` — 1/1 通过
+- `tests/governance/runtime-capability-matrix.test.mjs` — 1/1 通过
+- `scripts/validate-capability-routing.mjs` — valid
+
 ## [2.8.0] - 2026-06-01
 
 ### 新增
@@ -16,6 +105,7 @@
 - **Fetch 角度分解** — 研究类任务（`researchRequired=true`）在搜索前将问题拆分为 N 个语义不同的搜索角度，记录在 `searchAngles` 字段。默认 N=3。
 - **Worker 输出 schema 验证** — `workerTaskPacket.output` 定义了预期结构时，dispatcher 对 worker 返回结果做格式校验。不匹配则重试（最多 2 次）。记录在 `schemaValidationAttempts`。
 - **执行中交互沟通** — 多阶段任务中，dispatcher 在 5 个自然过渡点向用户报告进度：Fetch 完成、Thinking 完成、每阶段完成、scope 变更、路线变更。每次最多 3 条摘要。scope 或路线变化时升级为 Decision 卡片。
+- **Fetch 基线验证通道** — Fetch 阶段现在可以在路线选择前运行定向只读基线检查，包括 `node --test`、`node scripts/run-node-tests.mjs`，以及名称属于 test/check/verify/validate/lint/typecheck 形态的安全包管理器脚本。
 
 ### 变更
 
@@ -23,6 +113,9 @@
 - **dev-governance.md** — 增加降级模式段落和交互沟通段落。
 - **owner-resolution.md** — 增加无 Agent dispatch 时的降级 owner 解析路径。
 - **workflow-contract.json** — review/meta_review/verification 增加 `degradedPolicy`；reviewFinding 增加 `adversarialVotes`；contentEvidencePacket 增加 `searchAngles`。
+- **Critical -> Fetch hook 推进** — 活跃运行开始收集仓库证据或写 planning files 时会进入 Fetch，避免把基线测试误判为 Critical 阶段的 mutation。
+- **只读 Bash 分类** — Hook 命令切分现在尊重引号，允许复合探测里的 shell-local `cd`，并把 `2>&1` 识别为 fd 重定向而不是写入工作区。
+- **运行时能力真实性回归** — runtime-native preservation 现在锁定 Codex hook support 为 `partial`，同时允许 Cursor hook support 在 runtime matrix 证据下保持 `native`。
 - 版本升级：2.7.0 -> 2.8.0。
 
 ### 验证
@@ -30,6 +123,9 @@
 - `npm run meta:validate` — 7/7 通过
 - `npm run meta:sync` — 4 个 runtime 同步完成（claude、codex、openclaw、cursor）
 - `npm run meta:check` — 全绿，无过期 projection
+- `npm run meta:test:setup` — 312/312 通过
+- `npm run meta:test:meta-theory` — 857/857 通过
+- `npm run meta:test:governance` — 33/33 通过
 
 ## [2.7.0] - 2026-06-01
 
@@ -51,7 +147,7 @@
 
 - `codex --version`
 - `codex doctor`
-- `codex -a never exec --ephemeral --sandbox read-only -C D:/KimProject/Meta_Kim "Codex实机冒烟测试：不要修改文件，不要运行外部命令。读取项目说明后，用一句中文回答你能看到Meta_Kim项目且当前任务是发布前验证。"`
+- `codex -a never exec --ephemeral --sandbox read-only -C <repo> "Codex实机冒烟测试：不要修改文件，不要运行外部命令。读取项目说明后，用一句中文回答你能看到Meta_Kim项目且当前任务是发布前验证。"`
 - `npm run meta:sync`
 - `npm run meta:sync:global`
 - `npm run meta:check:global:release`
@@ -233,7 +329,7 @@
 
 ### 修复
 
-- **Item 1 — ECC plugin macOS 安装失败（新）** — `config/skills.json` 防御性规范由 `ecc@ecc` 改为 `everything-claude-code@ecc`，以兼容上游 affaan-m/everything-claude-code → ecc 插件改名跨新旧 marketplace 缓存。`scripts/install-global-skills-all-runtimes.mjs` 在 marketplace 注册和插件安装之间加入刷新循环（`claude plugin marketplace update <id>`），以确保解析前缓存已更新。来源证据：本地缓存 `C:/Users/Kim/.claude/plugins/marketplaces/ecc/.claude-plugin/marketplace.json`（当前 HEAD，插件名=ecc，版本 2.0.0-rc.1）vs `.../marketplaces/everything-claude-code/.claude-plugin/marketplace.json`（旧版，插件名=everything-claude-code）。防御性规范对两种状态都生效。
+- **Item 1 — ECC plugin macOS 安装失败（新）** — `config/skills.json` 防御性规范由 `ecc@ecc` 改为 `everything-claude-code@ecc`，以兼容上游 affaan-m/everything-claude-code → ecc 插件改名跨新旧 marketplace 缓存。`scripts/install-global-skills-all-runtimes.mjs` 在 marketplace 注册和插件安装之间加入刷新循环（`claude plugin marketplace update <id>`），以确保解析前缓存已更新。来源证据：本地缓存 `~/.claude/plugins/marketplaces/ecc/.claude-plugin/marketplace.json`（当前 HEAD，插件名=ecc，版本 2.0.0-rc.1）vs `~/.claude/plugins/marketplaces/everything-claude-code/.claude-plugin/marketplace.json`（旧版，插件名=everything-claude-code）。防御性规范对两种状态都生效。
 - **EB-008（HIGH）— workerExecutionEvidence 静默成功语义** — `config/contracts/workflow-contract.json::workerExecutionEvidenceField` 新增 `successMarkerFormat` enum (`stdout-text` | `exit-code-only` | `json-output`) 及 `exitCode`、`commandRanAt` 属性。静默成功命令（`node --check`、`tsc --noEmit`）只有在 `successMarkerFormat="exit-code-only"` 且 `exitCode=0` 且 `commandRanAt` 已记录时才允许 `actualOutput` 为空。关闭 v2.2.5 `accepted_risk`（W1 诚实披露 exit codes；占位符压力模式 `EXIT_OK\n` 退役）。`canonical/agents/meta-prism.md::Decision Rule 16` 同步扩展（silent-success extension v2.3.0）。
 - **EB-009（LOW）— 公开撤回错判（dogfood）** — v2.2.5 release notes 声称 `validate-project.mjs:15 loadRuntimeProfiles` 未被使用。重新验证显示其在 `validate-project.mjs:2808` 的 `validateSyncConfiguration()` 内被实际调用，且 `scripts/meta-kim-sync-config.mjs:271,333` 也定义和使用。该 import 必需保留。v2.2.5 release notes + CHANGELOG 中英双语条目均加入撤回引用/子条目。不做代码裁剪。
 - **EB-010（MEDIUM）— 同级 schema 风格归一化** — `config/contracts/workflow-contract.json::workerExecutionEvidenceField` 由异构 `fieldType`/`itemSchema`/顶层 `enforcement` 布局重塑为标准 JSON Schema `type`/`items`/`properties` + `_meta` 边带元数据。同级风格现在与 `verifyStepsField`、`fileCompletionListField` 一致。`_meta.closes` 列出 `[EB-005, EB-008, EB-010]`。

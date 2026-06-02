@@ -15,7 +15,9 @@ const fuzzy = route("fuzzy strategy task: choose a product monetization path and
 assert(fuzzy.candidateWeapons.includes("meta-kim-decision-patterns"), "Fuzzy strategy/product task must recall internal Meta_Kim decision patterns");
 assert(fuzzy.ownerDiscoveryPacket?.governanceStages?.Critical?.requiredAgents?.includes("meta-warden"), "Route output must expose Critical governance owner discovery");
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.projectRuntimeAgents), "Route output must expose project runtime agent discovery");
-assert(fuzzy.ownerDiscoveryPacket?.searchOrder?.includes("project_runtime_agent_inventory"), "Route owner discovery must include project runtime agent inventory");
+assert(fuzzy.ownerDiscoveryPacket?.discoveryPrinciple === "provider_first_evidence_owner_last_binding", "Route output must use provider-first evidence and owner-last binding");
+assert(fuzzy.ownerDiscoveryPacket?.searchOrder?.[0] === "available_capability_providers_skills_tools_mcp", "Provider evidence must precede owner binding");
+assert(fuzzy.ownerDiscoveryPacket?.ownerBindingOrder?.includes("project_runtime_agent_inventory"), "Route owner binding must include project runtime agent inventory");
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.projectRuntimeSkillProviders), "Route output must expose project runtime skill provider discovery");
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.localGlobalSkillProviders), "Route output must expose local/global skill provider discovery");
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.projectRuntimeCapabilityProviders), "Route output must expose project runtime capability provider discovery");
@@ -23,10 +25,14 @@ assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.localGlobalCapabilityProviders)
 assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.projectRuntimeLightScan?.hooks >= 1, "Route output must expose project hook provider coverage");
 assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.projectRuntimeLightScan?.rules >= 1, "Route output must expose project rule/prompt provider coverage");
 assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.localGlobalCached?.plugins >= 1, "Route output must expose cached global plugin provider coverage");
+assert(fuzzy.ownerDiscoveryPacket?.runtimeToolProviders?.some((provider) => provider.type === "runtimeTools"), "Route output must expose runtime tool providers");
+assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.projectRuntimeLightScan?.runtimeTools >= 1, "Route output must count runtime tool providers");
 assert(fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.mode === "cached_global_inventory_plus_project_light_scan", "Route output must expose cached+light-scan freshness policy");
 assert(fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.staleAfterMinutes === 20160, "Route output must use a 14-day global inventory stale threshold");
 assert(fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.staleAfterDays === 14, "Route output must expose the 2-week capability refresh cadence");
 assert(typeof fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.refreshRequiredBeforeExecution === "boolean", "Route output must expose whether refresh is required before execution");
+assert(fuzzy.routeExecutionGate?.canPreviewRoute === true, "Stale cache may still allow route preview");
+assert(typeof fuzzy.routeExecutionGate?.canEnterExecution === "boolean", "Route output must expose whether Execution may start");
 assert(fuzzy.ownerDiscoveryPacket?.candidateReusableCapabilityProviders?.length > 0, "Route output must expose reusable capability providers before agent creation");
 assert(fuzzy.ownerDiscoveryPacket?.searchOrder?.includes("available_capability_providers_skills_tools_mcp"), "Route owner discovery must include provider-first skill/tool/MCP inventory");
 if (fuzzy.candidateDependencyProjects.includes("kim-decision")) {

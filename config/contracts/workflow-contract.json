@@ -667,8 +667,8 @@
       "claude": {
         "primarySurface": "AskUserQuestion_tool",
         "fallbackSurfaces": ["conversation_fallback"],
-        "triggerDescription": "Use AskUserQuestion for blocking Critical clarification only when Fetch cannot proceed, then use it once for Execution confirmation after contentEvidencePacket and preDecisionOptionFrame are complete.",
-        "implementation": "Invoke AskUserQuestion with questions array; platform natively supports modal popup."
+        "triggerDescription": "Use AskUserQuestion (native since v2.0.21) for blocking Critical clarification only when Fetch cannot proceed, then use it once for Execution confirmation after contentEvidencePacket and preDecisionOptionFrame are complete. PreToolUse hooks must whitelist AskUserQuestion to avoid stripping return data (issue #12031).",
+        "implementation": "Invoke AskUserQuestion with a questions array; platform renders an interactive Ink popup. If unavailable or returns empty, label the route conversation_fallback, render a localized chat decision card, and wait before Execution."
       },
       "codex": {
         "primarySurface": "request_user_input",
@@ -937,12 +937,20 @@
       "anonymousExecutionForbidden": true,
       "existingOwnerPreferred": true,
       "existingOwnerDiscoveryRequired": true,
+      "discoveryPrinciple": "provider_first_evidence_owner_last_binding",
+      "providerEvidenceOrder": [
+        "available_capability_providers_skills_tools_mcp",
+        "runtime_tool_provider_inventory",
+        "repo_canonical_capability_index",
+        "runtime_mirror_indexes",
+        "project_runtime_agent_inventory",
+        "local_global_agent_inventory"
+      ],
       "existingOwnerEvidenceOrder": [
         "repo_canonical_capability_index",
         "runtime_mirror_indexes",
         "project_runtime_agent_inventory",
-        "local_global_agent_inventory",
-        "available_capability_providers_skills_tools_mcp"
+        "local_global_agent_inventory"
       ],
       "capabilityDiscoveryRuntimePolicy": {
         "defaultMode": "cached_global_inventory_plus_project_light_scan",
@@ -955,7 +963,7 @@
           "scheduled_refresh_older_than_14_days",
           "high_risk_provider_route"
         ],
-        "perRunBehavior": "Every governed execution reads the cached global capability inventory and performs a lightweight project scan for agents, skills, commands, hooks, rules/prompts, and MCP config references. It must not run a full global filesystem scan on every dispatch; it must require a full refresh first when the cache is missing or older than 14 days.",
+        "perRunBehavior": "Every governed execution reads the cached global capability inventory and performs a lightweight project scan for agents, skills, commands, hooks, rules/prompts, MCP config references, and runtime tool evidence. It must not run a full global filesystem scan on every dispatch. It may preview a route with missing cache or cache older than 14 days, but it must not enter Execution until discovery refreshes or returns to Fetch.",
         "staleAfterMinutes": 20160,
         "staleAfterDays": 14,
         "refreshCommand": "npm run discover:global",
@@ -1310,7 +1318,7 @@
       "dispatchArtifactsFinalizedAfterChoice": true,
       "choiceGateSkipAllowedWhen": [
         "trivial",
-        "pure_read_only_queryBypass",
+        "no_branching_choice",
         "explicit_auto_proceed"
       ],
       "capabilityGapPacketRequiredWhenUpgradeReasons": [
@@ -1758,16 +1766,16 @@
       ],
       "choiceGateSkipAllowedWhen": [
         "trivial",
-        "pure_read_only_queryBypass",
+        "no_branching_choice",
         "explicit_auto_proceed"
       ],
       "solutionChoiceStateEnum": [
         "confirmed",
         "trivial",
-        "pure_read_only_queryBypass",
+        "no_branching_choice",
         "explicit_auto_proceed"
       ],
-      "description": "Thinking-stage pre-decision frame for non-trivial executable work before AskUserQuestion, native choice, or fallback. It must list unresolvedQuestions, present contentEvidence-backed candidate solution paths, and record solutionChoiceState before detailed orchestration is locked. A skipped choice must include skipSource and skipSafetyRationale, and may only use strict skip reasons. It contains candidate orchestration paths and trade-offs only; it is not a finalized dispatchEnvelopePacket, dispatchBoard, or workerTaskPacket."
+      "description": "Thinking-stage pre-decision frame for non-trivial executable work before AskUserQuestion, native choice, or fallback. It must list unresolvedQuestions, present contentEvidence-backed candidate solution paths, and record solutionChoiceState before detailed orchestration is locked. A skipped choice must include skipSource and skipSafetyRationale, and may only use strict skip reasons. Read-only/queryBypass is a safety and path-classification boundary, not a choice-surface skip reason by itself; use no_branching_choice only when no user answer would change route, scope, risk, owner, permission, non-goal, or acceptance. It contains candidate orchestration paths and trade-offs only; it is not a finalized dispatchEnvelopePacket, dispatchBoard, or workerTaskPacket."
     },
     "intentPacket": {
       "requiredFields": [

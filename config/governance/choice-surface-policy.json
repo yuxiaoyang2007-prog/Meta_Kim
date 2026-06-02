@@ -6,7 +6,8 @@
     "choice changes owner or verification owner",
     "choice changes runtime or OS",
     "choice changes dependency adoption",
-    "choice changes public-ready acceptance"
+    "choice changes public-ready acceptance",
+    "read-only work still has branch-changing options"
   ],
   "choiceForbiddenWhen": [
     "AI can inspect the answer locally",
@@ -14,6 +15,7 @@
     "approval overlay would be used for product choice",
     "choice does not alter route/scope/risk/acceptance/owner/permission/non-goal"
   ],
+  "readOnlyPolicy": "Read-only/queryBypass is a safety and path-classification boundary, not a choice-surface skip reason by itself. Ask when branch-changing options exist; skip only when no user answer would change the route, scope, risk, owner, permission, non-goal, or acceptance.",
   "platformChoiceSurfaces": {
     "claude_code": [
       {
@@ -76,6 +78,45 @@
       "risk",
       "expectedResult",
       "verification"
+    ]
+  },
+  "intentConfirmationCard": {
+    "cardType": "intent_confirmation",
+    "requiredFields": [
+      "surfaceRequest",
+      "understoodIntent",
+      "confirmedDimensions",
+      "uncertainDimensions"
+    ],
+    "confirmationStates": ["pending", "confirmed", "corrected", "skipped"],
+    "allowedSkipReasons": ["trivial", "explicit_auto_proceed"],
+    "renderHint": "Show confirmed items as checkmarks, uncertain items as numbered questions. Prompt: reply 'yes' to confirm, or correct specific items.",
+    "surfacePreference": "Use the current runtime adapter's verified native choice surface when available. Fall back to chat card via the standard fallback chain."
+  },
+  "choiceSurfaceAdapterContract": {
+    "purpose": "Separate the canonical decision card from runtime-specific renderer schemas.",
+    "canonicalCardTypes": ["intent_confirmation", "pre_execution_decision"],
+    "adapterMayCompressForRenderer": true,
+    "adapterMustPreserve": [
+      "decision purpose",
+      "route-changing dimension",
+      "recommended default",
+      "option count",
+      "option trade-offs",
+      "selection result",
+      "fallback reason",
+      "writeback target"
+    ],
+    "canonicalMustNotContain": [
+      "renderer-specific payload schema",
+      "host-only option decoration",
+      "tool-specific field mapping",
+      "one-runtime-only labels"
+    ],
+    "runtimeSpecificMappingsLiveIn": [
+      "canonical/skills/meta-theory/references/runtime-claude.md",
+      "canonical/skills/meta-theory/references/runtime-codex.md",
+      "config/runtime-capability-matrix.json"
     ]
   },
   "codexUxRisks": [

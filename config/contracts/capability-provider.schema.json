@@ -1,0 +1,347 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meta-kim.dev/contracts/capability-provider.schema.json",
+  "title": "Meta_Kim Capability Provider Contract",
+  "description": "Provider-level governance contract for auditing how capabilities are declared, installed, trusted, discovered, invoked, consumed, enforced, and verified across runtimes, operating systems, and install layers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "providerTypes",
+    "stateModel",
+    "runtimes",
+    "operatingSystems",
+    "installLayers",
+    "mappingPolicy",
+    "providers"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "providerTypes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "runtime_native",
+          "canonical_agent",
+          "canonical_skill",
+          "external_skill",
+          "plugin_marketplace",
+          "plugin_bundle",
+          "mcp_server",
+          "hook_script",
+          "command",
+          "rule_file",
+          "dependency_project",
+          "memory_provider",
+          "graph_provider"
+        ]
+      }
+    },
+    "stateModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["successStates", "failureStates"],
+      "properties": {
+        "successStates": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "unknown",
+              "declared",
+              "projected",
+              "installed",
+              "trusted",
+              "discoverable",
+              "invokable",
+              "context_effective",
+              "enforcement_effective",
+              "verified"
+            ]
+          }
+        },
+        "failureStates": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "missing_projection",
+              "missing_global_install",
+              "untrusted",
+              "not_discoverable",
+              "not_invokable",
+              "output_not_consumed",
+              "degraded",
+              "blocked_for_execution"
+            ]
+          }
+        }
+      }
+    },
+    "runtimes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["claude_code", "codex", "cursor", "openclaw"] }
+    },
+    "operatingSystems": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["macos", "windows", "linux", "wsl2"] }
+    },
+    "installLayers": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "runtime_native",
+          "canonical_source",
+          "project_projection",
+          "global_home",
+          "plugin_marketplace",
+          "plugin_bundle",
+          "mcp_config",
+          "command_path",
+          "rule_projection",
+          "dependency_registry",
+          "memory_service",
+          "graph_index"
+        ]
+      }
+    },
+    "mappingPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skillsManifest",
+        "dependencyProjectRegistry",
+        "runtimeCapabilityMatrix",
+        "weaponRegistry"
+      ],
+      "properties": {
+        "skillsManifest": { "$ref": "#/$defs/sourceMapping" },
+        "dependencyProjectRegistry": { "$ref": "#/$defs/sourceMapping" },
+        "runtimeCapabilityMatrix": { "$ref": "#/$defs/sourceMapping" },
+        "weaponRegistry": { "$ref": "#/$defs/sourceMapping" }
+      }
+    },
+    "providers": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/provider" }
+    }
+  },
+  "$defs": {
+    "sourceMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceRef", "required"],
+      "properties": {
+        "sourceRef": { "type": "string" },
+        "required": { "type": "boolean" },
+        "notes": { "type": "string" }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "providerKind",
+        "providerType",
+        "capabilities",
+        "source",
+        "trust",
+        "installMethod",
+        "runtimeAdapters",
+        "osAdapters",
+        "installLayers",
+        "exposedArtifacts",
+        "activationEvents",
+        "outputContracts",
+        "safetyBoundary",
+        "summary",
+        "sourceOfTruth",
+        "mappings",
+        "activation",
+        "verification",
+        "degradation",
+        "owner",
+        "reviewOwner",
+        "evolutionKey",
+        "risk",
+        "support"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._:-]*$" },
+        "providerKind": { "type": "string" },
+        "providerType": { "type": "string" },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["sourceOfTruth"],
+          "properties": {
+            "sourceOfTruth": { "type": "string" },
+            "mappings": { "type": "object", "additionalProperties": true }
+          }
+        },
+        "trust": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["review", "required"],
+          "properties": {
+            "review": { "type": "string" },
+            "required": { "type": "boolean" }
+          }
+        },
+        "installMethod": { "type": "string" },
+        "runtimeAdapters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["state", "status", "installLayers", "outputContract"],
+            "properties": {
+              "state": { "type": "string" },
+              "status": { "type": "string" },
+              "installLayers": { "type": "object", "additionalProperties": true },
+              "activationEvent": { "type": ["string", "null"] },
+              "outputContract": { "type": "string" },
+              "reason": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "osAdapters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["status"],
+            "properties": {
+              "status": { "type": "string" },
+              "risks": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "installLayers": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "exposedArtifacts": { "type": "array", "items": { "type": "string" } },
+        "activationEvents": { "type": "array", "items": { "type": "string" } },
+        "outputContracts": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["consumption"],
+          "properties": {
+            "consumption": { "type": "string" },
+            "mustEnterModelContext": { "type": "boolean" },
+            "mustEnforcePolicy": { "type": "boolean" }
+          }
+        },
+        "safetyBoundary": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["trustReview"],
+          "properties": {
+            "trustReview": { "type": "string" },
+            "notes": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "summary": { "type": "string" },
+        "sourceOfTruth": { "type": "string" },
+        "mappings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "skillsJsonIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "dependencyProjectIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "runtimeMatrixPlatforms": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "weaponRegistryIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "capabilityInventoryTypes": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+          }
+        },
+        "activation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["installLayers", "trigger", "outputConsumption"],
+          "properties": {
+            "installLayers": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "trigger": { "type": "string" },
+            "outputConsumption": {
+              "type": "string",
+              "enum": ["model_context", "tool_denial", "runtime_call", "file_projection", "command_output", "reference_only", "not_consumed"]
+            }
+          }
+        },
+        "verification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method"],
+          "properties": {
+            "method": { "type": "string" },
+            "command": { "type": "string" },
+            "artifact": { "type": "string" }
+          }
+        },
+        "risk": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["trustReview"],
+          "properties": {
+            "trustReview": { "type": "string" },
+            "notes": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "degradation": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["statusByRuntime"],
+          "properties": {
+            "statusByRuntime": { "type": "object", "additionalProperties": { "type": "string" } },
+            "reason": { "type": ["string", "null"] }
+          }
+        },
+        "owner": { "type": "string" },
+        "reviewOwner": { "type": "string" },
+        "evolutionKey": { "type": "string" },
+        "support": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["default", "runtimes"],
+          "properties": {
+            "default": { "$ref": "#/$defs/supportState" },
+            "runtimes": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/$defs/supportState" }
+            }
+          }
+        }
+      }
+    },
+    "supportState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "status", "installLayers", "os"],
+      "properties": {
+        "state": { "type": "string" },
+        "status": { "enum": ["verified", "degraded", "partial", "needs_probe", "blocked"] },
+        "reason": { "type": "string" },
+        "installLayers": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": ["verified", "projected", "installed", "declared", "partial", "needs_probe", "missing", "unsupported", "degraded"]
+          }
+        },
+        "os": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": ["verified", "partial", "needs_probe", "unsupported", "degraded"]
+          }
+        }
+      }
+    }
+  }
+}

@@ -14,7 +14,7 @@ If you only keep five rules in mind:
 
 ## Codex Output Rules
 
-- On Windows, do not output raw Windows paths in normal Markdown text. Wrap paths in backticks and prefer forward slashes, for example `D:/KimProject/Meta_Kim`.
+- On Windows, do not output raw Windows paths in normal Markdown text. Wrap paths in backticks and prefer forward slashes, for example `D:/path/to/project`.
 - Do not paste full diffs or patches into chat after GitHub submit.
 - After GitHub submit, report only the branch name, commit hash, PR URL when present, and a short summary.
 
@@ -118,10 +118,10 @@ Hardcoding a specific agent name before discovery is a shortcut, not the canonic
 
 ### Mechanical Enforcement (Cross-Runtime)
 
-Capability-first has a mechanical hook path on Claude Code, Codex, and Cursor, but the default mode is progressive. During the grace window it warns unless `META_KIM_CAPABILITY_GATE=block` is set; do not describe the default as immediate hard-deny.
+Capability-first has a mechanical hook path on Claude Code, Codex, and Cursor, but the default mode is progressive. During the grace window it warns unless `META_KIM_CAPABILITY_GATE=block` is set; do not describe the default as immediate hard-deny. Hooks are last-resort fuses for key behavior only. They should block missing intent, missing Fetch evidence, missing capability discovery, missing owner/loadout, known-unsupported runtime/OS, missing memory strategy, or unsafe meta-agent mutation. They should not block merely because optional packet parameters are absent; detailed completeness belongs to validators, Review, and public-ready gates.
 
 - **Claude Code**: enforced via the PreToolUse hook `enforce-agent-dispatch.mjs` (deny payload `{hookSpecificOutput.permissionDecision: "deny"}` when the effective mode is `block`). The gate covers `Agent` dispatches in stages `execution`, `review`, `meta_review`, `verification`, `evolution` unless `fetchRecord.capabilitySearchPerformed === true`. Discovery stages `critical`, `fetch`, `thinking` are exempt except for execution-intent dispatch before design-time readiness.
-- **Codex CLI**: enforced via PreToolUse hook (same `enforce-agent-dispatch.mjs` script projected to `.codex/hooks/`). Matcher includes `"Bash|apply_patch|Edit|Write|MultiEdit|NotebookEdit|Agent|spawn_agent"`. Registered at `scripts/runtime-hook-mapping.mjs:213-219`.
+- **Codex CLI**: enforced via PreToolUse hook (same `enforce-agent-dispatch.mjs` script projected to `.codex/hooks/`). Matcher includes `"Bash|apply_patch|Edit|Write|MultiEdit|NotebookEdit|Agent|spawn_agent"`, but Codex hook coverage is runtime-version dependent; do not treat it as an all-tool policy engine. Registered at `scripts/runtime-hook-mapping.mjs:213-219`.
 - **Cursor**: mechanically enforced via the official `preToolUse` hook surface with `failClosed: true` (crash defaults to deny). Uses exit code 2 + stderr deny reason or stdout JSON `{"permission":"deny",...}`. Registered at `scripts/runtime-hook-mapping.mjs:269-280`.
 - **OpenClaw**: current Meta_Kim tool-blocking enforcement is declarative-only — hard refusal prose in workspace `HEARTBEAT.md` and `SOUL.md` (`executionBlock=true`). OpenClaw internal hooks cover command/lifecycle automation, and typed plugin hooks are the official blocking/canceling policy surface, but Meta_Kim has not installed a typed plugin enforcement adapter yet.
 

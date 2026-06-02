@@ -475,8 +475,8 @@
         {
           "platform": "claude_code",
           "capability": "browser / web",
-          "support": "partial",
-          "confidence": "repo_claim",
+          "support": "unknown",
+          "confidence": "unverified",
           "trigger": {
             "userTrigger": "Use browser/web tool when available.",
             "autoTrigger": "Only after evidence lane selects it.",
@@ -552,7 +552,7 @@
           "automationBoundary": {
             "canAutoRun": true,
             "requiresApproval": true,
-            "requiresTrustReview": false,
+            "requiresTrustReview": true,
             "dangerousModes": [
               "destructive_command"
             ],
@@ -4205,8 +4205,8 @@
         {
           "platform": "openclaw",
           "capability": "popup / overlay / approval UI",
-          "support": "partial",
-          "confidence": "repo_claim",
+          "support": "unknown",
+          "confidence": "unverified",
           "trigger": {
             "userTrigger": "User explicitly requests popup / overlay / approval UI or a governed task requires it.",
             "autoTrigger": "Meta_Kim may select popup / overlay / approval UI only after Fetch and Thinking identify it as a valid route component.",
@@ -4244,17 +4244,17 @@
           "automationBoundary": {
             "canAutoRun": false,
             "requiresApproval": true,
-            "requiresTrustReview": false,
+            "requiresTrustReview": true,
             "dangerousModes": [],
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": "openclaw/openclaw.template.json; openclaw/workspaces; openclaw/skills; openclaw/hooks",
+            "source": "not_verified",
+            "sourceRef": "OpenClaw popup / overlay / approval UI native behavior not verified by Meta_Kim.",
             "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "openclaw --version"
+            "verificationCommand": null
           },
-          "notes": "OpenClaw third-party skills require risk review; distinguish host tools from sandbox tools."
+          "notes": "No verified native approval popup claim. Use chat decision card fallback unless a typed plugin or host UI adapter is verified."
         },
         {
           "platform": "openclaw",

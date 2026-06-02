@@ -25,8 +25,17 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     "project runtime agents must be listed even when none are selected",
   );
   assert.ok(
-    fuzzy.ownerDiscoveryPacket?.searchOrder?.includes("local_global_agent_inventory"),
-    "local global inventory must be part of owner discovery",
+    fuzzy.ownerDiscoveryPacket?.discoveryPrinciple === "provider_first_evidence_owner_last_binding",
+    "route discovery must expose provider-first evidence and owner-last binding principle",
+  );
+  assert.equal(
+    fuzzy.ownerDiscoveryPacket?.searchOrder?.[0],
+    "available_capability_providers_skills_tools_mcp",
+    "provider evidence must be collected before owner binding",
+  );
+  assert.ok(
+    fuzzy.ownerDiscoveryPacket?.ownerBindingOrder?.includes("local_global_agent_inventory"),
+    "local global inventory must be part of owner binding",
   );
   assert.ok(
     fuzzy.ownerDiscoveryPacket?.searchOrder?.includes("available_capability_providers_skills_tools_mcp"),
@@ -48,6 +57,14 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.localGlobalCached?.plugins >= 1,
     "cached global plugin providers must be counted without per-run full scan",
   );
+  assert.ok(
+    fuzzy.ownerDiscoveryPacket?.runtimeToolProviders?.some((provider) => provider.type === "runtimeTools"),
+    "runtime tool providers must be visible as reusable provider evidence",
+  );
+  assert.ok(
+    fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.projectRuntimeLightScan?.runtimeTools >= 1,
+    "runtime tool coverage must be exposed alongside skills, commands, hooks, MCP, plugins, rules, and prompts",
+  );
   assert.equal(
     fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.mode,
     "cached_global_inventory_plus_project_light_scan",
@@ -56,6 +73,8 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   assert.equal(fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.staleAfterMinutes, 20160);
   assert.equal(fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.staleAfterDays, 14);
   assert.equal(typeof fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.refreshRequiredBeforeExecution, "boolean");
+  assert.equal(fuzzy.routeExecutionGate?.canPreviewRoute, true);
+  assert.equal(typeof fuzzy.routeExecutionGate?.canEnterExecution, "boolean");
   assert.ok(
     fuzzy.ownerDiscoveryPacket?.candidateReusableCapabilityProviders?.length > 0,
     "reusable capability providers must be listed before create/upgrade",

@@ -1,6 +1,6 @@
 {
   "name": "meta-kim",
-  "version": "2.8.0",
+  "version": "2.8.3",
   "description": "Governance layer for AI coding: meta agents, workflow contract, meta-theory; canonical in canonical/, with generated Claude/Codex/OpenClaw/Cursor projections.",
   "private": true,
   "type": "module",
@@ -63,6 +63,7 @@
     "meta:deps:discover": "node scripts/discover-dependency-capabilities.mjs",
     "meta:deps:check": "node scripts/discover-dependency-capabilities.mjs --check",
     "meta:capabilities:index": "node scripts/build-capability-inventory.mjs",
+    "meta:providers:validate": "node scripts/validate-provider-capabilities.mjs",
     "meta:capabilities:route": "node scripts/select-execution-route.mjs",
     "meta:lens:select": "node scripts/select-lenses.mjs",
     "meta:governance:validate": "node scripts/validate-governance-contracts.mjs",
@@ -74,7 +75,7 @@
     "meta:deps:compat": "node scripts/validate-dependency-compatibility.mjs",
     "meta:hook:validate": "node scripts/validate-hook-progression.mjs",
     "meta:test:governance": "node scripts/run-node-tests.mjs \"tests/governance/*.test.mjs\"",
-    "meta:verify:governance": "npm run meta:governance:validate && npm run meta:runtime:validate && npm run meta:os:check && npm run meta:deps:check && npm run meta:deps:compat && npm run meta:route:validate && npm run meta:intent:validate && npm run meta:prompt:validate && npm run meta:foundational:validate && npm run meta:hook:validate && npm run meta:test:governance"
+    "meta:verify:governance": "npm run meta:governance:validate && npm run meta:runtime:validate && npm run meta:os:check && npm run meta:deps:check && npm run meta:deps:compat && npm run meta:providers:validate && npm run meta:route:validate && npm run meta:intent:validate && npm run meta:prompt:validate && npm run meta:foundational:validate && npm run meta:hook:validate && npm run meta:test:governance"
   },
   "keywords": [
     "claude-code",

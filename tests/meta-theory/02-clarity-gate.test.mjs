@@ -21,13 +21,16 @@ describe("Clarity Gate unified execution confirmation", async () => {
   const runtimeCodex = await readFile(
     "canonical/skills/meta-theory/references/runtime-codex.md",
   );
+  const runtimeClaude = await readFile(
+    "canonical/skills/meta-theory/references/runtime-claude.md",
+  );
   const pathSelection = await readFile(
     "canonical/skills/meta-theory/references/path-selection.md",
   );
   const ownerResolution = await readFile(
     "canonical/skills/meta-theory/references/owner-resolution.md",
   );
-  const skillContent = `${skillEntry}\n${runtimeCodex}\n${pathSelection}\n${ownerResolution}`;
+  const skillContent = `${skillEntry}\n${runtimeCodex}\n${runtimeClaude}\n${pathSelection}\n${ownerResolution}`;
   const decisionTemplate = await readFile(
     "canonical/templates/user-interaction/decision-template.md",
   );
@@ -266,6 +269,28 @@ describe("Clarity Gate unified execution confirmation", async () => {
     assert.match(codexPolicyText, /choiceSurfaceFallback/i);
     assert.match(codexPolicyText, /exec|hook adapters/i);
     assert.match(codexPolicyText, /chat card.*popup|popup.*chat card/i);
+  });
+
+  test("Claude Code uses native AskUserQuestion for branch-changing decisions", () => {
+    const claudeSurface =
+      workflowContractJson.runDiscipline?.runtimeNativeChoiceSurfaces?.claude;
+    assert.ok(claudeSurface, "Claude native choice surface policy must exist");
+    assert.equal(claudeSurface.primarySurface, "AskUserQuestion_tool");
+    assert.ok(
+      claudeSurface.fallbackSurfaces?.includes("conversation_fallback"),
+      "Claude must allow conversation_fallback when the native tool is unavailable",
+    );
+
+    const claudePolicyText = `${claudeSurface.triggerDescription} ${claudeSurface.implementation}\n${runtimeClaude}`;
+    assert.match(claudePolicyText, /AskUserQuestion/);
+    assert.match(claudePolicyText, /v2\.0\.21/);
+    assert.match(claudePolicyText, /questions array/i);
+    assert.match(claudePolicyText, /popup/i);
+    assert.match(claudePolicyText, /conversation_fallback/i);
+    assert.match(claudePolicyText, /wait.*before Execution|wait.*user.*answer.*Execution/i);
+    assert.match(claudePolicyText, /two to four meaningful options/i);
+    assert.match(claudePolicyText, /No filler questions/i);
+    assert.match(claudePolicyText, /issue #12031/);
   });
 
   test("Codex meta-theory choice surfaces embed options without exposing protocol logs", () => {

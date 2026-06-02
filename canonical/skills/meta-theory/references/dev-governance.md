@@ -56,7 +56,7 @@ Parallelism rule: the same owner may run multiple instances only with shardKey, 
 
 ## Complexity Routing
 
-Simple routing: 1 file -> Execution -> Review -> Verification -> Evolution. This is the 4 stages simple path, not full orchestration.
+Simple routing: non-explicit, low-risk 1-file work may compress execution to Execution -> Review -> Verification -> Evolution after the dispatcher has established that no Critical, Fetch, or Thinking decision would change route, scope, risk, owner, permissions, non-goals, or acceptance. Explicit `meta-theory` activation and governed work still enter through Critical -> Fetch -> Thinking before Execution; simple routing is not a bypass for governance entry.
 
 Medium routing: 2-5 files -> full 8-stage spine.
 
@@ -74,24 +74,24 @@ Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verificat
 
 ## STAGE 4: Execution
 
-Execution dispatches from Thinking artifacts: `agentBlueprintPacket`, `dispatchEnvelopePacket`, `dispatchBoard`, and `workerTaskPackets`. Selected capabilities may be agents, skills, commands, MCP capabilities, runtime tools, or file-set capabilities. Execution is multi-agent when the task has independent lanes.
+Execution dispatches from Thinking artifacts: `agentBlueprintPacket`, `dispatchEnvelopePacket`, `dispatchBoard`, and `workerTaskPackets` when they are available. Hooks enforce only the key behavior minimum: intent, Fetch evidence, capability discovery, selected owner, owner loadout, runtime/OS not known-unsupported, memory strategy, and Review standard. Selected capabilities may be agents, skills, commands, MCP capabilities, runtime tools, abstract prompts, or file-set capabilities. Execution is multi-agent when the task has independent lanes.
 
 Stage transitions:
 
-- Critical -> Fetch after intent, scope, non-goals, permissions, and task classification are clear.
+- Critical -> Fetch after intent, scope, non-goals, permissions, and task classification are clear. When user input is wishful or ambiguous, Critical and Fetch form a bounded loop: Critical does initial intent translation, Fetch reads project context to fill gaps, then Critical updates the intent with context-enriched understanding. The loop repeats adaptively up to `criticalFetchLoopMax` (default 3). Exit requires an IntentCard confirmation by the user (or an allowed skip with recorded reason). See `spine-state.md` Critical-Fetch Intent Loop for full field definitions.
 - Fetch -> Thinking after decision-grade evidence, capability discovery, and contradictions are recorded.
-- Thinking -> Execution after option exploration, pre-decision frame, user choice or allowed skip, dispatch board, and worker task packets.
+- Thinking -> Execution after option exploration or `no_branching_choice`, owner/loadout selection, memory strategy, and enough dispatch evidence to execute. Full packet shape is validated by validators and Review; hooks must not block merely because optional fields are absent.
 - Review -> Meta-Review -> Verification when risk or review quality needs a standard check.
 - Evolution is final and cannot precede Verification.
 
 Hidden skeleton:
 
 - `stageState`: Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verification -> Evolution
-- `controlState`: `normal`, `skip`, `interrupt`, `override`, `iteration`, `intentional-silence`
-- `gateState`: `planning-open`, `planning-passed`, `verification-open`, `verification-closed`, `synthesis-ready`
-- `surfaceState`: `debug-surface`, `internal-ready`, `public-ready`
+- `controlState`: `normal`, `skip`, `interrupt`, `override`, `iteration`, `intentional_silence`, `degraded`
+- `gateState`: `pending`, `pass`, `fail`, `rework`, `blocked`
+- `surfaceState`: `silent`, `notice`, `decision`
 
-Skip / interrupt / override must return to the main chain. `controlState=skip` skips a stage only with a recorded reason; interrupt pauses the stage; iteration re-enters the stage after failed verification. Intentional-silence means no card because intervention has no clear gain.
+Skip / interrupt / override must return to the main chain. `controlState=skip` skips a stage only with a recorded reason; interrupt pauses the stage; iteration re-enters the stage after failed verification. `intentional_silence` means no card because intervention has no clear gain. Public readiness is not `surfaceState`; it lives in summary/public surface packets and remains blocked until verification and Warden gates close.
 
 ## Degraded Mode
 
@@ -102,7 +102,7 @@ When Agent dispatch is unavailable or no matching owner exists after capability 
 - Review: read the relevant meta-agent definition (e.g. `meta-prism` for review criteria), apply the same checklist, record `reviewPacket` with `degradedFlag: true` and `reviewerRole: "main-thread-degraded"`.
 - Meta-Review: same pattern as Review, reading `meta-warden` criteria.
 - Verification: run verifySteps with `degradedFlag: true`, add `humanAcceptanceRequired: true` when no independent verification owner exists.
-- `surfaceState` stays `internal-ready`. Claiming `public-ready` in degraded mode is forbidden.
+- `surfaceState` may be `silent` or `notice` but cannot become a public-ready claim. Summary/public surface packets must remain internal-only; claiming `public-ready` in degraded mode is forbidden.
 - The dispatcher may self-execute in degraded mode only with explicit `degradationReason` and `degradedFlag: true` recorded before mutation.
 
 ## User Interaction Policy
@@ -112,7 +112,7 @@ Decision vs Notice bifurcation:
 - Decision asks the user to choose because outcome, scope, owner, risk, or acceptance changes.
 - Notice reports state without asking.
 
-Non-trivial execution needs one consolidated Decision after Fetch and Thinking, unless the skip is `trivial`, pure read-only `queryBypass`, or explicit auto-proceed with rationale.
+Non-trivial execution needs one consolidated Decision after Fetch and Thinking, unless the skip is `trivial`, `no_branching_choice`, or `explicit_auto_proceed` with rationale. Read-only/queryBypass is a safety and path-classification boundary; it is not enough by itself to skip a choice surface when branch-changing options exist.
 
 Codex visible multi-option choice rule: visible Decisions include at least two options and a recommended default.
 

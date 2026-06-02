@@ -49,6 +49,7 @@ import {
 } from "./install-manifest.mjs";
 import {
   CODEX_REQUEST_USER_INPUT_FEATURE,
+  ensureCodexWindowsNotifyCompat,
   ensureCodexRequestUserInputFeature,
   hasCodexRequestUserInputFeature,
 } from "./codex-config-merge.mjs";
@@ -1355,7 +1356,8 @@ async function installGitSkill(skillId, targetDir, repoUrl) {
           if (repairResult.conflictDetected) {
             throw new Error(`managed install conflict: ${repairResult.reason}`);
           }
-          runGit(["-C", targetDir, "pull", "--ff-only"], {
+          runGit(["pull", "--ff-only"], {
+            cwd: targetDir,
             skillLabel: `pull ${skillId}`,
           });
           console.log(`${C.green}✓${C.reset} ${t.okUpdated(targetDir)}`);
@@ -1814,14 +1816,17 @@ async function ensureCodexChoiceSurfaceAfterInstall(runtimeHomes, activeTargets)
     ? await fs.readFile(configPath, "utf8")
     : "";
 
-  if (hasCodexRequestUserInputFeature(previous)) {
+  const next = ensureCodexWindowsNotifyCompat(
+    ensureCodexRequestUserInputFeature(previous),
+  );
+
+  if (previous === next && hasCodexRequestUserInputFeature(previous)) {
     console.log(
       `${C.green}✓${C.reset} ${C.dim}Codex ${CODEX_REQUEST_USER_INPUT_FEATURE} preserved: ${configPath}${C.reset}`,
     );
     return;
   }
 
-  const next = ensureCodexRequestUserInputFeature(previous);
   if (previous) {
     const backupPath = `${configPath}.meta-kim.bak`;
     await fs.copyFile(configPath, backupPath);
@@ -1832,7 +1837,7 @@ async function ensureCodexChoiceSurfaceAfterInstall(runtimeHomes, activeTargets)
 
   await fs.writeFile(configPath, next, "utf8");
   console.log(
-    `${C.green}✓${C.reset} ${C.dim}Restored Codex ${CODEX_REQUEST_USER_INPUT_FEATURE}: ${configPath}${C.reset}`,
+    `${C.green}✓${C.reset} ${C.dim}Restored Codex ${CODEX_REQUEST_USER_INPUT_FEATURE} and Windows-safe notify config: ${configPath}${C.reset}`,
   );
 }
 
@@ -1891,7 +1896,7 @@ function installCodexNativePlugin(pluginId) {
   spawnSync("codex", ["plugin", "marketplace", "upgrade", marketplaceId], {
     encoding: "utf8",
     shell: shouldUseCliShell(os.platform()),
-    stdio: "inherit",
+    stdio: "pipe",
   });
   const result = spawnSync(
     "codex",
@@ -1899,7 +1904,7 @@ function installCodexNativePlugin(pluginId) {
     {
       encoding: "utf8",
       shell: shouldUseCliShell(os.platform()),
-      stdio: "inherit",
+      stdio: "pipe",
     },
   );
   if (result.status === 0) return true;

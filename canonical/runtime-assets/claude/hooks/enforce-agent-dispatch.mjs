@@ -2,15 +2,16 @@
  * enforce-agent-dispatch.mjs — Meta_Kim Spine PreToolUse guard.
  *
  * Responsibilities:
- *   1. Spine-active runs: gate execution tools until the right meta-agents have
- *      been dispatched per stage requirements.
+ *   1. Spine-active runs: gate execution tools only on key behavior evidence:
+ *      intent, Fetch evidence, Thinking route/loadout, and memory strategy.
  *   2. Meta-agent readonly enforcement: even when spine is inactive (or skipped),
  *      a caller identified as a meta-* agent must not directly mutate the
  *      workspace via Edit / Write / MultiEdit / NotebookEdit / Bash. They must
  *      dispatch down to an execution worker instead.
  *   3. Capability-first gate: Agent dispatches at or after the execution stage
- *      require a prior capability search recorded in spine state. Forces the
- *      capability-first discovery contract instead of hardcoded agent names.
+ *      require a prior capability search recorded in spine state. This keeps
+ *      capability-first discovery without requiring every optional packet
+ *      field to be complete inside the hook.
  *   4. Read-only inspection fast-path (EB-002, v2.3.1): during Critical /
  *      Fetch / Review / Meta-Review / Verification stages, Bash commands that
  *      match the stage's read-only whitelist can bypass the stage-requirements
@@ -84,8 +85,13 @@
 import process from "node:process";
 import { join, normalize } from "node:path";
 import { readJsonFromStdin, extractFilePath } from "./utils.mjs";
-import { isReadOnlyBash, classifyBashCommand } from "./bash-readonly-whitelist.mjs";
 import {
+  isReadOnlyBash,
+  classifyBashCommand,
+  __internals as bashReadonlyInternals,
+} from "./bash-readonly-whitelist.mjs";
+import {
+  advanceStage,
   readSpineState,
   checkCapabilityNodeBindings,
   checkPreExecutionReadiness,
@@ -97,7 +103,6 @@ import {
   checkChoiceSurfaceGate,
   STAGE_META_AGENT_MAP,
   extractMetaAgentName,
-  setSimpleMode,
   recordSkippedHook,
   getGovernanceFlow,
 } from "./spine-state.mjs";
@@ -136,6 +141,133 @@ function isPlanningFile() {
   if (planningFiles.some((f) => targetPath.endsWith(f))) return true;
   const cmd = (toolInput?.command || "").toLowerCase();
   return planningFiles.some((f) => cmd.includes(f.toLowerCase()));
+}
+
+function matchesStageReadOnlyCommand(command, prefixes) {
+  const segments = bashReadonlyInternals
+    .splitSegments(command)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (!segments.length || !prefixes.length) return false;
+
+  let matchedVerifierSegment = false;
+  for (const segment of segments) {
+    const matchedPrefix = prefixes.find((prefix) => segment.startsWith(prefix));
+    const matchesVerifier = !!matchedPrefix;
+    if (matchesVerifier) {
+      if (
+        /^(npm|pnpm|yarn)\s/.test(segment) &&
+        !isSafeVerifierScriptInvocation(segment)
+      ) {
+        return false;
+      }
+      matchedVerifierSegment = true;
+      continue;
+    }
+    if (isReadOnlyBash(segment)) {
+      continue;
+    }
+    return false;
+  }
+
+  return matchedVerifierSegment;
+}
+
+const SAFE_VERIFIER_SCRIPT_NAME =
+  /(^|:)(test|check|verify|validate|lint|typecheck)(:|$)/i;
+
+function isSafeVerifierScriptInvocation(segment) {
+  const trimmed = segment.trim();
+  if (/^npm\s+test(?:\s|$)/i.test(trimmed)) return true;
+  if (/^pnpm\s+test(?:\s|$)/i.test(trimmed)) return true;
+  if (/^yarn\s+test(?:\s|$)/i.test(trimmed)) return true;
+
+  const patterns = [
+    /^npm\s+run\s+([^\s]+)/i,
+    /^pnpm\s+run\s+([^\s]+)/i,
+    /^pnpm\s+([^\s-][^\s]*)/i,
+    /^yarn\s+([^\s]+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = trimmed.match(pattern);
+    if (!match) continue;
+    const scriptName = match[1];
+    if (SAFE_VERIFIER_SCRIPT_NAME.test(scriptName)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+const FETCH_TRANSITION_READ_ONLY_TOOLS = new Set([
+  "Read",
+  "Glob",
+  "Grep",
+  "LSPO",
+  "WebFetch",
+  "WebSearch",
+  "ListMcpResourcesTool",
+  "ReadMcpResourceTool",
+]);
+
+function normalizedBashSegments(command) {
+  return bashReadonlyInternals
+    .splitSegments(command)
+    .map((segment) =>
+      bashReadonlyInternals
+        .stripEnvPrefix(segment.trim())
+        .join(" ")
+        .toLowerCase(),
+    )
+    .filter(Boolean);
+}
+
+function isFetchEvidenceBash(command) {
+  const cmd = (command || "").trim();
+  if (!isReadOnlyBash(cmd)) return false;
+
+  return normalizedBashSegments(cmd).some((segment) => {
+    if (
+      segment.startsWith("git status") ||
+      segment.startsWith("git diff") ||
+      segment.startsWith("git rev-parse") ||
+      segment.startsWith("rg ") ||
+      segment.startsWith("rg --files") ||
+      segment.startsWith("grep ") ||
+      segment.startsWith("egrep ") ||
+      segment.startsWith("fgrep ") ||
+      segment.startsWith("find ") ||
+      segment.startsWith("ls tests") ||
+      segment.startsWith("ls canonical") ||
+      segment.startsWith("cat package.json") ||
+      segment.startsWith("head package.json") ||
+      segment.startsWith("tail package.json") ||
+      segment.startsWith("get-childitem") ||
+      segment.startsWith("get-content") ||
+      segment.startsWith("select-string")
+    ) {
+      return true;
+    }
+    return false;
+  });
+}
+
+function shouldAdvanceCriticalToFetch(state, toolName, input) {
+  if (!state?.active || state.currentStage !== "critical") return false;
+  if (isPlanningFile()) return true;
+
+  if (FETCH_TRANSITION_READ_ONLY_TOOLS.has(toolName)) {
+    return true;
+  }
+
+  if (toolName !== "Bash") return false;
+  const cmd = (input?.command || "").trim();
+  if (isFetchEvidenceBash(cmd)) return true;
+  const fetchInspectionPrefixes =
+    STAGE_META_AGENT_MAP.fetch?.readOnlyInspectionCommands || [];
+  return matchesStageReadOnlyCommand(cmd, fetchInspectionPrefixes);
 }
 
 /**
@@ -515,16 +647,7 @@ function shouldSkipHook(state, userPrompt) {
     };
   }
 
-  // Priority 2: Simple mode flag in spine state
-  if (state?.simpleMode) {
-    return {
-      shouldSkip: true,
-      reason: formatSkipReason("simple_mode"),
-      source: "simple_mode",
-    };
-  }
-
-  // Priority 3: Auto-detect simple keywords in prompt
+  // Priority 2: Auto-detect simple keywords in prompt
   if (hasSimpleKeyword(userPrompt)) {
     return {
       shouldSkip: true,
@@ -613,7 +736,6 @@ if (isAgentDispatchTool(toolName)) {
 
   if (
     !state.queryBypass &&
-    !state.simpleMode &&
     ["critical", "fetch", "thinking"].includes(state.currentStage) &&
     isExecutionDispatchIntent(toolInput, metaName)
   ) {
@@ -647,9 +769,9 @@ if (isAgentDispatchTool(toolName)) {
   // Capability-first gate: at or after the execution stage, dispatching an
   // Agent requires evidence that a capability search was performed. Discovery
   // happens during critical / fetch / thinking, so those stages are exempt.
-  // queryBypass and simpleMode runs are also exempt because they intentionally
+  // queryBypass runs are also exempt because they intentionally
   // skip the regulated dispatch flow.
-  if (!state.queryBypass && !state.simpleMode) {
+  if (!state.queryBypass) {
     const stage = state.currentStage;
     const discoveryStages = new Set(["critical", "fetch", "thinking"]);
     const capabilityGateModeRaw = (
@@ -720,11 +842,12 @@ if (isAgentDispatchTool(toolName)) {
           packet?.taskPacketId && dispatchText.includes(packet.taskPacketId) ||
           packet?.roleInstanceId && dispatchText.includes(packet.roleInstanceId),
       );
-      if (!matchedTaskPacket) {
-        exitAfterDeny(
-          "Capability node binding violation: Agent dispatch in execution or later " +
-            "must cite a workerTaskPackets[].taskPacketId or roleInstanceId so the " +
-            "dispatch can be traced to a capability-matched task node.",
+      if (!matchedTaskPacket && (state?.workerTaskPackets || []).length > 1) {
+        process.stderr.write(
+          "\n[Meta_Kim capability-gate:warn] Agent dispatch did not cite a " +
+            "workerTaskPackets taskPacketId or roleInstanceId. Multiple worker " +
+            "nodes exist, so Review should verify traceability, but the hook " +
+            "will not block when minimum owner/loadout evidence is present.\n",
         );
       }
 
@@ -735,6 +858,7 @@ if (isAgentDispatchTool(toolName)) {
         toolInput?.type ||
         "";
       if (
+        matchedTaskPacket &&
         typeof dispatchTarget === "string" &&
         dispatchTarget.startsWith("meta-") &&
         matchedTaskPacket.ownerAgent !== dispatchTarget
@@ -765,13 +889,31 @@ if (
   process.exit(0);
 }
 
+// AskUserQuestion: always allow — it is a read-only UI surface, and
+// PreToolUse hooks strip its return data (anthropics/claude-code#12031).
+// Bypassing hook processing here prevents the stripping bug.
+if (toolName === "AskUserQuestion") {
+  process.exit(0);
+}
+
 // Read-only tools: always allow
 if (isReadOnlyTool(toolName)) {
+  if (shouldAdvanceCriticalToFetch(state, toolName, toolInput)) {
+    state = advanceStage(state, "fetch");
+    await writeSpineState(cwd, state);
+  }
   process.exit(0);
 }
 
 // Query bypass skips orchestration confirmation only. It remains read-only.
 if (state.queryBypass) {
+  // Deadlock breaker: the spine-state file itself must always be writable.
+  // Otherwise clearing queryBypass (which requires writing spine-state.json)
+  // becomes impossible once queryBypass is on. Scoped strictly to
+  // spine-state.json / the spine/ dir via isSpineStateWrite().
+  if (isSpineStateWrite()) {
+    process.exit(0);
+  }
   if (toolName === "Bash" && isReadOnlyBash((toolInput?.command || "").trim())) {
     process.exit(0);
   }
@@ -793,7 +935,14 @@ if (isExecutionTool(toolName)) {
     // warn-mode falls through; block-mode already exited.
   }
 
-  if (isSpineStateWrite() || isPlanningFile()) {
+  if (isSpineStateWrite()) {
+    process.exit(0);
+  }
+  if (isPlanningFile()) {
+    if (state.active && state.currentStage === "critical") {
+      const advanced = advanceStage(state, "fetch");
+      await writeSpineState(cwd, advanced);
+    }
     process.exit(0);
   }
 
@@ -823,8 +972,7 @@ if (isExecutionTool(toolName)) {
   // incomplete; otherwise the operator cannot inspect state to return upstream.
   if (
     toolName === "Bash" &&
-    !state.queryBypass &&
-    !state.simpleMode
+    !state.queryBypass
   ) {
     const stageConfig = STAGE_META_AGENT_MAP[stage];
     const cmd = (toolInput?.command || "").trim();
@@ -832,16 +980,19 @@ if (isExecutionTool(toolName)) {
       ...(stageConfig?.readOnlyVerifierCommands || []),
       ...(stageConfig?.readOnlyInspectionCommands || []),
     ];
-    const allowedByStage = stageWhitelist.some((prefix) => cmd.startsWith(prefix));
+    const allowedByStage = matchesStageReadOnlyCommand(cmd, stageWhitelist);
     if (allowedByStage || isReadOnlyBash(cmd)) {
+      if (shouldAdvanceCriticalToFetch(state, toolName, toolInput)) {
+        state = advanceStage(state, "fetch");
+        await writeSpineState(cwd, state);
+      }
       process.exit(0);
     }
   }
 
   if (
     currentIdx >= execIdx &&
-    !state.queryBypass &&
-    !state.simpleMode
+    !state.queryBypass
   ) {
     const nodeBindingGate = checkCapabilityNodeBindings(state);
     if (!nodeBindingGate.met) {
@@ -896,18 +1047,22 @@ if (isExecutionTool(toolName)) {
       );
     }
     exitAfterDeny(
-      "Critical stage is for scope clarification and read-only inspection. " +
-        "Complete Critical, Fetch, and Thinking before mutation. " +
-        "Allowed now: spine state writes, planning files, and read-only inspection. " +
+      "Current stage: Critical. This stage is for understanding the request and reading project evidence. " +
+        "Use repo-inspection commands to enter Fetch, then run baseline verification from Fetch. " +
+        "Allowed now: planning files, spine state writes, and read-only inspection. " +
         `Dispatch chain so far: ${JSON.stringify(state.dispatchChain || {})}`,
     );
   }
 
-  // Execution stage: require at least one agent dispatch
+  // Execution stage: the hard gate is capability-bound owner/loadout evidence,
+  // already checked above by checkCapabilityNodeBindings. Do not also require
+  // the host to have emitted a prior Agent dispatch event; Codex/Cursor/OpenClaw
+  // hook coverage and delegation surfaces differ by runtime and OS.
   if (stage === "execution" && state.dispatchedAgents.length === 0) {
-    exitAfterDeny(
-      "Execution stage requires at least one agent dispatch via Agent tool. " +
-        "Dispatch a specialist first. Violation: self-execution without delegation.",
+    process.stderr.write(
+      "\n[Meta_Kim dispatch:warn] Execution has no recorded Agent dispatch yet. " +
+        "Continuing because minimum owner/loadout evidence is present; Review " +
+        "must confirm the work did not collapse into an unbounded self-execution.\n",
     );
   }
 

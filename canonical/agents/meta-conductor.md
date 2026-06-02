@@ -77,7 +77,7 @@ Conductor manages the `choiceSurfaceState` field lifecycle as part of pre-decisi
 1. Initialize `choiceSurfaceState = "not_allowed"` when spine state is created
 2. Set to `critical_clarification_allowed` only when `intentFrameAssessment` marks a missing or conflicting dimension as execution-changing
 3. Set to `execution_confirmation_allowed` only after both `fetchRecord.capabilitySearchPerformed = true` AND `preDecisionOptionFrame` exists
-4. Set to `completed` after user responds via native question tool OR `solutionChoiceState` records a valid skip (`trivial`/`queryBypass`/`auto-proceed`)
+4. Set to `completed` after user responds via native question tool OR `solutionChoiceState` records a valid skip (`trivial`/`no_branching_choice`/`auto-proceed`)
 5. Reset to `not_allowed` if scope materially changes
 
 **Synchronization with `solutionChoiceState`**:
@@ -102,7 +102,7 @@ Before dealing cards or expanding a board, Conductor must name the `coreProblem`
 - If the route depends on current external facts, third-party behavior, or platform capability claims, require Fetch/Scout evidence before finalizing options.
 - For long pasted inputs, Conductor briefs the evidence owner to extract material claims first: version, price, tool/platform/API status, paths, project ownership, requirements, and non-goals. Current-fact claims set `contentEvidencePacket.researchRequired = true`; if `researchCapabilityDiscovery` cannot prove an available retrieval path or a valid skip reason, Conductor returns `blocked` / `user_fallback` before Thinking.
 - Conductor may perform read-only inspection and non-destructive verification needed for routing evidence, but must not implement worker deliverables.
-- If the issue is read-only and locally inspectable, gather evidence before interrupting the user with broad choice surfaces.
+- If the issue is read-only and locally inspectable, gather evidence before interrupting the user with broad choice surfaces; then ask only if the evidence exposes a route-changing choice.
 
 ### Production-Correctness Blueprint
 
@@ -152,7 +152,7 @@ If Warden rejects the same board twice without new evidence, Conductor must trig
 4. **Resolve Team** — `resolveAgentDependencies(teamId)`
 5. **Validate Evidence Lane** — require `contentEvidencePacket` before asking broad execution-choice questions; if the intent frame is missing or conflicting, ask only minimal blocking Critical clarification
 6. **Generate Pre-decision Option Frame** — turn evidence into >=2 candidate paths, candidate lanes, trade-offs, risks, and a recommended default without finalizing dispatch
-7. **Resolve User Decision** — use native choice or conversation fallback for non-trivial executable work unless explicit auto-proceed / trivial / queryBypass skip is recorded
+7. **Resolve User Decision** — use native choice or conversation fallback for non-trivial executable work unless explicit auto-proceed / trivial / no-branching skip is recorded
 8. **Generate Dispatch Board** — `generateWorkflowConfig({ workflowFamily, department, goal })` only after the user decision or allowed skip is recorded
 9. **Generate Business Flow Blueprint** — infer deliverable type, derive task-specific business lanes from outcome and scope, use dimensions like product / UX / UI / engineering / QA / release / feedback only when relevant, and record lane-level global scan evidence (`capabilitySearchQuery`, `candidateOwners`, `matchedCapabilities`, `capabilityBindings`, `selectedOwner`, `selectionReason`, `coverageStatus`)
 10. **Generate Agent Role Blueprint** — assign coarse English business role-family names such as `frontend`, `backend`, `test`, `review`, `analysis`, `verify`, or `docs`; map them to governance meta owner agents in the public repo; and record concrete work scope and run-scoped capability evidence in `roleInstanceId`, `shardScope`, `assignedResponsibilitySlice`, `ownerResponsibilityDelta`, `agentIterationPlan`, `ownerResolution`, `matchedCapabilities`, and `capabilityBindings`
@@ -278,7 +278,7 @@ Conductor must also brief the evidence owner with the Deep Research Requirement:
 - `reviewOwner`
 - `verificationOwner`
 
-Rule: Conductor validates evidence lanes, builds the pre-decision option frame, waits for user choice unless skip is allowed (`trivial`, pure read-only/queryBypass, or explicit auto-proceed), then finalizes the dispatch envelope. No evidence packet, option frame, or post-choice envelope means no execution.
+Rule: Conductor validates evidence lanes, builds the pre-decision option frame, waits for user choice unless skip is allowed (`trivial`, `no_branching_choice`, or explicit auto-proceed), then finalizes the dispatch envelope. Read-only/queryBypass is a safety and path-classification boundary, not a choice-surface skip reason when route-changing options exist. No evidence packet, option frame, or post-choice envelope means no execution.
 
 ### B. Standard Task Board Fields
 

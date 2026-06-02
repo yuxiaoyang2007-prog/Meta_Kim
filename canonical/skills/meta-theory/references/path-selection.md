@@ -4,7 +4,7 @@ Choose the smallest path that can honestly satisfy the real product problem.
 
 ## Paths
 
-- `fast_path`: pure read-only query, local evidence enough, no write, no durable artifact, no handoff. It may set `queryBypass: true`, but only for read-only tools.
+- `fast_path`: pure read-only query, local evidence enough, no write, no durable artifact, no handoff. It may set `queryBypass: true`, but only for read-only tools. This does not skip a user choice if the analysis reveals materially different routes, scopes, risks, owners, or acceptance standards.
 - `standard_path`: executable work with limited risk. Use Critical -> Fetch -> Thinking -> Execution -> Review -> Verification -> Evolution.
 - `regulated_path`: security, release, install, cross-runtime, public-ready, governance-contract, or high-blast-radius work. Use all gates, explicit evidence, Meta-Review when review quality matters, and fresh verification.
 

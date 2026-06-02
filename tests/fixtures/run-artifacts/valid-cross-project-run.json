@@ -1071,6 +1071,7 @@
     ],
     "researchRequired": false,
     "researchSkipReason": "local_project_only",
+    "searchAngles": [],
     "evidenceLaneValidatedBy": "meta-conductor",
     "triggerReasons": [
       "multi_file",

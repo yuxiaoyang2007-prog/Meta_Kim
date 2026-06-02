@@ -35,6 +35,7 @@ let skillContent;
 let scenarios;
 let workflowContract;
 let prismContent;
+let runtimeClaude;
 
 async function ensureLoaded() {
   if (!skillContent) {
@@ -49,6 +50,11 @@ async function ensureLoaded() {
   }
   if (!prismContent) {
     prismContent = await readFile("canonical/agents/meta-prism.md");
+  }
+  if (!runtimeClaude) {
+    runtimeClaude = await readFile(
+      "canonical/skills/meta-theory/references/runtime-claude.md",
+    );
   }
 }
 
@@ -270,6 +276,26 @@ describe("Agent Dispatch — Part B: Dispatch Rule Verification", async () => {
       hasReturnedOrEscalated,
       'agentInvocationState must document "returned" and "escalated" terminal states'
     );
+  });
+
+  test("Claude Code execution requires real provider dispatch, not main-thread implementation", async () => {
+    await ensureLoaded();
+    const combined = `${skillContent}\n${runtimeClaude}`;
+
+    assert.match(combined, /Dispatch-Not-Execute In Claude Code/i);
+    assert.match(combined, /main thread scopes, dispatches, reviews, and synthesizes/i);
+    assert.match(combined, /must not directly edit, write, or run implementation commands/i);
+    for (const provider of ["Agent", "Skill", "Command", "prompt", "MCP"]) {
+      assert.match(
+        combined,
+        new RegExp(provider, "i"),
+        `Claude runtime adapter must mention ${provider} provider dispatch`,
+      );
+    }
+    assert.match(combined, /capabilityBindings/i);
+    assert.match(combined, /workerTaskPackets\[\]\.taskPacketId|roleInstanceId/i);
+    assert.match(combined, /capabilityGapPacket/i);
+    assert.match(combined, /degraded mode/i);
   });
 
   test("Fetch evidence inventory hands off to Thinking owner resolution", async () => {

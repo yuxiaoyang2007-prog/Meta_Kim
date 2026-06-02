@@ -888,7 +888,6 @@ describe("MCP memory cross-runtime hooks", () => {
       "post-console-log-warn.mjs",
       "post-format.mjs",
       "post-typecheck.mjs",
-      "pre-git-push-confirm.mjs",
       "stop-compaction.mjs",
       "stop-completion-guard.mjs",
       "stop-console-log-audit.mjs",

@@ -281,7 +281,7 @@ describe("sync-runtimes / Codex project hooks", () => {
   });
 
   test("does not emit quoted absolute Node paths that fail in PowerShell", () => {
-    const hookPath = "C:\\Users\\Kim\\Path With Spaces\\meta-kim-memory-save.mjs";
+    const hookPath = "C:\\Users\\Example\\Path With Spaces\\meta-kim-memory-save.mjs";
     const config = buildCodexProjectHooksJson({
       memoryHookPath: hookPath,
     });

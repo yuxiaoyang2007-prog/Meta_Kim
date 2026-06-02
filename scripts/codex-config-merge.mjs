@@ -1,4 +1,12 @@
 export const CODEX_REQUEST_USER_INPUT_FEATURE = "default_mode_request_user_input";
+const WINDOWS_NOTIFY_COMMAND = [
+  "powershell.exe",
+  "-NoProfile",
+  "-ExecutionPolicy",
+  "Bypass",
+  "-Command",
+  "$input | Out-Null",
+];
 
 function findSection(lines, sectionName) {
   const headerRe = new RegExp(`^\\s*\\[${sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\]\\s*(?:#.*)?$`);
@@ -61,4 +69,62 @@ export function hasCodexRequestUserInputFeature(configText = "") {
   return lines
     .slice(features.start + 1, features.end)
     .some((line) => settingRe.test(line));
+}
+
+function tomlString(value) {
+  return JSON.stringify(value);
+}
+
+function windowsNotifyBlock() {
+  return [
+    "# Windows-safe no-op notification command. It consumes Codex's JSON",
+    "# notification payload and exits successfully without requiring macOS",
+    "# notification tools.",
+    "notify = [",
+    ...WINDOWS_NOTIFY_COMMAND.map((part, index) => {
+      const comma = index === WINDOWS_NOTIFY_COMMAND.length - 1 ? "" : ",";
+      return `  ${tomlString(part)}${comma}`;
+    }),
+    "]",
+  ];
+}
+
+function notifyBlockEnd(lines, start) {
+  let bracketDepth = 0;
+  for (let index = start; index < lines.length; index += 1) {
+    const line = lines[index];
+    bracketDepth += (line.match(/\[/g) ?? []).length;
+    bracketDepth -= (line.match(/\]/g) ?? []).length;
+    if (bracketDepth <= 0) return index + 1;
+  }
+  return start + 1;
+}
+
+export function ensureCodexWindowsNotifyCompat(
+  configText = "",
+  platformName = process.platform,
+) {
+  const normalized = String(configText ?? "").replace(/\r\n/g, "\n");
+  if (platformName !== "win32" || !/terminal-notifier/.test(normalized)) {
+    return normalized.endsWith("\n") || normalized.length === 0
+      ? normalized
+      : `${normalized}\n`;
+  }
+
+  const trailingNewline = normalized.endsWith("\n");
+  const lines = normalized.length > 0 ? normalized.split("\n") : [];
+  if (trailingNewline) {
+    lines.pop();
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!/^\s*notify\s*=\s*\[/.test(lines[index])) continue;
+    const end = notifyBlockEnd(lines, index);
+    const block = lines.slice(index, end).join("\n");
+    if (!/terminal-notifier/.test(block)) continue;
+    lines.splice(index, end - index, ...windowsNotifyBlock());
+    return `${lines.join("\n")}\n`;
+  }
+
+  return `${lines.join("\n")}\n`;
 }

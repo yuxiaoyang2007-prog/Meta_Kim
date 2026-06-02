@@ -428,7 +428,12 @@
         "requiredAction": "remove inline secret fallback and require env-based secret resolution",
         "fixArtifact": "src/auth/refresh.ts",
         "verifiedBy": "meta-prism",
-        "closeState": "open"
+        "closeState": "open",
+        "adversarialVotes": [
+          {"lens": "correctness", "verdict": "survived", "refutationEvidence": "inline secret confirmed in refresh.ts line 42"},
+          {"lens": "security", "verdict": "survived", "refutationEvidence": "hardcoded credential in production path"},
+          {"lens": "completeness", "verdict": "survived", "refutationEvidence": "no alternative env-based resolution found in codebase"}
+        ]
       }
     ],
     "triggerVsSkipReasonCheck": {
@@ -1147,6 +1152,7 @@
     ],
     "researchRequired": false,
     "researchSkipReason": "local_project_only",
+    "searchAngles": [],
     "evidenceLaneValidatedBy": "meta-conductor",
     "triggerReasons": [
       "multi_file",

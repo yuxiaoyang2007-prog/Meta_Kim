@@ -276,12 +276,24 @@ function normalizeHookCommand(command) {
 
 function isManagedGlobalCommand(command) {
   const n = normalizeHookCommand(command);
-  return n.includes("hooks/meta-kim/") || n.includes("hooks\\meta-kim\\");
+  return (
+    n.includes("hooks/meta-kim/") ||
+    n.includes("hooks\\meta-kim\\") ||
+    isRetiredHookCommand(command)
+  );
+}
+
+const RETIRED_HOOK_FILES = new Set(["pre-git-push-confirm.mjs"]);
+
+function isRetiredHookCommand(command) {
+  const n = normalizeHookCommand(command).replace(/\\/g, "/");
+  return [...RETIRED_HOOK_FILES].some(
+    (f) => n.endsWith(f) || n.includes(`/hooks/${f}`),
+  );
 }
 
 const REPO_HOOK_FILES = new Set([
   "block-dangerous-bash.mjs",
-  "pre-git-push-confirm.mjs",
   "post-format.mjs",
   "post-typecheck.mjs",
   "post-console-log-warn.mjs",
@@ -294,7 +306,7 @@ const REPO_HOOK_FILES = new Set([
 function isManagedRepoCommand(command) {
   const n = normalizeHookCommand(command).replace(/\\/g, "/");
   if (!n.includes("/.claude/hooks/")) return false;
-  return [...REPO_HOOK_FILES].some((f) => n.endsWith(f));
+  return [...REPO_HOOK_FILES].some((f) => n.endsWith(f)) || isRetiredHookCommand(command);
 }
 
 function stripManagedHookBlocks(hooksSection, predicate) {

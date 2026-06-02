@@ -10,6 +10,6 @@ test("runtime matrix preserves native and partial capabilities honestly", () => 
       assert.notEqual(caps.get(required)?.support, "unsupported", `${platform.platform}.${required}`);
     }
   }
-  const cursor = matrix.platforms.find((item) => item.platform === "cursor");
-  assert.notEqual(cursor.capabilities.find((cap) => cap.capability === "hook")?.support, "native");
+  const codex = matrix.platforms.find((item) => item.platform === "codex");
+  assert.equal(codex.capabilities.find((cap) => cap.capability === "hook")?.support, "partial");
 });
