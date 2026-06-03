@@ -22,6 +22,17 @@ Every verified claim must answer:
 - `exit-code-only`: exit code 0 and `commandRanAt` required.
 - `json-output`: `actualOutput` must parse as JSON.
 
+## Live Evidence Classification
+
+Classify runtime evidence before claiming a live pass:
+
+- `structural_smoke`: projection, config, schema, hook registration, matrix, startup, or non-live evaluator checks.
+- `ui_warning_or_system_message`: visible warning, UI notice, or systemMessage-like output without a verified target-runtime invocation artifact.
+- `skipped_or_needs_auth`: auth, model, config, permission, or environment blocker with a retry path.
+- `runtime_live_pass`: real target-runtime invocation with a recoverable assistant/tool artifact and runtime-specific scoring or verification tied to that artifact.
+
+Only `runtime_live_pass` supports a live-pass claim. Structural smoke, systemMessage/UI warnings, skipped states, config-only proof, auth-present checks, and matrix entries may support diagnosis or readiness, but they cannot be relabeled as live. If a live check times out, produces no recoverable assistant/tool artifact, or depends on a different backend than the declared runtime, classify it as incomplete.
+
 ## Fix Evidence
 
 `verificationPacket.fixEvidence[]` is structured:
@@ -49,6 +60,8 @@ Do not finish with only "done" or a plain-language restatement. The final user-f
 - remaining limits
 
 If no file changed, say that and cite the inspected evidence. If the route changed from the user's surface request, state the product reason.
+
+Routine low-risk releases use smoke evidence by default: projection sync, default capability-discovery smoke, meta-theory tests, whitespace diff check, changelog/release-note readiness, and exact git/release artifacts. Upgrade to release-grade closure only for install/update, global sync, hooks, runtime matrix, provider registry, dependency compatibility, runtime probes, package contents, security-sensitive behavior, or explicit full/live evidence requests. For release-grade closure, include the declared runtime target set and evidence for update/install, project sync, global sync, global hooks if in scope, runtime matrix, provider registry, dependency compatibility, runtime probe, default execution-demand route proof, live runtime results, changelog/release-note readiness, and security audit.
 
 
 ## Use when

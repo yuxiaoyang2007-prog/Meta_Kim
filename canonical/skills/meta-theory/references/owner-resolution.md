@@ -23,6 +23,18 @@ Before `upgrade_existing_owner`, `create_owner_first`, `upgrade_execution_agent`
 
 Critical, Fetch, Thinking, and Review governance nodes are covered by the governance-stage policy in `workflow-contract.json`; they are not execution agents. Execution agents may be reused directly only when the discovery evidence shows a fitting global or project-local owner. A skill or tool provider may satisfy the capability without requiring a new owner. If no fitting owner or provider exists, write the checked owners/providers into `capabilityGapPacket.currentAgentsChecked` before factory work starts.
 
+For default execution-demand proof, owner discovery is only the first segment. Thinking must also bind:
+
+- execution owner search and final owner selection
+- execution-agent creation provider or explicit `creation_not_needed`
+- skill search and selected skill/provider
+- skill creation provider or explicit `creation_not_needed`
+- MCP provider search and selected MCP provider or no-impact reason
+- command/runtime tool selection
+- verification owner and verification method
+
+This chain must be present before mutation for release-grade install/update/sync work. Routine low-risk releases may use the lighter maintainer smoke route when the user asks for speed and the change does not alter install, runtime, hooks, provider, dependency, package, or security behavior. A release-grade route that discovers only an owner and leaves skill, MCP, command/tool, or verification choice to later validators is incomplete.
+
 ## Scan cadence and UX
 
 Use a two-speed discovery model:

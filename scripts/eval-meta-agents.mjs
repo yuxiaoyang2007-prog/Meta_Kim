@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import crypto from "node:crypto";
+import { readFileSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -21,6 +22,7 @@ const evalMode =
     ? "live"
     : "smoke";
 const runtimeArg = rawArgs.find((arg) => arg.startsWith("--runtime="));
+const agentArg = rawArgs.find((arg) => arg.startsWith("--agent="));
 const selectedRuntimes = new Set(
   runtimeArg
     ? runtimeArg
@@ -30,10 +32,24 @@ const selectedRuntimes = new Set(
         .filter(Boolean)
     : ["claude", "codex", "openclaw"],
 );
+const selectedAgentIds = new Set(
+  agentArg
+    ? agentArg
+        .slice("--agent=".length)
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [],
+);
 const openclawTemplateConfigPath = path.join(
   canonicalRuntimeAssetsDir,
   "openclaw",
   "openclaw.template.json",
+);
+const openclawMainConfigPath = path.join(
+  os.homedir(),
+  ".openclaw",
+  "openclaw.json",
 );
 const prepareOpenClawScriptPath = path.join(
   repoRoot,
@@ -420,10 +436,20 @@ const claudeCases = {
         "coordination",
         "质量标准",
         "quality standard",
+        "quality gate arbitration",
+        "final gate",
+        "final gate decision",
+        "arbitration",
+        "final synthesis",
         "CEO",
       ],
       [
         "quality gate",
+        "质量门禁",
+        "质量门槛",
+        "门禁",
+        "验收",
+        "审查",
         "meta-review",
         "verification",
         "commission",
@@ -444,14 +470,16 @@ const claudeCases = {
         "report",
         "audit",
         "evolution backlog",
+        "evolution writeback",
+        "writeback gate",
       ],
     ],
     refuseGroups: [
-      ["具体分析", "质量分析", "技术分析", "analysis"],
-      ["工具发现", "tool discovery", "Scout", "scout", "SOUL", "soul"],
+      ["具体分析", "质量分析", "技术分析", "analysis", "quality forensics", "forensics", "code implementation", "business code", "业务代码", "debugging", "build", "test execution"],
+      ["工具发现", "tool discovery", "Scout", "scout", "SOUL", "soul", "prompting", "prompting design", "prompt 设计", "prompt 架构", "agent prompt", "新 agent", "workflow dispatch", "workflow", "dispatch sequencing", "sequencing", "Conductor", "conductor", "外部工具", "接入外部工具", "技能发现", "外部工具与技能"],
     ],
     artifactGroups: [
-      ["报告", "report", "综合", "synthesis", "go/no-go", "仲裁"],
+      ["报告", "report", "综合", "合成", "协调", "产物", "synthesis", "go/no-go", "仲裁", "wardenGateDecision"],
     ],
   },
   "meta-genesis": {
@@ -460,7 +488,10 @@ const claudeCases = {
       [
         "人格",
         "灵魂",
+        "身份",
         "identity",
+        "boundary",
+        "责任边界",
         "system",
         "系统",
         "stress testing",
@@ -476,8 +507,47 @@ const claudeCases = {
       ],
     ],
     refuseGroups: [
-      ["Hook", "hook", "权限", "安全", "security", "memory"],
-      ["MCP", "skill", "技能", "记忆", "memory", "matching"],
+      [
+        "Hook",
+        "hook",
+        "权限",
+        "安全",
+        "security",
+        "memory",
+        "配置",
+        "路由审批",
+        "approval",
+        "final configuration",
+        "coordinate",
+        "coordination",
+        "协调",
+        "cross-agent",
+        "跨 agent",
+        "把关",
+        "quality gate",
+        "quality gates",
+        "质量门禁",
+        "final synthesis",
+        "最终综合",
+        "最终合成",
+      ],
+      [
+        "MCP",
+        "skill",
+        "技能",
+        "记忆",
+        "memory",
+        "matching",
+        "external tools",
+        "tool discovery",
+        "工具发现",
+        "evolution writeback",
+        "writeback",
+        "演化回写",
+        "回写",
+        "演化信号",
+        "编排",
+      ],
     ],
     artifactGroups: [["SOUL", "soul", "prompt", "提示词"]],
   },
@@ -500,12 +570,14 @@ const claudeCases = {
       ["回滚", "rollback", "边界", "策略", "三级", "CAN", "CANNOT", "NEVER"],
     ],
     refuseGroups: [
-      ["SOUL", "prompt", "提示词"],
+      ["SOUL", "prompt", "提示词", "业务代码", "code implementation", "implementation"],
       [
         "工具发现",
         "tool discovery",
         "skill",
         "技能",
+        "内部逻辑",
+        "internal logic",
         "工作流",
         "编排",
         "workflow",
@@ -538,17 +610,33 @@ const claudeCases = {
         "protocol",
         "strategy",
         "expiration",
+        "身份",
+        "规范来源",
+        "一致性",
+        "source-of-truth",
+        "canonical",
       ],
     ],
     refuseGroups: [
       ["SOUL", "prompt", "提示词", "design"],
-      ["skill", "技能", "Hook", "hook", "权限", "security", "workflow"],
+      [
+        "skill",
+        "技能",
+        "Hook",
+        "hook",
+        "权限",
+        "security",
+        "workflow",
+        "编排",
+        "运行时行为",
+        "orchestration",
+      ],
     ],
     artifactGroups: [["记忆", "索引", "档案", "memory"]],
   },
   "meta-conductor": {
     ownGroups: [
-      ["编排", "workflow", "工作流", "orchestration"],
+      ["编排", "workflow", "工作流", "orchestration", "stage sequencing", "dispatch board", "business-flow"],
       ["阶段", "phase", "节奏", "rhythm", "节拍"],
       [
         "牌组",
@@ -563,10 +651,28 @@ const claudeCases = {
         "交付外壳",
         "handoff",
         "sequencing",
+        "任务路由",
+        "交接契约",
+        "执行路径",
+        "跨 agent",
+        "交接",
+        "cross-agent task routing",
       ],
     ],
     refuseGroups: [
-      ["SOUL", "prompt", "提示词"],
+      [
+        "SOUL",
+        "prompt",
+        "提示词",
+        "final gate",
+        "approval",
+        "arbitration",
+        "agent team coordination",
+        "coordination",
+        "quality gates",
+        "quality gate",
+        "final synthesis",
+      ],
       [
         "技能匹配",
         "技能到 agent",
@@ -577,6 +683,23 @@ const claudeCases = {
         "记忆",
         "security",
         "memory",
+        "loadout",
+        "skill/tool loadout",
+        "code implementation",
+        "execution work",
+        "实际执行",
+        "专属职责",
+        "external tools",
+        "tool discovery",
+        "capability gaps",
+        "quality review judgment",
+        "review judgment",
+        "自演化",
+        "写回",
+        "版本治理",
+        "evolution writeback",
+        "AGENTS",
+        "规范源文件",
       ],
     ],
     artifactGroups: [
@@ -588,6 +711,8 @@ const claudeCases = {
         "orchestration",
         "牌组",
         "card deck",
+        "dispatchBoard",
+        "dispatch board",
       ],
     ],
   },
@@ -595,10 +720,26 @@ const claudeCases = {
     ownGroups: [
       ["质量", "审查", "review", "quality", "forensics"],
       ["slop", "漂移", "缺陷", "defect", "evolution signal"],
-      ["验证", "回归", "verification", "regression", "assertion", "tracking"],
+      [
+        "验证",
+        "回归",
+        "verification",
+        "regression",
+        "assertion",
+        "tracking",
+        "accept/reject",
+        "findings",
+        "verdict",
+        "iterative review",
+        "role boundaries",
+        "boundary consistency",
+        "boundaries",
+        "边界守门",
+        "边界",
+      ],
     ],
     refuseGroups: [
-      ["工具发现", "tool discovery", "Scout", "scout"],
+      ["工具发现", "tool discovery", "Scout", "scout", "canonical", "源文件", "SOUL/AGENTS", "修改"],
       ["统筹", "coordination", "Warden", "warden", "SOUL", "soul", "design"],
     ],
     artifactGroups: [["审查", "报告", "缺陷", "review", "report", "analysis"]],
@@ -618,7 +759,27 @@ const claudeCases = {
       ["生态", "外部", "引入", "external", "candidate", "adoption"],
     ],
     refuseGroups: [
-      ["质量法医", "质量审查", "quality forensics", "Prism", "prism"],
+      [
+        "质量法医",
+        "质量审查",
+        "质量审计",
+        "quality forensics",
+        "quality audit",
+        "AI_slop",
+        "slop",
+        "Prism",
+        "prism",
+        "final security",
+        "permission policy",
+        "execute",
+        "execution",
+        "runtime action",
+        "tool execution",
+        "执行",
+        "直接执行",
+        "工具操作",
+        "具体工具",
+      ],
       [
         "安全",
         "final security",
@@ -633,10 +794,82 @@ const claudeCases = {
         "发牌",
         "sequencing",
         "dispatch",
+        "协调",
+        "协调管理",
+        "管理",
+        "coordinate",
+        "coordination",
+        "workflow",
+        "synthesis",
       ],
     ],
     artifactGroups: [
-      ["清单", "地图", "调研", "扫描", "分析报告", "report", "recommendation"],
+      ["清单", "地图", "调研", "扫描", "报告", "发现报告", "分析报告", "report", "recommendation", "capabilityDiscoveryPacket"],
+    ],
+  },
+  "meta-chrysalis": {
+    ownGroups: [
+      [
+        "evolution",
+        "writeback",
+        "演化",
+        "进化",
+        "写回",
+        "沉淀",
+        "permanence",
+      ],
+      [
+        "signal",
+        "signals",
+        "aggregation",
+        "scar",
+        "pattern",
+        "reuse",
+        "boundary drift",
+        "信号",
+        "疤痕",
+        "模式",
+      ],
+      [
+        "Warden",
+        "gate",
+        "recursive",
+        "self-evolution",
+        "five criteria",
+        "递归",
+        "自我演化",
+        "五项标准",
+      ],
+    ],
+    refuseGroups: [
+      [
+        "直接修改",
+        "direct edit",
+        "actual SOUL",
+        "SOUL",
+        "canonical modification",
+        "self-evolution",
+        "evolve itself",
+      ],
+      [
+        "implementation",
+        "执行工作",
+        "coding",
+        "tests",
+        "security review",
+        "quality gate",
+        "public-display",
+      ],
+    ],
+    artifactGroups: [
+      [
+        "evolutionWritebackPacket",
+        "writeback packet",
+        "演化写回包",
+        "evolution",
+        "writeback",
+        "scar",
+      ],
     ],
   },
 };
@@ -805,11 +1038,6 @@ function extractJsonObjectByAnchor(raw, anchor) {
 }
 
 function parseLastJson(raw) {
-  const parsedLines = parseJsonLines(raw);
-  if (parsedLines.length > 0) {
-    return parsedLines.at(-1);
-  }
-
   const trimmed = String(raw || "").trim();
   try {
     return JSON.parse(trimmed);
@@ -819,6 +1047,11 @@ function parseLastJson(raw) {
       try {
         return JSON.parse(trailingObject);
       } catch {}
+    }
+
+    const parsedLines = parseJsonLines(raw);
+    if (parsedLines.length > 0) {
+      return parsedLines.at(-1);
     }
 
     for (
@@ -834,12 +1067,53 @@ function parseLastJson(raw) {
   }
 }
 
+function parseJsonObjectFromText(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch {}
+
+  const anchored = extractJsonObjectByAnchor(text, "\"agent\"");
+  if (anchored) {
+    try {
+      const parsed = JSON.parse(anchored);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {}
+  }
+
+  const trailingObject = extractLastCompleteJsonObject(text);
+  if (trailingObject) {
+    try {
+      const parsed = JSON.parse(trailingObject);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
 function extractClaudeStructured(raw) {
   const parsed = parseLastJson(raw);
   if (!parsed) {
     throw new Error("Claude output was not valid JSON.");
   }
-  return parsed.structured_output || parsed.result || parsed;
+  const candidate = parsed.structured_output ?? parsed.result ?? parsed;
+  if (typeof candidate === "string") {
+    const nested = parseJsonObjectFromText(candidate);
+    if (nested) {
+      return nested.structured_output ?? nested.result ?? nested;
+    }
+  }
+  return candidate;
 }
 
 function extractCodexReply(raw) {
@@ -881,17 +1155,17 @@ function extractOpenClawReply(raw) {
 
   const payloadText = parsed.payloads?.[0]?.text;
   if (typeof payloadText === "string" && payloadText.trim()) {
-    try {
+    const payloadObject = parseJsonObjectFromText(payloadText);
+    if (payloadObject) {
       return {
-        ...JSON.parse(payloadText),
-        wrapper: parsed,
-      };
-    } catch {
-      return {
-        raw: payloadText.trim(),
+        ...payloadObject,
         wrapper: parsed,
       };
     }
+    return {
+      raw: payloadText.trim(),
+      wrapper: parsed,
+    };
   }
 
   const textCandidate =
@@ -903,14 +1177,334 @@ function extractOpenClawReply(raw) {
     "";
 
   if (typeof textCandidate === "string" && textCandidate.trim()) {
-    try {
-      return JSON.parse(textCandidate);
-    } catch {
-      return { raw: textCandidate.trim(), wrapper: parsed };
+    const payloadObject = parseJsonObjectFromText(textCandidate);
+    if (payloadObject) {
+      return {
+        ...payloadObject,
+        wrapper: parsed,
+      };
     }
+    return { raw: textCandidate.trim(), wrapper: parsed };
   }
 
   return parsed;
+}
+
+async function readOpenClawSessionPayload(
+  agentId,
+  sessionId,
+  sinceMs = 0,
+  sessionDirs = [],
+) {
+  const defaultSessionsDir = path.join(
+    os.homedir(),
+    ".openclaw",
+    "agents",
+    agentId,
+    "sessions",
+  );
+
+  const candidatePaths = [];
+  for (const sessionsDir of [
+    ...new Set([...sessionDirs.filter(Boolean), defaultSessionsDir]),
+  ]) {
+    candidatePaths.push(path.join(sessionsDir, `${sessionId}.jsonl`));
+    try {
+      const entries = await fs.readdir(sessionsDir, { withFileTypes: true });
+      const jsonlStats = await Promise.all(
+        entries
+          .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
+          .map(async (entry) => {
+            const fullPath = path.join(sessionsDir, entry.name);
+            const stat = await fs.stat(fullPath);
+            return { fullPath, mtimeMs: stat.mtimeMs };
+          }),
+      );
+      candidatePaths.push(
+        ...jsonlStats
+          .sort((a, b) => b.mtimeMs - a.mtimeMs)
+          .slice(0, 20)
+          .map((item) => item.fullPath),
+      );
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  for (const sessionPath of [...new Set(candidatePaths)]) {
+    let raw;
+    try {
+      raw = await fs.readFile(sessionPath, "utf8");
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+
+    const events = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+    const matchingEvents = [];
+    const recentEvents = [];
+    let currentSessionId = null;
+    for (const event of events) {
+      if (event.type === "session" && typeof event.id === "string") {
+        currentSessionId = event.id;
+      }
+      const eventMs = Date.parse(event.timestamp ?? "");
+      if (Number.isFinite(eventMs) && eventMs >= sinceMs - 1_000) {
+        recentEvents.push(event);
+      }
+      if (
+        currentSessionId === sessionId ||
+        event.data?.sessionId === sessionId ||
+        event.data?.runId === sessionId
+      ) {
+        matchingEvents.push(event);
+      }
+    }
+
+    const payload = extractOpenClawPayloadFromSessionEvents(
+      matchingEvents,
+      sessionPath,
+    );
+    if (payload) {
+      return payload;
+    }
+
+    if (sinceMs > 0) {
+      const recentPayload = extractOpenClawPayloadFromSessionEvents(
+        recentEvents,
+        sessionPath,
+      );
+      if (recentPayload) {
+        return recentPayload;
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractOpenClawPayloadFromSessionEvents(events, sessionPath) {
+  const assistantEvent = [...events]
+    .reverse()
+    .find((event) => event.message?.role === "assistant");
+  const text = assistantEvent?.message?.content?.find(
+    (item) => item?.type === "text" && typeof item.text === "string",
+  )?.text;
+  if (!text) {
+    return null;
+  }
+
+  const bootstrapFull = events.some(
+    (event) => event.customType === "openclaw:bootstrap-context:full",
+  );
+  const payloadObject = parseJsonObjectFromText(text);
+  if (payloadObject) {
+    return {
+      ...payloadObject,
+      sessionRecovery: {
+        recoveredFromSession: true,
+        sessionPath,
+        bootstrapFull,
+      },
+    };
+  }
+  return {
+    raw: text.trim(),
+    sessionRecovery: {
+      recoveredFromSession: true,
+      sessionPath,
+      bootstrapFull,
+    },
+  };
+}
+
+function normalizeOpenClawAgentPayload(agentId, payload) {
+  if (!payload || typeof payload !== "object") {
+    return payload;
+  }
+  if (typeof payload.agent === "string" && payload.agent.trim()) {
+    return payload;
+  }
+  return {
+    agent: agentId,
+    ...payload,
+  };
+}
+
+async function runOpenClawAgentTurn(command, args, options) {
+  const sessionPollMs = 1_000;
+  const heartbeatMs = 30_000;
+  const sessionTimeoutMs = options.sessionTimeoutMs ?? 90_000;
+  const startedAtMs = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(command.file, command.toArgs(args), {
+      cwd: options.cwd,
+      env: options.env,
+      windowsHide: true,
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    markChildActive(child, `${command.file} ${command.toArgs(args).join(" ")}`);
+
+    let stdout = "";
+    let stderr = "";
+    let finished = false;
+    let pollInFlight = false;
+
+    async function settle(error, result) {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      clearInterval(pollId);
+      clearInterval(heartbeatId);
+      clearTimeout(timeoutId);
+      if (result?.recoveredFromSession && child.exitCode === null) {
+        void terminateChildTree(child, { graceMs: 1_000 });
+      }
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(result);
+    }
+
+    async function recoverFromSession() {
+      const payload = await readOpenClawSessionPayload(
+        options.agentId,
+        options.sessionId,
+        startedAtMs,
+        options.sessionDirs ?? [],
+      );
+      if (!payload) {
+        return null;
+      }
+      return {
+        stdout,
+        stderr,
+        payload,
+        recoveredFromSession: true,
+      };
+    }
+
+    const pollId = setInterval(() => {
+      if (finished || pollInFlight) {
+        return;
+      }
+      pollInFlight = true;
+      recoverFromSession()
+        .then((result) => {
+          if (result) {
+            void settle(null, result);
+          }
+        })
+        .catch((error) => {
+          void settle(error);
+        })
+        .finally(() => {
+          pollInFlight = false;
+        });
+    }, sessionPollMs);
+
+    const heartbeatId = setInterval(() => {
+      if (finished) {
+        return;
+      }
+      const elapsedSeconds = Math.round((Date.now() - startedAtMs) / 1_000);
+      logProgress(
+        `OpenClaw live turn still running for ${options.agentId} (${elapsedSeconds}s, session ${options.sessionId})`,
+      );
+    }, heartbeatMs);
+
+    const timeoutId = setTimeout(() => {
+      recoverFromSession()
+        .then((result) => {
+          if (result) {
+            void settle(null, result);
+            return;
+          }
+          void terminateChildTree(child, { graceMs: 1_000 });
+          const failureDetails = mergeCommandOutput(stdout, stderr);
+          void settle(
+            new Error(
+              `Command timed out after ${sessionTimeoutMs}ms: ${command.file} ${command.toArgs(args).join(" ")}${
+                failureDetails ? `\n${failureDetails}` : ""
+              }`,
+            ),
+          );
+        })
+        .catch((error) => {
+          void settle(error);
+        });
+    }, sessionTimeoutMs);
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => {
+      void settle(error);
+    });
+    child.on("close", (code, signal) => {
+      if (finished) {
+        return;
+      }
+      if (code === 0) {
+        try {
+          void settle(null, {
+            stdout,
+            stderr,
+            payload: extractOpenClawReply(mergeCommandOutput(stdout, stderr)),
+            recoveredFromSession: false,
+          });
+        } catch (error) {
+          void settle(error);
+        }
+        return;
+      }
+
+      recoverFromSession()
+        .then((result) => {
+          if (result) {
+            void settle(null, result);
+            return;
+          }
+          const failureDetails = [stderr.trim(), stdout.trim()]
+            .filter(Boolean)
+            .join("\n");
+          const suffix = signal ? ` (signal: ${signal})` : "";
+          void settle(
+            new Error(
+              `Command failed: ${command.file} ${command.toArgs(args).join(" ")}${suffix}${
+                failureDetails ? `\n${failureDetails}` : ""
+              }`,
+            ),
+          );
+        })
+        .catch((error) => {
+          void settle(error);
+        });
+    });
+  });
 }
 
 function mergeCommandOutput(stdout, stderr) {
@@ -1179,6 +1773,333 @@ async function loadClaudeAgentIds() {
   return files.map((file) => file.replace(/\.md$/, ""));
 }
 
+function filterSelectedAgentIds(agentIds) {
+  if (selectedAgentIds.size === 0) {
+    return agentIds;
+  }
+  return agentIds.filter((agentId) => selectedAgentIds.has(agentId));
+}
+
+function defaultOpenClawEvalModel() {
+  const override = readEnvCliOverride("META_KIM_OPENCLAW_EVAL_MODEL");
+  if (override) {
+    return override;
+  }
+  const mainConfigModel = openClawMainDefaultModel();
+  if (mainConfigModel) {
+    return mainConfigModel;
+  }
+  const minimaxModel = openClawLocalModelRefForProvider("minimax-cn", [
+    "MiniMax-M3",
+    "minimax-m3",
+  ]);
+  if (minimaxModel && openClawLocalAuthProfileHasProvider("minimax-cn")) {
+    return minimaxModel;
+  }
+  if (hasCodexCliAuth()) {
+    return "codex-cli/gpt-5.4";
+  }
+  const codexModel = openClawLocalModelRefForProvider("codex", [
+    "gpt-5.4-mini",
+    "gpt-5.4",
+  ]);
+  if (codexModel && openClawLocalAuthProfileHasProvider("codex")) {
+    return codexModel;
+  }
+  return readEnvCliOverride("OPENAI_API_KEY")
+    ? "openai/gpt-5.4"
+      : "openai-codex/gpt-5.4";
+}
+
+function readOpenClawMainConfig() {
+  try {
+    return JSON.parse(readFileSync(openclawMainConfigPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function openClawMainDefaultModel() {
+  const parsed = readOpenClawMainConfig();
+  const model = parsed?.agents?.defaults?.model;
+  if (typeof model === "string" && model.trim()) {
+    return model.trim();
+  }
+  if (typeof model?.primary === "string" && model.primary.trim()) {
+    return model.primary.trim();
+  }
+  return null;
+}
+
+function cloneJson(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function ensureOpenClawModelRefInProviders(modelsConfig, modelRef) {
+  const models = cloneJson(modelsConfig) ?? {};
+  const [providerId, modelId] = String(modelRef || "").split("/");
+  if (!providerId || !modelId) {
+    return models;
+  }
+
+  models.providers = models.providers ?? {};
+  const provider = models.providers[providerId] ?? {};
+  const providerModels = Array.isArray(provider.models) ? provider.models : [];
+  if (providerModels.some((model) => model?.id === modelId)) {
+    models.providers[providerId] = {
+      ...provider,
+      models: providerModels,
+    };
+    return models;
+  }
+
+  const matchingModel = Object.values(models.providers)
+    .flatMap((candidate) =>
+      Array.isArray(candidate?.models) ? candidate.models : [],
+    )
+    .find((model) => model?.id === modelId);
+  models.providers[providerId] = {
+    ...provider,
+    models: [
+      ...providerModels,
+      matchingModel
+        ? cloneJson(matchingModel)
+        : {
+            id: modelId,
+            name: modelId,
+            input: ["text"],
+          },
+    ],
+  };
+  return models;
+}
+
+function hasCodexCliAuth() {
+  try {
+    readFileSync(path.join(os.homedir(), ".codex", "auth.json"), "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function shouldUseIsolatedCodexHome(modelRef) {
+  const normalized = String(modelRef || "").trim().toLowerCase();
+  return !(
+    normalized.startsWith("openai-codex/") ||
+    normalized.startsWith("codex-cli/") ||
+    normalized.startsWith("codex/")
+  );
+}
+
+function readOpenClawLocalProbeAgentJson(fileName) {
+  const filePath = path.join(
+    os.homedir(),
+    ".openclaw",
+    "agents",
+    "meta-artisan",
+    "agent",
+    fileName,
+  );
+  const raw = readFileSync(filePath, "utf8");
+  return JSON.parse(raw);
+}
+
+function openClawLocalAuthProfileHasProvider(providerId) {
+  try {
+    const parsed = readOpenClawLocalProbeAgentJson("auth-profiles.json");
+    return Object.values(parsed.profiles ?? {}).some(
+      (profile) => profile?.provider === providerId,
+    );
+  } catch {
+    return false;
+  }
+}
+
+function openClawLocalModelRefForProvider(providerId, preferredModelIds = []) {
+  try {
+    const parsed = readOpenClawLocalProbeAgentJson("models.json");
+    const models = parsed.providers?.[providerId]?.models;
+    if (!Array.isArray(models)) {
+      return null;
+    }
+    const modelIds = models
+      .map((model) => (typeof model?.id === "string" ? model.id.trim() : ""))
+      .filter(Boolean);
+    const modelId =
+      preferredModelIds.find((preferredId) => modelIds.includes(preferredId)) ??
+      modelIds[0] ??
+      null;
+    return modelId ? `${providerId}/${modelId}` : null;
+  } catch {
+    return null;
+  }
+}
+
+async function copyFileIfExists(sourcePath, targetPath) {
+  if (!(await fileExists(sourcePath))) {
+    return false;
+  }
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.copyFile(sourcePath, targetPath);
+  return true;
+}
+
+async function findOpenClawAuthSourceAgentDir(agentIds) {
+  const agentsRoot = path.join(os.homedir(), ".openclaw", "agents");
+  const candidates = ["main", "meta-artisan", ...agentIds];
+  for (const agentId of [...new Set(candidates)]) {
+    const agentDir = path.join(agentsRoot, agentId, "agent");
+    const hasAuth =
+      (await fileExists(path.join(agentDir, "auth-profiles.json"))) ||
+      (await fileExists(path.join(agentDir, "auth.json")));
+    const hasModels = await fileExists(path.join(agentDir, "models.json"));
+    if (hasAuth && hasModels) {
+      return agentDir;
+    }
+  }
+  return null;
+}
+
+async function hydrateOpenClawEvalAuthState(stateDir, agentIds) {
+  const agentsRoot = path.join(os.homedir(), ".openclaw", "agents");
+  const fallbackSourceDir = await findOpenClawAuthSourceAgentDir(agentIds);
+  const authFiles = [
+    "auth.json",
+    "auth-profiles.json",
+    "auth-state.json",
+    "models.json",
+  ];
+
+  for (const agentId of ["main", ...agentIds]) {
+    const sourceDir = path.join(agentsRoot, agentId, "agent");
+    const effectiveSourceDir =
+      (await fileExists(path.join(sourceDir, "models.json")))
+        ? sourceDir
+        : fallbackSourceDir;
+    if (!effectiveSourceDir) {
+      continue;
+    }
+    const targetDir = path.join(stateDir, "agents", agentId, "agent");
+    for (const fileName of authFiles) {
+      await copyFileIfExists(
+        path.join(effectiveSourceDir, fileName),
+        path.join(targetDir, fileName),
+      );
+    }
+  }
+}
+
+function applyOpenClawEvalDefaults(config) {
+  const existingAgents = config.agents ?? {};
+  const existingDefaults = existingAgents.defaults ?? {};
+  const existingModel =
+    typeof existingDefaults.model === "string"
+      ? { primary: existingDefaults.model }
+      : existingDefaults.model ?? {};
+  const existingModels =
+    existingDefaults.models && typeof existingDefaults.models === "object"
+      ? existingDefaults.models
+      : {};
+  const primaryModel = existingModel.primary ?? defaultOpenClawEvalModel();
+  const modelAlias =
+    existingModels[primaryModel]?.alias ??
+    primaryModel.split("/").pop() ??
+    primaryModel;
+
+  return {
+    ...config,
+    agents: {
+      ...existingAgents,
+      defaults: {
+        ...existingDefaults,
+        bootstrapMaxChars: existingDefaults.bootstrapMaxChars ?? 1_200,
+        bootstrapTotalMaxChars: existingDefaults.bootstrapTotalMaxChars ?? 4_000,
+        contextLimits: {
+          ...(existingDefaults.contextLimits ?? {}),
+          memoryGetMaxChars:
+            existingDefaults.contextLimits?.memoryGetMaxChars ?? 2_000,
+          memoryGetDefaultLines:
+            existingDefaults.contextLimits?.memoryGetDefaultLines ?? 80,
+          toolResultMaxChars:
+            existingDefaults.contextLimits?.toolResultMaxChars ?? 4_000,
+          postCompactionMaxChars:
+            existingDefaults.contextLimits?.postCompactionMaxChars ?? 2_000,
+        },
+        model: {
+          ...existingModel,
+          primary: primaryModel,
+          fallbacks: Array.isArray(existingModel.fallbacks)
+            ? existingModel.fallbacks
+            : [],
+        },
+        models: {
+          ...existingModels,
+          [primaryModel]: {
+            ...(existingModels[primaryModel] ?? {}),
+            alias: modelAlias,
+          },
+        },
+        skills: Array.isArray(existingDefaults.skills)
+          ? existingDefaults.skills
+          : ["meta-theory"],
+        startupContext: {
+          ...(existingDefaults.startupContext ?? {}),
+          enabled: false,
+        },
+      },
+    },
+  };
+}
+
+function openClawChildEnv(extra = {}) {
+  const homeDir = os.homedir();
+  const parsedHome = path.parse(homeDir);
+  const drive = parsedHome.root.replace(/[\\/]+$/, "");
+  const homePath = drive && homeDir.startsWith(drive)
+    ? homeDir.slice(drive.length)
+    : process.env.HOMEPATH;
+
+  return {
+    ...process.env,
+    HOME: homeDir,
+    USERPROFILE: homeDir,
+    ...(drive ? { HOMEDRIVE: drive } : {}),
+    ...(homePath ? { HOMEPATH: homePath } : {}),
+    NO_COLOR: "1",
+    ...extra,
+  };
+}
+
+function shouldKeepOpenClawEvalTemp() {
+  return Boolean(readEnvCliOverride("META_KIM_KEEP_OPENCLAW_EVAL_TEMP"));
+}
+
+async function cleanupOpenClawEvalTemp(tempConfig) {
+  if (!tempConfig?.tempDir) {
+    return;
+  }
+  if (shouldKeepOpenClawEvalTemp()) {
+    return;
+  }
+  try {
+    await fs.rm(tempConfig.tempDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 250,
+    });
+  } catch (error) {
+    if (["EBUSY", "ENOTEMPTY", "EPERM"].includes(error.code)) {
+      logProgress(
+        `OpenClaw eval temp cleanup left locked files: ${tempConfig.tempDir}`,
+      );
+      return;
+    }
+    throw error;
+  }
+}
+
 async function createOpenClawEvalConfig() {
   const rawConfig = JSON.parse(
     await fs.readFile(openclawTemplateConfigPath, "utf8"),
@@ -1200,19 +2121,129 @@ async function createOpenClawEvalConfig() {
     return value;
   };
 
-  const config = {
-    ...hydrateRepoRoot(rawConfig),
-    agents: {
-      ...rawConfig.agents,
-      list: (rawConfig.agents?.list ?? []).map((agent) =>
-        hydrateRepoRoot(agent),
-      ),
-    },
-  };
-
+  const hydratedConfig = hydrateRepoRoot(rawConfig);
+  const evalModel = defaultOpenClawEvalModel();
+  const mainConfig = readOpenClawMainConfig() ?? {};
+  const evalModels = ensureOpenClawModelRefInProviders(
+    mainConfig.models,
+    evalModel,
+  );
+  const codexCommand = evalModel.startsWith("codex-cli/")
+    ? await resolveCodexBackendCommand()
+    : null;
   const tempDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "meta-kim-openclaw-"),
   );
+  const stateDir = path.join(tempDir, "state");
+  const homeDir = path.join(tempDir, "home");
+  const sessionRootDir = path.join(tempDir, "sessions");
+  const logFile = path.join(tempDir, "openclaw.eval.log");
+  const skillsRootDir = path.join(repoRoot, "openclaw", "skills");
+  const agentIds = (rawConfig.agents?.list ?? [])
+    .map((agent) => agent.id)
+    .filter((agentId) => typeof agentId === "string" && agentId.trim());
+  await fs.mkdir(path.join(stateDir, "skills"), { recursive: true });
+  await fs.mkdir(homeDir, { recursive: true });
+  await hydrateOpenClawEvalAuthState(stateDir, agentIds);
+  const config = applyOpenClawEvalDefaults({
+    ...hydratedConfig,
+    auth: {
+      ...(mainConfig.auth ?? {}),
+      ...(hydratedConfig.auth ?? {}),
+    },
+    models: {
+      ...evalModels,
+      ...(hydratedConfig.models ?? {}),
+    },
+    logging: {
+      ...(hydratedConfig.logging ?? {}),
+      level: hydratedConfig.logging?.level ?? "warn",
+      consoleLevel: hydratedConfig.logging?.consoleLevel ?? "warn",
+      file: hydratedConfig.logging?.file ?? logFile,
+    },
+    env: {
+      ...(hydratedConfig.env ?? {}),
+      shellEnv: {
+        ...(hydratedConfig.env?.shellEnv ?? {}),
+        enabled: false,
+        timeoutMs: 0,
+      },
+    },
+    plugins: {
+      enabled: true,
+      allow: ["minimax", "openai"],
+      load: {
+        paths: [],
+      },
+      slots: {
+        memory: "none",
+        contextEngine: "none",
+      },
+      entries: {
+        minimax: {
+          enabled: true,
+        },
+        openai: {
+          enabled: true,
+        },
+      },
+    },
+    skills: {
+      ...(hydratedConfig.skills ?? {}),
+      allowBundled: [],
+      load: {
+        ...(hydratedConfig.skills?.load ?? {}),
+        extraDirs: [skillsRootDir],
+        watch: false,
+      },
+      limits: {
+        ...(hydratedConfig.skills?.limits ?? {}),
+        maxCandidatesPerRoot: 25,
+        maxSkillsLoadedPerSource: 8,
+        maxSkillsInPrompt: 2,
+        maxSkillsPromptChars: 12_000,
+        maxSkillFileBytes: 60_000,
+      },
+    },
+    session: {
+      ...(hydratedConfig.session ?? {}),
+      store: path.join(sessionRootDir, "{agentId}", "sessions.json"),
+    },
+    agents: {
+      ...hydratedConfig.agents,
+      defaults: {
+        ...(hydratedConfig.agents?.defaults ?? {}),
+        cliBackends: {
+          ...(hydratedConfig.agents?.defaults?.cliBackends ?? {}),
+          ...(codexCommand
+            ? {
+                "codex-cli": {
+                  ...(hydratedConfig.agents?.defaults?.cliBackends?.[
+                    "codex-cli"
+                  ] ?? {}),
+                  command: codexCommand,
+                },
+              }
+            : {}),
+        },
+      },
+      list: (rawConfig.agents?.list ?? []).map((agent) =>
+        hydrateRepoRoot({
+          ...agent,
+          model: agent.model ?? evalModel,
+          skills: agent.skills ?? ["meta-theory"],
+          tools: {
+            ...(agent.tools ?? {}),
+            profile: agent.tools?.profile ?? "minimal",
+            allow: Array.isArray(agent.tools?.allow) ? agent.tools.allow : [],
+          },
+        }),
+      ),
+    },
+  });
+
+  const codexHomeDir = path.join(tempDir, "codex-home");
+  await fs.mkdir(codexHomeDir, { recursive: true });
   const configPath = path.join(tempDir, "openclaw.eval.json");
   await fs.writeFile(
     configPath,
@@ -1220,7 +2251,29 @@ async function createOpenClawEvalConfig() {
     "utf8",
   );
 
-  return { tempDir, configPath };
+  return {
+    tempDir,
+    stateDir,
+    homeDir,
+    sessionRootDir,
+    logFile,
+    configPath,
+    codexHomeDir,
+    evalModel: config.agents.defaults.model.primary,
+  };
+}
+
+async function resolveCodexBackendCommand() {
+  try {
+    const command = await getResolvedCodexCommand();
+    if (command.file === "cmd.exe") {
+      const args = command.toArgs([]);
+      return args[2] ?? null;
+    }
+    return command.file;
+  } catch {
+    return null;
+  }
 }
 
 async function runClaudeDiscovery(agentIds) {
@@ -1326,48 +2379,55 @@ async function runClaudeCases(agentIds) {
     }
 
     try {
-      const prompt =
-        "你正在做 Meta_Kim 元 agent 角色边界自检。只返回符合 schema 的 JSON，不要解释。" +
-        "agent 写你的 agent id；owns 写你只负责的 3 个短语；refuses 写你明确不负责的 2 个短语；" +
-        "artifact 写你最核心的产物；delegates_to 写跨边界时最常升级/委派的 2 个 agent id。";
+      let finalResult = null;
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const prompt =
+          "你正在做 Meta_Kim 元 agent 角色边界自检。只返回符合 schema 的 JSON，不要解释。" +
+          "agent 写你的 agent id；owns 写你只负责的 3 个短语；refuses 写你明确不负责的 2 个短语；" +
+          "artifact 写你最核心的产物；delegates_to 写跨边界时最常升级/委派的 2 个 agent id。";
 
-      const cmd = await getResolvedClaudeCommand();
-      const { stdout } = await runCommandWithIgnoredStdin(
-        cmd.file,
-        cmd.toArgs([
-          "-p",
-          "--output-format",
-          "json",
-          "--agent",
+        const cmd = await getResolvedClaudeCommand();
+        const { stdout } = await runCommandWithIgnoredStdin(
+          cmd.file,
+          cmd.toArgs([
+            "-p",
+            "--output-format",
+            "json",
+            "--agent",
+            agentId,
+            "--json-schema",
+            claudeSchema,
+            prompt,
+          ]),
+          {
+            cwd: repoRoot,
+            timeout: 150_000,
+            env: { ...process.env, NO_COLOR: "1" },
+          },
+        );
+
+        const payload = extractClaudeStructured(stdout);
+        const { score, matchedGroups, missedGroups } = scoreClaudeCase(
+          caseConfig,
+          payload,
+        );
+        const scoutDrift =
+          agentId === "meta-scout" &&
+          metaScoutOwnsDriftsArtisanOrConductor(payload);
+        finalResult = {
           agentId,
-          "--json-schema",
-          claudeSchema,
-          prompt,
-        ]),
-        {
-          cwd: repoRoot,
-          timeout: 150_000,
-          env: { ...process.env, NO_COLOR: "1" },
-        },
-      );
-
-      const payload = extractClaudeStructured(stdout);
-      const { score, matchedGroups, missedGroups } = scoreClaudeCase(
-        caseConfig,
-        payload,
-      );
-      const scoutDrift =
-        agentId === "meta-scout" &&
-        metaScoutOwnsDriftsArtisanOrConductor(payload);
-      results.push({
-        agentId,
-        ok: payload.agent === agentId && score >= 0.8 && !scoutDrift,
-        score,
-        matchedGroups,
-        missedGroups,
-        ...(scoutDrift ? { scoutArtisanConductorDrift: true } : {}),
-        sample: payload,
-      });
+          ok: payload.agent === agentId && score >= 0.8 && !scoutDrift,
+          score,
+          matchedGroups,
+          missedGroups,
+          attempts: attempt,
+          ...(scoutDrift ? { scoutArtisanConductorDrift: true } : {}),
+          sample: payload,
+        };
+        if (finalResult.ok) break;
+        logProgress(`Claude live case ${agentId} attempt ${attempt}/2 scored ${score}`);
+      }
+      results.push(finalResult);
     } catch (error) {
       if (isRetryableClaudeFailure(error.message)) {
         results.push({
@@ -1626,21 +2686,38 @@ async function runCodexLive() {
   };
 }
 
-async function collectOpenClawBaseStatus() {
+async function collectOpenClawBaseStatus({ useMainConfig = false } = {}) {
   logProgress("OpenClaw smoke: preparing local config and validating hooks");
   await runCommandWithIgnoredStdin("node", [prepareOpenClawScriptPath], {
     cwd: repoRoot,
     timeout: 120_000,
-    env: { ...process.env, NO_COLOR: "1" },
+    env: openClawChildEnv(),
   });
 
   const command = await resolveOpenClawCommand();
-  const tempConfig = await createOpenClawEvalConfig();
-  const env = {
-    ...process.env,
-    NO_COLOR: "1",
-    OPENCLAW_CONFIG_PATH: tempConfig.configPath,
-  };
+  const tempConfig = useMainConfig
+    ? {
+        tempDir: null,
+        stateDir: null,
+        homeDir: null,
+        sessionRootDir: null,
+        logFile: null,
+        configPath: openclawMainConfigPath,
+        codexHomeDir: null,
+        configSource: "main",
+        evalModel: openClawMainDefaultModel() ?? defaultOpenClawEvalModel(),
+      }
+    : await createOpenClawEvalConfig();
+  const env = useMainConfig
+    ? openClawChildEnv()
+    : openClawChildEnv({
+        OPENCLAW_CONFIG_PATH: tempConfig.configPath,
+        OPENCLAW_STATE_DIR: tempConfig.stateDir,
+        OPENCLAW_HOME: tempConfig.homeDir,
+        ...(shouldUseIsolatedCodexHome(tempConfig.evalModel)
+          ? { CODEX_HOME: tempConfig.codexHomeDir }
+          : {}),
+      });
 
   const validation = await runCommandWithIgnoredStdin(
     command.file,
@@ -1757,7 +2834,7 @@ async function runOpenClawStructuralSmoke(authError) {
 async function runOpenClawSmoke() {
   let baseStatus;
   try {
-    baseStatus = await collectOpenClawBaseStatus();
+    baseStatus = await collectOpenClawBaseStatus({ useMainConfig: true });
   } catch (error) {
     if (isMissingOpenClawAuthError(error)) {
       return runOpenClawStructuralSmoke(error);
@@ -1773,25 +2850,68 @@ async function runOpenClawSmoke() {
       status: ok ? "passed" : "failed",
       ok,
       mode: "smoke",
+      evalModel: baseStatus.tempConfig.evalModel,
+      configSource: baseStatus.tempConfig.configSource,
       configOk: baseStatus.validationOutput
         .toLowerCase()
         .includes("config valid"),
       hooksOk: baseStatus.hooksDiscovery.ok,
       hooksDiscovery: baseStatus.hooksDiscovery.output,
       validation: baseStatus.validationOutput,
+      ...(shouldKeepOpenClawEvalTemp()
+        ? {
+            diagnosticTemp: {
+              tempDir: baseStatus.tempConfig.tempDir,
+              stateDir: baseStatus.tempConfig.stateDir,
+              logFile: baseStatus.tempConfig.logFile,
+            },
+          }
+        : {}),
     };
   } finally {
-    await fs.rm(baseStatus.tempConfig.tempDir, {
-      recursive: true,
-      force: true,
-    });
+    await cleanupOpenClawEvalTemp(baseStatus.tempConfig);
   }
 }
 
 async function runOpenClawLive() {
-  const baseStatus = await collectOpenClawBaseStatus();
+  let baseStatus;
   try {
-    const smokeAgents = await loadClaudeAgentIds();
+    baseStatus = await collectOpenClawBaseStatus();
+  } catch (error) {
+    if (isMissingOpenClawAuthError(error)) {
+      const structuralSmoke = await runOpenClawStructuralSmoke(error);
+      return {
+        status: "skipped",
+        ok: false,
+        skipped: true,
+        retryable: true,
+        reason: "openclaw_auth_not_configured",
+        needsAuth: true,
+        mode: "live",
+        authProbe: {
+          status: "needs_auth",
+          missing: path.join(
+            os.homedir(),
+            ".openclaw",
+            "agents",
+            "main",
+            "agent",
+            "auth.json",
+          ),
+          error: error.message,
+        },
+        structuralSmoke,
+      };
+    }
+    throw error;
+  }
+  try {
+    const smokeAgents = filterSelectedAgentIds(await loadClaudeAgentIds());
+    if (smokeAgents.length === 0) {
+      throw new Error(
+        `No canonical agent matched --agent=${[...selectedAgentIds].join(",")}`,
+      );
+    }
     const agentResults = [];
 
     for (const agentId of smokeAgents) {
@@ -1800,43 +2920,77 @@ async function runOpenClawLive() {
           `OpenClaw live case ${agentResults.length + 1}/${smokeAgents.length}: ${agentId}`,
         );
         const caseConfig = claudeCases[agentId];
+        const refusalInstruction =
+          agentId === "meta-scout"
+            ? "refuses：字符串数组，恰好 2 条；一条说明你不直接执行工具或运行时动作，一条说明你不负责协调、统筹或综合；"
+            : "refuses：字符串数组，恰好 2 条，每条是你明确不负责的短句；";
         const prompt =
           "你正在做 Meta_Kim 元 agent 角色边界自检。只输出一段 JSON，不要解释。" +
-          `agent 必须精确写 ${agentId}（不能翻译、不能改写、不能写角色名）。` +
+          "JSON 必须包含 agent、owns、refuses、artifact、delegates_to 这 5 个字段。" +
+          `agent 字段必须精确写 ${agentId}（不能翻译、不能改写、不能写角色名）。` +
           "owns：字符串数组，恰好 3 条，每条是你明确负责的短句；" +
-          "refuses：字符串数组，恰好 2 条，每条是你明确不负责的短句；" +
+          refusalInstruction +
           "artifact：一个字符串，你最核心的产物；" +
           "delegates_to：字符串数组，恰好 2 个 agent id，跨边界时最常委派给谁。";
-        const sessionId = `eval-${agentId}-${crypto.randomUUID()}`;
-        const { stdout, stderr } = await runCommandWithIgnoredStdin(
-          baseStatus.command.file,
-          baseStatus.command.toArgs([
-            "agent",
-            "--local",
-            "--agent",
-            agentId,
-            "--session-id",
-            sessionId,
-            "--message",
-            prompt,
-            "--json",
-            "--timeout",
-            "120",
-          ]),
-          {
-            cwd: repoRoot,
-            timeout: 180_000,
-            env: baseStatus.env,
-          },
-        );
+            let turn = null;
+            let lastTurnError = null;
+            let turnAttempt = 0;
+            for (let attempt = 1; attempt <= 2; attempt += 1) {
+              const sessionId = `eval-${agentId}-${crypto.randomUUID()}`;
+              turnAttempt = attempt;
+              try {
+                turn = await runOpenClawAgentTurn(
+                  baseStatus.command,
+                  [
+                    "agent",
+                    "--local",
+                    "--agent",
+                    agentId,
+                    "--thinking",
+                    "off",
+                    "--session-id",
+                    sessionId,
+                    "--message",
+                    prompt,
+                    "--json",
+                    "--timeout",
+                    "300",
+                  ],
+                  {
+                    cwd: repoRoot,
+                    env: baseStatus.env,
+                    agentId,
+                    sessionId,
+                    sessionDirs: [
+                      path.join(baseStatus.tempConfig.sessionRootDir, agentId),
+                      path.join(
+                        baseStatus.tempConfig.stateDir,
+                        "agents",
+                        agentId,
+                        "sessions",
+                      ),
+                    ],
+                    sessionTimeoutMs: 390_000,
+                  },
+                );
+                break;
+              } catch (error) {
+                lastTurnError = error;
+                logProgress(
+                  `OpenClaw live case ${agentId} attempt ${attempt}/2 failed: ${error.message}`,
+                );
+              }
+            }
+            if (!turn) {
+              throw lastTurnError ?? new Error("OpenClaw live turn failed.");
+            }
 
-        const payload = extractOpenClawReply(
-          mergeCommandOutput(stdout, stderr),
-        );
+        const payload = normalizeOpenClawAgentPayload(agentId, turn.payload);
         const injectionOk =
           payload.wrapper?.meta?.systemPromptReport?.injectedWorkspaceFiles?.every(
             (item) => item.missing === false,
-          ) ?? false;
+          ) ??
+          payload.sessionRecovery?.bootstrapFull === true;
         const injectedWorkspaceFiles =
           payload.wrapper?.meta?.systemPromptReport?.injectedWorkspaceFiles?.map(
             (item) => ({
@@ -1844,7 +2998,10 @@ async function runOpenClawLive() {
               missing: item.missing,
               truncated: item.truncated,
             }),
-          ) ?? [];
+          ) ??
+          (payload.sessionRecovery?.bootstrapFull
+            ? [{ name: "session-jsonl-bootstrap-context", missing: false, truncated: false }]
+            : []);
 
         const structuralOk = openClawStructuredPayloadLooksReal(
           agentId,
@@ -1882,8 +3039,10 @@ async function runOpenClawLive() {
             artifact: payload.artifact ?? null,
             delegates_to: payload.delegates_to ?? null,
             injectedWorkspaceFiles,
-          },
-        });
+              recoveredFromSession: turn.recoveredFromSession === true,
+              attempts: turnAttempt,
+            },
+          });
       } catch (error) {
         agentResults.push({
           agentId,
@@ -1904,19 +3063,26 @@ async function runOpenClawLive() {
         baseStatus.validationOutput.toLowerCase().includes("config valid") &&
         baseStatus.hooksDiscovery.ok &&
         agentResults.every((result) => result.ok && result.injectionOk),
+      evalModel: baseStatus.tempConfig.evalModel,
       configOk: baseStatus.validationOutput
         .toLowerCase()
         .includes("config valid"),
       hooksOk: baseStatus.hooksDiscovery.ok,
       hooksDiscovery: baseStatus.hooksDiscovery.output,
       validation: baseStatus.validationOutput,
+      ...(shouldKeepOpenClawEvalTemp()
+        ? {
+            diagnosticTemp: {
+              tempDir: baseStatus.tempConfig.tempDir,
+              stateDir: baseStatus.tempConfig.stateDir,
+              logFile: baseStatus.tempConfig.logFile,
+            },
+          }
+        : {}),
       agentResults,
     };
   } finally {
-    await fs.rm(baseStatus.tempConfig.tempDir, {
-      recursive: true,
-      force: true,
-    });
+    await cleanupOpenClawEvalTemp(baseStatus.tempConfig);
   }
 }
 
@@ -1931,11 +3097,19 @@ async function main() {
     `starting ${evalMode} evaluation for ${[...selectedRuntimes].join(", ")}`,
   );
 
-  const agentIds = await loadClaudeAgentIds();
+  const allAgentIds = await loadClaudeAgentIds();
+  const unknownAgentIds = [...selectedAgentIds].filter(
+    (agentId) => !allAgentIds.includes(agentId),
+  );
+  if (unknownAgentIds.length > 0) {
+    throw new Error(`Unknown agent filter(s): ${unknownAgentIds.join(", ")}`);
+  }
+  const agentIds = filterSelectedAgentIds(allAgentIds);
   const report = {
     timestamp: new Date().toISOString(),
     mode: evalMode,
     requestedRuntimes: [...selectedRuntimes],
+    requestedAgents: selectedAgentIds.size > 0 ? [...selectedAgentIds] : "all",
     claude: null,
     codex: null,
     openclaw: null,

@@ -217,12 +217,14 @@ const projectRuntimeCapabilityProviders = [
   ...projectRuntimeSkillProviders,
   ...await projectCapabilityProviders(),
 ];
-const localGlobalCapabilityProviders = ["skills", "commands", "hooks", "plugins", "mcpServers", "mcpTools", "rules", "prompts"].flatMap((type) =>
+const localGlobalCapabilityProvidersAll = ["skills", "commands", "hooks", "plugins", "mcpServers", "mcpTools", "rules", "prompts"].flatMap((type) =>
   capabilityEntries(globalCapabilityInventory, type)
-    .slice(0, 15)
     .map((entry) => compactCapabilityProvider(entry, `local_global_${type}_inventory`, type)),
 );
-const localGlobalSkillProviders = localGlobalCapabilityProviders;
+const localGlobalCapabilityProviders = localGlobalCapabilityProvidersAll.slice(0, 120);
+const localGlobalSkillProviders = localGlobalCapabilityProvidersAll
+  .filter((provider) => provider.type === "skills")
+  .slice(0, 60);
 const runtimeToolProviders = (capabilityInventory.capabilities ?? [])
   .filter((capability) => capability.type === "runtime_tool")
   .map((entry) => compactCapabilityProvider(entry, "local_runtime_capability_inventory", "runtimeTools"));
@@ -313,7 +315,7 @@ const ownerDiscoveryPacket = {
   candidateReusableCapabilityProviders: uniqueById([
     ...repoCanonicalCapabilityProviders,
     ...projectRuntimeCapabilityProviders,
-    ...localGlobalCapabilityProviders,
+    ...localGlobalCapabilityProvidersAll,
     ...runtimeToolProviders,
   ]).map((provider) => provider.id).slice(0, 100),
   candidateExistingExecutionOwners: [...new Set(candidateExistingExecutionOwners)].slice(0, 40),
@@ -460,7 +462,121 @@ function routeForWeapon(weapon) {
   };
 }
 
-const rankedRoutes = candidateWeapons.map(routeForWeapon).sort((a, b) => b.score - a.score);
+const reusableProviders = uniqueById([
+  ...repoCanonicalCapabilityProviders,
+  ...projectRuntimeCapabilityProviders,
+  ...localGlobalCapabilityProvidersAll,
+  ...runtimeToolProviders,
+]);
+
+function selectProvider(type, preferredIds = []) {
+  const providers = reusableProviders.filter((provider) => provider.type === type);
+  for (const preferredId of preferredIds) {
+    const match = providers.find((provider) => provider.id === preferredId || provider.id?.includes(preferredId));
+    if (match) return match;
+  }
+  return providers[0] ?? null;
+}
+
+function selectExecutionOwner() {
+  const available = new Set(ownerDiscoveryPacket.candidateExistingExecutionOwners);
+  const preferenceGroups = [
+    { terms: ["test", "smoke", "verify", "validation", "测试", "验证"], owners: ["test", "verify", "e2e-runner", "pr-test-analyzer", "worker"] },
+    { terms: ["doc", "docs", "readme", "文档"], owners: ["docs", "api-documenter", "worker"] },
+    { terms: ["frontend", "ui", "react", "前端"], owners: ["frontend", "worker"] },
+    { terms: ["backend", "api", "server", "后端"], owners: ["backend", "worker"] },
+    { terms: ["review", "审查"], owners: ["review", "code-reviewer", "worker"] },
+  ];
+  for (const group of preferenceGroups) {
+    if (!group.terms.some((term) => taskText.includes(term))) continue;
+    const owner = group.owners.find((candidate) => available.has(candidate));
+    if (owner) return owner;
+  }
+  return ["worker", "analysis", "backend", "test", "verify"].find((candidate) => available.has(candidate)) ?? null;
+}
+
+function engineeringExecutionRoute() {
+  if (taskShape !== "engineering_execution") return null;
+  const selectedOwner = selectExecutionOwner();
+  const selectedAgentProvider = [
+    ...projectRuntimeAgentCandidates,
+    ...localGlobalAgents,
+  ].find((agent) => agent.id === selectedOwner) ?? null;
+  const wantsDiscovery = /find|discover|search|寻找|发现/.test(taskText);
+  const wantsCreation = /create|scaffold|generate|创建|生成/.test(taskText);
+  const selectedSkillDiscovery = selectProvider("skills", ["findskill", "skill-scout", "skill-stocktake"]);
+  const selectedSkillCreation = selectProvider("skills", ["skill-creator", "create-agent", "agent-teams-playbook"]);
+  const selectedSkill = wantsDiscovery
+    ? selectedSkillDiscovery ?? selectedSkillCreation
+    : wantsCreation
+      ? selectedSkillCreation ?? selectedSkillDiscovery
+      : selectProvider("skills", ["tdd-workflow", "verification-loop", "meta-theory"]);
+  const selectedAgentCreation = selectProvider("skills", ["create-agent", "agent-teams-playbook", "skill-creator"]);
+  const selectedMcpServer = selectProvider("mcpServers", ["meta-kim-runtime", "repo-mcp", "codex-config-mcp"]);
+  const selectedMcpTool = selectProvider("mcpTools", ["get_meta_runtime_capabilities", "list_meta_agents", "get_meta_agent"]);
+  const selectedCommand = selectProvider("commands", ["meta-theory", "save-progress"]);
+  const selectedRuntimeTool = selectProvider("runtimeTools", ["apply_patch", "shell_command", "Bash"]);
+  const blockedReasons = [];
+  if (!selectedOwner) blockedReasons.push("execution owner missing");
+  if (!selectedSkill) blockedReasons.push("skill provider missing");
+  if (!selectedMcpServer && !selectedMcpTool) blockedReasons.push("MCP provider missing");
+  const routeScore = blockedReasons.length ? 49 : 88;
+  return {
+    id: `execution-capability-discovery:${runtime}:${osTarget}`,
+    owner: selectedOwner,
+    weapon: "select-execution-route",
+    dependency: selectedSkill?.id ?? null,
+    dependencyProject: null,
+    runtime,
+    os: osTarget,
+    verificationOwner: "meta-prism",
+    verificationMethod: "npm run meta:route:validate",
+    verification: {
+      command: "npm run meta:route:validate",
+      artifact: "route JSON",
+      passCondition: "Engineering execution route has a non-governance owner plus discovered skill, MCP, command/tool, runtime, OS, and verification owner.",
+    },
+    score: routeScore,
+    scoreBand: routeScore >= 85 ? "execute" : "blocked",
+    routeScoreBreakdown: {
+      intentFitWeight: 20,
+      ownerFitWeight: 15,
+      weaponFitWeight: 15,
+      dependencyFitWeight: 15,
+      runtimeSupportWeight: 10,
+      osSupportWeight: 10,
+      verificationStrengthWeight: 10,
+      riskRollbackClarityWeight: 5,
+      runtimeSupport: "native",
+      osSupport: "supported",
+      dependencyFit: selectedSkill ? 85 : 0,
+    },
+    ownerBinding: {
+      selectedOwner,
+      source: "existing_execution_owner_inventory",
+      existingOwnerMatched: Boolean(selectedOwner),
+      bindingStage: "Thinking",
+      providerEvidenceRef: "ownerDiscoveryPacket.candidateReusableCapabilityProviders",
+      ownerDiscoveryRef: "ownerDiscoveryPacket",
+    },
+    selectedCapabilityProviders: {
+      agentOwner: selectedOwner,
+      agent: selectedAgentProvider,
+      agentCreation: selectedAgentCreation,
+      skill: selectedSkill,
+      skillDiscovery: selectedSkillDiscovery,
+      skillCreation: selectedSkillCreation,
+      mcpServer: selectedMcpServer,
+      mcpTool: selectedMcpTool,
+      command: selectedCommand,
+      runtimeTool: selectedRuntimeTool,
+    },
+    blockedReasons,
+  };
+}
+
+const syntheticRoutes = [engineeringExecutionRoute()].filter(Boolean);
+const rankedRoutes = [...candidateWeapons.map(routeForWeapon), ...syntheticRoutes].sort((a, b) => b.score - a.score);
 const recommendedRoute = rankedRoutes.find((route) => route.score >= 85) ?? rankedRoutes.find((route) => route.score >= 70) ?? null;
 const capabilityGapPacket = recommendedRoute ? null : {
   gap: "No route has enough owner + weapon + dependency + runtime + OS + verification support.",
@@ -488,13 +604,25 @@ const decisionCard = userChoiceNeeded ? {
 } : null;
 const routeExecutionGate = {
   canPreviewRoute: true,
-  canEnterExecution: !globalInventoryFreshness.refreshRequiredBeforeExecution,
-  blockedBy: globalInventoryFreshness.refreshRequiredBeforeExecution ? ["global_capability_inventory_refresh_required"] : [],
-  returnToStage: globalInventoryFreshness.refreshRequiredBeforeExecution ? "Fetch" : null,
+  canEnterExecution: Boolean(recommendedRoute?.score >= 85) && !globalInventoryFreshness.refreshRequiredBeforeExecution,
+  blockedBy: [
+    ...(!recommendedRoute ? ["missing_recommended_route"] : []),
+    ...(recommendedRoute && recommendedRoute.score < 85 ? ["route_requires_confirmation_or_more_fetch"] : []),
+    ...(globalInventoryFreshness.refreshRequiredBeforeExecution ? ["global_capability_inventory_refresh_required"] : []),
+  ],
+  returnToStage: !recommendedRoute
+    ? "Thinking"
+    : recommendedRoute.score < 85 || globalInventoryFreshness.refreshRequiredBeforeExecution
+      ? "Fetch"
+      : null,
   refreshCommand: globalInventoryFreshness.refreshRequiredBeforeExecution ? globalInventoryFreshness.refreshCommand : null,
-  reason: globalInventoryFreshness.refreshRequiredBeforeExecution
-    ? "Cached provider evidence is missing or older than 14 days; route preview is allowed, but Execution must refresh capability discovery first."
-    : "Cached provider evidence is fresh enough for execution routing.",
+  reason: !recommendedRoute
+    ? "No executable route is available; Execution must not start until owner, provider, runtime, OS, and verification binding are resolved."
+    : recommendedRoute.score < 85
+      ? "Route preview is available, but Execution needs confirmation or stronger provider evidence before starting."
+      : globalInventoryFreshness.refreshRequiredBeforeExecution
+        ? "Cached provider evidence is missing or older than 14 days; route preview is allowed, but Execution must refresh capability discovery first."
+        : "Cached provider evidence is fresh enough and the route has execution-grade owner/provider/verification binding.",
 };
 
 const output = {

@@ -148,16 +148,19 @@ describe("capability index inheritance chain", () => {
     );
   });
 
-  test("release verification refreshes global capability discovery before checks", async () => {
+  test("release verification refreshes global capability discovery before checks while live eval stays live-only", async () => {
     const pkg = await readJson("package.json");
-    for (const scriptName of ["meta:verify:all", "meta:verify:all:live"]) {
-      const script = pkg.scripts?.[scriptName] ?? "";
-      assert.match(script, /npm run discover:global/);
-      assert.ok(
-        script.indexOf("npm run discover:global") < script.indexOf("npm run meta:check"),
-        `${scriptName} must refresh capability indexes before validation checks`,
-      );
-    }
+    const releaseScript = pkg.scripts?.["meta:verify:all"] ?? "";
+    assert.match(releaseScript, /npm run discover:global/);
+    assert.ok(
+      releaseScript.indexOf("npm run discover:global") < releaseScript.indexOf("npm run meta:check"),
+      "meta:verify:all must refresh capability indexes before validation checks",
+    );
+
+    const liveScript = pkg.scripts?.["meta:verify:all:live"] ?? "";
+    assert.match(liveScript, /eval-meta-agents\.mjs/);
+    assert.match(liveScript, /--live/);
+    assert.doesNotMatch(liveScript, /npm run discover:global|npm run meta:check/);
   });
 
   test("global discovery keeps volatile timestamps stable when canonical capability content is unchanged", () => {

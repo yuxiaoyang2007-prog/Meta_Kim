@@ -6,6 +6,59 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.8.5] - 2026-06-03
+
+### Added
+
+- **Release modes contract** — Added a fast routine release path for low-risk prompt/doc/governance iterations and kept full release-grade verification only for install, runtime, hook, provider, dependency, package, security, or explicit live-evidence changes.
+- **Default execution-demand proof** — Meta-theory now requires release-grade work to prove the natural Fetch -> Thinking route selects execution owner, agent creation provider, skill discovery/creation provider, MCP provider, command/runtime tool, and verification owner/path before mutation or release.
+- **Live evidence classification** — Verification references now distinguish structural smoke, UI/systemMessage warning output, skipped/needsAuth states, and true runtime live passes.
+
+### Changed
+
+- **Validators and hooks clarified as protection, not the engine** — Prompt contracts now state that validators, gates, and hooks may reject empty or unsafe routes, but the default path itself must discover and bind owner, skill, MCP, tool, runtime, OS, and verification choices.
+- **Meta-theory progressive disclosure preserved** — `SKILL.md` remains capped at 320 lines; release-mode detail moved into references instead of bloating the entrypoint.
+- Version bump: 2.8.4 -> 2.8.5.
+
+### Verification
+
+- `npm run meta:sync`
+- `node scripts/install-global-skills-all-runtimes.mjs --update --targets claude,codex,openclaw,cursor`
+- `npm run meta:sync:global`
+- `npm run meta:check:global:release`
+- `npm run meta:capabilities:smoke`
+- `npm run meta:runtime:probe`
+- `npm run meta:providers:validate`
+- `node scripts/validate-provider-capabilities.mjs --strict-global-hooks`
+- `npm run meta:deps:compat`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
+## [2.8.4] - 2026-06-02
+
+### Added
+
+- **Default capability-discovery smoke** — Added `npm run meta:capabilities:smoke` to prove an execution demand naturally selects an execution owner, agent provider, agent creation provider, skill discovery/creation providers, MCP provider, command/runtime tool, and verification path.
+- **OpenClaw live sharding** — Live meta-agent evaluation can now run with `--agent=<id[,id]>`, making long Claude/OpenClaw checks recoverable and easier to diagnose.
+
+### Fixed
+
+- **Execution routing now binds real providers before Execution** — Engineering execution routes now require execution-grade owner/provider/verification binding before entering Execution, instead of relying on validators or gates to catch an empty route later.
+- **OpenClaw live evaluation inherits main provider/model config** — OpenClaw smoke reads the main OpenClaw config directly, while live Meta_Kim agent checks merge the main provider/model definitions into the temporary project-agent config so project agents use the same configured provider surface as the user's OpenClaw installation.
+- **Live evaluator parsing and recovery hardened** — Claude/OpenClaw structured payload parsing now handles nested JSON text, OpenClaw session JSONL recovery, child-process cleanup, and accepted boundary wording without lowering score thresholds.
+- **OpenClaw auth hydration is less brittle** — Local OpenClaw meta-agent auth can be hydrated from an existing usable meta-agent auth source when `main/agent` auth is absent, without overwriting already usable agent auth files.
+
+### Verification
+
+- `npm run meta:capabilities:smoke` — passed
+- `npm run meta:test:governance` — passed
+- `npm run meta:providers:validate` — passed with 24 providers, 0 errors, 0 warnings
+- `node scripts/validate-provider-capabilities.mjs --strict-global-hooks` — passed with 24 providers, 0 errors, 0 warnings
+- `npm run meta:verify:all` — passed with Claude/Codex/OpenClaw smoke and 880/880 tests
+- `npm run meta:verify:all:live` — live-only evaluator gate for Claude, Codex, and OpenClaw
+- `npm audit --audit-level=high --registry=https://registry.npmjs.org` — passed with 0 vulnerabilities
+- Version bump: 2.8.3 -> 2.8.4.
+
 ## [2.8.3] - 2026-06-02
 
 ### Added
@@ -239,6 +292,7 @@ When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the
 - `npm run meta:intent:validate -- --template`
 - `npm run meta:intent:validate -- --strict --input tests/fixtures/run-artifacts/valid-run.json`
 - `npm run meta:prompt:validate`
+- `npm run meta:test:meta-theory`
 - `npm run meta:foundational:validate`
 - `npm run meta:test:governance`
 - `npm run meta:verify:governance`

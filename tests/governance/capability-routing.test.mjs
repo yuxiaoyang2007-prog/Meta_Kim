@@ -95,6 +95,29 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   const refactor = route("complex code refactor");
   assert.ok(refactor.recommendedRoute || refactor.capabilityGapPacket);
   assert.ok(refactor.capabilityGapPacket || !/^meta-/.test(refactor.recommendedRoute?.owner ?? ""), "Pure code execution must not route governance agent as implementation worker");
+  if (!refactor.recommendedRoute) {
+    assert.equal(refactor.routeExecutionGate?.canEnterExecution, false, "Execution gate must block when no route is recommended");
+  }
+
+  const smoke = route(
+    "Create a provider smoke test that discovers an execution agent, finds a skill provider, finds an MCP provider, and emits a verification command",
+    "codex",
+    "windows",
+  );
+  assert.equal(smoke.taskShape, "engineering_execution");
+  assert.equal(smoke.recommendedRoute?.id, "execution-capability-discovery:codex:windows");
+  assert.ok(!/^meta-/.test(smoke.recommendedRoute?.owner ?? ""), "Engineering smoke route must use an execution owner");
+  assert.equal(smoke.recommendedRoute?.selectedCapabilityProviders?.skillDiscovery?.id, "findskill");
+  assert.equal(smoke.recommendedRoute?.selectedCapabilityProviders?.skillCreation?.id, "skill-creator");
+  assert.ok(smoke.recommendedRoute?.selectedCapabilityProviders?.agent, "Engineering smoke route must bind an execution agent provider");
+  assert.equal(smoke.recommendedRoute?.selectedCapabilityProviders?.agentCreation?.id, "create-agent");
+  assert.ok(smoke.recommendedRoute?.selectedCapabilityProviders?.skill, "Engineering smoke route must bind a skill provider");
+  assert.ok(
+    smoke.recommendedRoute?.selectedCapabilityProviders?.mcpServer || smoke.recommendedRoute?.selectedCapabilityProviders?.mcpTool,
+    "Engineering smoke route must bind an MCP provider",
+  );
+  assert.ok(smoke.recommendedRoute?.selectedCapabilityProviders?.command || smoke.recommendedRoute?.selectedCapabilityProviders?.runtimeTool);
+  assert.equal(smoke.routeExecutionGate?.canEnterExecution, true);
 
   const hook = route("platform hook install");
   assert.ok(hook.candidateWeapons.includes("runtime-capability-matrix"));

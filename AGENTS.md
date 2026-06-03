@@ -116,6 +116,8 @@ config/capability-index/
 
 Hardcoding a specific agent name before discovery is a shortcut, not the canonical method.
 
+For a real execution demand, the default path must prove the whole provider chain before mutation: capability discovery, execution-agent search and selection, execution-agent creation capability search, skill search and selection, skill creation capability search, MCP provider search, command/runtime tool selection, and verification owner/path selection. This must happen as the natural Fetch -> Thinking route, not as a validator or hook rescue after the route is already weak.
+
 ### Mechanical Enforcement (Cross-Runtime)
 
 Capability-first has a mechanical hook path on Claude Code, Codex, and Cursor, but the default mode is progressive. During the grace window it warns unless `META_KIM_CAPABILITY_GATE=block` is set; do not describe the default as immediate hard-deny. Hooks are last-resort fuses for key behavior only. They should block missing intent, missing Fetch evidence, missing capability discovery, missing owner/loadout, known-unsupported runtime/OS, missing memory strategy, or unsafe meta-agent mutation. They should not block merely because optional packet parameters are absent; detailed completeness belongs to validators, Review, and public-ready gates.
@@ -328,7 +330,7 @@ After changing canonical behavior, contracts, hooks, or runtime-facing docs:
 2. `npm run discover:global`
 3. `npm run meta:check`
 4. `npm run meta:check:global`
-5. `npm run meta:verify:all` before release or after larger changes
+5. `npm run meta:release:smoke` before routine patch/minor release; use `npm run meta:verify:all` only for larger, risky, runtime, install, hook, dependency, or explicitly release-grade changes
 
 Use these supporting commands as needed:
 
@@ -351,7 +353,30 @@ Use these supporting commands as needed:
 - `npm run meta:sync:global`
 - `npm run prompt:next-iteration`
 
-`npm run meta:verify:all` runs runtime sync checks, project validation, graphify health, global sync checks, smoke-level runtime acceptance, setup tests, and meta-theory tests.
+`npm run meta:release:smoke` is the default maintainer release check for low-risk prompt/doc/governance iterations. It runs projection sync, default capability-discovery smoke, and meta-theory tests. `npm run meta:verify:all` remains the full release-grade suite: runtime sync checks, project validation, graphify health, global sync checks, smoke-level runtime acceptance, setup tests, and meta-theory tests.
+
+## Release Modes
+
+Routine patch/minor releases should stay fast. If the change is prompt text, docs, changelog, version metadata, or narrow governance wording with no runtime wiring change, the default release path is:
+
+1. `npm run meta:sync`
+2. `npm run meta:capabilities:smoke`
+3. `npm run meta:test:meta-theory`
+4. `git diff --check`
+
+This can be run directly as `npm run meta:release:smoke`, followed by `git diff --check`.
+
+Upgrade to full release-grade verification only when the task changes install/update behavior, global sync, hooks, runtime matrix, provider registry, dependency compatibility, runtime probes, package contents, security-sensitive behavior, or when the user explicitly asks for full/live/release-grade evidence.
+
+Release-grade work is stricter than a local green check. In that mode, before commit, push, tag, changelog/release-note update, or publication, the run must have current evidence for:
+
+- all declared runtime install/update targets; if machine-local defaults select only one runtime, use explicit all-runtime target selection
+- project sync, global sync, and global hooks when hooks are in scope
+- runtime matrix, provider registry, dependency compatibility, and runtime probe
+- a real execution-demand route that naturally selects owner, creation providers, skill, MCP provider, command/runtime tool, and verification owner/path
+- live Claude, Codex, and OpenClaw evidence when those live targets are declared
+
+Do not treat structural smoke, systemMessage/UI warning output, auth-present checks, skipped/needsAuth states, or config-only proof as live pass evidence. Those are valid diagnostics, not live completion. Validators and gates protect against empty or dangerous routes; they are not the primary mechanism that makes the default path correct.
 
 ## Install And Packaging Notes
 

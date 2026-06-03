@@ -16,21 +16,17 @@ description: |
 # Meta-Theory Dispatcher
 
 ## Purpose
-
 Run Meta_Kim as an executable governance system, not a theory essay. The main thread locks intent, gathers evidence, chooses route, delegates bounded work, reviews, verifies, and synthesizes. It must not become a generic implementation worker for non-trivial work.
 
 ## Trigger
-
 Activate when the user calls `/meta-theory`, names meta-theory, asks for governance, multi-file execution, agent design, capability discovery, runtime/platform compatibility, public-ready validation, complex debugging, or durable evolution writeback.
 
 ## Path classification
-
 - `fast_path`: read-only query, no mutation, no durable artifact. Output may be direct, but evidence claims still need source.
 - `standard_path`: ordinary executable work. Use the 8-stage spine and capability-first route.
 - `regulated_path`: governance, security, runtime, dependency, release, public-ready, or cross-platform work. Require full spine, Review, Meta-Review, Verification, and Evolution.
 
 ## Canonical spine
-
 Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verification -> Evolution.
 
 You are the DISPATCHER, not the executor. Use Agent tool / `Agent(...)` dispatch only after Fetch evidence and Thinking owner resolution prove the route.
@@ -105,6 +101,8 @@ Dispatch to `meta-prism` and `meta-warden`; optional `meta-scout`, `meta-sentine
 ## Type E: Orchestration / Business Flow / Release
 
 Dispatch to `meta-conductor` for business-flow blueprint and parallel lane orchestration, then `meta-warden` for synthesis. Thinking to Execution may use `agent-teams-playbook` only when there are 2+ independent parallel worker lanes / two or more parallel worker lane candidates. Independent sub-tasks must be parallelized when safe; avoid fake parallelism.
+
+Routine Type E release work defaults to lightweight smoke when the change is low-risk prompt/docs/governance wording, changelog, or version metadata. Use `meta:release:smoke` plus `git diff --check`, then commit/tag/publish without upgrading to full live gates unless risk or the user asks. Release-grade Type E is reserved for install/update, global sync, hooks, runtime matrix, provider registry, dependency compatibility, probes, package contents, security-sensitive behavior, or explicit full/live evidence requests; detailed evidence chains live in `dev-governance.md`, `owner-resolution.md`, and `verification-evidence.md`. Validators, gates, and hooks are protection, not the engine; if they patch missing route evidence after the fact, return to Thinking before public-ready or release.
 
 ## Dispatch Self-Check
 Before Stage 4, record the minimum Protocol-first Dispatch evidence: intent, Fetch evidence, a Thinking route, selected owner, owner loadout, memory strategy, and Review standard. Preferred artifacts are `runHeader`, `dispatchBoard`, `businessFlowBlueprintPacket`, `agentBlueprintPacket`, `ownerDiscoveryPacket`, and `workerTaskPackets`, but hooks must not require every optional field before useful work can continue. `agentInvocationState`: `idle -> discovered -> matched -> dispatched -> returned/escalated`. `workerTaskPackets` should include `dependsOn`, `parallelGroup`, and `mergeOwner` when the task has multiple lanes; single-lane work may record a compact task node. `ownerDiscoveryPacket` should list repo canonical owners, runtime mirror owners, project runtime agents, local global agents, reusable skill/command/hook/rule/prompt/MCP/plugin/tool providers, and the Critical / Fetch / Thinking / Review governance-stage owners checked before any create or upgrade decision. Option Exploration is MANDATORY when materially different paths exist: compare ≥2 solution paths with Pros / Cons or Decision Record, or record `no_branching_choice` with evidence. Apply Skip-Level Self-Reflection Gate and Escalation Signals before dispatch.
@@ -241,6 +239,8 @@ Adversarial verify pattern: when Review runs for `regulated_path` or when the us
 ## Verification gate
 
 Do not claim verified unless a command, log, artifact, or human acceptance record supports the claim. Command pass is not `userGoalDone`. Template validation is not strict run validation.
+
+Live and release-grade evidence are stricter than structural checks; smoke, config validation, UI/systemMessage output, auth-present checks, and skipped/needsAuth states cannot be relabeled as live pass. Routine low-risk releases may ship after the smoke path the user selected; release-grade claims wait for the evidence chain in `verification-evidence.md`.
 
 ## Evolution gate
 

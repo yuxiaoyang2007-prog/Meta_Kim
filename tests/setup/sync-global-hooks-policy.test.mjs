@@ -61,7 +61,7 @@ describe("sync-global-meta-theory hook policy", () => {
     });
   });
 
-  test("release verification uses the global hook hard gate", async () => {
+  test("release verification uses the global hook hard gate without making live eval a full release gate", async () => {
     const pkg = JSON.parse(
       await readFile(path.join(REPO_ROOT, "package.json"), "utf8"),
     );
@@ -70,9 +70,12 @@ describe("sync-global-meta-theory hook policy", () => {
       /--check.*--with-global-hooks|--with-global-hooks.*--check/,
     );
     assert.match(pkg.scripts["meta:verify:all"], /meta:check:global:release/);
-    assert.match(
+    assert.match(pkg.scripts["meta:verify:all:live"], /eval-meta-agents\.mjs/);
+    assert.match(pkg.scripts["meta:verify:all:live"], /--require-all-runtimes/);
+    assert.match(pkg.scripts["meta:verify:all:live"], /--live/);
+    assert.doesNotMatch(
       pkg.scripts["meta:verify:all:live"],
-      /meta:check:global:release/,
+      /meta:check:global:release|meta:test:setup|meta:test:meta-theory/,
     );
   });
 });

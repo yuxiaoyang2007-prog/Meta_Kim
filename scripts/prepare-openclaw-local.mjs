@@ -7,6 +7,7 @@ import { canonicalAgentsDir } from "./meta-kim-sync-config.mjs";
 const openclawAgentsRoot = path.join(os.homedir(), ".openclaw", "agents");
 const sourceAgentDir = path.join(openclawAgentsRoot, "main", "agent");
 const filesToMirror = ["auth.json", "auth-profiles.json", "models.json"];
+const minUsableFileBytes = 3;
 
 async function ensureExists(filePath) {
   try {
@@ -15,6 +16,22 @@ async function ensureExists(filePath) {
   } catch {
     return false;
   }
+}
+
+async function fileLooksUsable(filePath) {
+  try {
+    const stat = await fs.stat(filePath);
+    return stat.isFile() && stat.size >= minUsableFileBytes;
+  } catch {
+    return false;
+  }
+}
+
+async function agentAuthDirLooksUsable(agentDir) {
+  const checks = await Promise.all(
+    filesToMirror.map((fileName) => fileLooksUsable(path.join(agentDir, fileName))),
+  );
+  return checks.every(Boolean);
 }
 
 async function loadAgentIds() {
@@ -47,14 +64,31 @@ async function copyFileIfChanged(sourcePath, targetPath) {
 }
 
 async function main() {
-  for (const fileName of filesToMirror) {
-    const sourcePath = path.join(sourceAgentDir, fileName);
-    if (!(await ensureExists(sourcePath))) {
-      throw new Error(`Missing source OpenClaw auth file: ${sourcePath}`);
+  const agentIds = await loadAgentIds();
+  let effectiveSourceAgentDir = sourceAgentDir;
+  let sourceMode = "main";
+
+  if (!(await agentAuthDirLooksUsable(sourceAgentDir))) {
+    const fallbackAgentId = (
+      await Promise.all(
+        agentIds.map(async (agentId) => ({
+          agentId,
+          agentDir: path.join(openclawAgentsRoot, agentId, "agent"),
+          usable: await agentAuthDirLooksUsable(
+            path.join(openclawAgentsRoot, agentId, "agent"),
+          ),
+        })),
+      )
+    ).find((candidate) => candidate.usable);
+
+    if (!fallbackAgentId) {
+      throw new Error(`Missing source OpenClaw auth file: ${path.join(sourceAgentDir, "auth.json")}`);
     }
+
+    effectiveSourceAgentDir = fallbackAgentId.agentDir;
+    sourceMode = `fallback:${fallbackAgentId.agentId}`;
   }
 
-  const agentIds = await loadAgentIds();
   const changedTargets = [];
 
   for (const agentId of agentIds) {
@@ -64,8 +98,14 @@ async function main() {
     });
 
     for (const fileName of filesToMirror) {
-      const sourcePath = path.join(sourceAgentDir, fileName);
+      const sourcePath = path.join(effectiveSourceAgentDir, fileName);
       const targetPath = path.join(targetAgentDir, fileName);
+      if (
+        sourceMode !== "main" &&
+        (await fileLooksUsable(targetPath))
+      ) {
+        continue;
+      }
       const changed = await copyFileIfChanged(sourcePath, targetPath);
       if (changed) {
         changedTargets.push(path.relative(openclawAgentsRoot, targetPath));
@@ -78,7 +118,11 @@ async function main() {
     return;
   }
 
-  console.log(`Hydrated OpenClaw auth for ${agentIds.length} meta agents from ~/.openclaw/agents/main/agent.`);
+  console.log(
+    sourceMode === "main"
+      ? `Hydrated OpenClaw auth for ${agentIds.length} meta agents from ~/.openclaw/agents/main/agent.`
+      : `Hydrated missing OpenClaw auth files for ${agentIds.length} meta agents from existing ${sourceMode} local agent auth.`,
+  );
   for (const changed of changedTargets) {
     console.log(`- ${changed.replace(/\\/g, "/")}`);
   }
