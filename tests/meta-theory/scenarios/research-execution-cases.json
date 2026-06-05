@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "research-execution-cases-v0.1",
+  "cases": [
+    {
+      "id": "rfc-http-official-docs",
+      "task": "Verify an official protocol source before making route-changing claims about HTTP fetch behavior.",
+      "sourceType": "official_docs",
+      "url": "https://www.rfc-editor.org/rfc/rfc9110.txt",
+      "credibility": "official_spec",
+      "ttlHours": 168,
+      "expectedDecisionImpacts": [
+        "source_backed_fetch_available",
+        "official_docs_claim_supported"
+      ]
+    },
+    {
+      "id": "node-release-version-index",
+      "task": "Verify a current release/version source before treating version facts as fresh.",
+      "sourceType": "news_version",
+      "url": "https://nodejs.org/download/release/index.json",
+      "credibility": "official_release_index",
+      "ttlHours": 24,
+      "forceStaleRefreshProbe": true,
+      "expectedDecisionImpacts": [
+        "current_version_claim_requires_refresh",
+        "stale_evidence_returns_to_fetch"
+      ]
+    },
+    {
+      "id": "mcp-sdk-registry-latest",
+      "task": "Verify a third-party capability package before deciding whether an MCP-related provider exists.",
+      "sourceType": "third_party_tool",
+      "url": "https://registry.npmjs.org/@modelcontextprotocol/sdk/latest",
+      "credibility": "package_registry",
+      "ttlHours": 24,
+      "expectedDecisionImpacts": [
+        "third_party_tool_evidence_available",
+        "provider_reuse_before_creation"
+      ]
+    },
+    {
+      "id": "mcp-typescript-sdk-readme",
+      "task": "Fetch a third-party tool README before designing a new durable research capability.",
+      "sourceType": "third_party_tool",
+      "url": "https://api.github.com/repos/modelcontextprotocol/typescript-sdk/readme",
+      "credibility": "source_repository",
+      "ttlHours": 72,
+      "expectedDecisionImpacts": [
+        "external_capability_boundary_visible",
+        "innovation_candidate_requires_review"
+      ]
+    },
+    {
+      "id": "paid-search-api-credential-blocked",
+      "task": "Research a paid or credentialed search provider without activating credentials or billing.",
+      "sourceType": "credential_blocked",
+      "url": null,
+      "credibility": "blocked_boundary",
+      "ttlHours": 0,
+      "blockedReason": "credential_or_paid_activation_requires_user_approval",
+      "expectedDecisionImpacts": [
+        "blocked_or_needs_approval",
+        "no_external_write"
+      ]
+    },
+    {
+      "id": "offline-runtime-network-blocked",
+      "task": "Represent a runtime where network fetch is unavailable so Thinking does not invent current facts.",
+      "sourceType": "network_blocked",
+      "url": null,
+      "credibility": "runtime_blocker",
+      "ttlHours": 0,
+      "blockedReason": "network_unavailable_returns_to_fetch_or_user_supplied_sources",
+      "expectedDecisionImpacts": [
+        "blocked_return_to_fetch",
+        "user_supplied_source_fallback"
+      ]
+    }
+  ],
+  "innovationScenarios": [
+    {
+      "id": "research-evidence-synthesizer",
+      "gapEvidence": "Existing agents, skills, scripts, MCP providers, runtime tools, and dependencies can fetch sources, but none owns reusable evidence freshness plus Thinking handoff synthesis.",
+      "capabilityType": "script",
+      "alternativePaths": [
+        "keep as run-scoped workerTask for one-off evidence synthesis",
+        "create a project-local script candidate after repeat evidence",
+        "upgrade to MCP provider only if external credentialed systems become necessary"
+      ],
+      "estimatedCost": "medium",
+      "risks": [
+        "stale evidence treated as current",
+        "source scraping without permission review",
+        "overwriting canonical without Warden approval"
+      ],
+      "minimumExperiment": "Generate a read-only research execution report with live fetch, cache policy, and no canonical writes."
+    },
+    {
+      "id": "capability-innovation-sandbox",
+      "gapEvidence": "When every existing capability type is insufficient, the system needs a candidate sandbox instead of pretending the answer is always create_skill.",
+      "capabilityType": "worker_task_only",
+      "alternativePaths": [
+        "block and ask for approval",
+        "produce an innovationCandidatePacket for Warden review",
+        "reuse an existing owner only if Fetch evidence proves fit"
+      ],
+      "estimatedCost": "low",
+      "risks": [
+        "skill-only capability bias",
+        "identity pollution",
+        "unapproved durable writeback"
+      ],
+      "minimumExperiment": "Emit innovationCandidatePacket with canonicalWrites=0 and explicit Warden approval requirement."
+    }
+  ]
+}

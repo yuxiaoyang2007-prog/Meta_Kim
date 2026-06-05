@@ -127,6 +127,22 @@ Before designing or revising SOUL.md, Genesis must name the `coreProblem` in one
 | Boundary routing | External broad discovery belongs to Scout. Long-term loadout policy belongs to Artisan. Writeback requires Warden gate approval, with Chrysalis coordinating and the target specialist performing writeback. |
 | Forbidden long-term binding | Do not bind Genesis to concrete runtime child skills, plugin command names, or provider-specific sub-skill identifiers as long-term dependencies. |
 
+## Agent Design Station Output
+
+When a `create_agent` route is under consideration, Genesis owns the boundary station. Use `config/contracts/governance-agent-design-station-contract.json` as the output contract and produce `agentBoundaryDecision` before any durable identity is accepted.
+
+`agentBoundaryDecision` must include:
+
+- `coreProblem`: the durable capability problem, not the user's one-run wording.
+- `durableOwnerJustification`: why this should be a long-term execution agent instead of `worker_task_only`, skill, script, or MCP provider.
+- `domainBoundary`: what professional responsibility class the agent owns.
+- `nonCapabilities`: adjacent responsibilities the agent refuses.
+- `replaceabilityTest`: whether replacing the name with `generic-agent` breaks the design.
+- `rejectedPaths`: weaker routes rejected with reasons.
+- `identityPollutionCheck`: proof that paths, tickets, today's files, deliverable links, and verify steps stayed out of durable identity.
+
+External reference projects may sharpen the standard, but their hierarchy, naming style, database shape, and prompt wording must not appear in the durable agent identity.
+
 ## Collaboration
 
 ```

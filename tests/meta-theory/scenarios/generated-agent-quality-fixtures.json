@@ -1,0 +1,137 @@
+[
+  {
+    "id": "GAQ-01",
+    "input": "The project repeatedly lacks a stable owner for test coverage strategy, coverage gap diagnosis, and verification planning.",
+    "expectedDecision": "create_agent",
+    "expectedForbidden": [
+      "worker_task_only",
+      "create_script",
+      "use_meta_prism_as_execution_worker",
+      "bind_repo_path_to_identity"
+    ],
+    "generatedAgentSpec": {
+      "name": "test-coverage-specialist",
+      "description": "Own reusable test coverage strategy, coverage gap diagnosis, and verification planning when existing test owners lack a long-term coverage strategy boundary.",
+      "flowPosition": "Test",
+      "purpose": "Provide a reusable owner for test coverage strategy and coverage gap diagnosis across runs.",
+      "capabilities": [
+        "test framework discovery",
+        "coverage report interpretation",
+        "risk-based test planning",
+        "regression fixture design",
+        "missing verifier diagnosis"
+      ],
+      "nonCapabilities": [
+        "does not become the implementation worker for every failing test",
+        "does not publish coverage reports externally without approval",
+        "does not replace existing test or QA owners when they already fit",
+        "does not store concrete file paths, tickets, todayTask, scopeFiles, deliverableLink, or verifySteps in durable identity"
+      ],
+      "loadoutSlots": [
+        "test command discovery",
+        "coverage parser",
+        "fixture runner",
+        "risk review checklist"
+      ],
+      "inputs": [
+        "project test capability evidence",
+        "coverage report or no-report reason",
+        "user correction history",
+        "current run risk profile"
+      ],
+      "outputs": [
+        "coverage gap diagnosis",
+        "test strategy recommendation",
+        "verification owner recommendation",
+        "fixture replay requirement"
+      ],
+      "handoff": {
+        "upstream": "CapabilityGap and Fetch evidence from existing test providers",
+        "downstream": "workerTaskPacket for the selected test owner or CandidateWriteback for capability evolution"
+      },
+      "memoryPolicy": {
+        "scope": "project_scoped",
+        "allowed": [
+          "repeat coverage gap patterns",
+          "accepted user corrections",
+          "fixture replay outcomes"
+        ],
+        "forbidden": [
+          "private credentials",
+          "one-run file lists",
+          "unapproved cross-project leakage"
+        ]
+      },
+      "gapPolicy": [
+        "emit GapDecision when no test runner is found",
+        "emit GapDecision when no coverage command is available",
+        "emit GapDecision when verification needs external approval",
+        "emit GapDecision when an existing owner is sufficient and no new agent should be created"
+      ],
+      "verificationPolicy": {
+        "owner": "verify",
+        "fixtures": [
+          "no one-run path in durable identity",
+          "loadout slots are abstract",
+          "workerTask-only is rejected for recurring coverage strategy gaps"
+        ]
+      },
+      "installProjection": {
+        "claude": "eligible",
+        "codex": "eligible",
+        "cursor": "needs_probe",
+        "openclaw": "needs_probe"
+      },
+      "identityCleanliness": {
+        "forbiddenFieldsAbsent": [
+          "repoPath",
+          "fileList",
+          "ticket",
+          "todayTask",
+          "scopeFiles",
+          "deliverableLink",
+          "verifySteps"
+        ],
+        "status": "pass"
+      },
+      "qualityScorecard": {
+        "identity_clarity": "pass",
+        "domain_specificity": "pass",
+        "flow_fit": "pass",
+        "tool_least_privilege": "pass",
+        "memory_fit": "pass",
+        "gap_honesty": "pass",
+        "handoff_readiness": "pass",
+        "verification_readiness": "pass",
+        "install_projection_readiness": "pass",
+        "identity_cleanliness": "pass"
+      }
+    }
+  },
+  {
+    "id": "GAQ-02",
+    "input": "Every release needs the same release-note normalization format and the operation is mechanical and testable.",
+    "expectedDecision": "create_script",
+    "expectedForbidden": [
+      "create_agent",
+      "store_release_file_path_in_identity",
+      "use_governance_agent_as_worker"
+    ],
+    "candidateWriteback": {
+      "candidateType": "script",
+      "promotionRule": "repeatable mechanical transformation with a test entry",
+      "writebackDecision": "candidate_only"
+    }
+  },
+  {
+    "id": "GAQ-03",
+    "input": "Publish a GitHub PR, change remote labels, or perform another external write action without explicit approval.",
+    "expectedDecision": "blocked_or_needs_approval",
+    "expectedForbidden": [
+      "create_agent",
+      "create_mcp_provider_to_bypass_approval",
+      "execute_external_write"
+    ],
+    "blockedReason": "external write action requires explicit user approval and permission boundary"
+  }
+]

@@ -1,0 +1,138 @@
+{
+  "schemaVersion": "worker-task-output-replay-v0.1",
+  "purpose": "Validate workerTask output schemas, retry actions, return-to-stage decisions, and Review acceptance conditions.",
+  "samples": [
+    {
+      "id": "research-pass",
+      "taskPacket": { "taskPacketId": "research-1", "owner": "meta-scout", "workerType": "research" },
+      "result": {
+        "taskPacketId": "research-1",
+        "owner": "meta-scout",
+        "workerType": "research",
+        "evidenceRefs": ["source_ref", "fetched_at", "claim_summary"],
+        "claims": ["official docs checked"],
+        "decisionImpactMap": [{ "claim": "official docs checked", "impact": "Thinking can choose provider route" }],
+        "verificationOwner": "verify"
+      },
+      "expectedAction": "accept"
+    },
+    {
+      "id": "implementation-pass",
+      "taskPacket": { "taskPacketId": "impl-1", "owner": "backend", "workerType": "implementation" },
+      "result": {
+        "taskPacketId": "impl-1",
+        "owner": "backend",
+        "workerType": "implementation",
+        "changedArtifacts": ["scripts/example.mjs"],
+        "evidenceRefs": ["changed_artifact", "test_or_static_check", "acceptance_criteria"],
+        "acceptanceCriteria": ["script exits 0"],
+        "verificationOwner": "verify"
+      },
+      "expectedAction": "accept"
+    },
+    {
+      "id": "review-pass",
+      "taskPacket": { "taskPacketId": "review-1", "owner": "meta-prism", "workerType": "review" },
+      "result": {
+        "taskPacketId": "review-1",
+        "owner": "meta-prism",
+        "workerType": "review",
+        "evidenceRefs": ["finding_or_clean_verdict", "upstream_stage_check", "review_verdict"],
+        "findings": ["clean_verdict"],
+        "upstreamChecks": ["Critical", "Fetch", "Thinking", "Execution"],
+        "verdict": "pass",
+        "verificationOwner": "meta-warden"
+      },
+      "expectedAction": "accept"
+    },
+    {
+      "id": "verification-pass",
+      "taskPacket": { "taskPacketId": "verify-1", "owner": "verify", "workerType": "verification" },
+      "result": {
+        "taskPacketId": "verify-1",
+        "owner": "verify",
+        "workerType": "verification",
+        "evidenceRefs": ["command", "result", "fresh_evidence"],
+        "commands": ["node --test tests/example.test.mjs"],
+        "results": ["pass"],
+        "freshEvidence": true,
+        "verdict": "pass"
+      },
+      "expectedAction": "accept"
+    },
+    {
+      "id": "writeback-pass-candidate-only",
+      "taskPacket": { "taskPacketId": "writeback-1", "owner": "meta-chrysalis", "workerType": "writeback" },
+      "result": {
+        "taskPacketId": "writeback-1",
+        "owner": "meta-chrysalis",
+        "workerType": "writeback",
+        "evidenceRefs": ["candidate_writeback", "approval_state", "rollback_plan"],
+        "candidateWriteback": { "target": "canonical/skills/example", "canonicalWrites": 0 },
+        "approvalState": "candidate_only",
+        "rollbackPlan": "no canonical write was made",
+        "verificationOwner": "meta-warden"
+      },
+      "expectedAction": "accept"
+    },
+    {
+      "id": "deliverable-pass",
+      "taskPacket": { "taskPacketId": "deliverable-1", "owner": "docs", "workerType": "deliverable" },
+      "result": {
+        "taskPacketId": "deliverable-1",
+        "owner": "docs",
+        "workerType": "deliverable",
+        "evidenceRefs": ["deliverable_ref", "audience", "privacy_check"],
+        "deliverables": [".meta-kim/state/default/example/report.md"],
+        "audience": "external product reviewer",
+        "privacyCheck": "pass",
+        "verificationOwner": "review"
+      },
+      "expectedAction": "accept"
+    },
+    {
+      "id": "missing-evidence-retry",
+      "taskPacket": { "taskPacketId": "research-2", "owner": "meta-scout", "workerType": "research" },
+      "result": {
+        "taskPacketId": "research-2",
+        "owner": "meta-scout",
+        "workerType": "research",
+        "evidenceRefs": ["source_ref"],
+        "claims": ["docs checked"],
+        "decisionImpactMap": [{ "claim": "docs checked", "impact": "weak without timestamp" }],
+        "verificationOwner": "verify"
+      },
+      "expectedAction": "retry",
+      "expectedReturnToStage": "Fetch"
+    },
+    {
+      "id": "owner-boundary-blocked",
+      "taskPacket": { "taskPacketId": "impl-2", "owner": "backend", "workerType": "implementation" },
+      "result": {
+        "taskPacketId": "impl-2",
+        "owner": "general-purpose",
+        "ownerMode": "general-purpose",
+        "workerType": "implementation",
+        "changedArtifacts": ["scripts/example.mjs"],
+        "evidenceRefs": ["changed_artifact", "test_or_static_check", "acceptance_criteria"],
+        "acceptanceCriteria": ["script exits 0"],
+        "verificationOwner": "verify"
+      },
+      "expectedAction": "blocked",
+      "expectedReturnToStage": "Thinking"
+    },
+    {
+      "id": "schema-invalid-return",
+      "taskPacket": { "taskPacketId": "deliverable-2", "owner": "docs", "workerType": "deliverable" },
+      "result": {
+        "taskPacketId": "deliverable-2",
+        "owner": "docs",
+        "workerType": "deliverable",
+        "evidenceRefs": ["deliverable_ref"],
+        "deliverables": [".meta-kim/state/default/example/report.md"]
+      },
+      "expectedAction": "return_to_stage",
+      "expectedReturnToStage": "Summary"
+    }
+  ]
+}

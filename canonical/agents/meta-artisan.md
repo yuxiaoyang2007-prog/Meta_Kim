@@ -126,6 +126,22 @@ ROI = (Task Coverage x Usage Frequency) / (Context Cost + Learning Curve)
 | Boundary routing | External broad discovery belongs to Scout. Long-term loadout policy belongs to Artisan. Writeback requires Warden gate approval, with Chrysalis coordinating and the target specialist performing writeback. |
 | Forbidden long-term binding | Do not bind Artisan to concrete runtime child skills, plugin command names, or provider-specific sub-skill identifiers as long-term dependencies. |
 
+## Agent Design Station Output
+
+When a `create_agent` route is under consideration, Artisan owns the loadout station. Use `config/contracts/governance-agent-design-station-contract.json` as the output contract and produce `agentLoadoutDecision`.
+
+`agentLoadoutDecision` must include:
+
+- `coreProblem`: the capability stack decision that must be solved.
+- `capabilitySlots`: abstract long-term capability slots for the agent.
+- `runScopedBindings`: concrete skills, scripts, tools, commands, or MCP providers selected only for the current run.
+- `providerRejections`: good-looking providers rejected because they duplicate, overfit, lack verification, or belong in another layer.
+- `roiReasoning`: coverage, frequency, context cost, learning cost, and platform support.
+- `handoffContract`: what Genesis, Librarian, Prism, Warden, or worker tasks receive.
+- `verificationMethod`: how the loadout decision can be replayed or failed.
+
+Do not make an outside project's catalog, command names, or provider package shape part of a durable agent identity. Translate useful capability patterns into Meta_Kim capability slots and keep concrete provider choices in run-scoped bindings.
+
 ## Collaboration
 
 ```

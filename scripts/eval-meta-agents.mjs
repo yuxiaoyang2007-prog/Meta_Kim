@@ -30,7 +30,7 @@ const selectedRuntimes = new Set(
         .split(",")
         .map((item) => item.trim().toLowerCase())
         .filter(Boolean)
-    : ["claude", "codex", "openclaw"],
+    : ["claude", "codex", "openclaw", "cursor"],
 );
 const selectedAgentIds = new Set(
   agentArg
@@ -56,8 +56,46 @@ const prepareOpenClawScriptPath = path.join(
   "scripts",
   "prepare-openclaw-local.mjs",
 );
+const cursorLiveHarnessContractPath = path.join(
+  repoRoot,
+  "config",
+  "contracts",
+  "cursor-live-turn-harness-contract.json",
+);
 const activeChildren = new Map();
 let cleanupInFlight = false;
+
+const RUNTIME_FAILURE_TAXONOMY = Object.freeze({
+  pass: "pass",
+  timeout: "timeout",
+  authMissing: "auth_missing",
+  nativeHarnessMissing: "native_harness_missing",
+  projectionOnly: "projection_only",
+  toolUnsupported: "tool_unsupported",
+  runtimeUnavailable: "runtime_unavailable",
+  structuralFailure: "structural_failure",
+  liveIncomplete: "live_incomplete",
+  unknownFailure: "unknown_failure",
+});
+
+const RUNTIME_EVIDENCE_COMMANDS = Object.freeze({
+  claude: {
+    smoke: "node scripts/eval-meta-agents.mjs --runtime=claude",
+    live: "node scripts/eval-meta-agents.mjs --runtime=claude --live",
+  },
+  codex: {
+    smoke: "node scripts/eval-meta-agents.mjs --runtime=codex",
+    live: "node scripts/eval-meta-agents.mjs --runtime=codex --live",
+  },
+  openclaw: {
+    smoke: "node scripts/eval-meta-agents.mjs --runtime=openclaw",
+    live: "node scripts/eval-meta-agents.mjs --runtime=openclaw --live",
+  },
+  cursor: {
+    smoke: "node scripts/eval-meta-agents.mjs --runtime=cursor",
+    live: "node scripts/eval-meta-agents.mjs --runtime=cursor --live",
+  },
+});
 
 function readEnvCliOverride(envKey) {
   const raw = process.env[envKey];
@@ -364,6 +402,52 @@ async function probeClisOnly() {
   process.exitCode = allFound ? 0 : 1;
 }
 
+function shellQuoteForBash(value) {
+  return `'${String(value ?? "").replaceAll("'", "'\"'\"'")}'`;
+}
+
+function windowsPathToWslPath(filePath) {
+  const normalized = String(filePath ?? "").replaceAll("\\", "/");
+  const match = /^([A-Za-z]):\/(.*)$/.exec(normalized);
+  if (!match) {
+    return normalized;
+  }
+  return `/mnt/${match[1].toLowerCase()}/${match[2]}`;
+}
+
+function shouldProbeCursorWsl() {
+  return process.platform === "win32" && process.env.META_KIM_CURSOR_SKIP_WSL !== "1";
+}
+
+async function resolveWslCursorAgentCandidate() {
+  if (!shouldProbeCursorWsl()) {
+    throw new Error("Cursor WSL probe skipped by host policy or non-Windows platform.");
+  }
+  const probe = await runCommandWithIgnoredStdin(
+    "wsl.exe",
+    ["bash", "-lc", "command -v cursor-agent"],
+    {
+      cwd: repoRoot,
+      timeout: 30_000,
+      env: { ...process.env, NO_COLOR: "1" },
+    },
+  );
+  if (!probe.stdout.trim()) {
+    throw new Error("cursor-agent was not found on the WSL PATH.");
+  }
+  const wslRepoRoot = windowsPathToWslPath(repoRoot);
+  return {
+    file: "wsl.exe",
+    toArgs: (args) => [
+      "bash",
+      "-lc",
+      `cd ${shellQuoteForBash(wslRepoRoot)} && cursor-agent ${args
+        .map(shellQuoteForBash)
+        .join(" ")}`,
+    ],
+  };
+}
+
 let resolvedClaudeCmdPromise = null;
 function getResolvedClaudeCommand() {
   if (!resolvedClaudeCmdPromise) {
@@ -386,6 +470,73 @@ function getResolvedCodexCommand() {
     });
   }
   return resolvedCodexCmdPromise;
+}
+
+let resolvedCursorAgentCmdPromise = null;
+async function getResolvedCursorAgentCandidates() {
+  if (!resolvedCursorAgentCmdPromise) {
+    resolvedCursorAgentCmdPromise = (async () => {
+      const candidates = [];
+      try {
+        const direct = await resolveCliCommand({
+          envKey: "META_KIM_CURSOR_AGENT_BIN",
+          unixName: "cursor-agent",
+          winWhereCandidates: [
+            "cursor-agent.cmd",
+            "cursor-agent",
+            "cursor-agent.exe",
+          ],
+        });
+        candidates.push({
+          id: "cursor-agent-binary",
+          command: direct,
+          toArgs: direct.toArgs,
+        });
+      } catch (error) {
+        candidates.push({
+          id: "cursor-agent-binary",
+          unavailable: true,
+          error: error.message,
+        });
+      }
+
+      try {
+        const cursor = await resolveCliCommand({
+          envKey: "META_KIM_CURSOR_BIN",
+          unixName: "cursor",
+          winWhereCandidates: ["cursor.cmd", "cursor", "cursor.exe"],
+        });
+        candidates.push({
+          id: "cursor-agent-subcommand",
+          command: cursor,
+          toArgs: (args) => cursor.toArgs(["agent", ...args]),
+        });
+      } catch (error) {
+        candidates.push({
+          id: "cursor-agent-subcommand",
+          unavailable: true,
+          error: error.message,
+        });
+      }
+
+      try {
+        const wsl = await resolveWslCursorAgentCandidate();
+        candidates.push({
+          id: "cursor-agent-wsl",
+          command: wsl,
+          toArgs: wsl.toArgs,
+        });
+      } catch (error) {
+        candidates.push({
+          id: "cursor-agent-wsl",
+          unavailable: true,
+          error: error.message,
+        });
+      }
+      return candidates;
+    })();
+  }
+  return resolvedCursorAgentCmdPromise;
 }
 
 const claudeSchema = JSON.stringify({
@@ -422,6 +573,56 @@ const codexSmokeSchema = JSON.stringify({
     "mcp_supported",
     "sandbox_configurable",
     "approvals_configurable",
+  ],
+});
+
+const codexLiveOrchestrationSchema = JSON.stringify({
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    runtime: { type: "string" },
+    governed_entry: { type: "string" },
+    warden_entry_gate: { type: "boolean" },
+    conductor_orchestration: { type: "boolean" },
+    orchestrationTaskBoardPacket: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        synthesisOwner: { type: "string" },
+        route: { type: "string" },
+      },
+      required: ["synthesisOwner", "route"],
+    },
+    workerTaskPackets: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          owner: { type: "string" },
+          roleDisplayName: { type: "string" },
+          deliverable: { type: "string" },
+          verificationOwner: { type: "string" },
+        },
+        required: [
+          "owner",
+          "roleDisplayName",
+          "deliverable",
+          "verificationOwner",
+        ],
+      },
+    },
+    verificationOwner: { type: "string" },
+  },
+  required: [
+    "runtime",
+    "governed_entry",
+    "warden_entry_gate",
+    "conductor_orchestration",
+    "orchestrationTaskBoardPacket",
+    "workerTaskPackets",
+    "verificationOwner",
   ],
 });
 
@@ -1136,6 +1337,22 @@ function extractCodexReply(raw) {
   }
 }
 
+function tryExtractCodexReply(raw) {
+  try {
+    return extractCodexReply(raw);
+  } catch {
+    return null;
+  }
+}
+
+function extractCodexThreadId(raw) {
+  const events = parseJsonLines(raw);
+  const started = events.find(
+    (event) => event.type === "thread.started" && event.thread_id,
+  );
+  return typeof started?.thread_id === "string" ? started.thread_id : null;
+}
+
 async function resolveOpenClawCommand() {
   return resolveCliCommand({
     envKey: "META_KIM_OPENCLAW_BIN",
@@ -1539,6 +1756,74 @@ function isRetryableCodexFailure(message) {
   );
 }
 
+function isCommandTimeoutFailure(error) {
+  return (
+    error?.code === "META_KIM_COMMAND_TIMEOUT" ||
+    String(error?.message || "").toLowerCase().includes("timed out after")
+  );
+}
+
+function tailText(value, maxChars = 2_000) {
+  const text = String(value || "").trim();
+  if (text.length <= maxChars) {
+    return text;
+  }
+  return text.slice(-maxChars);
+}
+
+function shouldForceCodexLiveTimeoutFixture() {
+  return process.env.META_KIM_CODEX_LIVE_TIMEOUT_FIXTURE === "1";
+}
+
+function buildCodexLiveTimeoutFixtureStdout() {
+  return [
+    JSON.stringify({
+      type: "thread.started",
+      thread_id: "codex-live-timeout-fixture-thread",
+    }),
+    JSON.stringify({ type: "turn.started" }),
+    JSON.stringify({
+      type: "item.completed",
+      item: {
+        type: "agent_message",
+        text: JSON.stringify({
+          runtime: "codex",
+          governed_entry: "meta-theory",
+          warden_entry_gate: true,
+          conductor_orchestration: true,
+          orchestrationTaskBoardPacket: {
+            synthesisOwner: "meta-conductor",
+            route:
+              "Warden -> Conductor -> orchestrationTaskBoardPacket -> workerTaskPackets",
+          },
+          workerTaskPackets: [
+            {
+              owner: "meta-artisan",
+              roleDisplayName: "docs",
+              deliverable:
+                "Timeout fixture proves recoverable Codex live orchestration evidence.",
+              verificationOwner: "meta-prism",
+            },
+          ],
+          verificationOwner: "meta-prism",
+        }),
+      },
+    }),
+  ].join("\n");
+}
+
+function buildCodexLiveTimeoutFixtureError() {
+  const error = new Error(
+    "Command timed out after 1ms: codex fixture live orchestration",
+  );
+  error.code = "META_KIM_COMMAND_TIMEOUT";
+  error.timeoutMs = 1;
+  error.command = "codex fixture live orchestration";
+  error.stdout = buildCodexLiveTimeoutFixtureStdout();
+  error.stderr = "fixture stderr tail";
+  return error;
+}
+
 function isOptionalRuntimeUnavailable(message) {
   const normalized = String(message || "").toLowerCase();
   return (
@@ -1618,6 +1903,192 @@ function summarizeRuntimeReport(runtimeName, report) {
   };
 }
 
+function runtimeReason(report) {
+  return String(
+    report?.reason ??
+      report?.unsupportedWithReason ??
+      report?.error ??
+      report?.detail ??
+      report?.runtimeAuthHydration?.reason ??
+      report?.sample?.runtime_live?.reason ??
+      report?.sample?.runtime_smoke?.reason ??
+      "",
+  );
+}
+
+function classifyRuntimeFailure(runtimeName, report, mode) {
+  const status = report?.status ?? (report?.ok === true ? "passed" : "failed");
+  const reason = runtimeReason(report).toLowerCase();
+  if (
+    typeof report?.failureClass === "string" &&
+    Object.values(RUNTIME_FAILURE_TAXONOMY).includes(report.failureClass)
+  ) {
+    return report.failureClass;
+  }
+
+  if (status === "passed") {
+    return mode === "live"
+      ? RUNTIME_FAILURE_TAXONOMY.pass
+      : RUNTIME_FAILURE_TAXONOMY.projectionOnly;
+  }
+  if (reason.includes("timeout")) {
+    return RUNTIME_FAILURE_TAXONOMY.timeout;
+  }
+  if (reason.includes("auth") || reason.includes("apikey") || reason.includes("api key")) {
+    return RUNTIME_FAILURE_TAXONOMY.authMissing;
+  }
+  if (
+    reason.includes("live_harness_unavailable") ||
+    reason.includes("native live-turn harness") ||
+    (runtimeName === "cursor" && status === "skipped")
+  ) {
+    return RUNTIME_FAILURE_TAXONOMY.nativeHarnessMissing;
+  }
+  if (reason.includes("command not found") || reason.includes("enoent")) {
+    return RUNTIME_FAILURE_TAXONOMY.toolUnsupported;
+  }
+  if (reason.includes("runtime_unavailable")) {
+    return RUNTIME_FAILURE_TAXONOMY.runtimeUnavailable;
+  }
+  if (reason.includes("incomplete")) {
+    return RUNTIME_FAILURE_TAXONOMY.liveIncomplete;
+  }
+  if (status === "skipped") {
+    return RUNTIME_FAILURE_TAXONOMY.runtimeUnavailable;
+  }
+  if (status === "failed") {
+    return RUNTIME_FAILURE_TAXONOMY.structuralFailure;
+  }
+  return RUNTIME_FAILURE_TAXONOMY.unknownFailure;
+}
+
+function runtimeEvidenceKind(status, mode, failureClass) {
+  if (status === "passed" && mode === "live") {
+    return "live";
+  }
+  if (status === "passed") {
+    return "smoke";
+  }
+  if (failureClass === RUNTIME_FAILURE_TAXONOMY.nativeHarnessMissing) {
+    return "unsupported";
+  }
+  if (status === "skipped") {
+    return "skipped";
+  }
+  if (status === "failed") {
+    return "failed";
+  }
+  return "unknown";
+}
+
+function runtimeRemainingAction(runtimeName, failureClass, mode) {
+  if (failureClass === RUNTIME_FAILURE_TAXONOMY.pass) {
+    return "No remaining runtime action for this eval scope.";
+  }
+  if (failureClass === RUNTIME_FAILURE_TAXONOMY.projectionOnly) {
+    return `Run ${runtimeName} with --live before claiming native live release evidence.`;
+  }
+  if (failureClass === RUNTIME_FAILURE_TAXONOMY.timeout) {
+    return "Recover the live session or retry with the recorded retryCommand/threadId evidence.";
+  }
+  if (failureClass === RUNTIME_FAILURE_TAXONOMY.authMissing) {
+    return `Configure ${runtimeName} auth and rerun the live evaluator.`;
+  }
+  if (failureClass === RUNTIME_FAILURE_TAXONOMY.nativeHarnessMissing) {
+    return "Implement a native live-turn harness or keep the runtime marked unsupported-with-reason.";
+  }
+  if (failureClass === RUNTIME_FAILURE_TAXONOMY.toolUnsupported) {
+    return `Install or expose the ${runtimeName} CLI/tool before rerunning.`;
+  }
+  if (failureClass === RUNTIME_FAILURE_TAXONOMY.liveIncomplete) {
+    return "Rerun the incomplete shard set and keep skipped shards out of release pass.";
+  }
+  if (mode === "live") {
+    return `Inspect ${runtimeName} live report and rerun after fixing the reported failure.`;
+  }
+  return `Inspect ${runtimeName} smoke report and fix projection/config evidence.`;
+}
+
+function buildRuntimeEvidenceRecord(runtimeName, report, mode) {
+  const status = report?.status ?? (report?.ok === true ? "passed" : "failed");
+  const failureClass = classifyRuntimeFailure(runtimeName, report, mode);
+  const evidenceKind = runtimeEvidenceKind(status, mode, failureClass);
+  const strictReleasePass =
+    status === "passed" &&
+    mode === "live" &&
+    failureClass === RUNTIME_FAILURE_TAXONOMY.pass;
+  return {
+    runtime: runtimeName,
+    mode,
+    status,
+    evidenceKind,
+    failureClass,
+    reason: runtimeReason(report) || null,
+    command:
+      RUNTIME_EVIDENCE_COMMANDS[runtimeName]?.[mode] ??
+      `node scripts/eval-meta-agents.mjs --runtime=${runtimeName}`,
+    artifact: `report.${runtimeName}`,
+    remainingAction:
+      report?.remainingAction ?? runtimeRemainingAction(runtimeName, failureClass, mode),
+    strictReleasePass,
+    blockedFromRelease:
+      !strictReleasePass ||
+      status === "skipped" ||
+      status === "failed" ||
+      failureClass !== RUNTIME_FAILURE_TAXONOMY.pass,
+  };
+}
+
+function buildRuntimeEvidencePacket(report, runtimeStatuses) {
+  const records = runtimeStatuses.map((item) =>
+    buildRuntimeEvidenceRecord(item.runtime, report[item.runtime], report.mode),
+  );
+  const failureClasses = Object.fromEntries(
+    records.map((record) => [record.runtime, record.failureClass]),
+  );
+  return {
+    schemaVersion: "runtime-evidence-v0.1",
+    generatedAt: report.timestamp,
+    mode: report.mode,
+    strictRuntimesRequired: requireAllRuntimes,
+    records,
+    failureClasses,
+    summary: {
+      livePass: records
+        .filter((record) => record.evidenceKind === "live" && record.strictReleasePass)
+        .map((record) => record.runtime),
+      smokeOnly: records
+        .filter((record) => record.failureClass === RUNTIME_FAILURE_TAXONOMY.projectionOnly)
+        .map((record) => record.runtime),
+      skippedOrUnsupported: records
+        .filter((record) => ["skipped", "unsupported"].includes(record.evidenceKind))
+        .map((record) => record.runtime),
+      failed: records
+        .filter((record) => record.status === "failed")
+        .map((record) => record.runtime),
+      releaseGrade:
+        records.length > 0 &&
+        records.every((record) => record.strictReleasePass === true),
+    },
+  };
+}
+
+function codexLivePayloadOk(structuralOk, runtimePayload) {
+  return (
+    structuralOk &&
+    runtimePayload?.runtime === "codex" &&
+    runtimePayload?.governed_entry === "meta-theory" &&
+    runtimePayload?.warden_entry_gate === true &&
+    runtimePayload?.conductor_orchestration === true &&
+    runtimePayload?.orchestrationTaskBoardPacket?.synthesisOwner ===
+      "meta-conductor" &&
+    Array.isArray(runtimePayload?.workerTaskPackets) &&
+    runtimePayload.workerTaskPackets.length > 0 &&
+    typeof runtimePayload?.verificationOwner === "string" &&
+    runtimePayload.verificationOwner.trim().length > 0
+  );
+}
+
 async function runCommandWithIgnoredStdin(file, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, {
@@ -1652,11 +2123,15 @@ async function runCommandWithIgnoredStdin(file, args, options = {}) {
     if (typeof options.timeout === "number" && options.timeout > 0) {
       timeoutId = setTimeout(() => {
         void terminateChildTree(child).finally(() => {
-          settle(
-            new Error(
-              `Command timed out after ${options.timeout}ms: ${file} ${args.join(" ")}`,
-            ),
+          const error = new Error(
+            `Command timed out after ${options.timeout}ms: ${file} ${args.join(" ")}`,
           );
+          error.code = "META_KIM_COMMAND_TIMEOUT";
+          error.timeoutMs = options.timeout;
+          error.command = `${file} ${args.join(" ")}`;
+          error.stdout = stdout;
+          error.stderr = stderr;
+          settle(error);
         });
       }, options.timeout);
     }
@@ -2542,19 +3017,26 @@ async function runCodexSmoke() {
 }
 
 async function runCodexLive() {
-  const codexCmd = await getResolvedCodexCommand();
+  const forceTimeoutFixture = shouldForceCodexLiveTimeoutFixture();
+  const codexCmd = forceTimeoutFixture
+    ? { file: "codex-fixture", toArgs: (args) => args.map(String) }
+    : await getResolvedCodexCommand();
   let versionStdout;
   try {
     logProgress("Codex live: probing CLI and running repository smoke prompt");
-    ({ stdout: versionStdout } = await runCommandWithIgnoredStdin(
-      codexCmd.file,
-      codexCmd.toArgs(["--version"]),
-      {
-        cwd: repoRoot,
-        timeout: 30_000,
-        env: { ...process.env, NO_COLOR: "1" },
-      },
-    ));
+    if (forceTimeoutFixture) {
+      versionStdout = "codex-cli timeout-fixture";
+    } else {
+      ({ stdout: versionStdout } = await runCommandWithIgnoredStdin(
+        codexCmd.file,
+        codexCmd.toArgs(["--version"]),
+        {
+          cwd: repoRoot,
+          timeout: 30_000,
+          env: { ...process.env, NO_COLOR: "1" },
+        },
+      ));
+    }
   } catch (error) {
     if (isOptionalRuntimeUnavailable(error.message)) {
       return {
@@ -2606,43 +3088,99 @@ async function runCodexLive() {
     payload.request_user_input_default_mode === true;
 
   const schemaDir = await fs.mkdtemp(path.join(os.tmpdir(), "meta-kim-codex-"));
-  const schemaPath = path.join(schemaDir, "codex-smoke.schema.json");
-  await fs.writeFile(schemaPath, codexSmokeSchema, "utf8");
+  const schemaPath = path.join(schemaDir, "codex-live-orchestration.schema.json");
+  await fs.writeFile(schemaPath, codexLiveOrchestrationSchema, "utf8");
 
   let runtimePayload = null;
   try {
     const prompt =
-      "Read the current Meta_Kim repository and reply with JSON only. " +
-      'runtime must be "codex". entrypoint must be "AGENTS.md". ' +
-      'canonical_skill_root must be "canonical/skills/meta-theory". ' +
-      'sync_manifest must be "config/sync.json". ' +
-      "has_meta_warden_agent must be true only if the repo exposes that custom agent. " +
-      "mcp_supported, sandbox_configurable, and approvals_configurable must reflect the repository configuration. " +
-      "Do not modify files.";
+      "Return JSON only. Prove the governed Meta_Kim Codex route for one tiny task: " +
+      "identify whether a reusable skill should be created for repeated release report formatting. " +
+      'Set runtime to "codex" and governed_entry to "meta-theory". ' +
+      "Set warden_entry_gate and conductor_orchestration true only if the route is Warden -> Conductor. " +
+      'orchestrationTaskBoardPacket.synthesisOwner must be "meta-conductor" and route must mention Warden -> Conductor -> board -> workerTaskPackets. ' +
+      "workerTaskPackets must contain one bounded task with owner, deliverable, and verificationOwner. " +
+      "Do not modify files and do not explain outside JSON.";
 
+    const codexExecArgs = codexCmd.toArgs([
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "--output-schema",
+      schemaPath,
+      "--cd",
+      repoRoot,
+      prompt,
+    ]);
+    if (forceTimeoutFixture) {
+      throw buildCodexLiveTimeoutFixtureError();
+    }
     const { stdout } = await runCommandWithIgnoredStdin(
       codexCmd.file,
-      codexCmd.toArgs([
-        "exec",
-        "--json",
-        "--skip-git-repo-check",
-        "--sandbox",
-        "read-only",
-        "--output-schema",
-        schemaPath,
-        "--cd",
-        repoRoot,
-        prompt,
-      ]),
+      codexExecArgs,
       {
         cwd: repoRoot,
-        timeout: 180_000,
+        timeout: 120_000,
         env: { ...process.env, NO_COLOR: "1" },
       },
     );
 
     runtimePayload = extractCodexReply(stdout);
   } catch (error) {
+    if (isCommandTimeoutFailure(error)) {
+      const recoveredPayload = tryExtractCodexReply(error.stdout);
+      const recoveredOk = codexLivePayloadOk(structuralOk, recoveredPayload);
+      if (recoveredOk) {
+        return {
+          status: "passed",
+          ok: true,
+          recoveredFromTimeout: true,
+          sample: {
+            ...payload,
+            runtime_smoke: recoveredPayload,
+            runtime_recovery: {
+              recoveredFromTimeout: true,
+              reason: "codex_live_timeout_recovered",
+              stage: "codex_exec_orchestration_prompt",
+              timeoutMs: error.timeoutMs ?? 120_000,
+              threadId: extractCodexThreadId(error.stdout),
+              retryCommand:
+                "node scripts/eval-meta-agents.mjs --runtime=codex --live",
+              promptContract:
+                "Warden -> Conductor -> orchestrationTaskBoardPacket -> workerTaskPackets",
+              stderrTail: tailText(error.stderr),
+            },
+          },
+        };
+      }
+      return {
+        status: "skipped",
+        ok: structuralOk,
+        skipped: true,
+        retryable: true,
+        reason: "codex_live_timeout",
+        sample: {
+          ...payload,
+          runtime_live: {
+            skipped: true,
+            reason: "codex_live_timeout",
+            stage: "codex_exec_orchestration_prompt",
+            timeoutMs: error.timeoutMs ?? 120_000,
+            threadId: extractCodexThreadId(error.stdout),
+            retryCommand:
+              "node scripts/eval-meta-agents.mjs --runtime=codex --live",
+            sessionRecoveryHint:
+              "Use the Codex session record for threadId when stdout contains a thread.started event.",
+            promptContract:
+              "Warden -> Conductor -> orchestrationTaskBoardPacket -> workerTaskPackets",
+            stdoutTail: tailText(error.stdout),
+            stderrTail: tailText(error.stderr),
+          },
+        },
+      };
+    }
     if (isRetryableCodexFailure(error.message)) {
       return {
         status: "skipped",
@@ -2665,16 +3203,7 @@ async function runCodexLive() {
     await fs.rm(schemaDir, { recursive: true, force: true });
   }
 
-  const ok =
-    structuralOk &&
-    runtimePayload?.runtime === "codex" &&
-    runtimePayload?.entrypoint === "AGENTS.md" &&
-    runtimePayload?.canonical_skill_root === "canonical/skills/meta-theory" &&
-    runtimePayload?.sync_manifest === "config/sync.json" &&
-    runtimePayload?.has_meta_warden_agent === true &&
-    runtimePayload?.mcp_supported === true &&
-    runtimePayload?.sandbox_configurable === true &&
-    runtimePayload?.approvals_configurable === true;
+  const ok = codexLivePayloadOk(structuralOk, runtimePayload);
 
   return {
     status: ok ? "passed" : "failed",
@@ -2684,6 +3213,304 @@ async function runCodexLive() {
       runtime_smoke: runtimePayload,
     },
   };
+}
+
+async function runCursorSmoke() {
+  logProgress("Cursor smoke: checking generated projection files");
+  const cursorAgentsDir = path.join(repoRoot, ".cursor", "agents");
+  const cursorSkillPath = path.join(
+    repoRoot,
+    ".cursor",
+    "skills",
+    "meta-theory",
+    "SKILL.md",
+  );
+  const cursorHooksPath = path.join(repoRoot, ".cursor", "hooks.json");
+  const cursorRulesDir = path.join(repoRoot, ".cursor", "rules");
+  const agentFiles = (await fs.readdir(cursorAgentsDir))
+    .filter((file) => file.endsWith(".md"))
+    .sort();
+  const skillText = await fs.readFile(cursorSkillPath, "utf8");
+  const hooksText = await fs.readFile(cursorHooksPath, "utf8");
+  const ruleFiles = (await fs.readdir(cursorRulesDir))
+    .filter((file) => file.endsWith(".mdc"))
+    .sort();
+  const payload = {
+    runtime: "cursor",
+    mode: "smoke",
+    entrypoint: "AGENTS.md",
+    canonical_skill_root: "canonical/skills/meta-theory",
+    generated_skill: ".cursor/skills/meta-theory/SKILL.md",
+    generated_hooks: ".cursor/hooks.json",
+    generated_rules: ruleFiles.map((file) => `.cursor/rules/${file}`),
+    custom_agents: agentFiles.map((file) => file.replace(/\.md$/, "")),
+    skill_mentions_warden: /meta-warden/i.test(skillText),
+    skill_mentions_conductor: /meta-conductor/i.test(skillText),
+    hook_surface_configured: /preToolUse|postToolUse|failClosed/i.test(hooksText),
+    native_live_turn_harness: false,
+  };
+  const ok =
+    payload.custom_agents.includes("meta-warden") &&
+    payload.skill_mentions_warden &&
+    payload.skill_mentions_conductor &&
+    payload.hook_surface_configured &&
+    payload.generated_rules.length > 0;
+  return {
+    status: ok ? "passed" : "failed",
+    ok,
+    mode: "smoke",
+    sample: payload,
+  };
+}
+
+async function readCursorLiveHarnessContract() {
+  return JSON.parse(
+    await fs.readFile(cursorLiveHarnessContractPath, "utf8"),
+  );
+}
+
+function helpSupportsCursorHarness(helpText, contractCandidate) {
+  const text = String(helpText ?? "");
+  return (contractCandidate.requiredHelpPatterns ?? []).every((pattern) =>
+    text.includes(pattern),
+  );
+}
+
+function cursorLivePayloadOk(payload) {
+  return (
+    payload?.runtime === "cursor" &&
+    payload?.governed_entry === "meta-theory" &&
+    payload?.warden_entry_gate === true &&
+    payload?.conductor_orchestration === true &&
+    payload?.orchestrationTaskBoardPacket?.synthesisOwner ===
+      "meta-conductor" &&
+    Array.isArray(payload?.workerTaskPackets) &&
+    payload.workerTaskPackets.length > 0 &&
+    typeof payload?.verificationOwner === "string" &&
+    payload.verificationOwner.trim().length > 0
+  );
+}
+
+function buildCursorLiveSuccessFixture({ smoke, contract }) {
+  const payload = {
+    runtime: "cursor",
+    governed_entry: "meta-theory",
+    warden_entry_gate: true,
+    conductor_orchestration: true,
+    orchestrationTaskBoardPacket: {
+      synthesisOwner: "meta-conductor",
+      route: "Warden -> Conductor -> board -> workerTaskPackets",
+    },
+    workerTaskPackets: [
+      {
+        owner: "meta-artisan",
+        roleDisplayName: "backend",
+        deliverable: "Cursor native live success fixture",
+        verificationOwner: "verify",
+      },
+    ],
+    verificationOwner: "verify",
+  };
+  return {
+    status: "passed",
+    ok: true,
+    mode: "live",
+    fixture: true,
+    contract: {
+      schemaVersion: contract.schemaVersion,
+      path: "config/contracts/cursor-live-turn-harness-contract.json",
+    },
+    localProbe: {
+      selectedHarness: "cursor-agent-success-fixture",
+      candidates: [
+        {
+          id: "cursor-agent-success-fixture",
+          ok: true,
+          command: "fixture cursor-agent",
+          missingHelpPatterns: [],
+          helpTail: "--print --output-format json stream-json",
+        },
+      ],
+    },
+    sample: {
+      runtime_smoke: payload,
+    },
+    smoke,
+  };
+}
+
+async function probeCursorAgentHarness(contract) {
+  const candidates = await getResolvedCursorAgentCandidates();
+  const contractCandidates = new Map(
+    (contract.nativeHarnessCandidates ?? []).map((candidate) => [
+      candidate.id,
+      candidate,
+    ]),
+  );
+  const probes = [];
+  for (const candidate of candidates) {
+    const contractCandidate = contractCandidates.get(candidate.id);
+    if (!contractCandidate) {
+      continue;
+    }
+    if (candidate.unavailable) {
+      probes.push({
+        id: candidate.id,
+        ok: false,
+        unavailable: true,
+        reason: "cursor_agent_command_not_found",
+        error: candidate.error,
+      });
+      continue;
+    }
+    try {
+      const help = await runCommandWithIgnoredStdin(
+        candidate.command.file,
+        candidate.toArgs(["--help"]),
+        {
+          cwd: repoRoot,
+          timeout: 30_000,
+          env: { ...process.env, NO_COLOR: "1" },
+        },
+      );
+      const helpOutput = mergeCommandOutput(help.stdout, help.stderr);
+      const ok = helpSupportsCursorHarness(helpOutput, contractCandidate);
+      probes.push({
+        id: candidate.id,
+        ok,
+        command: contractCandidate.command,
+        missingHelpPatterns: (contractCandidate.requiredHelpPatterns ?? []).filter(
+          (pattern) => !helpOutput.includes(pattern),
+        ),
+        helpTail: tailText(helpOutput, 1200),
+      });
+      if (ok) {
+        return {
+          ok: true,
+          selected: {
+            ...candidate,
+            contractCandidate,
+          },
+          probes,
+        };
+      }
+    } catch (error) {
+      probes.push({
+        id: candidate.id,
+        ok: false,
+        command: contractCandidate.command,
+        reason: "cursor_agent_help_failed",
+        error: error.message,
+      });
+    }
+  }
+  return {
+    ok: false,
+    probes,
+  };
+}
+
+async function runCursorLive() {
+  const smoke = await runCursorSmoke();
+  const contract = await readCursorLiveHarnessContract();
+  if (process.env.META_KIM_CURSOR_LIVE_SUCCESS_FIXTURE === "1") {
+    return buildCursorLiveSuccessFixture({ smoke, contract });
+  }
+  const harnessProbe = await probeCursorAgentHarness(contract);
+  if (!harnessProbe.ok) {
+    return {
+      status: "blocked",
+      ok: false,
+      blocked: true,
+      retryable: true,
+      reason: "cursor_live_harness_blocked",
+      unsupportedWithReason: contract.unsupportedWithReason,
+      failureClass: "native_harness_missing",
+      contract: {
+        schemaVersion: contract.schemaVersion,
+        path: "config/contracts/cursor-live-turn-harness-contract.json",
+        officialEvidence: contract.officialEvidence,
+        passCriteria: contract.passCriteria,
+        blockedCriteria: contract.blockedCriteria,
+        releaseBoundary: contract.releaseBoundary,
+      },
+      localProbe: {
+        cursorVersionCommand: "cursor --version",
+        candidates: harnessProbe.probes,
+      },
+      remainingAction:
+        "Install or expose Cursor Agent CLI (`cursor-agent`) on the host or official Windows WSL path, or expose a `cursor agent` subcommand with -p/--print and --output-format support, authenticate it, then rerun `node scripts/eval-meta-agents.mjs --runtime=cursor --live`.",
+      smoke,
+    };
+  }
+
+  const prompt =
+    "Return JSON only. Prove the governed Meta_Kim Cursor route for one tiny task: " +
+    "identify whether a reusable skill should be created for repeated release report formatting. " +
+    'Set runtime to "cursor" and governed_entry to "meta-theory". ' +
+    "Set warden_entry_gate and conductor_orchestration true only if the route is Warden -> Conductor. " +
+    'orchestrationTaskBoardPacket.synthesisOwner must be "meta-conductor" and route must mention Warden -> Conductor -> board -> workerTaskPackets. ' +
+    "workerTaskPackets must contain one bounded task with owner, deliverable, and verificationOwner. " +
+    "Do not modify files and do not explain outside JSON.";
+
+  try {
+    const selected = harnessProbe.selected;
+    const { stdout, stderr } = await runCommandWithIgnoredStdin(
+      selected.command.file,
+      selected.toArgs([...selected.contractCandidate.runArgs, prompt]),
+      {
+        cwd: repoRoot,
+        timeout: 120_000,
+        env: { ...process.env, NO_COLOR: "1" },
+      },
+    );
+    const payload = parseJsonObjectFromText(mergeCommandOutput(stdout, stderr));
+    const ok = cursorLivePayloadOk(payload);
+    return {
+      status: ok ? "passed" : "failed",
+      ok,
+      mode: "live",
+      contract: {
+        schemaVersion: contract.schemaVersion,
+        path: "config/contracts/cursor-live-turn-harness-contract.json",
+      },
+      localProbe: {
+        selectedHarness: selected.id,
+        candidates: harnessProbe.probes,
+      },
+      sample: {
+        runtime_smoke: payload,
+      },
+      smoke,
+    };
+  } catch (error) {
+    return {
+      status: "blocked",
+      ok: false,
+      blocked: true,
+      retryable: true,
+      reason: isCommandTimeoutFailure(error)
+        ? "cursor_live_timeout"
+        : "cursor_live_harness_blocked",
+      unsupportedWithReason:
+        "Cursor native agent CLI was detected, but the live run did not return parseable governed JSON.",
+      failureClass: isCommandTimeoutFailure(error) ? "timeout" : "native_harness_missing",
+      contract: {
+        schemaVersion: contract.schemaVersion,
+        path: "config/contracts/cursor-live-turn-harness-contract.json",
+      },
+      localProbe: {
+        selectedHarness: harnessProbe.selected?.id,
+        candidates: harnessProbe.probes,
+        error: error.message,
+        stdoutTail: tailText(error.stdout),
+        stderrTail: tailText(error.stderr),
+      },
+      remainingAction:
+        "Fix Cursor Agent CLI auth/output mode or rerun after confirming it can return JSON in non-interactive mode.",
+      smoke,
+    };
+  }
 }
 
 async function collectOpenClawBaseStatus({ useMainConfig = false } = {}) {
@@ -3089,7 +3916,7 @@ async function runOpenClawLive() {
 async function main() {
   installSignalCleanup();
   for (const runtimeName of selectedRuntimes) {
-    if (!["claude", "codex", "openclaw"].includes(runtimeName)) {
+    if (!["claude", "codex", "openclaw", "cursor"].includes(runtimeName)) {
       throw new Error(`Unknown runtime filter: ${runtimeName}`);
     }
   }
@@ -3113,6 +3940,7 @@ async function main() {
     claude: null,
     codex: null,
     openclaw: null,
+    cursor: null,
   };
 
   try {
@@ -3188,6 +4016,21 @@ async function main() {
 
       logProgress(`OpenClaw result: ${report.openclaw.status}`);
     }
+
+    if (isRuntimeSelected("cursor")) {
+      try {
+        report.cursor =
+          evalMode === "live" ? await runCursorLive() : await runCursorSmoke();
+      } catch (error) {
+        report.cursor = {
+          status: "failed",
+          ok: false,
+          error: error.message,
+        };
+      }
+
+      logProgress(`Cursor result: ${report.cursor.status}`);
+    }
   } finally {
     await cleanupActiveChildren("final sweep");
   }
@@ -3202,7 +4045,14 @@ async function main() {
     isRuntimeSelected("openclaw")
       ? summarizeRuntimeReport("openclaw", report.openclaw)
       : null,
+    isRuntimeSelected("cursor")
+      ? summarizeRuntimeReport("cursor", report.cursor)
+      : null,
   ].filter(Boolean);
+  report.runtimeEvidencePacket = buildRuntimeEvidencePacket(
+    report,
+    runtimeStatuses,
+  );
 
   report.summary = {
     passed: runtimeStatuses
@@ -3214,11 +4064,17 @@ async function main() {
     failed: runtimeStatuses
       .filter((item) => item.status === "failed")
       .map((item) => item.runtime),
+    blocked: runtimeStatuses
+      .filter((item) => !["passed", "skipped", "failed"].includes(item.status))
+      .map((item) => item.runtime),
     strictRuntimesRequired: requireAllRuntimes,
+    releaseGrade: report.runtimeEvidencePacket.summary.releaseGrade,
+    failureClasses: report.runtimeEvidencePacket.failureClasses,
   };
 
   const overallOk =
     report.summary.failed.length === 0 &&
+    report.summary.blocked.length === 0 &&
     (!requireAllRuntimes || report.summary.skipped.length === 0);
 
   console.log(JSON.stringify(report, null, 2));

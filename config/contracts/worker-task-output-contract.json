@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "worker-task-output-contract-v0.1",
+  "purpose": "Define workerTask output schemas, failure return policy, retry limits, and Review acceptance criteria before execution results can be accepted.",
+  "workerTypes": {
+    "research": {
+      "requiredFields": ["taskPacketId", "owner", "workerType", "evidenceRefs", "claims", "decisionImpactMap", "verificationOwner"],
+      "requiredEvidence": ["source_ref", "fetched_at", "claim_summary"],
+      "failureClass": "missing_research_evidence",
+      "returnToStage": "Fetch",
+      "maxRetries": 1,
+      "reviewAcceptanceCriteria": ["source refs are present", "material claims map to decision impact", "verification owner is named"]
+    },
+    "implementation": {
+      "requiredFields": ["taskPacketId", "owner", "workerType", "changedArtifacts", "evidenceRefs", "acceptanceCriteria", "verificationOwner"],
+      "requiredEvidence": ["changed_artifact", "test_or_static_check", "acceptance_criteria"],
+      "failureClass": "implementation_output_incomplete",
+      "returnToStage": "Execution",
+      "maxRetries": 2,
+      "reviewAcceptanceCriteria": ["changed artifacts are named", "verification command or check is present", "acceptance criteria are explicit"]
+    },
+    "review": {
+      "requiredFields": ["taskPacketId", "owner", "workerType", "findings", "upstreamChecks", "verdict", "verificationOwner"],
+      "requiredEvidence": ["finding_or_clean_verdict", "upstream_stage_check", "review_verdict"],
+      "failureClass": "review_output_incomplete",
+      "returnToStage": "Review",
+      "maxRetries": 1,
+      "reviewAcceptanceCriteria": ["Critical Fetch Thinking and Execution quality were checked", "findings or clean verdict are explicit", "verdict is pass or fail"]
+    },
+    "verification": {
+      "requiredFields": ["taskPacketId", "owner", "workerType", "commands", "results", "freshEvidence", "verdict"],
+      "requiredEvidence": ["command", "result", "fresh_evidence"],
+      "failureClass": "verification_evidence_missing",
+      "returnToStage": "Verification",
+      "maxRetries": 1,
+      "reviewAcceptanceCriteria": ["commands are reproducible", "fresh evidence is present", "verdict is explicit"]
+    },
+    "writeback": {
+      "requiredFields": ["taskPacketId", "owner", "workerType", "candidateWriteback", "approvalState", "rollbackPlan", "verificationOwner"],
+      "requiredEvidence": ["candidate_writeback", "approval_state", "rollback_plan"],
+      "failureClass": "writeback_approval_missing",
+      "returnToStage": "Evolution",
+      "maxRetries": 0,
+      "reviewAcceptanceCriteria": ["approval state is candidate_only approved or none_with_reason", "rollback plan is present", "canonical writes are not automatic"]
+    },
+    "deliverable": {
+      "requiredFields": ["taskPacketId", "owner", "workerType", "deliverables", "audience", "privacyCheck", "verificationOwner"],
+      "requiredEvidence": ["deliverable_ref", "audience", "privacy_check"],
+      "failureClass": "deliverable_contract_incomplete",
+      "returnToStage": "Summary",
+      "maxRetries": 1,
+      "reviewAcceptanceCriteria": ["deliverable references are present", "audience is named", "privacy check passed"]
+    }
+  },
+  "globalRequiredFields": ["taskPacketId", "owner", "workerType", "evidenceRefs"],
+  "ownerBoundary": {
+    "forbiddenOwnerModes": ["temporary-fallback-owner", "general-purpose", "runtime-nickname"],
+    "ownerMustMatchTaskPacket": true,
+    "violationAction": "blocked",
+    "returnToStage": "Thinking",
+    "failureClass": "owner_boundary_violation"
+  },
+  "retryPolicy": {
+    "missingEvidenceAction": "retry",
+    "schemaMismatchAction": "return_to_stage",
+    "ownerBoundaryAction": "blocked",
+    "retryWithoutChangedOutputForbidden": true
+  },
+  "reviewGate": {
+    "acceptOnlyWhen": [
+      "schemaStatus = pass",
+      "ownerBoundaryStatus = pass",
+      "requiredEvidenceStatus = pass",
+      "reviewAcceptanceCriteriaStatus = pass"
+    ],
+    "rejectWhenMissing": ["owner", "evidenceRefs", "acceptanceCriteria or type-specific reviewAcceptanceCriteria"]
+  }
+}

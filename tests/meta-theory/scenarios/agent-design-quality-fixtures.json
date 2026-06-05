@@ -1,0 +1,492 @@
+[
+  {
+    "id": "ADQ-01",
+    "name": "professional-test-coverage-owner",
+    "expectedStatus": "pass",
+    "spec": {
+      "name": "test-coverage-specialist",
+      "description": "Own reusable test coverage strategy, coverage gap diagnosis, and verification planning when existing test owners lack a long-term coverage boundary.",
+      "flowPosition": "Test",
+      "purpose": "Provide a reusable owner for test coverage strategy and coverage gap diagnosis across runs.",
+      "capabilities": [
+        "test framework discovery",
+        "coverage report interpretation",
+        "risk-based test planning",
+        "regression fixture design",
+        "missing verifier diagnosis"
+      ],
+      "nonCapabilities": [
+        "does not become the implementation worker for every failing test",
+        "does not publish coverage reports externally without approval",
+        "does not replace existing test or QA owners when they already fit",
+        "does not store concrete file paths, tickets, todayTask, scopeFiles, deliverableLink, or verifySteps in durable identity"
+      ],
+      "loadoutSlots": [
+        "test command discovery",
+        "coverage parser",
+        "fixture runner",
+        "risk review checklist"
+      ],
+      "inputs": [
+        "project test capability evidence",
+        "coverage report or no-report reason",
+        "user correction history",
+        "current run risk profile"
+      ],
+      "outputs": [
+        "coverage gap diagnosis",
+        "test strategy recommendation",
+        "verification owner recommendation",
+        "fixture replay requirement"
+      ],
+      "handoff": {
+        "upstream": "CapabilityGap and Fetch evidence from existing test providers",
+        "downstream": "workerTaskPacket for the selected test owner or CandidateWriteback for capability evolution"
+      },
+      "memoryPolicy": {
+        "scope": "project_scoped",
+        "allowed": [
+          "repeat coverage gap patterns",
+          "accepted user corrections",
+          "fixture replay outcomes"
+        ],
+        "forbidden": [
+          "private credentials",
+          "one-run file lists",
+          "unapproved cross-project leakage"
+        ]
+      },
+      "gapPolicy": [
+        "emit GapDecision when no test runner is found",
+        "emit GapDecision when no coverage command is available",
+        "emit GapDecision when verification needs external approval",
+        "emit GapDecision when an existing owner is sufficient and no new agent should be created"
+      ],
+      "verificationPolicy": {
+        "owner": "verify",
+        "fixtures": [
+          "no one-run path in durable identity",
+          "loadout slots are abstract",
+          "workerTask-only is rejected for recurring coverage strategy gaps"
+        ]
+      },
+      "installProjection": {
+        "claude": "eligible",
+        "codex": "eligible",
+        "cursor": "needs_probe",
+        "openclaw": "needs_probe"
+      },
+      "identityCleanliness": {
+        "forbiddenFieldsAbsent": [
+          "repoPath",
+          "fileList",
+          "ticket",
+          "todayTask",
+          "scopeFiles",
+          "deliverableLink",
+          "verifySteps"
+        ],
+        "status": "pass"
+      },
+      "referenceAbsorption": {
+        "contentEvidenceOnly": true,
+        "usedFor": [
+          "professional role naming",
+          "product-flow handoff clarity",
+          "scoped memory policy"
+        ],
+        "architectureCopied": false,
+        "sourceIds": [
+          "professional-role-benchmark",
+          "flow-handoff-benchmark",
+          "memory-boundary-benchmark"
+        ]
+      }
+    },
+    "intelligenceTrace": {
+      "coreProblem": {
+        "surfaceRequest": "create an agent for long-term test coverage strategy owner",
+        "durableProblem": "The project repeatedly lacks a stable owner for test coverage strategy, gap diagnosis, and verification planning after existing test providers are checked.",
+        "notAOneRunTask": true
+      },
+      "evidenceUsed": {
+        "localSources": [
+          "canonical/skills/meta-theory/references/create-agent.md",
+          "canonical/agents/meta-genesis.md",
+          "canonical/agents/meta-artisan.md",
+          "canonical/agents/meta-prism.md"
+        ],
+        "dependencyEvidence": [
+          {
+            "sourceId": "professional-role-benchmark",
+            "usedFor": "professional role naming and concise trigger",
+            "architectureCopied": false
+          },
+          {
+            "sourceId": "flow-handoff-benchmark",
+            "usedFor": "product-flow handoff clarity",
+            "architectureCopied": false
+          },
+          {
+            "sourceId": "memory-boundary-benchmark",
+            "usedFor": "scoped memory and gap analysis behavior",
+            "architectureCopied": false
+          }
+        ]
+      },
+      "designAlternatives": [
+        {
+          "path": "worker_task_only",
+          "fit": "low",
+          "reason": "Would solve only the current coverage task and lose repeated strategy ownership."
+        },
+        {
+          "path": "create_script",
+          "fit": "medium",
+          "reason": "Could automate report parsing, but cannot own coverage strategy and gap diagnosis."
+        },
+        {
+          "path": "create_agent",
+          "fit": "high",
+          "reason": "The repeated missing boundary is a long-term professional owner, not only an automation."
+        }
+      ],
+      "selectedPath": "create_agent",
+      "rejectedWeakPaths": [
+        {
+          "path": "generic_quality_agent",
+          "reason": "Too replaceable; does not name test coverage domain judgment."
+        },
+        {
+          "path": "task_bound_report_fixer",
+          "reason": "Would put today's report and commands into durable identity."
+        }
+      ],
+      "stationReasoning": {
+        "genesis": {
+          "judgment": "Define the stable identity as test coverage strategy, not as running one test command.",
+          "boundary": "Own coverage strategy and gap diagnosis; do not implement every failing test."
+        },
+        "artisan": {
+          "judgment": "Use abstract loadout slots, then bind concrete test commands only per run."
+        },
+        "prism": {
+          "judgment": "Reject if replacing the name with generic-agent still works or if verifySteps appear in identity."
+        }
+      },
+      "loadoutReasoning": {
+        "candidates": [
+          {
+            "slot": "test command discovery",
+            "coverage": 0.9,
+            "frequency": "every coverage run",
+            "cost": "low",
+            "roi": 4.5,
+            "decision": "keep"
+          },
+          {
+            "slot": "browser QA",
+            "coverage": 0.2,
+            "frequency": "only for UI coverage",
+            "cost": "medium",
+            "roi": 0.8,
+            "decision": "reject"
+          }
+        ]
+      },
+      "prismReview": {
+        "assertions": [
+          {
+            "claim": "The design is domain-specific.",
+            "status": "pass",
+            "evidence": "Capabilities name coverage reports, fixtures, test framework discovery, and missing verifier diagnosis."
+          },
+          {
+            "claim": "The design is not task-bound.",
+            "status": "pass",
+            "evidence": "Concrete commands and file paths are explicitly refused."
+          }
+        ],
+        "selfCritique": "A pass would be too weak without fixture replay and identity cleanliness checks."
+      },
+      "finalSpecBinding": {
+        "selectedPath": "create_agent",
+        "generatedSpecName": "test-coverage-specialist",
+        "boundToCoreProblem": true
+      }
+    }
+  },
+  {
+    "id": "ADQ-02",
+    "name": "generic-excellence-agent",
+    "expectedStatus": "fail",
+    "expectedFailDimensions": [
+      "domain_specificity",
+      "verification_readiness"
+    ],
+    "expectedFailIntelligenceDimensions": [
+      "core_problem_capture",
+      "alternative_comparison",
+      "rejected_weak_path",
+      "station_reasoning",
+      "prism_adversarial_review"
+    ],
+    "spec": {
+      "name": "quality-agent",
+      "description": "Help the team do excellent work with intelligent judgment.",
+      "flowPosition": "Review",
+      "purpose": "Improve quality for any task.",
+      "capabilities": [
+        "analysis",
+        "quality improvement",
+        "collaboration",
+        "problem solving"
+      ],
+      "nonCapabilities": [
+        "does not do unsafe things"
+      ],
+      "loadoutSlots": [
+        "review capability"
+      ],
+      "inputs": [
+        "task"
+      ],
+      "outputs": [
+        "better result"
+      ],
+      "handoff": {
+        "upstream": "anyone",
+        "downstream": "anyone"
+      },
+      "memoryPolicy": {
+        "scope": "run_scoped",
+        "allowed": [
+          "notes"
+        ],
+        "forbidden": [
+          "secrets"
+        ]
+      },
+      "gapPolicy": [
+        "ask when unsure"
+      ],
+      "verificationPolicy": {
+        "owner": "verify",
+        "fixtures": []
+      },
+      "installProjection": {
+        "claude": "eligible",
+        "codex": "eligible"
+      },
+      "identityCleanliness": {
+        "forbiddenFieldsAbsent": [],
+        "status": "pass"
+      },
+      "referenceAbsorption": {
+        "contentEvidenceOnly": true,
+        "usedFor": [],
+        "architectureCopied": false,
+        "sourceIds": []
+      }
+    },
+    "intelligenceTrace": {
+      "coreProblem": {
+        "surfaceRequest": "make work better",
+        "durableProblem": "Improve quality for any task.",
+        "notAOneRunTask": false
+      },
+      "evidenceUsed": {
+        "localSources": [],
+        "dependencyEvidence": []
+      },
+      "designAlternatives": [
+        {
+          "path": "create_agent",
+          "fit": "high",
+          "reason": "A quality agent is useful."
+        }
+      ],
+      "selectedPath": "create_agent",
+      "rejectedWeakPaths": [],
+      "stationReasoning": {
+        "genesis": {
+          "judgment": "Make a helpful quality agent."
+        },
+        "artisan": {},
+        "prism": {}
+      },
+      "loadoutReasoning": {
+        "candidates": []
+      },
+      "prismReview": {
+        "assertions": [],
+        "selfCritique": ""
+      },
+      "finalSpecBinding": {
+        "selectedPath": "create_agent",
+        "generatedSpecName": "quality-agent",
+        "boundToCoreProblem": false
+      }
+    }
+  },
+  {
+    "id": "ADQ-03",
+    "name": "task-bound-agent",
+    "expectedStatus": "fail",
+    "expectedFailDimensions": [
+      "identity_cleanliness",
+      "tool_least_privilege"
+    ],
+    "spec": {
+      "name": "release-json-file-fixer",
+      "description": "Edit docs/generated-run-report.zh-CN.md and run npm scripts for today's release report.",
+      "flowPosition": "Build",
+      "purpose": "Fix this release report file.",
+      "capabilities": [
+        "edit docs/generated-run-report.zh-CN.md",
+        "run npm run meta:gap:codex-real-test",
+        "commit the result",
+        "update today's report"
+      ],
+      "nonCapabilities": [
+        "does not do other work"
+      ],
+      "loadoutSlots": [
+        "npm run meta:gap:codex-real-test",
+        "git commit",
+        "docs/generated-run-report.zh-CN.md"
+      ],
+      "inputs": [
+        "todayTask",
+        "scopeFiles"
+      ],
+      "outputs": [
+        "deliverableLink",
+        "verifySteps"
+      ],
+      "handoff": {
+        "upstream": "this ticket",
+        "downstream": "this commit"
+      },
+      "memoryPolicy": {
+        "scope": "project_scoped",
+        "allowed": [
+          "this file path"
+        ],
+        "forbidden": [
+          "none"
+        ]
+      },
+      "gapPolicy": [
+        "continue with fallback owner"
+      ],
+      "verificationPolicy": {
+        "owner": "verify",
+        "fixtures": [
+          "run today's verifySteps"
+        ]
+      },
+      "installProjection": {
+        "claude": "eligible",
+        "codex": "eligible"
+      },
+      "identityCleanliness": {
+        "forbiddenFieldsAbsent": [],
+        "status": "fail"
+      },
+      "referenceAbsorption": {
+        "contentEvidenceOnly": true,
+        "usedFor": [],
+        "architectureCopied": false,
+        "sourceIds": []
+      }
+    }
+  },
+  {
+    "id": "ADQ-04",
+    "name": "dependency-architecture-copy",
+    "expectedStatus": "fail",
+    "expectedFailDimensions": [
+      "dependency_content_boundary"
+    ],
+    "spec": {
+      "name": "copied-architecture-agent",
+      "description": "Own agent design by adopting a dependency skill catalog architecture and provider packaging shape.",
+      "flowPosition": "Plan",
+      "purpose": "Use dependency project architecture as the durable Meta_Kim agent architecture.",
+      "capabilities": [
+        "professional role naming",
+        "upstream downstream handoff",
+        "skill catalog architecture adoption",
+        "provider packaging architecture adoption"
+      ],
+      "nonCapabilities": [
+        "does not execute business work",
+        "does not perform external write without approval"
+      ],
+      "loadoutSlots": [
+        "capability slot discovery",
+        "handoff review",
+        "risk review"
+      ],
+      "inputs": [
+        "dependency project reference",
+        "Meta_Kim owner gap"
+      ],
+      "outputs": [
+        "agent design draft",
+        "handoff packet"
+      ],
+      "handoff": {
+        "upstream": "Fetch evidence from dependency content",
+        "downstream": "Prism review"
+      },
+      "memoryPolicy": {
+        "scope": "project_scoped",
+        "allowed": [
+          "accepted content patterns"
+        ],
+        "forbidden": [
+          "dependency project architecture"
+        ]
+      },
+      "gapPolicy": [
+        "emit GapDecision for missing owner boundary",
+        "return to Thinking if architecture source is unclear"
+      ],
+      "verificationPolicy": {
+        "owner": "verify",
+        "fixtures": [
+          "dependency architecture copy must fail"
+        ]
+      },
+      "installProjection": {
+        "claude": "needs_probe",
+        "codex": "needs_probe"
+      },
+      "identityCleanliness": {
+        "forbiddenFieldsAbsent": [
+          "repoPath",
+          "fileList",
+          "ticket",
+          "todayTask",
+          "scopeFiles",
+          "deliverableLink",
+          "verifySteps"
+        ],
+        "status": "pass"
+      },
+      "referenceAbsorption": {
+        "contentEvidenceOnly": false,
+        "usedFor": [
+          "skill catalog architecture",
+          "provider packaging architecture"
+        ],
+        "architectureCopied": true,
+        "sourceIds": [
+          "flow-handoff-benchmark"
+        ]
+      }
+    }
+  }
+]

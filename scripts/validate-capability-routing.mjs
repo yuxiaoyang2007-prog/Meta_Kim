@@ -59,5 +59,16 @@ assert(cursorUnknown.recommendedRoute || cursorUnknown.capabilityGapPacket, "Cur
 
 const missing = route("missing dependency task requiring imaginary provider xzzq");
 assert(missing.recommendedRoute || missing.capabilityGapPacket, "Missing dependency task must produce route or capabilityGapPacket");
+assert(missing.capabilityGapDetected === true, "Explicit missing dependency must trigger capability-gap detection");
+assert(missing.capabilityGapDecision?.decision === "blocked_or_needs_approval", "Imaginary provider must block or require approval instead of being swallowed by a generic route");
+assert(missing.capabilityGapDecision?.decisionEvidence?.status === "pass", "Capability-gap route decision must carry passing DecisionEvidenceContract");
+assert(missing.capabilityGapDecision?.decisionEvidence?.missingEvidence?.length === 0, "Capability-gap route decision must not miss required evidence");
+assert(missing.routeExecutionGate?.canEnterExecution === false, "Blocked capability-gap decision must close the Execution gate");
+assert(missing.routeExecutionGate?.blockedBy?.includes("capability_gap_decision_blocks_execution"), "Execution gate must name the capability-gap blocker");
+
+const createAgentGap = route("create agent for long-term test coverage strategy owner");
+assert(createAgentGap.capabilityGapDetected === true, "Explicit create agent request must trigger capability-gap detection");
+assert(createAgentGap.capabilityGapDecision?.decision === "create_agent", "Long-term coverage owner gap must route to create_agent");
+assert(createAgentGap.capabilityGapDecision?.generatedAgentSpec?.identityCleanliness?.status === "pass", "create_agent route gap must produce a clean GeneratedAgentSpec");
 
 console.log("capability routing valid");

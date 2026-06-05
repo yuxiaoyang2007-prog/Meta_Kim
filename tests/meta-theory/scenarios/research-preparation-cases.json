@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "research-preparation-cases-v0.1",
+  "cases": [
+    {
+      "id": "cursor-native-live-current-docs",
+      "task": "Before orchestrating Cursor native live release work, verify the latest official Cursor Agent CLI docs and local CLI readiness.",
+      "researchRequired": true,
+      "expectedStageGate": "must_complete_before_thinking",
+      "requiredSourceCategories": [
+        "official_docs",
+        "current_runtime_inventory",
+        "provider_registry"
+      ],
+      "requiredSearchAngles": [
+        "official CLI print/json support",
+        "Windows WSL installation and version probe",
+        "blocked versus release-grade evidence boundary"
+      ],
+      "expectedDecisionImpacts": [
+        "runtime_release_boundary",
+        "cursor_native_live_blocker",
+        "verification_owner_path"
+      ]
+    },
+    {
+      "id": "external-mcp-provider-discovery",
+      "task": "Decide whether a new MCP provider is needed for source-backed market and competitor research before creating any durable capability.",
+      "researchRequired": true,
+      "expectedStageGate": "must_complete_before_thinking",
+      "requiredSourceCategories": [
+        "external_ecosystem",
+        "provider_registry",
+        "mcp_inventory"
+      ],
+      "requiredSearchAngles": [
+        "existing MCP provider coverage",
+        "official API and permission requirements",
+        "sandbox and credential risk"
+      ],
+      "expectedDecisionImpacts": [
+        "create_mcp_provider_or_block",
+        "permission_boundary",
+        "meta_scout_handoff"
+      ]
+    },
+    {
+      "id": "local-prd-only-review",
+      "task": "Review whether the PRD already records capability types and AI-readable product standards without relying on current external facts.",
+      "researchRequired": false,
+      "expectedStageGate": "recorded_before_thinking",
+      "requiredSourceCategories": [
+        "canonical_sources",
+        "contracts",
+        "local_runtime_inventory"
+      ],
+      "requiredSearchAngles": [
+        "single PRD source",
+        "local contract coverage",
+        "status and evidence markers"
+      ],
+      "expectedDecisionImpacts": [
+        "local_only_route",
+        "prd_status_guard",
+        "no_external_research_needed"
+      ]
+    },
+    {
+      "id": "blocked-paid-web-research",
+      "task": "Research paid third-party research APIs and pricing before buying or activating a provider for the run.",
+      "researchRequired": true,
+      "expectedStageGate": "blocked_return_to_fetch",
+      "blockedReason": "paid_or_credentialed_action_requires_user_approval",
+      "requiredSourceCategories": [
+        "official_docs",
+        "pricing",
+        "permission_boundary"
+      ],
+      "requiredSearchAngles": [
+        "pricing and terms",
+        "credential and billing boundary",
+        "read-only alternatives"
+      ],
+      "expectedDecisionImpacts": [
+        "blocked_or_needs_approval",
+        "no_external_write",
+        "approval_request"
+      ]
+    }
+  ]
+}

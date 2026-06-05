@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 1,
+  "contractId": "capability-gap-executable-graph-contract",
+  "owner": "Meta_Kim",
+  "purpose": "Machine-readable control graph contract for the Capability Gap complete-product MVP. It fixes node, edge, state, event, owner, and failure-return requirements without introducing a full CapabilityGraph or graph database.",
+  "stateFields": [
+    "criticalSummary",
+    "fetchEvidence",
+    "capabilityGap",
+    "gapDecision",
+    "decisionOutput",
+    "reviewResult",
+    "verificationResult",
+    "feedback",
+    "evolutionDecision"
+  ],
+  "persistenceBoundary": {
+    "adapter": "RunStateStore",
+    "allowed": ["checkpoint", "event_log", "analytics_query"],
+    "forbidden": ["planner", "canonical_identity_source", "automatic_canonical_write"],
+    "databaseAsPlannerCountTarget": 0,
+    "directCanonicalWriteTarget": 0
+  },
+  "nodes": [
+    {
+      "id": "critical_intent",
+      "owner": "meta-warden",
+      "inputState": ["rawInput"],
+      "outputState": ["criticalSummary"],
+      "events": ["run_started"],
+      "failureReturnStage": "Critical"
+    },
+    {
+      "id": "fetch_capabilities",
+      "owner": "meta-scout",
+      "inputState": ["criticalSummary"],
+      "outputState": ["fetchEvidence"],
+      "events": ["providers_checked"],
+      "failureReturnStage": "Fetch"
+    },
+    {
+      "id": "detect_gap",
+      "owner": "meta-artisan",
+      "inputState": ["criticalSummary", "fetchEvidence"],
+      "outputState": ["capabilityGap"],
+      "events": ["capability_gap_detected"],
+      "failureReturnStage": "Thinking"
+    },
+    {
+      "id": "decide_gap_route",
+      "owner": "meta-artisan",
+      "inputState": ["capabilityGap"],
+      "outputState": ["gapDecision"],
+      "events": ["gap_decision_made", "alternative_rejected"],
+      "failureReturnStage": "Thinking"
+    },
+    {
+      "id": "design_skill_candidate",
+      "owner": "meta-artisan",
+      "inputState": ["capabilityGap", "gapDecision"],
+      "outputState": ["decisionOutput"],
+      "events": ["decision_output_created"],
+      "failureReturnStage": "Thinking"
+    },
+    {
+      "id": "design_agent_spec",
+      "owner": "meta-genesis",
+      "inputState": ["capabilityGap", "gapDecision"],
+      "outputState": ["decisionOutput"],
+      "events": ["generated_agent_spec_created", "decision_output_created"],
+      "failureReturnStage": "Thinking"
+    },
+    {
+      "id": "design_script_candidate",
+      "owner": "script-provider",
+      "inputState": ["capabilityGap", "gapDecision"],
+      "outputState": ["decisionOutput"],
+      "events": ["decision_output_created"],
+      "failureReturnStage": "Thinking"
+    },
+    {
+      "id": "design_mcp_provider_candidate",
+      "owner": "mcp-provider-capability",
+      "inputState": ["capabilityGap", "gapDecision"],
+      "outputState": ["decisionOutput"],
+      "events": ["decision_output_created"],
+      "failureReturnStage": "Thinking"
+    },
+    {
+      "id": "make_worker_task",
+      "owner": "existing_execution_owner",
+      "inputState": ["capabilityGap", "gapDecision"],
+      "outputState": ["decisionOutput"],
+      "events": ["worker_task_only_selected", "decision_output_created"],
+      "failureReturnStage": "Thinking"
+    },
+    {
+      "id": "ask_approval_or_block",
+      "owner": "meta-sentinel",
+      "inputState": ["capabilityGap", "gapDecision"],
+      "outputState": ["decisionOutput"],
+      "events": ["blocked_or_approval_required", "decision_output_created"],
+      "failureReturnStage": "Thinking"
+    },
+    {
+      "id": "review_quality",
+      "owner": "meta-prism",
+      "inputState": ["decisionOutput"],
+      "outputState": ["reviewResult"],
+      "events": ["review_score_recorded"],
+      "failureReturnStage": "Review"
+    },
+    {
+      "id": "warden_gate",
+      "owner": "meta-warden",
+      "inputState": ["reviewResult"],
+      "outputState": ["reviewResult"],
+      "events": ["warden_gate_decided"],
+      "failureReturnStage": "Meta-Review"
+    },
+    {
+      "id": "verify_result",
+      "owner": "verify",
+      "inputState": ["decisionOutput", "reviewResult"],
+      "outputState": ["verificationResult"],
+      "events": ["fixture_replayed"],
+      "failureReturnStage": "Verification"
+    },
+    {
+      "id": "record_feedback",
+      "owner": "meta-chrysalis",
+      "inputState": ["verificationResult"],
+      "outputState": ["feedback"],
+      "events": ["user_feedback_recorded"],
+      "failureReturnStage": "Evolution"
+    },
+    {
+      "id": "evolve_or_none",
+      "owner": "meta-warden",
+      "inputState": ["feedback"],
+      "outputState": ["evolutionDecision"],
+      "events": ["none_with_reason", "promotion_review_candidate_created"],
+      "failureReturnStage": "Evolution"
+    }
+  ],
+  "conditionalEdges": [
+    {
+      "from": "decide_gap_route",
+      "to": "design_skill_candidate",
+      "condition": "GapDecision.decision == create_skill"
+    },
+    {
+      "from": "decide_gap_route",
+      "to": "design_agent_spec",
+      "condition": "GapDecision.decision == create_agent"
+    },
+    {
+      "from": "decide_gap_route",
+      "to": "design_script_candidate",
+      "condition": "GapDecision.decision == create_script"
+    },
+    {
+      "from": "decide_gap_route",
+      "to": "design_mcp_provider_candidate",
+      "condition": "GapDecision.decision == create_mcp_provider"
+    },
+    {
+      "from": "decide_gap_route",
+      "to": "make_worker_task",
+      "condition": "GapDecision.decision == worker_task_only"
+    },
+    {
+      "from": "decide_gap_route",
+      "to": "ask_approval_or_block",
+      "condition": "GapDecision.decision == blocked_or_needs_approval"
+    }
+  ],
+  "normalEdges": [
+    ["critical_intent", "fetch_capabilities"],
+    ["fetch_capabilities", "detect_gap"],
+    ["detect_gap", "decide_gap_route"],
+    ["design_skill_candidate", "review_quality"],
+    ["design_agent_spec", "review_quality"],
+    ["design_script_candidate", "review_quality"],
+    ["design_mcp_provider_candidate", "review_quality"],
+    ["make_worker_task", "review_quality"],
+    ["ask_approval_or_block", "review_quality"],
+    ["review_quality", "warden_gate"],
+    ["warden_gate", "verify_result"],
+    ["verify_result", "record_feedback"],
+    ["record_feedback", "evolve_or_none"]
+  ],
+  "acceptance": {
+    "requiredNodeCountAtLeast": 15,
+    "requiredConditionalEdgeCount": 6,
+    "branchCoverageTarget": "100%",
+    "databaseAsPlannerCount": 0,
+    "directCanonicalWriteFromGraphNode": 0
+  }
+}

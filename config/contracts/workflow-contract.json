@@ -360,13 +360,24 @@
       "userFacingSummaryContract": {
         "required": true,
         "requiredFields": [
+          "rootGoal",
+          "workDoneThisRun",
+          "directionFit",
+          "deliveryCompleteness",
+          "complexityDelta",
           "whyChanged",
           "whatChanged",
           "userImpact",
           "verificationEvidence",
-          "remainingLimits"
+          "remainingLimits",
+          "deferredOrNotDone",
+          "nextAction"
         ],
-        "rule": "User-facing closure must explain why the path was chosen or changed, what changed and where, how the user path or product behavior changes, what verification evidence supports it, and what remains limited or deferred. Plain language is not a substitute for product rationale."
+        "rootGoalRule": "Every non-query governed run must close by restating the root goal in plain user language before listing files, tests, or implementation details.",
+        "directionFitRule": "The closure must say whether this run directly serves the root goal. If the answer is partial or no, the run must say so and avoid claiming complete delivery.",
+        "completenessRule": "The closure must distinguish complete delivery, partial foundation, blocked work, and deferred work. Passing commands is not enough.",
+        "complexityRule": "The closure must state whether the run added complexity, and why that complexity is necessary, bounded, or deferred. Do not add artifacts merely because they are possible.",
+        "rule": "User-facing closure must explain the root goal, what this run did, whether it still fits the direction, whether it fully satisfies delivery, why the path was chosen or changed, what changed and where, how the user path or product behavior changes, what verification evidence supports it, what complexity was added or avoided, what remains limited or deferred, and the next action. Plain language is not a substitute for product rationale."
       },
       "userFacingStageFeedbackContract": {
         "required": true,

@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "owner": "Meta_Kim",
+  "contractId": "capability-gap-decision-contract",
+  "purpose": "Machine-readable judgment standard for CapabilityGap -> GapDecision routing. This contract makes owner, evidence, forbidden behavior, and acceptance criteria explicit for AI and validators.",
+  "scope": {
+    "coreModels": ["CapabilityGap", "GapDecision", "CandidateWriteback"],
+    "nonGoals": [
+      "full CapabilityGraph",
+      "graph database",
+      "full runtime planner",
+      "automatic canonical writeback",
+      "governance agent as execution worker"
+    ]
+  },
+  "requiredEvidenceKeys": [
+    "critical.intent_locked",
+    "fetch.providers_checked",
+    "thinking.decision_rule_applied",
+    "thinking.rejected_alternatives_recorded",
+    "execution.branch_owner_bound",
+    "review.quality_gate_recorded",
+    "verification.fixture_replayed",
+    "evolution.writeback_or_none_recorded"
+  ],
+  "specialEvidenceKeys": {
+    "create_agent": ["execution.generated_agent_spec_reviewed"],
+    "blocked_or_needs_approval": ["execution.approval_boundary_recorded"]
+  },
+  "decisions": {
+    "create_skill": {
+      "branch": "design_skill_candidate",
+      "owner": "meta-artisan",
+      "ownerRole": "governance_design",
+      "selectedBecause": "重复出现的方法、流程或评审套路，不需要新的长期责任身份。",
+      "deliverable": "skill CandidateWriteback",
+      "verifier": "verify",
+      "candidateType": "skill",
+      "forbiddenBehaviors": ["create_agent", "worker_task_only", "automatic_canonical_write"],
+      "acceptance": ["reusable flow explained", "candidate only", "no automatic canonical write"]
+    },
+    "create_agent": {
+      "branch": "design_agent_spec",
+      "owner": "meta-genesis",
+      "ownerRole": "governance_design",
+      "selectedBecause": "缺稳定长期 owner，需要专业身份、拒绝项、输入输出、记忆和验收政策。",
+      "deliverable": "GeneratedAgentSpec plus agent CandidateWriteback",
+      "verifier": "verify",
+      "candidateType": "agent",
+      "forbiddenBehaviors": ["worker_task_only", "create_script", "bind_repo_path_to_identity"],
+      "acceptance": ["GeneratedAgentSpec complete", "10/10 scorecard", "identity pollution 0"]
+    },
+    "create_script": {
+      "branch": "design_script_candidate",
+      "owner": "script-provider",
+      "ownerRole": "execution_capability_candidate",
+      "selectedBecause": "动作稳定、机械、可测试，本地脚本比 agent 更清楚。",
+      "deliverable": "script CandidateWriteback",
+      "verifier": "verify",
+      "candidateType": "script",
+      "forbiddenBehaviors": ["create_agent", "create_mcp_provider", "manual_json_stitching"],
+      "acceptance": ["deterministic action", "test entry exists", "no agent identity created"]
+    },
+    "create_mcp_provider": {
+      "branch": "design_mcp_provider_candidate",
+      "owner": "mcp-provider-capability",
+      "ownerRole": "execution_capability_candidate",
+      "selectedBecause": "稳定外部系统能力需要权限、凭证、审计和调用边界。",
+      "deliverable": "MCP provider CandidateWriteback",
+      "verifier": "verify",
+      "candidateType": "mcp_provider",
+      "forbiddenBehaviors": [
+        "direct_unauthorized_credentials",
+        "one_off_curl_as_capability",
+        "automatic_external_write"
+      ],
+      "acceptance": ["provider boundary clear", "credential boundary clear", "external write still requires approval"]
+    },
+    "worker_task_only": {
+      "branch": "make_worker_task",
+      "owner": "existing_execution_owner",
+      "ownerRole": "execution_worker",
+      "selectedBecause": "本次 run 内一次性任务，已有 owner/loadout 足够，没有长期复用证据。",
+      "deliverable": "workerTaskPacket",
+      "verifier": "verify",
+      "candidateType": null,
+      "forbiddenBehaviors": ["create_skill", "create_agent", "candidate_writeback"],
+      "acceptance": ["run scoped only", "no candidate writeback", "long-term identity pollution 0"]
+    },
+    "blocked_or_needs_approval": {
+      "branch": "ask_approval_or_block",
+      "owner": "meta-sentinel",
+      "ownerRole": "safety_gate",
+      "selectedBecause": "缺权限、缺凭证、外部写、付费任务、证据不足或高风险。",
+      "deliverable": "blocked reason or minimal approval request",
+      "verifier": "meta-sentinel",
+      "candidateType": null,
+      "forbiddenBehaviors": [
+        "execute_external_write",
+        "create_provider_to_bypass_approval",
+        "validator_as_completion"
+      ],
+      "acceptance": ["no external state change", "minimal approval request", "return to Thinking when evidence is missing"]
+    }
+  },
+  "routeIntegration": {
+    "attachGapDecisionWhen": [
+      "recommended route is missing",
+      "task explicitly says capability gap",
+      "task explicitly asks to create skill/agent/script/MCP provider",
+      "task mentions missing dependency or imaginary provider",
+      "task requires external write without approval"
+    ],
+    "routeOutputField": "capabilityGapDecision",
+    "executionGateRule": "A route may preview, but Execution cannot claim capability-gap closure unless capabilityGapDecision.decisionEvidence.status is pass."
+  },
+  "quantitativeAcceptance": {
+    "decisionExplainability": "100%",
+    "requiredEvidenceCoverage": "100%",
+    "fakeOwnerCount": 0,
+    "missingVerifierCount": 0,
+    "governanceAgentAsWorkerCount": 0,
+    "validatorAsPlannerCount": 0,
+    "automaticCanonicalWriteback": 0
+  }
+}

@@ -119,6 +119,23 @@ Before designing memory or continuity policy, Librarian must name the `coreProbl
 | Boundary routing | External broad discovery belongs to Scout. Long-term loadout policy belongs to Artisan. Writeback requires Warden gate approval, with Chrysalis coordinating and the target specialist performing writeback. |
 | Forbidden long-term binding | Do not bind Librarian to concrete runtime child skills, plugin command names, or provider-specific sub-skill identifiers as long-term dependencies. |
 
+## Agent Design Station Output
+
+When a `create_agent` route needs memory, continuity, replay, or cross-project knowledge boundaries, Librarian owns the memory station. Use `config/contracts/governance-agent-design-station-contract.json` as the output contract and produce `agentMemoryDecision`.
+
+`agentMemoryDecision` must include:
+
+- `coreProblem`: the continuity or memory-risk decision that must be solved.
+- `memoryScope`: none, run-scoped, project-scoped, or cross-project-readonly / denied / approved.
+- `allowedMemory`: durable patterns the agent may remember.
+- `forbiddenMemory`: one-run instructions, private project details, credentials, raw user corrections without scope, and external-provider internals.
+- `retentionPolicy`: how long each information class lives and when it expires or compresses.
+- `replaySource`: whether evidence belongs in RunStateStore event replay, memory files, or source documents.
+- `crossProjectAccess`: trust boundary and read/write rule.
+- `writebackGate`: Warden-gated approval required before durable memory or candidate writeback.
+
+The memory station must preserve Meta_Kim's three memory methods and RunStateStore boundary. Outside memory systems can inform trust and replay standards, but must not replace Meta_Kim's memory architecture or bypass Warden.
+
 ## Claude Code Auto-Memory Integration
 
 Claude Code has a built-in auto-memory system at `~/.claude/projects/<project-hash>/memory/`. Librarian must design memory strategies that **complement rather than compete** with this system:

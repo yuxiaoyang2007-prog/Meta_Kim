@@ -15,6 +15,16 @@ Resolve the skill from the first available directory skill root:
 
 Follow the skill's clarity, capability-discovery, dispatch, review, verification, and evolution discipline. If a required runtime capability is missing, state the missing capability and the exact checked path instead of guessing.
 
+Default product runtime path:
+
+For governed execution that should produce an auditable artifact, run:
+
+```bash
+npm run meta:theory:run -- "$ARGUMENTS"
+```
+
+Then use `npm run meta:theory:report -- latest` or the returned runId to reopen the user-readable report. This is the default artifact path for `/meta-theory` governed execution: Warden entry gate -> Conductor orchestration -> CapabilityGap decisions -> workerTaskPackets -> runtime projection evidence -> Warden writeback decision -> run report.
+
 Codex execution rule:
 
 **DISPATCH IS MANDATORY.** The main thread is the dispatcher, never the executor. Before producing >3 sentences of execution-layer analysis yourself, STOP and dispatch via `spawn_agent` instead.

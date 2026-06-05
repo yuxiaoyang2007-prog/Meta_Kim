@@ -6,6 +6,43 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.8.6] - 2026-06-05
+
+### 新增
+
+- **Capability Gap 完整产品 MVP** — 新增 Capability Gap PRD、决策合约、输出合约、真实输入回放、编排板校验和核心 MVP 验收门，让 capability gap 处理成为可验收的产品流程，而不是孤立脚本。
+- **治理 agent 流程证据** — 新增 agent design quality 评估、governance process MVP 脚本、station 合约、AI-readable product standards 和 reviewer calibration fixtures，用于验证抽象、专业、可测试的 agent 设计。
+- **Run 交付物与发布闭环报告** — 新增 run deliverables、趋势面板、Warden approval experience、GitHub gap report、只读子窗口验证包、research preparation / execution 报告、多类型能力浏览器、编排 DAG / scheduler 报告、worker output 报告和 product delivery bundle。
+- **Runtime 证据加固** — 新增 runtime live shard matrix、Cursor live boundary contract、OpenClaw batch stability report、Codex live timeout recovery evidence 和复杂 capability-gap replay 场景。
+- **可复用项目文件盘点技能** — 新增项目内 canonical skill：`same-set-reusable-flow-for-project-file-inventor`。
+
+### 修复
+
+- **项目 Claude hook 命令保持可移植** — 项目 `.claude/settings.json` 同步现在保留 repo 相对 hook 命令；全局 Claude hooks 仍使用 slash-normalized absolute commands。
+- **清理退役全局 hook** — 全局 Claude settings merge 会移除退役 Meta_Kim hook，例如旧的 git-push confirmation hook。
+- **Capability Gap PRD 闭环对齐** — complete-product PRD guard 已跟随当前完成 backlog，不再断言旧的 unfinished markers。
+- **生成报告卫生** — 生成报告移出 tracked docs 路径，并移除风险较高的 orphan cross-project batch updater。
+
+### 变更
+
+- **强化 meta-theory 编排** — 扩展默认 governed execution、多能力 Fetch、owner/loadout 证据，以及有边界的 worker-task output validation。
+- **发布证据覆盖产品闭环** — 验证栈现在覆盖产品报告、回放场景、runtime boundary evidence，以及 Warden writeback / rollback rehearsal。
+- 版本升级：2.8.5 -> 2.8.6。
+
+### 验证
+
+- `node --test tests/setup/claude-settings-merge.test.mjs`
+- `npm run meta:test:setup`
+- `npm run meta:sync`
+- `npm run discover:global`
+- `npm run meta:check:global`
+- `npm run meta:check`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:release:smoke`
+- `npm run meta:verify:all`
+- `npm run meta:doctor:hooks`
+- `git diff --check`
+
 ## [2.8.5] - 2026-06-03
 
 ### 新增

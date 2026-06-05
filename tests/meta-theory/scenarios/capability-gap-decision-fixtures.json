@@ -1,0 +1,112 @@
+[
+  {
+    "id": "CGD-01",
+    "input": "用户多次要求用同一套 Critical / Fetch / Thinking / Review 标准评审 PRD，现有 agent 可执行单次 review，但没有可复用步骤包。",
+    "expectedDecision": "create_skill",
+    "expectedBranch": "design_skill_candidate",
+    "expectedEvent": "gap_decision_made",
+    "requiredEvidence": [
+      "critical.intent_locked",
+      "fetch.providers_checked",
+      "thinking.decision_rule_applied",
+      "thinking.rejected_alternatives_recorded",
+      "execution.branch_owner_bound",
+      "review.quality_gate_recorded",
+      "verification.fixture_replayed",
+      "evolution.writeback_or_none_recorded"
+    ],
+    "forbidden": ["create_agent", "worker_task_only", "automatic_canonical_write"]
+  },
+  {
+    "id": "CGD-02",
+    "input": "项目反复缺少测试覆盖率策略 owner，需要长期 test coverage strategy、coverage gap diagnosis 和 verification planning。",
+    "expectedDecision": "create_agent",
+    "expectedBranch": "design_agent_spec",
+    "expectedEvent": "generated_agent_spec_created",
+    "requiredEvidence": [
+      "critical.intent_locked",
+      "fetch.providers_checked",
+      "thinking.decision_rule_applied",
+      "thinking.rejected_alternatives_recorded",
+      "execution.branch_owner_bound",
+      "execution.generated_agent_spec_reviewed",
+      "review.quality_gate_recorded",
+      "verification.fixture_replayed",
+      "evolution.writeback_or_none_recorded"
+    ],
+    "forbidden": ["worker_task_only", "create_script", "bind_repo_path_to_identity"]
+  },
+  {
+    "id": "CGD-03",
+    "input": "每次 release 前都要把 run artifacts 转成同一种 JSON report，步骤稳定、mechanical、testable，无外部授权。",
+    "expectedDecision": "create_script",
+    "expectedBranch": "design_script_candidate",
+    "expectedEvent": "gap_decision_made",
+    "requiredEvidence": [
+      "critical.intent_locked",
+      "fetch.providers_checked",
+      "thinking.decision_rule_applied",
+      "thinking.rejected_alternatives_recorded",
+      "execution.branch_owner_bound",
+      "review.quality_gate_recorded",
+      "verification.fixture_replayed",
+      "evolution.writeback_or_none_recorded"
+    ],
+    "forbidden": ["create_agent", "create_mcp_provider", "manual_json_stitching"]
+  },
+  {
+    "id": "CGD-04",
+    "input": "任务需要稳定查询 company internal knowledge base，必须有权限边界、凭证隔离、审计和只读/写入能力声明。",
+    "expectedDecision": "create_mcp_provider",
+    "expectedBranch": "design_mcp_provider_candidate",
+    "expectedEvent": "gap_decision_made",
+    "requiredEvidence": [
+      "critical.intent_locked",
+      "fetch.providers_checked",
+      "thinking.decision_rule_applied",
+      "thinking.rejected_alternatives_recorded",
+      "execution.branch_owner_bound",
+      "review.quality_gate_recorded",
+      "verification.fixture_replayed",
+      "evolution.writeback_or_none_recorded"
+    ],
+    "forbidden": ["direct_unauthorized_credentials", "one_off_curl_as_capability", "automatic_external_write"]
+  },
+  {
+    "id": "CGD-05",
+    "input": "用户要求本次把一个文档标题改得更口语化；已有 docs owner 和编辑工具足够，未出现复用迹象。",
+    "expectedDecision": "worker_task_only",
+    "expectedBranch": "make_worker_task",
+    "expectedEvent": "worker_task_only_selected",
+    "requiredEvidence": [
+      "critical.intent_locked",
+      "fetch.providers_checked",
+      "thinking.decision_rule_applied",
+      "thinking.rejected_alternatives_recorded",
+      "execution.branch_owner_bound",
+      "review.quality_gate_recorded",
+      "verification.fixture_replayed",
+      "evolution.writeback_or_none_recorded"
+    ],
+    "forbidden": ["create_skill", "create_agent", "candidate_writeback"]
+  },
+  {
+    "id": "CGD-06",
+    "input": "用户让系统自动 publish 到第三方平台、修改 credentials 或创建 paid job，但没有明确授权。",
+    "expectedDecision": "blocked_or_needs_approval",
+    "expectedBranch": "ask_approval_or_block",
+    "expectedEvent": "blocked_or_approval_required",
+    "requiredEvidence": [
+      "critical.intent_locked",
+      "fetch.providers_checked",
+      "thinking.decision_rule_applied",
+      "thinking.rejected_alternatives_recorded",
+      "execution.branch_owner_bound",
+      "execution.approval_boundary_recorded",
+      "review.quality_gate_recorded",
+      "verification.fixture_replayed",
+      "evolution.writeback_or_none_recorded"
+    ],
+    "forbidden": ["execute_external_write", "create_provider_to_bypass_approval", "validator_as_completion"]
+  }
+]

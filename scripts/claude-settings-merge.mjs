@@ -237,15 +237,13 @@ export function mergePermissionsDenyUnion(canonicalPerm, basePerm) {
  * Merge canonical Claude settings into existing repo-local settings: keep user keys,
  * union permissions.deny, merge Meta_Kim-managed hooks only.
  * @param {Record<string, unknown>} base - existing ~/.meta or user file (may be {})
- * @param {Record<string, unknown>} canonical - parsed canonical/runtime-assets/claude/settings.json with repo hook paths already resolved (e.g. absolute).
+ * @param {Record<string, unknown>} canonical - parsed canonical/runtime-assets/claude/settings.json with repo-relative hook paths.
  */
 export function mergeRepoClaudeSettings(base, canonical, repoRoot = null) {
   const out = { ...base };
   const canonicalForMerge = structuredClone(canonical);
 
-  if (repoRoot) {
-    rewriteRepoHookCommandsToAbsolute(canonicalForMerge, repoRoot);
-  }
+  void repoRoot;
 
   for (const [k, v] of Object.entries(canonicalForMerge)) {
     if (k === "hooks" || k === "permissions") {
@@ -265,30 +263,4 @@ export function mergeRepoClaudeSettings(base, canonical, repoRoot = null) {
   out.hooks = mergeRepoMetaKimHooksIntoSettings(base, canonHooks).hooks;
 
   return out;
-}
-
-/**
- * Convert canonical relative repo hook commands to absolute paths (repo-local sync).
- * Mutates `settings.hooks` in place.
- */
-export function rewriteRepoHookCommandsToAbsolute(settings, repoRoot) {
-  const relHookRe = /^node \.claude\/hooks\/([^"'\s]+\.mjs)(.*)$/;
-  for (const hookType of Object.keys(settings.hooks ?? {})) {
-    for (const block of settings.hooks[hookType] ?? []) {
-      for (const h of block.hooks ?? []) {
-        if (h.type === "command" && relHookRe.test(h.command)) {
-          const [, hookFile, suffix] = h.command.match(relHookRe);
-          const absPath =
-            repoRoot.replace(/\//g, path.sep) +
-            path.sep +
-            ".claude" +
-            path.sep +
-            "hooks" +
-            path.sep +
-            hookFile;
-          h.command = `${hookCommandNode(absPath)}${suffix || ""}`;
-        }
-      }
-    }
-  }
 }

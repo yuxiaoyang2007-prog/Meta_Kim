@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 1,
+  "contractId": "governance-agent-design-station-contract",
+  "owner": "Meta_Kim",
+  "purpose": "Convert outside agent/workflow/memory references into Meta_Kim-native governance decisions without copying external architecture or prompt structure.",
+  "sourceTranslationPolicy": {
+    "mayExtract": [
+      "judgment standards",
+      "handoff clarity",
+      "role-boundary tests",
+      "memory access boundaries",
+      "replay and evaluation expectations"
+    ],
+    "mustRewriteAs": [
+      "Meta_Kim station output fields",
+      "Meta_Kim owner boundaries",
+      "CapabilityGap and GapDecision evidence",
+      "RunStateStore replay evidence",
+      "LangGraph-compatible branch reasons"
+    ],
+    "mustNotCopy": [
+      "external directory structure",
+      "external agent hierarchy",
+      "external database or graph architecture",
+      "external command catalog",
+      "external prompt wording",
+      "provider-specific identity language"
+    ],
+    "conflictRule": "When an outside reference overlaps with existing Meta_Kim workflow, memory, database, or LangGraph policy, keep Meta_Kim policy and translate only the useful judgment pattern."
+  },
+  "promptShape": {
+    "requiredOrder": [
+      "coreProblem",
+      "stationDecision",
+      "evidenceUsed",
+      "rejectedPaths",
+      "deliverableBinding",
+      "verificationBinding"
+    ],
+    "styleRules": [
+      "Use Meta_Kim terms for durable fields.",
+      "Keep concrete files, commands, and today-only work in workerTaskPacket or run-scoped capabilityBindings.",
+      "Do not name dependency projects inside durable agent identity.",
+      "Explain decisions in human-readable language while retaining machine-readable fields."
+    ]
+  },
+  "stations": [
+    {
+      "id": "boundary_station",
+      "owner": "meta-genesis",
+      "outputPacket": "agentBoundaryDecision",
+      "decides": [
+        "whether this is a durable execution agent",
+        "which responsibility class the agent owns",
+        "which adjacent responsibility classes it refuses",
+        "whether the name and purpose survive replaceability testing"
+      ],
+      "requiredFields": [
+        "coreProblem",
+        "durableOwnerJustification",
+        "domainBoundary",
+        "nonCapabilities",
+        "replaceabilityTest",
+        "rejectedPaths",
+        "identityPollutionCheck"
+      ],
+      "failIf": [
+        "agent identity contains one-run file paths, tickets, deliverable links, or verify steps",
+        "the role still makes sense after replacing its name with generic-agent",
+        "the output copies an outside project's agent hierarchy or wording"
+      ]
+    },
+    {
+      "id": "loadout_station",
+      "owner": "meta-artisan",
+      "outputPacket": "agentLoadoutDecision",
+      "decides": [
+        "which abstract capability slots belong to the durable agent",
+        "which concrete skills, scripts, tools, or MCP providers stay run-scoped",
+        "which good-looking providers are rejected and why"
+      ],
+      "requiredFields": [
+        "coreProblem",
+        "capabilitySlots",
+        "runScopedBindings",
+        "providerRejections",
+        "roiReasoning",
+        "handoffContract",
+        "verificationMethod"
+      ],
+      "failIf": [
+        "long-term identity binds to provider-specific commands or child skills",
+        "ROI reasoning is absent",
+        "a provider is selected only because an outside project uses it"
+      ]
+    },
+    {
+      "id": "memory_station",
+      "owner": "meta-librarian",
+      "outputPacket": "agentMemoryDecision",
+      "decides": [
+        "what memory scope is allowed",
+        "what must never be remembered",
+        "which evidence belongs in RunStateStore replay instead of long-term memory",
+        "whether cross-project access is readonly, denied, or explicitly approved"
+      ],
+      "requiredFields": [
+        "coreProblem",
+        "memoryScope",
+        "allowedMemory",
+        "forbiddenMemory",
+        "retentionPolicy",
+        "replaySource",
+        "crossProjectAccess",
+        "writebackGate"
+      ],
+      "failIf": [
+        "memory policy can leak one project into another",
+        "memory provider bypasses Warden writeback",
+        "database event evidence is treated as durable identity"
+      ]
+    },
+    {
+      "id": "review_station",
+      "owner": "meta-prism",
+      "outputPacket": "agentDesignReview",
+      "decides": [
+        "whether Critical, Fetch, and Thinking evidence was strong enough",
+        "whether the candidate is abstract but professional",
+        "whether outside references were translated instead of copied",
+        "whether assertions can fail on bad agent designs"
+      ],
+      "requiredFields": [
+        "coreProblem",
+        "assertions",
+        "evidenceRefs",
+        "failedDimensions",
+        "copyRiskCheck",
+        "upstreamReadiness",
+        "returnToStage"
+      ],
+      "failIf": [
+        "review only checks final text polish",
+        "dependency architecture copy is not tested",
+        "weak assertions allow generic or task-bound agents to pass"
+      ]
+    },
+    {
+      "id": "gate_station",
+      "owner": "meta-warden",
+      "outputPacket": "agentCandidateGateDecision",
+      "decides": [
+        "whether CandidateWriteback is allowed",
+        "whether the run returns to Thinking, Genesis, Artisan, Librarian, or Prism",
+        "whether the result is public-ready or blocked",
+        "whether repeated accepted signals qualify for evolution review"
+      ],
+      "requiredFields": [
+        "coreProblem",
+        "stationPacketsChecked",
+        "gateDecision",
+        "blockedReasons",
+        "candidateWritebackPermission",
+        "publicReadyStatus",
+        "evolutionSignal"
+      ],
+      "failIf": [
+        "Warden approves with missing station packets",
+        "fallback compatibility is counted as governance readiness",
+        "external reference copying is accepted as a low-risk issue"
+      ]
+    }
+  ],
+  "quantitativeAcceptance": {
+    "stationOutputCoverage": "100%",
+    "dependencyArchitectureCopyPassCount": 0,
+    "durableIdentityExternalProjectNameCount": 0,
+    "runScopedBindingLeakCount": 0,
+    "memoryWritebackBypassCount": 0,
+    "missingReturnToStageCount": 0
+  }
+}

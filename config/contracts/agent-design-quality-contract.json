@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "contractId": "agent-design-quality-contract",
+  "owner": "Meta_Kim",
+  "purpose": "Evaluate whether governance agents can design abstract, professional, bounded, reusable, and verifiable agent specs.",
+  "sourceBoundary": {
+    "dependencyProjectsMayInform": [
+      "content",
+      "capability_behavior",
+      "professional_standard",
+      "task_artifact_shape",
+      "judgment_pattern"
+    ],
+    "dependencyProjectsMustNotInform": [
+      "meta_kim_architecture",
+      "durable_identity_structure",
+      "runtime_graph_shape",
+      "database_schema",
+      "owner_hierarchy"
+    ],
+    "architectureDecisionSource": [
+      "Meta_Kim product north star",
+      "governance agent responsibility boundaries",
+      "skill agent script MCP provider separation",
+      "LangGraph-compatible state transitions",
+      "RunStateStore evidence and replay needs",
+      "quantitative acceptance"
+    ]
+  },
+  "dependencyContentEvidence": [
+    {
+      "sourceId": "professional-role-benchmark",
+      "allowedAbsorption": [
+        "professional role naming",
+        "concise trigger language",
+        "tool awareness",
+        "domain-specific examples"
+      ],
+      "forbiddenAbsorption": [
+        "repository architecture",
+        "runtime-specific file layout",
+        "host-specific preambles"
+      ]
+    },
+    {
+      "sourceId": "flow-handoff-benchmark",
+      "allowedAbsorption": [
+        "product-flow position",
+        "upstream/downstream handoff clarity",
+        "keeping concrete work in skill/runtime context"
+      ],
+      "forbiddenAbsorption": [
+        "skill catalog architecture",
+        "provider packaging architecture",
+        "workflow architecture"
+      ]
+    },
+    {
+      "sourceId": "memory-boundary-benchmark",
+      "allowedAbsorption": [
+        "scoped memory policy",
+        "gap analysis behavior",
+        "evaluation readiness",
+        "access boundaries"
+      ],
+      "forbiddenAbsorption": [
+        "memory architecture",
+        "graph or database architecture",
+        "agent hierarchy"
+      ]
+    }
+  ],
+  "requiredSpecFields": [
+    "name",
+    "description",
+    "flowPosition",
+    "purpose",
+    "capabilities",
+    "nonCapabilities",
+    "loadoutSlots",
+    "inputs",
+    "outputs",
+    "handoff",
+    "memoryPolicy",
+    "gapPolicy",
+    "verificationPolicy",
+    "installProjection",
+    "identityCleanliness"
+  ],
+  "scorecardDimensions": [
+    {
+      "id": "identity_clarity",
+      "passCondition": "Name and description make the role trigger clear without reading implementation details."
+    },
+    {
+      "id": "domain_specificity",
+      "passCondition": "Capabilities use domain nouns; replacing the name with generic-agent breaks the logic."
+    },
+    {
+      "id": "flow_fit",
+      "passCondition": "Agent has a clear product-flow position and handoff direction."
+    },
+    {
+      "id": "tool_least_privilege",
+      "passCondition": "Loadout slots are abstract and minimal; concrete commands stay run-scoped."
+    },
+    {
+      "id": "memory_fit",
+      "passCondition": "Memory scope and forbidden memory are explicit and bounded."
+    },
+    {
+      "id": "gap_honesty",
+      "passCondition": "Agent states what it cannot know or do and routes gaps to GapDecision."
+    },
+    {
+      "id": "handoff_readiness",
+      "passCondition": "Inputs, outputs, upstream, and downstream are reviewable without oral explanation."
+    },
+    {
+      "id": "verification_readiness",
+      "passCondition": "At least one fixture or replay check can fail the agent design."
+    },
+    {
+      "id": "install_projection_readiness",
+      "passCondition": "Runtime projection status is explicit: eligible, needs_probe, or reference_only."
+    },
+    {
+      "id": "identity_cleanliness",
+      "passCondition": "No repo path, file list, ticket, today task, deliverable link, or verify step appears in durable identity."
+    },
+    {
+      "id": "dependency_content_boundary",
+      "passCondition": "Dependency project references are content/capability evidence only, never architecture adoption."
+    }
+  ],
+  "hardBlockDimensions": [
+    "identity_cleanliness",
+    "gap_honesty",
+    "tool_least_privilege",
+    "memory_fit",
+    "dependency_content_boundary"
+  ],
+  "intelligenceLayer": {
+    "purpose": "Evaluate whether governance agents can reason their way to a good agent design, not only whether the final spec has the right shape.",
+    "requiredTraceFields": [
+      "coreProblem",
+      "evidenceUsed",
+      "designAlternatives",
+      "rejectedWeakPaths",
+      "stationReasoning",
+      "loadoutReasoning",
+      "prismReview",
+      "finalSpecBinding"
+    ],
+    "scorecardDimensions": [
+      {
+        "id": "core_problem_capture",
+        "passCondition": "Trace separates the surface request from the durable capability problem."
+      },
+      {
+        "id": "evidence_grounding",
+        "passCondition": "Trace cites local/source evidence and treats dependency projects as content evidence only."
+      },
+      {
+        "id": "alternative_comparison",
+        "passCondition": "Trace compares at least two viable design paths before selecting one."
+      },
+      {
+        "id": "rejected_weak_path",
+        "passCondition": "Trace rejects at least one weak path with a reason, such as generic agent, task-bound agent, script-only, or architecture copy."
+      },
+      {
+        "id": "station_reasoning",
+        "passCondition": "Genesis, Artisan, and Prism each contribute a distinct judgment instead of one undifferentiated answer."
+      },
+      {
+        "id": "loadout_roi_reasoning",
+        "passCondition": "Artisan loadout reasoning includes coverage, frequency, cost, ROI, or rejection rationale."
+      },
+      {
+        "id": "prism_adversarial_review",
+        "passCondition": "Prism checks claims, anti-slop, and whether evaluation criteria are strong enough."
+      },
+      {
+        "id": "final_spec_binding",
+        "passCondition": "Final GeneratedAgentSpec is explicitly bound back to the reasoning trace and selected path."
+      }
+    ],
+    "hardBlockDimensions": [
+      "core_problem_capture",
+      "alternative_comparison",
+      "station_reasoning",
+      "prism_adversarial_review",
+      "final_spec_binding"
+    ]
+  },
+  "quantitativeAcceptance": {
+    "requiredDimensionPassRate": "100%",
+    "genericAgentPassCount": 0,
+    "taskBoundIdentityPassCount": 0,
+    "dependencyArchitectureCopyPassCount": 0,
+    "missingVerifierCount": 0,
+    "missingHandoffCount": 0,
+    "longTermIdentityPollutionCount": 0,
+    "reasoningTraceMissingPassCount": 0,
+    "surfaceMirroringPassCount": 0,
+    "singlePathReasoningPassCount": 0,
+    "missingPrismReviewPassCount": 0,
+    "finalSpecWithoutReasoningPassCount": 0
+  }
+}

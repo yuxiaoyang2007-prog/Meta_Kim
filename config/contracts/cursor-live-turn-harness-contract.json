@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "cursor-live-turn-harness-v0.1",
+  "owner": "meta-conductor",
+  "reviewOwner": "meta-prism",
+  "verificationOwner": "verify",
+  "purpose": "Define when Cursor runtime evidence may be promoted from projection smoke to native live-turn evidence.",
+  "officialEvidenceRefreshedAt": "2026-06-04",
+  "officialEvidenceRefreshOwner": "meta-scout",
+  "officialEvidence": [
+    {
+      "source": "Cursor CLI overview",
+      "url": "https://docs.cursor.com/en/cli/overview",
+      "claim": "Cursor CLI supports agent interaction from the terminal and can run interactive or print automation flows."
+    },
+    {
+      "source": "Cursor CLI using",
+      "url": "https://docs.cursor.com/en/cli/using",
+      "claim": "Cursor CLI supports rules, MCP, AGENTS.md/CLAUDE.md, and non-interactive print mode."
+    },
+    {
+      "source": "Cursor CLI parameters",
+      "url": "https://docs.cursor.com/en/cli/reference/parameters",
+      "claim": "Cursor Agent CLI documents -p/--print and --output-format json or stream-json."
+    },
+    {
+      "source": "Cursor CLI output format",
+      "url": "https://docs.cursor.com/en/cli/reference/output-format",
+      "claim": "Cursor Agent CLI emits a single JSON object for --output-format json on successful --print runs, and failures exit non-zero without well-formed JSON."
+    },
+    {
+      "source": "Cursor CLI installation",
+      "url": "https://docs.cursor.com/en/cli/installation",
+      "claim": "Cursor Agent CLI installation is documented for macOS, Linux, and Windows WSL, and verifies with cursor-agent --version."
+    }
+  ],
+  "nativeHarnessCandidates": [
+    {
+      "id": "cursor-agent-binary",
+      "command": "cursor-agent",
+      "requiredHelpPatterns": ["--print", "--output-format"],
+      "runArgs": ["-p", "--output-format", "json"]
+    },
+    {
+      "id": "cursor-agent-subcommand",
+      "command": "cursor agent",
+      "requiredHelpPatterns": ["--print", "--output-format"],
+      "runArgs": ["-p", "--output-format", "json"]
+    },
+    {
+      "id": "cursor-agent-wsl",
+      "command": "wsl.exe bash -lc 'cursor-agent'",
+      "requiredHelpPatterns": ["--print", "--output-format"],
+      "runArgs": ["-p", "--output-format", "json"],
+      "hostBoundary": "Windows host invoking the official Windows WSL Cursor Agent CLI installation path."
+    }
+  ],
+  "livePromptContract": {
+    "mode": "read_only_json",
+    "mustReturnJsonOnly": true,
+    "requiredFields": [
+      "runtime",
+      "governed_entry",
+      "warden_entry_gate",
+      "conductor_orchestration",
+      "orchestrationTaskBoardPacket",
+      "workerTaskPackets",
+      "verificationOwner"
+    ],
+    "expectedValues": {
+      "runtime": "cursor",
+      "governed_entry": "meta-theory",
+      "warden_entry_gate": true,
+      "conductor_orchestration": true,
+      "orchestrationTaskBoardPacket.synthesisOwner": "meta-conductor"
+    }
+  },
+  "passCriteria": [
+    "A Cursor-native agent CLI is present or explicitly configured.",
+    "The CLI help output proves non-interactive print mode and structured output support.",
+    "The live prompt exits 0 and returns parseable JSON.",
+    "The JSON proves Warden -> Conductor -> orchestrationTaskBoardPacket -> workerTaskPackets.",
+    "The command runs without modifying files."
+  ],
+  "blockedCriteria": [
+    "Only the Cursor IDE launcher is present.",
+    "WSL is present but cursor-agent is not installed or not on the WSL PATH.",
+    "The local command accepts agent arguments but does not expose -p/--print and --output-format.",
+    "The local command opens UI, emits only launcher help, or returns no parseable agent JSON.",
+    "Authentication is missing or the CLI requests interactive login.",
+    "The run would require unsafe file writes, approval bypass, or unbounded UI automation."
+  ],
+  "unsupportedWithReason": "Projection smoke can validate .cursor files, rules, hooks, and mirrors, but release-grade Cursor live evidence requires a native agent CLI that can run a read-only non-interactive prompt and return parseable JSON.",
+  "releaseBoundary": {
+    "projectionSmokeMayPass": true,
+    "projectionSmokeIsLivePass": false,
+    "blockedCountsAsReleasePass": false,
+    "nativeLiveRequiredForReleaseGrade": true
+  }
+}

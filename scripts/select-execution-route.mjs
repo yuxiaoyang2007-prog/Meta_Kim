@@ -2,6 +2,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { GOVERNANCE_OWNERS, OS_TARGETS, RUNTIMES, classifyTaskShape, exists, readJson, repoPath, scoreRoute, stateDir, supportScore, toPosix } from "./governance-lib.mjs";
+import { CAPABILITY_GAP_DECISION_CONTRACT, decideCapabilityGap } from "./capability-gap-mvp.mjs";
 
 function argValue(name, fallback = null) {
   const index = process.argv.indexOf(name);
@@ -35,6 +36,74 @@ const intentContract = await readJson("config/governance/intent-amplification-co
 function textContains(entry, terms) {
   const text = JSON.stringify(entry).toLowerCase();
   return terms.some((term) => text.includes(term));
+}
+
+function taskContainsAny(terms) {
+  return terms.some((term) => taskText.includes(term));
+}
+
+function implicitScriptCapabilityGapRequested() {
+  const recurrenceSignal = taskContainsAny([
+    "repeat",
+    "recurring",
+    "repeatedly",
+    "every time",
+    "stable",
+    "每次",
+    "反复",
+    "重复",
+    "稳定",
+  ]);
+  const deterministicSignal = taskContainsAny([
+    "mechanical",
+    "testable",
+    "local",
+    "deterministic",
+    "json summary",
+    "json report",
+    "stage outputs",
+    "verification owner",
+    "decision output",
+    "blocked gate reason",
+    "机械",
+    "可测试",
+    "本地",
+    "自动整理",
+    "检测缺失",
+  ]);
+  const noAgentSignal = taskContainsAny([
+    "no new agent",
+    "no agent identity",
+    "不需要新 agent",
+    "不需要新agent",
+    "不需要新 agent 身份",
+    "不需要新长期身份",
+  ]);
+  return recurrenceSignal && deterministicSignal && noAgentSignal;
+}
+
+function explicitCapabilityGapRequested() {
+  return [
+    "capability gap",
+    "missing capability",
+    "missing dependency",
+    "imaginary provider",
+    "unknown provider",
+    "no provider",
+    "create skill",
+    "create agent",
+    "create script",
+    "create mcp",
+    "缺能力",
+    "能力缺口",
+    "缺少能力",
+    "缺少依赖",
+    "不存在的 provider",
+    "创建 skill",
+    "创建 agent",
+    "创建 script",
+    "创建 mcp",
+  ].some((term) => taskText.includes(term)) || implicitScriptCapabilityGapRequested();
 }
 
 function taskTerms() {
@@ -587,6 +656,40 @@ const capabilityGapPacket = recommendedRoute ? null : {
   missing: rankedRoutes[0]?.blockedReasons?.length ? rankedRoutes[0].blockedReasons : ["owner_weapon_dependency_route"],
   returnToStage: "Thinking",
 };
+const capabilityGapDetected = !recommendedRoute || explicitCapabilityGapRequested();
+const capabilityGapDecision = capabilityGapDetected
+  ? (() => {
+      const result = decideCapabilityGap(task, {
+        currentProvidersChecked: ownerDiscoveryPacket.evidenceRefs,
+        requestedCapability: task || capabilityGapPacket?.gap || "Capability gap route decision",
+        insufficiencyReason: capabilityGapPacket?.gap ?? "Task explicitly asks for a capability-gap decision before Execution.",
+        riskIfUnresolved:
+          "A normal route may hide a missing capability, fake owner, missing verifier, or unauthorized provider path.",
+        requiredEvidence: CAPABILITY_GAP_DECISION_CONTRACT.requiredEvidenceKeys,
+      });
+      return {
+        detected: true,
+        source: recommendedRoute ? "explicit_gap_signal" : "missing_recommended_route",
+        decision: result.gapDecision.decision,
+        gapDecision: result.gapDecision,
+        decisionEvidence: result.decisionEvidence,
+        decisionOutput: result.decisionOutput,
+        candidateWriteback: result.candidateWriteback,
+        generatedAgentSpec: result.generatedAgentSpec,
+        workerTaskPacket: result.workerTaskPacket,
+        blockedReason: result.blockedReason,
+        graphPath: result.graphPath,
+        acceptance: {
+          requiredEvidenceCovered: result.decisionEvidence.status === "pass",
+          missingEvidence: result.decisionEvidence.missingEvidence,
+          forbiddenBehaviors: result.decisionEvidence.decisionRule.forbiddenBehaviors,
+        },
+      };
+    })()
+  : null;
+const capabilityGapBlocksExecution =
+  capabilityGapDecision?.decision === "blocked_or_needs_approval" ||
+  capabilityGapDecision?.decisionEvidence?.status !== "pass";
 const userChoiceNeeded = Boolean(recommendedRoute && recommendedRoute.score >= 70 && recommendedRoute.score < 85);
 const decisionCard = userChoiceNeeded ? {
   recommendedDefault: recommendedRoute.id,
@@ -604,14 +707,20 @@ const decisionCard = userChoiceNeeded ? {
 } : null;
 const routeExecutionGate = {
   canPreviewRoute: true,
-  canEnterExecution: Boolean(recommendedRoute?.score >= 85) && !globalInventoryFreshness.refreshRequiredBeforeExecution,
+  canEnterExecution:
+    Boolean(recommendedRoute?.score >= 85) &&
+    !globalInventoryFreshness.refreshRequiredBeforeExecution &&
+    !capabilityGapBlocksExecution,
   blockedBy: [
     ...(!recommendedRoute ? ["missing_recommended_route"] : []),
     ...(recommendedRoute && recommendedRoute.score < 85 ? ["route_requires_confirmation_or_more_fetch"] : []),
     ...(globalInventoryFreshness.refreshRequiredBeforeExecution ? ["global_capability_inventory_refresh_required"] : []),
+    ...(capabilityGapBlocksExecution ? ["capability_gap_decision_blocks_execution"] : []),
   ],
   returnToStage: !recommendedRoute
     ? "Thinking"
+    : capabilityGapBlocksExecution
+      ? "Thinking"
     : recommendedRoute.score < 85 || globalInventoryFreshness.refreshRequiredBeforeExecution
       ? "Fetch"
       : null,
@@ -620,6 +729,8 @@ const routeExecutionGate = {
     ? "No executable route is available; Execution must not start until owner, provider, runtime, OS, and verification binding are resolved."
     : recommendedRoute.score < 85
       ? "Route preview is available, but Execution needs confirmation or stronger provider evidence before starting."
+      : capabilityGapBlocksExecution
+        ? "Capability-gap decision requires approval, stronger evidence, or return to Thinking before Execution."
       : globalInventoryFreshness.refreshRequiredBeforeExecution
         ? "Cached provider evidence is missing or older than 14 days; route preview is allowed, but Execution must refresh capability discovery first."
         : "Cached provider evidence is fresh enough and the route has execution-grade owner/provider/verification binding.",
@@ -645,6 +756,8 @@ const output = {
   osFilterResult: { requested: osArg, applied: osTarget, unsupported: !OS_TARGETS.includes(osTarget) },
   rankedRoutes,
   recommendedRoute,
+  capabilityGapDetected,
+  capabilityGapDecision,
   routeExecutionGate,
   userChoiceNeeded,
   decisionCard,

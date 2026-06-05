@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "product-delivery-bundle-contract-v0.1",
+  "requiredSections": ["design", "execution", "acceptance", "feedback", "deliverables"],
+  "requiredFiles": [
+    "panelHtml",
+    "readabilityReview",
+    "rubricMarkdown",
+    "rubricJson",
+    "casePack",
+    "githubGapReport",
+    "runtimeMatrixReport",
+    "orchestrationDagReport",
+    "researchReport",
+    "feedbackLoopReport",
+    "bundleMarkdown",
+    "bundleManifest"
+  ],
+  "privacyRules": {
+    "forbidLocalAbsolutePaths": true,
+    "forbidCredentials": true,
+    "allowedPathStyle": "repo-relative"
+  },
+  "reviewUseRequiredFields": ["audience", "reviewUse", "reviewerPrompt", "passSignal", "failSignal"],
+  "calibrationRequiredPitfalls": [
+    "research_before_orchestration",
+    "skill_only_capability",
+    "fake_parallelism",
+    "fixture_pass_as_live",
+    "unauthorized_writeback",
+    "github_gap_overclaim",
+    "warden_approval_confusion",
+    "mixed_deliverables"
+  ]
+}

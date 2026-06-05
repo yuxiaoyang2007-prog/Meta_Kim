@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "run-report-panel-contract-v0.1",
+  "owner": "meta-warden",
+  "producer": "scripts/run-meta-theory-governed-execution.mjs",
+  "purpose": "Stable reader-facing data contract for a runId product panel. The UI reads this contract instead of parsing internal protocol packets directly.",
+  "requiredSections": [
+    "decisionSummary",
+    "ownerHandoff",
+    "blockedReasons",
+    "runtimeEvidence",
+    "approvalRequest",
+    "aiReadableRubric",
+    "deliverables"
+  ],
+  "sectionRules": {
+    "decisionSummary": {
+      "requiredFields": [
+        "runId",
+        "status",
+        "task",
+        "gapCount",
+        "workerTaskCount",
+        "plainLanguageSummary"
+      ]
+    },
+    "ownerHandoff": {
+      "requiredFields": [
+        "taskPacketId",
+        "roleDisplayName",
+        "owner",
+        "parallelGroup",
+        "mergeOwner",
+        "verificationOwner"
+      ]
+    },
+    "blockedReasons": {
+      "requiredFields": [
+        "gapId",
+        "reason",
+        "returnToStage",
+        "remainingAction"
+      ]
+    },
+    "runtimeEvidence": {
+      "requiredFields": [
+        "runtime",
+        "status",
+        "evidenceKind",
+        "failureClass",
+        "remainingAction",
+        "strictReleasePass"
+      ],
+      "blockedOrUnsupportedIsNotPass": true
+    },
+    "approvalRequest": {
+      "requiredFields": [
+        "approvalRequired",
+        "approvalValidation",
+        "dryRunCanonicalWrites",
+        "candidateCount",
+        "nextAction"
+      ],
+      "canonicalWritesBeforeApproval": 0
+    },
+    "aiReadableRubric": {
+      "requiredFields": [
+        "id",
+        "label",
+        "plainLanguageQuestion",
+        "passStandard",
+        "failStandard",
+        "requiredEvidence",
+        "status"
+      ],
+      "requiredStandardCount": 5
+    },
+    "deliverables": {
+      "requiredFields": [
+        "json",
+        "markdown",
+        "sqlite",
+        "panelContract"
+      ],
+      "forbidAbsoluteLocalPaths": true
+    }
+  },
+  "forbidden": [
+    "raw absolute local paths in user-facing values",
+    "credentials or secret values",
+    "runtime nicknames as primary owner names",
+    "claiming release-grade completion when runtime evidence is projection-only, unsupported, or blocked",
+    "writing canonical without Warden approval"
+  ],
+  "acceptance": {
+    "allRequiredSectionsPresent": true,
+    "aiReadableRubricStatusPass": true,
+    "blockedRuntimeRemainsVisible": true,
+    "approvalBoundaryVisible": true,
+    "panelReadsSingleContract": true
+  }
+}

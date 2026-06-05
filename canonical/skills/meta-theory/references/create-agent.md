@@ -166,7 +166,116 @@ Concrete work belongs in `workerTaskPacket`: file lists, shard scope, current ta
 
 Before creating or upgrading an execution agent, Fetch must produce checked-owner evidence from repo canonical capability index, runtime mirrors, project runtime agents, local global inventory, skills, commands, hooks, rules/prompts, tools, plugins, and MCP capabilities. The factory may proceed only when `capabilityGapPacket.currentAgentsChecked` and `currentProvidersChecked` list those candidates and explain why reuse is insufficient.
 
-Reference pattern from `gstack`: a large reusable capability surface can be represented as generated `SKILL.md` providers with host-specific projection metadata, not as many durable execution-agent identities. `agents/openai.yaml`-style metadata is an interface card for discovery, not a worker identity. Meta_Kim should therefore prefer provider reuse or provider projection before creating a new execution agent; create the agent only when the missing thing is a recurring owner boundary that cannot be represented by an existing agent, skill, command, MCP tool, runtime tool, or plugin.
+A reusable capability surface can be represented as provider records with host-specific projection metadata, not as many durable execution-agent identities. Interface metadata is a discovery card, not a worker identity. Meta_Kim should therefore prefer provider reuse or provider projection before creating a new execution agent; create the agent only when the missing thing is a recurring owner boundary that cannot be represented by an existing agent, skill, command, MCP tool, runtime tool, or plugin.
+
+### Generated Agent Spec Quality Contract
+
+When `GapDecision.decision = create_agent`, the factory must produce a `GeneratedAgentSpec` review artifact before any local or project agent file is written. This artifact proves that the proposed agent is abstract enough to be reusable, professional enough to be useful, and bounded enough to avoid becoming a one-run worker.
+
+`GeneratedAgentSpec` is a review artifact, not a fourth core data model for the Capability Gap MVP. It is required only for create-agent decisions.
+
+Required fields:
+
+- `name`: short, stable, English role-family name; no runtime nickname and no task title.
+- `description`: one high-signal trigger sentence that names the professional capability and the route conditions.
+- `flowPosition`: where the agent belongs in a product flow such as `Think`, `Plan`, `Build`, `Review`, `Test`, `Ship`, or `Reflect`.
+- `purpose`: what durable problem class the agent owns.
+- `capabilities`: 4-8 reusable capability classes with domain-specific nouns.
+- `nonCapabilities`: explicit refusals, including external writes, one-run implementation work, and work better handled by skill/script/provider.
+- `loadoutSlots`: abstract skill, command, MCP, runtime tool, or normal tool slots; concrete providers stay in run-scoped `capabilityBindings`.
+- `inputs`: stable input contract.
+- `outputs`: stable output contract.
+- `handoff`: upstream evidence needed and downstream consumer expectations.
+- `memoryPolicy`: whether memory is `none`, `run_scoped`, `project_scoped`, or `cross_project_readonly`, plus access boundaries.
+- `gapPolicy`: what the agent must report as a capability gap instead of pretending to know.
+- `verificationPolicy`: fixtures, scorecard dimensions, and verification owner.
+- `installProjection`: whether this can be projected to Claude, Codex, Cursor, OpenClaw, or remains reference-only.
+- `identityCleanliness`: explicit proof that no repo path, file list, ticket, today task, deliverable link, or verify step is in durable identity.
+
+Quality bar:
+
+| Dimension | Pass condition |
+|---|---|
+| `identity_clarity` | A maintainer can tell when to call the agent from the name and description alone. |
+| `domain_specificity` | Replacing the agent name with `generic-agent` breaks the core logic. |
+| `flow_fit` | The agent has a clear upstream and downstream position inside Meta_Kim's product flow. |
+| `tool_least_privilege` | Loadout slots are the minimum needed for the capability class. |
+| `memory_fit` | Memory policy uses scoped access and does not leak user/project history into identity. |
+| `gap_honesty` | The agent names what it cannot know or do and routes gaps to `GapDecision`. |
+| `handoff_readiness` | Outputs can be consumed by another owner without oral explanation. |
+| `verification_readiness` | At least one fixture or replay check can fail the agent design. |
+| `install_projection_readiness` | Runtime projection status is explicit: eligible, needs_probe, or reference_only. |
+| `identity_cleanliness` | No one-run work-order fields appear in durable identity. |
+
+Pass threshold: all ten dimensions must pass for direct creation. One soft miss returns to Genesis or Artisan for revision. Any miss in `identity_cleanliness`, `gap_honesty`, `tool_least_privilege`, or `memory_fit` blocks creation and returns to Thinking.
+
+Reference translation:
+
+- Professional role standard: use a domain role, concise trigger, tool awareness, examples, and cross-runtime packaging discipline.
+- Flow standard: place the agent inside a real product flow and make upstream/downstream handoff explicit.
+- Memory standard: give the agent scoped memory, gap analysis, schema/eval thinking, and access boundaries.
+
+Do not copy:
+
+- Do not copy one repository's commands, install scripts, or host-specific preambles into durable identity.
+- Do not create a graph database or full CapabilityGraph before the create-agent fixture proves value.
+- Do not let every agent carry long-term memory; memory is a provider policy, not a personality trait.
+
+Minimal create-agent fixture:
+
+```json
+{
+  "fixtureId": "generated-agent-test-coverage-specialist",
+  "input": "The project repeatedly lacks a stable owner for test coverage strategy, gap diagnosis, and verification planning.",
+  "expectedDecision": "create_agent",
+  "generatedAgentSpec": {
+    "name": "test-coverage-specialist",
+    "flowPosition": "Test",
+    "purpose": "Own reusable test coverage strategy and coverage gap diagnosis across runs.",
+    "nonCapabilities": [
+      "does not become the implementation worker for every failing test",
+      "does not publish coverage reports externally without approval",
+      "does not replace existing test, QA, or release owners when they already fit"
+    ],
+    "loadoutSlots": [
+      "test framework discovery",
+      "coverage report parsing",
+      "risk-based test planning",
+      "regression fixture design"
+    ],
+    "memoryPolicy": "project_scoped repeat patterns and user corrections only",
+    "gapPolicy": "emit GapDecision when the project lacks a test runner, coverage command, fixture harness, or permission to execute tests",
+    "verificationPolicy": "fixture must prove no one-run path or verifySteps appear in durable identity"
+  }
+}
+```
+
+### LangGraph Projection Boundary
+
+When the Capability Gap MVP is projected into a LangGraph-style runtime, keep identity, task, and route state separate:
+
+- `GeneratedAgentSpec` maps to a reusable worker node contract.
+- `workerTaskPacket` maps to the run-scoped task state passed into that node.
+- `GapDecision` maps to conditional edge routing.
+- `CandidateWriteback` maps to the post-run evolution state, not to automatic file writes.
+- Governance agents map to decision, review, and gate nodes; they do not become business execution worker nodes.
+- Skills, scripts, commands, MCP providers, runtime tools, and plugins map to capability/tool nodes or loadout slots.
+
+The first LangGraph target is a control graph, not a knowledge graph:
+
+```text
+critical_intent
+-> fetch_capabilities
+-> detect_gap
+-> decide_gap_route
+-> one of: design_skill_candidate | design_agent_spec | design_script_candidate | design_mcp_provider_candidate | make_worker_task | ask_approval_or_block
+-> review_quality
+-> warden_gate
+-> verify_fixture
+-> evolve_or_none
+```
+
+Do not create `CapabilityGraph`, graph database storage, or edge-builder logic until the `GapDecision` and `GeneratedAgentSpec` fixtures prove value.
 
 ### Phase 4 — Review and Revision
 

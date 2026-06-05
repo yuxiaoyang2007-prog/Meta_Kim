@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "feedback-action-contract-v0.1",
+  "runStateTarget": ".meta-kim/state/default/feedback-loop/latest.json",
+  "actions": {
+    "accept": {
+      "requiredFields": ["actor", "target", "reason", "effectOnNextRun", "writebackIntent"],
+      "allowedWritebackIntent": ["none"],
+      "description": "User accepts the current result and keeps the next route unchanged unless later evidence changes it."
+    },
+    "correct": {
+      "requiredFields": ["actor", "target", "reason", "effectOnNextRun", "writebackIntent"],
+      "allowedWritebackIntent": ["none", "candidate_only"],
+      "description": "User corrects a decision, owner, research, parallelism, deliverable, or writeback misunderstanding."
+    },
+    "reject": {
+      "requiredFields": ["actor", "target", "reason", "effectOnNextRun", "writebackIntent"],
+      "allowedWritebackIntent": ["none"],
+      "description": "User rejects the current result and forces the next run back to the relevant upstream stage."
+    },
+    "promote_to_long_term": {
+      "requiredFields": ["actor", "target", "reason", "effectOnNextRun", "writebackIntent", "wardenApprovalRequired"],
+      "allowedWritebackIntent": ["candidate_only"],
+      "description": "User asks to upgrade a repeated pattern into a long-term candidate, still without automatic canonical writes."
+    },
+    "keep_one_time": {
+      "requiredFields": ["actor", "target", "reason", "effectOnNextRun", "writebackIntent"],
+      "allowedWritebackIntent": ["none"],
+      "description": "User keeps the correction scoped to this run and prevents durable evolution."
+    }
+  },
+  "durableWritePolicy": {
+    "canonicalWritesWithoutApproval": 0,
+    "approvalPacketRequired": "warden-approval-v0.1",
+    "promotionWithoutApprovalAction": "candidate_only",
+    "forbiddenTargetsWithoutApproval": ["canonical/agents", "canonical/skills", "canonical/runtime-assets"]
+  },
+  "reviewMetaReviewGate": {
+    "schemaVersion": "review-meta-review-gate-v0.1",
+    "reviewRequiredChecks": [
+      "critical_intent_evidence",
+      "fetch_source_evidence",
+      "thinking_route_evidence",
+      "execution_worker_output_evidence",
+      "feedback_effect_evidence",
+      "acceptance_evidence"
+    ],
+    "metaReviewRequiredChecks": [
+      "review_standard_sufficient",
+      "not_result_polish_only",
+      "public_ready_boundary_checked",
+      "writeback_boundary_checked"
+    ],
+    "rejectActions": {
+      "missingUpstreamEvidence": "return_to_stage",
+      "polishOnlyReview": "return_to_review",
+      "writebackBoundaryMissing": "blocked"
+    }
+  }
+}

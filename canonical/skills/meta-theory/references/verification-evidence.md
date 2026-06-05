@@ -53,13 +53,35 @@ Closed findings require matching fix evidence.
 
 Do not finish with only "done" or a plain-language restatement. The final user-facing closure must explain:
 
+- root goal
+- what this run did
+- whether the work still fits the root direction
+- whether the delivery is complete, partial, blocked, or deferred
+- whether complexity was added or avoided, and why
 - why changed
 - what changed / where changed
 - user impact
 - verification evidence
 - remaining limits
+- deferred or not-done work
+- next action
 
 If no file changed, say that and cite the inspected evidence. If the route changed from the user's surface request, state the product reason.
+
+Minimum closure template:
+
+```text
+Root goal:
+This run did:
+Direction fit:
+Delivery completeness:
+Verification:
+Complexity:
+Deferred / not done:
+Next action:
+```
+
+Rule: a run that only reports files, commits, or passing tests without the root goal and completeness judgment is not closed. A partial foundation must be named as partial; do not let it sound like the product goal is fully achieved.
 
 Routine low-risk releases use smoke evidence by default: projection sync, default capability-discovery smoke, meta-theory tests, whitespace diff check, changelog/release-note readiness, and exact git/release artifacts. Upgrade to release-grade closure only for install/update, global sync, hooks, runtime matrix, provider registry, dependency compatibility, runtime probes, package contents, security-sensitive behavior, or explicit full/live evidence requests. For release-grade closure, include the declared runtime target set and evidence for update/install, project sync, global sync, global hooks if in scope, runtime matrix, provider registry, dependency compatibility, runtime probe, default execution-demand route proof, live runtime results, changelog/release-note readiness, and security audit.
 

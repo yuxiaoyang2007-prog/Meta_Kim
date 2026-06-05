@@ -6,6 +6,43 @@ All notable changes to Meta_Kim are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 When you tag a release, add a new **`## [version] - YYYY-MM-DD`** section at the top (above older entries) and list changes there.
 
+## [2.8.6] - 2026-06-05
+
+### Added
+
+- **Capability Gap complete-product MVP** — Added the Capability Gap PRD, decision contracts, output contracts, real-input replay, orchestration board validation, and core MVP acceptance gate so gap handling can be judged as a product workflow instead of an isolated script.
+- **Governance-agent process evidence** — Added agent design quality evaluation, governance process MVP scripts, station contracts, AI-readable product standards, and reviewer calibration fixtures for abstract, professional, testable agent designs.
+- **Run deliverables and release closure reports** — Added run deliverables, trend panels, Warden approval experience, GitHub gap reports, subwindow verification packets, research preparation/execution reports, multi-type capability browser, orchestration DAG/scheduler reports, worker output reports, and product delivery bundles.
+- **Runtime evidence hardening** — Added runtime live shard matrix coverage, Cursor live boundary contracts, OpenClaw batch stability reports, Codex live timeout recovery evidence, and complex capability-gap replay scenarios.
+- **Reusable project-file inventory skill** — Added the project-local `same-set-reusable-flow-for-project-file-inventor` canonical skill.
+
+### Fixed
+
+- **Repo Claude hook commands stay portable** — Project `.claude/settings.json` sync now keeps repository hook commands relative, while global Claude hooks still use slash-normalized absolute commands.
+- **Retired global hook cleanup** — Global Claude settings merge strips retired Meta_Kim hook entries such as the old git-push confirmation hook.
+- **Capability Gap PRD closure alignment** — Updated the complete-product PRD guard to track the current completed backlog instead of stale unfinished markers.
+- **Generated report hygiene** — Moved generated reports out of tracked docs paths and removed the risky orphan cross-project batch updater.
+
+### Changed
+
+- **Meta-theory orchestration strengthened** — Expanded default governed execution, multi-capability Fetch, owner/loadout evidence, and bounded worker-task output validation.
+- **Release evidence now covers product closure** — The verification stack now proves product reports, replay scenarios, runtime boundary evidence, and Warden writeback/rollback rehearsal before public closure.
+- Version bump: 2.8.5 -> 2.8.6.
+
+### Verification
+
+- `node --test tests/setup/claude-settings-merge.test.mjs`
+- `npm run meta:test:setup`
+- `npm run meta:sync`
+- `npm run discover:global`
+- `npm run meta:check:global`
+- `npm run meta:check`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:release:smoke`
+- `npm run meta:verify:all`
+- `npm run meta:doctor:hooks`
+- `git diff --check`
+
 ## [2.8.5] - 2026-06-03
 
 ### Added

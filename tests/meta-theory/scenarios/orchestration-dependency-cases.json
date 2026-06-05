@@ -1,0 +1,214 @@
+{
+  "schemaVersion": "orchestration-dependency-cases-v0.1",
+  "purpose": "Exercise serial dependencies, safe parallel groups, blocked nodes, and scheduling simulation for orchestration DAGs.",
+  "cases": [
+    {
+      "id": "research-capability-execution-review",
+      "description": "A current-fact task must research first, match capability second, execute third, and review last.",
+      "tasks": [
+        {
+          "taskPacketId": "research-sources",
+          "owner": "meta-scout",
+          "roleDisplayName": "research",
+          "roleInstanceId": "research-1-1",
+          "parallelGroup": "prep",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "source-backed-research",
+          "dependsOn": [],
+          "estimatedMinutes": 18
+        },
+        {
+          "taskPacketId": "capability-match",
+          "owner": "meta-artisan",
+          "roleDisplayName": "capability",
+          "roleInstanceId": "capability-1-1",
+          "parallelGroup": "planning",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "multi-type-capability-match",
+          "dependsOn": ["research-sources"],
+          "estimatedMinutes": 12
+        },
+        {
+          "taskPacketId": "execution-plan",
+          "owner": "backend",
+          "roleDisplayName": "backend",
+          "roleInstanceId": "backend-1-1",
+          "parallelGroup": "execution",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "implement-runner",
+          "dependsOn": ["capability-match"],
+          "estimatedMinutes": 25
+        },
+        {
+          "taskPacketId": "review-result",
+          "owner": "meta-prism",
+          "roleDisplayName": "review",
+          "roleInstanceId": "review-1-1",
+          "parallelGroup": "review",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "upstream-quality-check",
+          "dependsOn": ["execution-plan"],
+          "estimatedMinutes": 10
+        }
+      ]
+    },
+    {
+      "id": "parallel-deliverable-pack",
+      "description": "Independent deliverable shards can run in parallel and merge under Conductor.",
+      "tasks": [
+        {
+          "taskPacketId": "panel",
+          "owner": "frontend",
+          "roleDisplayName": "frontend",
+          "roleInstanceId": "frontend-1-1",
+          "parallelGroup": "deliverables",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "panel",
+          "dependsOn": [],
+          "estimatedMinutes": 20
+        },
+        {
+          "taskPacketId": "rubric",
+          "owner": "docs",
+          "roleDisplayName": "docs",
+          "roleInstanceId": "docs-1-1",
+          "parallelGroup": "deliverables",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "rubric",
+          "dependsOn": [],
+          "estimatedMinutes": 16
+        },
+        {
+          "taskPacketId": "case-pack",
+          "owner": "review",
+          "roleDisplayName": "review",
+          "roleInstanceId": "review-1-1",
+          "parallelGroup": "deliverables",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "case-pack",
+          "dependsOn": [],
+          "estimatedMinutes": 22
+        }
+      ]
+    },
+    {
+      "id": "approval-blocked-writeback",
+      "description": "A writeback approval block remains visible and must not unlock downstream pass edges.",
+      "tasks": [
+        {
+          "taskPacketId": "approval-request",
+          "owner": "meta-warden",
+          "roleDisplayName": "approval",
+          "roleInstanceId": "approval-1-1",
+          "parallelGroup": "approval",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "canonical-writeback-approval",
+          "dependsOn": [],
+          "estimatedMinutes": 8,
+          "blocked": true,
+          "blockedWaitReason": "missing_warden_approval"
+        },
+        {
+          "taskPacketId": "dry-run-preview",
+          "owner": "meta-chrysalis",
+          "roleDisplayName": "writeback",
+          "roleInstanceId": "writeback-1-1",
+          "parallelGroup": "preview",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "candidate-only-preview",
+          "dependsOn": [],
+          "estimatedMinutes": 12
+        }
+      ]
+    },
+    {
+      "id": "fanout-then-merge-review",
+      "description": "Research gates two parallel execution shards, then review waits for both.",
+      "tasks": [
+        {
+          "taskPacketId": "research-gate",
+          "owner": "meta-scout",
+          "roleDisplayName": "research",
+          "roleInstanceId": "research-2-1",
+          "parallelGroup": "prep",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "current-fact-gate",
+          "dependsOn": [],
+          "estimatedMinutes": 14
+        },
+        {
+          "taskPacketId": "script-shard",
+          "owner": "backend",
+          "roleDisplayName": "backend",
+          "roleInstanceId": "backend-2-1",
+          "parallelGroup": "execution",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "script-output",
+          "dependsOn": ["research-gate"],
+          "estimatedMinutes": 18
+        },
+        {
+          "taskPacketId": "docs-shard",
+          "owner": "docs",
+          "roleDisplayName": "docs",
+          "roleInstanceId": "docs-2-1",
+          "parallelGroup": "execution",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "report-output",
+          "dependsOn": ["research-gate"],
+          "estimatedMinutes": 15
+        },
+        {
+          "taskPacketId": "merge-review",
+          "owner": "meta-prism",
+          "roleDisplayName": "review",
+          "roleInstanceId": "review-2-1",
+          "parallelGroup": "review",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "merged-evidence-review",
+          "dependsOn": ["script-shard", "docs-shard"],
+          "estimatedMinutes": 11
+        }
+      ]
+    },
+    {
+      "id": "runtime-probe-chain",
+      "description": "Runtime probe evidence must precede live validation and release closure.",
+      "tasks": [
+        {
+          "taskPacketId": "probe-cli",
+          "owner": "verify",
+          "roleDisplayName": "verify",
+          "roleInstanceId": "verify-1-1",
+          "parallelGroup": "runtime-probe",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "cursor-cli-probe",
+          "dependsOn": [],
+          "estimatedMinutes": 10
+        },
+        {
+          "taskPacketId": "live-validation",
+          "owner": "verify",
+          "roleDisplayName": "verify",
+          "roleInstanceId": "verify-1-2",
+          "parallelGroup": "runtime-live",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "native-live-json",
+          "dependsOn": ["probe-cli"],
+          "estimatedMinutes": 20
+        },
+        {
+          "taskPacketId": "release-boundary",
+          "owner": "meta-warden",
+          "roleDisplayName": "release",
+          "roleInstanceId": "release-1-1",
+          "parallelGroup": "release",
+          "mergeOwner": "meta-conductor",
+          "shardScope": "release-grade-boundary",
+          "dependsOn": ["live-validation"],
+          "estimatedMinutes": 9
+        }
+      ]
+    }
+  ]
+}

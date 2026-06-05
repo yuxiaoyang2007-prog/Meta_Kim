@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "research-execution-contract-v0.1",
+  "purpose": "Turn Fetch research preparation into auditable live source retrieval, freshness policy, and innovation-candidate handoff before Thinking orchestration.",
+  "requiredResearchExecutionFields": [
+    "caseId",
+    "preparationStatus",
+    "executionStatus",
+    "sourceType",
+    "url",
+    "fetchedAt",
+    "httpStatus",
+    "byteLength",
+    "contentHash",
+    "freshnessPolicy",
+    "staleReason",
+    "credibility",
+    "decisionImpactMap",
+    "thinkingHandoff"
+  ],
+  "executionStatusEnum": [
+    "fetched_live",
+    "cache_hit",
+    "stale_refreshed",
+    "blocked"
+  ],
+  "requiredSourceCategories": [
+    "official_docs",
+    "news_version",
+    "third_party_tool",
+    "credential_blocked",
+    "network_blocked"
+  ],
+  "freshnessPolicy": {
+    "requiredFields": [
+      "ttlHours",
+      "fetchedAt",
+      "expiresAt",
+      "state",
+      "staleReason"
+    ],
+    "stateEnum": [
+      "fresh",
+      "stale_refresh_required",
+      "blocked_no_cache"
+    ],
+    "staleAction": "return_to_fetch_refresh_before_thinking"
+  },
+  "innovationCandidatePacket": {
+    "schemaVersion": "innovation-candidate-packet-v0.1",
+    "requiredFields": [
+      "candidateId",
+      "capabilityType",
+      "gapEvidence",
+      "existingCapabilitiesChecked",
+      "alternativePaths",
+      "estimatedCost",
+      "risks",
+      "minimumExperiment",
+      "wardenApprovalRequirement",
+      "canonicalWrites"
+    ],
+    "canonicalWritesMustEqual": 0,
+    "allowedCapabilityTypes": [
+      "agent",
+      "skill",
+      "script",
+      "mcp_provider",
+      "runtime_tool",
+      "plugin_connector",
+      "dependency_external_package",
+      "worker_task_only"
+    ]
+  },
+  "thinkingGate": {
+    "readyWhen": "All route-changing current facts are fetched live or explicitly blocked with a return stage; stale evidence returns to Fetch before orchestration.",
+    "mustNotDo": [
+      "Do not treat research preparation as live source evidence.",
+      "Do not enter Thinking with stale current-fact evidence.",
+      "Do not create a long-term capability when an innovation candidate is only a sandbox proposal.",
+      "Do not write canonical files without Warden approval."
+    ]
+  },
+  "aiReadableProductStandard": {
+    "passSignal": "A reviewer can tell which source was fetched, when it was fetched, whether it is fresh enough, how it changes orchestration, and what happens when all existing capabilities are insufficient.",
+    "failSignal": "The report only says research planned, hides stale evidence, treats every gap as a skill, or writes a durable capability without approval."
+  }
+}

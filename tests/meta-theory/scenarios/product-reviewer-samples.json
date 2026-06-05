@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "product-reviewer-samples-v0.1",
+  "purpose": "Replay near-real external product reviewer reactions against Meta_Kim run deliverables.",
+  "rubricDimensions": ["design", "execution", "acceptance", "feedback", "deliverables"],
+  "samples": [
+    {
+      "id": "product-manager-reviewer",
+      "persona": "Product manager reviewer with AI product background",
+      "confusions": [
+        "Cannot tell whether Cursor fixture is real native live evidence.",
+        "Needs a plain-language owner handoff summary before JSON fields."
+      ],
+      "scores": {
+        "design": 4,
+        "execution": 4,
+        "acceptance": 3,
+        "feedback": 4,
+        "deliverables": 5
+      }
+    },
+    {
+      "id": "technical-reviewer",
+      "persona": "Technical reviewer checking replayability",
+      "confusions": [
+        "Needs exact commands next to each PASS claim.",
+        "Wants blocked runtime evidence separated from release-grade pass evidence."
+      ],
+      "scores": {
+        "design": 5,
+        "execution": 4,
+        "acceptance": 4,
+        "feedback": 3,
+        "deliverables": 4
+      }
+    },
+    {
+      "id": "external-product-reviewer",
+      "persona": "External reviewer checking product comprehension",
+      "confusions": [
+        "Needs fail examples for overclaiming GitHub complete.",
+        "Needs a short reviewer note explaining why Warden approval is not optional."
+      ],
+      "scores": {
+        "design": 4,
+        "execution": 5,
+        "acceptance": 4,
+        "feedback": 4,
+        "deliverables": 4
+      }
+    }
+  ]
+}

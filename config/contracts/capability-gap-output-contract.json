@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "owner": "Meta_Kim",
+  "contractId": "capability-gap-output-contract",
+  "purpose": "Machine-readable output standard for the next artifact after GapDecision. This proves each decision can produce a controllable deliverable without writing canonical or executing external actions.",
+  "requiredFields": [
+    "outputId",
+    "decision",
+    "kind",
+    "owner",
+    "scope",
+    "inputs",
+    "outputs",
+    "forbidden",
+    "verification"
+  ],
+  "commonRules": {
+    "noAutomaticCanonicalWrite": true,
+    "noExternalWriteWithoutApproval": true,
+    "governanceAgentCannotBeExecutionWorker": true,
+    "allOutputsMustBeReviewable": true
+  },
+  "outputs": {
+    "create_skill": {
+      "kind": "skill_candidate_spec",
+      "owner": "meta-artisan",
+      "scope": "candidate_only",
+      "requiredInputs": ["CapabilityGap", "GapDecision", "DecisionEvidenceContract"],
+      "requiredOutputs": ["skillName", "purpose", "triggerConditions", "procedure", "nonGoals", "verification"],
+      "forbidden": ["automatic_canonical_write", "one_run_file_path", "new_agent_identity"],
+      "verification": {
+        "owner": "verify",
+        "passCondition": "Skill candidate is reusable, has trigger conditions and procedure, and does not write canonical."
+      }
+    },
+    "create_agent": {
+      "kind": "agent_candidate_spec",
+      "owner": "meta-genesis",
+      "scope": "candidate_only",
+      "requiredInputs": ["CapabilityGap", "GapDecision", "DecisionEvidenceContract"],
+      "requiredOutputs": ["GeneratedAgentSpec", "identityCleanliness", "qualityScorecard", "installProjection"],
+      "forbidden": ["bind_repo_path_to_identity", "todayTask", "scopeFiles", "verifySteps_in_identity"],
+      "verification": {
+        "owner": "verify",
+        "passCondition": "GeneratedAgentSpec is complete, scorecard is 10/10, identityCleanliness is pass."
+      }
+    },
+    "create_script": {
+      "kind": "script_candidate_spec",
+      "owner": "script-provider",
+      "scope": "candidate_only",
+      "requiredInputs": ["CapabilityGap", "GapDecision", "DecisionEvidenceContract"],
+      "requiredOutputs": ["scriptName", "deterministicInputs", "deterministicOutputs", "testEntry", "failureMode"],
+      "forbidden": ["create_agent", "manual_repeat_work", "external_write_without_approval"],
+      "verification": {
+        "owner": "verify",
+        "passCondition": "Script candidate has deterministic inputs, deterministic outputs, and a test entry."
+      }
+    },
+    "create_mcp_provider": {
+      "kind": "mcp_provider_candidate_spec",
+      "owner": "mcp-provider-capability",
+      "scope": "candidate_only",
+      "requiredInputs": ["CapabilityGap", "GapDecision", "DecisionEvidenceContract"],
+      "requiredOutputs": ["providerName", "capabilities", "permissionBoundary", "credentialBoundary", "auditEvents", "readWritePolicy"],
+      "forbidden": ["direct_unauthorized_credentials", "automatic_external_write", "one_off_curl_as_capability"],
+      "verification": {
+        "owner": "verify",
+        "passCondition": "Provider candidate declares permission, credential, audit, and read/write boundaries."
+      }
+    },
+    "worker_task_only": {
+      "kind": "worker_task_packet",
+      "owner": "existing_execution_owner",
+      "scope": "run_scoped",
+      "requiredInputs": ["CapabilityGap", "GapDecision", "DecisionEvidenceContract"],
+      "requiredOutputs": ["taskId", "owner", "scope", "work", "verify"],
+      "forbidden": ["candidate_writeback", "long_term_identity_write", "new_agent_identity"],
+      "verification": {
+        "owner": "verify",
+        "passCondition": "Worker task is run-scoped and does not produce CandidateWriteback."
+      }
+    },
+    "blocked_or_needs_approval": {
+      "kind": "approval_request",
+      "owner": "meta-sentinel",
+      "scope": "blocked_until_user_approval",
+      "requiredInputs": ["CapabilityGap", "GapDecision", "DecisionEvidenceContract"],
+      "requiredOutputs": ["reason", "requestedApproval", "allowedNextAction", "forbiddenAction", "returnToStage"],
+      "forbidden": ["execute_external_write", "create_provider_to_bypass_approval", "claim_completion"],
+      "verification": {
+        "owner": "meta-sentinel",
+        "passCondition": "Approval request names the blocked action, requested approval, allowed next action, forbidden action, and return stage."
+      }
+    }
+  },
+  "quantitativeAcceptance": {
+    "outputCoverage": "100%",
+    "missingOutputFieldCount": 0,
+    "automaticCanonicalWrite": 0,
+    "externalWriteWithoutApproval": 0,
+    "workerTaskCandidateWritebackCount": 0,
+    "blockedBypassCount": 0
+  }
+}

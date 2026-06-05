@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "reviewer-calibration-samples-v0.1",
+  "scoringSamples": [
+    {
+      "id": "research-before-orchestration-fail",
+      "pitfall": "research_before_orchestration",
+      "kind": "negative",
+      "reviewerClaim": "The board is ready even though current docs were not fetched.",
+      "reviewerVerdict": "fail",
+      "score": 2,
+      "reviewerPrompt": "先问研究有没有完成，再看编排。",
+      "passSignal": "source-backed research completes before Thinking.",
+      "failSignal": "orchestration starts from assumptions."
+    },
+    {
+      "id": "research-before-orchestration-pass",
+      "pitfall": "research_before_orchestration",
+      "kind": "positive",
+      "reviewerClaim": "Fetch records source list, freshness, blocked reasons, then Thinking designs the board.",
+      "reviewerVerdict": "pass",
+      "score": 5,
+      "reviewerPrompt": "让 reviewer 指出 Fetch evidence 改变了哪条路线。",
+      "passSignal": "Thinking handoff references research evidence.",
+      "failSignal": "research packet exists but does not affect route."
+    },
+    {
+      "id": "skill-only-capability-fail",
+      "pitfall": "skill_only_capability",
+      "kind": "negative",
+      "reviewerClaim": "No matching skill means no capability exists.",
+      "reviewerVerdict": "fail",
+      "score": 1,
+      "reviewerPrompt": "要求 reviewer 列出 agent、script、MCP、runtime tool、retrieval、dependency。",
+      "passSignal": "multi-type capability inventory is checked.",
+      "failSignal": "skill catalog is treated as the only inventory."
+    },
+    {
+      "id": "fake-parallelism-fail",
+      "pitfall": "fake_parallelism",
+      "kind": "negative",
+      "reviewerClaim": "Research, implementation, and review can all run at once.",
+      "reviewerVerdict": "fail",
+      "score": 2,
+      "reviewerPrompt": "让 reviewer 画出 dependsOn 和 criticalPath。",
+      "passSignal": "serial research -> capability -> execution -> review edge is visible.",
+      "failSignal": "dependent work is placed in the same parallel group."
+    },
+    {
+      "id": "fixture-pass-live-fail",
+      "pitfall": "fixture_pass_as_live",
+      "kind": "negative",
+      "reviewerClaim": "Cursor success fixture means release-grade native live pass.",
+      "reviewerVerdict": "fail",
+      "score": 1,
+      "reviewerPrompt": "要求 reviewer 区分 fixture pass、projection smoke、native live pass。",
+      "passSignal": "runtime evidence keeps P-024 blocked until native CLI is available.",
+      "failSignal": "fixture evidence is used as release evidence."
+    },
+    {
+      "id": "unauthorized-writeback-fail",
+      "pitfall": "unauthorized_writeback",
+      "kind": "negative",
+      "reviewerClaim": "Repeated feedback can directly update canonical skills.",
+      "reviewerVerdict": "fail",
+      "score": 1,
+      "reviewerPrompt": "让 reviewer 找 Warden approval packet。",
+      "passSignal": "promotion remains candidate_only without Warden approval.",
+      "failSignal": "canonical write count is non-zero without approval."
+    },
+    {
+      "id": "github-gap-overclaim-fail",
+      "pitfall": "github_gap_overclaim",
+      "kind": "negative",
+      "reviewerClaim": "Local green tests mean GitHub is complete.",
+      "reviewerVerdict": "fail",
+      "score": 2,
+      "reviewerPrompt": "要求 reviewer 比较本地 PRD 状态和 origin/main 差距。",
+      "passSignal": "GitHub gap report lists local-only capabilities.",
+      "failSignal": "ahead commits or unpushed changes are ignored."
+    },
+    {
+      "id": "warden-and-deliverables-pass",
+      "pitfall": "warden_approval_confusion",
+      "secondaryPitfall": "mixed_deliverables",
+      "kind": "positive",
+      "reviewerClaim": "Approval preview is separate from canonical write, and the bundle separates design, execution, acceptance, feedback, deliverables.",
+      "reviewerVerdict": "pass",
+      "score": 5,
+      "reviewerPrompt": "让 reviewer 分别指出 approval boundary 和五类交付内容。",
+      "passSignal": "writeback approval and product deliverable categories are separate.",
+      "failSignal": "approval, feedback, and deliverables are collapsed into one summary."
+    }
+  ]
+}

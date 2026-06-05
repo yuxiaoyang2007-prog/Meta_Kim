@@ -1,0 +1,287 @@
+{
+  "schemaVersion": "feedback-loop-replay-v0.1",
+  "corrections": [
+    {
+      "id": "decision-route-correction-1",
+      "type": "decision",
+      "feedbackAction": "correct",
+      "target": "gapDecision",
+      "reason": "The route treated a blocked native live check as finished.",
+      "beforeDecision": "accept_fixture_pass",
+      "correctedDecision": "keep_native_live_blocked",
+      "effectOnNextRun": "route_to_runtime_blocker",
+      "writebackIntent": "none",
+      "repeatGapKey": "fixture_pass_as_live",
+      "reviewerConfusionBefore": 5,
+      "reviewerConfusionAfter": 2,
+      "expectedNextRouteChange": true
+    },
+    {
+      "id": "decision-route-correction-2",
+      "type": "decision",
+      "feedbackAction": "reject",
+      "target": "completionClaim",
+      "reason": "The run claimed GitHub completion from local-only evidence.",
+      "beforeDecision": "claim_github_complete",
+      "correctedDecision": "emit_github_gap",
+      "effectOnNextRun": "run_github_gap_report",
+      "writebackIntent": "none",
+      "repeatGapKey": "local_as_github_complete",
+      "reviewerConfusionBefore": 5,
+      "reviewerConfusionAfter": 1,
+      "expectedNextRouteChange": true
+    },
+    {
+      "id": "owner-correction-1",
+      "type": "owner",
+      "feedbackAction": "correct",
+      "target": "workerOwner",
+      "reason": "The route used a governance agent as an implementation worker.",
+      "beforeDecision": "meta-warden_executes_backend",
+      "correctedDecision": "backend_worker_with_warden_gate",
+      "effectOnNextRun": "rematch_execution_owner",
+      "writebackIntent": "candidate_only",
+      "repeatGapKey": "governance_agent_as_worker",
+      "reviewerConfusionBefore": 4,
+      "reviewerConfusionAfter": 1,
+      "expectedNextRouteChange": true
+    },
+    {
+      "id": "owner-correction-2",
+      "type": "owner",
+      "feedbackAction": "keep_one_time",
+      "target": "runtimeAlias",
+      "reason": "The worker display name used a runtime nickname instead of role family.",
+      "beforeDecision": "runtime_nickname_owner",
+      "correctedDecision": "roleDisplayName_backend",
+      "effectOnNextRun": "normalize_display_owner",
+      "writebackIntent": "none",
+      "repeatGapKey": "runtime_nickname_owner",
+      "reviewerConfusionBefore": 3,
+      "reviewerConfusionAfter": 1,
+      "expectedNextRouteChange": true
+    },
+    {
+      "id": "research-correction-1",
+      "type": "research",
+      "feedbackAction": "correct",
+      "target": "fetchEvidence",
+      "reason": "The route began orchestration before source-backed research finished.",
+      "beforeDecision": "thinking_before_fetch",
+      "correctedDecision": "research_complete_before_thinking",
+      "effectOnNextRun": "return_to_fetch",
+      "writebackIntent": "candidate_only",
+      "repeatGapKey": "research_after_thinking",
+      "reviewerConfusionBefore": 5,
+      "reviewerConfusionAfter": 2,
+      "expectedNextRouteChange": true
+    },
+    {
+      "id": "research-correction-2",
+      "type": "research",
+      "feedbackAction": "promote_to_long_term",
+      "target": "researchFreshness",
+      "reason": "Repeated current-fact claims need freshness policy before route design.",
+      "beforeDecision": "reuse_stale_docs",
+      "correctedDecision": "refresh_required",
+      "effectOnNextRun": "mark_stale_evidence_refresh_required",
+      "writebackIntent": "candidate_only",
+      "wardenApprovalRequired": true,
+      "repeatGapKey": "stale_research_evidence",
+      "reviewerConfusionBefore": 4,
+      "reviewerConfusionAfter": 1,
+      "expectedNextRouteChange": true
+    },
+    {
+      "id": "parallelism-correction-1",
+      "type": "parallelism",
+      "feedbackAction": "correct",
+      "target": "orchestrationBoard",
+      "reason": "The route called tasks parallel even though one depended on research.",
+      "beforeDecision": "fake_parallelism",
+      "correctedDecision": "serial_research_then_execution",
+      "effectOnNextRun": "add_depends_on_edges",
+      "writebackIntent": "none",
+      "repeatGapKey": "fake_parallelism",
+      "reviewerConfusionBefore": 4,
+      "reviewerConfusionAfter": 1,
+      "expectedNextRouteChange": true
+    },
+    {
+      "id": "parallelism-correction-2",
+      "type": "parallelism",
+      "feedbackAction": "accept",
+      "target": "schedulerReport",
+      "reason": "The user accepts the corrected DAG schedule and critical path.",
+      "beforeDecision": "dag_schedule_review",
+      "correctedDecision": "dag_schedule_accepted",
+      "effectOnNextRun": "keep_scheduler_policy",
+      "writebackIntent": "none",
+      "repeatGapKey": "schedule_acceptance",
+      "reviewerConfusionBefore": 2,
+      "reviewerConfusionAfter": 1,
+      "expectedNextRouteChange": false
+    },
+    {
+      "id": "deliverable-correction-1",
+      "type": "deliverable",
+      "feedbackAction": "correct",
+      "target": "productBundle",
+      "reason": "The report mixed design, execution, acceptance, feedback, and deliverables.",
+      "beforeDecision": "single_summary_as_bundle",
+      "correctedDecision": "separate_product_outputs",
+      "effectOnNextRun": "separate_deliverable_sections",
+      "writebackIntent": "none",
+      "repeatGapKey": "mixed_deliverable_categories",
+      "reviewerConfusionBefore": 5,
+      "reviewerConfusionAfter": 2,
+      "expectedNextRouteChange": true
+    },
+    {
+      "id": "deliverable-correction-2",
+      "type": "deliverable",
+      "feedbackAction": "reject",
+      "target": "aiReadableRubric",
+      "reason": "The rubric did not show pass and fail examples for non-maintainers.",
+      "beforeDecision": "rubric_without_examples",
+      "correctedDecision": "rubric_with_examples",
+      "effectOnNextRun": "add_product_review_examples",
+      "writebackIntent": "none",
+      "repeatGapKey": "rubric_without_examples",
+      "reviewerConfusionBefore": 4,
+      "reviewerConfusionAfter": 1,
+      "expectedNextRouteChange": true
+    },
+    {
+      "id": "writeback-correction-1",
+      "type": "writeback",
+      "feedbackAction": "correct",
+      "target": "evolutionWriteback",
+      "reason": "The route treated a candidate writeback as approved canonical mutation.",
+      "beforeDecision": "auto_write_canonical",
+      "correctedDecision": "candidate_only_until_warden_approval",
+      "effectOnNextRun": "require_warden_approval_packet",
+      "writebackIntent": "candidate_only",
+      "repeatGapKey": "unauthorized_writeback",
+      "reviewerConfusionBefore": 5,
+      "reviewerConfusionAfter": 1,
+      "expectedNextRouteChange": true
+    },
+    {
+      "id": "writeback-correction-2",
+      "type": "writeback",
+      "feedbackAction": "promote_to_long_term",
+      "target": "correctionPattern",
+      "reason": "The same writeback boundary confusion repeated across runs.",
+      "beforeDecision": "one_time_warning",
+      "correctedDecision": "promotion_candidate_requires_approval",
+      "effectOnNextRun": "emit_promotion_candidate",
+      "writebackIntent": "candidate_only",
+      "wardenApprovalRequired": true,
+      "repeatGapKey": "unauthorized_writeback",
+      "reviewerConfusionBefore": 4,
+      "reviewerConfusionAfter": 1,
+      "expectedNextRouteChange": true
+    }
+  ],
+  "reviewSamples": [
+    {
+      "id": "review-pass-full-chain",
+      "upstreamEvidence": {
+        "critical": true,
+        "fetch": true,
+        "thinking": true,
+        "execution": true,
+        "workerOutput": true,
+        "feedbackEffect": true,
+        "acceptance": true
+      },
+      "reviewChecks": [
+        "critical_intent_evidence",
+        "fetch_source_evidence",
+        "thinking_route_evidence",
+        "execution_worker_output_evidence",
+        "feedback_effect_evidence",
+        "acceptance_evidence"
+      ],
+      "metaReviewChecks": [
+        "review_standard_sufficient",
+        "not_result_polish_only",
+        "public_ready_boundary_checked",
+        "writeback_boundary_checked"
+      ],
+      "expectedAction": "accept"
+    },
+    {
+      "id": "review-reject-polish-only",
+      "upstreamEvidence": {
+        "critical": true,
+        "fetch": false,
+        "thinking": false,
+        "execution": true,
+        "workerOutput": true,
+        "feedbackEffect": false,
+        "acceptance": false
+      },
+      "reviewChecks": ["acceptance_evidence"],
+      "metaReviewChecks": [
+        "not_result_polish_only",
+        "public_ready_boundary_checked",
+        "writeback_boundary_checked"
+      ],
+      "expectedAction": "return_to_review"
+    },
+    {
+      "id": "review-return-missing-fetch",
+      "upstreamEvidence": {
+        "critical": true,
+        "fetch": false,
+        "thinking": true,
+        "execution": true,
+        "workerOutput": true,
+        "feedbackEffect": true,
+        "acceptance": true
+      },
+      "reviewChecks": [
+        "critical_intent_evidence",
+        "thinking_route_evidence",
+        "execution_worker_output_evidence",
+        "feedback_effect_evidence",
+        "acceptance_evidence"
+      ],
+      "metaReviewChecks": [
+        "review_standard_sufficient",
+        "not_result_polish_only",
+        "public_ready_boundary_checked",
+        "writeback_boundary_checked"
+      ],
+      "expectedAction": "return_to_stage"
+    },
+    {
+      "id": "review-block-writeback-boundary",
+      "upstreamEvidence": {
+        "critical": true,
+        "fetch": true,
+        "thinking": true,
+        "execution": true,
+        "workerOutput": true,
+        "feedbackEffect": true,
+        "acceptance": true
+      },
+      "reviewChecks": [
+        "critical_intent_evidence",
+        "fetch_source_evidence",
+        "thinking_route_evidence",
+        "execution_worker_output_evidence",
+        "feedback_effect_evidence",
+        "acceptance_evidence"
+      ],
+      "metaReviewChecks": [
+        "review_standard_sufficient",
+        "not_result_polish_only",
+        "public_ready_boundary_checked"
+      ],
+      "expectedAction": "blocked"
+    }
+  ]
+}

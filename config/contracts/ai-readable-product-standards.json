@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "contractId": "ai-readable-product-standards",
+  "owner": "meta-conductor",
+  "purpose": "Plain-language product standards for AI-readable product review. They explain how a Capability Gap run proves design, execution, acceptance, feedback, and deliverable quality without relying on hidden protocol knowledge.",
+  "audience": "external product reviewer and AI reviewer",
+  "standards": [
+    {
+      "id": "design",
+      "label": "设计标准",
+      "plainLanguageQuestion": "这次运行有没有先说明用户真正要什么、缺什么能力、为什么选这条路线？",
+      "passStandard": "报告必须同时展示 Critical summary, Fetch evidence, GapDecision, selected owner, rejected unsafe or weaker routes, and graph branch.",
+      "failStandard": "只给结论、不解释能力缺口、不说明 owner 或 graph branch，就不能算设计完成。",
+      "requiredEvidence": [
+        "productArtifacts[].criticalSummary",
+        "productArtifacts[].fetchEvidence",
+        "productArtifacts[].gapDecision",
+        "graphValidation.executedBranches"
+      ]
+    },
+    {
+      "id": "execution",
+      "label": "执行标准",
+      "plainLanguageQuestion": "判断之后有没有产出能交给下一位 owner 做的具体东西？",
+      "passStandard": "每个 GapDecision 都必须有 DecisionOutput，写清 owner, scope, deliverable, inputs, outputs, forbidden behavior, and verification policy.",
+      "failStandard": "只有建议、没有下一步交付物，或者治理 agent 被当成执行 worker，就不能算执行完成。",
+      "requiredEvidence": [
+        "productArtifacts[].decisionOutput",
+        "scorecards[].dimensions.boundary_fit",
+        "scorecards[].dimensions.reuse_or_run_scope_fit"
+      ]
+    },
+    {
+      "id": "acceptance",
+      "label": "验收标准",
+      "plainLanguageQuestion": "我们怎么知道它真的跑对了，而不是看起来像对？",
+      "passStandard": "R-001 through R-010 must have auditable pass/fail checks, owner, returnToStage, and quantitative evidence. Full completion also requires smoke or release verification.",
+      "failStandard": "只说测试通过但没有对应 R 项、量化指标、失败返回阶段或 owner，就不能算验收完成。",
+      "requiredEvidence": [
+        "requirementChecks",
+        "quantitativeChecks",
+        "evidence.commands"
+      ]
+    },
+    {
+      "id": "feedback",
+      "label": "反馈标准",
+      "plainLanguageQuestion": "用户纠正会不会改变下一次判断，而不是只留在聊天里？",
+      "passStandard": "报告必须展示 userCorrection replay, decisionChangedByCorrection, repeatKey, promotion review candidate, and no automatic canonical write.",
+      "failStandard": "只记录用户说过什么，但下一次 decision 不受影响，或重复 3 次后直接自动写 canonical，就不能算反馈完成。",
+      "requiredEvidence": [
+        "feedbackReplay.cases",
+        "feedbackReplay.correctionInfluence.decisionChangedByCorrection",
+        "feedbackReplay.promotionCandidates"
+      ]
+    },
+    {
+      "id": "deliverables",
+      "label": "交付内容标准",
+      "plainLanguageQuestion": "它最后给用户和系统留下了哪些可读、可查、可复盘的交付内容？",
+      "passStandard": "每次完整产品运行必须生成 JSON artifact, Chinese Markdown report, SQLite run record, productArtifacts, scorecards, analytics, graph validation, and evidence commands.",
+      "failStandard": "只有聊天总结、只有原始 JSON、没有 runId/report/db/evidence，或报告泄露本机路径、凭证、私有来源，就不能算交付完成。",
+      "requiredEvidence": [
+        "evidence.files.json",
+        "evidence.files.markdown",
+        "evidence.files.sqlite",
+        "productArtifacts",
+        "analytics",
+        "graphValidation"
+      ]
+    }
+  ]
+}

@@ -1216,16 +1216,31 @@ describe("workflow-contract.json — schema compliance", async () => {
     const summary = quality.userFacingSummaryContract ?? {};
     assert.equal(summary.required, true);
     for (const field of [
+      "rootGoal",
+      "workDoneThisRun",
+      "directionFit",
+      "deliveryCompleteness",
+      "complexityDelta",
       "whyChanged",
       "whatChanged",
       "userImpact",
       "verificationEvidence",
       "remainingLimits",
+      "deferredOrNotDone",
+      "nextAction",
     ]) {
       assert.ok(
         summary.requiredFields?.includes(field),
         `userFacingSummaryContract missing ${field}`,
       );
+    }
+    for (const rule of [
+      "rootGoalRule",
+      "directionFitRule",
+      "completenessRule",
+      "complexityRule",
+    ]) {
+      assert.equal(typeof summary[rule], "string", `${rule} must be defined`);
     }
   });
 

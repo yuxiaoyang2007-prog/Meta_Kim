@@ -9,6 +9,7 @@ canonical/skills/commit-review/
 
 # ========== Runtime Projections (Generated from canonical/) ==========
 # These are DERIVED assets, NOT source. Edit canonical/ instead.
+/.vscode/
 /.claude/
 /.mcp.json
 /.codex/
@@ -68,10 +69,8 @@ pwsh.*.omp.cache
 pip/
 
 
-# ========== Root-level images (docs/images/ is tracked) ==========
-# README files reference docs/images/ — do NOT ignore docs/images/
+# ========== Root-level images ==========
 /images/
-# docs/images/ is tracked — contains QR codes, payment images referenced in README
 
 # ========== Lib directories ==========
 # (docs/lib/ may be created by some build tools)
@@ -82,8 +81,16 @@ lib/
 !canonical/runtime-assets/shared/lib/
 !canonical/runtime-assets/shared/lib/**
 
-# ========== Ignored docs ==========
-docs/architecture.zh-CN.md
-docs/governance/
-docs/protocols/
-docs/meta-kim-current-settings-zh/
+# ========== Docs Privacy Boundary ==========
+# docs/ is local-private by default. Keep only README images public.
+docs/**
+!docs/
+!docs/images/
+!docs/images/**
+
+# ========== Generated reports ==========
+docs/agent-design-quality-eval-report.zh-CN.md
+docs/capability-gap-codex-real-test-report.zh-CN.md
+docs/capability-gap-isolated-task-report.zh-CN.md
+docs/governance-agent-benchmark-review.zh-CN.md
+docs/governance-agent-process-mvp-report.zh-CN.md

@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "complex-capability-gap-inputs-v0.1",
+  "purpose": "Replay realistic mixed capability-gap inputs so Conductor orchestration does not regress to skill-only or fake parallelism.",
+  "cases": [
+    {
+      "id": "research-first-mcp-provider",
+      "input": "需要根据最新官方 API 和外部生态判断知识库 MCP provider 是否足够，并联网搜索官方资料后再编排。",
+      "requiredTraits": ["research-first", "mcp-provider", "external-current-fact"]
+    },
+    {
+      "id": "multi-capability-release-system",
+      "input": "发布报告反复需要同一套 PRD review skill、release summary JSON script、runtime evidence matrix command，并且要保留 workerTask 给本次报告。",
+      "requiredTraits": ["multi-capability", "create-skill", "create-script", "worker-task"]
+    },
+    {
+      "id": "approval-blocked-github-write",
+      "input": "请直接给远程 GitHub PR 加 label 并发布评论，但当前没有授权，必须阻塞并给最小批准请求。",
+      "requiredTraits": ["approval-blocked", "external-write"]
+    },
+    {
+      "id": "long-term-owner-coverage",
+      "input": "项目长期缺 test coverage strategy owner，要稳定 owner、verifier、输入输出和拒绝项，不能只做一次性任务。",
+      "requiredTraits": ["create-agent", "long-term-owner"]
+    },
+    {
+      "id": "same-type-skill-repeat",
+      "input": "同一套 PRD review standard 已经多次出现，需要流程包；每次 PRD review 都要 Critical Fetch Thinking Review，也需要沉淀为同一个 skill 触发条件。",
+      "requiredTraits": ["same-type-repeat", "create-skill"]
+    },
+    {
+      "id": "worker-task-only-copy-edit",
+      "input": "这次只整理一个标题的措辞，已有编辑能力足够，不要长期沉淀，不要新建 agent。",
+      "requiredTraits": ["worker-task-only"]
+    },
+    {
+      "id": "script-normalizer",
+      "input": "run artifact 到AI 可读评分表的转换是稳定机械动作，需要本地 script 生成 JSON 和 Markdown。",
+      "requiredTraits": ["create-script"]
+    },
+    {
+      "id": "mixed-provider-and-approval",
+      "input": "内部知识库需要 MCP provider 边界和只读查询，但写入知识库、改凭证、付费调用都需要授权并阻塞。",
+      "requiredTraits": ["mcp-provider", "approval-blocked"]
+    },
+    {
+      "id": "runtime-tool-matrix",
+      "input": "Claude、Codex、Cursor、OpenClaw 的 runtime live shard 需要统一命令矩阵、timeout、artifact、failureClass 和 remainingAction。",
+      "requiredTraits": ["multi-runtime", "create-script"]
+    },
+    {
+      "id": "reviewer-product-feedback",
+      "input": "外部 reviewer 看不懂报告字段，需要真实 reviewer 样本回放、误解点、评分差异和人话标签修订建议。",
+      "requiredTraits": ["reviewer-feedback", "create-skill"]
+    }
+  ]
+}

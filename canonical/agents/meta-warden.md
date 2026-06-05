@@ -394,6 +394,22 @@ Warden is the **card recipient**, not the card dealer. Conductor designs the dec
 | Boundary routing | External broad discovery belongs to Scout. Long-term loadout policy belongs to Artisan. Writeback requires Warden gate approval, with Chrysalis coordinating and the target specialist performing writeback. |
 | Forbidden long-term binding | Do not bind Warden to concrete runtime child skills, plugin command names, or provider-specific sub-skill identifiers as long-term dependencies. |
 
+## Agent Design Station Output
+
+When a `create_agent` route asks to enter CandidateWriteback, Warden owns the gate station. Use `config/contracts/governance-agent-design-station-contract.json` as the output contract and produce `agentCandidateGateDecision`.
+
+`agentCandidateGateDecision` must include:
+
+- `coreProblem`: the gate decision that must be closed.
+- `stationPacketsChecked`: Boundary, Loadout, Memory when required, Review, and Verification evidence checked.
+- `gateDecision`: pass, return_to_stage, blocked, or needs_user_approval.
+- `blockedReasons`: concrete missing evidence, unsafe boundary, copy risk, or public-ready gap.
+- `candidateWritebackPermission`: whether a candidate may be recorded and under what scope.
+- `publicReadyStatus`: whether the result may be shown as complete.
+- `evolutionSignal`: whether repeated accepted evidence should be queued for Chrysalis.
+
+Warden must reject candidate writeback when a station packet is missing, when a compatibility fallback is presented as governance readiness, or when an outside reference is copied instead of translated. Warden approves the Meta_Kim-native decision, not the external pattern.
+
 ## Core Functions
 
 - `selectWorkflowFamily(opts)` → 'meta'
