@@ -1,0 +1,81 @@
+# Meta_Kim
+
+Meta_Kim is a cross-runtime governance layer for AI coding assistants.
+
+It is not another code generator. It coordinates AI coding work through a repeatable spine:
+
+Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verification -> Evolution
+
+## Core Idea
+
+AI coding assistants are good hands. Meta_Kim adds the governing layer above the hands:
+
+- clarify the real intent before execution
+- search available capabilities before picking an owner
+- route work to bounded agents, skills, scripts, MCP providers, or runtime tools
+- review and verify results with artifacts
+- write back useful lessons only after approval
+
+## Start Here
+
+- Project overview: README.md
+- Chinese overview: README.zh-CN.md
+- Maintainer guide: AGENTS.md
+- Claude Code guide: CLAUDE.md
+- First-run proof: examples/first-run/README.md
+- Launch metadata draft: examples/launch-kit/github-metadata.md
+
+Some maintainer worktrees also contain local PRD and research notes under docs/. Treat those as local evidence only when the files are present in the checkout.
+
+## Source Of Truth
+
+Durable behavior should be edited in:
+
+- canonical/agents/
+- canonical/skills/meta-theory/
+- canonical/runtime-assets/
+- config/contracts/
+- config/capability-index/
+
+Runtime folders such as .claude/, .codex/, .cursor/, openclaw/, and .agents/ are projections or adapters unless the task explicitly targets runtime wiring.
+
+## Important Commands
+
+```bash
+npm run meta:theory:run
+npm run meta:theory:report -- --run-id latest
+npm run meta:delivery:bundle
+npm run meta:release:smoke
+npm run meta:check
+npm run meta:verify:all
+```
+
+Use `npm run meta:release:smoke` for routine prompt, docs, changelog, version, and narrow governance wording changes. Upgrade to `npm run meta:verify:all` for install, runtime, hook, dependency, package, security, or release-grade changes.
+
+## Public Claims Boundary
+
+Safe claims:
+
+- Meta_Kim has formal runtime projections for Claude Code, Codex, OpenClaw, and Cursor.
+- The local complete-product MVP has repeatable scripts, tests, reports, and AI-readable delivery artifacts.
+- Capability-first dispatch is the default governance route: define the capability, search owners/tools, then execute.
+
+Do not overclaim:
+
+- Do not say every runtime is release-grade native-live complete while Cursor native live remains blocked.
+- Do not turn projection smoke, fixture pass, or generated reports into live runtime proof.
+- Do not describe the product as course, teacher, classroom, student, or lesson tooling. The product boundary is AI-readable governance and evidence review.
+
+## External Reviewer Prompt
+
+When reviewing Meta_Kim, inspect whether a run produces:
+
+- explicit intent and success criteria
+- capability discovery evidence
+- selected owner, loadout, and verification owner
+- bounded worker tasks
+- review and meta-review findings
+- fresh verification evidence
+- writeback decision or none-with-reason
+
+Prefer artifact evidence under .meta-kim/state/default/ over chat summaries.

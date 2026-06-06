@@ -15,6 +15,8 @@ Use `AskUserQuestion` in exactly these cases:
 
 Every `AskUserQuestion` payload must use `questions` with two to four meaningful options. Each option states what changes, what problem it solves, expected result, advantage, disadvantage or risk, and verification impact. No filler questions and no question quota.
 
+Subjective quality or non-measurable adjective requests such as "good", "bad", "beautiful", "ugly", "doesn't look good", "smooth", "not smooth", "professional", "premium", "advanced", "clean", "simple", "fast", "slow", "hard to use", "feels off", or localized equivalents are blocking Critical clarification when the target, quality dimension, acceptance standard, or allowed scope is unclear. Ask through `AskUserQuestion` before Fetch or Execution rather than guessing an aesthetic, UX, quality, or trade-off direction.
+
 ## Dispatch-Not-Execute In Claude Code
 
 In Claude Code, governed Execution is real only when the main thread invokes actual providers selected during Thinking. The main thread scopes, dispatches, reviews, and synthesizes; it must not directly edit, write, or run implementation commands as the worker for non-trivial executable work.
@@ -36,6 +38,14 @@ Execution must then call the selected provider surface:
 
 If no real provider is callable, do not self-execute to "keep moving". Return to Thinking with `capabilityGapPacket`, or enter degraded mode with explicit `degradationReason`, `humanAcceptanceRequired`, and `surfaceState=internal-ready`.
 
+## Write-Time Fact Gates
+
+Claude Code may run project or plugin PreToolUse hooks that deny the first `Write`, `Edit`, or file-producing command until the assistant states file facts. Treat that denial as a Fetch/Thinking repair signal, not as a permission problem to bypass.
+
+When a write-time fact gate appears, produce the Meta_Kim `fileChangeFactCard` in the user's language and retry the same file operation only after the card is complete. The card must name target files, explain their consumer/caller/distribution path, show same-purpose file search results and reuse decision, describe data fields/structure/date formats with redacted or synthetic examples when data files are involved, and quote the current user instruction verbatim. For content projects, "consumer" may mean the lesson, README, task card, index page, or human workflow that will distribute or ask the user to open the file.
+
+Do not copy the external hook's wording into durable Meta_Kim instructions. Keep the durable concept as "change facts before mutation": target, consumer, overlap, data shape, and user instruction.
+
 ## Use when
 
 - The user expects a Claude Code popup or native decision surface.
@@ -56,6 +66,7 @@ If no real provider is callable, do not self-execute to "keep moving". Return to
 - Prefer real Agent / Skill / Command / prompt / MCP dispatch over main-thread execution.
 - Record unavailable providers as evidence, not as permission to fake delegation.
 - Cite `workerTaskPackets[].taskPacketId` in every Agent dispatch prompt.
+- Build `fileChangeFactCard` before file mutation, and use it to answer write-time fact gates before retrying the same operation.
 - Fall back to `conversation_fallback` with a localized decision card when `AskUserQuestion` is unavailable or returns empty.
 
 ## Do not
@@ -64,16 +75,19 @@ If no real provider is callable, do not self-execute to "keep moving". Return to
 - Do not ask during Critical, Fetch, Thinking, or Review just to satisfy a ritual.
 - Do not let the main thread become the implementation worker for non-trivial governed execution.
 - Do not self-execute when Thinking assigned a different owner without recording `degradationReason`.
+- Do not disable, route around, or repeatedly hammer a write-time fact gate; return to Fetch/Thinking, state the facts once, then retry.
 
 ## Required packet
 
 - `dispatchEnvelopePacket` with `ownerAgent`, `weapon`, `capabilityBindings`, and `verificationOwner`.
+- `fileChangeFactCard` when the lane will mutate files.
 - `workerResultPackets[].workerExecutionEvidence` from each dispatched provider.
 - For `AskUserQuestion`: `choiceSurfaceState` must be `completed` before Execution; `preDecisionOptionFrame.candidatePaths` must list at least two options.
 
 ## Pass criteria
 
 - Every dispatched provider returned a result matching its declared output schema.
+- Every mutated file has a recorded target, consumer, overlap decision, and data-shape note where applicable.
 - `AskUserQuestion` returned a non-empty answer, or `conversation_fallback` was used with recorded reason.
 - `workerResultPackets[].schemaValidationAttempts[].passed === true` for each lane.
 - The main thread did not directly edit, write, or run implementation commands.
@@ -81,21 +95,25 @@ If no real provider is callable, do not self-execute to "keep moving". Return to
 ## Fail criteria
 
 - Main thread directly executed implementation work without dispatching a provider.
+- File mutation started without `fileChangeFactCard` when the change was non-trivial, new-file, data-file, runtime-facing, or hook-gated.
 - `AskUserQuestion` returned empty and no `conversation_fallback` fallback was recorded.
 - `workerTaskPackets` missing `taskPacketId` or `roleInstanceId`.
 - `capabilityBindings` missing or referencing a provider not found during Fetch.
 
 ## Block conditions
 
-- `AskUserQuestion` called during Critical or Fetch stage (only allowed after Thinking option framing).
+- `AskUserQuestion` called outside blocking Critical clarification or post-Thinking execution confirmation.
+- Critical clarification needed for a subjective quality complaint, but mutation or execution starts without `choiceSurfaceState=critical_clarification_allowed` followed by a completed answer or recorded fallback.
 - Agent dispatch in execution stage without `capabilitySearchPerformed === true` in spine state.
 - `choiceSurfaceState` not `completed` when Execution attempts mutation tools.
+- Same write-time fact gate blocks the same action twice after `fileChangeFactCard` was presented; record `hookFailurePacket` and return to Thinking.
 - PreToolUse hook strips `AskUserQuestion` return data (workaround: hook bypasses `AskUserQuestion` at line ~900 of `enforce-agent-dispatch.mjs`).
 
 ## Return to stage
 
 - Missing `fetchPacket.capabilityMatches` → return to Fetch.
 - Missing `dispatchEnvelopePacket` or `capabilityBindings` → return to Thinking.
+- Missing or incomplete `fileChangeFactCard` for a write-time fact gate → return to Fetch, complete the card, then retry the same operation.
 - Empty `AskUserQuestion` response → record `choiceSurfaceFallback=hook_strip`, return to Thinking or use `conversation_fallback`.
 - Provider dispatch fails → return to Thinking with `capabilityGapPacket`.
 

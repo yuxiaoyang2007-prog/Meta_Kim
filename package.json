@@ -124,6 +124,8 @@
     "bin/",
     "config/",
     "docs/images/",
+    "examples/",
+    "llms.txt",
     "setup.mjs",
     "install-deps.sh",
     "CHANGELOG.md",

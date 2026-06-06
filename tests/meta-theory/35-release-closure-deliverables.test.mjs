@@ -35,7 +35,15 @@ describe("35 — Release closure deliverables", () => {
     assert.equal(report.prd.singleSourceOfTruth, true);
     assert.equal(report.releaseBoundary.cannotClaimGithubComplete, true);
     assert.match(report.releaseBoundary.reason, /P-024 Cursor native live pass remains blocked/);
-    assert.ok(report.git.aheadOfOriginMain >= 1);
+    assert.equal(typeof report.git.hasWorkingTreeDelta, "boolean");
+    assert.ok(
+      report.git.aheadOfOriginMain >= 1 || report.git.hasWorkingTreeDelta,
+      "expected either unpushed commits or working tree delta in the GitHub gap report",
+    );
+    if (report.git.hasWorkingTreeDelta) {
+      assert.ok(Array.isArray(report.git.workingTreeEntries));
+      assert.ok(report.git.workingTreeEntries.length >= 1);
+    }
     assert.ok(report.tasks.blockedOrNotDone.some((task) => task.id === "P-024"));
     assert.ok(report.tasks.completedParallelBacklog.some((task) => task.id === "P-028"));
   });

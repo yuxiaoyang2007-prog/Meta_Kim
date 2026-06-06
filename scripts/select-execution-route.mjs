@@ -294,9 +294,35 @@ const localGlobalCapabilityProviders = localGlobalCapabilityProvidersAll.slice(0
 const localGlobalSkillProviders = localGlobalCapabilityProvidersAll
   .filter((provider) => provider.type === "skills")
   .slice(0, 60);
-const runtimeToolProviders = (capabilityInventory.capabilities ?? [])
+const discoveredRuntimeToolProviders = (capabilityInventory.capabilities ?? [])
   .filter((capability) => capability.type === "runtime_tool")
   .map((entry) => compactCapabilityProvider(entry, "local_runtime_capability_inventory", "runtimeTools"));
+const runtimeToolProviders = uniqueById([
+  ...discoveredRuntimeToolProviders,
+  ...[
+    {
+      id: "shell_command",
+      type: "runtimeTools",
+      source: "runtime_tool_provider_inventory",
+      platformId: runtime,
+      sourceRef: `${runtime}:shell_command`,
+    },
+    {
+      id: "apply_patch",
+      type: "runtimeTools",
+      source: "runtime_tool_provider_inventory",
+      platformId: runtime,
+      sourceRef: `${runtime}:apply_patch`,
+    },
+    {
+      id: "filesystem",
+      type: "runtimeTools",
+      source: "runtime_tool_provider_inventory",
+      platformId: runtime,
+      sourceRef: `${runtime}:filesystem`,
+    },
+  ],
+]);
 const capabilityProviderCoverage = {
   repoCanonical: Object.fromEntries(["skills", "commands", "hooks", "mcpServers", "mcpTools", "plugins", "rules", "prompts", "runtimeTools"].map((type) => [type, capabilityEntries(repoCapabilityIndex, type).length])),
   projectRuntimeLightScan: Object.fromEntries(["skills", "commands", "hooks", "mcpServers", "rules", "prompts", "runtimeTools"].map((type) => [type, type === "runtimeTools" ? runtimeToolProviders.length : projectRuntimeCapabilityProviders.filter((provider) => provider.type === type).length])),
@@ -687,9 +713,11 @@ const capabilityGapDecision = capabilityGapDetected
       };
     })()
   : null;
-const capabilityGapBlocksExecution =
-  capabilityGapDecision?.decision === "blocked_or_needs_approval" ||
-  capabilityGapDecision?.decisionEvidence?.status !== "pass";
+const capabilityGapBlocksExecution = Boolean(
+  capabilityGapDecision &&
+    (capabilityGapDecision.decision === "blocked_or_needs_approval" ||
+      capabilityGapDecision.decisionEvidence?.status !== "pass"),
+);
 const userChoiceNeeded = Boolean(recommendedRoute && recommendedRoute.score >= 70 && recommendedRoute.score < 85);
 const decisionCard = userChoiceNeeded ? {
   recommendedDefault: recommendedRoute.id,

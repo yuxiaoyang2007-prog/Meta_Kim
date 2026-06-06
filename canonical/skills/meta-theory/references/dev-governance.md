@@ -50,6 +50,8 @@ Owner-resolution branches: existing owner, upgrade existing owner, create owner,
 
 Default execution route proof: for a real execution demand, the route must naturally resolve the full provider chain before mutation. Evidence must name the selected execution owner, the checked execution-agent sources, the agent creation capability or reason no creation is needed, the selected skill and checked skill sources, the skill creation capability or reason no creation is needed, the MCP provider or no-impact reason, the command/runtime tool, and the verification owner plus verification method. This proof belongs to Fetch and Thinking, not to a validator after Execution.
 
+Change facts before mutation: for any non-trivial, new-file, data-file, runtime-facing, or hook-gated file change, Fetch creates `fileChangeFactCard` before Execution. It records target files, the consumer/caller/distribution path, same-purpose overlap search and reuse decision, data fields/structure/date formats with redacted or synthetic examples when relevant, and the current user instruction verbatim. Thinking binds those facts into `workerTaskPackets` so Execution writes files because they have a delivery contract, not because the worker needed somewhere to put output.
+
 Step 1.7 Business-flow capability matrix: for executable deliverables, Fetch expands the work into product, UX, UI, frontend, backend, database, auth/security, motion, accessibility, browser QA, performance, release, install, feedback, and evolution lanes. Each lane records needed capability, owner candidates, dependency, and omission reason. Interface Integration Contract Layer adds `interfaceIntegrationContractPacket` for `third_party_integration` and internal integration work: interface_contract, provider_adapter, permission, contract_test, observability, rollout_rollback, blocking_unknown, and auth/signature evidence.
 
 User-visible agent naming: `roleDisplayName` is a short business role such as frontend, backend, test, review, analysis, verify, or docs. Runtime nicknames and random personal aliases belong only in `runtimeInstanceAlias`. Put shard detail in `roleInstanceId` or `shardScope`, not the visible role name.
@@ -147,6 +149,7 @@ Stage 4 may not start before:
 - `taskClassification`
 - `fetchPacket`
 - `contentEvidencePacket`
+- `fileChangeFactCard` when file mutation is planned
 - `preDecisionOptionFrame`
 - `dispatchEnvelopePacket`
 - `dispatchBoard`
@@ -171,11 +174,15 @@ Dispatch from Thinking artifacts and selected capabilities. Execution may be par
 
 Surgical hygiene: touch only files required by the task, remove only unused code caused by the change, and preserve unrelated user changes.
 
+If a write-time hook blocks with a request for file facts, return to Fetch/Thinking, present the `fileChangeFactCard` in user-facing language, and retry the same operation. Do not disable the hook, invent fake callers, or retry unchanged without the facts.
+
 ## Review
 
 Review validates owner coverage, protocol compliance, quality, security where selected, UX where selected, and AI-slop risks in agent/system definitions.
 
 Reviewers must be able to perform read-only inspection and allowed validation commands. A review that cannot inspect evidence is not a real review.
+
+Review must also check that each new or changed file has a recorded target, consumer/distribution path, overlap decision, and data-shape note where relevant.
 
 ## Verification
 

@@ -76,6 +76,46 @@ describe("Stage 1: Critical — Blocking Clarification", () => {
     );
   });
 
+  test("E2E-01b: 主观审美负反馈触发早期交互澄清", () => {
+    const scenario = clarityScenarios.find((s) => s.id === "CG-13");
+    assert.ok(scenario, "CG-13 must exist");
+    assert.match(scenario.input, /不好看/);
+    assert.ok(
+      scenario.ambiguousDims.includes("Success criteria"),
+      "Subjective quality input must mark success criteria as ambiguous",
+    );
+    assert.match(
+      scenario.expectedBehavior,
+      /native choice surface|localized fallback|交互式选择|确认卡/i,
+      "Subjective quality input must require a user choice surface",
+    );
+    assert.match(
+      scenario.passFailCriteria.FAIL,
+      /猜|直接开始改 UI/,
+      "Guessing an aesthetic direction must be a failure",
+    );
+  });
+
+  test("E2E-01c: 不可量化形容词触发用户定标", () => {
+    const scenario = clarityScenarios.find((s) => s.id === "CG-14");
+    assert.ok(scenario, "CG-14 must exist");
+    assert.match(scenario.input, /顺畅|高级|好一点/);
+    assert.ok(
+      scenario.ambiguousDims.includes("Success criteria"),
+      "Non-measurable adjectives must mark success criteria as ambiguous",
+    );
+    assert.match(
+      scenario.expectedBehavior,
+      /non-measurable|judgment|不可量化/i,
+      "Non-measurable adjectives must be treated as judgment-dependent",
+    );
+    assert.match(
+      scenario.passFailCriteria.FAIL,
+      /猜|直接/,
+      "Guessing a subjective quality direction must be a failure",
+    );
+  });
+
   test("Critical阶段保留澄清维度用于阻断性问题", () => {
     const allDims = new Set();
     for (const s of clarityScenarios) {

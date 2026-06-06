@@ -17,11 +17,17 @@
   <img alt="License" src="https://img.shields.io/badge/license-MIT-green"/>
 </p>
 
+<p>
+  <img alt="Meta_Kim turns chaotic AI coding into governed execution" src="docs/images/meta-kim-social-card.png" width="100%"/>
+</p>
+
 </div>
 
 ## Overview
 
-**Meta_Kim** is not another AI coding tool. It is a governance system that gives AI coding assistants a brain.
+**Meta_Kim** is not another AI coding tool. It is the governance layer for AI coding work.
+
+The hard part of AI coding is no longer getting a model to change files. The hard part is deciding what should happen first, which capability should own it, what evidence proves it worked, and how the lesson survives the next run.
 
 Claude Code, Codex, OpenClaw, and Cursor are all hands: they can write code and change files. But who decides which file to change first? Who reviews the result? Who fixes the problems that show up? And how do we make sure the same mistake does not repeat next time?
 
@@ -32,6 +38,35 @@ Meta_Kim is built for that. It is **AI above AI**: a unified governance layer th
 > **First clarify what needs to happen -> then decide who should do it -> review after execution -> preserve what was learned -> feed that back into the next run.**
 
 This is not a new concept. Mature engineering teams already do this. Meta_Kim turns it into a runnable system instead of relying on human discipline alone.
+
+### Before / After
+
+| Without Meta_Kim | With Meta_Kim |
+|---|---|
+| One giant chat response tries to do everything | Work is routed through intent, capability, owner, review, verification, and writeback |
+| A tool is chosen because it is available | A capability is selected because it fits the task, runtime, OS, dependency, and risk |
+| Passing commands get mistaken for success | Evidence is checked against the user's real goal |
+| Good fixes disappear into chat history | Reusable lessons become governed skills, agents, scripts, contracts, or run-scoped tasks |
+
+### 3-minute proof
+
+Meta_Kim is easiest to understand by watching one governed run, not by reading every rule.
+
+```bash
+npm run meta:theory:run
+npm run meta:theory:report -- --run-id latest
+npm run meta:delivery:bundle
+```
+
+The proof path shows five things:
+
+- a fuzzy request is turned into an explicit intent and success standard
+- capability search happens before execution ownership is chosen
+- work is split into bounded worker tasks instead of one giant chat response
+- review and verification produce artifacts, not just reassuring prose
+- blocked runtime evidence stays blocked, for example Cursor native live is not promoted from smoke evidence
+
+For a guided walk-through, start with [examples/first-run/README.md](examples/first-run/README.md).
 
 ## Quick Start
 
@@ -780,6 +815,8 @@ Start with `package.json` scripts. The supported maintenance paths are the `meta
 | `npm run meta:deps:install:claude-plugins` | Install Claude Code marketplace plugins only |
 | `npm run discover:global` | Scan global capabilities |
 | `npm run meta:sync:global` | Sync meta-theory to the user-level runtime |
+
+`planning-with-files` is a core external dependency, not a project-local `.agents/skills/` mirror. After dependency install, check runtime home directories such as `~/.codex/skills/planning-with-files/`, `~/.claude/skills/planning-with-files/`, `~/.cursor/skills/planning-with-files/`, or `~/.openclaw/skills/planning-with-files/`. Do not conclude it is missing from the absence of `.agents/skills/planning-with-files/` alone.
 
 #### Native dependency installs (Superpowers, ECC, cli-anything)
 

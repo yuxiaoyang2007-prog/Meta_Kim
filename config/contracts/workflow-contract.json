@@ -284,6 +284,38 @@
         ],
         "blockingRule": "If a missing or conflicting dimension changes route, scope, risk, acceptance, owner, permission, or non-goal, set choiceSurfaceState=critical_clarification_allowed and ask the fewest outcome-branching questions before Fetch/Thinking/Execution.",
         "nonBlockingRule": "If the dimension can be inferred without changing route, scope, risk, acceptance, owner, permission, or non-goal, record the defaultAssumption and proceed with correction-friendly wording.",
+        "subjectiveQualitySignalPolicy": {
+          "required": true,
+          "triggerSignals": [
+            "good",
+            "bad",
+            "beautiful",
+            "not_beautiful",
+            "does_not_look_good",
+            "ugly",
+            "smooth",
+            "not_smooth",
+            "hard_to_use",
+            "feels_off",
+            "professional",
+            "premium",
+            "advanced",
+            "clean",
+            "simple",
+            "fast",
+            "slow",
+            "localized_equivalents"
+          ],
+          "nonMeasurableAdjectiveRule": "Words whose acceptance depends on taste, audience, baseline, or trade-off are not executable requirements by themselves. Examples include good/bad, beautiful/ugly, smooth/not smooth, professional, premium, advanced, clean, simple, fast/slow, and localized equivalents.",
+          "ambiguityChoiceSurfaceRule": "If an unclear qualitative word can lead to multiple valid outputs with different user acceptance, ask through the native choice surface or localized fallback before choosing evidence, design direction, scope, or mutation. If the ambiguity cannot change route, scope, risk, acceptance, owner, permission, or non-goal, record a low-risk assumption and proceed.",
+          "blockingWhenMissing": [
+            "target",
+            "quality_dimension",
+            "acceptance_standard",
+            "allowed_scope"
+          ],
+          "requiredAction": "set choiceSurfaceState=critical_clarification_allowed and ask through the native choice surface or localized fallback before Fetch, Thinking, mutation, or execution confirmation"
+        },
         "intentFrameAssessment": {
           "requiredFields": [
             "dimension",
@@ -678,7 +710,7 @@
       "claude": {
         "primarySurface": "AskUserQuestion_tool",
         "fallbackSurfaces": ["conversation_fallback"],
-        "triggerDescription": "Use AskUserQuestion (native since v2.0.21) for blocking Critical clarification only when Fetch cannot proceed, then use it once for Execution confirmation after contentEvidencePacket and preDecisionOptionFrame are complete. PreToolUse hooks must whitelist AskUserQuestion to avoid stripping return data (issue #12031).",
+        "triggerDescription": "Use AskUserQuestion (native since v2.0.21) for blocking Critical clarification when Fetch cannot proceed or subjective quality wording is too ambiguous to choose evidence, then use it once for Execution confirmation after contentEvidencePacket and preDecisionOptionFrame are complete. PreToolUse hooks must whitelist AskUserQuestion to avoid stripping return data (issue #12031).",
         "implementation": "Invoke AskUserQuestion with a questions array; platform renders an interactive Ink popup. If unavailable or returns empty, label the route conversation_fallback, render a localized chat decision card, and wait before Execution."
       },
       "codex": {
@@ -720,8 +752,10 @@
       "deferRequiresDeadline": true
     },
     "userInteractionPolicy": {
-      "description": "Policy for when to use AskUserQuestion / native choice / fallback decision surfaces versus notice. Non-trivial non-query decisions require Fetch content evidence and Thinking option framing before interruption.",
+      "description": "Policy for when to use AskUserQuestion / native choice / fallback decision surfaces versus notice. Blocking Critical clarification may interrupt before Fetch; non-trivial execution confirmation requires Fetch content evidence and Thinking option framing before interruption.",
       "decisionTriggerEnum": [
+        "blocking_critical_clarification",
+        "subjective_quality_ambiguous_intent",
         "non_trivial_executable_decision",
         "multiple_viable_solutions",
         "product_direction_required",
@@ -784,7 +818,7 @@
           "completed"
         ],
         "defaultState": "not_allowed",
-        "criticalClarificationRule": "Allowed during Critical when the intent frame is missing or conflicting and the answer changes route, scope, risk, acceptance, owner, permission, or non-goal; may clarify outcome, audience/value, success criteria, scope, permissions, safety, evidence freshness, output format, or language; must not present execution options.",
+        "criticalClarificationRule": "Allowed during Critical when the intent frame is missing or conflicting and the answer changes route, scope, risk, acceptance, owner, permission, or non-goal; may clarify outcome, audience/value, success criteria, scope, permissions, safety, evidence freshness, output format, language, or subjective quality terms such as does_not_look_good / ugly / hard_to_use when target, quality dimension, acceptance standard, or allowed scope is unclear; must not present execution options.",
         "executionConfirmationRule": "Allowed only after contentEvidencePacket and preDecisionOptionFrame exist, before Execution; must present evidence-backed candidate paths and a recommended default.",
         "forbiddenPrematureTriggers": [
           "popup_test_request",

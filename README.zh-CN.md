@@ -17,11 +17,17 @@
   <img alt="License" src="https://img.shields.io/badge/license-MIT-green"/>
 </p>
 
+<p>
+  <img alt="Meta_Kim 把混乱的 AI 编码变成可治理执行" src="docs/images/meta-kim-social-card.png" width="100%"/>
+</p>
+
 </div>
 
 ## 简介
 
-**Meta_Kim** 不是又一个 AI 编码工具。它是一套给 AI 编码助手装上"大脑"的治理系统。
+**Meta_Kim** 不是又一个 AI 编码工具。它是 AI 编码工作的治理层。
+
+AI 编码现在最难的，已经不是让模型改文件。真正难的是：先做什么、该由什么能力负责、怎么证明真的做对、这次经验怎么在下一轮继续复用。
 
 打个比方：你现在用的 Claude Code、Codex、OpenClaw、Cursor，本质上都是"手"——能写代码、能改文件。但谁来决定先改哪个文件？改完谁来检查？检查出了问题谁来修？修完了怎么保证下次不会再犯同样的错？
 
@@ -32,6 +38,35 @@ Meta_Kim 就是干这个的。它是**AI 之上的 AI**——一套统一的治�
 > **先搞清楚要干什么 → 再决定谁去干 → 干完审查 → 审完沉淀经验 → 经验反哺下一轮。**
 
 这不是什么新概念，这就是任何成熟工程团队都在做的事情。只不过 Meta_Kim 把它变成了一套可运行的系统，而不是靠人的自觉。
+
+### Before / After
+
+| 没有 Meta_Kim | 使用 Meta_Kim |
+|---|---|
+| 一个超长聊天回复试图包办所有事 | 任务会经过意图、能力、owner、审查、验证、写回 |
+| 因为某个工具能用，所以就直接用它 | 因为某个能力适合当前任务、runtime、OS、依赖和风险，才选择它 |
+| 命令跑绿就被误认为目标完成 | 证据必须回到用户真实目标上验收 |
+| 好经验沉没在聊天记录里 | 可复用经验会沉淀成 skill、agent、script、contract 或一次性任务 |
+
+### 3 分钟证明
+
+Meta_Kim 最好不是靠读完整套规则理解，而是先看一次 governed run。
+
+```bash
+npm run meta:theory:run
+npm run meta:theory:report -- --run-id latest
+npm run meta:delivery:bundle
+```
+
+这条证明链会展示五件事：
+
+- 模糊需求会先变成明确意图和成功标准
+- 先搜索能力，再决定谁执行
+- 复杂任务会拆成有边界的 worker task，而不是一段万能聊天回复
+- Review 和 Verification 会留下产物证据，而不是只给安慰性结论
+- 被阻塞的 runtime 证据会继续保持阻塞，例如 Cursor native live 不会被 smoke evidence 冒充完成
+
+带着示例看第一遍：[`examples/first-run/README.md`](examples/first-run/README.md)。
 
 ## 快速开始
 
@@ -776,6 +811,8 @@ flowchart TB
 | `npm run meta:deps:install:claude-plugins` | 只安装 Claude Code marketplace plugin |
 | `npm run discover:global` | 扫描全局能力 |
 | `npm run meta:sync:global` | 同步 meta-theory 到用户级 |
+
+`planning-with-files` 是核心外部依赖，不是项目内 `.agents/skills/` 镜像。安装依赖后应检查 runtime home，例如 `~/.codex/skills/planning-with-files/`、`~/.claude/skills/planning-with-files/`、`~/.cursor/skills/planning-with-files/` 或 `~/.openclaw/skills/planning-with-files/`。不能只因为 `.agents/skills/planning-with-files/` 不存在就判断它没装。
 
 #### Plugin 市场类 skill（Superpowers、Everything Claude Code、cli-anything）
 

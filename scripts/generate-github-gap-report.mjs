@@ -77,11 +77,16 @@ function buildMarkdown(report) {
     `- generatedAt: ${report.generatedAt}`,
     `- branch: ${report.git.branch}`,
     `- aheadOfOriginMain: ${report.git.aheadOfOriginMain}`,
+    `- hasWorkingTreeDelta: ${report.git.hasWorkingTreeDelta}`,
     `- prdVersion: ${report.prd.version}`,
     "",
     "## Local Commits Not On origin/main",
     "",
     ...report.git.localCommits.map((commit) => `- ${commit}`),
+    "",
+    "## Working Tree Delta",
+    "",
+    ...report.git.workingTreeEntries.map((entry) => `- ${entry}`),
     "",
     "## Current GitHub Delta From PRD",
     "",
@@ -108,6 +113,11 @@ async function main() {
   const aheadRaw = runGit(["rev-list", "--count", "origin/main..HEAD"]);
   const commitsRaw = runGit(["log", "--oneline", "--no-decorate", "origin/main..HEAD"]);
   const statusRaw = runGit(["status", "--short", "--branch"]);
+  const workingTreeEntries = statusRaw.stdout
+    ? statusRaw.stdout
+        .split(/\r?\n/)
+        .filter((line) => line.trim() && !line.startsWith("##"))
+    : [];
   const tasks = parsePrdTasks(prd);
   const report = {
     schemaVersion: "github-gap-report-v0.1",
@@ -117,6 +127,9 @@ async function main() {
       aheadOfOriginMain: aheadRaw.ok ? Number(aheadRaw.stdout || 0) : null,
       aheadEvidenceCommand: "git rev-list --count origin/main..HEAD",
       status: statusRaw.stdout,
+      hasWorkingTreeDelta: workingTreeEntries.length > 0,
+      workingTreeEntries,
+      workingTreeEvidenceCommand: "git status --short --branch",
       localCommits: commitsRaw.stdout ? commitsRaw.stdout.split(/\r?\n/) : [],
       localCommitsCommand: "git log --oneline --no-decorate origin/main..HEAD",
     },
@@ -157,6 +170,7 @@ async function main() {
         report: relativeToRepo(jsonPath),
         markdown: relativeToRepo(mdPath),
         aheadOfOriginMain: report.git.aheadOfOriginMain,
+        hasWorkingTreeDelta: report.git.hasWorkingTreeDelta,
         cannotClaimGithubComplete: report.releaseBoundary.cannotClaimGithubComplete,
       },
       null,

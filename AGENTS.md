@@ -269,6 +269,8 @@ When `planning-with-files` is installed and the task is not a pure query, create
 - `findings.md`
 - `progress.md`
 
+Do not infer that `planning-with-files` is missing only because it is absent from `.agents/skills/`. It is a core external dependency declared in `config/skills.json` and normally installed into runtime home skill directories such as `~/.codex/skills/planning-with-files/`, `~/.claude/skills/planning-with-files/`, `~/.cursor/skills/planning-with-files/`, or `~/.openclaw/skills/planning-with-files/`. Check the manifest, global runtime homes, and `npm run discover:global` before declaring it unavailable.
+
 These files supplement protocol packets. They do not replace `businessFlowBlueprintPacket`, `dispatchEnvelopePacket`, or verification evidence. The Conductor or the main thread acting as Conductor is the sole writer.
 
 ## The Nine Meta Agents
