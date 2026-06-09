@@ -2344,7 +2344,26 @@
         ],
         "creationBlockedUntilExistingAgentsChecked": true,
         "checkedAgentsMustBeNamedInCapabilityGapPacket": true,
-        "description": "Fetch inventories global agents, project/runtime agents, skills, commands, hooks, rules/prompts, MCP capabilities, plugins, runtime tools, and capability indexes as evidence while confirming the problem and candidate solutions. Thinking resolves the owner/loadout from that evidence. Per-run discovery reads the cached global inventory plus lightweight project scans; full global scans are reserved for install, update, explicit refresh, stale/missing cache, or high-risk provider routes. A global agent or provider that already satisfies the orchestration node is used directly and is not copied into the user project. Only agents that need project-specific modification, persistent capability changes, or recurring local ownership are copied into the downstream project as project-local agents, under governance review. agentCopyPolicy=copy_to_project_for_modification is valid only with ownerSource=project_local and ownerResolution=upgrade_existing_owner; agentCopyPolicy=create_project_local_agent is valid only with ownerSource=project_local and ownerResolution=create_owner_first."
+        "description": "Fetch inventories global agents, project/runtime agents, skills, commands, hooks, rules/prompts, MCP capabilities, plugins, runtime tools, and capability indexes as evidence while confirming the problem and candidate solutions. Thinking resolves the owner/loadout from that evidence. Per-run discovery reads the cached global inventory plus lightweight project scans; full global scans are reserved for install, update, explicit refresh, stale/missing cache, or high-risk provider routes. A global agent or provider that already satisfies the orchestration node is used directly and is not copied into the user project. Only agents that need project-specific modification, persistent capability changes, or recurring local ownership are copied into the downstream project as project-local agents, under governance review. When the user explicitly asks to create, iterate, upgrade, or keep an agent in the project, the result must be a durable project-local abstract agent candidate or a blocked capabilityGapPacket; a temporary subagent prompt or runtime nickname cannot satisfy the deliverable. agentCopyPolicy=copy_to_project_for_modification is valid only with ownerSource=project_local and ownerResolution=upgrade_existing_owner; agentCopyPolicy=create_project_local_agent is valid only with ownerSource=project_local and ownerResolution=create_owner_first."
+      },
+      "durableProjectAgentPolicy": {
+        "appliesWhenUserRequestsAgentCreationOrIteration": true,
+        "runtimeTargetsSource": [
+          "config/sync.json supportedTargets",
+          "config/runtime-compatibility-catalog.json genericCompatibility.agentPath"
+        ],
+        "runtimeTargetPolicy": "Every formal tool target with an agentPath must be listed with its compatibility status; do not hardcode a required/optional split in generated artifacts.",
+        "temporarySubagentCanSatisfyDurableAgent": false,
+        "projectRetentionRequired": true,
+        "forbiddenIdentitySources": [
+          "runtimeInstanceAlias",
+          "temporary subagent prompt",
+          "workerTaskPacket todayTask",
+          "scopeFiles",
+          "deliverableLink",
+          "verifySteps"
+        ],
+        "description": "Project-agent creation and iteration produce durable abstract agent definitions kept in the project. Runtime workers may build or review those definitions, but they are not the durable agent."
       },
       "ownerAgentPublicRepoRule": {
         "allowedOwnerAgents": [
@@ -2507,6 +2526,12 @@
       ],
       "abstractionPolicy": {
         "durableIdentityMustDescribeCapabilityClass": true,
+        "projectRetentionRequiredForCreateOrUpgrade": true,
+        "temporarySubagentAsDefinitionForbidden": true,
+        "projectionTargetsSource": [
+          "config/sync.json supportedTargets",
+          "config/runtime-compatibility-catalog.json genericCompatibility.agentPath"
+        ],
         "concreteWorkOrderFieldsForbidden": true,
         "pathLikeBindingsForbidden": true,
         "singleRunTaskBindingForbidden": true,
@@ -2536,7 +2561,7 @@
           "runtime tools",
           "plugins"
         ],
-        "description": "executionAgentCard may define a reusable capability class, boundaries, abstract dependencies, inputs, and outputs. It must not freeze a repo path, file list, issue/ticket, one-run instruction, or worker verification checklist into long-term agent identity. Capability providers such as skills, commands, MCP tools, runtime tools, and plugins must be matched before creating or upgrading an execution agent; agent creation is the last resort for a recurring owner gap."
+        "description": "executionAgentCard may define a reusable capability class, boundaries, abstract dependencies, inputs, and outputs. It must not freeze a repo path, file list, issue/ticket, one-run instruction, temporary subagent prompt, runtime nickname, or worker verification checklist into long-term agent identity. Capability providers such as skills, commands, MCP tools, runtime tools, and plugins must be matched before creating or upgrading an execution agent; agent creation is the last resort for a recurring owner gap or an explicit user request for a durable project agent."
       },
       "description": "Packet for execution-agent creation or upgrade in user projects and external/private registries. It is not used for direct global reuse. Public Meta_Kim does not use this as durable owner state; public owner creation or upgrade is represented by governance meta-owner decisions plus run-scoped matchedCapabilities / capabilityBindings, with matchedSkills accepted only as legacy compatibility evidence."
     },

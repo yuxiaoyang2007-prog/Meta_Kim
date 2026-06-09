@@ -12,6 +12,7 @@ import {
   decideCapabilityGap,
   openRunStateStore,
 } from "../../scripts/capability-gap-mvp.mjs";
+import { buildAgentProjectionTargets } from "../../scripts/runtime-tool-profiles.mjs";
 import { readJson } from "./_helpers.mjs";
 
 describe("22 — Capability Gap MVP policy and RunStateStore", async () => {
@@ -146,6 +147,28 @@ describe("22 — Capability Gap MVP policy and RunStateStore", async () => {
         assert.equal(result.generatedAgentSpec.name, "test-coverage-specialist");
         assert.equal(result.generatedAgentSpec.identityCleanliness.status, "pass");
         assert.equal(result.generatedAgentSpec.qualityScorecard.identity_cleanliness, "pass");
+        assert.equal(result.generatedAgentSpec.projectRetention.policy, "project_local_agent");
+        assert.equal(
+          result.generatedAgentSpec.projectRetention.temporarySubagentAsDefinition,
+          false
+        );
+        assert.deepEqual(
+          result.generatedAgentSpec.projectRetention.runtimeTargets,
+          Object.fromEntries(
+            buildAgentProjectionTargets("test-coverage-specialist").map((target) => [
+              target.runtime,
+              {
+                target: target.target,
+                tool: target.tool,
+                compatibilityStatus: target.compatibilityStatus,
+              },
+            ])
+          )
+        );
+        assert.equal(
+          result.decisionOutput.payload.projectRetention.temporarySubagentAsDefinition,
+          false
+        );
       } else {
         assert.equal(result.generatedAgentSpec, null);
       }

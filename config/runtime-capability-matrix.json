@@ -4910,7 +4910,7 @@
     },
     {
       "platform": "cursor",
-      "summary": "Official Cursor docs verify rules, MCP, hooks, and subagents; Meta_Kim still treats Cursor as a lighter governance projection and keeps arbitrary choice UI as a chat-card fallback until a native popup is proven.",
+      "summary": "Official Cursor docs verify rules, MCP, hooks, and subagents. Meta_Kim treats Cursor as a compatible formal projection and keeps arbitrary choice UI as a chat-card fallback until a native popup is proven with strict Cursor test evidence.",
       "capabilities": [
         {
           "platform": "cursor",
@@ -5133,7 +5133,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -5187,7 +5187,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -5243,7 +5243,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -5411,7 +5411,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -5467,7 +5467,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -5521,7 +5521,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -5575,7 +5575,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -5631,7 +5631,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -5687,7 +5687,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -5743,7 +5743,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -5854,7 +5854,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -5966,7 +5966,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -6020,7 +6020,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -6074,7 +6074,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -6183,7 +6183,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -6237,7 +6237,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -6291,7 +6291,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -6345,7 +6345,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -6399,7 +6399,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -6455,7 +6455,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a light governance projection; unknown capabilities must not be treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
         },
         {
           "platform": "cursor",
@@ -6588,7 +6588,7 @@
     ],
     "cursor": [
       "Do not mark hooks or native choice as native without official or local proof.",
-      "Treat Cursor as a light governance projection platform until verified.",
+      "Treat Cursor as a compatible formal projection; new Cursor-native claims need strict Cursor test evidence, and can merge only after the evidence passes review.",
       "Cursor subagents under .cursor/agents and hooks under .cursor/hooks.json are official surfaces.",
       "Cursor arbitrary native choice popup remains unverified; use chat decision card fallback for human choices."
     ]

@@ -6,6 +6,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { importDatabaseSync } from "./sqlite-runtime.mjs";
+import { buildAgentProjectionTargets } from "./runtime-tool-profiles.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const contractPath = path.resolve(scriptDir, "../config/contracts/capability-gap-decision-contract.json");
@@ -315,6 +316,7 @@ function candidateType(decision) {
 
 function makeGeneratedAgentSpec(decision) {
   if (decision !== "create_agent") return null;
+  const projectionTargets = buildAgentProjectionTargets("test-coverage-specialist");
   return {
     name: "test-coverage-specialist",
     description:
@@ -390,6 +392,23 @@ function makeGeneratedAgentSpec(decision) {
       codex: "eligible",
       cursor: "needs_probe",
       openclaw: "needs_probe",
+    },
+    projectRetention: {
+      policy: "project_local_agent",
+      durableDefinitionRequired: true,
+      temporarySubagentAsDefinition: false,
+      runtimeTargets: Object.fromEntries(
+        projectionTargets.map((target) => [
+          target.runtime,
+          {
+            target: target.target,
+            tool: target.tool,
+            compatibilityStatus: target.compatibilityStatus,
+          },
+        ])
+      ),
+      approvalBoundary:
+        "Warden or user approval is required before writing or updating project agent files.",
     },
     identityCleanliness: {
       forbiddenFieldsAbsent: [
@@ -515,6 +534,7 @@ function makeDecisionOutput({
       identityCleanliness: generatedAgentSpec?.identityCleanliness,
       qualityScorecard: generatedAgentSpec?.qualityScorecard,
       installProjection: generatedAgentSpec?.installProjection,
+      projectRetention: generatedAgentSpec?.projectRetention,
     },
     create_script: {
       scriptName: stableId("script", input).replace(/^script-/, ""),

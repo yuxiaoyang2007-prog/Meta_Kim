@@ -1995,7 +1995,7 @@ function runtimeRemainingAction(runtimeName, failureClass, mode) {
     return `Configure ${runtimeName} auth and rerun the live evaluator.`;
   }
   if (failureClass === RUNTIME_FAILURE_TAXONOMY.nativeHarnessMissing) {
-    return "Implement a native live-turn harness or keep the runtime marked unsupported-with-reason.";
+    return "Add strict native live-turn test evidence before claiming native live release evidence.";
   }
   if (failureClass === RUNTIME_FAILURE_TAXONOMY.toolUnsupported) {
     return `Install or expose the ${runtimeName} CLI/tool before rerunning.`;

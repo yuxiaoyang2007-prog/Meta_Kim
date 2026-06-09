@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getReportLabels } from "../../scripts/meta-kim-i18n.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
@@ -127,7 +128,11 @@ describe("45 — Remaining product backlog reports", () => {
           variant.releaseGradeCandidate === false,
       ),
     );
-    assert.match(markdown, /Runtime Probe Playbook/);
+    const labels = getReportLabels("zh-CN");
+    assert.match(
+      markdown,
+      new RegExp(labels.runtimeProbePlaybookTitle(labels.toolList(labels.toolNames))),
+    );
   });
 
   test("P-032 generates OpenClaw batch stability report with shard fallback and timeout class", () => {

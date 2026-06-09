@@ -12,6 +12,7 @@ import {
   openRunStateStore,
 } from "./capability-gap-mvp.mjs";
 import { runMetaTheoryGovernedExecution } from "./run-meta-theory-governed-execution.mjs";
+import { buildAgentProjectionTargets } from "./runtime-tool-profiles.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
@@ -206,6 +207,7 @@ function scoreDecisionOutput(result) {
     "create_script",
     "create_mcp_provider",
   ].includes(decision);
+  const candidateScopes = new Set(["candidate_only", "project_local_candidate"]);
   const dimensions = {
     completeness:
       output.acceptance.status === "pass" &&
@@ -222,7 +224,7 @@ function scoreDecisionOutput(result) {
       output.acceptance.noAutomaticCanonicalWrite === true,
     reuse_or_run_scope_fit:
       isCandidateDecision
-        ? output.scope === "candidate_only"
+        ? candidateScopes.has(output.scope)
         : decision === "worker_task_only"
           ? output.scope === "run_scoped"
           : output.scope === "blocked_until_user_approval",
@@ -232,6 +234,13 @@ function scoreDecisionOutput(result) {
       payload.GeneratedAgentSpec?.identityCleanliness?.status === "pass" &&
       Object.values(payload.GeneratedAgentSpec?.qualityScorecard ?? {}).every(
         (value) => value === "pass"
+      );
+    dimensions.durable_project_agent_spec =
+      payload.projectRetention?.policy === "project_local_agent" &&
+      payload.projectRetention?.temporarySubagentAsDefinition === false &&
+      buildAgentProjectionTargets("test-coverage-specialist").every(
+        (target) =>
+          payload.projectRetention?.runtimeTargets?.[target.runtime]?.target === target.target
       );
   }
   return {

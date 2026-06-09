@@ -5,6 +5,7 @@ import process from "node:process";
 import { buildCapabilityGapOrchestration } from "../../scripts/run-capability-gap-orchestration.mjs";
 import { validateOrchestrationBoard } from "../../scripts/validate-capability-gap-orchestration-board.mjs";
 import { buildCandidateScorecard } from "../../scripts/score-capability-candidates.mjs";
+import { buildAgentProjectionTargets } from "../../scripts/runtime-tool-profiles.mjs";
 
 const multiNeedTask = [
   "同一套 PRD review standard 已经多次出现，需要流程包和触发条件。",
@@ -28,6 +29,25 @@ describe("33 — Capability Gap orchestration quality gates", () => {
     assert.equal(validation.checked.mergeOwners.length, 1);
     assert.equal(validation.checked.mergeOwners[0], "meta-conductor");
     assert.ok(validation.checked.groupedRepeatedNeeds >= 1);
+    assert.deepEqual(report.stageVisibility.requiredStages, [
+      "Critical",
+      "Fetch",
+      "Thinking",
+      "Review",
+    ]);
+    assert.equal(report.stageVisibility.mustShowCapabilityRoute, true);
+    assert.deepEqual(
+      report.fetchEvidence.runtimeRequirements.formalToolTargets,
+      buildAgentProjectionTargets()
+    );
+    assert.ok(
+      report.workerTaskPackets.some(
+        (packet) =>
+          packet.durableProjectAgentPolicy?.requiredDeliverable ===
+            "project_retained_abstract_agent_definition" &&
+          packet.durableProjectAgentPolicy.temporaryWorkerIsNotDeliverable === true
+      )
+    );
   });
 
   test("P-016 fails when a same-owner parallel group has conflicting merge owners", () => {

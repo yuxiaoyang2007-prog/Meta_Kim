@@ -36,8 +36,9 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-const result = spawnSync(process.execPath, ["--test", ...files], {
+const result = spawnSync(process.execPath, ["--test", "--test-concurrency=1", ...files], {
   encoding: "utf8",
+  maxBuffer: 1024 * 1024 * 64,
   stdio: ["ignore", "pipe", "pipe"],
 });
 

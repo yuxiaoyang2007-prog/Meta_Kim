@@ -13,6 +13,8 @@ import {
   decideCapabilityGap,
   openRunStateStore,
 } from "./capability-gap-mvp.mjs";
+import { getReportLabelsForPath } from "./meta-kim-i18n.mjs";
+import { buildAgentProjectionTargets } from "./runtime-tool-profiles.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(scriptDir, "..");
@@ -76,6 +78,153 @@ const RUNTIME_SMOKE_PROJECTIONS = {
     extra: ["openclaw/openclaw.template.json"],
   },
 };
+
+const CARD_DECK_TEMPLATE = Object.freeze([
+  {
+    id: "clarify",
+    label: "Clarify",
+    type: "clarify",
+    cardType: "info",
+    cardIntent: "clarify",
+    priority: 10,
+    cost: "low",
+    trigger: "Intent, success standard, non-goal, permission, or acceptance boundary may change the route.",
+    action: "Lock the real outcome before Fetch, Thinking, or execution.",
+    deliveryShell: "chat_status",
+    mapsToSpine: ["Critical"],
+  },
+  {
+    id: "shrink-scope",
+    label: "Shrink scope",
+    type: "shrink-scope",
+    cardType: "default",
+    cardIntent: "scope_contract",
+    priority: 9,
+    cost: "low",
+    trigger: "Multiple gaps, files, runtimes, or worker lanes may overload one route.",
+    action: "Narrow the boundary and declare omitted lanes with reasons.",
+    deliveryShell: "markdown_report",
+    mapsToSpine: ["Critical", "Thinking"],
+  },
+  {
+    id: "options",
+    label: "Options",
+    type: "options",
+    cardType: "info",
+    cardIntent: "plan",
+    priority: 8,
+    cost: "mid",
+    trigger: "More than one viable path, owner, or capability class exists.",
+    action: "Compare paths and choose the route with explicit trade-offs.",
+    deliveryShell: "decision_card",
+    mapsToSpine: ["Thinking"],
+  },
+  {
+    id: "execute",
+    label: "Execute",
+    type: "execute",
+    cardType: "action",
+    cardIntent: "execute",
+    priority: 7,
+    cost: "high",
+    trigger: "Owner, weapon, dependency policy, runtime, OS, and verification owner are bound.",
+    action: "Dispatch or run the bounded work selected by Thinking.",
+    deliveryShell: "worker_task_packet",
+    mapsToSpine: ["Execution"],
+  },
+  {
+    id: "verify",
+    label: "Verify",
+    type: "verify",
+    cardType: "action",
+    cardIntent: "verify",
+    priority: 6,
+    cost: "mid",
+    trigger: "Execution or projection evidence exists and needs fresh proof.",
+    action: "Run checks and bind claims to command, log, artifact, or human acceptance evidence.",
+    deliveryShell: "json_artifact",
+    mapsToSpine: ["Verification"],
+  },
+  {
+    id: "fix",
+    label: "Fix",
+    type: "fix",
+    cardType: "action",
+    cardIntent: "repair",
+    priority: 5,
+    cost: "mid",
+    trigger: "Verification or Review fails.",
+    action: "Repair bounded failures up to the iteration limit, then re-verify.",
+    deliveryShell: "worker_task_packet",
+    mapsToSpine: ["Execution", "Verification"],
+  },
+  {
+    id: "rollback",
+    label: "Rollback",
+    type: "rollback",
+    cardType: "risk",
+    cardIntent: "rollback",
+    priority: 4,
+    cost: "high",
+    trigger: "Risk or blast radius grows beyond the approved boundary.",
+    action: "Return to the last stable state and re-enter Thinking.",
+    deliveryShell: "chat_status",
+    mapsToSpine: ["Review", "Execution"],
+  },
+  {
+    id: "risk",
+    label: "Risk",
+    type: "risk",
+    cardType: "risk",
+    cardIntent: "risk_surface",
+    priority: 9,
+    cost: "high",
+    trigger: "Security, release, runtime, third-party, or cross-project risk can preempt the normal route.",
+    action: "Surface the risk, bind owner and rollback, and preempt unsafe execution.",
+    deliveryShell: "chat_status",
+    mapsToSpine: ["Fetch", "Review"],
+  },
+  {
+    id: "nudge",
+    label: "Nudge",
+    type: "nudge",
+    cardType: "default",
+    cardIntent: "suggest",
+    priority: 3,
+    cost: "low",
+    trigger: "The user is blocked or needs one low-cost next move.",
+    action: "Offer a compact next action without expanding scope.",
+    deliveryShell: "chat_status",
+    mapsToSpine: ["Evolution"],
+  },
+  {
+    id: "pause",
+    label: "Pause",
+    type: "pause",
+    cardType: "silence",
+    cardIntent: "silence",
+    priority: 2,
+    cost: "zero",
+    trigger: "Digest window, user decision, or three consecutive high-cost cards.",
+    action: "Stop pushing new tasks and show only a compact status.",
+    deliveryShell: "intentional_silence",
+    mapsToSpine: ["Critical", "Review"],
+  },
+]);
+
+const BUSINESS_PHASES = Object.freeze([
+  ["direction", "Direction", ["Critical"], "meta-warden"],
+  ["planning", "Planning", ["Fetch", "Thinking"], "meta-conductor"],
+  ["execution", "Execution", ["Execution"], "worker"],
+  ["review", "Review", ["Review"], "meta-prism"],
+  ["meta_review", "Meta-review", ["Meta-Review"], "meta-warden"],
+  ["revision", "Revision", ["Execution", "Verification"], "worker"],
+  ["verify", "Verify", ["Verification"], "verify"],
+  ["summary", "Summary", ["Evolution"], "meta-warden"],
+  ["feedback", "Feedback", ["Evolution"], "user"],
+  ["evolve", "Evolve", ["Evolution"], "meta-chrysalis"],
+  ["mirror", "Mirror", ["Evolution"], "meta-conductor"],
+]);
 
 function stableId(prefix, seed) {
   const hash = createHash("sha1").update(String(seed ?? "")).digest("hex").slice(0, 12);
@@ -146,7 +295,7 @@ function remainingActionForProjection(runtime, failureClass) {
     return `Run ${runtime} live evaluator before claiming release-grade native evidence.`;
   }
   if (failureClass === RUNTIME_FAILURE_TAXONOMY.nativeHarnessMissing) {
-    return "Implement Cursor native live-turn harness or keep unsupported-with-reason.";
+    return "Add strict Cursor native live-turn test evidence before claiming native live release evidence.";
   }
   if (failureClass === RUNTIME_FAILURE_TAXONOMY.authMissing) {
     return `Configure ${runtime} auth and rerun live evidence.`;
@@ -563,50 +712,315 @@ export async function buildWardenWritebackFlow({
   };
 }
 
-function buildUserReadableRunReport({ runId, task, orchestrationReport, decisionResults, runtimeEvidence, writebackFlow }) {
+function buildCardPlanPacket({ runId, orchestrationReport, runtimeEvidence }) {
+  const workerCount = orchestrationReport.workerTaskPackets.length;
+  const hasBlockedGap = orchestrationReport.capabilityGaps.some((gap) => gap.blocked);
+  const runtimeRisk = runtimeEvidence.results.some((item) => item.strictReleasePass === false);
+  const dealOrder = [
+    "clarify",
+    ...(workerCount > 1 ? ["shrink-scope"] : []),
+    "options",
+    ...(runtimeRisk ? ["risk"] : []),
+    "execute",
+    "verify",
+    ...(hasBlockedGap ? ["rollback"] : []),
+    ...(orchestrationReport.reviewResult.status !== "pass" ? ["fix"] : []),
+    "nudge",
+    "pause",
+  ];
+  const orderIndex = new Map(dealOrder.map((id, index) => [id, index]));
+  const cards = CARD_DECK_TEMPLATE.map((card) => {
+    const dealt = orderIndex.has(card.id);
+    return {
+      cardId: `${runId}-${card.id}`,
+      cardKey: card.id,
+      label: card.label,
+      type: card.type,
+      cardType: card.cardType,
+      cardIntent: card.cardIntent,
+      cardDecision: dealt ? "deal" : "defer",
+      cardAudience: card.id === "pause" ? "user" : "dispatcher",
+      cardTiming: dealt ? "next_stage" : "after_dependency",
+      cardShell: card.deliveryShell,
+      cardPriority: card.priority,
+      cost: card.cost,
+      cardReason: card.trigger,
+      action: card.action,
+      cardSource: "canonical/skills/meta-theory/references/rhythm-orchestration.md",
+      cardSuppressed: false,
+      suppressionReason: null,
+      deliveryShellId: card.deliveryShell,
+      choiceSurface:
+        card.id === "options" || card.id === "clarify"
+          ? "native_choice_or_chat_card"
+          : "status_or_artifact",
+      owner: card.id === "risk" || card.id === "rollback" ? "meta-sentinel" : "meta-conductor",
+      mapsToSpine: card.mapsToSpine,
+      dealIndex: dealt ? orderIndex.get(card.id) + 1 : null,
+    };
+  });
+  const dealtCards = cards
+    .filter((card) => card.cardDecision === "deal")
+    .sort((a, b) => a.dealIndex - b.dealIndex);
+  return {
+    schemaVersion: "card-plan-v0.1",
+    packetName: "cardPlanPacket",
+    dealerOwner: "meta-conductor",
+    dealerMode: "conductor-primary-warden-escalation",
+    deckSource: "canonical/skills/meta-theory/references/rhythm-orchestration.md",
+    visibleByDefault: true,
+    deckSummary:
+      "Conductor deals cards to pace governed work; Warden gates, Sentinel/Prism can interrupt, and Pause is explicit silence.",
+    dealOrder: dealtCards.map((card) => card.cardKey),
+    cards,
+    deliveryShells: [...new Set(cards.map((card) => card.deliveryShellId))],
+    silenceDecision: {
+      silenceDecision: dealOrder.includes("pause") ? "deal_pause_card" : "not_needed",
+      noInterventionPreferred: dealOrder.includes("pause"),
+      interruptionJustified: false,
+      deferUntil: "after_status_summary_or_user_reply",
+      reasonForSilence:
+        "Pause remains visible as a card so intentional silence is not mistaken for missing orchestration.",
+    },
+    controlDecisions: [
+      {
+        decisionId: `${runId}-forced-pause-rule`,
+        decisionType: "pause_after_high_cost_streak",
+        skipReason: null,
+        interruptReason: null,
+        overrideReason: null,
+        insertedGovernanceOwner: "meta-conductor",
+        rule: "After three consecutive high-cost cards, insert Pause before dealing new work.",
+      },
+      {
+        decisionId: `${runId}-risk-preempt-rule`,
+        decisionType: runtimeRisk ? "interrupt_insert" : "skip",
+        skipReason: runtimeRisk ? null : "No runtime risk preempt required in this run.",
+        interruptReason: runtimeRisk ? "projection_smoke_is_not_release_grade_live_evidence" : null,
+        overrideReason: null,
+        insertedGovernanceOwner: runtimeRisk ? "meta-sentinel" : "meta-conductor",
+        rule: "Risk preempts Execute when runtime, release, security, or external capability evidence changes route safety.",
+      },
+    ],
+    defaultShellId: "markdown_report",
+    visibleSummary: {
+      dealt: dealtCards.length,
+      deckSize: cards.length,
+      activeCards: dealtCards.map((card) => card.label),
+      forcedPauseRule: "3 consecutive high-cost cards -> Pause",
+      interruptSources: ["meta-sentinel", "meta-prism", "user", "system"],
+    },
+  };
+}
+
+function buildBusinessPhasePlanPacket({ runId, orchestrationReport, runtimeEvidence, writebackFlow }) {
+  const phaseStatuses = new Map([
+    ["direction", "done"],
+    ["planning", "done"],
+    ["execution", orchestrationReport.workerTaskPackets.length > 0 ? "done" : "skipped"],
+    ["review", orchestrationReport.reviewResult.status === "pass" ? "done" : "blocked"],
+    ["meta_review", "done"],
+    ["revision", orchestrationReport.reviewResult.status === "pass" ? "skipped" : "pending"],
+    ["verify", runtimeEvidence.status === "pass" ? "done" : "blocked"],
+    ["summary", "done"],
+    ["feedback", "pending"],
+    ["evolve", writebackFlow.status === "none-with-reason" ? "skipped" : "done"],
+    ["mirror", runtimeEvidence.status === "pass" ? "done" : "blocked"],
+  ]);
+  const skipReasons = new Map([
+    ["execution", "No worker task was needed."],
+    ["revision", "Review passed, so no revision loop was opened."],
+    ["evolve", writebackFlow.noneWithReason ?? "No durable writeback candidate was produced."],
+  ]);
+  const phases = BUSINESS_PHASES.map(([phase, label, mapsToSpine, owner], index) => {
+    const status = phaseStatuses.get(phase) ?? "pending";
+    return {
+      phaseIndex: index + 1,
+      phase,
+      label,
+      status,
+      owner,
+      mapsToSpine,
+      evidence:
+        phase === "planning"
+          ? "orchestrationTaskBoardPacket + workerTaskPackets"
+          : phase === "verify" || phase === "mirror"
+            ? "runtimeProjectionEvidence"
+            : phase === "evolve"
+              ? "wardenWritebackFlow"
+              : "run artifact and markdown report",
+      skipReason: status === "skipped" ? skipReasons.get(phase) ?? "Not needed for this run." : null,
+    };
+  });
+  return {
+    schemaVersion: "business-phase-plan-v0.1",
+    packetName: "businessPhasePlanPacket",
+    source: "canonical/skills/meta-theory/references/ten-step-governance.md",
+    legacyAlias: "ten-step-governance",
+    visibleByDefault: true,
+    spineRelationship:
+      "The 8-stage spine governs execution logic; the 11-phase workflow governs packaging, closure, feedback, evolution, and mirrors.",
+    phaseCount: phases.length,
+    phases,
+    closure: {
+      currentPhase: "feedback",
+      userAcceptanceRequired: true,
+      publicReadyClaimAllowed: false,
+      reason:
+        "Generated run evidence can show orchestration completeness, but user acceptance is separate from command or smoke pass evidence.",
+    },
+  };
+}
+
+function buildBusinessFlowBlueprintPacket({ businessPhasePlanPacket }) {
+  return {
+    deliverableType: "governed_meta_theory_run",
+    requiredLanes: businessPhasePlanPacket.phases.map((phase) => phase.phase),
+    optionalLanes: [],
+    omittedLanes: businessPhasePlanPacket.phases
+      .filter((phase) => phase.status === "skipped")
+      .map((phase) => ({
+        lane: phase.phase,
+        reason: phase.skipReason,
+      })),
+    laneDependencies: [
+      "direction -> planning",
+      "planning -> execution",
+      "execution -> review",
+      "review -> meta_review",
+      "meta_review -> revision|verify",
+      "verify -> summary",
+      "summary -> feedback",
+      "feedback -> evolve",
+      "evolve -> mirror",
+    ],
+    coverageJudgment:
+      businessPhasePlanPacket.phaseCount === 11
+        ? "pass_all_11_business_phases_recorded"
+        : "fail_missing_business_phase",
+    blueprintSource: businessPhasePlanPacket.source,
+    blueprintVersion: businessPhasePlanPacket.schemaVersion,
+  };
+}
+
+function renderReportLabel(label, ...args) {
+  return typeof label === "function" ? label(...args) : label;
+}
+
+function renderReportList(label, ...args) {
+  const value = renderReportLabel(label, ...args);
+  return Array.isArray(value) ? value : [String(value)];
+}
+
+function buildUserReadableRunReport({
+  runId,
+  task,
+  orchestrationReport,
+  decisionResults,
+  runtimeEvidence,
+  writebackFlow,
+  cardPlanPacket,
+  businessPhasePlanPacket,
+  markdownPath,
+}) {
+  const labels = getReportLabelsForPath(markdownPath);
+  const sectionLabels = labels.sections;
+  const toolList = labels.toolList(labels.toolNames);
   const lines = [
-    "# Meta-Theory Governed Execution Report",
+    `# ${labels.governedExecutionReportTitle}`,
     "",
-    `RunId: ${runId}`,
+    `${labels.runId}: ${runId}`,
     "",
-    "## 判定摘要",
+    `## ${sectionLabels.decisionSummary}`,
     "",
-    `- 状态：${orchestrationReport.status}`,
-    `- 输入任务：${task}`,
-    `- gaps：${orchestrationReport.capabilityGaps.length}`,
-    `- workerTaskPackets：${orchestrationReport.workerTaskPackets.length}`,
-    `- synthesisOwner：${orchestrationReport.orchestrationTaskBoardPacket.synthesisOwner}`,
+    `- ${labels.status}: ${orchestrationReport.status}`,
+    `- ${labels.inputTask}: ${task}`,
+    `- ${labels.capabilityGaps}: ${orchestrationReport.capabilityGaps.length}`,
+    `- ${labels.workerTasks}: ${orchestrationReport.workerTaskPackets.length}`,
+    `- ${labels.synthesisOwner}: ${orchestrationReport.orchestrationTaskBoardPacket.synthesisOwner}`,
     "",
-    "## 为什么这么判",
+    `## ${labels.stageSummaryTitle}`,
     "",
-    "| Gap | Decision | Reason | Owner | Blocked |",
+    `- ${renderReportLabel(labels.stageSummaries.critical, toolList)}`,
+    `- ${labels.stageSummaries.fetch(orchestrationReport.fetchEvidence.capabilityInventory.length)}`,
+    `- ${labels.stageSummaries.thinking(
+      orchestrationReport.thinkingRoute.boardMode,
+      orchestrationReport.orchestrationTaskBoardPacket.synthesisOwner
+    )}`,
+    `- ${renderReportLabel(labels.stageSummaries.review, toolList)}`,
+    "",
+    `## ${labels.cardPlanTitle}`,
+    "",
+    `- ${labels.cardPlanSummary(
+      cardPlanPacket.visibleSummary.dealt,
+      cardPlanPacket.visibleSummary.deckSize,
+      cardPlanPacket.visibleSummary.forcedPauseRule
+    )}`,
+    `- ${labels.cardDealer}: ${cardPlanPacket.dealerOwner}`,
+    `| ${labels.card} | ${labels.status} | ${labels.owner} | ${labels.cardShell} | ${labels.cardWhy} |`,
+    "|---|---|---|---|---|",
+    ...cardPlanPacket.cards.map(
+      (card) =>
+        `| ${card.label} | ${card.cardDecision} | ${card.owner} | ${card.deliveryShellId} | ${String(card.cardReason).replaceAll("|", "\\|")} |`
+    ),
+    "",
+    `## ${labels.businessPhasePlanTitle}`,
+    "",
+    `- ${labels.businessPhaseSummary(businessPhasePlanPacket.phaseCount)}`,
+    `- ${labels.spineRelationship}: ${businessPhasePlanPacket.spineRelationship}`,
+    `| ${labels.phase} | ${labels.status} | ${labels.owner} | ${labels.mapsToSpine} | ${labels.evidence} |`,
+    "|---|---|---|---|---|",
+    ...businessPhasePlanPacket.phases.map(
+      (phase) =>
+        `| ${phase.phaseIndex}. ${phase.label} | ${phase.status} | ${phase.owner} | ${phase.mapsToSpine.join("+")} | ${String(phase.evidence).replaceAll("|", "\\|")} |`
+    ),
+    "",
+    `## ${labels.capabilityRouteTitle}`,
+    "",
+    `| ${labels.capabilityType} | ${labels.status} | ${labels.source} | ${labels.routeImpact} |`,
+    "|---|---|---|---|",
+    ...orchestrationReport.fetchEvidence.capabilityInventory.map(
+      (item) =>
+        `| ${item.capabilityType} | ${item.coverageStatus} | ${item.source.replaceAll("|", "\\|")} | ${item.routeImpact.replaceAll("|", "\\|")} |`
+    ),
+    "",
+    `## ${labels.durableAgentPolicyTitle}`,
+    "",
+    ...renderReportList(
+      labels.durableAgentPolicyBullets,
+      labels.toolProfiles ?? []
+    ).map((item) => `- ${item}`),
+    "",
+    `## ${sectionLabels.whyDecision}`,
+    "",
+    `| ${labels.gap} | ${labels.decision} | ${labels.reason} | ${labels.owner} | ${labels.blocked} |`,
     "|---|---|---|---|---|",
     ...orchestrationReport.capabilityGaps.map(
       (gap) =>
-        `| ${gap.gapId} | ${gap.decision} | ${String(gap.decisionReason).replaceAll("|", "\\|")} | ${gap.owner} | ${gap.blocked ? "yes" : "no"} |`
+        `| ${gap.gapId} | ${gap.decision} | ${String(gap.decisionReason).replaceAll("|", "\\|")} | ${gap.owner} | ${labels.boolean(gap.blocked)} |`
     ),
     "",
-    "## 下一步交给谁",
+    `## ${sectionLabels.ownerHandoff}`,
     "",
-    "| WorkerTask | Role | Owner | ParallelGroup | MergeOwner |",
+    `| ${labels.workerTask} | ${labels.role} | ${labels.owner} | ${labels.parallelGroup} | ${labels.mergeOwner} |`,
     "|---|---|---|---|---|",
     ...orchestrationReport.workerTaskPackets.map(
       (packet) =>
         `| ${packet.taskPacketId} | ${packet.roleDisplayName} | ${packet.owner} | ${packet.parallelGroup} | ${packet.mergeOwner} |`
     ),
     "",
-    "## Runtime 投影证据",
+    `## ${sectionLabels.toolEvidenceFull(toolList)}`,
     "",
-    "| Runtime | Status | FailureClass | Entry | Remaining Action |",
+    `| ${labels.tool} | ${labels.status} | ${labels.failureClass} | ${labels.entry} | ${labels.remainingAction} |`,
     "|---|---|---|---|---|",
     ...runtimeEvidence.results.map(
       (item) =>
         `| ${item.runtime} | ${item.status} | ${item.failureClass} | ${item.runtimeEntry} | ${item.remainingAction.replaceAll("|", "\\|")} |`
     ),
     "",
-    "## 长期能力升级建议",
+    `## ${sectionLabels.capabilityUpgrade}`,
     "",
-    "| Candidate | Type | Decision | Target | DryRun Writes | Verification |",
+    `| ${labels.candidate} | ${labels.type} | ${labels.decision} | ${labels.target} | ${labels.dryRunWrites} | ${labels.verification} |`,
     "|---|---|---|---|---|---|",
     ...(writebackFlow.candidates.length > 0
       ? writebackFlow.candidates.map(
@@ -617,21 +1031,21 @@ function buildUserReadableRunReport({ runId, task, orchestrationReport, decision
                 : item.target ?? "none"
             } | ${item.dryRunArtifact.canonicalWrites} | ${item.verificationResult.status} |`
         )
-      : ["| none | none | none-with-reason | none | 0 | not-run |"]),
+      : [`| ${labels.none} | ${labels.none} | none-with-reason | ${labels.none} | 0 | ${labels.notRun} |`]),
     "",
-    "## Warden 审批包",
+    `## ${sectionLabels.wardenApproval}`,
     "",
-    `- approvalRequired：${writebackFlow.approvalRequired}`,
-    `- approvalValidation：${writebackFlow.approvalValidation.ok ? "pass" : "missing"}`,
-    `- dryRun canonicalWrites：${writebackFlow.dryRun.canonicalWrites}`,
+    `- ${labels.approvalRequired}: ${writebackFlow.approvalRequired}`,
+    `- ${labels.approvalValidation}: ${writebackFlow.approvalValidation.ok ? "pass" : "missing"}`,
+    `- ${labels.dryRunCanonicalWrites}: ${writebackFlow.dryRun.canonicalWrites}`,
     "",
-    "## 验证状态",
+    `## ${sectionLabels.verificationStatus}`,
     "",
-    `- orchestration review：${orchestrationReport.reviewResult.status}`,
-    `- runtime projection：${runtimeEvidence.status}`,
-    `- runtime releaseGrade：${runtimeEvidence.releaseGrade}`,
-    `- writeback：${writebackFlow.status}`,
-    `- decision runs：${decisionResults.length}`,
+    `- ${labels.orchestrationReview}: ${orchestrationReport.reviewResult.status}`,
+    `- ${sectionLabels.toolEvidenceFull(toolList)}：${runtimeEvidence.status}`,
+    `- ${labels.releaseGradeComplete}：${runtimeEvidence.releaseGrade}`,
+    `- ${labels.writeback}: ${writebackFlow.status}`,
+    `- ${labels.decisionRuns}: ${decisionResults.length}`,
     "",
   ];
   return `${lines.join("\n")}`;
@@ -646,6 +1060,8 @@ function buildRunReportPanelContract({
   orchestrationReport,
   runtimeEvidence,
   writebackFlow,
+  cardPlanPacket,
+  businessPhasePlanPacket,
   paths,
 }) {
   const blockedGaps = orchestrationReport.capabilityGaps.filter((gap) => gap.blocked);
@@ -691,8 +1107,7 @@ function buildRunReportPanelContract({
       gapCount: orchestrationReport.capabilityGaps.length,
       workerTaskCount: orchestrationReport.workerTaskPackets.length,
       synthesisOwner: orchestrationReport.orchestrationTaskBoardPacket.synthesisOwner,
-      plainLanguageSummary:
-        "本次运行先判断缺什么能力，再把下一步交给合适 owner，并保留阻塞、审批和验证证据。",
+      plainLanguageSummary: getReportLabelsForPath(paths.markdown).plainLanguageSummary,
     },
     ownerHandoff: orchestrationReport.workerTaskPackets.map((packet) => ({
       taskPacketId: packet.taskPacketId,
@@ -720,6 +1135,21 @@ function buildRunReportPanelContract({
             },
           ],
     runtimeEvidence: runtimeRows,
+    cardPlan: {
+      dealerOwner: cardPlanPacket.dealerOwner,
+      deckSize: cardPlanPacket.cards.length,
+      dealtCount: cardPlanPacket.visibleSummary.dealt,
+      activeCards: cardPlanPacket.visibleSummary.activeCards,
+      forcedPauseRule: cardPlanPacket.visibleSummary.forcedPauseRule,
+    },
+    businessPhasePlan: {
+      phaseCount: businessPhasePlanPacket.phaseCount,
+      statuses: Object.fromEntries(
+        businessPhasePlanPacket.phases.map((phase) => [phase.phase, phase.status])
+      ),
+      currentPhase: businessPhasePlanPacket.closure.currentPhase,
+      userAcceptanceRequired: businessPhasePlanPacket.closure.userAcceptanceRequired,
+    },
     approvalRequest: {
       approvalRequired,
       approvalValidation: writebackFlow.approvalValidation.ok ? "pass" : "missing",
@@ -829,6 +1259,20 @@ export async function runMetaTheoryGovernedExecution({
     applyWriteback,
     canonicalRoot,
   });
+  const cardPlanPacket = buildCardPlanPacket({
+    runId: effectiveRunId,
+    orchestrationReport,
+    runtimeEvidence,
+  });
+  const businessPhasePlanPacket = buildBusinessPhasePlanPacket({
+    runId: effectiveRunId,
+    orchestrationReport,
+    runtimeEvidence,
+    writebackFlow,
+  });
+  const businessFlowBlueprintPacket = buildBusinessFlowBlueprintPacket({
+    businessPhasePlanPacket,
+  });
   await persistDecisionRuns({ dbPath, decisionResults });
   const analytics = await persistRuntimeEvidenceEvents({
     dbPath,
@@ -836,6 +1280,13 @@ export async function runMetaTheoryGovernedExecution({
     runtimeEvidence,
     writebackFlow,
   });
+  await fs.mkdir(stateDir, { recursive: true });
+  const jsonPath = path.join(stateDir, `${effectiveRunId}.json`);
+  const markdownPath = path.join(stateDir, `${effectiveRunId}.zh-CN.md`);
+  const latestPath = path.join(stateDir, "latest.json");
+  const labels = getReportLabelsForPath(markdownPath);
+  const sectionLabels = labels.sections;
+  const toolList = labels.toolList(labels.toolNames);
   const userReportMarkdown = buildUserReadableRunReport({
     runId: effectiveRunId,
     task: normalizedTask,
@@ -843,11 +1294,10 @@ export async function runMetaTheoryGovernedExecution({
     decisionResults,
     runtimeEvidence,
     writebackFlow,
+    cardPlanPacket,
+    businessPhasePlanPacket,
+    markdownPath,
   });
-  await fs.mkdir(stateDir, { recursive: true });
-  const jsonPath = path.join(stateDir, `${effectiveRunId}.json`);
-  const markdownPath = path.join(stateDir, `${effectiveRunId}.zh-CN.md`);
-  const latestPath = path.join(stateDir, "latest.json");
   const panelContractDefinition = await readJson(RUN_REPORT_PANEL_CONTRACT_PATH);
   const aiReadableStandards = await readJson(AI_READABLE_PRODUCT_STANDARDS_PATH);
   const artifactStatus =
@@ -865,6 +1315,8 @@ export async function runMetaTheoryGovernedExecution({
     orchestrationReport,
     runtimeEvidence,
     writebackFlow,
+    cardPlanPacket,
+    businessPhasePlanPacket,
     paths: {
       json: jsonPath,
       markdown: markdownPath,
@@ -882,6 +1334,16 @@ export async function runMetaTheoryGovernedExecution({
       triggerChain: orchestrationReport.orchestrationTaskBoardPacket.triggerChain,
       orchestrationTaskBoardPacket: orchestrationReport.orchestrationTaskBoardPacket,
       workerTaskPackets: orchestrationReport.workerTaskPackets,
+    },
+    stageVisibility: orchestrationReport.stageVisibility,
+    cardPlanPacket,
+    businessPhasePlanPacket,
+    businessFlowBlueprintPacket,
+    capabilityRoute: orchestrationReport.fetchEvidence.capabilityInventory,
+    durableProjectAgentPolicy: {
+      createAgentDeliverable: "project_retained_abstract_agent_definition",
+      temporarySubagentAsDefinition: false,
+      runtimeTargets: buildAgentProjectionTargets(),
     },
     runtimeProjectionEvidence: runtimeEvidence,
     runtimeEvidencePacket: {
@@ -906,13 +1368,15 @@ export async function runMetaTheoryGovernedExecution({
       runId: effectiveRunId,
       markdownPath: `${effectiveRunId}.zh-CN.md`,
       sections: [
-        "判定摘要",
-        "为什么这么判",
-        "下一步交给谁",
-        "Runtime 投影证据",
-        "长期能力升级建议",
-        "Warden 审批包",
-        "验证状态",
+        sectionLabels.decisionSummary,
+        labels.cardPlanTitle,
+        labels.businessPhasePlanTitle,
+        sectionLabels.whyDecision,
+        sectionLabels.ownerHandoff,
+        sectionLabels.toolEvidenceFull(toolList),
+        sectionLabels.capabilityUpgrade,
+        sectionLabels.wardenApproval,
+        sectionLabels.verificationStatus,
       ],
     },
     runReportPanelContract,

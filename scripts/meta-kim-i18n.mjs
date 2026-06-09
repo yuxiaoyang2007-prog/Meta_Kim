@@ -5,13 +5,20 @@
  */
 
 import { platform } from "node:os";
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  loadAgentProjectionProfiles,
+  loadFormalToolProfiles,
+} from "./runtime-tool-profiles.mjs";
 
 // ── Detect language ──────────────────────────────────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const FORMAL_TOOL_PROFILES = Object.freeze(loadFormalToolProfiles());
+const FORMAL_TOOL_NAMES = Object.freeze(FORMAL_TOOL_PROFILES.map((profile) => profile.label));
+const AGENT_PROJECTION_PROFILES = Object.freeze(loadAgentProjectionProfiles());
 
 /** Align with setup.mjs LANG_ARG_ALIASES so `--lang zh` resolves to zh-CN. */
 const LANG_ALIASES = { zh: "zh-CN", ja: "ja-JP", ko: "ko-KR" };
@@ -306,13 +313,13 @@ const STRINGS = {
       `范围：${scope}  ·  目标工具：${targets}`,
     syncInstallManifestOk: (path, entries) =>
       `安装清单：${path}（共 ${entries} 条）`,
-    syncRuntimesCheckStale: "生成的运行时资源已过期：",
+    syncRuntimesCheckStale: "生成的工具端镜像已过期：",
     syncRuntimesCheckStaleLine: (file) => `- ${file}`,
-    syncRuntimesCheckOk: "运行时资源已是最新。",
+    syncRuntimesCheckOk: "工具端镜像已是最新。",
     // Reverse mode strings
-    reverseModeIntro: "扫描运行时投影以检测演进信号...",
-    reverseModeNoSignals: "未检测到演进信号。运行时投影与 canonical 源一致。",
-    reverseModeSignalsFound: (n) => `从运行时投影发现 ${n} 个演进信号。`,
+    reverseModeIntro: "扫描工具端镜像以检测演进信号...",
+    reverseModeNoSignals: "未检测到演进信号。工具端镜像与 canonical 源一致。",
+    reverseModeSignalsFound: (n) => `从工具端镜像发现 ${n} 个演进信号。`,
     reverseModeConflictsDetected: (n) => `⚠ 检测到 ${n} 个潜在冲突：`,
     reverseModeConflictHint: "（canonical 内容更多 - 可能有未同步的更改）",
     reverseModeConflictPrompt: "检测到冲突。使用 --force 覆盖 canonical，或手动审查更改。",
@@ -322,7 +329,7 @@ const STRINGS = {
     reverseModeDryRun: "试运行完成：未写入文件。使用不带 --dry-run 的命令应用更改。",
     reverseModeWriteFailed: (path, err) => `写回失败 ${path}：${err}`,
     reverseModeComplete: (n) => `反向同步完成：${n} 个文件已写入 canonical/`,
-    reverseModePropagating: "将 canonical 更新传播到其他运行时...",
+    reverseModePropagating: "将 canonical 更新传播到其他工具端...",
     reverseModeValidationFailed: (path) => `验证失败 ${path}，跳过：`,
     proxyFallbackProxy: (label) => `"${label}" 直连失败，正在尝试代理连接...`,
     proxyFallbackProxySuccess: (label) =>
@@ -373,8 +380,8 @@ const STRINGS = {
       "没有匹配的 skill id — 请检查 config/skills.json 以及 --skills / META_KIM_SKILL_IDS。",
     done: "完成。",
     noteCodexOpenclaw:
-      "注意：Codex/Cursor 原生插件必须通过宿主插件 UI 安装；没有原生插件入口的运行时才使用技能目录回退。",
-    activeTargets: (targets) => `活跃运行时目标：${targets.join(", ")}`,
+      "注意：Codex/Cursor 原生插件必须通过宿主插件 UI 安装；没有原生插件入口的工具端才使用技能目录回退。",
+    activeTargets: (targets) => `当前启用的工具端：${targets.join(", ")}`,
     metaKimRoot: (root) => `Meta_Kim 仓库（正典源根目录）：${root}`,
     logSaved: (path) => `完整日志已保存至：${path}`,
     warnManifestMissing: "缺少技能清单 — 无技能可安装",
@@ -416,13 +423,13 @@ const STRINGS = {
     failureHint_proxy_network:
       "网络连接失败 — 请使用 --proxy <url> 或设置 META_KIM_GIT_PROXY 环境变量后重试",
     failureHint_permission_denied: "权限被拒绝 — 请检查用户目录的读写权限",
-    failureHint_missing_runtime: "缺少运行时 — 请确保 git 已安装并在 PATH 中",
+    failureHint_missing_runtime: "缺少 git 命令 — 请确保 git 已安装并在 PATH 中",
     failureHint_unknown:
       "未知错误 — 请查看上方详细错误信息，或使用 --update 重试",
     failureSuggestions: "建议：",
     stagingHeaderParallel: "阶段 1：在临时缓存目录并行拉取技能仓库",
     stagingExplainParallel: (cacheDir) =>
-      `这一步在做什么：\n• 缓存目录（不是你的项目仓库）：${cacheDir}\n• 先把各上游仓库下载到这里，多运行时只拉取一次。\n• 阶段 2 再复制到你勾选的各运行时 skills 目录（如 ~/.claude/skills）。\n• 全部完成后会删除该临时目录。`,
+      `这一步在做什么：\n• 缓存目录（不是你的项目仓库）：${cacheDir}\n• 先把各上游仓库下载到这里，多工具端只拉取一次。\n• 阶段 2 再复制到你勾选的各工具端 skills 目录（如 ~/.claude/skills）。\n• 全部完成后会删除该临时目录。`,
     cloneStarting: (id) => `开始拉取 ${id}…`,
     cloneProgressLine: (id, curStr, totStr, pct, curObj, totObj) =>
       `[${id}] 已接收 ${curStr} / 约 ${totStr} · ${pct}% · 对象 ${curObj}/${totObj}`,
@@ -445,12 +452,13 @@ const STRINGS = {
         "README.md, CLAUDE.md, package.json, 同步清单, canonical 源, 本地状态规则",
       step01Pass: "所有必需内核文件就绪",
       step02: "验证阶段质量合约",
-      step02Detail: "Critical、Fetch、Thinking、worker packet 和 Review gate",
+      step02Detail:
+        "Critical（确认真实目标）、Fetch（收集证据和能力来源）、Thinking（选择路线）、worker packet 和 Review（审查质量与边界）gate",
       step02Pass: "阶段质量合约有效",
       step03: "验证同步清单",
       step03Detail:
         "supportedTargets, defaultTargets, availableTargets, generatedTargets",
-      step03Pass: "同步清单与运行时目标目录一致",
+      step03Pass: "同步清单与工具端目标目录一致",
       step04: "验证 canonical 智能体定义",
       step04Detail: "frontmatter 完整性 + 禁止标记检查 + 边界规范",
       step04Pass: (n, names) => `${n} 个智能体通过：${names.join(", ")}`,
@@ -892,7 +900,993 @@ const STRINGS = {
   },
 };
 
+const REPORT_STRINGS = {
+  en: {
+    htmlLang: "en",
+    toolNames: FORMAL_TOOL_NAMES,
+    toolProfiles: AGENT_PROJECTION_PROFILES,
+    toolList: (tools) => tools.join("/"),
+    runtimeProbePlaybookTitle: (tools) => `${tools} tool probe playbook`,
+    runtimeLiveShardMatrixTitle: (tools) => `${tools} live shard matrix`,
+    githubGapReportTitle: "Meta_Kim GitHub Gap Report",
+    governedExecutionReportTitle: "Meta-Theory Governed Execution Report",
+    panelTitle: "Meta_Kim Run Panel",
+    generatedAt: "generatedAt",
+    source: "source",
+    status: "status",
+    task: "Task",
+    inputTask: "Input task",
+    variantCount: "variantCount",
+    releaseGradeCandidateCount: "releaseGradeCandidateCount",
+    releaseGradeComplete: "releaseGrade",
+    runId: "Run ID",
+    runState: "Run state",
+    aheadOfOriginMain: "aheadOfOriginMain",
+    hasWorkingTreeDelta: "hasWorkingTreeDelta",
+    gitDeltaState: "gitDeltaState",
+    prdVersion: "prdVersion",
+    localCommitsNotOnOriginMain: "Local commits not on origin/main",
+    workingTreeDelta: "Working tree delta",
+    currentGithubDeltaFromPrd: "Current GitHub delta from PRD",
+    blockedOrNotDone: "Blocked or not done",
+    completedParallelBacklogEvidence: "Completed parallel backlog evidence",
+    missing: "(missing)",
+    capabilityGaps: "Capability gaps",
+    workerTasks: "Worker tasks",
+    synthesisOwner: "Synthesis owner",
+    tool: "Tool",
+    role: "Role",
+    owner: "Owner",
+    gap: "Gap",
+    decision: "Decision",
+    reason: "Reason",
+    blocked: "Blocked",
+    workerTask: "WorkerTask",
+    candidate: "Candidate",
+    type: "Type",
+    target: "Target",
+    dryRunWrites: "Dry-run writes",
+    verification: "Verification",
+    entry: "Entry",
+    taskScope: "Task scope",
+    parallelGroup: "Parallel group",
+    mergeOwner: "Merge owner",
+    acceptance: "Acceptance",
+    canonicalWrites: "Canonical writes",
+    environment: "Environment",
+    shardGroup: "Shard group",
+    expectedClass: "Expected class",
+    evidenceKind: "Evidence kind",
+    failureClass: "Failure class",
+    releaseGrade: "Release-grade",
+    releaseGradeCandidate: "Release-grade candidate",
+    remainingAction: "Remaining action",
+    commands: "Commands",
+    fixtureOnly: "Fixture only",
+    approvalRequired: "approvalRequired",
+    approvalValidation: "approvalValidation",
+    dryRunCanonicalWrites: "dryRun canonicalWrites",
+    orchestrationReview: "orchestration review",
+    writeback: "writeback",
+    decisionRuns: "decision runs",
+    none: "none",
+    notRun: "not-run",
+    plainLanguageSummary:
+      "This run first decides which capability is missing, then hands next work to the right owner while keeping blocker, approval, and verification evidence.",
+    stageSummaryTitle: "Critical / Fetch / Thinking / Review",
+    stageSummaries: {
+      critical: (toolList) =>
+        `Critical: lock the real goal, success standard, and non-goals for the formal tool targets: ${toolList}.`,
+      fetch: (count) =>
+        `Fetch: the capability route is not skill-only; checked ${count} capability types including agent, skill, command/script, MCP/tool, runtime tool, plugin, retrieval, dependency, and worker task.`,
+      thinking: (mode, mergeOwner) =>
+        `Thinking: ${mode}, mergeOwner=${mergeOwner}; create_agent routes must deliver a durable abstract project agent or candidate writeback.`,
+      review: (toolList) =>
+        `Review: verify that Critical/Fetch/Thinking really exist, temporary subagents were not promoted into durable agents, and ${toolList} projection goals are preserved.`,
+    },
+    capabilityRouteTitle: "Capability Route",
+    capabilityType: "Capability Type",
+    routeImpact: "Route Impact",
+    cardPlanTitle: "Card Dealing",
+    cardPlanSummary: (dealt, deckSize, pauseRule) =>
+      `Card plan: dealt ${dealt}/${deckSize} cards; ${pauseRule}.`,
+    cardDealer: "Dealer",
+    card: "Card",
+    cardShell: "Shell",
+    cardWhy: "Why now",
+    businessPhasePlanTitle: "11-phase Business Workflow",
+    businessPhaseSummary: (count) => `${count} business phases are recorded for packaging and closure.`,
+    phase: "Phase",
+    mapsToSpine: "Maps to spine",
+    evidence: "Evidence",
+    spineRelationship: "Spine relationship",
+    durableAgentPolicyTitle: "Durable Agent Policy",
+    durableAgentPolicyBullets: (profiles) => [
+      "The final deliverable for create_agent / iterate_agent is a durable abstract project agent definition or candidate writeback, not a temporary worker prompt.",
+      ...profiles.map((profile) => `${profile.label} projection target: \`${profile.agentPath}\`.`),
+      "Projection status follows the compatibility catalog; partial or needs_probe targets are preserved without being overclaimed.",
+      "Runtime-generated aliases are metadata only; they never replace `roleDisplayName` or durable `ownerAgent`.",
+    ],
+    boolean: (value) => (value ? "yes" : "no"),
+    statusValue: (status) => {
+      if (status === true || status === "pass" || status === "smoke_pass") return "pass";
+      if (status === "blocked") return "blocked";
+      if (status === "partial") return "partial";
+      return String(status ?? "unknown");
+    },
+    deliverableLinks: {
+      readabilityReview: "Readability review",
+      rubricMarkdown: "AI-readable rubric Markdown",
+      rubricJson: "AI-readable rubric JSON",
+      casePack: "AI-readable case pack",
+    },
+    readability: {
+      title: "Meta_Kim Run Readability Review",
+      conclusionHeading: "Review Conclusion",
+      conclusionBody:
+        "PASS. The report may keep machine fields, but the user's first view should show business-readable labels, owner, blockers, and next actions without requiring protocol knowledge.",
+      fieldTranslationHeading: "Field Translation Table",
+      tableHeaders: {
+        field: "Machine field",
+        humanLabel: "Human label",
+        meaning: "What the user should understand",
+        pageTreatment: "Page treatment",
+      },
+      pageTreatment: "Keep the machine field, but prioritize the localized user-facing label on the page",
+      fieldMeanings: {
+        decisionSummary: "Tells the user why this decision was made.",
+        ownerHandoff:
+          "Tells the user each worker's owner, scope, parallel group, and acceptance owner.",
+        blockedReasons:
+          "Tells the user what cannot continue and which stage needs more evidence.",
+        toolEvidence: "Separates live, smoke, unsupported, and release-grade evidence.",
+        approvalRequest: "Explains whether canonical writeback needs Warden approval.",
+        aiReadableRubric:
+          "Turns design, execution, acceptance, feedback, and deliverables into scorable questions.",
+        deliverables: "Lists files the user and system can inspect again.",
+      },
+      beforeAfterHeading: "Before / After",
+      sourceContractEntry: "Source contract entry",
+      visibleEntryPrefix: "User-visible entries",
+      acceptanceHeading: "Acceptance Notes",
+      gapCount: "Gap count",
+      workerCount: "Worker count",
+      toolEvidenceCount: "Tool evidence count",
+      canonicalDryRunWriteCount: "Canonical dry-run write count",
+      returnIfCannotExplain:
+        "If a reviewer cannot explain why, who owns next, what is blocked, and how to verify from these labels, return this item to P-013.",
+    },
+    rubric: {
+      title: "Meta_Kim AI-Readable Rubric",
+      scoringIntro:
+        "Scoring scale: pass / retry / fail. Score the run artifact, report, panel, and case pack evidence rather than the chat summary.",
+      scoringScale: {
+        pass: "Evidence is sufficient for an external reviewer to restate the decision and acceptance basis.",
+        retry: "Evidence exists but is incomplete; supplement the report, owner, or verification fields.",
+        fail: "No inspectable evidence exists, or a chat summary is presented as product delivery.",
+      },
+      humanQuestion: "Plain-language question",
+      passStandard: "Pass standard",
+      failStandard: "Fail standard",
+      evidencePath: "Evidence path",
+      reviewerScore: "Reviewer score",
+      reviewerNotes: "Reviewer notes",
+      pending: "pending",
+    },
+    casePack: {
+      title: "Meta_Kim AI-Readable Case Pack",
+      reviewerShouldSeeHeading: "What the reviewer should see",
+      reviewerShouldSeeIntro: (summary) =>
+        `The reviewer should first see a one-sentence goal: ${summary}`,
+      reviewerShouldSeeThen: (toolEvidenceLabel) =>
+        `Then they should see what the task was, how many capabilities were missing, how the work was split, who owns each worker, and which ${toolEvidenceLabel} is still smoke or blocked.`,
+      reviewerScoringHeading: "How the reviewer scores",
+      reviewerScoringBody: (rubricMarkdown, rubricJson) =>
+        `The reviewer scores five dimensions: design, execution, acceptance, feedback, and deliverables. See \`${rubricMarkdown}\` and \`${rubricJson}\`.`,
+      designEvidenceHeading: "Design Evidence",
+      executionEvidenceHeading: "Execution Evidence",
+      acceptanceEvidenceHeading: "Acceptance Evidence",
+      feedbackEvidenceHeading: "Feedback Evidence",
+      passFailExamplesHeading: "Pass / Fail Examples",
+      taskLabel: "Task",
+      synthesisOwnerLabel: "Synthesis owner",
+      wardenApprovalRequired: "Warden approval required",
+      canonicalDryRunWrites: "Canonical dry-run writes",
+      staticPanel: "Static panel",
+      readabilityReview: "Readability review",
+      rubricMarkdown: "Rubric Markdown",
+      rubricJson: "Rubric JSON",
+      manifest: "Manifest",
+      passExample:
+        "Pass: the reviewer can explain why, who owns next, what is blocked, why canonical writeback still needs Warden approval, and which tool evidence cannot count as release-grade live pass.",
+      failExample:
+        "Fail: only a chat summary, only raw JSON, local absolute path leaks, or a P-012 page presented as the P-014 rubric / P-023 case pack.",
+    },
+    productTasks: [
+      {
+        id: "P-012",
+        label: "Web/UI product panel prototype",
+        evidence: "run-panel.html reads artifact.runReportPanelContract by runId.",
+      },
+      {
+        id: "P-013",
+        label: "Report readability review",
+        evidence: "readability-review.zh-CN.md maps protocol fields to user-facing labels.",
+      },
+      {
+        id: "P-014",
+        label: "AI-readable rubric export",
+        evidence: "ai-readable-rubric.zh-CN.md and ai-readable-rubric.json export five criteria.",
+      },
+      {
+        id: "P-023",
+        label: "AI-readable case pack",
+        evidence: "ai-readable-case-pack.zh-CN.md shows reviewer view, reviewer scoring, pass/fail evidence.",
+      },
+    ],
+    sections: {
+      decisionSummary: "Decision summary",
+      whyDecision: "Why this decision",
+      ownerHandoff: "Who owns next",
+      blockedApproval: "Blockers and approval",
+      toolEvidenceShort: "Tool evidence",
+      toolEvidenceFull: (tools) => `${tools} tool mirror evidence`,
+      aiReadableRubric: "AI-readable scoring standard",
+      deliverables: "Deliverables",
+      capabilityUpgrade: "Long-term capability upgrades",
+      wardenApproval: "Warden approval packet",
+      verificationStatus: "Verification status",
+    },
+  },
+  "zh-CN": {
+    htmlLang: "zh-CN",
+    toolNames: FORMAL_TOOL_NAMES,
+    toolProfiles: AGENT_PROJECTION_PROFILES,
+    toolList: (tools) => tools.join("/"),
+    runtimeProbePlaybookTitle: (tools) => `${tools} 工具端探测手册`,
+    runtimeLiveShardMatrixTitle: (tools) => `${tools} Live 分片矩阵`,
+    githubGapReportTitle: "Meta_Kim GitHub 差距报告",
+    governedExecutionReportTitle: "Meta-Theory 治理执行报告",
+    panelTitle: "Meta_Kim 运行面板",
+    generatedAt: "生成时间",
+    source: "来源",
+    status: "状态",
+    branch: "分支",
+    task: "任务",
+    inputTask: "输入任务",
+    variantCount: "探测变体数",
+    releaseGradeCandidateCount: "可作为发布级证据候选",
+    releaseGradeComplete: "发布级证据是否完整",
+    runId: "运行 ID",
+    runState: "运行状态",
+    aheadOfOriginMain: "领先 origin/main",
+    hasWorkingTreeDelta: "工作区是否有改动",
+    gitDeltaState: "Git 差异状态",
+    prdVersion: "PRD 版本",
+    localCommitsNotOnOriginMain: "本地未进入 origin/main 的提交",
+    workingTreeDelta: "工作区改动",
+    currentGithubDeltaFromPrd: "PRD 中记录的当前 GitHub 差距",
+    blockedOrNotDone: "阻塞或未完成",
+    completedParallelBacklogEvidence: "已完成并行 backlog 证据",
+    missing: "（缺失）",
+    capabilityGaps: "能力缺口",
+    workerTasks: "Worker 任务",
+    synthesisOwner: "合成负责人",
+    tool: "工具端",
+    role: "角色",
+    owner: "负责人",
+    gap: "缺口",
+    decision: "判定",
+    reason: "理由",
+    blocked: "是否阻塞",
+    workerTask: "Worker 任务",
+    candidate: "候选",
+    type: "类型",
+    target: "目标",
+    dryRunWrites: "dry-run 写入",
+    verification: "验证",
+    entry: "入口",
+    taskScope: "任务范围",
+    parallelGroup: "并行组",
+    mergeOwner: "合并",
+    acceptance: "验收",
+    canonicalWrites: "Canonical 写入",
+    environment: "环境",
+    shardGroup: "分片组",
+    expectedClass: "预期结果类",
+    evidenceKind: "证据类型",
+    failureClass: "失败类",
+    releaseGrade: "发布级",
+    releaseGradeCandidate: "可作为发布级证据候选",
+    remainingAction: "下一步",
+    commands: "命令",
+    fixtureOnly: "仅 fixture",
+    approvalRequired: "是否需要审批",
+    approvalValidation: "审批验证",
+    dryRunCanonicalWrites: "dry-run canonical 写入",
+    orchestrationReview: "编排 review",
+    writeback: "写回",
+    decisionRuns: "决策运行数",
+    none: "none",
+    notRun: "not-run",
+    plainLanguageSummary:
+      "本次运行先判断缺什么能力，再把下一步交给合适 owner，并保留阻塞、审批和验证证据。",
+    stageSummaryTitle: "Critical / Fetch / Thinking / Review",
+    stageSummaries: {
+      critical: (toolList) =>
+        `Critical：锁定真实目标、成功标准、非目标；正式工具端目标是 ${toolList}。`,
+    fetch: (count) =>
+        `Fetch：收集证据和能力来源；能力路线不是 skill-only，已检查 ${count} 类能力，包括 agent、skill、command/script、MCP/tool、工具端工具、plugin、retrieval、dependency 和 worker task。`,
+      thinking: (mode, mergeOwner) =>
+        `Thinking：选择路线和 owner；${mode}，mergeOwner=${mergeOwner}；create_agent 路线必须交付项目内可保留抽象 agent。`,
+      review: (toolList) =>
+        `Review：审查质量与边界；检查 Critical/Fetch/Thinking 是否真实存在、是否把临时 subagent 当成持久 agent、是否保留 ${toolList} 工具端投影目标。`,
+    },
+    capabilityRouteTitle: "能力路线",
+    capabilityType: "能力类型",
+    routeImpact: "路线影响",
+    cardPlanTitle: "发牌",
+    cardPlanSummary: (dealt, deckSize, pauseRule) =>
+      `发牌计划：本次显性处理 ${dealt}/${deckSize} 张牌；${pauseRule}。`,
+    cardDealer: "发牌 owner",
+    card: "牌",
+    cardShell: "呈现壳",
+    cardWhy: "为什么现在发",
+    businessPhasePlanTitle: "11 阶段业务流",
+    businessPhaseSummary: (count) => `已记录 ${count} 个业务阶段，用于打包、闭环、反馈和镜像。`,
+    phase: "阶段",
+    mapsToSpine: "映射到 8-stage",
+    evidence: "证据",
+    spineRelationship: "与 8-stage 的关系",
+    durableAgentPolicyTitle: "持久 Agent 策略",
+    durableAgentPolicyBullets: (profiles) => [
+      "create_agent / iterate_agent 的最终交付物是项目内可保留的抽象 agent 定义或候选写回，不是临时 worker prompt。",
+      ...profiles.map((profile) => `${profile.label} 投影目标：\`${profile.agentPath}\`。`),
+      "投影状态以兼容目录为准；partial 或 needs_probe 的目标会保留证据，但不夸大为完整能力。",
+      "工具端生成的 alias 只是 metadata，不会替代 `roleDisplayName` 或长期 `ownerAgent`。",
+    ],
+    boolean: (value) => (value ? "是" : "否"),
+    statusValue: (status) => {
+      if (status === true || status === "pass" || status === "smoke_pass") return "通过";
+      if (status === "blocked") return "阻塞";
+      if (status === "partial") return "部分完成";
+      return String(status ?? "未知");
+    },
+    deliverableLinks: {
+      readabilityReview: "可读性 review",
+      rubricMarkdown: "AI 可读评分表 Markdown",
+      rubricJson: "AI 可读评分表 JSON",
+      casePack: "AI 可读案例包",
+    },
+    readability: {
+      title: "Meta_Kim Run 可读性 Review",
+      conclusionHeading: "Review 结论",
+      conclusionBody:
+        "PASS。报告可以继续保留机器字段，但用户第一眼看到的是中文业务标签、owner、阻塞原因和下一步动作，不需要理解内部 packet 才能判断这次运行是否靠谱。",
+      fieldTranslationHeading: "字段翻译表",
+      tableHeaders: {
+        field: "机器字段",
+        humanLabel: "人话标签",
+        meaning: "用户要看懂什么",
+        pageTreatment: "页面处理",
+      },
+      pageTreatment: "保留机器字段，但页面优先显示中文标签",
+      fieldMeanings: {
+        decisionSummary: "告诉用户这次为什么这样判。",
+        ownerHandoff: "告诉用户每个 worker 的 owner、范围、并行组和验收 owner。",
+        blockedReasons: "告诉用户哪里不能继续，以及要回到哪个阶段补证据。",
+        toolEvidence: "区分 live、smoke、unsupported 和 release-grade。",
+        approvalRequest: "说明 canonical 写回是否需要 Warden 批准。",
+        aiReadableRubric: "把设计、执行、验收、反馈、交付内容变成可打分问题。",
+        deliverables: "列出用户和系统能复查的文件。",
+      },
+      beforeAfterHeading: "前后对照",
+      sourceContractEntry: "原始合同入口",
+      visibleEntryPrefix: "用户看到的入口",
+      acceptanceHeading: "验收说明",
+      gapCount: "Gap 数量",
+      workerCount: "Worker 数量",
+      toolEvidenceCount: "工具端证据数",
+      canonicalDryRunWriteCount: "Canonical dry-run 写入数",
+      returnIfCannotExplain:
+        "如果 reviewer 不能从这些标签解释“为什么判、交给谁、哪里阻塞、怎么验收”，本项应退回 P-013。",
+    },
+    rubric: {
+      title: "Meta_Kim AI 可读评分表",
+      scoringIntro:
+        "评分口径：通过 / 重试 / 失败。评分对象不是聊天回答，而是 run artifact、报告、面板和案例包留下的证据。",
+      scoringScale: {
+        pass: "证据足够，外部 reviewer 可以复述判断和验收依据。",
+        retry: "证据存在但不完整，需要补报告、owner 或验证字段。",
+        fail: "没有可复查证据，或把聊天总结冒充产品交付。",
+      },
+      humanQuestion: "人话问题",
+      passStandard: "通过标准",
+      failStandard: "失败标准",
+      evidencePath: "证据路径",
+      reviewerScore: "Reviewer 评分",
+      reviewerNotes: "Reviewer 备注",
+      pending: "待填写",
+    },
+    casePack: {
+      title: "Meta_Kim AI 可读案例包",
+      reviewerShouldSeeHeading: "reviewer 该看到什么",
+      reviewerShouldSeeIntro: (summary) =>
+        `reviewer 应该能先看到一句话目标：${summary}`,
+      reviewerShouldSeeThen: (toolEvidenceLabel) =>
+        `然后看到这次任务是什么、缺几个能力、拆成几个 worker、每个 worker 交给谁、哪些${toolEvidenceLabel}还只是 smoke 或 blocked。`,
+      reviewerScoringHeading: "reviewer 怎么评分",
+      reviewerScoringBody: (rubricMarkdown, rubricJson) =>
+        `reviewer 按五维评分：设计、执行、验收、反馈、交付内容。评分表见 \`${rubricMarkdown}\` 和 \`${rubricJson}\`。`,
+      designEvidenceHeading: "设计证据",
+      executionEvidenceHeading: "执行证据",
+      acceptanceEvidenceHeading: "验收证据",
+      feedbackEvidenceHeading: "反馈证据",
+      passFailExamplesHeading: "通过 / 失败样例",
+      taskLabel: "任务",
+      synthesisOwnerLabel: "合成 owner",
+      wardenApprovalRequired: "是否需要 Warden 审批",
+      canonicalDryRunWrites: "Canonical dry-run 写入",
+      staticPanel: "静态面板",
+      readabilityReview: "可读性 review",
+      rubricMarkdown: "评分表 Markdown",
+      rubricJson: "评分表 JSON",
+      manifest: "Manifest",
+      passExample:
+        "通过：reviewer 能说清楚为什么判、交给谁、哪里阻塞、为什么 canonical 写入仍需 Warden 批准，以及哪些工具端证据不能算发布级 live pass。",
+      failExample:
+        "失败：只有聊天总结、只有原始 JSON、页面泄露本机绝对路径、或把 P-012 页面冒充 P-014 评分表 / P-023 案例包。",
+    },
+    productTasks: [
+      {
+        id: "P-012",
+        label: "Web/UI 产品面板原型",
+        evidence: "run-panel.html reads artifact.runReportPanelContract by runId.",
+      },
+      {
+        id: "P-013",
+        label: "报告可读性 review",
+        evidence: "readability-review.zh-CN.md maps protocol fields to user-facing labels.",
+      },
+      {
+        id: "P-014",
+        label: "AI 可读评分表导出",
+        evidence: "ai-readable-rubric.zh-CN.md and ai-readable-rubric.json export five criteria.",
+      },
+      {
+        id: "P-023",
+        label: "AI 可读案例包",
+        evidence:
+          "ai-readable-case-pack.zh-CN.md shows reviewer view, reviewer scoring, pass/fail evidence.",
+      },
+    ],
+    sections: {
+      decisionSummary: "判定摘要",
+      whyDecision: "为什么这么判",
+      ownerHandoff: "下一步交给谁",
+      blockedApproval: "阻塞与审批",
+      toolEvidenceShort: "工具端证据",
+      toolEvidenceFull: (tools) => `${tools} 工具端镜像证据`,
+      aiReadableRubric: "AI 可读评分标准",
+      deliverables: "交付内容",
+      capabilityUpgrade: "长期能力升级建议",
+      wardenApproval: "Warden 审批包",
+      verificationStatus: "验证状态",
+    },
+  },
+  "ja-JP": {
+    htmlLang: "ja-JP",
+    toolNames: FORMAL_TOOL_NAMES,
+    toolProfiles: AGENT_PROJECTION_PROFILES,
+    toolList: (tools) => tools.join("/"),
+    runtimeProbePlaybookTitle: (tools) => `${tools} ツール側プローブ手順書`,
+    runtimeLiveShardMatrixTitle: (tools) => `${tools} ライブシャード行列`,
+    githubGapReportTitle: "Meta_Kim GitHub ギャップレポート",
+    governedExecutionReportTitle: "Meta-Theory ガバナンス実行レポート",
+    panelTitle: "Meta_Kim 実行パネル",
+    generatedAt: "生成日時",
+    source: "出典",
+    status: "状態",
+    branch: "ブランチ",
+    task: "タスク",
+    inputTask: "入力タスク",
+    variantCount: "プローブ変種数",
+    releaseGradeCandidateCount: "リリース級証拠候補数",
+    releaseGradeComplete: "リリース級証拠の完全性",
+    runId: "実行 ID",
+    runState: "実行状態",
+    aheadOfOriginMain: "origin/main との差分コミット数",
+    hasWorkingTreeDelta: "作業ツリー差分あり",
+    gitDeltaState: "Git 差分状態",
+    prdVersion: "PRD バージョン",
+    localCommitsNotOnOriginMain: "origin/main にないローカルコミット",
+    workingTreeDelta: "作業ツリー差分",
+    currentGithubDeltaFromPrd: "PRD 上の現在の GitHub ギャップ",
+    blockedOrNotDone: "ブロックまたは未完了",
+    completedParallelBacklogEvidence: "完了済み並列 backlog 証拠",
+    missing: "（欠落）",
+    capabilityGaps: "能力ギャップ",
+    workerTasks: "Worker タスク",
+    synthesisOwner: "統合 owner",
+    tool: "ツール側",
+    role: "役割",
+    owner: "担当",
+    gap: "ギャップ",
+    decision: "判定",
+    reason: "理由",
+    blocked: "ブロック",
+    workerTask: "Worker タスク",
+    candidate: "候補",
+    type: "種別",
+    target: "対象",
+    dryRunWrites: "dry-run 書き込み",
+    verification: "検証",
+    entry: "入口",
+    taskScope: "タスク範囲",
+    parallelGroup: "並列グループ",
+    mergeOwner: "マージ担当",
+    acceptance: "受け入れ",
+    canonicalWrites: "Canonical 書き込み",
+    environment: "環境",
+    shardGroup: "シャードグループ",
+    expectedClass: "期待クラス",
+    evidenceKind: "証拠種別",
+    failureClass: "失敗クラス",
+    releaseGrade: "リリース級",
+    releaseGradeCandidate: "リリース級証拠候補",
+    remainingAction: "次の対応",
+    commands: "コマンド",
+    fixtureOnly: "fixture のみ",
+    approvalRequired: "承認が必要",
+    approvalValidation: "承認検証",
+    dryRunCanonicalWrites: "dry-run canonical 書き込み",
+    orchestrationReview: "オーケストレーション review",
+    writeback: "書き戻し",
+    decisionRuns: "判定実行数",
+    none: "なし",
+    notRun: "未実行",
+    plainLanguageSummary:
+      "この実行では、まず不足している能力を判定し、次の作業を適切な owner に渡しながら、ブロック、承認、検証の証拠を残します。",
+    stageSummaryTitle: "Critical / Fetch / Thinking / Review",
+    stageSummaries: {
+      critical: (toolList) =>
+        `Critical: 本当のゴール、成功基準、非ゴールを、正式ツール対象 ${toolList} に対して固定します。`,
+      fetch: (count) =>
+        `Fetch: 能力ルートは skill だけではありません。agent、skill、command/script、MCP/tool、runtime tool、plugin、retrieval、dependency、worker task を含む ${count} 種類の能力を確認しました。`,
+      thinking: (mode, mergeOwner) =>
+        `Thinking: ルートと owner を選びます。${mode}、mergeOwner=${mergeOwner}。create_agent ルートは、プロジェクトに残せる抽象 agent または候補 writeback を成果物にする必要があります。`,
+      review: (toolList) =>
+        `Review: Critical/Fetch/Thinking が実在すること、一時 subagent が永続 agent として扱われていないこと、${toolList} の投影目標が保たれていることを確認します。`,
+    },
+    capabilityRouteTitle: "能力ルート",
+    capabilityType: "能力種別",
+    routeImpact: "ルートへの影響",
+    cardPlanTitle: "カード配布",
+    cardPlanSummary: (dealt, deckSize, pauseRule) =>
+      `カード計画: 今回は ${dealt}/${deckSize} 枚を可視化して処理します。${pauseRule}。`,
+    cardDealer: "配布 owner",
+    card: "カード",
+    cardShell: "表示シェル",
+    cardWhy: "今出す理由",
+    businessPhasePlanTitle: "11フェーズ業務ワークフロー",
+    businessPhaseSummary: (count) =>
+      `${count} 個の業務フェーズを、パッケージングと完了確認のために記録しています。`,
+    phase: "フェーズ",
+    mapsToSpine: "8-stage への対応",
+    evidence: "証拠",
+    spineRelationship: "8-stage との関係",
+    durableAgentPolicyTitle: "永続 Agent 方針",
+    durableAgentPolicyBullets: (profiles) => [
+      "create_agent / iterate_agent の最終成果物は、プロジェクトに残せる抽象 agent 定義または候補 writeback であり、一時的な worker prompt ではありません。",
+      ...profiles.map((profile) => `${profile.label} 投影ターゲット: \`${profile.agentPath}\`。`),
+      "投影状態は互換性カタログに従います。partial または needs_probe の対象は保持しますが、過大に主張しません。",
+      "ランタイム生成の alias は metadata にすぎず、`roleDisplayName` や永続 `ownerAgent` を置き換えません。",
+    ],
+    boolean: (value) => (value ? "はい" : "いいえ"),
+    statusValue: (status) => {
+      if (status === true || status === "pass" || status === "smoke_pass") return "合格";
+      if (status === "blocked") return "ブロック";
+      if (status === "partial") return "部分完了";
+      return String(status ?? "不明");
+    },
+    deliverableLinks: {
+      readabilityReview: "可読性 review",
+      rubricMarkdown: "AI 可読ルーブリック Markdown",
+      rubricJson: "AI 可読ルーブリック JSON",
+      casePack: "AI 可読ケースパック",
+    },
+    readability: {
+      title: "Meta_Kim 実行可読性 Review",
+      conclusionHeading: "Review 結論",
+      conclusionBody:
+        "PASS。レポートは機械向けフィールドを保持できますが、ユーザーの最初のビューでは、プロトコル知識なしに判断できるローカライズ済みの業務ラベル、owner、ブロック理由、次の対応を優先します。",
+      fieldTranslationHeading: "フィールド翻訳表",
+      tableHeaders: {
+        field: "機械フィールド",
+        humanLabel: "人が読むラベル",
+        meaning: "ユーザーが理解すべきこと",
+        pageTreatment: "ページでの扱い",
+      },
+      pageTreatment:
+        "機械フィールドは保持しつつ、ページではローカライズ済みのユーザー向けラベルを優先する",
+      fieldMeanings: {
+        decisionSummary: "この判定がなぜ行われたかを伝える。",
+        ownerHandoff:
+          "各 worker の owner、範囲、並列グループ、受け入れ owner を伝える。",
+        blockedReasons: "何が続行不能で、どの段階に証拠を戻すべきかを伝える。",
+        toolEvidence: "live、smoke、unsupported、release-grade の証拠を分ける。",
+        approvalRequest: "canonical writeback に Warden 承認が必要かを説明する。",
+        aiReadableRubric:
+          "設計、実行、受け入れ、フィードバック、成果物を採点可能な質問に変換する。",
+        deliverables: "ユーザーとシステムが再確認できるファイルを列挙する。",
+      },
+      beforeAfterHeading: "Before / After",
+      sourceContractEntry: "元の契約エントリ",
+      visibleEntryPrefix: "ユーザーに見えるエントリ",
+      acceptanceHeading: "受け入れメモ",
+      gapCount: "ギャップ数",
+      workerCount: "Worker 数",
+      toolEvidenceCount: "ツール側証拠数",
+      canonicalDryRunWriteCount: "Canonical dry-run 書き込み数",
+      returnIfCannotExplain:
+        "reviewer が、なぜ、誰が次を担当するか、何がブロックされているか、どう検証するかをこれらのラベルから説明できない場合、この項目を P-013 に戻します。",
+    },
+    rubric: {
+      title: "Meta_Kim AI 可読ルーブリック",
+      scoringIntro:
+        "採点尺度: pass / retry / fail。チャット要約ではなく、run artifact、レポート、パネル、ケースパックの証拠を採点します。",
+      scoringScale: {
+        pass: "外部 reviewer が判定と受け入れ根拠を再説明できるだけの証拠がある。",
+        retry: "証拠はあるが不完全で、レポート、owner、検証フィールドの補足が必要。",
+        fail: "確認可能な証拠がない、またはチャット要約を成果物として扱っている。",
+      },
+      humanQuestion: "平易な質問",
+      passStandard: "合格基準",
+      failStandard: "失敗基準",
+      evidencePath: "証拠パス",
+      reviewerScore: "Reviewer スコア",
+      reviewerNotes: "Reviewer メモ",
+      pending: "未記入",
+    },
+    casePack: {
+      title: "Meta_Kim AI 可読ケースパック",
+      reviewerShouldSeeHeading: "reviewer が見るべきもの",
+      reviewerShouldSeeIntro: (summary) =>
+        `reviewer はまず一文のゴールを確認できる必要があります: ${summary}`,
+      reviewerShouldSeeThen: (toolEvidenceLabel) =>
+        `次に、タスク内容、不足能力の数、worker 分割、各 worker の owner、どの ${toolEvidenceLabel} がまだ smoke または blocked なのかを確認します。`,
+      reviewerScoringHeading: "reviewer の採点方法",
+      reviewerScoringBody: (rubricMarkdown, rubricJson) =>
+        `reviewer は設計、実行、受け入れ、フィードバック、成果物の五つの観点で採点します。詳しくは \`${rubricMarkdown}\` と \`${rubricJson}\` を参照してください。`,
+      designEvidenceHeading: "設計証拠",
+      executionEvidenceHeading: "実行証拠",
+      acceptanceEvidenceHeading: "受け入れ証拠",
+      feedbackEvidenceHeading: "フィードバック証拠",
+      passFailExamplesHeading: "Pass / Fail 例",
+      taskLabel: "タスク",
+      synthesisOwnerLabel: "統合 owner",
+      wardenApprovalRequired: "Warden 承認が必要",
+      canonicalDryRunWrites: "Canonical dry-run 書き込み",
+      staticPanel: "静的パネル",
+      readabilityReview: "可読性 review",
+      rubricMarkdown: "ルーブリック Markdown",
+      rubricJson: "ルーブリック JSON",
+      manifest: "Manifest",
+      passExample:
+        "Pass: reviewer が、なぜ、誰が次を担当するか、何がブロックされているか、なぜ canonical 書き込みに Warden 承認がまだ必要か、どのツール側証拠が release-grade live pass と見なせないかを説明できる。",
+      failExample:
+        "Fail: チャット要約だけ、raw JSON だけ、ローカル絶対パスの漏えい、または P-012 ページを P-014 ルーブリック / P-023 ケースパックとして扱っている。",
+    },
+    productTasks: [
+      {
+        id: "P-012",
+        label: "Web/UI プロダクトパネル prototype",
+        evidence: "run-panel.html reads artifact.runReportPanelContract by runId.",
+      },
+      {
+        id: "P-013",
+        label: "レポート可読性 review",
+        evidence: "readability-review.ja-JP.md maps protocol fields to user-facing labels.",
+      },
+      {
+        id: "P-014",
+        label: "AI 可読ルーブリック export",
+        evidence: "ai-readable-rubric.ja-JP.md and ai-readable-rubric.json export five criteria.",
+      },
+      {
+        id: "P-023",
+        label: "AI 可読ケースパック",
+        evidence:
+          "ai-readable-case-pack.ja-JP.md shows reviewer view, reviewer scoring, pass/fail evidence.",
+      },
+    ],
+    sections: {
+      decisionSummary: "判定サマリー",
+      whyDecision: "この判定の理由",
+      ownerHandoff: "次の担当",
+      blockedApproval: "ブロックと承認",
+      toolEvidenceShort: "ツール側証拠",
+      toolEvidenceFull: (tools) => `${tools} ツール側ミラー証拠`,
+      aiReadableRubric: "AI 可読スコア基準",
+      deliverables: "成果物",
+      capabilityUpgrade: "長期能力アップグレード",
+      wardenApproval: "Warden 承認パケット",
+      verificationStatus: "検証状態",
+    },
+  },
+  "ko-KR": {
+    htmlLang: "ko-KR",
+    toolNames: FORMAL_TOOL_NAMES,
+    toolProfiles: AGENT_PROJECTION_PROFILES,
+    toolList: (tools) => tools.join("/"),
+    runtimeProbePlaybookTitle: (tools) => `${tools} 도구 측 프로브 플레이북`,
+    runtimeLiveShardMatrixTitle: (tools) => `${tools} 라이브 샤드 매트릭스`,
+    githubGapReportTitle: "Meta_Kim GitHub 격차 보고서",
+    governedExecutionReportTitle: "Meta-Theory 거버넌스 실행 보고서",
+    panelTitle: "Meta_Kim 실행 패널",
+    generatedAt: "생성 시각",
+    source: "출처",
+    status: "상태",
+    branch: "브랜치",
+    task: "작업",
+    inputTask: "입력 작업",
+    variantCount: "프로브 변형 수",
+    releaseGradeCandidateCount: "릴리스급 증거 후보 수",
+    releaseGradeComplete: "릴리스급 증거 완성 여부",
+    runId: "실행 ID",
+    runState: "실행 상태",
+    aheadOfOriginMain: "origin/main 대비 앞선 커밋 수",
+    hasWorkingTreeDelta: "작업 트리 변경 여부",
+    gitDeltaState: "Git 차이 상태",
+    prdVersion: "PRD 버전",
+    localCommitsNotOnOriginMain: "origin/main 에 없는 로컬 커밋",
+    workingTreeDelta: "작업 트리 변경",
+    currentGithubDeltaFromPrd: "PRD 의 현재 GitHub 격차",
+    blockedOrNotDone: "차단 또는 미완료",
+    completedParallelBacklogEvidence: "완료된 병렬 backlog 증거",
+    missing: "（누락）",
+    capabilityGaps: "능력 격차",
+    workerTasks: "Worker 작업",
+    synthesisOwner: "종합 owner",
+    tool: "도구 측",
+    role: "역할",
+    owner: "담당",
+    gap: "격차",
+    decision: "판정",
+    reason: "이유",
+    blocked: "차단됨",
+    workerTask: "Worker 작업",
+    candidate: "후보",
+    type: "유형",
+    target: "대상",
+    dryRunWrites: "dry-run 쓰기",
+    verification: "검증",
+    entry: "엔트리",
+    taskScope: "작업 범위",
+    parallelGroup: "병렬 그룹",
+    mergeOwner: "병합 담당",
+    acceptance: "수락",
+    canonicalWrites: "Canonical 쓰기",
+    environment: "환경",
+    shardGroup: "샤드 그룹",
+    expectedClass: "예상 클래스",
+    evidenceKind: "증거 종류",
+    failureClass: "실패 클래스",
+    releaseGrade: "릴리스급",
+    releaseGradeCandidate: "릴리스급 증거 후보",
+    remainingAction: "다음 조치",
+    commands: "명령",
+    fixtureOnly: "fixture 전용",
+    approvalRequired: "승인 필요",
+    approvalValidation: "승인 검증",
+    dryRunCanonicalWrites: "dry-run canonical 쓰기",
+    orchestrationReview: "오케스트레이션 review",
+    writeback: "쓰기 반영",
+    decisionRuns: "판정 실행 수",
+    none: "없음",
+    notRun: "미실행",
+    plainLanguageSummary:
+      "이 실행은 먼저 어떤 능력이 부족한지 판단한 뒤, 다음 작업을 적절한 owner 에 넘기고 차단, 승인, 검증 증거를 남깁니다.",
+    stageSummaryTitle: "Critical / Fetch / Thinking / Review",
+    stageSummaries: {
+      critical: (toolList) =>
+        `Critical: 실제 목표, 성공 기준, 비목표를 공식 도구 대상 ${toolList} 기준으로 고정합니다.`,
+      fetch: (count) =>
+        `Fetch: 능력 경로는 skill 전용이 아닙니다. agent, skill, command/script, MCP/tool, runtime tool, plugin, retrieval, dependency, worker task 를 포함해 ${count}개 능력 유형을 확인했습니다.`,
+      thinking: (mode, mergeOwner) =>
+        `Thinking: 경로와 owner 를 선택합니다. ${mode}, mergeOwner=${mergeOwner}. create_agent 경로는 프로젝트에 남길 수 있는 추상 agent 또는 후보 writeback 을 산출해야 합니다.`,
+      review: (toolList) =>
+        `Review: Critical/Fetch/Thinking 이 실제로 존재하는지, 임시 subagent 를 영구 agent 로 승격하지 않았는지, ${toolList} 투영 목표가 보존되는지 확인합니다.`,
+    },
+    capabilityRouteTitle: "능력 경로",
+    capabilityType: "능력 유형",
+    routeImpact: "경로 영향",
+    cardPlanTitle: "카드 배분",
+    cardPlanSummary: (dealt, deckSize, pauseRule) =>
+      `카드 계획: 이번 실행에서 ${dealt}/${deckSize}장을 가시적으로 처리합니다. ${pauseRule}.`,
+    cardDealer: "배분 owner",
+    card: "카드",
+    cardShell: "표시 shell",
+    cardWhy: "지금 배분하는 이유",
+    businessPhasePlanTitle: "11단계 비즈니스 워크플로",
+    businessPhaseSummary: (count) =>
+      `${count}개 비즈니스 단계를 패키징과 종료 확인을 위해 기록했습니다.`,
+    phase: "단계",
+    mapsToSpine: "8-stage 매핑",
+    evidence: "증거",
+    spineRelationship: "8-stage 와의 관계",
+    durableAgentPolicyTitle: "영구 Agent 정책",
+    durableAgentPolicyBullets: (profiles) => [
+      "create_agent / iterate_agent 의 최종 산출물은 프로젝트에 남길 수 있는 추상 agent 정의 또는 후보 writeback 이며, 임시 worker prompt 가 아닙니다.",
+      ...profiles.map((profile) => `${profile.label} 투영 대상: \`${profile.agentPath}\`.`),
+      "투영 상태는 호환성 카탈로그를 따릅니다. partial 또는 needs_probe 대상은 보존하되 과장하지 않습니다.",
+      "런타임이 생성한 alias 는 metadata 일 뿐이며 `roleDisplayName` 또는 영구 `ownerAgent` 를 대체하지 않습니다.",
+    ],
+    boolean: (value) => (value ? "예" : "아니요"),
+    statusValue: (status) => {
+      if (status === true || status === "pass" || status === "smoke_pass") return "통과";
+      if (status === "blocked") return "차단";
+      if (status === "partial") return "부분 완료";
+      return String(status ?? "알 수 없음");
+    },
+    deliverableLinks: {
+      readabilityReview: "가독성 review",
+      rubricMarkdown: "AI 가독 루브릭 Markdown",
+      rubricJson: "AI 가독 루브릭 JSON",
+      casePack: "AI 가독 케이스 팩",
+    },
+    readability: {
+      title: "Meta_Kim 실행 가독성 Review",
+      conclusionHeading: "Review 결론",
+      conclusionBody:
+        "PASS. 보고서는 기계 필드를 유지할 수 있지만, 사용자의 첫 화면에는 프로토콜 지식 없이 판단할 수 있는 현지화된 업무 라벨, owner, 차단 이유, 다음 조치가 우선 노출되어야 합니다.",
+      fieldTranslationHeading: "필드 번역표",
+      tableHeaders: {
+        field: "기계 필드",
+        humanLabel: "사람이 읽는 라벨",
+        meaning: "사용자가 이해해야 할 것",
+        pageTreatment: "페이지 처리",
+      },
+      pageTreatment:
+        "기계 필드는 유지하되 페이지에서는 현지화된 사용자-facing 라벨을 우선 표시",
+      fieldMeanings: {
+        decisionSummary: "이번 판정이 왜 내려졌는지 알려준다.",
+        ownerHandoff:
+          "각 worker 의 owner, 범위, 병렬 그룹, 수락 owner 를 알려준다.",
+        blockedReasons: "무엇 때문에 진행할 수 없고 어느 단계에 증거를 보강해야 하는지 알려준다.",
+        toolEvidence: "live, smoke, unsupported, release-grade 증거를 구분한다.",
+        approvalRequest: "canonical writeback 에 Warden 승인이 필요한지 설명한다.",
+        aiReadableRubric:
+          "설계, 실행, 수락, 피드백, 산출물을 채점 가능한 질문으로 바꾼다.",
+        deliverables: "사용자와 시스템이 다시 확인할 수 있는 파일을 나열한다.",
+      },
+      beforeAfterHeading: "Before / After",
+      sourceContractEntry: "원본 계약 엔트리",
+      visibleEntryPrefix: "사용자에게 보이는 엔트리",
+      acceptanceHeading: "수락 메모",
+      gapCount: "격차 수",
+      workerCount: "Worker 수",
+      toolEvidenceCount: "도구 측 증거 수",
+      canonicalDryRunWriteCount: "Canonical dry-run 쓰기 수",
+      returnIfCannotExplain:
+        "reviewer 가 왜, 누가 다음을 맡는지, 무엇이 차단되었는지, 어떻게 검증하는지를 이 라벨로 설명할 수 없다면 이 항목을 P-013 으로 되돌립니다.",
+    },
+    rubric: {
+      title: "Meta_Kim AI 가독 루브릭",
+      scoringIntro:
+        "채점 척도: pass / retry / fail. 채팅 요약이 아니라 run artifact, 보고서, 패널, 케이스 팩 증거를 채점합니다.",
+      scoringScale: {
+        pass: "외부 reviewer 가 판정과 수락 근거를 다시 설명할 수 있을 만큼 증거가 충분하다.",
+        retry: "증거는 있지만 불완전하며 보고서, owner, 검증 필드를 보강해야 한다.",
+        fail: "검토 가능한 증거가 없거나 채팅 요약을 제품 산출물로 제시했다.",
+      },
+      humanQuestion: "쉬운 말 질문",
+      passStandard: "통과 기준",
+      failStandard: "실패 기준",
+      evidencePath: "증거 경로",
+      reviewerScore: "Reviewer 점수",
+      reviewerNotes: "Reviewer 메모",
+      pending: "대기",
+    },
+    casePack: {
+      title: "Meta_Kim AI 가독 케이스 팩",
+      reviewerShouldSeeHeading: "reviewer 가 봐야 할 것",
+      reviewerShouldSeeIntro: (summary) =>
+        `reviewer 는 먼저 한 문장 목표를 볼 수 있어야 합니다: ${summary}`,
+      reviewerShouldSeeThen: (toolEvidenceLabel) =>
+        `그다음 작업 내용, 부족한 능력 수, worker 분할, 각 worker 의 owner, 어떤 ${toolEvidenceLabel} 가 아직 smoke 또는 blocked 인지 확인합니다.`,
+      reviewerScoringHeading: "reviewer 채점 방식",
+      reviewerScoringBody: (rubricMarkdown, rubricJson) =>
+        `reviewer 는 설계, 실행, 수락, 피드백, 산출물의 다섯 차원으로 채점합니다. \`${rubricMarkdown}\` 및 \`${rubricJson}\` 를 참고하세요.`,
+      designEvidenceHeading: "설계 증거",
+      executionEvidenceHeading: "실행 증거",
+      acceptanceEvidenceHeading: "수락 증거",
+      feedbackEvidenceHeading: "피드백 증거",
+      passFailExamplesHeading: "Pass / Fail 예시",
+      taskLabel: "작업",
+      synthesisOwnerLabel: "종합 owner",
+      wardenApprovalRequired: "Warden 승인 필요",
+      canonicalDryRunWrites: "Canonical dry-run 쓰기",
+      staticPanel: "정적 패널",
+      readabilityReview: "가독성 review",
+      rubricMarkdown: "루브릭 Markdown",
+      rubricJson: "루브릭 JSON",
+      manifest: "Manifest",
+      passExample:
+        "Pass: reviewer 가 왜, 누가 다음을 맡는지, 무엇이 차단되었는지, 왜 canonical 쓰기에 아직 Warden 승인이 필요한지, 어떤 도구 측 증거가 release-grade live pass 로 볼 수 없는지 설명할 수 있다.",
+      failExample:
+        "Fail: 채팅 요약만 있거나, raw JSON 만 있거나, 로컬 절대 경로가 노출되거나, P-012 페이지를 P-014 루브릭 / P-023 케이스 팩으로 취급한다.",
+    },
+    productTasks: [
+      {
+        id: "P-012",
+        label: "Web/UI 제품 패널 prototype",
+        evidence: "run-panel.html reads artifact.runReportPanelContract by runId.",
+      },
+      {
+        id: "P-013",
+        label: "보고서 가독성 review",
+        evidence: "readability-review.ko-KR.md maps protocol fields to user-facing labels.",
+      },
+      {
+        id: "P-014",
+        label: "AI 가독 루브릭 export",
+        evidence: "ai-readable-rubric.ko-KR.md and ai-readable-rubric.json export five criteria.",
+      },
+      {
+        id: "P-023",
+        label: "AI 가독 케이스 팩",
+        evidence:
+          "ai-readable-case-pack.ko-KR.md shows reviewer view, reviewer scoring, pass/fail evidence.",
+      },
+    ],
+    sections: {
+      decisionSummary: "판정 요약",
+      whyDecision: "판정 이유",
+      ownerHandoff: "다음 담당",
+      blockedApproval: "차단 및 승인",
+      toolEvidenceShort: "도구 측 증거",
+      toolEvidenceFull: (tools) => `${tools} 도구 측 미러 증거`,
+      aiReadableRubric: "AI 가독 평가 기준",
+      deliverables: "산출물",
+      capabilityUpgrade: "장기 능력 업그레이드",
+      wardenApproval: "Warden 승인 패킷",
+      verificationStatus: "검증 상태",
+    },
+  },
+};
+
 const LANG = detectLang();
 const t = STRINGS[LANG] || STRINGS.en;
 
-export { t, LANG };
+function mergeReportLabels(base, override) {
+  const merged = { ...base, ...override };
+  for (const [key, baseValue] of Object.entries(base)) {
+    const overrideValue = override?.[key];
+    if (
+      baseValue &&
+      overrideValue &&
+      typeof baseValue === "object" &&
+      typeof overrideValue === "object" &&
+      !Array.isArray(baseValue) &&
+      !Array.isArray(overrideValue) &&
+      typeof baseValue !== "function" &&
+      typeof overrideValue !== "function"
+    ) {
+      merged[key] = mergeReportLabels(baseValue, overrideValue);
+    }
+  }
+  return merged;
+}
+
+function getReportLabels(lang = LANG) {
+  const normalized = normalizeLangCode(lang);
+  return mergeReportLabels(REPORT_STRINGS.en, REPORT_STRINGS[normalized] || {});
+}
+
+function getReportLabelsForPath(filePath, fallbackLang = LANG) {
+  const match = String(filePath ?? "").match(/\.([a-z]{2}(?:-[A-Z]{2})?)\.md$/);
+  return getReportLabels(match?.[1] ?? fallbackLang);
+}
+
+export { t, LANG, getReportLabels, getReportLabelsForPath };

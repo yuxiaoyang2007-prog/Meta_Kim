@@ -36,13 +36,13 @@
     "create_agent": {
       "kind": "agent_candidate_spec",
       "owner": "meta-genesis",
-      "scope": "candidate_only",
+      "scope": "project_local_candidate",
       "requiredInputs": ["CapabilityGap", "GapDecision", "DecisionEvidenceContract"],
-      "requiredOutputs": ["GeneratedAgentSpec", "identityCleanliness", "qualityScorecard", "installProjection"],
-      "forbidden": ["bind_repo_path_to_identity", "todayTask", "scopeFiles", "verifySteps_in_identity"],
+      "requiredOutputs": ["GeneratedAgentSpec", "identityCleanliness", "qualityScorecard", "installProjection", "projectRetention"],
+      "forbidden": ["bind_repo_path_to_identity", "todayTask", "scopeFiles", "verifySteps_in_identity", "temporary_subagent_as_agent_definition"],
       "verification": {
         "owner": "verify",
-        "passCondition": "GeneratedAgentSpec is complete, scorecard is 10/10, identityCleanliness is pass."
+        "passCondition": "GeneratedAgentSpec is complete, scorecard is 10/10, identityCleanliness is pass, and project-retention targets are declared for every formal tool projection with an agent path."
       }
     },
     "create_script": {

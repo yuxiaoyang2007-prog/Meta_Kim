@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { getReportLabelsForPath } from "./meta-kim-i18n.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(scriptDir, "..");
@@ -95,28 +96,30 @@ function runtimeRows(agentIds) {
   ];
 }
 
-function buildMarkdown(report) {
+function buildMarkdown(report, outputPath) {
+  const labels = getReportLabelsForPath(outputPath);
+  const toolList = labels.toolList(labels.toolNames);
   const lines = [
-    "# Runtime Live Shard Matrix",
+    `# ${labels.runtimeLiveShardMatrixTitle(toolList)}`,
     "",
-    `- generatedAt: ${report.generatedAt}`,
-    `- source: ${report.source}`,
-    `- releaseGrade: ${report.summary.releaseGrade}`,
+    `- ${labels.generatedAt}: ${report.generatedAt}`,
+    `- ${labels.source}: ${report.source}`,
+    `- ${labels.releaseGradeComplete}: ${report.summary.releaseGrade}`,
     "",
-    "| Runtime | Shard group | Expected class | Release-grade candidate | Remaining action |",
+    `| ${labels.tool} | ${labels.shardGroup} | ${labels.expectedClass} | ${labels.releaseGradeCandidate} | ${labels.remainingAction} |`,
     "|---|---|---|---|---|",
     ...report.records.map(
       (row) =>
-        `| ${row.runtime} | ${row.shardGroup} | ${row.expectedFailureClass} | ${row.releaseGradeCandidate ? "yes" : "no"} | ${row.remainingAction.replaceAll("|", "\\|")} |`,
+        `| ${row.runtime} | ${row.shardGroup} | ${row.expectedFailureClass} | ${labels.boolean(row.releaseGradeCandidate)} | ${row.remainingAction.replaceAll("|", "\\|")} |`,
     ),
     "",
-    "## Commands",
+    `## ${labels.commands}`,
     "",
     ...report.records.flatMap((row) => [
       `### ${row.runtime}`,
       "",
       `\`${row.command}\``,
-      ...(row.fixtureCommand ? ["", `Fixture only: \`${row.fixtureCommand}\``] : []),
+      ...(row.fixtureCommand ? ["", `${labels.fixtureOnly}: \`${row.fixtureCommand}\``] : []),
       "",
     ]),
   ];
@@ -147,7 +150,7 @@ async function main() {
   const jsonPath = path.join(OUTPUT_DIR, "latest.json");
   const mdPath = path.join(OUTPUT_DIR, "latest.zh-CN.md");
   await fs.writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
-  await fs.writeFile(mdPath, buildMarkdown(report));
+  await fs.writeFile(mdPath, buildMarkdown(report, mdPath));
 
   process.stdout.write(
     `${JSON.stringify(

@@ -5,6 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { readGovernedExecutionRun } from "./run-meta-theory-governed-execution.mjs";
+import { getReportLabelsForPath } from "./meta-kim-i18n.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(scriptDir, "..");
@@ -68,22 +69,20 @@ function requirePanelContract(run) {
   return contract;
 }
 
-function statusLabel(status) {
-  if (status === true || status === "pass" || status === "smoke_pass") return "通过";
-  if (status === "blocked") return "阻塞";
-  if (status === "partial") return "部分完成";
-  return String(status ?? "未知");
+function statusLabel(status, labels) {
+  return labels.statusValue(status);
 }
 
-function buildPanelHtml({ run, contract, manifest }) {
+function buildPanelHtml({ run, contract, manifest, labels }) {
+  const sectionLabels = labels.sections;
   const runtimeRows = contract.runtimeEvidence
     .map(
       (row) => `<tr>
         <td>${escapeHtml(row.runtime)}</td>
-        <td>${escapeHtml(statusLabel(row.status))}</td>
+        <td>${escapeHtml(statusLabel(row.status, labels))}</td>
         <td>${escapeHtml(row.evidenceKind)}</td>
         <td>${escapeHtml(row.failureClass)}</td>
-        <td>${escapeHtml(row.strictReleasePass ? "是" : "否")}</td>
+        <td>${escapeHtml(labels.boolean(row.strictReleasePass))}</td>
         <td>${escapeHtml(row.remainingAction)}</td>
       </tr>`
     )
@@ -105,7 +104,7 @@ function buildPanelHtml({ run, contract, manifest }) {
       (item) => `<li>
         <strong>${escapeHtml(item.label)}</strong>
         <span>${escapeHtml(item.plainLanguageQuestion)}</span>
-        <em>${escapeHtml(statusLabel(item.status))}</em>
+        <em>${escapeHtml(statusLabel(item.status, labels))}</em>
       </li>`
     )
     .join("\n");
@@ -119,11 +118,11 @@ function buildPanelHtml({ run, contract, manifest }) {
     )
     .join("\n");
   return `<!doctype html>
-<html lang="zh-CN">
+<html lang="${escapeHtml(labels.htmlLang)}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Meta_Kim Run Panel ${escapeHtml(run.runId)}</title>
+  <title>${escapeHtml(labels.panelTitle)} ${escapeHtml(run.runId)}</title>
   <style>
     :root {
       color-scheme: light;
@@ -206,50 +205,50 @@ function buildPanelHtml({ run, contract, manifest }) {
 </head>
 <body>
   <header>
-    <h1>Meta_Kim Run Panel</h1>
+    <h1>${escapeHtml(labels.panelTitle)}</h1>
     <p>${escapeHtml(contract.decisionSummary.plainLanguageSummary)}</p>
     <div class="summary">
-      <div class="metric"><span>Run ID</span><b>${escapeHtml(contract.decisionSummary.runId)}</b></div>
-      <div class="metric"><span>运行状态</span><b>${escapeHtml(statusLabel(contract.decisionSummary.status))}</b></div>
-      <div class="metric"><span>能力缺口</span><b>${escapeHtml(contract.decisionSummary.gapCount)}</b></div>
-      <div class="metric"><span>Worker 任务</span><b>${escapeHtml(contract.decisionSummary.workerTaskCount)}</b></div>
+      <div class="metric"><span>${escapeHtml(labels.runId)}</span><b>${escapeHtml(contract.decisionSummary.runId)}</b></div>
+      <div class="metric"><span>${escapeHtml(labels.runState)}</span><b>${escapeHtml(statusLabel(contract.decisionSummary.status, labels))}</b></div>
+      <div class="metric"><span>${escapeHtml(labels.capabilityGaps)}</span><b>${escapeHtml(contract.decisionSummary.gapCount)}</b></div>
+      <div class="metric"><span>${escapeHtml(labels.workerTasks)}</span><b>${escapeHtml(contract.decisionSummary.workerTaskCount)}</b></div>
     </div>
   </header>
   <main>
     <section>
-      <h2>判定摘要</h2>
+      <h2>${escapeHtml(sectionLabels.decisionSummary)}</h2>
       <p>${escapeHtml(contract.decisionSummary.task)}</p>
     </section>
     <section>
-      <h2>下一步交给谁</h2>
+      <h2>${escapeHtml(sectionLabels.ownerHandoff)}</h2>
       <table>
-        <thead><tr><th>角色</th><th>Owner</th><th>任务范围</th><th>并行组</th><th>合并</th><th>验收</th></tr></thead>
+        <thead><tr><th>${escapeHtml(labels.role)}</th><th>${escapeHtml(labels.owner)}</th><th>${escapeHtml(labels.taskScope)}</th><th>${escapeHtml(labels.parallelGroup)}</th><th>${escapeHtml(labels.mergeOwner)}</th><th>${escapeHtml(labels.acceptance)}</th></tr></thead>
         <tbody>${ownerRows}</tbody>
       </table>
     </section>
     <section>
-      <h2>阻塞与审批</h2>
+      <h2>${escapeHtml(sectionLabels.blockedApproval)}</h2>
       <ul>${blockedItems}</ul>
-      <p>Canonical 写入：${escapeHtml(contract.approvalRequest.dryRunCanonicalWrites)}；下一步：${escapeHtml(contract.approvalRequest.nextAction)}</p>
+      <p>${escapeHtml(labels.canonicalWrites)}: ${escapeHtml(contract.approvalRequest.dryRunCanonicalWrites)}; ${escapeHtml(labels.remainingAction)}: ${escapeHtml(contract.approvalRequest.nextAction)}</p>
     </section>
     <section>
-      <h2>Runtime 证据</h2>
+      <h2>${escapeHtml(sectionLabels.toolEvidenceShort)}</h2>
       <table>
-        <thead><tr><th>Runtime</th><th>状态</th><th>证据类型</th><th>失败类</th><th>发布级</th><th>剩余动作</th></tr></thead>
+        <thead><tr><th>${escapeHtml(labels.tool)}</th><th>${escapeHtml(labels.status)}</th><th>${escapeHtml(labels.evidenceKind)}</th><th>${escapeHtml(labels.failureClass)}</th><th>${escapeHtml(labels.releaseGrade)}</th><th>${escapeHtml(labels.remainingAction)}</th></tr></thead>
         <tbody>${runtimeRows}</tbody>
       </table>
     </section>
     <section>
-      <h2>AI 可读评分标准</h2>
+      <h2>${escapeHtml(sectionLabels.aiReadableRubric)}</h2>
       <ul>${rubricItems}</ul>
     </section>
     <section>
-      <h2>交付内容</h2>
+      <h2>${escapeHtml(sectionLabels.deliverables)}</h2>
       <div class="deliverables">
-        <a href="${escapeHtml(path.basename(manifest.files.readabilityReview))}">可读性 review</a>
-        <a href="${escapeHtml(path.basename(manifest.files.rubricMarkdown))}">AI 可读评分表 Markdown</a>
-        <a href="${escapeHtml(path.basename(manifest.files.rubricJson))}">AI 可读评分表 JSON</a>
-        <a href="${escapeHtml(path.basename(manifest.files.casePack))}">AI 可读案例包</a>
+        <a href="${escapeHtml(path.basename(manifest.files.readabilityReview))}">${escapeHtml(labels.deliverableLinks.readabilityReview)}</a>
+        <a href="${escapeHtml(path.basename(manifest.files.rubricMarkdown))}">${escapeHtml(labels.deliverableLinks.rubricMarkdown)}</a>
+        <a href="${escapeHtml(path.basename(manifest.files.rubricJson))}">${escapeHtml(labels.deliverableLinks.rubricJson)}</a>
+        <a href="${escapeHtml(path.basename(manifest.files.casePack))}">${escapeHtml(labels.deliverableLinks.casePack)}</a>
       </div>
     </section>
   </main>
@@ -258,54 +257,56 @@ function buildPanelHtml({ run, contract, manifest }) {
 `;
 }
 
-function buildReadabilityReview({ run, contract }) {
-  const labels = [
-    ["decisionSummary", "判定摘要", "告诉用户这次为什么这样判。"],
-    ["ownerHandoff", "下一步交给谁", "告诉用户每个 worker 的 owner、范围、并行组和验收 owner。"],
-    ["blockedReasons", "阻塞原因", "告诉用户哪里不能继续，以及要回到哪个阶段补证据。"],
-    ["runtimeEvidence", "Runtime 证据", "区分 live、smoke、unsupported 和 release-grade。"],
-    ["approvalRequest", "审批请求", "说明 canonical 写回是否需要 Warden 批准。"],
-    ["aiReadableRubric", "AI 可读评分标准", "把设计、执行、验收、反馈、交付内容变成可打分问题。"],
-    ["deliverables", "交付内容", "列出用户和系统能复查的文件。"],
+function buildReadabilityReview({ run, contract, labels }) {
+  const sectionLabels = labels.sections;
+  const readability = labels.readability;
+  const rowsByField = [
+    ["decisionSummary", sectionLabels.decisionSummary, readability.fieldMeanings.decisionSummary],
+    ["ownerHandoff", sectionLabels.ownerHandoff, readability.fieldMeanings.ownerHandoff],
+    ["blockedReasons", sectionLabels.blockedApproval, readability.fieldMeanings.blockedReasons],
+    ["runtimeEvidence", sectionLabels.toolEvidenceShort, readability.fieldMeanings.toolEvidence],
+    ["approvalRequest", sectionLabels.wardenApproval, readability.fieldMeanings.approvalRequest],
+    ["aiReadableRubric", sectionLabels.aiReadableRubric, readability.fieldMeanings.aiReadableRubric],
+    ["deliverables", sectionLabels.deliverables, readability.fieldMeanings.deliverables],
   ];
-  const rows = labels
+  const rows = rowsByField
     .map(
       ([field, label, meaning]) =>
-        `| \`${field}\` | ${label} | ${meaning} | 保留机器字段，但页面优先显示中文标签 |`
+        `| \`${field}\` | ${label} | ${meaning} | ${readability.pageTreatment} |`
     )
     .join("\n");
-  return `# Meta_Kim Run 可读性 Review
+  return `# ${readability.title}
 
-Run ID：\`${run.runId}\`
+${labels.runId}: \`${run.runId}\`
 
-## Review 结论
+## ${readability.conclusionHeading}
 
-PASS。报告可以继续保留机器字段，但用户第一眼看到的是中文业务标签、owner、阻塞原因和下一步动作，不需要理解内部 packet 才能判断这次运行是否靠谱。
+${readability.conclusionBody}
 
-## 字段翻译表
+## ${readability.fieldTranslationHeading}
 
-| 机器字段 | 人话标签 | 用户要看懂什么 | 页面处理 |
+| ${readability.tableHeaders.field} | ${readability.tableHeaders.humanLabel} | ${readability.tableHeaders.meaning} | ${readability.tableHeaders.pageTreatment} |
 |---|---|---|---|
 ${rows}
 
-## 前后对照
+## ${readability.beforeAfterHeading}
 
-原始合同入口：\`artifact.runReportPanelContract\`
+${readability.sourceContractEntry}: \`artifact.runReportPanelContract\`
 
-用户看到的入口：\`判定摘要\`、\`下一步交给谁\`、\`阻塞与审批\`、\`Runtime 证据\`、\`AI 可读评分标准\`、\`交付内容\`。
+${readability.visibleEntryPrefix}: \`${sectionLabels.decisionSummary}\`, \`${sectionLabels.ownerHandoff}\`, \`${sectionLabels.blockedApproval}\`, \`${sectionLabels.toolEvidenceShort}\`, \`${sectionLabels.aiReadableRubric}\`, \`${sectionLabels.deliverables}\`.
 
-## 验收说明
+## ${readability.acceptanceHeading}
 
-- Gap 数量：${contract.decisionSummary.gapCount}
-- Worker 数量：${contract.decisionSummary.workerTaskCount}
-- Runtime 证据数：${contract.runtimeEvidence.length}
-- Canonical dry-run 写入数：${contract.approvalRequest.dryRunCanonicalWrites}
+- ${readability.gapCount}: ${contract.decisionSummary.gapCount}
+- ${readability.workerCount}: ${contract.decisionSummary.workerTaskCount}
+- ${readability.toolEvidenceCount}: ${contract.runtimeEvidence.length}
+- ${readability.canonicalDryRunWriteCount}: ${contract.approvalRequest.dryRunCanonicalWrites}
 
-如果 reviewer 不能从这些标签解释“为什么判、交给谁、哪里阻塞、怎么验收”，本项应退回 P-013。
+${readability.returnIfCannotExplain}
 `;
 }
 
-function buildRubric({ run, contract }) {
+function buildRubric({ run, contract, labels }) {
   const criteria = contract.aiReadableRubric.map((item) => ({
     id: item.id,
     label: item.label,
@@ -326,38 +327,40 @@ function buildRubric({ run, contract }) {
     runId: run.runId,
     status: criteria.length === 5 ? "pass" : "fail",
     scoringScale: {
-      pass: "证据足够，外部 reviewer 可以复述判断和验收依据。",
-      retry: "证据存在但不完整，需要补报告、owner 或验证字段。",
-      fail: "没有可复查证据，或把聊天总结冒充产品交付。",
+      pass: labels.rubric.scoringScale.pass,
+      retry: labels.rubric.scoringScale.retry,
+      fail: labels.rubric.scoringScale.fail,
     },
     criteria,
   };
 }
 
-function buildRubricMarkdown(rubric) {
+function buildRubricMarkdown(rubric, labels) {
   const sections = rubric.criteria
     .map(
       (item) => `## ${item.label}
 
-- 人话问题：${item.question}
-- 通过标准：${item.passStandard}
-- 失败标准：${item.failStandard}
-- 证据路径：${item.evidencePath.map((entry) => `\`${entry}\``).join("、")}
-- Reviewer 评分：待填写
-- Reviewer 备注：待填写
+- ${labels.rubric.humanQuestion}: ${item.question}
+- ${labels.rubric.passStandard}: ${item.passStandard}
+- ${labels.rubric.failStandard}: ${item.failStandard}
+- ${labels.rubric.evidencePath}: ${item.evidencePath.map((entry) => `\`${entry}\``).join(", ")}
+- ${labels.rubric.reviewerScore}: ${labels.rubric.pending}
+- ${labels.rubric.reviewerNotes}: ${labels.rubric.pending}
 `
     )
     .join("\n");
-  return `# Meta_Kim AI 可读评分表
+  return `# ${labels.rubric.title}
 
-Run ID：\`${rubric.runId}\`
+${labels.runId}: \`${rubric.runId}\`
 
-评分口径：通过 / 重试 / 失败。评分对象不是聊天回答，而是 run artifact、报告、面板和案例包留下的证据。
+${labels.rubric.scoringIntro}
 
 ${sections}`;
 }
 
-function buildCasePack({ run, contract, manifest }) {
+function buildCasePack({ run, contract, manifest, labels }) {
+  const sectionLabels = labels.sections;
+  const casePack = labels.casePack;
   const ownerRows = contract.ownerHandoff
     .map(
       (owner) =>
@@ -370,57 +373,57 @@ function buildCasePack({ run, contract, manifest }) {
         `| ${markdownEscape(row.runtime)} | ${markdownEscape(row.evidenceKind)} | ${markdownEscape(row.failureClass)} | ${markdownEscape(row.remainingAction)} |`
     )
     .join("\n");
-  return `# Meta_Kim AI 可读案例包
+  return `# ${casePack.title}
 
-Run ID：\`${run.runId}\`
+${labels.runId}: \`${run.runId}\`
 
-## reviewer 该看到什么
+## ${casePack.reviewerShouldSeeHeading}
 
-reviewer 应该能先看到一句话目标：${contract.decisionSummary.plainLanguageSummary}
+${casePack.reviewerShouldSeeIntro(contract.decisionSummary.plainLanguageSummary)}
 
-然后看到这次任务是什么、缺几个能力、拆成几个 worker、每个 worker 交给谁、哪些 runtime 证据还只是 smoke 或 blocked。
+${casePack.reviewerShouldSeeThen(sectionLabels.toolEvidenceShort)}
 
-## reviewer 怎么评分
+## ${casePack.reviewerScoringHeading}
 
-reviewer 按五维评分：设计、执行、验收、反馈、交付内容。评分表见 \`${path.basename(manifest.files.rubricMarkdown)}\` 和 \`${path.basename(manifest.files.rubricJson)}\`。
+${casePack.reviewerScoringBody(path.basename(manifest.files.rubricMarkdown), path.basename(manifest.files.rubricJson))}
 
-## 设计证据
+## ${casePack.designEvidenceHeading}
 
-- 任务：${contract.decisionSummary.task}
-- 能力缺口数：${contract.decisionSummary.gapCount}
-- 合成 owner：${contract.decisionSummary.synthesisOwner}
+- ${casePack.taskLabel}: ${contract.decisionSummary.task}
+- ${labels.capabilityGaps}：${contract.decisionSummary.gapCount}
+- ${casePack.synthesisOwnerLabel}: ${contract.decisionSummary.synthesisOwner}
 
-## 执行证据
+## ${casePack.executionEvidenceHeading}
 
-| 角色 | Owner | 范围 | 合并 owner |
+| ${labels.role} | ${labels.owner} | ${labels.taskScope} | ${labels.mergeOwner} |
 |---|---|---|---|
 ${ownerRows}
 
-## 验收证据
+## ${casePack.acceptanceEvidenceHeading}
 
-| Runtime | 证据类型 | 失败类 | 剩余动作 |
+| ${labels.tool} | ${labels.evidenceKind} | ${labels.failureClass} | ${labels.remainingAction} |
 |---|---|---|---|
 ${runtimeRows}
 
-## 反馈证据
+## ${casePack.feedbackEvidenceHeading}
 
-- Warden approval required：${contract.approvalRequest.approvalRequired}
-- Canonical dry-run writes：${contract.approvalRequest.dryRunCanonicalWrites}
-- 下一步：${contract.approvalRequest.nextAction}
+- ${casePack.wardenApprovalRequired}: ${contract.approvalRequest.approvalRequired}
+- ${casePack.canonicalDryRunWrites}: ${contract.approvalRequest.dryRunCanonicalWrites}
+- ${labels.remainingAction}: ${contract.approvalRequest.nextAction}
 
-## 交付内容
+## ${sectionLabels.deliverables}
 
-- 静态面板：\`${path.basename(manifest.files.panelHtml)}\`
-- 可读性 review：\`${path.basename(manifest.files.readabilityReview)}\`
-- 评分表 Markdown：\`${path.basename(manifest.files.rubricMarkdown)}\`
-- 评分表 JSON：\`${path.basename(manifest.files.rubricJson)}\`
-- Manifest：\`${path.basename(manifest.files.manifest)}\`
+- ${casePack.staticPanel}: \`${path.basename(manifest.files.panelHtml)}\`
+- ${casePack.readabilityReview}: \`${path.basename(manifest.files.readabilityReview)}\`
+- ${casePack.rubricMarkdown}: \`${path.basename(manifest.files.rubricMarkdown)}\`
+- ${casePack.rubricJson}: \`${path.basename(manifest.files.rubricJson)}\`
+- ${casePack.manifest}: \`${path.basename(manifest.files.manifest)}\`
 
-## 通过 / 失败样例
+## ${casePack.passFailExamplesHeading}
 
-通过：reviewer 能说清楚为什么判、交给谁、哪里阻塞、为什么 canonical 写入仍需 Warden 批准，以及哪些 runtime 证据不能算发布级 live pass。
+${casePack.passExample}
 
-失败：只有聊天总结、只有原始 JSON、页面泄露本机绝对路径、或把 P-012 页面冒充 P-014 评分表 / P-023 案例包。
+${casePack.failExample}
 `;
 }
 
@@ -444,36 +447,12 @@ export async function generateRunDeliverables({
     casePack: path.join(baseOutDir, "ai-readable-case-pack.zh-CN.md"),
     manifest: path.join(baseOutDir, "deliverables-manifest.json"),
   };
+  const labels = getReportLabelsForPath(files.readabilityReview);
   const manifest = {
     schemaVersion: "meta-theory-run-deliverables-v0.1",
     runId: run.runId,
     status: "pass",
-    productTasks: [
-      {
-        id: "P-012",
-        label: "Web/UI 产品面板原型",
-        status: "pass",
-        evidence: "run-panel.html reads artifact.runReportPanelContract by runId.",
-      },
-      {
-        id: "P-013",
-        label: "报告可读性 review",
-        status: "pass",
-        evidence: "readability-review.zh-CN.md maps protocol fields to user-facing labels.",
-      },
-      {
-        id: "P-014",
-        label: "AI 可读评分表导出",
-        status: "pass",
-        evidence: "ai-readable-rubric.zh-CN.md and ai-readable-rubric.json export five criteria.",
-      },
-      {
-        id: "P-023",
-        label: "AI 可读案例包",
-        status: "pass",
-        evidence: "ai-readable-case-pack.zh-CN.md shows reviewer view, reviewer scoring, pass/fail evidence.",
-      },
-    ],
+    productTasks: labels.productTasks.map((task) => ({ ...task, status: "pass" })),
     files: Object.fromEntries(
       Object.entries(files).map(([key, filePath]) => [key, relativeToRepo(filePath)])
     ),
@@ -483,14 +462,14 @@ export async function generateRunDeliverables({
       panelContract: "artifact.runReportPanelContract",
     },
   };
-  const rubric = buildRubric({ run, contract });
-  const panelHtml = buildPanelHtml({ run, contract, manifest });
+  const rubric = buildRubric({ run, contract, labels });
+  const panelHtml = buildPanelHtml({ run, contract, manifest, labels });
   const outputs = {
     [files.panelHtml]: panelHtml,
-    [files.readabilityReview]: buildReadabilityReview({ run, contract }),
-    [files.rubricMarkdown]: buildRubricMarkdown(rubric),
+    [files.readabilityReview]: buildReadabilityReview({ run, contract, labels }),
+    [files.rubricMarkdown]: buildRubricMarkdown(rubric, labels),
     [files.rubricJson]: `${JSON.stringify(rubric, null, 2)}\n`,
-    [files.casePack]: buildCasePack({ run, contract, manifest }),
+    [files.casePack]: buildCasePack({ run, contract, manifest, labels }),
     [files.manifest]: `${JSON.stringify(manifest, null, 2)}\n`,
   };
   const leaks = collectAbsolutePathLeaks({

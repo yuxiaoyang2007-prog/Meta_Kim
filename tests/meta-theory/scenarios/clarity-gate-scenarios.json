@@ -146,7 +146,7 @@
     "ambiguousDims": ["Scope", "Goal", "Constraints"],
     "expectedBehavior": "MUST ASK — multiple outcome-changing dimensions are ambiguous",
     "expectedQuestions": [
-      "什么东西太慢？Agent 响应、构建过程还是运行时？",
+      "什么东西太慢？Agent 响应、构建过程，还是程序实际运行时？",
       "慢到什么程度？有具体的耗时数据吗？",
       "可接受的目标速度是多少？"
     ],

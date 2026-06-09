@@ -9,6 +9,7 @@ import {
   GAP_DECISIONS,
   decideCapabilityGap,
 } from "./capability-gap-mvp.mjs";
+import { buildAgentProjectionTargets } from "./runtime-tool-profiles.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(scriptDir, "..");
@@ -87,6 +88,8 @@ const MULTI_TYPE_CAPABILITY_INVENTORY = [
     routeImpact: "one-run execution without durable capability creation",
   },
 ];
+
+const AGENT_PROJECTION_TARGETS = buildAgentProjectionTargets();
 
 const RETRIEVAL_CAPABILITIES = [
   {
@@ -269,6 +272,7 @@ function summarizeGap(result, request) {
     owner: OWNER_BY_DECISION[result.gapDecision.decision],
     outputKind: result.decisionOutput.kind,
     candidateType: result.candidateWriteback?.candidateType ?? null,
+    projectRetention: result.generatedAgentSpec?.projectRetention ?? null,
     blocked: result.gapDecision.decision === "blocked_or_needs_approval",
   };
 }
@@ -308,6 +312,14 @@ function makeWorkerTaskPacket({ gap, group, groupIndex, itemIndex }) {
     capabilityRequirements: [decision],
     toolRequirements: [],
     capabilityInventoryRefs: group.capabilityInventoryRefs,
+    durableProjectAgentPolicy:
+      decision === "create_agent"
+        ? {
+            requiredDeliverable: "project_retained_abstract_agent_definition",
+            temporaryWorkerIsNotDeliverable: true,
+            runtimeTargets: AGENT_PROJECTION_TARGETS.map((target) => ({ ...target })),
+          }
+        : null,
     referenceDirection: "Use CapabilityGap and GapDecision evidence; concrete one-run work stays in this packet.",
     handoffTarget: "meta-conductor",
     handoffContract: {
@@ -408,6 +420,7 @@ export function buildCapabilityGapOrchestration(input) {
       mergeOwner: packet.mergeOwner,
       shardKey: packet.shardKey,
       shardScope: packet.shardScope,
+      durableProjectAgentPolicy: packet.durableProjectAgentPolicy,
     })),
   };
   const decisionCounts = Object.fromEntries(
@@ -447,7 +460,15 @@ export function buildCapabilityGapOrchestration(input) {
         "Conductor owns orchestration.",
         "Each gap has its own GapDecision.",
         "Same-type repeated needs have stable grouping and merge owner.",
+        "Create-agent routes produce durable project-agent candidates, not temporary worker prompts.",
+        "Formal tool projection targets are declared from the compatibility catalog.",
       ],
+    },
+    stageVisibility: {
+      requiredStages: ["Critical", "Fetch", "Thinking", "Review"],
+      publicSummaryRequired: true,
+      mustShowCapabilityRoute: true,
+      mustDistinguishTemporarySubagentsFromDurableAgents: true,
     },
     fetchEvidence: {
       sources: [
@@ -460,6 +481,9 @@ export function buildCapabilityGapOrchestration(input) {
       decisionKernel: "scripts/capability-gap-mvp.mjs",
       stageOrder: "Fetch completes research and multi-type capability inventory before Thinking.",
       capabilityInventory,
+      runtimeRequirements: {
+        formalToolTargets: AGENT_PROJECTION_TARGETS.map((target) => ({ ...target })),
+      },
       researchCapabilityDiscovery,
       deepResearchPlan,
       decisionImpactMap: capabilityInventory.map((item) => ({
@@ -467,6 +491,15 @@ export function buildCapabilityGapOrchestration(input) {
         routeImpact: item.routeImpact,
         checkedBeforeThinking: item.checkedBeforeThinking,
       })),
+    },
+    thinkingRoute: {
+      boardMode: boardModeFor(decided),
+      groupingPolicy: "same decision + repeat key share parallel group",
+      ownerSelectionPolicy:
+        "Use governance owner for candidate design; implementation workers remain run-scoped.",
+      durableProjectAgentPolicy:
+        "When decision=create_agent, the deliverable is a project-retained abstract agent candidate with formal tool projection targets.",
+      runtimeTargets: AGENT_PROJECTION_TARGETS.map((target) => ({ ...target })),
     },
     capabilityGaps: decided,
     groupedGaps: groups,

@@ -1314,15 +1314,15 @@ async function validateRuntimeCompatibilityCatalog() {
   const openclaw = byId.get("openclaw");
   assert(openclaw, "runtime compatibility catalog must include openclaw.");
   assert(
-    openclaw.genericCompatibility?.status === "partial" &&
-      /typed plugin/i.test(openclaw.nextAction ?? "") &&
+    openclaw.genericCompatibility?.status === "verified_current" &&
+      /strict OpenClaw self-test evidence/i.test(openclaw.nextAction ?? "") &&
       (openclaw.evidence ?? []).some(
         (entry) => entry.type === "official_docs" && entry.ref.includes("docs.openclaw.ai/concepts/agent"),
       ) &&
       (openclaw.evidence ?? []).some(
         (entry) => entry.type === "official_docs" && entry.ref.includes("docs.openclaw.ai/automation/hooks"),
       ),
-    "OpenClaw runtime projection must preserve the official workspace/hook boundary and partial tool-blocking status.",
+    "OpenClaw runtime projection must preserve official workspace/hook evidence and require strict OpenClaw self-test evidence that passes review before merge.",
   );
 }
 

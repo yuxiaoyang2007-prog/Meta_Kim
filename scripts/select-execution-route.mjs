@@ -213,6 +213,25 @@ async function projectRuntimeAgents() {
       });
     }
   }
+  const openclawWorkspaces = repoPath("openclaw/workspaces");
+  if (await exists(openclawWorkspaces)) {
+    const entries = await fs.readdir(openclawWorkspaces, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const soulPath = path.join("openclaw/workspaces", entry.name, "SOUL.md");
+      if (!(await exists(repoPath(soulPath)))) continue;
+      const id = entry.name;
+      const layer = id.startsWith("meta-") ? "meta" : "execution";
+      agents.push({
+        id,
+        layer,
+        source: "project_runtime_agent_inventory",
+        runtime: "openclaw",
+        sourceRef: toPosix(soulPath),
+        executionBlock: layer === "meta",
+      });
+    }
+  }
   return agents;
 }
 
@@ -260,6 +279,42 @@ async function projectCapabilityProviders() {
   const providers = [];
   for (const spec of providerSpecs) {
     providers.push(...await scanProjectFiles(spec));
+  }
+  if (await exists(repoPath(".codex/hooks.json"))) {
+    providers.push({
+      id: "codex-hooks-json",
+      type: "hooks",
+      source: "project_runtime_hook_config_inventory",
+      runtime: "codex",
+      sourceRef: ".codex/hooks.json",
+    });
+  }
+  for (const file of [
+    { id: "claude-settings-json", runtime: "claude_code", sourceRef: ".claude/settings.json" },
+    { id: "cursor-hooks-json", runtime: "cursor", sourceRef: ".cursor/hooks.json" },
+    { id: "openclaw-template-json", runtime: "openclaw", sourceRef: "openclaw/openclaw.template.json" },
+  ]) {
+    if (await exists(repoPath(file.sourceRef))) {
+      providers.push({
+        id: file.id,
+        type: "hooks",
+        source: "project_runtime_hook_config_inventory",
+        runtime: file.runtime,
+        sourceRef: file.sourceRef,
+      });
+    }
+  }
+  if (await exists(repoPath("package.json"))) {
+    const packageJson = await readJson("package.json");
+    for (const scriptName of Object.keys(packageJson.scripts ?? {})) {
+      providers.push({
+        id: `package-script:${scriptName}`,
+        type: "commands",
+        source: "package_script_inventory",
+        runtime: "shared",
+        sourceRef: `package.json#scripts.${scriptName}`,
+      });
+    }
   }
   for (const file of [
     { id: "repo-mcp", type: "mcpServers", source: "project_runtime_mcp_inventory", runtime: "shared", sourceRef: ".mcp.json" },
@@ -396,7 +451,7 @@ const ownerDiscoveryPacket = {
   ],
   governanceStages,
   repoCanonicalAgents: repoCanonicalAgents.slice(0, 20),
-  projectRuntimeAgents: projectRuntimeAgentCandidates.slice(0, 30),
+  projectRuntimeAgents: projectRuntimeAgentCandidates.slice(0, 80),
   localGlobalAgents: localGlobalAgents.slice(0, 30),
   repoCanonicalSkillProviders: repoCanonicalSkillProviders.slice(0, 30),
   projectRuntimeSkillProviders: projectRuntimeSkillProviders.slice(0, 40),
@@ -407,6 +462,21 @@ const ownerDiscoveryPacket = {
   runtimeToolProviders: runtimeToolProviders.slice(0, 40),
   capabilityProviderCoverage,
   globalInventoryFreshness,
+  capabilityDiscoverySearchLog: [
+    { source: "repo_canonical_capability_index", checked: true, sourceRef: "config/capability-index/meta-kim-capabilities.json" },
+    { source: "runtime_mirror_capability_indexes", checked: true, sourceRef: ".claude/.codex/.cursor/openclaw capability-index mirrors" },
+    { source: "claude_project_inventory", checked: true, sourceRef: ".claude/agents; .claude/skills; .claude/commands; .claude/hooks; .claude/settings.json" },
+    { source: "codex_project_inventory", checked: true, sourceRef: ".codex/agents; .agents/skills; .codex/commands; .codex/hooks; .codex/hooks.json; .codex/config.toml; .mcp.json; package.json scripts" },
+    { source: "cursor_project_inventory", checked: true, sourceRef: ".cursor/agents; .cursor/skills; .cursor/rules; .cursor/prompts; .cursor/hooks; .cursor/hooks.json; .cursor/mcp.json" },
+    { source: "openclaw_project_inventory", checked: true, sourceRef: "openclaw/workspaces; openclaw/skills; openclaw/hooks; openclaw/openclaw.template.json" },
+    { source: "local_global_inventory_cache", checked: true, sourceRef: ".meta-kim/state/default/capability-index/global-capabilities.json" },
+    { source: "claude_global_inventory", checked: true, sourceRef: "~/.claude/agents; ~/.claude/skills; ~/.claude/commands; ~/.claude/hooks; ~/.claude/settings.json" },
+    { source: "codex_global_inventory", checked: true, sourceRef: "~/.codex/agents; ~/.codex/skills; ~/.codex/commands; ~/.codex/hooks; ~/.codex/hooks.json; ~/.codex/config.toml; ~/.agents/skills" },
+    { source: "cursor_global_inventory", checked: true, sourceRef: "~/.cursor/agents; ~/.cursor/skills; ~/.cursor/rules; ~/.cursor/prompts; ~/.cursor/hooks; ~/.cursor/hooks.json; ~/.cursor/mcp.json" },
+    { source: "openclaw_global_inventory", checked: true, sourceRef: "~/.openclaw/openclaw.json; ~/.openclaw/workspace-*; ~/.openclaw/skills; ~/.openclaw/hooks; ~/.agents/skills" },
+    { source: "mcp_inventory", checked: true, sourceRef: ".mcp.json; .cursor/mcp.json; .codex/config.toml; MCP server/tool inventory" },
+    { source: "runtime_tools", checked: true, sourceRef: `${runtime}:shell_command; ${runtime}:apply_patch; ${runtime}:filesystem` },
+  ],
   candidateReusableCapabilityProviders: uniqueById([
     ...repoCanonicalCapabilityProviders,
     ...projectRuntimeCapabilityProviders,
@@ -418,20 +488,54 @@ const ownerDiscoveryPacket = {
   evidenceRefs: [
     "config/capability-index/meta-kim-capabilities.json",
     ".codex/agents",
+    ".codex/commands",
+    ".codex/hooks",
+    ".codex/hooks.json",
+    ".codex/config.toml",
     ".claude/agents",
+    ".claude/commands",
+    ".claude/hooks",
+    ".claude/settings.json",
     ".cursor/agents",
+    ".cursor/hooks",
+    ".cursor/hooks.json",
+    ".cursor/mcp.json",
+    ".cursor/rules",
     ".agents/skills",
     ".claude/skills",
     ".cursor/skills",
     "openclaw/skills",
-    ".claude/hooks",
-    ".codex/hooks",
-    ".cursor/rules",
+    "openclaw/hooks",
+    "openclaw/workspaces",
+    "openclaw/openclaw.template.json",
     "config/runtime-capability-matrix.json",
     ".meta-kim/state/default/capability-inventory.json",
     ".mcp.json",
-    ".cursor/mcp.json",
-    ".codex/config.toml",
+    "package.json",
+    "scripts",
+    "~/.codex/agents",
+    "~/.codex/skills",
+    "~/.codex/commands",
+    "~/.codex/hooks",
+    "~/.codex/hooks.json",
+    "~/.codex/config.toml",
+    "~/.agents/skills",
+    "~/.claude/agents",
+    "~/.claude/skills",
+    "~/.claude/commands",
+    "~/.claude/hooks",
+    "~/.claude/settings.json",
+    "~/.cursor/agents",
+    "~/.cursor/skills",
+    "~/.cursor/rules",
+    "~/.cursor/prompts",
+    "~/.cursor/hooks",
+    "~/.cursor/hooks.json",
+    "~/.cursor/mcp.json",
+    "~/.openclaw/openclaw.json",
+    "~/.openclaw/workspace-*",
+    "~/.openclaw/skills",
+    "~/.openclaw/hooks",
     ".meta-kim/state/default/capability-index/global-capabilities.json",
     "config/contracts/workflow-contract.json",
   ],

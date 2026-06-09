@@ -80,4 +80,25 @@ describe("runtime compatibility catalog", () => {
       qoder.evidence.filter((entry) => entry.type === "official_docs").length >= 4,
     );
   });
+
+  test("formal projection wording preserves support and self-test boundaries", () => {
+    const byId = new Map(catalog.products.map((product) => [product.id, product]));
+    const claude = byId.get("claude");
+    const codex = byId.get("codex");
+    const openclaw = byId.get("openclaw");
+    const cursor = byId.get("cursor");
+
+    assert.equal(claude.genericCompatibility.status, "verified_current");
+    assert.equal(codex.genericCompatibility.status, "verified_current");
+    assert.equal(openclaw.genericCompatibility.status, "verified_current");
+    assert.equal(cursor.genericCompatibility.status, "verified_current");
+    assert.match(openclaw.nextAction, /strict OpenClaw self-test evidence/i);
+    assert.match(cursor.nextAction, /strict Cursor self-test evidence/i);
+    assert.match(openclaw.nextAction, /passes review/i);
+    assert.match(cursor.nextAction, /passes review/i);
+    assert.doesNotMatch(openclaw.nextAction, /before merge/i);
+    assert.doesNotMatch(cursor.nextAction, /before merge/i);
+    assert.doesNotMatch(openclaw.decision, /unsupported|not supported|partial/i);
+    assert.doesNotMatch(cursor.decision, /unsupported|not supported|partial|light/i);
+  });
 });

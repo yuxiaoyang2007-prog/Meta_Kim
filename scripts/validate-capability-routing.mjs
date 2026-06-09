@@ -22,6 +22,28 @@ assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.projectRuntimeSkillProviders), 
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.localGlobalSkillProviders), "Route output must expose local/global skill provider discovery");
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.projectRuntimeCapabilityProviders), "Route output must expose project runtime capability provider discovery");
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.localGlobalCapabilityProviders), "Route output must expose local/global capability provider discovery");
+assert(
+  fuzzy.ownerDiscoveryPacket.projectRuntimeCapabilityProviders.some((provider) => provider.id === "codex-hooks-json" && provider.sourceRef === ".codex/hooks.json"),
+  "Route output must expose .codex/hooks.json as a real Codex hook config provider",
+);
+for (const [providerId, providerPath] of [
+  ["claude-settings-json", ".claude/settings.json"],
+  ["cursor-hooks-json", ".cursor/hooks.json"],
+  ["openclaw-template-json", "openclaw/openclaw.template.json"],
+]) {
+  assert(
+    fuzzy.ownerDiscoveryPacket.projectRuntimeCapabilityProviders.some((provider) => provider.id === providerId && provider.sourceRef === providerPath),
+    `Route output must expose ${providerPath} as a real runtime config provider`,
+  );
+}
+assert(
+  fuzzy.ownerDiscoveryPacket.projectRuntimeAgents.some((agent) => agent.runtime === "openclaw" && agent.sourceRef?.startsWith("openclaw/workspaces/")),
+  "Route output must expose OpenClaw workspace agents as project runtime agent providers",
+);
+assert(
+  fuzzy.ownerDiscoveryPacket.projectRuntimeCapabilityProviders.some((provider) => provider.id?.startsWith("package-script:") && provider.sourceRef?.startsWith("package.json#scripts.")),
+  "Route output must expose package.json scripts as real command providers",
+);
 assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.projectRuntimeLightScan?.hooks >= 1, "Route output must expose project hook provider coverage");
 assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.projectRuntimeLightScan?.rules >= 1, "Route output must expose project rule/prompt provider coverage");
 assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.localGlobalCached?.plugins >= 1, "Route output must expose cached global plugin provider coverage");
@@ -35,6 +57,61 @@ assert(fuzzy.routeExecutionGate?.canPreviewRoute === true, "Stale cache may stil
 assert(typeof fuzzy.routeExecutionGate?.canEnterExecution === "boolean", "Route output must expose whether Execution may start");
 assert(fuzzy.ownerDiscoveryPacket?.candidateReusableCapabilityProviders?.length > 0, "Route output must expose reusable capability providers before agent creation");
 assert(fuzzy.ownerDiscoveryPacket?.searchOrder?.includes("available_capability_providers_skills_tools_mcp"), "Route owner discovery must include provider-first skill/tool/MCP inventory");
+assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.capabilityDiscoverySearchLog), "Route output must expose Fetch capabilityDiscovery.searchLog evidence");
+const routeSearchRefs = fuzzy.ownerDiscoveryPacket.capabilityDiscoverySearchLog
+  .map((entry) => `${entry.source}:${entry.sourceRef}`)
+  .join("\n");
+for (const requiredRef of [
+  ".codex/agents",
+  ".agents/skills",
+  ".codex/commands",
+  ".codex/hooks",
+  ".codex/hooks.json",
+  ".codex/config.toml",
+  ".mcp.json",
+  "package.json scripts",
+  ".claude/agents",
+  ".claude/skills",
+  ".claude/commands",
+  ".claude/hooks",
+  ".claude/settings.json",
+  "~/.claude/agents",
+  "~/.claude/skills",
+  "~/.claude/commands",
+  "~/.claude/hooks",
+  "~/.claude/settings.json",
+  ".cursor/agents",
+  ".cursor/skills",
+  ".cursor/rules",
+  ".cursor/prompts",
+  ".cursor/hooks",
+  ".cursor/hooks.json",
+  ".cursor/mcp.json",
+  "~/.cursor/agents",
+  "~/.cursor/skills",
+  "~/.cursor/rules",
+  "~/.cursor/prompts",
+  "~/.cursor/hooks",
+  "~/.cursor/hooks.json",
+  "~/.cursor/mcp.json",
+  "openclaw/workspaces",
+  "openclaw/skills",
+  "openclaw/hooks",
+  "openclaw/openclaw.template.json",
+  "~/.openclaw/openclaw.json",
+  "~/.openclaw/workspace-*",
+  "~/.openclaw/skills",
+  "~/.openclaw/hooks",
+  "~/.codex/agents",
+  "~/.codex/skills",
+  "~/.codex/commands",
+  "~/.codex/hooks",
+  "~/.codex/hooks.json",
+  "~/.codex/config.toml",
+  "~/.agents/skills",
+]) {
+  assert(routeSearchRefs.includes(requiredRef), `Route Fetch searchLog must include ${requiredRef}`);
+}
 if (fuzzy.candidateDependencyProjects.includes("kim-decision")) {
   assert(!fuzzy.rankedRoutes.some((item) => item.dependencyProject === "kim-decision" && item.scoreBand === "execute"), "Kim_Decision may be discovered but must not become an execution dependency");
 }

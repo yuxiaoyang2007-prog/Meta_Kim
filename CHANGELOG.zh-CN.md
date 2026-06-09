@@ -6,6 +6,66 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
 
+## [2.8.9] - 2026-06-09
+
+### 修复
+
+- **OpenClaw/Cursor 合并证据门** — OpenClaw 或 Cursor 的贡献改造现在明确要求提交者先在对应工具端自己完成严格自测并提供证据，证据通过审查后才能合并。
+
+### 变更
+
+- 版本升级：2.8.8 -> 2.8.9。
+
+## [2.8.8] - 2026-06-09
+
+### 修复
+
+- **工具端报告文案** — meta-theory 公开报告继续保留 `Critical / Fetch / Thinking / Review` 协议标签，但会配上人话说明，例如 Fetch 是“收集证据和能力来源”。
+- **正式工具端来源** — 报告里的工具端名称和持久 agent 投影目标改为从 `config/sync.json` 与 `config/runtime-compatibility-catalog.json` 读取，避免在生成逻辑里写死 Claude/Codex/Cursor/OpenClaw 列表。
+- **持久 agent 边界** — 临时 subagent 只作为 factory / review worker，不再被当成创建出来的项目 agent。
+- **支持口径修正** — Claude Code 和 Codex 明确为完整支持；OpenClaw 和 Cursor 表述为兼容的正式投影，不再暗示不支持或降级。
+- **OpenClaw/Cursor PR 证据门** — OpenClaw 或 Cursor 的增强改造欢迎提交 PR；提交者需要先在对应工具端自己完成严格自测并提供证据，证据通过审查后才能合并。
+
+### 变更
+
+- **中文公开表述更明确** — 面向用户的中文文案优先使用明确工具名或 `工具端`，减少把 Claude Code、Codex、Cursor、OpenClaw 说成含糊“运行时”的情况。
+- **保留 meta-theory 入口边界** — `SKILL.md` 内容不扩写，继续保持在维护者接受的 500 行以内。
+- 版本升级：2.8.7 -> 2.8.8。
+
+### 验证
+
+- `npm run meta:sync`
+- `npm run meta:check`
+- `npm run meta:providers:validate`
+- `npm run meta:hook:validate`
+- `npm run meta:route:validate`
+- `npm run meta:runtime:validate`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
+## [2.8.7] - 2026-06-09
+
+### 修复
+
+- **跨工具端 Fetch 发现证据** — 扩展 meta-theory Fetch 最小检查清单和 route searchLog，Claude Code、Codex、Cursor、OpenClaw 现在都必须在 Thinking 前显式记录项目/全局能力库存证据。
+- **工具端 provider 扫描对齐** — 全局发现器现在覆盖 Claude Code settings / MCP 证据、Cursor rules / prompts / hooks / MCP 配置、Codex hooks / config / skills，以及 OpenClaw config / workspace / skill 证据，不再只让 Codex 路径相对完整。
+- **工具端 skill 投影路径漂移** — runtime sync 现在会原样保留跨工具端 Fetch checklist，Claude、Cursor、OpenClaw 镜像不再把其它工具端的路径替换成自己的投影路径。
+
+### 变更
+
+- **能力路由证据更可审计** — route selection 现在把 `.claude/settings.json`、`.cursor/hooks.json`、`openclaw/openclaw.template.json`、`package.json` scripts 和 OpenClaw workspace agents 都作为真实 provider evidence 输出。
+- **放宽 meta-theory 入口行数预算** — 结构守卫现在允许 `SKILL.md` 保持在 500 行以内，匹配当前维护者接受的预算。
+- 版本升级：2.8.6 -> 2.8.7。
+
+### 验证
+
+- `npm run meta:sync`
+- `npm run meta:route:validate`
+- `npm run meta:capabilities:smoke`
+- `npm run meta:check:runtimes`
+- `npm run meta:test:meta-theory`
+- `git diff --check`
+
 ## [2.8.6] - 2026-06-05
 
 ### 新增
@@ -54,7 +114,7 @@
 ### 变更
 
 - **澄清 validators 和 hooks 是保护，不是主引擎** — Prompt contracts 现在明确：validators、gates、hooks 可以拒绝空路线或危险路线，但默认路径本身必须发现并绑定 owner、skill、MCP、tool、runtime、OS 和 verification choices。
-- **保留 meta-theory progressive disclosure 硬线** — `SKILL.md` 继续限制在 320 行以内；发布模式细节放到 references，不膨胀入口文件。
+- **保留 meta-theory progressive disclosure 硬线** — `SKILL.md` 继续限制在 500 行以内；发布模式细节放到 references，不膨胀入口文件。
 - 版本升级：2.8.4 -> 2.8.5。
 
 ### 验证

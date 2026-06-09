@@ -75,6 +75,8 @@ When Type B is triggered by a **capability gap in the Meta_Kim repository itself
 
 When Type B is triggered while Meta_Kim is used inside a **user project**, search global agents first. If a global agent already fits, use it directly and do not copy it into the project. Copy a global agent into the user project only when project-specific knowledge, boundary changes, persistent skill/tool additions, or recurring local ownership require modification; that copy must be recorded as project-local upgrade work, not ordinary reuse.
 
+When the user's intent explicitly says the agent should be created, iterated, upgraded, or kept in the project, the route must not collapse into `worker_task_only`. The factory may still reject bad agent design, but it must return a durable project-agent candidate or a blocked `capabilityGapPacket` explaining which evidence is missing. Temporary runtime subagents are allowed only as factory workers or reviewers; they are not the created agent.
+
 Professional role split:
 
 - **Warden** is the **public front door** and approval owner.
@@ -137,6 +139,21 @@ Required fields:
 
 This card is the build contract for an execution-agent factory when an agent must be created or upgraded. It is not used just because a global agent exists; direct global reuse remains a reference, not a local copy. A copied global agent must be modified or upgraded after copy; otherwise it should stay global.
 
+### Durable Project Agent Deliverable
+
+For user-project `create_agent` or `upgrade_existing_owner` routes, the accepted deliverable is a project-retained abstract agent definition, plus projection metadata for required runtimes. It must be suitable for version control and future reuse, not just for the current run.
+
+Required durable deliverables:
+
+- `GeneratedAgentSpec` as the reviewed source of identity truth.
+- Project target policy: `project_local_agent`.
+- Runtime projections: every formal tool target from `config/sync.json` with an agent path in `config/runtime-compatibility-catalog.json`, marked with its catalog status and evidence.
+- Candidate writeback or planned file target showing where the agent will be retained after Warden/user approval.
+
+The durable definition must contain abstract rules: role-family name, trigger conditions, responsibilities, non-capabilities, loadout slots, inputs, outputs, handoff, memory policy, gap policy, and verification policy. It must not contain the current task, current files, ticket names, runtime nickname, or one-run verification steps.
+
+If the run only needs a temporary execution worker, use `workerTaskPacket` and do not create an agent. If the user asks for a persistent project agent, `workerTaskPacket` can describe the factory work, but it cannot be the final deliverable.
+
 ### Sub-agent Identity Carry-over
 
 When the orchestrator dispatches a meta-* agent as a sub-agent (e.g., `Agent(subagent_type: "meta-prism", ...)`):
@@ -190,6 +207,7 @@ Required fields:
 - `gapPolicy`: what the agent must report as a capability gap instead of pretending to know.
 - `verificationPolicy`: fixtures, scorecard dimensions, and verification owner.
 - `installProjection`: whether this can be projected to Claude, Codex, Cursor, OpenClaw, or remains reference-only.
+- `projectRetention`: how the agent will be kept in the project, including formal tool projection targets and writeback approval boundary.
 - `identityCleanliness`: explicit proof that no repo path, file list, ticket, today task, deliverable link, or verify step is in durable identity.
 
 Quality bar:

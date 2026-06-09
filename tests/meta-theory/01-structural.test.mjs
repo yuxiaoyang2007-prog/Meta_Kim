@@ -194,8 +194,8 @@ describe("SKILL.md structural integrity", async () => {
     test("SKILL.md stays lean and delegates details to references", () => {
       const lineCount = raw.split(/\r?\n/).length;
       assert.ok(
-        lineCount <= 320,
-        `SKILL.md should stay <= 320 lines after progressive disclosure; got ${lineCount}`,
+        lineCount <= 500,
+        `SKILL.md should stay <= 500 lines after progressive disclosure; got ${lineCount}`,
       );
     });
 

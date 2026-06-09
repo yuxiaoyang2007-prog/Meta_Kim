@@ -12,7 +12,7 @@
 </p>
 
 <p>
-  <img alt="Runtime" src="https://img.shields.io/badge/runtime-Claude%20Code%20%7C%20Codex%20%7C%20OpenClaw%20%7C%20Cursor-111827"/>
+  <img alt="Tools" src="https://img.shields.io/badge/tools-Claude%20Code%20%7C%20Codex%20%7C%20OpenClaw%20%7C%20Cursor-111827"/>
   <img alt="Stars" src="https://img.shields.io/github/stars/KimYx0207/Meta_Kim?style=flat&logo=github"/>
   <img alt="License" src="https://img.shields.io/badge/license-MIT-green"/>
 </p>
@@ -44,7 +44,7 @@ Meta_Kim 就是干这个的。它是**AI 之上的 AI**——一套统一的治�
 | 没有 Meta_Kim | 使用 Meta_Kim |
 |---|---|
 | 一个超长聊天回复试图包办所有事 | 任务会经过意图、能力、owner、审查、验证、写回 |
-| 因为某个工具能用，所以就直接用它 | 因为某个能力适合当前任务、runtime、OS、依赖和风险，才选择它 |
+| 因为某个工具能用，所以就直接用它 | 因为某个能力适合当前任务、工具端、OS、依赖和风险，才选择它 |
 | 命令跑绿就被误认为目标完成 | 证据必须回到用户真实目标上验收 |
 | 好经验沉没在聊天记录里 | 可复用经验会沉淀成 skill、agent、script、contract 或一次性任务 |
 
@@ -64,7 +64,7 @@ npm run meta:delivery:bundle
 - 先搜索能力，再决定谁执行
 - 复杂任务会拆成有边界的 worker task，而不是一段万能聊天回复
 - Review 和 Verification 会留下产物证据，而不是只给安慰性结论
-- 被阻塞的 runtime 证据会继续保持阻塞，例如 Cursor native live 不会被 smoke evidence 冒充完成
+- 被阻塞的工具端证据会继续保持阻塞，例如 Cursor native live 不会被 smoke evidence 冒充完成
 
 带着示例看第一遍：[`examples/first-run/README.md`](examples/first-run/README.md)。
 
@@ -110,17 +110,17 @@ npm run meta:validate
 | Meta_Kim 仓库 + Claude Code | 完整治理（CLAUDE.md 提供 8-stage spine、门、分发规则） | — |
 | 任意其他项目 + Claude Code | Hooks（安全拦截、格式化、记忆保存）+ `/meta-theory` skill | 说"run meta theory"或输入 `/meta-theory` |
 | Codex | AGENTS.md 规则 + 9 个自定义 agent + `/meta-theory` 命令 | 输入"run meta theory"或 `/meta-theory` |
-| OpenClaw | Workspace agent + internal lifecycle hooks；工具阻断需要 typed plugin adapter | 需要配置 OpenClaw config/auth |
-| Cursor | 官方 subagents、`.cursor/rules`、hooks、MCP 镜像 | 最轻量；适合阅读和轻量操作 |
+| OpenClaw | 兼容 workspace agent、skill、config 和 internal lifecycle hooks | 需要配置 OpenClaw config/auth；提交者必须先在 OpenClaw 自己完成严格自测并提供证据，证据通过审查后才能合并 |
+| Cursor | 兼容官方 subagents、`.cursor/rules`、hooks、skills 和 MCP 镜像 | 提交者必须先在 Cursor 自己完成严格自测并提供证据，证据通过审查后才能合并 |
 
 ### 平台支持分层
 
-Meta_Kim 现在把平台支持分成几层，而不是把所有“看起来兼容”的平台都说成完整 runtime 投影。
+Meta_Kim 现在把平台支持分成几层，而不是把所有“看起来兼容”的平台都说成完整工具端投影。
 
 | 层级 | 产品 | 含义 |
 |---|---|---|
-| 正式 runtime 投影 | Claude Code、Codex、OpenClaw、Cursor | canonical 治理层会同步成对应 runtime 文件，并由 `npm run meta:sync` / `npm run meta:check` 校验。 |
-| 原生依赖安装目标 | opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode | ECC 上游安装器支持这些目标，但 Meta_Kim 不会在没有 profile、layout、sync、测试前宣称完整 runtime 投影。 |
+| 正式工具端投影 | Claude Code、Codex、OpenClaw、Cursor | canonical 治理层会同步成对应工具端文件，并由 `npm run meta:sync` / `npm run meta:check` 校验。 |
+| 原生依赖安装目标 | opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode | ECC 上游安装器支持这些目标，但 Meta_Kim 不会在没有 profile、layout、sync、测试前宣称完整工具端投影。 |
 | 候选 probe | Qoder CLI | Qoder 官方文档确认它有 skills、subagents、hooks、MCP 表面；Meta_Kim 先记录为候选兼容，不宣称正式支持。 |
 
 事实源：`config/runtime-compatibility-catalog.json`。
@@ -211,11 +211,11 @@ flowchart LR
 
 **Fetch — 先找已有能力，而不是上来就自己发明**
 
-搜索现有 agent、skill、工具、MCP 能不能覆盖这个需求。这一步的核心理念是**能力优先**——先定义需要什么能力，再搜索谁声明了这个能力，最后派给最匹配的 owner。能力索引查找顺序是 `config/capability-index/` → runtime mirror → local inventory → fallback，而不是一开始就写死一个 agent 名字。
+搜索现有 agent、skill、工具、MCP 能不能覆盖这个需求。这一步的核心理念是**能力优先**——先定义需要什么能力，再搜索谁声明了这个能力，最后派给最匹配的 owner。能力索引查找顺序是 `config/capability-index/` → 工具端镜像 → 本地库存 → fallback，而不是一开始就写死一个 agent 名字。
 
 **治理决策引擎**
 
-Meta_Kim 不只是 8 阶段。它会先识别治理触发条件，再查平台能力、OS 兼容、依赖项目能力，接着分离 owner 与 weapon，根据 Win/Mac/runtime 过滤可执行路径，只在关键分叉点给用户选择项，自动执行确定性部分，再验证用户目标是否真的落地，最后把经验写回供下次复用。只作为参考的项目会被吸收成 Meta_Kim 自己的数据，不会被悄悄升级成依赖；见 `config/governance/decision-pattern-catalog.json`。
+Meta_Kim 不只是 8 阶段。它会先识别治理触发条件，再查平台能力、OS 兼容、依赖项目能力，接着分离 owner 与 weapon，根据 Win/Mac/工具端过滤可执行路径，只在关键分叉点给用户选择项，自动执行确定性部分，再验证用户目标是否真的落地，最后把经验写回供下次复用。只作为参考的项目会被吸收成 Meta_Kim 自己的数据，不会被悄悄升级成依赖；见 `config/governance/decision-pattern-catalog.json`。
 
 **Thinking — 定义边界、owner、顺序、交付物、风险和停机条件**
 
@@ -285,7 +285,7 @@ flowchart TB
     style workflow fill:#14532d,stroke:#22c55e,color:#dcfce7
 ```
 
-11 阶段业务工作流额外多了 `revision`（修订）、`summary`（总结）、`feedback`（反馈）、`mirror`（镜像）这些环节，让整个流程不仅仅是"做完"，还要"做好"、"做对"，并把运行时投影同步到位。
+11 阶段业务工作流额外多了 `revision`（修订）、`summary`（总结）、`feedback`（反馈）、`mirror`（镜像）这些环节，让整个流程不仅仅是"做完"，还要"做好"、"做对"，并把 Claude/Codex/Cursor/OpenClaw 工具端镜像同步到位。
 
 ### 协议 = 每个节点必须交出什么
 
@@ -538,8 +538,8 @@ Meta_Kim 当前已经映射了 4 个平台：
 | --- | --- | --- |
 | **Claude Code** | 完整支持 | `.claude/agents/*.md` + `SKILL.md` + hooks + MCP |
 | **Codex** | 完整支持 | `.codex/agents/*.toml` + `.agents/skills/` + commands + hooks |
-| **OpenClaw** | 正式投影；执行阻断仍是 partial | `openclaw/` workspaces + skills + internal hooks；阻断策略需要 typed plugin |
-| **Cursor** | 正式投影；轻量 runtime | `.cursor/agents/*.md` + `.cursor/rules/*.mdc` + skills + hooks + MCP |
+| **OpenClaw** | 兼容的正式投影 | `openclaw/` workspaces + skills + internal hooks；更强工具阻断改造需提交者先在 OpenClaw 自己完成严格自测并提供证据，证据通过审查后才能合并 |
+| **Cursor** | 兼容的正式投影 | `.cursor/agents/*.md` + `.cursor/rules/*.mdc` + skills + hooks + MCP；Cursor 改造需提交者先在 Cursor 自己完成严格自测并提供证据，证据通过审查后才能合并 |
 
 主源层由 `canonical/agents/`、`canonical/skills/meta-theory/`、`config/contracts/`、`config/capability-index/` 组成，再通过同步脚本（`npm run meta:sync`）镜像 / 投影到不同平台的文件结构。
 
@@ -564,24 +564,24 @@ flowchart TB
 
 你可以通过配置**不断补充新的平台映射**——只要那个平台支持 agent 和 agent 间通信。
 
-但要注意：四个运行时不是平权关系。当前 Claude Code 的承载面最完整，是主编辑运行时。
+Claude/Codex/Cursor/OpenClaw 四个工具端都是 Meta_Kim 的正式投影，但原生能力表面不同。Claude Code 和 Codex 都是完整支持。OpenClaw 与 Cursor 是兼容的正式投影；增强这两端的 PR 需要提交者先在对应工具端自己完成严格自测并提供证据，证据通过审查后才能合并。
 
 | 能力面 | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
 | **agent** | 原生 agents/subagents，项目级与用户级都成熟 | custom agents/subagents 很强 | workspace 型 agent，支持 agent-to-agent | 官方 `.cursor/agents` subagents 可用，但作为治理宿主仍较轻 |
 | **skill/references** | 原生 skill、references、全局技能生态完整 | `.agents/skills/` 是项目 skill 根 | workspace skill + installable skill | skill/references 接入较轻 |
 | **hook/自动化** | 项目级 hooks + settings.json + 插件生态 | 可信 `.codex/hooks.json` 项目/用户 hooks | internal lifecycle hooks；阻断/取消策略需要 typed plugin hooks | `.cursor/hooks.json` lowerCamel lifecycle hooks，支持 `preToolUse` / `failClosed` |
-| **MCP/配置** | 原生 MCP 与配置面完整 | 可接 runtime adapter 与 MCP | workspace config 明确 | 可接 MCP，但整体较轻 |
-| **治理闭环承载力** | **最高** | 高，但低于 Claude Code | 高，但形态不同 | 最轻 |
+| **MCP/配置** | 原生 MCP 与配置面完整 | 可接工具端 adapter 与 MCP | workspace config 明确 | 可接 MCP，但整体较轻 |
+| **治理闭环支持** | 通过 Claude-native 表面完整支持 | 通过 Codex-native 表面完整支持 | 通过 OpenClaw-native 表面兼容；typed plugin 工具阻断改造需提交者严格自测并提供证据，证据通过审查后才能合并 | 通过 Cursor-native 表面兼容；选择弹窗在未验证前使用 chat-card fallback |
 
-原因不是情怀——Claude Code 同时具备 agent、skill、references、hooks、settings、MCP、plugin、全局能力发现这些原生面，让"发牌 → 协议 → 过门 → 自动化守卫 → 写回"这一整套闭环更容易完整承载。
+重点不是排座次，而是兼容纪律：每个正式工具端都保留自己的 agent、skill、hook、MCP、选择面和配置面，不把某一个宿主格式伪装成通用格式。
 
 ### 仓库四层承载结构
 
 | 层 | 位置 | 作用 |
 | --- | --- | --- |
 | **canonical 主源** | `canonical/agents/`、`canonical/skills/meta-theory/`、`config/contracts/`、`config/capability-index/` | 长期维护优先改这里 |
-| **运行时投影** | `.claude/`、`.codex/`、`openclaw/`、`.cursor/` | 同一能力在不同运行时的镜像 |
+| **工具端镜像** | `.claude/`、`.codex/`、`openclaw/`、`.cursor/` | 同一能力在不同工具端的镜像 |
 | **本地状态** | `.meta-kim/state/{profile}/`、`.meta-kim/local.overrides.json` | profile 级状态、run index、continuity |
 | **脚本与校验** | `scripts/`、`npm run *` | 同步、校验、发现、验收 |
 
@@ -591,7 +591,7 @@ flowchart TB
 
 | 层级 | 承载位置 | 决定什么 |
 | --- | --- | --- |
-| **项目级** | 当前仓库的 `canonical/`、`config/contracts/`、`config/capability-index/`、runtime projections、文档、脚本 | 这个项目自己定义了什么 |
+| **项目级** | 当前仓库的 `canonical/`、`config/contracts/`、`config/capability-index/`、工具端投影、文档、脚本 | 这个项目自己定义了什么 |
 | **全局级** | `~/.claude/`、`~/.codex/`、`~/.openclaw/`、`~/.cursor/`、`~/.meta-kim/global/` | 这台机器上还能发现什么 |
 | **本地级** | `.meta-kim/state/{profile}/run-index.sqlite`、`compaction/`、`profile.json` | 这次 run 在这个 profile 下留下了什么 |
 
@@ -623,7 +623,7 @@ flowchart TB
 
 | 路径 | 作用 | 什么时候写入 |
 | --- | --- | --- |
-| `local.overrides.json` | 记住你选了哪些运行时 | 自动 — 首次运行 `setup.mjs` |
+| `local.overrides.json` | 记住你选了哪些工具端 | 自动 — 首次运行 `setup.mjs` |
 | `state/{profile}/profile.json` | Profile 元信息（创建时间、名称） | 自动 — `setup.mjs` 创建 `default` profile |
 | `state/{profile}/run-index.sqlite` | 治理 run 的索引记录 — 谁跑了什么、发现了什么、还有什么没解决 | 按需 — `npm run meta:index:runs -- <artifact>` |
 | `state/{profile}/compaction/` | 跨会话接力包：未完成的步骤、待处理的发现、未关闭的验证门 | 按需 — 治理 run 需要跨会话恢复时写入 |
@@ -650,7 +650,7 @@ Meta_Kim 的门和协议有四层执行保障。全局安装（`node setup.mjs`�
 Meta_Kim 的记忆不是单一的。它有三层，各有分工，共同保障 agent 持续进化且对项目越来越熟。
 
 三层记忆的激活方式各不相同：
-- **第一层** 内置于 Claude Code——依赖 Claude Code 运行时（在 `~/.claude/projects/*/memory/` 自动读写）
+- **第一层** 内置于 Claude Code——依赖 Claude Code 自带记忆机制（在 `~/.claude/projects/*/memory/` 自动读写）
 - **第二层** 由 `node setup.mjs` 自动安装
 - **第三层** 由 `node setup.mjs` 安装，但需要手动启动服务器（见下方第三层激活说明）
 
@@ -668,7 +668,7 @@ Meta_Kim 的记忆不是单一的。它有三层，各有分工，共同保障 a
 - **负责什么**：项目级别的代码知识图谱
 - **存储位置**：`graphify-out/graph.json`（NetworkX 节点链接格式）；深度阅读可优先看同目录下的 `GRAPH_REPORT.md`
 - **工作机制（数据面）**：`node setup.mjs` 可选步骤会安装 graphify、并**幂等**执行 `python -m graphify claude install` 与 `python -m graphify hook install`（即使 graphify 已通过 pip 安装过也会补全 hook）；git hook 在 commit/checkout 时触发当前仓库内图谱重建。`npm run meta:graphify:install` 行为与之一致（含 hook）。
-- **工作机制（使用面）**：同步后的 `meta-theory` 里 Fetch Step 0.5 约定模型如何检测与使用图谱；**不是**后台常驻进程。Claude Code 子代理仅通过 `subagent-context.mjs` 收到**短提示**，不会自动把整份 `graph.json` 塞进上下文。Codex / OpenClaw / Cursor 无该 hook，但共享同一份 `dev-governance.md` 引用；其他运行时可在**目标仓库**按需执行 `python -m graphify codex install` 或 `python -m graphify claw install`（参见 `python -m graphify --help`）。
+- **工作机制（使用面）**：同步后的 `meta-theory` 里 Fetch Step 0.5 约定模型如何检测与使用图谱；**不是**后台常驻进程。Claude Code 子代理仅通过 `subagent-context.mjs` 收到**短提示**，不会自动把整份 `graph.json` 塞进上下文。Codex / OpenClaw / Cursor 无该 hook，但共享同一份 `dev-governance.md` 引用；其他工具端可在**目标仓库**按需执行 `python -m graphify codex install` 或 `python -m graphify claw install`（参见 `python -m graphify --help`）。
 - **核心价值**：
   - 让记忆越来越熟悉项目——不是记住代码原文，而是理解代码的结构和关系
   - **大幅降低幻觉**——agent 不再凭记忆瞎编，而是基于图谱事实回答
@@ -703,14 +703,14 @@ Meta_Kim 的记忆不是单一的。它有三层，各有分工，共同保障 a
   - 跨会话连续性——上次聊到哪了，这次能接上
   • 向量级检索——不是关键词匹配，而是语义理解
   - 精准召回——从历史会话中找到最相关的上下文
-- **激活方式**：`node setup.mjs` 安装并配置 MCP Memory Service（第三层），同时安装各运行时记忆 hook，并尝试在后台启动 HTTP 服务。
+- **激活方式**：`node setup.mjs` 安装并配置 MCP Memory Service（第三层），同时安装各工具端记忆 hook，并尝试在后台启动 HTTP 服务。
   - **Claude Code**：SessionStart Hook 和 Stop 记忆保存 Hook 在 `node setup.mjs` 时自动注册；会话启动时通过 `mcp_memory_global.py --mode session` 写入项目状态。
   - **Codex**：`~/.codex/hooks.json` 自动写入 SessionStart、UserPromptSubmit、Stop 桥接，调用 `meta-kim-memory-save.mjs`，覆盖开始 / 提示提交 / 结束。
   - **OpenClaw**：`~/.openclaw/hooks/mcp-memory-service` 自动安装 managed hook，覆盖 `command:new`、`command:reset`、`session:compact:after`、`command:stop`。
   - **Cursor**：`~/.cursor/hooks.json` 自动写入 `beforeSubmitPrompt` 和 `stop` 桥接，复用共享记忆 hook。
 - **启动服务器**：`memory server --http`（macOS/Linux 需设置 `MCP_ALLOW_ANONYMOUS_ACCESS=true`；Windows PowerShell 使用 `$env:MCP_ALLOW_ANONYMOUS_ACCESS="true"`），然后访问 `http://localhost:8000`。
 - **端口**：服务器和 Meta_Kim hooks 统一使用 `http://localhost:8000`。
-- **Hook**：Claude Code、Codex、Cursor、OpenClaw 都会自动注册；各运行时使用自己的 hook 格式，但共享同一个 MCP Memory HTTP 端点。
+- **Hook**：Claude Code、Codex、Cursor、OpenClaw 都会自动注册；各工具端使用自己的 hook 格式，但共享同一个 MCP Memory HTTP 端点。
 - **MCP 注册与写入区别**：`.mcp.json` 只注册 MCP Memory server（`memory server`）供客户端访问；自动写入会话记忆由 lifecycle hooks 单独完成：Claude Code 使用 `stop-memory-save.mjs`，Codex/Cursor 使用 `meta-kim-memory-save.mjs`，OpenClaw 使用 managed `mcp-memory-service` hook。
 - **查询**：`npm run meta:query:runs -- --owner <agent>`——按 agent 查找历史 run，或 `npm run meta:index:runs -- <artifact>` 手动索引 run 产物
 - **故障排除**：
@@ -782,7 +782,7 @@ flowchart TB
 | `npm run meta:sync` | 从 canonical 同步到四端 |
 | `npm run meta:check:runtimes` | 检查四端是否同步 |
 | `npm run meta:validate` | 项目完整性校验 |
-| `npm run meta:verify:all` | 全量校验（含 runtime smoke） |
+| `npm run meta:verify:all` | 全量校验（含工具端 smoke） |
 | `npm run meta:doctor:governance` | 治理健康体检 |
 
 ### 当前有效规则在哪里
@@ -794,7 +794,7 @@ flowchart TB
 | Meta-theory skill | `canonical/skills/meta-theory/SKILL.md` |
 | Meta-theory 细节 | `canonical/skills/meta-theory/references/` |
 | Cursor 声明式兜底规则 | `canonical/runtime-assets/cursor/rules/meta-enforcement.mdc` |
-| Runtime 镜像 | 运行 `npm run meta:sync` 后生成到 `.claude/`、`.codex/`、`.cursor/`、`openclaw/` |
+| 工具端镜像 | 运行 `npm run meta:sync` 后生成到 `.claude/`、`.codex/`、`.cursor/`、`openclaw/` |
 
 拿不准时，先改 canonical 源，再跑 `npm run meta:sync` 和 `npm run meta:check`。
 
@@ -807,20 +807,20 @@ flowchart TB
 | 命令 | 作用 |
 | --- | --- |
 | `npm run meta:deps:install` | 安装 9 个社区技能到全局 |
-| `npm run meta:deps:install:all-runtimes` | 安装到所有 runtime |
+| `npm run meta:deps:install:all-runtimes` | 安装到所有工具端 |
 | `npm run meta:deps:install:claude-plugins` | 只安装 Claude Code marketplace plugin |
 | `npm run discover:global` | 扫描全局能力 |
 | `npm run meta:sync:global` | 同步 meta-theory 到用户级 |
 
-`planning-with-files` 是核心外部依赖，不是项目内 `.agents/skills/` 镜像。安装依赖后应检查 runtime home，例如 `~/.codex/skills/planning-with-files/`、`~/.claude/skills/planning-with-files/`、`~/.cursor/skills/planning-with-files/` 或 `~/.openclaw/skills/planning-with-files/`。不能只因为 `.agents/skills/planning-with-files/` 不存在就判断它没装。
+`planning-with-files` 是核心外部依赖，不是项目内 `.agents/skills/` 镜像。安装依赖后应检查工具端 home，例如 `~/.codex/skills/planning-with-files/`、`~/.claude/skills/planning-with-files/`、`~/.cursor/skills/planning-with-files/` 或 `~/.openclaw/skills/planning-with-files/`。不能只因为 `.agents/skills/planning-with-files/` 不存在就判断它没装。
 
 #### Plugin 市场类 skill（Superpowers、Everything Claude Code、cli-anything）
 
 Superpowers 在 Claude Code、Codex 和 Cursor 都有原生 plugin 入口。Meta_Kim 不再把 Codex / Cursor 的 `skills/superpowers` fallback 当成正确插件安装；更新时会清理旧版 Meta_Kim 写入的 fallback 目录，并提示用户走宿主原生插件入口。
 
-对没有原生插件入口的 plugin bundle，安装脚本仍会从 upstream bundle 按 runtime 优先级抽取对应子目录（sparse-checkout）：
+对没有原生插件入口的 plugin bundle，安装脚本仍会从 upstream bundle 按工具端优先级抽取对应子目录（sparse-checkout）：
 
-| Runtime | 优先链 |
+| 工具端 | 优先链 |
 | --- | --- |
 | Claude Code | 原生 `claude plugin install <spec>@<marketplace>`（无 `claudePlugin` 字段的 skill 走 `skills/` 回退） |
 | Codex | Superpowers 走 Codex 插件 UI 或 `/plugins`；其他 bundle 再按 `.codex/` → `.codex-plugin/` → `skills/` 回退 |
@@ -831,14 +831,14 @@ Superpowers 在 Claude Code、Codex 和 Cursor 都有原生 plugin 入口。Meta
 | Zed、Gemini、CodeBuddy、Antigravity、JoyCode | ECC 是项目本地安装：在每个项目根目录运行 `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target <target>` |
 | Qoder CLI | 仅 candidate probe：通用 bundle 探测可以看 `.qoder/` → `skills/`，但 ECC 不会对 Qoder 执行安装，因为上游 `ecc install --help` 当前没有 `qoder` |
 
-抽取结果装到 `~/.<runtime>/skills/<id>/`。只装 Claude 市场 plugin：`npm run meta:deps:install:claude-plugins`；一次覆盖全 runtime：`npm run meta:deps:install:all-runtimes`。**升级用户无需手动清理**：老版本的整 repo clone 残留会通过目标目录下的 `.claude-plugin/` 标志自动识别；旧版 Codex/Cursor `skills/superpowers` fallback 也会在更新时移除，并提示安装原生插件。
+抽取结果装到 `~/.<tool>/skills/<id>/`。只装 Claude 市场 plugin：`npm run meta:deps:install:claude-plugins`；一次覆盖全工具端：`npm run meta:deps:install:all-runtimes`。**升级用户无需手动清理**：老版本的整 repo clone 残留会通过目标目录下的 `.claude-plugin/` 标志自动识别；旧版 Codex/Cursor `skills/superpowers` fallback 也会在更新时移除，并提示安装原生插件。
 
 ### 高级运维
 
 | 命令 | 作用 |
 | --- | --- |
 | `npm run meta:validate:run -- <file.json>` | 校验治理 run 产物 |
-| `npm run meta:eval:agents` | 轻量 runtime smoke 测试 |
+| `npm run meta:eval:agents` | 轻量工具端 smoke 测试 |
 | `npm run meta:eval:agents:live` | 带实时 prompt 的验收 |
 | `npm run meta:probe:clis` | 探测本机 CLI 工具 |
 | `npm run meta:test:mcp` | MCP 自测 |
@@ -854,7 +854,7 @@ Superpowers 在 Claude Code、Codex 和 Cursor 都有原生 plugin 入口。Meta
 
 Meta_Kim 把产物写到 3 个地方：
 
-1. **当前目录** — `.claude/`、`.codex/`、`.cursor/`、`openclaw/` 本项目的 runtime 投影
+1. **当前目录** — `.claude/`、`.codex/`、`.cursor/`、`openclaw/` 本项目的工具端镜像
 2. **用户 home** — `~/.claude/skills/meta-theory/`（以及 `.codex / .cursor / .openclaw`）跨项目共享的全局 skill
 3. **清单** — `~/.meta-kim/install-manifest.json` 记录所有改动，支持安全卸载
 
@@ -870,7 +870,7 @@ Meta_Kim 把产物写到 3 个地方：
 
 ### Q：8 大流程和 11 阶段业务工作流是什么关系？
 
-8 大流程是**执行骨架**（Critical → Fetch → Thinking → Execution → Review → Meta-Review → Verification → Evolution），相对固定。11 阶段业务工作流定义在 `config/contracts/workflow-contract.json` 中（direction → planning → execution → review → meta_review → revision → verify → summary → feedback → evolve → mirror），更注重 run 包装、交付物流转、闭环与运行时镜像。它不是推翻 8 大流程，而是在它之上增加治理纪律。
+8 大流程是**执行骨架**（Critical → Fetch → Thinking → Execution → Review → Meta-Review → Verification → Evolution），相对固定。11 阶段业务工作流定义在 `config/contracts/workflow-contract.json` 中（direction → planning → execution → review → meta_review → revision → verify → summary → feedback → evolve → mirror），更注重 run 包装、交付物流转、闭环与工具端镜像。它不是推翻 8 大流程，而是在它之上增加治理纪律。
 
 ### Q：动态发牌是什么意思？
 
@@ -887,7 +887,7 @@ Meta_Kim 把产物写到 3 个地方：
 
 ### Q：支持哪些平台？
 
-Claude Code、Codex、OpenClaw、Cursor 是正式 runtime 投影。ECC 另外原生支持 opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode 这些安装目标。Qoder CLI 目前是 candidate probe：官方文档确认它有 skills、subagents、hooks、MCP 表面，但 Meta_Kim 还没有把它升级成正式 runtime 投影。精确边界见 `config/runtime-compatibility-catalog.json`。
+Claude Code、Codex、OpenClaw、Cursor 是正式工具端投影。ECC 另外原生支持 opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode 这些安装目标。Qoder CLI 目前是 candidate probe：官方文档确认它有 skills、subagents、hooks、MCP 表面，但 Meta_Kim 还没有把它升级成正式工具端投影。精确边界见 `config/runtime-compatibility-catalog.json`。
 
 ### Q：安装复杂吗？
 

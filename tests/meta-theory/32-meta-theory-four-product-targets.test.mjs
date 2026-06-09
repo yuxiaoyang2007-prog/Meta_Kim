@@ -9,6 +9,7 @@ import {
   readGovernedExecutionRun,
   runMetaTheoryGovernedExecution,
 } from "../../scripts/run-meta-theory-governed-execution.mjs";
+import { getReportLabels } from "../../scripts/meta-kim-i18n.mjs";
 
 const multiGapTask = [
   "同一套 PRD review standard 需要 skill。",
@@ -202,14 +203,17 @@ describe("32 — Meta-theory four product targets", () => {
         readBack.artifact.runReportPanelContract.deliverables.panelContract,
         "artifact.runReportPanelContract"
       );
+      const labels = getReportLabels("zh-CN");
+      const sectionLabels = labels.sections;
+      const toolList = labels.toolList(labels.toolNames);
       for (const section of [
-        "判定摘要",
-        "为什么这么判",
-        "下一步交给谁",
-        "Runtime 投影证据",
-        "长期能力升级建议",
-        "Warden 审批包",
-        "验证状态",
+        sectionLabels.decisionSummary,
+        sectionLabels.whyDecision,
+        sectionLabels.ownerHandoff,
+        sectionLabels.toolEvidenceFull(toolList),
+        sectionLabels.capabilityUpgrade,
+        sectionLabels.wardenApproval,
+        sectionLabels.verificationStatus,
       ]) {
         assert.match(readBack.markdown, new RegExp(section));
         assert.ok(readBack.artifact.runReport.sections.includes(section));

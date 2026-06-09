@@ -76,7 +76,7 @@ const STRINGS = {
     // Hook impacts
     impactEnforceAgentDispatch: "绕过了元理论调度执行；直接执行可能发生",
     impactPostFormat: "未自动应用代码格式；可能出现样式不一致",
-    impactPostTypecheck: "跳过类型检查；类型错误可能到达运行时",
+    impactPostTypecheck: "跳过类型检查；类型错误可能在程序实际运行时才暴露",
     impactStopConsoleLogAudit: "会话结束时未标记 console.log 语句",
     impactStopSaveProgress: "未自动保存进度；需要手动保存",
     impactStopMemorySave: "会话摘要未写入 MCP Memory",

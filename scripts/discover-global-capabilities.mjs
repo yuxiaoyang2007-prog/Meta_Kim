@@ -91,11 +91,22 @@ const PLATFORMS = {
       agents: async (baseDir) =>
         scanMarkdownFiles(path.join(baseDir, "agents")),
       skills: async (baseDir) => scanSkillFiles(path.join(baseDir, "skills")),
-      hooks: async (baseDir) => scanHookFiles(path.join(baseDir, "hooks")),
+      hooks: async (baseDir) =>
+        mergeCapabilityLists(
+          await scanHookFiles(path.join(baseDir, "hooks")),
+          await scanConfigFile(path.join(baseDir, "settings.json"), {
+            id: "settings-json",
+            providerKind: "runtime-settings",
+          }),
+        ),
       plugins: async (baseDir) =>
         scanPluginFiles(path.join(baseDir, "plugins")),
       commands: async (baseDir) =>
         scanCommandFiles(path.join(baseDir, "commands")),
+      mcpServers: async (baseDir) =>
+        scanMcpConfig(path.join(baseDir, "settings.json")).then((result) => result.servers),
+      mcpTools: async (baseDir) =>
+        scanMcpConfig(path.join(baseDir, "settings.json")).then((result) => result.tools),
     },
   },
   openclaw: {
@@ -104,7 +115,14 @@ const PLATFORMS = {
     scanners: {
       agents: async (baseDir) => scanOpenClawAgents(baseDir),
       skills: async (baseDir) => scanOpenClawSkills(baseDir),
-      hooks: async (baseDir) => scanHookFiles(path.join(baseDir, "hooks")),
+      hooks: async (baseDir) =>
+        mergeCapabilityLists(
+          await scanHookFiles(path.join(baseDir, "hooks")),
+          await scanConfigFile(path.join(baseDir, "openclaw.json"), {
+            id: "openclaw-json",
+            providerKind: "runtime-config",
+          }),
+        ),
       commands: async (baseDir) =>
         scanCommandFiles(path.join(baseDir, "commands")),
     },
@@ -115,10 +133,21 @@ const PLATFORMS = {
     scanners: {
       agents: async (baseDir) =>
         scanTomlFilesRecursive(path.join(baseDir, "agents")),
-      skills: async (baseDir) =>
-        scanSkillFilesRecursive(path.join(baseDir, "skills")),
+      skills: async (baseDir) => scanCodexSkills(baseDir),
+      hooks: async (baseDir) =>
+        mergeCapabilityLists(
+          await scanHookFiles(path.join(baseDir, "hooks")),
+          await scanConfigFile(path.join(baseDir, "hooks.json"), {
+            id: "hooks-json",
+            providerKind: "hook-config",
+          }),
+        ),
       commands: async (baseDir) =>
         scanCommandFiles(path.join(baseDir, "commands")),
+      mcpServers: async (baseDir) =>
+        scanCodexTomlMcpServers(path.join(baseDir, "config.toml")),
+      mcpTools: async (baseDir) =>
+        scanCodexTomlMcpTools(path.join(baseDir, "config.toml")),
     },
   },
   cursor: {
@@ -128,6 +157,22 @@ const PLATFORMS = {
       agents: async (baseDir) =>
         scanMarkdownFiles(path.join(baseDir, "agents")),
       skills: async (baseDir) => scanCursorSkills(baseDir),
+      hooks: async (baseDir) =>
+        mergeCapabilityLists(
+          await scanHookFiles(path.join(baseDir, "hooks")),
+          await scanConfigFile(path.join(baseDir, "hooks.json"), {
+            id: "hooks-json",
+            providerKind: "hook-config",
+          }),
+        ),
+      rules: async (baseDir) =>
+        scanMarkdownFilesRecursive(path.join(baseDir, "rules")),
+      prompts: async (baseDir) =>
+        scanMarkdownFilesRecursive(path.join(baseDir, "prompts")),
+      mcpServers: async (baseDir) =>
+        scanMcpConfig(path.join(baseDir, "mcp.json")).then((result) => result.servers),
+      mcpTools: async (baseDir) =>
+        scanMcpConfig(path.join(baseDir, "mcp.json")).then((result) => result.tools),
       plugins: async (baseDir) =>
         scanPluginFiles(path.join(baseDir, "plugins")),
     },
@@ -398,11 +443,40 @@ async function scanOpenClawSkills(baseDir) {
   );
 }
 
+async function scanCodexSkills(baseDir) {
+  return mergeCapabilityLists(
+    await scanSkillFilesRecursive(path.join(baseDir, "skills")),
+    await scanSkillFilesRecursive(path.join(baseDir, ".agents", "skills")),
+    await scanSkillFilesRecursive(path.join(os.homedir(), ".agents", "skills")),
+  );
+}
+
 async function scanCursorSkills(baseDir) {
   return mergeCapabilityLists(
     await scanSkillFilesRecursive(path.join(baseDir, "skills")),
     await scanSkillFilesRecursive(path.join(baseDir, "skills-cursor")),
   );
+}
+
+async function scanConfigFile(filePath, metadata = {}) {
+  try {
+    const stat = await fs.stat(filePath);
+    return [
+      {
+        id: metadata.id ?? path.basename(filePath),
+        path: filePath,
+        relativePath: path.basename(filePath),
+        size: stat.size,
+        modified: stat.mtime,
+        metadata: {
+          providerKind: metadata.providerKind ?? "config",
+          source: "runtime-config",
+        },
+      },
+    ];
+  } catch {
+    return [];
+  }
 }
 
 async function scanHookFiles(dir) {
@@ -627,6 +701,77 @@ async function scanMcpConfig(configPath) {
   }
 
   return { servers, tools };
+}
+
+async function scanCodexTomlMcpServers(configPath) {
+  let raw;
+  let stat;
+  try {
+    [raw, stat] = await Promise.all([
+      fs.readFile(configPath, "utf8"),
+      fs.stat(configPath),
+    ]);
+  } catch {
+    return [];
+  }
+
+  const servers = [];
+  const serverMatches = raw.matchAll(/^\s*\[mcp_servers\.([^\]\s]+)\]\s*$/gm);
+  for (const match of serverMatches) {
+    const serverId = match[1].replace(/^["']|["']$/g, "");
+    servers.push({
+      id: serverId,
+      path: configPath,
+      relativePath: path.basename(configPath),
+      size: stat.size,
+      modified: stat.mtime,
+      metadata: {
+        name: serverId,
+        description: `Configured Codex MCP server ${serverId}`,
+        providerKind: "mcp-server",
+        source: "codex-config-toml",
+        permissionStatus: "configured_unverified",
+      },
+    });
+  }
+
+  return servers;
+}
+
+async function scanCodexTomlMcpTools(configPath) {
+  let raw;
+  let stat;
+  try {
+    [raw, stat] = await Promise.all([
+      fs.readFile(configPath, "utf8"),
+      fs.stat(configPath),
+    ]);
+  } catch {
+    return [];
+  }
+
+  const tools = [];
+  const serverMatches = raw.matchAll(/^\s*\[mcp_servers\.([^\]\s]+)\]\s*$/gm);
+  for (const match of serverMatches) {
+    const serverId = match[1].replace(/^["']|["']$/g, "");
+    tools.push({
+      id: `${serverId}:tools-unlisted`,
+      path: configPath,
+      relativePath: path.basename(configPath),
+      size: stat.size,
+      modified: stat.mtime,
+      metadata: {
+        name: "tools-unlisted",
+        description: `Codex MCP server ${serverId} is configured, but tool names were not introspected during static discovery.`,
+        providerKind: "mcp-tool-list",
+        serverId,
+        source: "codex-config-toml",
+        permissionStatus: "configured_unverified",
+      },
+    });
+  }
+
+  return tools;
 }
 
 function runKnownMcpSelfTest(command, args) {

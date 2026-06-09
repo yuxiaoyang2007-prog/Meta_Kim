@@ -5,6 +5,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { getReportLabelsForPath } from "./meta-kim-i18n.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(scriptDir, "..");
@@ -70,35 +71,37 @@ function relativeToRepo(filePath) {
   return path.relative(REPO_ROOT, filePath).replaceAll("\\", "/");
 }
 
-function buildMarkdown(report) {
+function buildMarkdown(report, outputPath) {
+  const labels = getReportLabelsForPath(outputPath);
   const lines = [
-    "# Meta_Kim GitHub Gap Report",
+    `# ${labels.githubGapReportTitle}`,
     "",
-    `- generatedAt: ${report.generatedAt}`,
-    `- branch: ${report.git.branch}`,
-    `- aheadOfOriginMain: ${report.git.aheadOfOriginMain}`,
-    `- hasWorkingTreeDelta: ${report.git.hasWorkingTreeDelta}`,
-    `- prdVersion: ${report.prd.version}`,
+    `- ${labels.generatedAt}: ${report.generatedAt}`,
+    `- ${labels.branch}: ${report.git.branch}`,
+    `- ${labels.aheadOfOriginMain}: ${report.git.aheadOfOriginMain}`,
+    `- ${labels.hasWorkingTreeDelta}: ${labels.boolean(report.git.hasWorkingTreeDelta)}`,
+    `- ${labels.gitDeltaState}: ${report.git.deltaState}`,
+    `- ${labels.prdVersion}: ${report.prd.version}`,
     "",
-    "## Local Commits Not On origin/main",
+    `## ${labels.localCommitsNotOnOriginMain}`,
     "",
     ...report.git.localCommits.map((commit) => `- ${commit}`),
     "",
-    "## Working Tree Delta",
+    `## ${labels.workingTreeDelta}`,
     "",
     ...report.git.workingTreeEntries.map((entry) => `- ${entry}`),
     "",
-    "## Current GitHub Delta From PRD",
+    `## ${labels.currentGithubDeltaFromPrd}`,
     "",
-    report.prd.currentGithubDelta || "(missing)",
+    report.prd.currentGithubDelta || labels.missing,
     "",
-    "## Blocked Or Not Done",
+    `## ${labels.blockedOrNotDone}`,
     "",
     ...report.tasks.blockedOrNotDone.map(
       (task) => `- ${task.id} [${task.status}] ${task.task}`,
     ),
     "",
-    "## Completed Parallel Backlog Evidence",
+    `## ${labels.completedParallelBacklogEvidence}`,
     "",
     ...report.tasks.completedParallelBacklog.map(
       (task) => `- ${task.id} [${task.status}] ${task.task}`,
@@ -118,16 +121,27 @@ async function main() {
         .split(/\r?\n/)
         .filter((line) => line.trim() && !line.startsWith("##"))
     : [];
+  const aheadOfOriginMain = aheadRaw.ok ? Number(aheadRaw.stdout || 0) : null;
+  const hasWorkingTreeDelta = workingTreeEntries.length > 0;
+  const deltaState =
+    aheadOfOriginMain > 0 && hasWorkingTreeDelta
+      ? "ahead_and_dirty"
+      : aheadOfOriginMain > 0
+        ? "ahead"
+        : hasWorkingTreeDelta
+          ? "dirty"
+          : "clean_synced";
   const tasks = parsePrdTasks(prd);
   const report = {
     schemaVersion: "github-gap-report-v0.1",
     generatedAt: new Date().toISOString(),
     git: {
       branch,
-      aheadOfOriginMain: aheadRaw.ok ? Number(aheadRaw.stdout || 0) : null,
+      aheadOfOriginMain,
       aheadEvidenceCommand: "git rev-list --count origin/main..HEAD",
       status: statusRaw.stdout,
-      hasWorkingTreeDelta: workingTreeEntries.length > 0,
+      hasWorkingTreeDelta,
+      deltaState,
       workingTreeEntries,
       workingTreeEvidenceCommand: "git status --short --branch",
       localCommits: commitsRaw.stdout ? commitsRaw.stdout.split(/\r?\n/) : [],
@@ -161,7 +175,7 @@ async function main() {
   const jsonPath = path.join(OUTPUT_DIR, "latest.json");
   const mdPath = path.join(OUTPUT_DIR, "latest.zh-CN.md");
   await fs.writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
-  await fs.writeFile(mdPath, buildMarkdown(report));
+  await fs.writeFile(mdPath, buildMarkdown(report, mdPath));
 
   process.stdout.write(
     `${JSON.stringify(

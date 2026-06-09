@@ -368,9 +368,43 @@ ${r ? `Raw error: ${r}` : ""}
     installScopeBothLabel: "Both (recommended)",
     installScopeProjectDesc:
       "Update tool configs in this repo only; skips home-directory skills.",
+    installScopeProjectDescDetail: `Creates project-level features:
+• graphify-out/ — Knowledge graph (reduces hallucination, speeds queries)
+• .meta-kim/state/ — Runtime cache & session recovery
+• .claude/.codex/.cursor/ — Tool-specific agents & hooks`,
     installScopeGlobalDesc:
       "Install skills + meta-theory for tools you pick next; does not update this repo.",
+    installScopeGlobalDescDetail: `Creates global-level features:
+• ~/.claude/skills/ — Skills shared across ALL projects
+• ~/%tool%/skills/ — Tool-specific skills (Claude, Codex, Cursor, etc.)
+• Existing projects can use Meta_Kim without setup`,
     installScopeBothDesc: "Repo step, then home step.",
+    installScopeBothDescDetail: `Complete installation:
+• First: project-level agents, hooks, and tool configs
+• Then: global skills shared across all projects
+• New & existing projects both benefit`,
+    // Directory structure explanation
+    directoryExplanationHeading: "Directory Structure",
+    directoryExplanationIntro: "Meta_Kim creates two levels of directories:",
+    directoryExplanationProject: "Project-level (in this repo):",
+    directoryExplanationProjectDetail: `• graphify-out/ — Knowledge graph built from your code
+  Reduces AI hallucination by grounding queries in actual codebase structure
+
+• .meta-kim/state/ — Runtime cache and session recovery
+  Stores run history, compacts sessions, enables cross-session recovery
+
+• .claude/.codex/.cursor/ — Tool-specific agents and hooks
+  Project-local configuration for each AI coding tool`,
+    directoryExplanationGlobal: "Global-level (in home directory):",
+    directoryExplanationGlobalDetail: `• ~/.claude/skills/ — Skills shared across ALL projects
+  Install once, use everywhere. Existing projects gain Meta_Kim capabilities.
+
+• ~/%tool%/skills/ — Tool-specific skills
+  Claude: ~/.claude/skills/
+  Codex: ~/.codex/skills/
+  Cursor: ~/.cursor/skills/
+  OpenClaw: ~/.openclaw/skills/`,
+    directoryExplanationExisting: "For existing projects:",
     depCheckHeading: "Dependency Check",
     depOk: (n) => `${n} — OK`,
     depMissing: (n) => `${n} — MISSING`,
@@ -665,9 +699,9 @@ Possible causes:
     npxQuickDone: "Project ready!",
     npxQuickOpenIn: "Open your platform in this directory:",
     npxQuickAskDeploy:
-      "Deploy runtime files to a custom directory? (e.g. Desktop)",
-    npxQuickDeployYes: "Yes, deploy to a custom directory",
-    npxQuickDeployNo: "No, skip for now",
+      "Where to create the project-level directory? You can copy this directory to existing projects.",
+    npxQuickDeployYes: "Select directory",
+    npxQuickDeployNo: "Skip",
     aboutAuthor: "About the Author",
     contactWebsite: "Website",
     contactGithub: "GitHub",
@@ -830,9 +864,43 @@ ${r ? `原始错误：${r}` : ""}
     installScopeGlobalLabel: "仅用户目录",
     installScopeBothLabel: "两者（推荐）",
     installScopeProjectDesc: "只更新本仓库内各工具配置；不改用户目录 skills。",
+    installScopeProjectDescDetail: `创建项目级功能：
+• graphify-out/ — 知识图谱（减少幻觉，加速查询）
+• .meta-kim/state/ — 运行缓存与会话恢复
+• .claude/.codex/.cursor/ — 各工具专用智能体与钩子`,
     installScopeGlobalDesc:
       "按下一步所选工具写入各 skills + 全局 meta-theory；不改本仓库。",
+    installScopeGlobalDescDetail: `创建全局级功能：
+• ~/.claude/skills/ — 所有项目共享的技能
+• ~/%tool%/skills/ — 各工具专用技能（Claude、Codex、Cursor 等）
+• 现有项目无需安装即可使用 Meta_Kim`,
     installScopeBothDesc: "先本仓库，后用户目录。",
+    installScopeBothDescDetail: `完整安装：
+• 第一步：项目级智能体、钩子、工具配置
+• 第二步：跨项目共享的全局技能
+• 新项目与现有项目皆受益`,
+    // 目录结构说明
+    directoryExplanationHeading: "目录结构",
+    directoryExplanationIntro: "Meta_Kim 创建两级目录：",
+    directoryExplanationProject: "项目级（本仓库内）：",
+    directoryExplanationProjectDetail: `• graphify-out/ — 从代码构建的知识图谱
+  通过实际代码结构 grounding 查询，减少 AI 幻觉
+
+• .meta-kim/state/ — 运行缓存与会话恢复
+  存储运行历史、压缩会话、支持跨会话恢复
+
+• .claude/.codex/.cursor/ — 各工具专用智能体与钩子
+  每个 AI 编程工具的项目本地配置`,
+    directoryExplanationGlobal: "全局级（用户目录内）：",
+    directoryExplanationGlobalDetail: `• ~/.claude/skills/ — 所有项目共享的技能
+  一次安装，处处可用。现有项目立即获得 Meta_Kim 能力。
+
+• ~/%tool%/skills/ — 各工具专用技能
+  Claude: ~/.claude/skills/
+  Codex: ~/.codex/skills/
+  Cursor: ~/.cursor/skills/
+  OpenClaw: ~/.openclaw/skills/`,
+    directoryExplanationExisting: "现有项目使用方式：",
     depCheckHeading: "依赖检查",
     depOk: (n) => `${n} — 正常`,
     depMissing: (n) => `${n} — 缺失`,
@@ -1112,9 +1180,9 @@ ${r ? `原始错误：${r}` : ""}
     npxQuickDirExists: "目录已存在 — 将更新其中的文件",
     npxQuickDone: "项目就绪！",
     npxQuickOpenIn: "在该目录打开你的平台：",
-    npxQuickAskDeploy: "要把运行时文件部署到指定目录吗？（比如桌面）",
-    npxQuickDeployYes: "是，部署到指定目录",
-    npxQuickDeployNo: "不用了，跳过",
+    npxQuickAskDeploy: "想在哪建立项目级目录？您可以直接复制此目录到现有项目中创建项目级内容。",
+    npxQuickDeployYes: "选择目录",
+    npxQuickDeployNo: "跳过",
     aboutAuthor: "关于作者",
     contactWebsite: "个人主页",
     contactGithub: "GitHub",
@@ -1288,9 +1356,43 @@ ${r ? `生エラー：${r}` : ""}
     installScopeBothLabel: "両方（推奨）",
     installScopeProjectDesc:
       "このリポのツール設定のみ同期。ホーム skills は触らない。",
+    installScopeProjectDescDetail: `プロジェクトレベル機能を作成：
+• graphify-out/ — 知識グラフ（幻覚低減、クエリ高速化）
+• .meta-kim/state/ — 実行キャッシュとセッション回復
+• .claude/.codex/.cursor/ — 各ツール専用エージェントとフック`,
     installScopeGlobalDesc:
       "次に選ぶツール向けに skills + meta-theory。リポは更新しない。",
+    installScopeGlobalDescDetail: `グローバルレベル機能を作成：
+• ~/.claude/skills/ — 全プロジェクト共有スキル
+• ~/%tool%/skills/ — 各ツール専用スキル（Claude、Codex、Cursor 等）
+• 既存プロジェクトもセットアップ不要で利用可能`,
     installScopeBothDesc: "リポのあとホーム。",
+    installScopeBothDescDetail: `完全インストール：
+• 最初：プロジェクトレベルエージェント、フック、ツール設定
+• 次：全プロジェクト共有のグローバルスキル
+• 新規・既存プロジェクト両方に恩恵`,
+    // ディレクトリ構造説明
+    directoryExplanationHeading: "ディレクトリ構造",
+    directoryExplanationIntro: "Meta_Kim は 2 つのレベルのディレクトリを作成：",
+    directoryExplanationProject: "プロジェクトレベル（このリポ内）：",
+    directoryExplanationProjectDetail: `• graphify-out/ — コードから構築された知識グラフ
+  実際のコードベース構造に基づいたクエリで AI 幻覚を低減
+
+• .meta-kim/state/ — 実行キャッシュとセッション回復
+  実行履歴、セッション圧縮、クロスセッション回復を保存
+
+• .claude/.codex/.cursor/ — 各ツール専用エージェントとフック
+  各 AI コーディングツールのプロジェクトローカル設定`,
+    directoryExplanationGlobal: "グローバルレベル（ホームディレクトリ内）：",
+    directoryExplanationGlobalDetail: `• ~/.claude/skills/ — 全プロジェクト共有スキル
+  一度のインストールでどこでも使用。既存プロジェクトも Meta_Kim 機能を獲得。
+
+• ~/%tool%/skills/ — 各ツール専用スキル
+  Claude: ~/.claude/skills/
+  Codex: ~/.codex/skills/
+  Cursor: ~/.cursor/skills/
+  OpenClaw: ~/.openclaw/skills/`,
+    directoryExplanationExisting: "既存プロジェクトの場合：",
     depCheckHeading: "依存関係チェック",
     depOk: (n) => `${n} — OK`,
     depMissing: (n) => `${n} — 見つかりません`,
@@ -1596,8 +1698,8 @@ ${r ? `生エラー：${r}` : ""}
     npxQuickDone: "プロジェクトの準備完了！",
     npxQuickOpenIn: "このディレクトリでプラットフォームを開く：",
     npxQuickAskDeploy:
-      "ランタイムファイルを指定ディレクトリにデプロイしますか？（例：デスクトップ）",
-    npxQuickDeployYes: "はい、指定ディレクトリにデプロイ",
+      "プロジェクト級ディレクトリをどこに作成しますか？このディレクトリを既存プロジェクトにコピーできます。",
+    npxQuickDeployYes: "ディレクトリを選択",
     npxQuickDeployNo: "スキップ",
     aboutAuthor: "作者について",
     contactWebsite: "ウェブサイト",
@@ -1766,9 +1868,43 @@ ${r ? `원본 오류：${r}` : ""}
     installScopeGlobalLabel: "홈만",
     installScopeBothLabel: "둘 다 (권장)",
     installScopeProjectDesc: "이 리포 도구 설정만. 홈 skills는 안 함.",
+    installScopeProjectDescDetail: `프로젝트 레벨 기능 생성：
+• graphify-out/ — 지식 그래프（환각 감소，쿼리 속도 향상）
+• .meta-kim/state/ — 런타임 캐시 및 세션 복구
+• .claude/.codex/.cursor/ — 각 도구 전용 에이전트 및 훅`,
     installScopeGlobalDesc:
       "다음에 고른 도구용 skills + meta-theory. 리포는 안 건드림.",
+    installScopeGlobalDescDetail: `글로벌 레벨 기능 생성：
+• ~/.claude/skills/ — 모든 프로젝트 공유 스킬
+• ~/%tool%/skills/ — 각 도구 전용 스킬（Claude，Codex，Cursor 등）
+• 기존 프로젝트도 설치 없이 Meta_Kim 사용 가능`,
     installScopeBothDesc: "리포 후 홈 순서.",
+    installScopeBothDescDetail: `완전 설치：
+• 첫째：프로젝트 레벨 에이전트，훅，도구 설정
+• 둘째：모든 프로젝트 공유 글로벌 스킬
+• 신규 및 기존 프로젝트 모두 혜택`,
+    // 디렉토리 구조 설명
+    directoryExplanationHeading: "디렉토리 구조",
+    directoryExplanationIntro: "Meta_Kim 은 두 레벨의 디렉토리 생성：",
+    directoryExplanationProject: "프로젝트 레벨（이 리포 내）：",
+    directoryExplanationProjectDetail: `• graphify-out/ — 코드에서 구축된 지식 그래프
+  실제 코드베이스 구조에 기반한 쿼리로 AI 환각 감소
+
+• .meta-kim/state/ — 런타임 캐시 및 세션 복구
+  실행 기록，세션 압축，크로스 세션 복구 저장
+
+• .claude/.codex/.cursor/ — 각 도구 전용 에이전트 및 훅
+  각 AI 코딩 도구의 프로젝트 로컬 설정`,
+    directoryExplanationGlobal: "글로벌 레벨（홈 디렉토리 내）：",
+    directoryExplanationGlobalDetail: `• ~/.claude/skills/ — 모든 프로젝트 공유 스킬
+  한 번 설치로 어디서든 사용. 기존 프로젝트도 Meta_Kim 기능 획득.
+
+• ~/%tool%/skills/ — 각 도구 전용 스킬
+  Claude: ~/.claude/skills/
+  Codex: ~/.codex/skills/
+  Cursor: ~/.cursor/skills/
+  OpenClaw: ~/.openclaw/skills/`,
+    directoryExplanationExisting: "기존 프로젝트 사용 방법：",
     depCheckHeading: "의존성 확인",
     depOk: (n) => `${n} — 정상`,
     depMissing: (n) => `${n} — 누락`,
@@ -2059,8 +2195,8 @@ ${r ? `원본 오류：${r}` : ""}
     npxQuickDone: "프로젝트 준비 완료!",
     npxQuickOpenIn: "이 디렉터리에서 플랫폼 열기:",
     npxQuickAskDeploy:
-      "런타임 파일을 지정 디렉터리에 배포할까요? (예: 바탕 화면)",
-    npxQuickDeployYes: "네, 지정 디렉터리에 배포",
+      "프로젝트 레벨 디렉터리를 어디에 만들까요? 이 디렉터리를 기존 프로젝트에 복사할 수 있습니다.",
+    npxQuickDeployYes: "디렉터리 선택",
     npxQuickDeployNo: "건너뛰기",
     aboutAuthor: "작성자 소개",
     contactWebsite: "웹사이트",
@@ -2894,7 +3030,62 @@ async function askInstallScope() {
       both: t.installScopeBothLabel,
     }[selected] || selected;
   info(t.selectedScope(pickedLabel));
+
+  // Show selected scope detail
+  const detailKey =
+    {
+      project: "installScopeProjectDescDetail",
+      global: "installScopeGlobalDescDetail",
+      both: "installScopeBothDescDetail",
+    }[selected];
+  if (t[detailKey]) {
+    console.log("");
+    console.log(`${C.green}${C.bold}▸ ${pickedLabel}${C.reset}`);
+    const detailLines = t[detailKey].split("\n");
+    for (const line of detailLines) {
+      if (line.startsWith("•")) {
+        console.log(`${C.dim}  ${line}${C.reset}`);
+      } else if (line.trim()) {
+        console.log(`${C.dim}  ${line.trim()}${C.reset}`);
+      }
+    }
+    console.log("");
+  }
+
   return selected;
+}
+
+// ── Directory structure explanation ─────────────────────────────
+
+function showDirectoryExplanation() {
+  console.log("");
+  console.log(`${C.bold}${C.cyan}● ${t.directoryExplanationHeading}${C.reset}`);
+  console.log("");
+  console.log(`${C.dim}${t.directoryExplanationIntro}${C.reset}`);
+  console.log("");
+
+  // Project-level
+  console.log(`${C.bold}${t.directoryExplanationProject}${C.reset}`);
+  const projectLines = t.directoryExplanationProjectDetail.split("\n");
+  for (const line of projectLines) {
+    if (line.startsWith("•")) {
+      console.log(`${C.dim}•${C.reset} ${line.slice(1).trim()}`);
+    } else if (line.trim()) {
+      console.log(`${C.dim}  ${line.trim()}${C.reset}`);
+    }
+  }
+  console.log("");
+
+  // Global-level
+  console.log(`${C.bold}${t.directoryExplanationGlobal}${C.reset}`);
+  const globalLines = t.directoryExplanationGlobalDetail.split("\n");
+  for (const line of globalLines) {
+    if (line.startsWith("•")) {
+      console.log(`${C.dim}•${C.reset} ${line.slice(1).trim()}`);
+    } else if (line.trim()) {
+      console.log(`${C.dim}  ${line.trim()}${C.reset}`);
+    }
+  }
 }
 
 // ── Global install guidance ─────────────────────────────
@@ -5007,7 +5198,7 @@ async function runInstall() {
   const runtimes = await detectRuntimes();
   const activeTargets = await selectActiveTargets(runtimes);
 
-  // 新增：询问安装范围
+  // 询问安装范围
   const installScope = await askInstallScope();
 
   // Ask proxy configuration (saves to localOverrides)
@@ -5017,6 +5208,9 @@ async function runInstall() {
   if (installScope === "global" || installScope === "both") {
     selectedSkillIds = await resolveSelectedSkillDependencyIds();
   }
+
+  // 在用户知道选了哪些技能后，显示目录结构说明
+  showDirectoryExplanation();
 
   // Ask deploy directory BEFORE confirm (so user decides upfront)
   const deployDir = await askDeployDirectory();

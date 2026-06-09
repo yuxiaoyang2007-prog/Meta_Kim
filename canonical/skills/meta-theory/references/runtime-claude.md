@@ -2,6 +2,8 @@
 
 Use this reference when Meta_Kim runs inside Claude Code and the route depends on native questions, subagents, skills, slash commands, prompts, hooks, or MCP tools.
 
+Project-retained Claude Code agents live in `.claude/agents/<agent>.md`. When the user asks to create, iterate, upgrade, or keep an agent in the project, Claude Code must treat that file-level agent definition or a Warden-approved candidate writeback as the deliverable. A Claude subagent invocation may help design or review the agent, but it is not itself the durable project agent.
+
 ## Native Question Surface
 
 Claude Code exposes the native `AskUserQuestion` tool (added v2.0.21) for branch-changing user decisions. It renders an interactive Ink popup with 2–4 selectable options and waits for the user's choice before continuing.
@@ -36,6 +38,13 @@ Execution must then call the selected provider surface:
 - Use prompt/rule providers only when Fetch found them and Thinking bound them to the lane.
 - Use MCP tools only when the MCP inventory proves the tool is available and safe for the lane.
 
+For create-agent or iterate-agent routes, execution must separate two artifacts:
+
+- durable project agent: `.claude/agents/<agent>.md` plus matching formal tool projection metadata from `config/sync.json` and `config/runtime-compatibility-catalog.json`
+- temporary worker dispatch: `Agent` prompts tied to `workerTaskPackets`
+
+Do not accept a temporary Agent prompt, runtime thread name, or current work order as the agent definition. Durable agent identity must stay abstract: reusable responsibility class, non-capabilities, abstract loadout slots, inputs, outputs, handoff, memory policy, gap policy, and verification policy.
+
 If no real provider is callable, do not self-execute to "keep moving". Return to Thinking with `capabilityGapPacket`, or enter degraded mode with explicit `degradationReason`, `humanAcceptanceRequired`, and `surfaceState=internal-ready`.
 
 ## Write-Time Fact Gates
@@ -64,6 +73,7 @@ Do not copy the external hook's wording into durable Meta_Kim instructions. Keep
 
 - Use `AskUserQuestion` for required branch-changing choices when available.
 - Prefer real Agent / Skill / Command / prompt / MCP dispatch over main-thread execution.
+- For agent creation/iteration, produce a durable project-agent candidate with formal tool projection targets from the sync manifest and compatibility catalog; use subagents only as factory or review workers.
 - Record unavailable providers as evidence, not as permission to fake delegation.
 - Cite `workerTaskPackets[].taskPacketId` in every Agent dispatch prompt.
 - Build `fileChangeFactCard` before file mutation, and use it to answer write-time fact gates before retrying the same operation.

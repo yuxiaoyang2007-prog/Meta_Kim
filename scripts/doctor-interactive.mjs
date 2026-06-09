@@ -66,16 +66,18 @@ async function runFullDiagnostic() {
     runCommand("安装状态诊断", "npm", ["meta:validate"]),
   ]);
   results.push([
-    "运行时检查",
-    runCommand("运行时镜像检查", "npm", ["meta:check:runtimes"]),
+    "工具端镜像检查",
+    runCommand("工具端镜像检查", "npm", ["meta:check:runtimes"]),
   ]);
   results.push([
     "全局同步检查",
     runCommand("全局同步检查", "npm", ["meta:check:global"]),
   ]);
   results.push([
-    "运行时集成",
-    runCommand("运行时集成诊断", "npm", ["meta:eval:agents"]),
+    "Claude/Codex/Cursor/OpenClaw 集成",
+    runCommand("Claude/Codex/Cursor/OpenClaw 集成诊断", "npm", [
+      "meta:eval:agents",
+    ]),
   ]);
 
   console.log(`\n${"=".repeat(60)}`);
@@ -129,7 +131,7 @@ async function main() {
     {
       name: "安装状态诊断",
       value: "install",
-      description: "验证项目验证 (npm run meta:validate) 和运行时镜像",
+      description: "验证项目状态 (npm run meta:validate) 和工具端镜像",
     },
     {
       name: "同步状态诊断",
@@ -138,9 +140,9 @@ async function main() {
         "检查 canonical/ -> .claude/.codex/openclaw/.cursor 同步状态",
     },
     {
-      name: "运行时集成诊断",
+      name: "Claude/Codex/Cursor/OpenClaw 集成诊断",
       value: "agents",
-      description: "运行时烟雾测试：CLI 可用性、注册表/配置脚手架",
+      description: "检查四个工具的 CLI 可用性、注册表/配置脚手架",
     },
     {
       name: "完整诊断报告",
@@ -188,7 +190,9 @@ async function main() {
           break;
 
         case "agents":
-          runCommand("运行时集成诊断", "npm", ["meta:eval:agents"]);
+          runCommand("Claude/Codex/Cursor/OpenClaw 集成诊断", "npm", [
+            "meta:eval:agents",
+          ]);
           break;
 
         case "full":

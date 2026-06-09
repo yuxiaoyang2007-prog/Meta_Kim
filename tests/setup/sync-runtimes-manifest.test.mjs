@@ -364,6 +364,21 @@ Body content.
       "Agent source: openclaw/workspaces/meta-warden/SOUL.md, openclaw/workspaces/*/SOUL.md, and openclaw/workspaces/{name}/SOUL.md",
     );
   });
+
+  test("keeps cross-runtime Fetch checklist paths literal in runtime skill mirrors", () => {
+    const source = `Fetch discovery minimum checklist: before Thinking, search at least these locations (even if results are empty):
+- canonical sources and capability indexes: \`canonical/agents/\`, \`canonical/skills/\`, \`canonical/runtime-assets/\`, \`config/capability-index/*.json\`, and runtime capability-index mirrors
+- Claude Code project and global inventories: \`.claude/agents/\`, \`.claude/skills/\`, \`.claude/commands/\`, \`.claude/hooks/\`, \`.claude/settings.json\`, \`~/.claude/agents/\`, \`~/.claude/skills/\`, \`~/.claude/commands/\`, \`~/.claude/hooks/\`, and \`~/.claude/settings.json\`
+- Cursor project and global inventories: \`.cursor/agents/\`, \`.cursor/skills/\`, \`.cursor/rules/\`, \`.cursor/prompts/\`, \`.cursor/hooks/\`, \`.cursor/hooks.json\`, \`.cursor/mcp.json\`, \`~/.cursor/agents/\`, \`~/.cursor/skills/\`, \`~/.cursor/rules/\`, \`~/.cursor/prompts/\`, \`~/.cursor/hooks/\`, and \`~/.cursor/hooks.json\`
+- OpenClaw project and global inventories: \`openclaw/workspaces/\`, \`openclaw/skills/\`, \`openclaw/hooks/\`, \`openclaw/openclaw.template.json\`, \`~/.openclaw/openclaw.json\`, \`~/.openclaw/workspace-*\`, \`~/.openclaw/skills/\`, \`~/.openclaw/hooks/\`, and \`~/.agents/skills/\`
+
+Pass condition: searchLog exists.
+`;
+
+    for (const target of ["claude", "codex", "cursor", "openclaw"]) {
+      assert.equal(applyRuntimePaths(source, target), source);
+    }
+  });
 });
 
 describe("sync-runtimes / Codex agents", () => {

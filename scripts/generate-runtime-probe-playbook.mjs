@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { getReportLabelsForPath } from "./meta-kim-i18n.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(scriptDir, "..");
@@ -110,7 +111,7 @@ const variants = [
     probeCommand: "command -v <runtime-cli> || where <runtime-cli>",
     expectedFailureClass: "runtime_unavailable",
     expectedOutput: "CLI path or not-found diagnostic",
-    remainingAction: "Install CLI or record unsupported-with-reason.",
+    remainingAction: "Install CLI or record unavailable-with-reason plus strict tool-side test evidence.",
     releaseGradeCandidate: false,
   },
   {
@@ -124,20 +125,22 @@ const variants = [
   },
 ];
 
-function buildMarkdown(report) {
+function buildMarkdown(report, outputPath) {
+  const labels = getReportLabelsForPath(outputPath);
+  const toolList = labels.toolList(labels.toolNames);
   const lines = [
-    "# Runtime Probe Playbook",
+    `# ${labels.runtimeProbePlaybookTitle(toolList)}`,
     "",
-    `- generatedAt: ${report.generatedAt}`,
-    `- status: ${report.status}`,
-    `- variantCount: ${report.summary.variantCount}`,
-    `- releaseGradeCandidateCount: ${report.summary.releaseGradeCandidateCount}`,
+    `- ${labels.generatedAt}: ${report.generatedAt}`,
+    `- ${labels.status}: ${report.status}`,
+    `- ${labels.variantCount}: ${report.summary.variantCount}`,
+    `- ${labels.releaseGradeCandidateCount}: ${report.summary.releaseGradeCandidateCount}`,
     "",
-    "| Runtime | Environment | Expected class | Release-grade candidate | Remaining action |",
+    `| ${labels.tool} | ${labels.environment} | ${labels.expectedClass} | ${labels.releaseGradeCandidate} | ${labels.remainingAction} |`,
     "|---|---|---|---|---|",
     ...report.variants.map(
       (row) =>
-        `| ${row.runtime} | ${row.environment} | ${row.expectedFailureClass} | ${row.releaseGradeCandidate ? "yes" : "no"} | ${row.remainingAction.replaceAll("|", "\\|")} |`,
+        `| ${row.runtime} | ${row.environment} | ${row.expectedFailureClass} | ${labels.boolean(row.releaseGradeCandidate)} | ${row.remainingAction.replaceAll("|", "\\|")} |`,
     ),
   ];
   return `${lines.join("\n")}\n`;
@@ -179,7 +182,7 @@ async function main() {
   const jsonPath = path.join(OUTPUT_DIR, "latest.json");
   const mdPath = path.join(OUTPUT_DIR, "latest.zh-CN.md");
   await fs.writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
-  await fs.writeFile(mdPath, buildMarkdown(report));
+  await fs.writeFile(mdPath, buildMarkdown(report, mdPath));
   process.stdout.write(
     `${JSON.stringify(
       {

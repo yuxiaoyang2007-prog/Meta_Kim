@@ -43,12 +43,18 @@
       "branch": "design_agent_spec",
       "owner": "meta-genesis",
       "ownerRole": "governance_design",
-      "selectedBecause": "缺稳定长期 owner，需要专业身份、拒绝项、输入输出、记忆和验收政策。",
-      "deliverable": "GeneratedAgentSpec plus agent CandidateWriteback",
+      "selectedBecause": "缺稳定长期 owner，或用户明确要求创建/迭代项目内可保留 agent；需要专业身份、拒绝项、输入输出、记忆和验收政策。",
+      "deliverable": "GeneratedAgentSpec plus durable project-agent CandidateWriteback",
       "verifier": "verify",
       "candidateType": "agent",
-      "forbiddenBehaviors": ["worker_task_only", "create_script", "bind_repo_path_to_identity"],
-      "acceptance": ["GeneratedAgentSpec complete", "10/10 scorecard", "identity pollution 0"]
+      "forbiddenBehaviors": ["worker_task_only", "create_script", "bind_repo_path_to_identity", "temporary_subagent_as_agent_definition"],
+      "acceptance": [
+        "GeneratedAgentSpec complete",
+        "10/10 scorecard",
+        "identity pollution 0",
+        "projectRetention present",
+        "formal tool projection targets present"
+      ]
     },
     "create_script": {
       "branch": "design_script_candidate",
@@ -120,6 +126,7 @@
     "fakeOwnerCount": 0,
     "missingVerifierCount": 0,
     "governanceAgentAsWorkerCount": 0,
+    "temporarySubagentAsDurableAgentCount": 0,
     "validatorAsPlannerCount": 0,
     "automaticCanonicalWriteback": 0
   }

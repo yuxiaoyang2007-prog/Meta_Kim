@@ -1,6 +1,8 @@
 # Codex Runtime Adapter
 
-In Codex, `/meta-theory` is authorization to use available subagent/delegation tools. Only claim delegation when a real tool was called successfully.
+In Codex, `/meta-theory` is authorization to use available subagent/delegation tools when the user explicitly requests governed subagent work or the active user request names Critical / Fetch / Thinking / Review with meta-theory. Only claim delegation when a real tool was called successfully.
+
+Codex must not self-degrade to "single-thread dispatcher" merely because it is running in Codex App. If `spawn_agent` / subagent tooling is exposed, Thinking may select it after Fetch evidence and the dispatcher must show which temporary workers were spawned. If the tool is absent or fails, record `subagentCapabilityStatus=unavailable` and a concrete `degradationReason`.
 
 ## Honest Subagent Contract
 
@@ -9,6 +11,26 @@ If `spawn_agent` / `Agent` equivalent is unavailable:
 - do not pretend agents ran
 - record the blocked reason
 - continue only for read-only degraded analysis or ask before degraded executable work
+
+If `spawn_agent` is available and the user explicitly authorized subagents:
+
+- use it for independent, bounded worker or review lanes after Thinking creates `workerTaskPackets`
+- keep each worker's write scope disjoint when it edits files
+- show the dispatch board before or alongside dispatch
+- distinguish temporary `runtimeInstanceAlias` from durable `roleDisplayName` and `ownerAgent`
+- do not describe the temporary subagent prompt as the created/iterated project agent
+
+## Codex Durable Agent Projection
+
+Codex project-retained agents use `.codex/agents/<agent>.toml` with a stable `name`, `description`, and `developer_instructions`. When `GapDecision.decision=create_agent` or the user asks to iterate an agent, Codex must produce or update a durable project-local agent candidate for this TOML surface after Warden/user approval. Temporary `spawn_agent` workers only execute the factory/review tasks; they do not satisfy the durable agent deliverable.
+
+For cross-tool compatibility, every durable project-agent candidate must include:
+
+- formal tool projection targets from `config/sync.json` and `config/runtime-compatibility-catalog.json`
+- abstract loadout slots instead of concrete one-run skill/command choices
+- no Windows absolute paths, current file lists, tickets, `todayTask`, `scopeFiles`, `deliverableLink`, or `verifySteps` in identity
+
+Other formal tool projections follow `config/sync.json` and `config/runtime-compatibility-catalog.json`; keep `needs_probe`, `partial`, or `reference_only` statuses as evidence instead of promoting them by wording.
 
 ## Choice Surfaces
 

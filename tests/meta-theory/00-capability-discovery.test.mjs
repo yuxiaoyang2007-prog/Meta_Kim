@@ -155,6 +155,69 @@ describe("Part A: SKILL.md documents all capability types", async () => {
     );
   });
 
+  test("Fetch stage explicitly lists runtime global and project capability paths", () => {
+    const requiredPaths = [
+      ".claude/agents/",
+      ".claude/skills/",
+      ".claude/commands/",
+      ".claude/hooks/",
+      ".claude/settings.json",
+      "~/.claude/agents/",
+      "~/.claude/skills/",
+      "~/.claude/commands/",
+      "~/.claude/hooks/",
+      "~/.claude/settings.json",
+      "~/.codex/agents/",
+      "~/.codex/skills/",
+      "~/.codex/commands/",
+      "~/.codex/hooks/",
+      "~/.codex/hooks.json",
+      "~/.codex/config.toml",
+      "~/.agents/skills/",
+      ".codex/agents/",
+      ".agents/skills/",
+      ".codex/commands/",
+      ".codex/hooks/",
+      ".codex/hooks.json",
+      ".codex/config.toml",
+      ".cursor/agents/",
+      ".cursor/skills/",
+      ".cursor/rules/",
+      ".cursor/prompts/",
+      ".cursor/hooks/",
+      ".cursor/hooks.json",
+      ".cursor/mcp.json",
+      "~/.cursor/agents/",
+      "~/.cursor/skills/",
+      "~/.cursor/rules/",
+      "~/.cursor/prompts/",
+      "~/.cursor/hooks/",
+      "~/.cursor/hooks.json",
+      "openclaw/workspaces/",
+      "openclaw/skills/",
+      "openclaw/hooks/",
+      "openclaw/openclaw.template.json",
+      "~/.openclaw/openclaw.json",
+      "~/.openclaw/workspace-*",
+      "~/.openclaw/skills/",
+      "~/.openclaw/hooks/",
+      ".mcp.json",
+      "package.json",
+    ];
+
+    for (const requiredPath of requiredPaths) {
+      assert.ok(
+        skillContent.includes(requiredPath),
+        `Fetch discovery checklist must explicitly include ${requiredPath}`,
+      );
+    }
+    assert.match(
+      skillContent,
+      /fetchPacket\.capabilityDiscovery\.searchLog[\s\S]*empty or unavailable source entries/i,
+      "Fetch pass condition must require a searchLog with checked empty/unavailable sources.",
+    );
+  });
+
   test("Fetch stage is NOT skill-only (capability-first)", () => {
     // Verify the Fetch section mentions more than just skills
     const fetchSectionMatch = skillContent.match(
@@ -679,6 +742,61 @@ describe("Part H: discover-global-capabilities Script", async () => {
       assert.ok(
         content.includes(platformId) || content.includes(platformName),
         `discover-global-capabilities.mjs must reference ${platformName} (${platformId})`,
+      );
+    }
+  });
+
+  test("script scans Codex agents, skills, commands, hooks, and MCP config", async () => {
+    const scriptPath = path.join(
+      REPO_ROOT,
+      "scripts",
+      "discover-global-capabilities.mjs",
+    );
+    const content = await fs.readFile(scriptPath, "utf8");
+
+    const requiredPatterns = [
+      /scanTomlFilesRecursive\(path\.join\(baseDir,\s*"agents"\)\)/,
+      /scanCodexSkills\(baseDir\)/,
+      /scanCommandFiles\(path\.join\(baseDir,\s*"commands"\)\)/,
+      /scanHookFiles\(path\.join\(baseDir,\s*"hooks"\)\)/,
+      /scanConfigFile\(path\.join\(baseDir,\s*"hooks\.json"\)/,
+      /scanCodexTomlMcpServers\(path\.join\(baseDir,\s*"config\.toml"\)\)/,
+      /scanCodexTomlMcpTools\(path\.join\(baseDir,\s*"config\.toml"\)\)/,
+      /id:\s*`\$\{serverId\}:tools-unlisted`/,
+      /path\.join\(os\.homedir\(\),\s*"\.agents",\s*"skills"\)/,
+    ];
+
+    for (const pattern of requiredPatterns) {
+      assert.match(
+        content,
+        pattern,
+        `discover-global-capabilities.mjs must include Codex discovery pattern ${pattern}`,
+      );
+    }
+  });
+
+  test("script scans Claude, Cursor, and OpenClaw runtime config providers", async () => {
+    const scriptPath = path.join(
+      REPO_ROOT,
+      "scripts",
+      "discover-global-capabilities.mjs",
+    );
+    const content = await fs.readFile(scriptPath, "utf8");
+
+    const requiredPatterns = [
+      /scanConfigFile\(path\.join\(baseDir,\s*"settings\.json"\)/,
+      /scanConfigFile\(path\.join\(baseDir,\s*"openclaw\.json"\)/,
+      /scanConfigFile\(path\.join\(baseDir,\s*"hooks\.json"\)/,
+      /scanMarkdownFilesRecursive\(path\.join\(baseDir,\s*"rules"\)\)/,
+      /scanMarkdownFilesRecursive\(path\.join\(baseDir,\s*"prompts"\)\)/,
+      /scanMcpConfig\(path\.join\(baseDir,\s*"mcp\.json"\)\)/,
+    ];
+
+    for (const pattern of requiredPatterns) {
+      assert.match(
+        content,
+        pattern,
+        `discover-global-capabilities.mjs must include cross-runtime discovery pattern ${pattern}`,
       );
     }
   });

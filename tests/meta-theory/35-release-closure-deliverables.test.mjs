@@ -36,10 +36,15 @@ describe("35 — Release closure deliverables", () => {
     assert.equal(report.releaseBoundary.cannotClaimGithubComplete, true);
     assert.match(report.releaseBoundary.reason, /P-024 Cursor native live pass remains blocked/);
     assert.equal(typeof report.git.hasWorkingTreeDelta, "boolean");
-    assert.ok(
-      report.git.aheadOfOriginMain >= 1 || report.git.hasWorkingTreeDelta,
-      "expected either unpushed commits or working tree delta in the GitHub gap report",
+    assert.match(
+      report.git.deltaState,
+      /^(clean_synced|ahead|dirty|ahead_and_dirty)$/,
+      "expected Git delta state to classify current repo state",
     );
+    if (report.git.deltaState === "clean_synced") {
+      assert.equal(report.git.aheadOfOriginMain, 0);
+      assert.equal(report.git.hasWorkingTreeDelta, false);
+    }
     if (report.git.hasWorkingTreeDelta) {
       assert.ok(Array.isArray(report.git.workingTreeEntries));
       assert.ok(report.git.workingTreeEntries.length >= 1);

@@ -117,7 +117,7 @@
         "agentPath": "openclaw/workspaces/{agent}/SOUL.md",
         "hookConfig": "openclaw/openclaw.template.json",
         "mcpConfig": "openclaw/openclaw.template.json",
-        "status": "partial"
+        "status": "verified_current"
       },
       "dependencyInstall": {
         "ecc": {
@@ -135,7 +135,7 @@
         {
           "type": "local_file",
           "ref": "AGENTS.md",
-          "claim": "OpenClaw enforcement is currently declarative-only with an upgrade path."
+          "claim": "OpenClaw is a compatible formal projection; stricter tool-denial behavior must be backed by OpenClaw-side strict tests, and can merge only after the evidence passes review."
         },
         {
           "type": "official_docs",
@@ -148,8 +148,8 @@
           "claim": "OpenClaw internal hooks cover command/lifecycle automation; blocking/canceling policy belongs to typed plugin hooks."
         }
       ],
-      "decision": "Keep as a formal projection while marking tool-blocking enforcement as partial.",
-      "nextAction": "Do not describe OpenClaw internal hooks as PreToolUse-style blocking; add a typed plugin adapter before claiming mechanical tool denial."
+      "decision": "Keep as a compatible formal Meta_Kim projection with OpenClaw-native workspace, skill, config, and hook surfaces.",
+      "nextAction": "Community PRs that improve OpenClaw behavior are welcome; contributors must include strict OpenClaw self-test evidence, especially for typed plugin tool-denial behavior, and changes can merge only after the evidence passes review."
     },
     {
       "id": "cursor",
@@ -203,7 +203,7 @@
         }
       ],
       "decision": "Keep as a formal Meta_Kim runtime projection with official subagent/rule/hook/MCP surfaces.",
-      "nextAction": "Maintain Cursor hook, MCP, rules, and subagent mirrors through sync validation while keeping native choice popup unverified."
+      "nextAction": "Community PRs that improve Cursor behavior are welcome; contributors must include strict Cursor self-test evidence, especially for native choice-surface claims, and changes can merge only after the evidence passes review."
     },
     {
       "id": "opencode",

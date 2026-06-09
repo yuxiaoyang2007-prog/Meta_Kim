@@ -1749,9 +1749,20 @@ function buildRuntimeSkillMap(targetId) {
  */
 export function applyRuntimePaths(content, targetId) {
   const rules = buildRuntimeSkillMap(targetId);
-  let result = content;
+  const protectedBlocks = [];
+  let result = content.replace(
+    /Fetch discovery minimum checklist: before Thinking, search at least these locations \(even if results are empty\):[\s\S]*?\n(?=Pass condition:)/g,
+    (block) => {
+      const token = `__META_KIM_RUNTIME_LITERAL_BLOCK_${protectedBlocks.length}__`;
+      protectedBlocks.push({ token, block });
+      return token;
+    },
+  );
   for (const { pattern, replacement } of rules) {
     result = result.replace(pattern, replacement);
+  }
+  for (const { token, block } of protectedBlocks) {
+    result = result.replace(token, block);
   }
   return result;
 }
