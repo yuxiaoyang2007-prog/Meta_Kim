@@ -74,6 +74,53 @@ describe("29 — Capability Gap complete product PRD", () => {
     }
   });
 
+  test("keeps human-readable natural-language entry work in the single PRD source", () => {
+    for (const marker of [
+      "版本：v0.36",
+      "human-readable natural-language entry hardening is PRD-scoped",
+      "自然语言入口与用户体验提示",
+      "普通自然语言 durable 任务",
+      "没有真实 conversation notice emitted 证据时必须标 partial",
+      "CLI adapter 发射后才可标 ready",
+      "--emit-conversation-notice",
+      "帮我做个小红书营销自动发布器",
+      "P-061",
+      "自然语言入口分类",
+      "P-062",
+      "用户体验 truth boundary",
+      "P-063",
+      "阶段执行说明",
+      "P-064",
+      "单一 PRD 源守卫",
+      "P-065",
+      "多语言阶段说明覆盖",
+      "P-066",
+      "真实 conversation notice 发射",
+      "不能新增第二份 backlog / PRD",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing natural-language PRD marker ${marker}`);
+    }
+
+    assert.equal(
+      existsSync(
+        path.join(REPO_ROOT, "config", "governance", "human-readable-ambiguity-remediation.json"),
+      ),
+      false,
+      "human-readable remediation must not live as a second PRD/backlog source",
+    );
+  });
+
+  test("keeps the PRD local-private and out of GitHub-visible paths", () => {
+    const gitignore = readFileSync(path.join(REPO_ROOT, ".gitignore"), "utf8");
+
+    assert.match(gitignore, /^docs\/\*\*$/m);
+    assert.doesNotMatch(
+      gitignore,
+      /^!docs\/ai-native-capability-gap-mvp-prd\.zh-CN\.md$/m,
+      "the local PRD must not be unignored for GitHub publication",
+    );
+  });
+
   test("tracks the four next product targets with status and done standards", () => {
     for (const marker of [
       "T-001",
@@ -265,7 +312,7 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records expanded unfinished parallel backlog instead of collapsing to one blocker", () => {
     for (const marker of [
-      "版本：v0.35",
+      "版本：v0.36",
       "未完成但可并行推进的扩展 / 解阻队列",
       "P-025",
       "Cursor WSL live 安装与只读验收子窗口",
@@ -397,7 +444,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "五维评分",
       "6 条误解点与修订建议",
       "fixture pass、release-grade、GitHub complete、Warden approval",
-      "P-026 / P-027 / P-028 / P-029 / P-030 / P-031 / P-032 / P-033 / P-034 / P-035 / P-036 / P-037 / P-038 / P-039 / P-040 / P-041 / P-042 / P-043 / P-044 / P-045 / P-046 / P-047 / P-048 / P-049 / P-050 / P-051 / P-052 / P-053 / P-054 / P-055 / P-056 / P-057 / P-058 / P-059 / P-060 已测通",
+      "P-026 / P-027 / P-028 / P-029 / P-030 / P-031 / P-032 / P-033 / P-034 / P-035 / P-036 / P-037 / P-038 / P-039 / P-040 / P-041 / P-042 / P-043 / P-044 / P-045 / P-046 / P-047 / P-048 / P-049 / P-050 / P-051 / P-052 / P-053 / P-054 / P-055 / P-056 / P-057 / P-058 / P-059 / P-060 / P-061 / P-062 / P-063 / P-064 / P-065 / P-066 已测通",
       "P-025 需要安装或暴露 Cursor Agent CLI",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.24 marker ${marker}`);
@@ -407,8 +454,8 @@ describe("29 — Capability Gap complete product PRD", () => {
   test("records v0.25 wider parallel product backlog", () => {
     for (const marker of [
       "P-025 到 P-060 并行扩展队列",
-      "本 PRD v0.35 的状态更新",
-      "P-025 到 P-060 队列",
+      "本 PRD v0.36 的状态更新",
+      "P-025 到 P-066 队列",
       "researchPreparationPacket",
       "研究完才编排",
       "避免把 capability 简化成 skill",
@@ -444,7 +491,7 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records v0.27 multi-type capability browser closure", () => {
     for (const marker of [
-      "本 PRD v0.35 的状态更新",
+      "本 PRD v0.36 的状态更新",
       "P-038 \\| R-007/R-010 \\| 多类型能力库存浏览器[\\s\\S]*?\\| 已测通 \\|",
       "npm run meta:capabilities:browser",
       ".meta-kim/state/default/multi-type-capability-browser/latest.json",
@@ -462,7 +509,7 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records v0.28 orchestration DAG closure and wider parallel product lanes", () => {
     for (const marker of [
-      "版本：v0.35",
+      "版本：v0.36",
       "P-039 \\| R-003/R-007 \\| 编排 DAG 可视化与依赖模拟[\\s\\S]*?\\| 已测通 \\|",
       "npm run meta:orchestration:dag",
       ".meta-kim/state/default/orchestration-dag/latest.json",
@@ -493,7 +540,7 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records v0.29 orchestration scheduler closure", () => {
     for (const marker of [
-      "版本：v0.35",
+      "版本：v0.36",
       "P-050 \\| R-003/R-007 \\| DAG 串行依赖样本扩展[\\s\\S]*?\\| 已测通 \\|",
       "P-051 \\| R-003/R-007 \\| DAG 调度仿真与关键路径[\\s\\S]*?\\| 已测通 \\|",
       "npm run meta:orchestration:schedule",
@@ -521,7 +568,7 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records v0.30 workerTask output contract and retry closure", () => {
     for (const marker of [
-      "版本：v0.35",
+      "版本：v0.36",
       "P-040 \\| R-001/R-007 \\| workerTask 输出合同与返工策略[\\s\\S]*?\\| 已测通 \\|",
       "P-052 \\| R-001/R-007 \\| workerTask 输出 schema registry[\\s\\S]*?\\| 已测通 \\|",
       "P-053 \\| R-001/R-007 \\| workerTask 返工 runner[\\s\\S]*?\\| 已测通 \\|",
@@ -553,7 +600,7 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records v0.31 feedback loop and Review Meta-Review gate closure", () => {
     for (const marker of [
-      "版本：v0.35",
+      "版本：v0.36",
       "P-041 \\| R-002/R-011 \\| 真实用户纠错 replay 池[\\s\\S]*?\\| 已测通 \\|",
       "P-042 \\| R-002/R-010 \\| 反馈入口与状态闭环[\\s\\S]*?\\| 已测通 \\|",
       "P-054 \\| R-008/R-011 \\| Review / Meta-Review 双层接收门[\\s\\S]*?\\| 已测通 \\|",
@@ -580,9 +627,9 @@ describe("29 — Capability Gap complete product PRD", () => {
     }
   });
 
-  test("records v0.35 product delivery bundle and reviewer calibration closure", () => {
+  test("records product delivery bundle and reviewer calibration closure", () => {
     for (const marker of [
-      "版本：v0.35",
+      "版本：v0.36",
       "P-045 \\| R-010/R-011 \\| 产品交付包打包[\\s\\S]*?\\| 已测通 \\|",
       "P-046 \\| R-011 \\| reviewer 校准样本[\\s\\S]*?\\| 已测通 \\|",
       "P-059 \\| R-010/R-011 \\| 产品交付 bundle CLI[\\s\\S]*?\\| 已测通 \\|",
@@ -605,9 +652,9 @@ describe("29 — Capability Gap complete product PRD", () => {
     }
   });
 
-  test("records v0.35 live research execution, freshness, and innovation sandbox closure", () => {
+  test("records live research execution, freshness, and innovation sandbox closure", () => {
     for (const marker of [
-      "版本：v0.35",
+      "版本：v0.36",
       "P-047 \\| R-007 \\| 真实联网研究执行层[\\s\\S]*?\\| 已测通 \\|",
       "P-048 \\| R-007/R-010 \\| 研究证据缓存与新鲜度策略[\\s\\S]*?\\| 已测通 \\|",
       "P-049 \\| R-007/R-009 \\| 能力创新候选沙箱[\\s\\S]*?\\| 已测通 \\|",
@@ -628,9 +675,9 @@ describe("29 — Capability Gap complete product PRD", () => {
     }
   });
 
-  test("records v0.35 remaining backlog closure without clearing true blockers", () => {
+  test("records remaining backlog closure without clearing true blockers", () => {
     for (const marker of [
-      "版本：v0.35",
+      "版本：v0.36",
       "P-029 \\| R-010 \\| 跨 run 趋势服务化面板[\\s\\S]*?\\| 已测通 \\|",
       "npm run meta:trend:panel",
       ".meta-kim/state/default/run-trend-panel/latest.json",

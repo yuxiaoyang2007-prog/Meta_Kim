@@ -103,7 +103,6 @@ export function hookCommand(command, timeout, extra = {}) {
 }
 
 export function buildHookPromptAdapterSource(runtimeId) {
-  const outputKey = runtimeId === "cursor" ? "prompt" : "systemMessage";
   return [
     'import { spawnSync } from "node:child_process";',
     'import { existsSync, readFileSync } from "node:fs";',
@@ -146,6 +145,7 @@ export function buildHookPromptAdapterSource(runtimeId) {
     "  const hookDir = path.dirname(fileURLToPath(import.meta.url));",
     '  candidates.push(path.join(hookDir, "user-prompt-submit.js"));',
     '  candidates.push(path.join(hookDir, "hookprompt", "user-prompt-submit.js"));',
+    '  candidates.push(path.join(hookDir, "..", "skills", "hookprompt", ".codex", "hooks", "user-prompt-submit.js"));',
     '  candidates.push(path.join(hookDir, "..", "skills", "hookprompt", ".claude", "hooks", "user-prompt-submit.js"));',
     '  candidates.push(path.join(process.env.HOME || process.env.USERPROFILE || "", ".claude", "hooks", "user-prompt-submit.js"));',
     "  return candidates.find((candidate) => candidate && existsSync(candidate));",
@@ -160,6 +160,20 @@ export function buildHookPromptAdapterSource(runtimeId) {
     "  }",
     "}",
     "",
+    "function emitAdditionalContext(additionalContext) {",
+    `  const runtimeId = ${JSON.stringify(runtimeId)};`,
+    '  if (runtimeId === "cursor") {',
+    "    console.log(JSON.stringify({ prompt: additionalContext }));",
+    "    return;",
+    "  }",
+    "  console.log(JSON.stringify({",
+    "    hookSpecificOutput: {",
+    '      hookEventName: "UserPromptSubmit",',
+    "      additionalContext,",
+    "    },",
+    "  }));",
+    "}",
+    "",
     "const payload = readPayload();",
     "const prompt = promptFromPayload(payload);",
     "const script = findHookPromptScript();",
@@ -172,7 +186,7 @@ export function buildHookPromptAdapterSource(runtimeId) {
     "  });",
     "  const additionalContext = parseClaudeAdditionalContext(result.stdout || '');",
     "  if (additionalContext) {",
-    `    console.log(JSON.stringify({ ${JSON.stringify(outputKey)}: additionalContext }));`,
+    "    emitAdditionalContext(additionalContext);",
     "  }",
     "}",
     "",

@@ -39,6 +39,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node .claude/hooks/graphify-context.mjs"
+          },
+          {
+            "type": "command",
             "command": "node .claude/hooks/block-dangerous-bash.mjs"
           }
         ]

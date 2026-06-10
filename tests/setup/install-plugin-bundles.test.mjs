@@ -97,7 +97,11 @@ describe("installPluginBundlesForNonClaudeRuntimes (dry-run e2e)", () => {
     assert.match(plain, /npx --yes --package ecc-universal@2\.0\.0-rc\.1 ecc install --profile core --target codex/);
     assert.match(
       plain,
-      /ensure .*\.codex.*config\.toml has \[features\]\.default_mode_request_user_input = true/,
+      /preserve existing .*\.codex.*config\.toml before ECC upstream installer and restore it with add-only ECC merge/,
+    );
+    assert.match(
+      plain,
+      /ensure .*\.codex.*config\.toml preserves Codex App Browser\/Chrome\/Computer Use native controls/,
     );
     assert.match(
       plain,

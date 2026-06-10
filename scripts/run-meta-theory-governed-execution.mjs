@@ -9,6 +9,7 @@ import {
   buildCapabilityGapOrchestration,
   decomposeCapabilityGapRequests,
 } from "./run-capability-gap-orchestration.mjs";
+import { classifyMetaTheoryEntry } from "./meta-theory-entry-classifier.mjs";
 import {
   decideCapabilityGap,
   openRunStateStore,
@@ -46,6 +47,8 @@ const AI_READABLE_PRODUCT_STANDARDS_PATH = path.join(
 );
 const RUNTIME_TARGETS = ["claude", "codex", "cursor", "openclaw"];
 const WARDEN_APPROVAL_PACKET_SCHEMA_VERSION = "warden-approval-v0.1";
+const CONVERSATION_NOTICE_SCHEMA_VERSION = "conversation-notice-v0.1";
+const CONVERSATION_NOTICE_ADAPTER = "meta-theory-governed-execution-cli";
 
 const RUNTIME_FAILURE_TAXONOMY = Object.freeze({
   pass: "pass",
@@ -229,6 +232,10 @@ const BUSINESS_PHASES = Object.freeze([
 function stableId(prefix, seed) {
   const hash = createHash("sha1").update(String(seed ?? "")).digest("hex").slice(0, 12);
   return `${prefix}-${hash}`;
+}
+
+function textSha256(text) {
+  return createHash("sha256").update(String(text ?? ""), "utf8").digest("hex");
 }
 
 function normalizeTask(input) {
@@ -912,6 +919,259 @@ function renderReportList(label, ...args) {
   return Array.isArray(value) ? value : [String(value)];
 }
 
+function buildConversationNotice({
+  orchestrationReport,
+  runtimeEvidence,
+  labels,
+  emitConversationNotice = false,
+  conversationNoticeChannel = "stdout",
+  conversationNoticeAdapter = CONVERSATION_NOTICE_ADAPTER,
+}) {
+  const capabilityCount = orchestrationReport.fetchEvidence.capabilityInventory.length;
+  const workerTaskCount = orchestrationReport.workerTaskPackets.length;
+  const synthesisOwner = orchestrationReport.orchestrationTaskBoardPacket.synthesisOwner;
+  const laneSummary = [
+    ...new Set(
+      orchestrationReport.workerTaskPackets
+        .map((packet) => packet.businessFlowLaneLabel ?? packet.roleDisplayName)
+        .filter(Boolean)
+    ),
+  ].join("、");
+  const lines = [
+    `${labels.conversationNotice.title}: ${labels.plainLanguageSummary}`,
+    `- ${labels.conversationNotice.stageProgress}: ${labels.conversationNotice.stageProgressDetail}`,
+    `- ${labels.conversationNotice.route}: ${labels.conversationNotice.routeDetail(capabilityCount)}`,
+    `- ${labels.conversationNotice.handoff}: ${labels.conversationNotice.handoffDetail(
+      workerTaskCount,
+      synthesisOwner,
+      laneSummary
+    )}`,
+    `- ${labels.conversationNotice.verification}: ${labels.conversationNotice.verificationDetail(
+      runtimeEvidence.status
+    )}`,
+  ];
+  const text = lines.join("\n");
+  const hash = textSha256(text);
+  const emitted = emitConversationNotice === true;
+  return {
+    schemaVersion: CONVERSATION_NOTICE_SCHEMA_VERSION,
+    status: emitted ? "emitted" : "not_emitted",
+    emitted,
+    channel: emitted ? conversationNoticeChannel : null,
+    adapter: emitted ? conversationNoticeAdapter : null,
+    emittedAt: emitted ? new Date().toISOString() : null,
+    language: labels.htmlLang,
+    lineCount: lines.length,
+    text,
+    textSha256: hash,
+    emittedTextSha256: emitted ? hash : null,
+    evidenceKind: emitted ? "adapter_emitted_notice" : "not_emitted",
+    outputBoundary: emitted ? "stdout_before_summary_json" : null,
+    routeSummary: {
+      capabilityCount,
+      workerTaskCount,
+      synthesisOwner,
+      runtimeEvidenceStatus: runtimeEvidence.status,
+    },
+  };
+}
+
+function buildUserExperienceNotice({
+  orchestrationReport,
+  runtimeEvidence,
+  writebackFlow,
+  labels,
+  conversationNotice,
+}) {
+  const internalOnlySignals = [
+    "ownerDiscoveryPacket",
+    "orchestrationTaskBoardPacket",
+    "workerTaskPackets",
+    "cardPlanPacket",
+  ];
+  const userVisibleSignals = [
+    labels.userExperienceNotice.signals.stageProgress,
+    labels.userExperienceNotice.signals.routeSummary(
+      orchestrationReport.fetchEvidence.capabilityInventory.length
+    ),
+    labels.userExperienceNotice.signals.ownerHandoff(
+      orchestrationReport.workerTaskPackets.length
+    ),
+    labels.userExperienceNotice.signals.verification(runtimeEvidence.status),
+  ];
+  const noticeEmitted = conversationNotice?.emitted === true;
+
+  return {
+    schemaVersion: "user-experience-notice-v0.1",
+    status: noticeEmitted ? "ready" : "partial",
+    primarySurface: noticeEmitted ? "localized_conversation_notice" : "user_readable_run_report",
+    pendingPrimarySurface: noticeEmitted ? null : "localized_conversation_notice",
+    secondarySurface: "user_readable_run_report",
+    conversationNoticeEmitted: noticeEmitted,
+    statusReason: noticeEmitted
+      ? labels.userExperienceNotice.emittedStatusReason(
+          conversationNotice.channel,
+          conversationNotice.adapter,
+          conversationNotice.textSha256
+        )
+      : labels.userExperienceNotice.partialStatusReason,
+    conversationNoticeEvidence: noticeEmitted
+      ? {
+          schemaVersion: conversationNotice.schemaVersion,
+          channel: conversationNotice.channel,
+          adapter: conversationNotice.adapter,
+          emittedAt: conversationNotice.emittedAt,
+          textSha256: conversationNotice.textSha256,
+          evidenceKind: conversationNotice.evidenceKind,
+          outputBoundary: conversationNotice.outputBoundary,
+        }
+      : null,
+    expectation: labels.userExperienceNotice.expectation,
+    accuracyBoundary: labels.userExperienceNotice.accuracyBoundary,
+    userVisibleSignals,
+    internalOnlySignals,
+    mustNotClaim: labels.userExperienceNotice.mustNotClaim,
+  };
+}
+
+function capabilityToolingFor(packet) {
+  const requirement = packet.capabilityRequirements?.[0] ?? "worker_task_only";
+  if (requirement === "create_agent") {
+    return {
+      agent: packet.owner,
+      skill: "meta-theory / meta-genesis",
+      mcp: "not required",
+      command: packet.verifySteps?.[0]?.command ?? "npm run meta:gap:orchestrate",
+    };
+  }
+  if (requirement === "create_skill") {
+    return {
+      agent: packet.owner,
+      skill: "meta-theory / meta-artisan",
+      mcp: "not required",
+      command: packet.verifySteps?.[0]?.command ?? "npm run meta:gap:orchestrate",
+    };
+  }
+  if (requirement === "create_script") {
+    return {
+      agent: packet.owner,
+      skill: "meta-theory",
+      mcp: "not required",
+      command: packet.verifySteps?.[0]?.command ?? "npm run meta:gap:orchestrate",
+    };
+  }
+  if (requirement === "create_mcp_provider") {
+    return {
+      agent: packet.owner,
+      skill: "meta-theory / meta-artisan",
+      mcp: "MCP provider boundary",
+      command: packet.verifySteps?.[0]?.command ?? "npm run meta:gap:orchestrate",
+    };
+  }
+  return {
+    agent: packet.owner,
+    skill: "meta-theory",
+    mcp: "not required",
+    command: packet.verifySteps?.[0]?.command ?? "npm run meta:gap:orchestrate",
+  };
+}
+
+function buildStageOperationPlan({
+  orchestrationReport,
+  runtimeEvidence,
+  labels,
+}) {
+  const stageLabels = labels.stageOperationPlan.stages;
+  const workerTasks = orchestrationReport.workerTaskPackets.map((packet, index) => {
+    const tooling = capabilityToolingFor(packet);
+    const mcp =
+      tooling.mcp === "not required"
+        ? labels.stageOperationPlan.notRequired
+        : tooling.mcp === "MCP provider boundary"
+          ? labels.stageOperationPlan.mcpProviderBoundary
+          : tooling.mcp;
+    return {
+      order: index + 1,
+      taskPacketId: packet.taskPacketId,
+      owner: packet.owner,
+      roleDisplayName: packet.roleDisplayName,
+      skill: tooling.skill,
+      mcp,
+      command: tooling.command,
+      does: labels.stageOperationPlan.workerDoes(packet.output, packet.evidenceRefs?.[0]),
+      resultReport: labels.stageOperationPlan.workerResult(packet.output),
+      nextWork: labels.stageOperationPlan.workerNext(packet.handoffTarget, packet.parallelGroup),
+    };
+  });
+  return {
+    schemaVersion: "stage-operation-plan-v0.1",
+    stages: [
+      {
+        stage: "Critical",
+        owner: "meta-warden",
+        uses: stageLabels.critical.uses,
+        whatHappens: stageLabels.critical.whatHappens,
+        outputShape: labels.stageOperationPlan.outputs.critical(
+          orchestrationReport.criticalSummary.successCriteria.length
+        ),
+        resultReport: labels.stageOperationPlan.results.critical,
+        nextWork: "Fetch",
+      },
+      {
+        stage: "Fetch",
+        owner: orchestrationReport.fetchEvidence.orchestrationOwner,
+        uses: stageLabels.fetch.uses,
+        whatHappens: stageLabels.fetch.whatHappens,
+        outputShape: labels.stageOperationPlan.outputs.fetch(
+          orchestrationReport.fetchEvidence.capabilityInventory.length,
+          orchestrationReport.fetchEvidence.sources.length
+        ),
+        resultReport: labels.stageOperationPlan.results.fetch,
+        nextWork: "Thinking",
+      },
+      {
+        stage: "Thinking",
+        owner: orchestrationReport.orchestrationTaskBoardPacket.synthesisOwner,
+        uses: stageLabels.thinking.uses,
+        whatHappens: stageLabels.thinking.whatHappens,
+        outputShape: labels.stageOperationPlan.outputs.thinking(
+          orchestrationReport.thinkingRoute.boardMode,
+          workerTasks.length
+        ),
+        resultReport: labels.stageOperationPlan.results.thinking,
+        nextWork: "Execution",
+      },
+      {
+        stage: "Execution",
+        owner: orchestrationReport.orchestrationTaskBoardPacket.synthesisOwner,
+        uses: stageLabels.execution.uses,
+        whatHappens: stageLabels.execution.whatHappens,
+        outputShape: labels.stageOperationPlan.outputs.execution(workerTasks.length),
+        resultReport:
+          workerTasks.length > 0
+            ? labels.stageOperationPlan.executionResult(workerTasks.length)
+            : labels.stageOperationPlan.noExecutionTasks,
+        nextWork: "Review",
+        workerTasks,
+      },
+      {
+        stage: "Review",
+        owner: orchestrationReport.reviewResult.owner,
+        uses: stageLabels.review.uses,
+        whatHappens: stageLabels.review.whatHappens,
+        outputShape: labels.stageOperationPlan.outputs.review(
+          Object.keys(orchestrationReport.reviewResult.checks).length
+        ),
+        resultReport: labels.stageOperationPlan.results.review(
+          orchestrationReport.reviewResult.status,
+          runtimeEvidence.status
+        ),
+        nextWork: "Verification / Evolution",
+      },
+    ],
+  };
+}
+
 function buildUserReadableRunReport({
   runId,
   task,
@@ -921,6 +1181,8 @@ function buildUserReadableRunReport({
   writebackFlow,
   cardPlanPacket,
   businessPhasePlanPacket,
+  userExperienceNotice,
+  stageOperationPlan,
   markdownPath,
 }) {
   const labels = getReportLabelsForPath(markdownPath);
@@ -938,6 +1200,44 @@ function buildUserReadableRunReport({
     `- ${labels.capabilityGaps}: ${orchestrationReport.capabilityGaps.length}`,
     `- ${labels.workerTasks}: ${orchestrationReport.workerTaskPackets.length}`,
     `- ${labels.synthesisOwner}: ${orchestrationReport.orchestrationTaskBoardPacket.synthesisOwner}`,
+    "",
+    `## ${labels.userExperienceNotice.title}`,
+    "",
+    `- ${labels.status}: ${userExperienceNotice.status}`,
+    `- ${labels.userExperienceNotice.primarySurface}: ${userExperienceNotice.primarySurface}`,
+    `- ${labels.reason}: ${userExperienceNotice.statusReason}`,
+    `- ${labels.userExperienceNotice.expectationLabel}: ${userExperienceNotice.expectation}`,
+    `- ${labels.userExperienceNotice.boundaryLabel}: ${userExperienceNotice.accuracyBoundary}`,
+    `- ${labels.userExperienceNotice.mustNotClaimLabel}: ${userExperienceNotice.mustNotClaim}`,
+    ...(userExperienceNotice.conversationNoticeEvidence
+      ? [
+          `- ${labels.userExperienceNotice.emissionEvidenceLabel}: ${userExperienceNotice.conversationNoticeEvidence.channel} / ${userExperienceNotice.conversationNoticeEvidence.adapter} / ${userExperienceNotice.conversationNoticeEvidence.textSha256}`,
+        ]
+      : []),
+    `| ${labels.userExperienceNotice.signal} | ${labels.routeImpact} |`,
+    "|---|---|",
+    ...userExperienceNotice.userVisibleSignals.map(
+      (signal) => `| ${signal.label} | ${String(signal.detail).replaceAll("|", "\\|")} |`
+    ),
+    `| ${labels.userExperienceNotice.internalOnly} | ${userExperienceNotice.internalOnlySignals.join(", ")} |`,
+    "",
+    `## ${labels.stageOperationPlan.title}`,
+    "",
+    `| ${labels.stageOperationPlan.stage} | ${labels.owner} | ${labels.stageOperationPlan.whatHappens} | ${labels.stageOperationPlan.uses} | ${labels.stageOperationPlan.outputShape} | ${labels.stageOperationPlan.resultReport} | ${labels.stageOperationPlan.nextWork} |`,
+    "|---|---|---|---|---|---|---|",
+    ...stageOperationPlan.stages.map(
+      (stage) =>
+        `| ${stage.stage} | ${stage.owner} | ${String(stage.whatHappens).replaceAll("|", "\\|")} | ${String(stage.uses).replaceAll("|", "\\|")} | ${String(stage.outputShape).replaceAll("|", "\\|")} | ${String(stage.resultReport).replaceAll("|", "\\|")} | ${stage.nextWork} |`
+    ),
+    "",
+    `## ${labels.stageOperationPlan.executionTitle}`,
+    "",
+    `| ${labels.stageOperationPlan.order} | ${labels.workerTask} | ${labels.agent} | ${labels.skill} | ${labels.mcp} | ${labels.commands} | ${labels.stageOperationPlan.does} | ${labels.stageOperationPlan.resultReport} | ${labels.stageOperationPlan.nextWork} |`,
+    "|---|---|---|---|---|---|---|---|---|",
+    ...(stageOperationPlan.stages.find((stage) => stage.stage === "Execution")?.workerTasks ?? []).map(
+      (taskItem) =>
+        `| ${taskItem.order} | ${taskItem.roleDisplayName} | ${taskItem.owner} | ${taskItem.skill} | ${taskItem.mcp} | ${taskItem.command} | ${String(taskItem.does).replaceAll("|", "\\|")} | ${String(taskItem.resultReport).replaceAll("|", "\\|")} | ${taskItem.nextWork} |`
+    ),
     "",
     `## ${labels.stageSummaryTitle}`,
     "",
@@ -1235,6 +1535,9 @@ export async function runMetaTheoryGovernedExecution({
   approvalPacket = null,
   applyWriteback = false,
   canonicalRoot = path.join(REPO_ROOT, "canonical"),
+  emitConversationNotice = false,
+  conversationNoticeChannel = "stdout",
+  conversationNoticeAdapter = CONVERSATION_NOTICE_ADAPTER,
 } = {}) {
   const normalizedTask = normalizeTask(task);
   if (!normalizedTask) {
@@ -1287,6 +1590,26 @@ export async function runMetaTheoryGovernedExecution({
   const labels = getReportLabelsForPath(markdownPath);
   const sectionLabels = labels.sections;
   const toolList = labels.toolList(labels.toolNames);
+  const conversationNotice = buildConversationNotice({
+    orchestrationReport,
+    runtimeEvidence,
+    labels,
+    emitConversationNotice,
+    conversationNoticeChannel,
+    conversationNoticeAdapter,
+  });
+  const userExperienceNotice = buildUserExperienceNotice({
+    orchestrationReport,
+    runtimeEvidence,
+    writebackFlow,
+    labels,
+    conversationNotice,
+  });
+  const stageOperationPlan = buildStageOperationPlan({
+    orchestrationReport,
+    runtimeEvidence,
+    labels,
+  });
   const userReportMarkdown = buildUserReadableRunReport({
     runId: effectiveRunId,
     task: normalizedTask,
@@ -1296,6 +1619,8 @@ export async function runMetaTheoryGovernedExecution({
     writebackFlow,
     cardPlanPacket,
     businessPhasePlanPacket,
+    userExperienceNotice,
+    stageOperationPlan,
     markdownPath,
   });
   const panelContractDefinition = await readJson(RUN_REPORT_PANEL_CONTRACT_PATH);
@@ -1335,6 +1660,9 @@ export async function runMetaTheoryGovernedExecution({
       orchestrationTaskBoardPacket: orchestrationReport.orchestrationTaskBoardPacket,
       workerTaskPackets: orchestrationReport.workerTaskPackets,
     },
+    conversationNotice,
+    userExperienceNotice,
+    stageOperationPlan,
     stageVisibility: orchestrationReport.stageVisibility,
     cardPlanPacket,
     businessPhasePlanPacket,
@@ -1369,6 +1697,9 @@ export async function runMetaTheoryGovernedExecution({
       markdownPath: `${effectiveRunId}.zh-CN.md`,
       sections: [
         sectionLabels.decisionSummary,
+        labels.userExperienceNotice.title,
+        labels.stageOperationPlan.title,
+        labels.stageOperationPlan.executionTitle,
         labels.cardPlanTitle,
         labels.businessPhasePlanTitle,
         sectionLabels.whyDecision,
@@ -1489,6 +1820,11 @@ async function main() {
   const stateDirArg = argValue("--state-dir", null);
   const dbArg = argValue("--db", null);
   const stateDir = path.resolve(stateDirArg ?? (taskArg ? DEFAULT_STATE_DIR : positional[2] ?? DEFAULT_STATE_DIR));
+  if (process.argv.includes("--classify-entry")) {
+    const task = taskArg ?? positionalTask("");
+    process.stdout.write(`${JSON.stringify(classifyMetaTheoryEntry(task), null, 2)}\n`);
+    return;
+  }
   if (process.argv.includes("--read")) {
     const run = await readGovernedExecutionRun({
       runId: runIdArg ?? positional[0] ?? "latest",
@@ -1521,7 +1857,13 @@ async function main() {
     approvalPacket,
     applyWriteback: process.argv.includes("--apply-writeback"),
     canonicalRoot: path.resolve(argValue("--canonical-root", path.join(REPO_ROOT, "canonical"))),
+    emitConversationNotice: process.argv.includes("--emit-conversation-notice"),
+    conversationNoticeChannel: "stdout",
+    conversationNoticeAdapter: CONVERSATION_NOTICE_ADAPTER,
   });
+  if (report.conversationNotice.emitted) {
+    process.stdout.write(`${report.conversationNotice.text}\n\n`);
+  }
   process.stdout.write(
     `${JSON.stringify(
       {

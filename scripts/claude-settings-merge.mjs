@@ -117,6 +117,7 @@ const REPO_META_KIM_HOOK_FILES = [
   "activate-meta-theory-spine.mjs",
   "block-dangerous-bash.mjs",
   "enforce-agent-dispatch.mjs",
+  "graphify-context.mjs",
   "meta-kim-memory-save.mjs",
   "post-format.mjs",
   "post-typecheck.mjs",
@@ -134,6 +135,12 @@ export function isRepoMetaKimHookCommand(command) {
     return false;
   }
   const norm = normalizeHookCommand(command).replace(/\\/g, "/");
+  if (
+    norm.includes("graphify-out/graph.json") &&
+    (norm.includes("CMD=$(python3") || norm.includes("case \"$CMD\""))
+  ) {
+    return true;
+  }
   if (!norm.includes(".claude/hooks/")) {
     return false;
   }

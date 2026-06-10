@@ -103,13 +103,13 @@ Recommended reading order:
 
 ### Usage Paths
 
-After global install (`node setup.mjs` or `npx`), what works where:
+After global install (`node setup.mjs` or `npx`), humans should be able to use plain task language. Slash commands remain maintainer shortcuts, not the normal user path.
 
-| Where you are | What works automatically | What needs explicit trigger |
+| Where you are | What works automatically | Human entry path |
 |---|---|---|
-| Meta_Kim repo with Claude Code | Full governance via CLAUDE.md (8-stage spine, gates, dispatch rules) | — |
-| Any other project with Claude Code | Hooks (safety, format, memory save) + `/meta-theory` skill | Say "run meta theory" or type `/meta-theory` |
-| Codex | AGENTS.md rules + 9 custom agents + `/meta-theory` command | Type "run meta theory" or `/meta-theory` |
+| Meta_Kim repo with Claude Code | Full governance via CLAUDE.md (8-stage spine, gates, dispatch rules) | Say the task naturally; durable work is classified into the governed route |
+| Any other project with Claude Code | Hooks (safety, format, memory save) + meta-theory skill | Say the task naturally; explicit `/meta-theory` remains a maintainer shortcut |
+| Codex | AGENTS.md rules + 9 custom agents + meta-theory command | Say the task naturally; Codex classifies durable work, subjective ambiguity, and pure queries differently |
 | OpenClaw | Compatible workspace agents, skills, config, and internal lifecycle hooks | Requires OpenClaw config/auth; contributors must complete strict OpenClaw self-testing and provide evidence; changes can merge only after that evidence passes review |
 | Cursor | Compatible official subagents, `.cursor/rules`, hooks, skills, and MCP mirrors | Contributors must complete strict Cursor self-testing and provide evidence; changes can merge only after that evidence passes review |
 

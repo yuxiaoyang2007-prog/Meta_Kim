@@ -937,6 +937,9 @@ const REPORT_STRINGS = {
     tool: "Tool",
     role: "Role",
     owner: "Owner",
+    agent: "Agent",
+    skill: "Skill",
+    mcp: "MCP",
     gap: "Gap",
     decision: "Decision",
     reason: "Reason",
@@ -973,6 +976,127 @@ const REPORT_STRINGS = {
     notRun: "not-run",
     plainLanguageSummary:
       "This run first decides which capability is missing, then hands next work to the right owner while keeping blocker, approval, and verification evidence.",
+    conversationNotice: {
+      title: "Meta_Kim notice",
+      stageProgress: "Stage progress",
+      stageProgressDetail:
+        "Critical, Fetch, Thinking, Execution, and Review are being surfaced as compact progress.",
+      route: "Capability route",
+      routeDetail: (count) =>
+        `Interpreted the natural-language request and checked ${count} capability type(s).`,
+      handoff: "Owner handoff",
+      handoffDetail: (count, owner, lanes = "") =>
+        lanes
+          ? `${owner} prepared ${count} worker handoff(s) from the user's short request: ${lanes}.`
+          : `${owner} prepared ${count} worker handoff(s) from the user's short request.`,
+      verification: "Verification",
+      verificationDetail: (status) =>
+        `Current verification status is ${status}; internal artifacts stay separate from what users see.`,
+    },
+    userExperienceNotice: {
+      title: "User Experience Notice",
+      primarySurface: "Primary surface",
+      expectationLabel: "User expectation",
+      boundaryLabel: "Accuracy boundary",
+      mustNotClaimLabel: "Must not claim",
+      emissionEvidenceLabel: "Conversation notice evidence",
+      signal: "User-visible signal",
+      internalOnly: "Internal evidence only",
+      partialStatusReason:
+        "The readable report is generated, but no runtime conversation notice is emitted by this script yet.",
+      emittedStatusReason: (channel, adapter, hash) =>
+        `A localized conversation notice was emitted through ${channel} by ${adapter}; textSha256=${hash}.`,
+      expectation:
+        "The user should receive compact progress, route, owner, blocker, and verification notices from ordinary language, without knowing internal commands or technical loadout terms.",
+      accuracyBoundary:
+        "Command output and JSON artifacts are supporting evidence; they are not a completed user experience unless surfaced through the runtime notice or readable report.",
+      mustNotClaim:
+        "Do not claim the orchestration is fully experienced by users when it only exists as an internal artifact.",
+      signals: {
+        stageProgress: {
+          label: "Stage progress",
+          detail: "Show the current stage, completed stages, next step, and blocker in localized plain language.",
+        },
+        routeSummary: (count) => ({
+          label: "Capability route",
+          detail: `Summarize the ${count} checked capability types as counts and top candidates, not raw packet dumps.`,
+        }),
+        ownerHandoff: (count) => ({
+          label: "Owner handoff",
+          detail: `Show ${count} worker task owner(s), scope, merge owner, and verification owner when work is split.`,
+        }),
+        verification: (status) => ({
+          label: "Verification boundary",
+          detail: `Show verification status ${status} and keep smoke, internal, blocked, and live evidence separate.`,
+        }),
+      },
+    },
+    stageOperationPlan: {
+      title: "Stage Operation Plan",
+      executionTitle: "Execution Orchestration Detail",
+      stage: "Stage",
+      whatHappens: "What happens",
+      uses: "Uses",
+      outputShape: "Output shape",
+      resultReport: "Result report",
+      nextWork: "Next work",
+      order: "Order",
+      does: "Does",
+      notRequired: "not required",
+      mcpProviderBoundary: "MCP provider boundary",
+      noExecutionTasks: "No execution worker task was required.",
+      executionResult: (count) =>
+        `Execution runs ${count} worker task(s), reports each result, then hands the run to Review.`,
+      workerDoes: (output, gapId) =>
+        `Produce ${output} for ${gapId}, using the chosen owner loadout.`,
+      workerResult: (output) =>
+        `Briefly report that ${output} is review-ready and attach decision, acceptance, and verification evidence.`,
+      workerNext: (handoffTarget, parallelGroup) =>
+        `${handoffTarget} merges ${parallelGroup} and starts the next queued item.`,
+      outputs: {
+        critical: (count) => `${count} success criteria plus real-goal and non-goal boundaries.`,
+        fetch: (capabilityCount, sourceCount) =>
+          `${capabilityCount} capability types checked from ${sourceCount} source group(s).`,
+        thinking: (mode, workerCount) =>
+          `${mode}; ${workerCount} worker task(s) with owners and merge path.`,
+        execution: (workerCount) => `${workerCount} ordered worker result report(s).`,
+        review: (checkCount) => `${checkCount} upstream and result-quality checks.`,
+      },
+      results: {
+        critical: "The run is allowed to gather evidence because the goal and non-goals are bounded.",
+        fetch: "Fetch is complete enough to choose a route; capability discovery is not skill-only.",
+        thinking: "The route, owners, loadout, merge owner, and verification owner are selected.",
+        review: (reviewStatus, runtimeStatus) =>
+          `Review status=${reviewStatus}; verification evidence status=${runtimeStatus}.`,
+      },
+      stages: {
+        critical: {
+          uses: "meta-theory skill and Warden entry gate",
+          whatHappens:
+            "Lock the real outcome, success standard, non-goals, and permission boundary before evidence gathering.",
+        },
+        fetch: {
+          uses: "local source reads, capability inventory, retrieval readiness check",
+          whatHappens:
+            "Read local sources, collect evidence, and check capability types before route design.",
+        },
+        thinking: {
+          uses: "dispatch board, GapDecision kernel, worker task packets",
+          whatHappens:
+            "Choose the route, owner, loadout, merge owner, and verification owner.",
+        },
+        execution: {
+          uses: "selected agent, skill, MCP boundary, and command per task",
+          whatHappens:
+            "Run the selected worker tasks with their bound agent, skill, MCP, and command loadout.",
+        },
+        review: {
+          uses: "meta-theory review checks",
+          whatHappens:
+            "Check upstream Critical/Fetch/Thinking quality and whether execution results satisfy the boundary.",
+        },
+      },
+    },
     stageSummaryTitle: "Critical / Fetch / Thinking / Review",
     stageSummaries: {
       critical: (toolList) =>
@@ -1175,6 +1299,9 @@ const REPORT_STRINGS = {
     tool: "工具端",
     role: "角色",
     owner: "负责人",
+    agent: "Agent",
+    skill: "Skill",
+    mcp: "MCP",
     gap: "缺口",
     decision: "判定",
     reason: "理由",
@@ -1211,6 +1338,127 @@ const REPORT_STRINGS = {
     notRun: "not-run",
     plainLanguageSummary:
       "本次运行先判断缺什么能力，再把下一步交给合适 owner，并保留阻塞、审批和验证证据。",
+    conversationNotice: {
+      title: "Meta_Kim 对话提示",
+      stageProgress: "阶段进度",
+      stageProgressDetail:
+        "Critical、Fetch、Thinking、Execution、Review 会被压缩成用户能看懂的简短进度。",
+      route: "能力路线",
+      routeDetail: (count) =>
+        `已把许愿式自然语言需求转成路线，并检查 ${count} 类能力。`,
+      handoff: "Owner 交接",
+      handoffDetail: (count, owner, lanes = "") =>
+        lanes
+          ? `${owner} 已从用户短句准备 ${count} 个 worker 交接：${lanes}。`
+          : `${owner} 已从用户短句准备 ${count} 个 worker 交接。`,
+      verification: "验证",
+      verificationDetail: (status) =>
+        `当前验证状态是 ${status}；内部 artifact 不等于用户已看见的内容。`,
+    },
+    userExperienceNotice: {
+      title: "用户体验提示",
+      primarySurface: "主要呈现面",
+      expectationLabel: "用户预期",
+      boundaryLabel: "准确性边界",
+      mustNotClaimLabel: "不能声称",
+      emissionEvidenceLabel: "conversation notice 发射证据",
+      signal: "用户可见信号",
+      internalOnly: "仅内部证据",
+      partialStatusReason:
+        "可读报告已生成，但这个脚本还没有发出 runtime conversation notice。",
+      emittedStatusReason: (channel, adapter, hash) =>
+        `本地化 conversation notice 已通过 ${channel} 由 ${adapter} 发出；textSha256=${hash}。`,
+      expectation:
+        "用户只用普通自然语言输入，也应该能看到简洁的进度、路线、owner、阻塞和验证提示，不需要知道内部命令或技术 loadout 名称。",
+      accuracyBoundary:
+        "命令输出和 JSON artifact 只是支撑证据；只有被运行时 notice 或可读报告呈现出来，才算用户可体验内容。",
+      mustNotClaim:
+        "如果编排只存在于内部 artifact 中，不要声称用户已经完整体验到编排。",
+      signals: {
+        stageProgress: {
+          label: "阶段进度",
+          detail: "用本地化人话显示当前阶段、已完成阶段、下一步和阻塞项。",
+        },
+        routeSummary: (count) => ({
+          label: "能力路线",
+          detail: `把已检查的 ${count} 类能力压缩成数量和 top candidates，不倾倒原始 packet。`,
+        }),
+        ownerHandoff: (count) => ({
+          label: "Owner 交接",
+          detail: `拆分工作时显示 ${count} 个 worker task 的 owner、范围、合并 owner 和验证 owner。`,
+        }),
+        verification: (status) => ({
+          label: "验证边界",
+          detail: `显示验证状态 ${status}，并区分 smoke、internal、blocked 和 live 证据。`,
+        }),
+      },
+    },
+    stageOperationPlan: {
+      title: "阶段执行说明",
+      executionTitle: "执行编排明细",
+      stage: "阶段",
+      whatHappens: "要做什么",
+      uses: "使用什么",
+      outputShape: "结果长什么样",
+      resultReport: "完成后报告",
+      nextWork: "下一项工作",
+      order: "顺序",
+      does: "做的事情",
+      notRequired: "不需要",
+      mcpProviderBoundary: "MCP provider 边界",
+      noExecutionTasks: "本次不需要执行 worker 任务。",
+      executionResult: (count) =>
+        `执行阶段会运行 ${count} 个 worker 任务，逐项报告结果，然后交给 Review。`,
+      workerDoes: (output, gapId) =>
+        `为 ${gapId} 产出 ${output}，并使用 Thinking 选定的 owner loadout。`,
+      workerResult: (output) =>
+        `简要报告 ${output} 已可进入 review，并附上判定、验收和验证证据。`,
+      workerNext: (handoffTarget, parallelGroup) =>
+        `${handoffTarget} 合并 ${parallelGroup}，然后开始下一项工作。`,
+      outputs: {
+        critical: (count) => `${count} 条成功标准，加上真实目标和非目标边界。`,
+        fetch: (capabilityCount, sourceCount) =>
+          `从 ${sourceCount} 组来源检查 ${capabilityCount} 类能力。`,
+        thinking: (mode, workerCount) =>
+          `${mode === "factory_then_dispatch" ? "先准备候选能力再分派" : "直接分派"}；${workerCount} 个 worker 任务，包含 owner 和合并路径。`,
+        execution: (workerCount) => `${workerCount} 份按顺序输出的 worker 简报。`,
+        review: (checkCount) => `${checkCount} 项上游质量和结果质量检查。`,
+      },
+      results: {
+        critical: "真实目标和非目标已经收束，可以进入证据收集。",
+        fetch: "Fetch 证据足以进入路线选择；能力发现没有退化成 skill-only。",
+        thinking: "路线、owner、loadout、合并 owner 和验证 owner 已选定。",
+        review: (reviewStatus, runtimeStatus) =>
+          `Review 状态=${reviewStatus}；验证证据状态=${runtimeStatus}。`,
+      },
+      stages: {
+        critical: {
+          uses: "meta-theory skill 和 Warden 入口",
+          whatHappens:
+            "先锁定真实目标、成功标准、非目标和权限边界，再进入证据收集。",
+        },
+        fetch: {
+          uses: "本地来源读取、能力清单、retrieval readiness 检查",
+          whatHappens:
+            "读取本地来源，收集证据，并在设计路线前检查各类能力。",
+        },
+        thinking: {
+          uses: "路线选择板、能力缺口判定内核、worker 任务简报",
+          whatHappens:
+            "选择路线、owner、loadout、合并 owner 和验证 owner。",
+        },
+        execution: {
+          uses: "每个任务选定的 agent、skill、MCP 边界和 command",
+          whatHappens:
+            "按 Thinking 的编排运行 worker 任务，明确每项用哪个 agent、skill、MCP 和 command。",
+        },
+        review: {
+          uses: "meta-theory review checks",
+          whatHappens:
+            "检查 Critical/Fetch/Thinking 是否够好，以及执行结果是否满足边界。",
+        },
+      },
+    },
     stageSummaryTitle: "Critical / Fetch / Thinking / Review",
     stageSummaries: {
       critical: (toolList) =>
@@ -1411,6 +1659,9 @@ const REPORT_STRINGS = {
     tool: "ツール側",
     role: "役割",
     owner: "担当",
+    agent: "Agent",
+    skill: "Skill",
+    mcp: "MCP",
     gap: "ギャップ",
     decision: "判定",
     reason: "理由",
@@ -1447,6 +1698,127 @@ const REPORT_STRINGS = {
     notRun: "未実行",
     plainLanguageSummary:
       "この実行では、まず不足している能力を判定し、次の作業を適切な owner に渡しながら、ブロック、承認、検証の証拠を残します。",
+    conversationNotice: {
+      title: "Meta_Kim 通知",
+      stageProgress: "ステージ進捗",
+      stageProgressDetail:
+        "Critical、Fetch、Thinking、Execution、Review を、ユーザーが読める短い進捗として表示します。",
+      route: "能力ルート",
+      routeDetail: (count) =>
+        `願望に近い自然言語の依頼を解釈し、${count} 種類の能力を確認しました。`,
+      handoff: "Owner 引き渡し",
+      handoffDetail: (count, owner, lanes = "") =>
+        lanes
+          ? `${owner} がユーザーの短い依頼から ${count} 個の worker 引き渡しを準備しました: ${lanes}.`
+          : `${owner} がユーザーの短い依頼から ${count} 個の worker 引き渡しを準備しました。`,
+      verification: "検証",
+      verificationDetail: (status) =>
+        `現在の検証状態は ${status} です。内部 artifact はユーザー表示とは分けます。`,
+    },
+    userExperienceNotice: {
+      title: "ユーザー体験通知",
+      primarySurface: "主な表示面",
+      expectationLabel: "ユーザー期待",
+      boundaryLabel: "正確性の境界",
+      mustNotClaimLabel: "主張してはいけないこと",
+      emissionEvidenceLabel: "conversation notice 発射証拠",
+      signal: "ユーザーに見える信号",
+      internalOnly: "内部証拠のみ",
+      partialStatusReason:
+        "読みやすいレポートは生成済みですが、このスクリプトはまだ runtime conversation notice を発射していません。",
+      emittedStatusReason: (channel, adapter, hash) =>
+        `ローカライズ済み conversation notice は ${adapter} により ${channel} へ発射されました; textSha256=${hash}.`,
+      expectation:
+        "ユーザーは内部コマンドを実行しなくても、進捗、ルート、owner、ブロック、検証を短く理解できる必要があります。",
+      accuracyBoundary:
+        "コマンド出力と JSON artifact は補助証拠です。runtime notice または読みやすいレポートに表示されて初めてユーザー体験になります。",
+      mustNotClaim:
+        "オーケストレーションが内部 artifact にしか存在しない場合、ユーザーが完全に体験済みだと主張してはいけません。",
+      signals: {
+        stageProgress: {
+          label: "ステージ進捗",
+          detail: "現在のステージ、完了済みステージ、次の手順、ブロックを自然な言葉で表示します。",
+        },
+        routeSummary: (count) => ({
+          label: "能力ルート",
+          detail: `${count} 種類の確認済み能力を、数と主要候補として要約し、生の packet を出しません。`,
+        }),
+        ownerHandoff: (count) => ({
+          label: "Owner 引き渡し",
+          detail: `作業分割時は ${count} 個の worker task の owner、範囲、merge owner、verification owner を表示します。`,
+        }),
+        verification: (status) => ({
+          label: "検証境界",
+          detail: `検証状態 ${status} を表示し、smoke、internal、blocked、live 証拠を分けます。`,
+        }),
+      },
+    },
+    stageOperationPlan: {
+      title: "ステージ実行説明",
+      executionTitle: "実行オーケストレーション詳細",
+      stage: "ステージ",
+      whatHappens: "何をするか",
+      uses: "使用するもの",
+      outputShape: "結果の形",
+      resultReport: "完了後の報告",
+      nextWork: "次の作業",
+      order: "順序",
+      does: "行うこと",
+      notRequired: "不要",
+      mcpProviderBoundary: "MCP provider 境界",
+      noExecutionTasks: "この実行では execution worker task は不要です。",
+      executionResult: (count) =>
+        `Execution は ${count} 個の worker task を実行し、各結果を報告してから Review に渡します。`,
+      workerDoes: (output, gapId) =>
+        `${gapId} に対して ${output} を作成し、選択済み owner loadout を使います。`,
+      workerResult: (output) =>
+        `${output} が review 可能になったことを短く報告し、判定、受け入れ、検証証拠を添付します。`,
+      workerNext: (handoffTarget, parallelGroup) =>
+        `${handoffTarget} が ${parallelGroup} をマージし、次のキュー項目を開始します。`,
+      outputs: {
+        critical: (count) => `${count} 個の成功基準と、実際のゴール、非ゴール境界。`,
+        fetch: (capabilityCount, sourceCount) =>
+          `${sourceCount} 個のソースグループから ${capabilityCount} 種類の能力を確認。`,
+        thinking: (mode, workerCount) =>
+          `${mode}; owner と merge path を持つ ${workerCount} 個の worker task。`,
+        execution: (workerCount) => `${workerCount} 個の順序付き worker 結果レポート。`,
+        review: (checkCount) => `${checkCount} 個の上流品質と結果品質チェック。`,
+      },
+      results: {
+        critical: "ゴールと非ゴールが境界づけられたため、証拠収集に進めます。",
+        fetch: "Fetch はルート選択に十分です。能力 discovery は skill-only ではありません。",
+        thinking: "ルート、owner、loadout、merge owner、verification owner が選択されました。",
+        review: (reviewStatus, runtimeStatus) =>
+          `Review 状態=${reviewStatus}; 検証証拠状態=${runtimeStatus}。`,
+      },
+      stages: {
+        critical: {
+          uses: "meta-theory skill と Warden entry gate",
+          whatHappens:
+            "証拠収集前に、本当の成果、成功基準、非ゴール、許可境界を固定します。",
+        },
+        fetch: {
+          uses: "ローカルソース読み取り、能力 inventory、retrieval readiness check",
+          whatHappens:
+            "ローカルソースを読み、証拠を集め、ルート設計前に能力タイプを確認します。",
+        },
+        thinking: {
+          uses: "dispatch board、GapDecision kernel、worker task packets",
+          whatHappens:
+            "ルート、owner、loadout、merge owner、verification owner を選びます。",
+        },
+        execution: {
+          uses: "選択された agent、skill、MCP boundary、task ごとの command",
+          whatHappens:
+            "選択済み worker task を、紐づいた agent、skill、MCP、command loadout で実行します。",
+        },
+        review: {
+          uses: "meta-theory review checks",
+          whatHappens:
+            "上流の Critical/Fetch/Thinking 品質と、execution 結果が境界を満たすかを確認します。",
+        },
+      },
+    },
     stageSummaryTitle: "Critical / Fetch / Thinking / Review",
     stageSummaries: {
       critical: (toolList) =>
@@ -1651,6 +2023,9 @@ const REPORT_STRINGS = {
     tool: "도구 측",
     role: "역할",
     owner: "담당",
+    agent: "Agent",
+    skill: "Skill",
+    mcp: "MCP",
     gap: "격차",
     decision: "판정",
     reason: "이유",
@@ -1687,6 +2062,127 @@ const REPORT_STRINGS = {
     notRun: "미실행",
     plainLanguageSummary:
       "이 실행은 먼저 어떤 능력이 부족한지 판단한 뒤, 다음 작업을 적절한 owner 에 넘기고 차단, 승인, 검증 증거를 남깁니다.",
+    conversationNotice: {
+      title: "Meta_Kim 알림",
+      stageProgress: "단계 진행",
+      stageProgressDetail:
+        "Critical, Fetch, Thinking, Execution, Review 를 사용자가 읽을 수 있는 짧은 진행 상태로 표시합니다.",
+      route: "능력 경로",
+      routeDetail: (count) =>
+        `희망형 자연어 요청을 해석하고 ${count}개 능력 유형을 확인했습니다.`,
+      handoff: "Owner 인계",
+      handoffDetail: (count, owner, lanes = "") =>
+        lanes
+          ? `${owner} 가 사용자의 짧은 요청에서 ${count}개 worker 인계를 준비했습니다: ${lanes}.`
+          : `${owner} 가 사용자의 짧은 요청에서 ${count}개 worker 인계를 준비했습니다.`,
+      verification: "검증",
+      verificationDetail: (status) =>
+        `현재 검증 상태는 ${status} 입니다. 내부 artifact 는 사용자 표시와 분리합니다.`,
+    },
+    userExperienceNotice: {
+      title: "사용자 경험 알림",
+      primarySurface: "기본 표시 위치",
+      expectationLabel: "사용자 기대",
+      boundaryLabel: "정확성 경계",
+      mustNotClaimLabel: "주장하면 안 되는 것",
+      emissionEvidenceLabel: "conversation notice 발사 증거",
+      signal: "사용자에게 보이는 신호",
+      internalOnly: "내부 증거 전용",
+      partialStatusReason:
+        "읽기 쉬운 보고서는 생성되었지만 이 스크립트는 아직 runtime conversation notice 를 발사하지 않았습니다.",
+      emittedStatusReason: (channel, adapter, hash) =>
+        `현지화된 conversation notice 가 ${adapter} 에 의해 ${channel} 로 발사되었습니다; textSha256=${hash}.`,
+      expectation:
+        "사용자는 내부 명령을 실행하지 않아도 진행 상황, 경로, owner, 차단 항목, 검증 상태를 간결하게 알 수 있어야 합니다.",
+      accuracyBoundary:
+        "명령 출력과 JSON artifact 는 보조 증거입니다. runtime notice 또는 읽기 쉬운 보고서에 표시되어야 사용자 경험으로 볼 수 있습니다.",
+      mustNotClaim:
+        "오케스트레이션이 내부 artifact 에만 있으면 사용자가 완전히 경험했다고 주장하지 않습니다.",
+      signals: {
+        stageProgress: {
+          label: "단계 진행",
+          detail: "현재 단계, 완료된 단계, 다음 단계, 차단 항목을 자연어로 표시합니다.",
+        },
+        routeSummary: (count) => ({
+          label: "능력 경로",
+          detail: `확인한 ${count}개 능력 유형을 개수와 주요 후보로 요약하고 원시 packet 을 덤프하지 않습니다.`,
+        }),
+        ownerHandoff: (count) => ({
+          label: "Owner 인계",
+          detail: `작업을 나눌 때 ${count}개 worker task 의 owner, 범위, merge owner, verification owner 를 표시합니다.`,
+        }),
+        verification: (status) => ({
+          label: "검증 경계",
+          detail: `검증 상태 ${status} 를 표시하고 smoke, internal, blocked, live 증거를 구분합니다.`,
+        }),
+      },
+    },
+    stageOperationPlan: {
+      title: "단계 실행 설명",
+      executionTitle: "실행 오케스트레이션 상세",
+      stage: "단계",
+      whatHappens: "무엇을 하는가",
+      uses: "무엇을 쓰는가",
+      outputShape: "결과 형태",
+      resultReport: "완료 후 보고",
+      nextWork: "다음 작업",
+      order: "순서",
+      does: "하는 일",
+      notRequired: "필요 없음",
+      mcpProviderBoundary: "MCP provider 경계",
+      noExecutionTasks: "이번 실행에는 execution worker task 가 필요하지 않습니다.",
+      executionResult: (count) =>
+        `Execution 은 ${count}개 worker task 를 실행하고 각 결과를 보고한 뒤 Review 로 넘깁니다.`,
+      workerDoes: (output, gapId) =>
+        `${gapId} 에 대해 ${output} 를 만들고 선택된 owner loadout 을 사용합니다.`,
+      workerResult: (output) =>
+        `${output} 가 review 준비 상태임을 간단히 보고하고 판정, 수락, 검증 증거를 첨부합니다.`,
+      workerNext: (handoffTarget, parallelGroup) =>
+        `${handoffTarget} 가 ${parallelGroup} 를 병합한 뒤 다음 큐 작업을 시작합니다.`,
+      outputs: {
+        critical: (count) => `${count}개 성공 기준과 실제 목표, 비목표 경계.`,
+        fetch: (capabilityCount, sourceCount) =>
+          `${sourceCount}개 소스 그룹에서 ${capabilityCount}개 능력 유형을 확인.`,
+        thinking: (mode, workerCount) =>
+          `${mode}; owner 와 merge path 를 가진 ${workerCount}개 worker task.`,
+        execution: (workerCount) => `${workerCount}개 순서 있는 worker 결과 보고.`,
+        review: (checkCount) => `${checkCount}개 상류 품질 및 결과 품질 점검.`,
+      },
+      results: {
+        critical: "목표와 비목표가 경계 지어졌으므로 증거 수집을 시작할 수 있습니다.",
+        fetch: "Fetch 는 경로 선택에 충분합니다. 능력 discovery 는 skill-only 가 아닙니다.",
+        thinking: "경로, owner, loadout, merge owner, verification owner 가 선택되었습니다.",
+        review: (reviewStatus, runtimeStatus) =>
+          `Review 상태=${reviewStatus}; 검증 증거 상태=${runtimeStatus}.`,
+      },
+      stages: {
+        critical: {
+          uses: "meta-theory skill 과 Warden entry gate",
+          whatHappens:
+            "증거 수집 전에 실제 결과, 성공 기준, 비목표, 권한 경계를 고정합니다.",
+        },
+        fetch: {
+          uses: "로컬 소스 읽기, 능력 inventory, retrieval readiness check",
+          whatHappens:
+            "로컬 소스를 읽고 증거를 모으며 경로 설계 전에 능력 유형을 확인합니다.",
+        },
+        thinking: {
+          uses: "dispatch board, GapDecision kernel, worker task packets",
+          whatHappens:
+            "경로, owner, loadout, merge owner, verification owner 를 선택합니다.",
+        },
+        execution: {
+          uses: "선택된 agent, skill, MCP boundary, task 별 command",
+          whatHappens:
+            "선택된 worker task 를 연결된 agent, skill, MCP, command loadout 으로 실행합니다.",
+        },
+        review: {
+          uses: "meta-theory review checks",
+          whatHappens:
+            "상류 Critical/Fetch/Thinking 품질과 execution 결과가 경계를 만족하는지 확인합니다.",
+        },
+      },
+    },
     stageSummaryTitle: "Critical / Fetch / Thinking / Review",
     stageSummaries: {
       critical: (toolList) =>

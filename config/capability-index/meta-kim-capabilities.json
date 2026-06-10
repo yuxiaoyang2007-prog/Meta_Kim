@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-08T15:55:20.952Z",
+  "generatedAt": "2026-06-09T09:14:05.868Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -20,7 +20,7 @@
   "summary": {
     "totalAgents": 9,
     "totalSkills": 16,
-    "totalHooks": 22,
+    "totalHooks": 23,
     "totalMcpServers": 1,
     "totalMcpTools": 3,
     "totalPlugins": 4,
@@ -207,8 +207,8 @@
         "type": "skills",
         "namespace": "canonical",
         "path": "canonical/skills/meta-theory/SKILL.md",
-        "size": 35626,
-        "modified": "2026-06-08T15:50:46.197Z"
+        "size": 37581,
+        "modified": "2026-06-09T09:12:29.698Z"
       },
       "repo:canonical:same-set-reusable-flow-for-project-file-inventor": {
         "id": "same-set-reusable-flow-for-project-file-inventor",
@@ -224,8 +224,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/create-agent.md",
         "relativePath": "create-agent.md",
-        "size": 31655,
-        "modified": "2026-06-03T19:05:56.128Z"
+        "size": 33584,
+        "modified": "2026-06-08T18:31:58.766Z"
       },
       "repo:canonical-reference:dev-governance": {
         "id": "dev-governance",
@@ -305,8 +305,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/runtime-claude.md",
         "relativePath": "runtime-claude.md",
-        "size": 10419,
-        "modified": "2026-06-05T10:34:11.691Z"
+        "size": 11644,
+        "modified": "2026-06-08T18:41:51.706Z"
       },
       "repo:canonical-reference:runtime-codex": {
         "id": "runtime-codex",
@@ -314,8 +314,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/runtime-codex.md",
         "relativePath": "runtime-codex.md",
-        "size": 12231,
-        "modified": "2026-06-05T10:34:23.882Z"
+        "size": 14325,
+        "modified": "2026-06-08T18:32:08.372Z"
       },
       "repo:canonical-reference:spine-state": {
         "id": "spine-state",
@@ -361,8 +361,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/shared/hooks/hook-i18n.mjs",
         "relativePath": "hook-i18n.mjs",
-        "size": 6218,
-        "modified": "2026-06-01T13:32:10.170Z"
+        "size": 6236,
+        "modified": "2026-06-08T16:55:58.960Z"
       },
       "repo:canonical-runtime-assets:meta-kim-memory-save.mjs": {
         "id": "meta-kim-memory-save.mjs",
@@ -435,6 +435,15 @@
         "relativePath": "enforce-agent-dispatch.mjs",
         "size": 38993,
         "modified": "2026-06-01T18:46:33.113Z"
+      },
+      "repo:canonical-runtime-assets:graphify-context.mjs": {
+        "id": "graphify-context.mjs",
+        "type": "hooks",
+        "namespace": "canonical-runtime-assets",
+        "path": "canonical/runtime-assets/claude/hooks/graphify-context.mjs",
+        "relativePath": "graphify-context.mjs",
+        "size": 1193,
+        "modified": "2026-06-09T09:10:10.468Z"
       },
       "repo:canonical-runtime-assets:post-console-log-warn.mjs": {
         "id": "post-console-log-warn.mjs",

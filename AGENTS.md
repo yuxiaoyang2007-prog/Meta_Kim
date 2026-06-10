@@ -133,7 +133,16 @@ Canonical hook source: `canonical/runtime-assets/claude/hooks/enforce-agent-disp
 
 ## Meta-Theory Activation
 
-When `/meta-theory`, `meta-theory`, `meta theory`, `run meta theory`, `execute meta theory`, `元理论`, or an explicit `meta-theory` skill mention appears, treat it as a governance-mode request.
+Do not require humans to know or type command words. Treat ordinary natural-language executable requests as the primary entry path when they imply durable planning, execution, review, verification, prioritization, repair suggestions, or a validation checklist. Examples include "帮我整理成优先级、修复建议和验证清单", "这个页面不好看，帮我弄高级一点", "帮我规划并开始处理", or "review this and fix what matters".
+
+Explicit triggers such as `/meta-theory`, `meta-theory`, `meta theory`, `run meta theory`, `execute meta theory`, `元理论`, or a `meta-theory` skill mention are maintainer shortcuts, not required user behavior.
+
+Use the entry classifier behavior as the user-facing rule:
+
+- plain durable work in natural language enters governed `standard_path`
+- subjective or taste-dependent work enters Critical clarification before Fetch
+- pure read-only questions stay on `fast_path`
+- explicit meta-theory requests enter `regulated_path`
 
 Codex must first run:
 
@@ -170,7 +179,7 @@ Governance-quality fallback is forbidden. Missing intent, evidence, design, owne
 
 ## Business Flow Before Execution
 
-For executable work, plan the business flow before writing code or changing files. A web app, for example, may need separate lanes for:
+For executable work, plan the business flow before writing code or changing files. This is a dynamic workflow step, not a fixed checklist: classify the user's natural-language intent, choose lanes from evidence and dependency signals, and record omitted lanes with reasons. A web app, for example, may need separate lanes for:
 
 - product direction
 - UX flow
@@ -197,7 +206,7 @@ Hard rules before Execution:
 - Public-ready requires verification plus intent acceptance; workflow completion alone is not user-goal completion.
 - Evolution must write back or record none-with-reason.
 
-Not every task needs every lane, but omitted lanes should be intentional. The business-flow blueprint should explain:
+Not every task needs every lane. Do not force every wish-style request through the same lane set; omitted lanes should be intentional. The business-flow blueprint should explain:
 
 - what user pain/value and success standard the run serves
 - what capability is needed
@@ -317,11 +326,13 @@ This repository has a knowledge graph under `graphify-out/`.
 
 Rules:
 
-- For broad architecture or codebase questions, start with `graphify-out/GRAPH_REPORT.md` when present.
+- For broad architecture or codebase questions, use existing `graphify-out/GRAPH_REPORT.md` and `graphify-out/graph.json` as navigation indexes when present.
+- Do not run a startup freshness gate merely because a graph exists. At the start of a run, check only whether graph artifacts are present and useful enough for navigation.
+- Treat Graphify as a project map, not the final source of truth. Use graph queries or subgraph extraction to find relevant modules, concepts, and file anchors, then verify route-changing claims against the target source files.
+- Agent and worker context should receive only graph slices, short hints, and file anchors relevant to that worker. Do not inject the full `graph.json`, full `GRAPH_REPORT.md`, or broad graph dumps into every worker.
 - If `graphify-out/wiki/index.md` exists, use it for broad navigation instead of raw source browsing.
-- Use graph queries or subgraph extraction when available for focused relationships.
 - Dirty `graphify-out/` files can be expected after hooks or incremental updates; dirty graph files are not a reason to skip graph context.
-- `npm run meta:graphify:check` and `npm run meta:validate` compare the graph's built commit with current `git rev-parse HEAD` and fail when `GRAPH_REPORT.md` is stale.
+- `npm run meta:graphify:check` and `npm run meta:validate` compare the graph's built commit with current `git rev-parse HEAD` and fail when `GRAPH_REPORT.md` is stale. Use this as a verification/release/public-ready gate, not as a routine run-start cost.
 - After modifying code files, run `npm run meta:graphify:rebuild` to keep the graph current across Windows, macOS, and Linux.
 
 ## Maintenance Loop

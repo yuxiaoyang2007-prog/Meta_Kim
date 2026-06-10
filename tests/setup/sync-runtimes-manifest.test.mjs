@@ -18,7 +18,9 @@ import {
   inferProjectCategory,
   inferProjectPurpose,
 } from "../../scripts/sync-runtimes.mjs";
+import { mergeRepoClaudeSettings } from "../../scripts/claude-settings-merge.mjs";
 import { CATEGORIES } from "../../scripts/install-manifest.mjs";
+import { buildHookPromptAdapterSource } from "../../scripts/runtime-hook-mapping.mjs";
 
 const REPO = path.resolve("/fake/repo");
 
@@ -252,6 +254,56 @@ describe("sync-runtimes / Codex project hooks", () => {
     assert.doesNotMatch(command, /\[ -f|\|\| true|2>\/dev\/null/);
   });
 
+  test("repo Claude settings replace retired inline graphify shell hook with Node hook", () => {
+    const retiredInlineHook =
+      'CMD=$(python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get(\'tool_input\',d).get(\'command\',\'\'))" 2>/dev/null || true); case "$CMD" in *rg\\ *) [ -f graphify-out/graph.json ] && echo "{}" || true ;; esac';
+    const canonical = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              {
+                type: "command",
+                command: "node .claude/hooks/graphify-context.mjs",
+              },
+              {
+                type: "command",
+                command: "node .claude/hooks/block-dangerous-bash.mjs",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const merged = mergeRepoClaudeSettings(
+      {
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash",
+              hooks: [
+                {
+                  type: "command",
+                  command: retiredInlineHook,
+                },
+              ],
+            },
+          ],
+        },
+      },
+      canonical,
+      REPO
+    );
+    const commands = merged.hooks.PreToolUse.flatMap((block) =>
+      block.hooks.map((hook) => hook.command)
+    );
+
+    assert.ok(commands.includes("node .claude/hooks/graphify-context.mjs"));
+    assert.ok(commands.includes("node .claude/hooks/block-dangerous-bash.mjs"));
+    assert.equal(commands.some((command) => command.includes("CMD=$(python3")), false);
+  });
+
   test("wires MCP memory across start, prompt, and stop", () => {
     const config = buildCodexProjectHooksJson();
 
@@ -278,6 +330,17 @@ describe("sync-runtimes / Codex project hooks", () => {
       config.hooks.UserPromptSubmit[0].hooks[1].command,
       /hookprompt-adapter\.mjs/,
     );
+  });
+
+  test("Codex HookPrompt adapter injects model-visible additionalContext", () => {
+    const codexSource = buildHookPromptAdapterSource("codex");
+    const cursorSource = buildHookPromptAdapterSource("cursor");
+
+    assert.match(codexSource, /hookSpecificOutput/);
+    assert.match(codexSource, /hookEventName:\s*"UserPromptSubmit"/);
+    assert.match(codexSource, /additionalContext/);
+    assert.doesNotMatch(codexSource, /systemMessage:\s*additionalContext/);
+    assert.match(cursorSource, /prompt:\s*additionalContext/);
   });
 
   test("does not emit quoted absolute Node paths that fail in PowerShell", () => {

@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -114,6 +114,197 @@ describe("31 — Capability Gap orchestration through meta-theory Conductor", ()
     assert.equal(report.fetchEvidence.deepResearchPlan.stageGate, "must_complete_before_thinking");
   });
 
+  test("wish-style product build input expands into dynamic business-flow worker lanes", () => {
+    const report = buildCapabilityGapOrchestration("帮我做个小红书营销自动发布器");
+    const laneIds = report.workerTaskPackets.map((packet) => packet.businessFlowLaneId);
+    const laneLabels = report.workerTaskPackets.map((packet) => packet.businessFlowLaneLabel);
+    const roles = new Set(report.workerTaskPackets.map((packet) => packet.roleDisplayName));
+    const testLane = report.workerTaskPackets.find(
+      (packet) => packet.businessFlowLaneId === "test-qa"
+    );
+    const frontendLane = report.workerTaskPackets.find(
+      (packet) => packet.businessFlowLaneId === "frontend-ui"
+    );
+    const integrationLane = report.workerTaskPackets.find(
+      (packet) => packet.businessFlowLaneId === "platform-integration"
+    );
+
+    assert.equal(report.status, "pass");
+    assert.equal(report.fetchEvidence.dynamicWorkflowPlan.applied, true);
+    assert.equal(report.fetchEvidence.dynamicWorkflowPlan.notFixedTemplate, true);
+    assert.equal(report.fetchEvidence.dynamicWorkflowPlan.intentSignals.requiresExternalResearch, true);
+    assert.equal(report.fetchEvidence.dynamicWorkflowPlan.intentSignals.requiresContentGeneration, true);
+    assert.equal(report.capabilityGaps.length, 11);
+    assert.equal(report.workerTaskPackets.length, 11);
+    assert.deepEqual(laneIds, [
+      "product-definition",
+      "market-research",
+      "content-strategy",
+      "ux-flow",
+      "frontend-ui",
+      "backend-api",
+      "data-model",
+      "platform-integration",
+      "security-approval",
+      "test-qa",
+      "release-ops",
+    ]);
+    assert.ok(laneLabels.includes("产品定义"));
+    assert.ok(laneLabels.includes("市场与平台规则研究"));
+    assert.ok(laneLabels.includes("内容策略与生成"));
+    assert.ok(laneLabels.includes("前端界面"));
+    assert.ok(laneLabels.includes("后端 API"));
+    assert.ok(laneLabels.includes("测试验收"));
+    assert.ok(roles.has("product"));
+    assert.ok(roles.has("research"));
+    assert.ok(roles.has("content"));
+    assert.ok(roles.has("frontend"));
+    assert.ok(roles.has("backend"));
+    assert.ok(roles.has("data"));
+    assert.ok(roles.has("integration"));
+    assert.ok(roles.has("test"));
+    assert.ok(
+      report.workerTaskPackets.every((packet) => packet.ownerMode === "project-agent-profile")
+    );
+    assert.ok(
+      report.workerTaskPackets.every(
+        (packet) =>
+          packet.workerInstanceMode === "run-scoped-instance" &&
+          packet.durableIdentityStatus === "project_agent_profile_synthesized_and_capability_pinned_for_run"
+      )
+    );
+    assert.ok(
+      report.workerTaskPackets.every(
+        (packet) =>
+          packet.roleSoulPolicy?.savedIn === "projectAgentBlueprintPacket" &&
+          packet.roleSoulPolicy?.identityKind === "project_scoped_agent_profile" &&
+          packet.roleSoulPolicy?.durableAgentCreated === false
+      )
+    );
+    assert.ok(
+      report.workerTaskPackets.every(
+        (packet) =>
+          packet.capabilityLoadout?.repoSkills.includes("meta-theory") &&
+          packet.capabilityLoadout?.fixedForRun === true &&
+          packet.capabilityLoadout?.capabilityProfileId &&
+          packet.capabilityLoadout?.commands.length > 0 &&
+          packet.capabilityLoadout?.runtimeTools.length > 0
+      )
+    );
+    assert.ok(
+      report.projectAgentBlueprintPacket.agents.every(
+        (agent) =>
+          agent.ownerMode === "project-agent-profile" &&
+          agent.fixedForRun === true &&
+          agent.capabilityProfileId &&
+          agent.memoryStrategy.scope === "project" &&
+          agent.localBaselineComparison?.required === true &&
+          agent.localBaselineComparison?.noProviderClaimWithoutLocalCheck === true &&
+          agent.evidenceContract?.localComparisonBeforeDispatch === true &&
+          agent.knowledgeGraphPolicy?.equipped === true &&
+          agent.knowledgeGraphPolicy?.runStartPolicy?.existenceCheckOnly === true &&
+          agent.knowledgeGraphPolicy?.runStartPolicy?.noStartupFreshnessGate === true &&
+          agent.knowledgeGraphPolicy?.runStartPolicy?.noStartupRebuild === true &&
+          agent.knowledgeGraphPolicy?.contextInjectionPolicy?.allowed.includes(
+            "worker_relevant_graph_slice"
+          ) &&
+          agent.knowledgeGraphPolicy?.contextInjectionPolicy?.forbidden.includes(
+            "full_graph_json"
+          ) &&
+          agent.knowledgeGraphPolicy?.truthPolicy?.finalTruthSource === "target_source_files" &&
+          agent.knowledgeGraphPolicy?.afterMutationPolicy?.rebuildCommand ===
+            "npm run meta:graphify:rebuild"
+      )
+    );
+    const blueprintByRole = new Map(
+      report.projectAgentBlueprintPacket.agents.map((agent) => [
+        agent.roleDisplayName,
+        agent,
+      ])
+    );
+    for (const role of ["research", "integration", "security", "ops"]) {
+      const agent = blueprintByRole.get(role);
+      assert.ok(agent, `missing ${role} project agent profile`);
+      assert.equal(agent.externalEvidencePolicy?.required, true);
+      assert.equal(agent.externalEvidencePolicy?.noCurrentFactWithoutSource, true);
+      assert.ok(agent.externalEvidencePolicy?.preferredRetrieval.includes("web_search"));
+      assert.ok(agent.externalEvidencePolicy?.preferredRetrieval.includes("url_fetch"));
+      assert.equal(agent.externalEvidencePolicy?.loadoutHasRetrieval, true);
+    }
+    assert.ok(report.projectAgentBlueprintPacket.agents.length >= 9);
+    assert.ok(frontendLane.projectAgentId.includes("xiaohongshu-marketing-automation"));
+    assert.ok(frontendLane.capabilityLoadout.runtimeSkillCandidates.includes("frontend-patterns"));
+    assert.ok(integrationLane.capabilityLoadout.runtimeMcpCandidates.includes("exa"));
+    assert.ok(
+      integrationLane.roleSoulPolicy.durableAgentEscalation.includes(
+        "GapDecision=create_agent"
+      )
+    );
+    assert.ok(testLane.dependsOn.length >= 4);
+    assert.ok(frontendLane.dependsOn.length >= 2);
+    assert.ok(
+      integrationLane.nonGoals.includes(
+        "Do not perform real third-party publish actions without explicit user approval."
+      )
+    );
+    assert.equal(report.thinkingRoute.businessFlowLaneCount, 11);
+    assert.equal(report.fetchEvidence.businessFlowCapabilityMatrix.length, 11);
+    assert.ok(
+      report.fetchEvidence.businessFlowCapabilityMatrix.every(
+        (lane) =>
+          lane.ownerMode === "project-agent-profile" &&
+          lane.workerInstanceMode === "run-scoped-instance" &&
+          lane.durableIdentityStatus === "project_agent_profile_synthesized_and_capability_pinned_for_run"
+      )
+    );
+    assert.equal(
+      report.reviewResult.checks.dynamicLanesHaveLoadoutAndSoulPolicy,
+      true
+    );
+    assert.equal(report.reviewResult.checks.dynamicProjectAgentsAreSynthesizedAndPinned, true);
+    assert.equal(report.reviewResult.checks.dynamicProjectAgentsHaveEvidencePolicies, true);
+    assert.equal(report.reviewResult.checks.dynamicProjectAgentsHaveGraphPolicies, true);
+    assert.deepEqual(report.fetchEvidence.dynamicWorkflowPlan.omittedLanes, []);
+  });
+
+  test("dynamic workflow does not force every product request through the same lane set", () => {
+    const report = buildCapabilityGapOrchestration("帮我做个本地待办看板");
+    const laneIds = report.workerTaskPackets.map((packet) => packet.businessFlowLaneId);
+    const omittedLaneIds = report.fetchEvidence.dynamicWorkflowPlan.omittedLanes.map(
+      (lane) => lane.laneId
+    );
+
+    assert.equal(report.status, "pass");
+    assert.equal(report.fetchEvidence.dynamicWorkflowPlan.applied, true);
+    assert.equal(report.fetchEvidence.dynamicWorkflowPlan.notFixedTemplate, true);
+    assert.deepEqual(laneIds, [
+      "product-definition",
+      "ux-flow",
+      "frontend-ui",
+      "data-model",
+      "test-qa",
+      "release-ops",
+    ]);
+    assert.ok(
+      report.workerTaskPackets.every((packet) => packet.ownerMode === "project-agent-profile")
+    );
+    assert.ok(
+      report.workerTaskPackets.every(
+        (packet) =>
+          packet.workerInstanceMode === "run-scoped-instance" &&
+          packet.roleSoulPolicy?.identityKind === "project_scoped_agent_profile" &&
+          packet.projectAgentId.startsWith("local-todo-dashboard.") &&
+          packet.capabilityLoadout?.fixedForRun === true
+      )
+    );
+    assert.ok(omittedLaneIds.includes("market-research"));
+    assert.ok(omittedLaneIds.includes("content-strategy"));
+    assert.ok(omittedLaneIds.includes("platform-integration"));
+    assert.ok(omittedLaneIds.includes("security-approval"));
+    assert.equal(report.fetchEvidence.dynamicWorkflowPlan.intentSignals.requiresExternalIntegration, false);
+    assert.equal(report.fetchEvidence.dynamicWorkflowPlan.intentSignals.requiresBackend, false);
+  });
+
   test("groups same-type same-repeatKey needs without collapsing worker instances", () => {
     const input = [
       "同一套 PRD review standard 已经多次出现，需要流程包和触发条件。",
@@ -163,6 +354,70 @@ describe("31 — Capability Gap orchestration through meta-theory Conductor", ()
       const report = JSON.parse(await readFile(outputPath, "utf8"));
       assert.equal(report.orchestrationTaskBoardPacket.synthesisOwner, "meta-conductor");
       assert.ok(report.workerTaskPackets.length >= 2);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("CLI supports stdout-only dynamic workflow inspection without writing a report", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-gap-orchestration-"));
+    try {
+      const outputPath = path.join(tempDir, "should-not-exist.json");
+      const result = spawnSync(
+        process.execPath,
+        [
+          "scripts/run-capability-gap-orchestration.mjs",
+          "--task",
+          "帮我做个小红书营销自动发布器",
+          "--json-out",
+          outputPath,
+          "--stdout-only",
+        ],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+      assert.equal(result.status, 0, result.stderr);
+      const summary = JSON.parse(result.stdout);
+      assert.equal(summary.status, "pass");
+      assert.equal(summary.outputMode, "stdout-only");
+      assert.equal(summary.report, null);
+      assert.equal(summary.workerTaskPackets.length, 11);
+      assert.equal(summary.reviewChecks.dynamicProjectAgentsAreSynthesizedAndPinned, true);
+      assert.equal(summary.reviewChecks.dynamicProjectAgentsHaveEvidencePolicies, true);
+      assert.equal(summary.reviewChecks.dynamicProjectAgentsHaveGraphPolicies, true);
+      assert.equal(summary.reviewChecks.dynamicLanesHaveLoadoutAndSoulPolicy, true);
+      assert.ok(summary.projectAgentBlueprintPacket.agentCount >= 9);
+      assert.ok(
+        summary.projectAgentBlueprintPacket.externalEvidenceRequiredAgentIds.some((agentId) =>
+          agentId.endsWith(".research")
+        )
+      );
+      assert.ok(
+        summary.projectAgentBlueprintPacket.externalEvidenceRequiredAgentIds.some((agentId) =>
+          agentId.endsWith(".integration")
+        )
+      );
+      assert.ok(
+        summary.projectAgentBlueprintPacket.localBaselineRequiredAgentIds.length >=
+          summary.projectAgentBlueprintPacket.agentCount
+      );
+      assert.ok(
+        summary.projectAgentBlueprintPacket.knowledgeGraphEquippedAgentIds.length >=
+          summary.projectAgentBlueprintPacket.agentCount
+      );
+      assert.ok(
+        summary.workerTaskPackets.every(
+          (packet) =>
+            packet.ownerMode === "project-agent-profile" &&
+            packet.workerInstanceMode === "run-scoped-instance" &&
+            packet.savedIn === "projectAgentBlueprintPacket" &&
+            packet.fixedForRun === true &&
+            packet.capabilityProfileId &&
+            packet.commands.length > 0 &&
+            packet.localBaselineRequired === true &&
+            packet.knowledgeGraphEquipped === true
+        )
+      );
+      await assert.rejects(() => access(outputPath), /ENOENT/);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

@@ -49,9 +49,8 @@ import {
 } from "./install-manifest.mjs";
 import {
   CODEX_REQUEST_USER_INPUT_FEATURE,
-  ensureCodexWindowsNotifyCompat,
-  ensureCodexRequestUserInputFeature,
-  hasCodexRequestUserInputFeature,
+  ensureCodexAppNativeControls,
+  mergeCodexConfigAddOnly,
 } from "./codex-config-merge.mjs";
 import {
   detectManagedInstallConflict,
@@ -1564,6 +1563,18 @@ async function installSkillCreator(targetBaseSkills) {
   );
 }
 
+async function deployRuntimeHookSupport(spec, runtimeHome, runtimeId, skillsRoot) {
+  await sanitizeCompatibilityRoots(runtimeId, skillsRoot, spec);
+  await ensureHookLayoutAliases(runtimeHome, spec);
+  await deployHookSubdirs(spec, runtimeHome, runtimeId);
+  await deployHookConfigFiles(spec, runtimeHome, runtimeId);
+  await deployHookExtraFiles(spec, runtimeHome, runtimeId);
+  await patchPlanningWithFilesPhaseCounters(spec, runtimeHome, runtimeId);
+  await patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId);
+  await patchCodexHookPromptForPlatform(spec, runtimeHome, runtimeId);
+  await mergeHookSettings(spec, runtimeHome, runtimeId);
+}
+
 async function installAllSkillsForRuntime(label, runtimeHome, runtimeId) {
   const skillsRoot = path.join(runtimeHome, "skills");
   assertUnderHome(runtimeHome);
@@ -1600,16 +1611,7 @@ async function installAllSkillsForRuntime(label, runtimeHome, runtimeId) {
     } else {
       await installGitSkill(spec.id, targetDir, spec.repo);
     }
-    await sanitizeCompatibilityRoots(runtimeId, skillsRoot, spec);
-    await ensureHookLayoutAliases(runtimeHome, spec);
-    // Hook co-deployment for subdirExtraction installs (e.g. planning-with-files)
-    await deployHookSubdirs(spec, runtimeHome, runtimeId);
-    await deployHookConfigFiles(spec, runtimeHome, runtimeId);
-    await deployHookExtraFiles(spec, runtimeHome, runtimeId);
-    await patchPlanningWithFilesPhaseCounters(spec, runtimeHome, runtimeId);
-    await patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId);
-    await patchCodexHookPromptForPlatform(spec, runtimeHome, runtimeId);
-    await mergeHookSettings(spec, runtimeHome, runtimeId);
+    await deployRuntimeHookSupport(spec, runtimeHome, runtimeId, skillsRoot);
     await cleanupDisabledSkillResidue(runtimeHome, spec.id);
   }
   const hasManifestSkillCreator = SKILL_REPOS.some(
@@ -1726,6 +1728,42 @@ function formatNpxCommand(args) {
   return `npx ${args.join(" ")}`;
 }
 
+async function readCodexConfigSnapshot(runtimeId, runtimeHome) {
+  if (runtimeId !== "codex" || !runtimeHome) return null;
+  const configPath = path.join(runtimeHome, "config.toml");
+  const text = (await pathExists(configPath))
+    ? await fs.readFile(configPath, "utf8")
+    : null;
+  return { configPath, text };
+}
+
+async function backupCodexConfigBeforeUpstream(snapshot) {
+  if (!snapshot?.text) return null;
+  const backupPath = `${snapshot.configPath}.meta-kim.pre-ecc.bak`;
+  await fs.copyFile(snapshot.configPath, backupPath);
+  console.log(
+    `${C.yellow}↻${C.reset} ${C.dim}Backed up Codex config before ECC upstream installer: ${backupPath}${C.reset}`,
+  );
+  return backupPath;
+}
+
+async function restoreCodexConfigAfterUpstream(snapshot, runtimeHome) {
+  if (!snapshot || snapshot.text === null) return false;
+  const upstreamText = (await pathExists(snapshot.configPath))
+    ? await fs.readFile(snapshot.configPath, "utf8")
+    : "";
+  const merged = mergeCodexConfigAddOnly(snapshot.text, upstreamText);
+  const next = ensureCodexAppNativeControls(merged, {
+    codexHome: runtimeHome,
+  });
+  if (upstreamText === next) return false;
+  await fs.writeFile(snapshot.configPath, next, "utf8");
+  console.log(
+    `${C.green}✓${C.reset} ${C.dim}Restored user Codex config after ECC upstream installer with add-only ECC merge: ${snapshot.configPath}${C.reset}`,
+  );
+  return true;
+}
+
 async function installUpstreamCliSpecs(runtimeHomes, activeTargets) {
   if (skipPlugins) return;
   const specs = SKILL_REPOS.filter((s) => s.installMethod === "upstreamCli");
@@ -1771,18 +1809,31 @@ async function installUpstreamCliSpecs(runtimeHomes, activeTargets) {
 
       if (dryRun) {
         console.log(t.dryRun(commandText));
+        if (runtimeId === "codex") {
+          console.log(
+            t.dryRun(
+              `preserve existing ${path.join(runtimeHome, "config.toml")} before ECC upstream installer and restore it with add-only ECC merge`,
+            ),
+          );
+        }
         continue;
       }
 
       console.log(
         `${C.cyan}→${C.reset} ${spec.id}: upstream native install for ${runtimeId}`,
       );
+      const codexConfigSnapshot = await readCodexConfigSnapshot(
+        runtimeId,
+        runtimeHome,
+      );
+      await backupCodexConfigBeforeUpstream(codexConfigSnapshot);
       const result = spawnSync("npx", args, {
         cwd: os.homedir(),
         encoding: "utf8",
         shell: shouldUseCliShell(os.platform()),
         stdio: "inherit",
       });
+      await restoreCodexConfigAfterUpstream(codexConfigSnapshot, runtimeHome);
       if (result.status !== 0) {
         recordInstallFailure({
           skillId: `${spec.id} (${runtimeId})`,
@@ -1805,7 +1856,7 @@ async function ensureCodexChoiceSurfaceAfterInstall(runtimeHomes, activeTargets)
   if (dryRun) {
     console.log(
       t.dryRun(
-        `ensure ${configPath} has [features].${CODEX_REQUEST_USER_INPUT_FEATURE} = true`,
+        `ensure ${configPath} preserves Codex App Browser/Chrome/Computer Use native controls ([features].${CODEX_REQUEST_USER_INPUT_FEATURE}, [features].js_repl, Windows sandbox/notify, openai-bundled marketplace/plugins)`,
       ),
     );
     return;
@@ -1816,13 +1867,13 @@ async function ensureCodexChoiceSurfaceAfterInstall(runtimeHomes, activeTargets)
     ? await fs.readFile(configPath, "utf8")
     : "";
 
-  const next = ensureCodexWindowsNotifyCompat(
-    ensureCodexRequestUserInputFeature(previous),
-  );
+  const next = ensureCodexAppNativeControls(previous, {
+    codexHome: runtimeHomes.codex,
+  });
 
-  if (previous === next && hasCodexRequestUserInputFeature(previous)) {
+  if (previous === next) {
     console.log(
-      `${C.green}✓${C.reset} ${C.dim}Codex ${CODEX_REQUEST_USER_INPUT_FEATURE} preserved: ${configPath}${C.reset}`,
+      `${C.green}✓${C.reset} ${C.dim}Codex choice surface and App native controls preserved: ${configPath}${C.reset}`,
     );
     return;
   }
@@ -1831,13 +1882,13 @@ async function ensureCodexChoiceSurfaceAfterInstall(runtimeHomes, activeTargets)
     const backupPath = `${configPath}.meta-kim.bak`;
     await fs.copyFile(configPath, backupPath);
     console.log(
-      `${C.yellow}↻${C.reset} ${C.dim}Backed up Codex config before restoring choice surface: ${backupPath}${C.reset}`,
+      `${C.yellow}↻${C.reset} ${C.dim}Backed up Codex config before restoring choice surface and App native controls: ${backupPath}${C.reset}`,
     );
   }
 
   await fs.writeFile(configPath, next, "utf8");
   console.log(
-    `${C.green}✓${C.reset} ${C.dim}Restored Codex ${CODEX_REQUEST_USER_INPUT_FEATURE} and Windows-safe notify config: ${configPath}${C.reset}`,
+    `${C.green}✓${C.reset} ${C.dim}Restored Codex choice surface, Windows-safe notify, and App native controls: ${configPath}${C.reset}`,
   );
 }
 
@@ -3220,8 +3271,7 @@ async function installSkillsToMultipleRuntimes(
           }
         }
 
-        await sanitizeCompatibilityRoots(runtimeId, skillsRoot, spec);
-        await ensureHookLayoutAliases(runtimeHome, spec);
+        await deployRuntimeHookSupport(spec, runtimeHome, runtimeId, skillsRoot);
         await cleanupDisabledSkillResidue(runtimeHome, spec.id);
       }
 

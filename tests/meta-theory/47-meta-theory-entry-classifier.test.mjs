@@ -1,0 +1,122 @@
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { readFile } from "./_helpers.mjs";
+import { classifyMetaTheoryEntry } from "../../scripts/meta-theory-entry-classifier.mjs";
+
+describe("47 - Meta-theory entry classifier", () => {
+  test("explicit meta-theory activation enters regulated path", () => {
+    const result = classifyMetaTheoryEntry("meta-theory 帮我做治理审查");
+
+    assert.equal(result.governedEntry, true);
+    assert.equal(result.path, "regulated_path");
+    assert.equal(result.taskClassification, "meta_theory_explicit");
+    assert.equal(result.triggerReason, "explicit_meta_theory");
+  });
+
+  test("ordinary natural-language durable work enters governed path", () => {
+    const prompt =
+      "我想把客户反馈自动整理成优先级、修复建议和验证清单，请帮我规划并开始处理。";
+    assert.doesNotMatch(prompt, /agent|skill|MCP|command|阶段|packet|JSON/i);
+
+    const result = classifyMetaTheoryEntry(prompt);
+
+    assert.equal(result.governedEntry, true);
+    assert.equal(result.path, "standard_path");
+    assert.equal(result.taskClassification, "meta_theory_auto");
+    assert.equal(result.triggerReason, "natural_language_durable_work");
+    assert.equal(result.shouldAskBeforeFetch, false);
+  });
+
+  test("wish-style product build enters governed path without protocol words", () => {
+    const prompt = "帮我做个小红书营销自动发布器";
+    assert.doesNotMatch(prompt, /agent|skill|MCP|command|阶段|packet|JSON|优先级|验证清单/i);
+
+    const result = classifyMetaTheoryEntry(prompt);
+
+    assert.equal(result.governedEntry, true);
+    assert.equal(result.path, "standard_path");
+    assert.equal(result.taskClassification, "meta_theory_auto");
+    assert.equal(result.triggerReason, "natural_language_product_build");
+    assert.equal(result.shouldAskBeforeFetch, false);
+  });
+
+  test("subjective quality request asks through Critical before Fetch", () => {
+    const result = classifyMetaTheoryEntry("这个页面不好看，帮我弄高级一点");
+
+    assert.equal(result.governedEntry, true);
+    assert.equal(result.path, "standard_path");
+    assert.equal(result.triggerReason, "subjective_quality_ambiguous");
+    assert.equal(result.choiceSurfaceState, "critical_clarification_allowed");
+    assert.equal(result.shouldAskBeforeFetch, true);
+  });
+
+  test("pure read-only question stays on fast path", () => {
+    const result = classifyMetaTheoryEntry("这个项目是什么？");
+
+    assert.equal(result.governedEntry, false);
+    assert.equal(result.path, "fast_path");
+    assert.equal(result.taskClassification, "pure_query");
+    assert.equal(result.triggerReason, "pure_query");
+  });
+
+  test("existing governed execution CLI exposes entry classification without running a full run", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/run-meta-theory-governed-execution.mjs",
+        "--classify-entry",
+        "--task",
+        "我想把客户反馈自动整理成优先级、修复建议和验证清单，请帮我规划并开始处理。",
+      ],
+      { cwd: process.cwd(), encoding: "utf8" },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.governedEntry, true);
+    assert.equal(payload.triggerReason, "natural_language_durable_work");
+    assert.equal(payload.taskClassification, "meta_theory_auto");
+  });
+
+  test("CLI classifies wish-style product build as governed work", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/run-meta-theory-governed-execution.mjs",
+        "--classify-entry",
+        "--task",
+        "帮我做个小红书营销自动发布器",
+      ],
+      { cwd: process.cwd(), encoding: "utf8" },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.governedEntry, true);
+    assert.equal(payload.path, "standard_path");
+    assert.equal(payload.triggerReason, "natural_language_product_build");
+    assert.equal(payload.taskClassification, "meta_theory_auto");
+  });
+
+  test("user-facing docs present natural language as the normal entry path", async () => {
+    const readme = await readFile("README.md");
+    const readmeZh = await readFile("README.zh-CN.md");
+    const agents = await readFile("AGENTS.md");
+    const skill = await readFile("canonical/skills/meta-theory/SKILL.md");
+    const combined = `${readme}\n${readmeZh}\n${agents}\n${skill}`;
+
+    assert.match(readme, /humans should be able to use plain task language/i);
+    assert.match(readme, /maintainer shortcuts, not the normal user path/i);
+    assert.match(readmeZh, /人类应该直接用自然语言说任务/);
+    assert.match(readmeZh, /维护者快捷方式，不是普通用户入口/);
+    assert.match(agents, /Do not require humans to know or type command words/);
+    assert.match(skill, /ordinary natural-language durable work/);
+    assert.match(skill, /not required human behavior/);
+
+    assert.doesNotMatch(
+      combined,
+      /What needs explicit trigger|需要显式触发|Type "run meta theory"|输入"run meta theory"/,
+    );
+  });
+});

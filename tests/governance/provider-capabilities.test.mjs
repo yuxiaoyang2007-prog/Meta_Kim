@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -53,6 +53,8 @@ test("provider registry covers all provider kinds and required modeled providers
     "plugin-marketplace-superpowers",
     "plugin-marketplace-ecc",
     "mcp-server-meta-kim-runtime",
+    "hook-script-codex-hookprompt-adapter",
+    "hook-script-cursor-hookprompt-adapter",
   ]) {
     assert.ok(registry.providers.some((provider) => provider.id === id), id);
   }
@@ -85,6 +87,36 @@ test("provider registry covers all provider kinds and required modeled providers
     for (const osName of ["macos", "windows", "linux", "wsl2"]) {
       assert.ok(provider.osAdapters[osName], `${provider.id} missing ${osName} adapter`);
     }
+  }
+});
+
+test("strict global hook validation checks Codex and Cursor HookPrompt adapters", () => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-hooks-"));
+  const codexHooks = path.join(tempDir, ".codex", "hooks.json");
+  const cursorHooks = path.join(tempDir, ".cursor", "hooks.json");
+  mkdirSync(path.dirname(codexHooks), { recursive: true });
+  mkdirSync(path.dirname(cursorHooks), { recursive: true });
+  writeFileSync(codexHooks, `${JSON.stringify({ hooks: {} }, null, 2)}\n`);
+  writeFileSync(cursorHooks, `${JSON.stringify({ hooks: {} }, null, 2)}\n`);
+
+  try {
+    const result = runValidator([
+      "--strict-global-hooks",
+      "--codex-hooks",
+      codexHooks,
+      "--cursor-hooks",
+      cursorHooks,
+      "--json",
+    ]);
+    assert.notEqual(result.status, 0);
+    const payload = JSON.parse(result.stdout);
+    const runtimes = new Set(payload.issues.map((entry) => entry.runtimeId));
+    assert.ok(runtimes.has("codex"));
+    assert.ok(runtimes.has("cursor"));
+    assert.match(JSON.stringify(payload.issues), /UserPromptSubmit/);
+    assert.match(JSON.stringify(payload.issues), /beforeSubmitPrompt/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
   }
 });
 

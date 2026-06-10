@@ -3418,6 +3418,198 @@
       "evolutionKey": "provider:hook-script-codex-hookprompt-adapter"
     },
     {
+      "id": "hook-script-cursor-hookprompt-adapter",
+      "providerType": "hook_script",
+      "summary": "Cursor beforeSubmitPrompt adapter that converts HookPrompt output into model context.",
+      "sourceOfTruth": "scripts/runtime-hook-mapping.mjs",
+      "mappings": {
+        "skillsJsonIds": [
+          "hookprompt"
+        ],
+        "capabilityInventoryTypes": [
+          "hook"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "project_projection",
+          "global_home"
+        ],
+        "trigger": "Cursor beforeSubmitPrompt",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "global hook chain validation",
+        "command": "npm run meta:providers:validate -- --strict-global-hooks"
+      },
+      "risk": {
+        "trustReview": "hook_context",
+        "notes": [
+          "UI warnings are not equivalent to model context."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "project_projection": "verified",
+            "global_home": "needs_probe"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {
+          "cursor": {
+            "state": "context_effective",
+            "status": "partial",
+            "installLayers": {
+              "project_projection": "verified",
+              "global_home": "needs_probe"
+            },
+            "os": {
+              "macos": "partial",
+              "windows": "partial",
+              "linux": "partial",
+              "wsl2": "partial"
+            }
+          }
+        }
+      },
+      "providerKind": "hook_script",
+      "capabilities": [
+        "Cursor beforeSubmitPrompt adapter that converts HookPrompt output into model context.",
+        "hook",
+        "hookprompt"
+      ],
+      "source": {
+        "sourceOfTruth": "scripts/runtime-hook-mapping.mjs",
+        "mappings": {
+          "skillsJsonIds": [
+            "hookprompt"
+          ],
+          "capabilityInventoryTypes": [
+            "hook"
+          ]
+        }
+      },
+      "trust": {
+        "review": "hook_context",
+        "required": true
+      },
+      "installMethod": "hookConfig",
+      "installLayers": [
+        "project_projection",
+        "global_home"
+      ],
+      "exposedArtifacts": [
+        "scripts/runtime-hook-mapping.mjs",
+        "config/skills.json#hookprompt"
+      ],
+      "activationEvents": [
+        "Cursor beforeSubmitPrompt"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "hook_context",
+        "notes": [
+          "UI warnings are not equivalent to model context."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "project_projection": "verified",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "Cursor beforeSubmitPrompt",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "project_projection": "verified",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "Cursor beforeSubmitPrompt",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "context_effective",
+          "status": "partial",
+          "installLayers": {
+            "project_projection": "verified",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "Cursor beforeSubmitPrompt",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "projected",
+          "status": "partial",
+          "installLayers": {
+            "project_projection": "verified",
+            "global_home": "needs_probe"
+          },
+          "activationEvent": "Cursor beforeSubmitPrompt",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "UI warnings are not equivalent to model context."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "UI warnings are not equivalent to model context."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "UI warnings are not equivalent to model context."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "UI warnings are not equivalent to model context."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:hook-script-cursor-hookprompt-adapter"
+    },
+    {
       "id": "command-provider-validator",
       "providerType": "command",
       "summary": "Provider capability validator command.",

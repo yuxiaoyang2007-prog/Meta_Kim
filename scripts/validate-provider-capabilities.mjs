@@ -104,9 +104,17 @@ const hooksPath = path.resolve(
       path.join(os.homedir(), ".codex", "hooks.json"),
   ),
 );
+const cursorHooksPath = path.resolve(
+  argValue(
+    "--cursor-hooks",
+    process.env.META_KIM_CURSOR_HOOKS_JSON ||
+      path.join(os.homedir(), ".cursor", "hooks.json"),
+  ),
+);
 const jsonOutput = args.includes("--json");
 const strictGlobalHooks = args.includes("--strict-global-hooks");
 const fixCodexHookPrompt = args.includes("--fix-codex-hookprompt");
+const fixCursorHookPrompt = args.includes("--fix-cursor-hookprompt");
 
 function issue({
   severity = "error",
@@ -246,13 +254,33 @@ function validateSupport(provider, issues) {
   }
 }
 
-async function validateCodexHookPrompt({ issues, registry }) {
+function currentOsId() {
+  return process.platform === "win32" ? "windows" : undefined;
+}
+
+function adapterCommand(filePath) {
+  const nodeCommand = process.execPath.includes(" ")
+    ? `"${process.execPath.replace(/\\/g, "\\\\")}"`
+    : process.execPath.replace(/\\/g, "\\\\");
+  return `${nodeCommand} "${filePath.replace(/\\/g, "\\\\")}"`;
+}
+
+async function validateHookPromptAdapter({
+  issues,
+  registry,
+  runtimeId,
+  providerId,
+  hooksFilePath,
+  projectHooksPath,
+  eventName,
+  fixFlag,
+}) {
   const provider = registry.providers.find(
-    (entry) => entry.id === "hook-script-codex-hookprompt-adapter",
+    (entry) => entry.id === providerId,
   );
   if (!provider) return;
 
-  const hooks = await readJsonIfExists(hooksPath);
+  const hooks = await readJsonIfExists(hooksFilePath);
   const severity = strictGlobalHooks ? "error" : "warning";
   if (!hooks) {
     issues.push(
@@ -261,26 +289,26 @@ async function validateCodexHookPrompt({ issues, registry }) {
         code: "missing_global_install",
         providerId: provider.id,
         providerType: provider.providerType,
-        runtimeId: "codex",
-        osId: process.platform === "win32" ? "windows" : undefined,
+        runtimeId,
+        osId: currentOsId(),
         installLayer: "global_home",
         state: "missing_global_install",
-        sourceRef: toPosix(hooksPath),
-        message: `Codex global hooks file not found at ${toPosix(hooksPath)}`,
+        sourceRef: toPosix(hooksFilePath),
+        message: `${runtimeId} global hooks file not found at ${toPosix(hooksFilePath)}`,
       }),
     );
     return;
   }
 
-  const projectHooks = await readJson(repoPath(".codex/hooks.json"));
+  const projectHooks = await readJson(repoPath(projectHooksPath));
   const projectHasAdapter = hasCommand(
     projectHooks,
-    "UserPromptSubmit",
+    eventName,
     "hookprompt-adapter.mjs",
   );
   const globalHasAdapter = hasCommand(
     hooks,
-    "UserPromptSubmit",
+    eventName,
     "hookprompt-adapter.mjs",
   );
 
@@ -290,11 +318,11 @@ async function validateCodexHookPrompt({ issues, registry }) {
         code: "missing_projection",
         providerId: provider.id,
         providerType: provider.providerType,
-        runtimeId: "codex",
+        runtimeId,
         installLayer: "project_projection",
         state: "missing_projection",
-        sourceRef: ".codex/hooks.json",
-        message: "Project Codex hooks do not register hookprompt-adapter.mjs",
+        sourceRef: projectHooksPath,
+        message: `Project ${runtimeId} hooks do not register hookprompt-adapter.mjs`,
       }),
     );
   }
@@ -306,56 +334,83 @@ async function validateCodexHookPrompt({ issues, registry }) {
         code: "output_not_consumed",
         providerId: provider.id,
         providerType: provider.providerType,
-        runtimeId: "codex",
-        osId: process.platform === "win32" ? "windows" : undefined,
+        runtimeId,
+        osId: currentOsId(),
         installLayer: "global_home",
         state: "output_not_consumed",
-        sourceRef: toPosix(hooksPath),
+        sourceRef: toPosix(hooksFilePath),
         message:
-          "Codex global UserPromptSubmit does not register hookprompt-adapter.mjs, so HookPrompt output may not enter model context globally",
+          `${runtimeId} global ${eventName} does not register hookprompt-adapter.mjs, so HookPrompt output may not enter model context globally`,
       }),
     );
   }
 
-  if (fixCodexHookPrompt && hooks && !globalHasAdapter) {
-    await addCodexHookPromptAdapter(hooksPath, hooks);
+  if (fixFlag && hooks && !globalHasAdapter) {
+    await addHookPromptAdapter(hooksFilePath, hooks, eventName, runtimeId);
     issues.push(
       issue({
         severity: "info",
         code: "fixed_global_install",
         providerId: provider.id,
         providerType: provider.providerType,
-        runtimeId: "codex",
+        runtimeId,
         installLayer: "global_home",
         state: "installed",
-        sourceRef: toPosix(hooksPath),
-        message: "Registered hookprompt-adapter.mjs in Codex global UserPromptSubmit hooks",
+        sourceRef: toPosix(hooksFilePath),
+        message: `Registered hookprompt-adapter.mjs in ${runtimeId} global ${eventName} hooks`,
       }),
     );
   }
 }
 
-async function addCodexHookPromptAdapter(filePath, hooksJson) {
+async function validateCodexHookPrompt({ issues, registry }) {
+  await validateHookPromptAdapter({
+    issues,
+    registry,
+    runtimeId: "codex",
+    providerId: "hook-script-codex-hookprompt-adapter",
+    hooksFilePath: hooksPath,
+    projectHooksPath: ".codex/hooks.json",
+    eventName: "UserPromptSubmit",
+    fixFlag: fixCodexHookPrompt,
+  });
+}
+
+async function validateCursorHookPrompt({ issues, registry }) {
+  await validateHookPromptAdapter({
+    issues,
+    registry,
+    runtimeId: "cursor",
+    providerId: "hook-script-cursor-hookprompt-adapter",
+    hooksFilePath: cursorHooksPath,
+    projectHooksPath: ".cursor/hooks.json",
+    eventName: "beforeSubmitPrompt",
+    fixFlag: fixCursorHookPrompt,
+  });
+}
+
+async function addHookPromptAdapter(filePath, hooksJson, eventName, runtimeId) {
   const home = path.resolve(os.homedir());
   const target = path.resolve(filePath);
   if (target !== home && !target.startsWith(`${home}${path.sep}`)) {
-    throw new Error(`Refusing to modify Codex hooks outside user home: ${target}`);
+    throw new Error(`Refusing to modify ${runtimeId} hooks outside user home: ${target}`);
   }
   const hooksDir = path.join(path.dirname(target), "hooks");
   const adapter = path.join(hooksDir, "hookprompt-adapter.mjs");
-  const nodeCommand = process.execPath.includes(" ")
-    ? `"${process.execPath.replace(/\\/g, "\\\\")}"`
-    : process.execPath.replace(/\\/g, "\\\\");
-  const command = `${nodeCommand} "${adapter.replace(/\\/g, "\\\\")}"`;
+  const command = adapterCommand(adapter);
   hooksJson.hooks ??= {};
-  hooksJson.hooks.UserPromptSubmit ??= [{ hooks: [] }];
-  if (!Array.isArray(hooksJson.hooks.UserPromptSubmit)) {
-    hooksJson.hooks.UserPromptSubmit = [{ hooks: [] }];
+  hooksJson.hooks[eventName] ??= runtimeId === "codex" ? [{ hooks: [] }] : [];
+  if (!Array.isArray(hooksJson.hooks[eventName])) {
+    hooksJson.hooks[eventName] = runtimeId === "codex" ? [{ hooks: [] }] : [];
   }
-  const first = hooksJson.hooks.UserPromptSubmit[0] ?? { hooks: [] };
-  first.hooks ??= [];
-  first.hooks.push({ type: "command", command, timeout: 10 });
-  hooksJson.hooks.UserPromptSubmit[0] = first;
+  if (runtimeId === "codex") {
+    const first = hooksJson.hooks[eventName][0] ?? { hooks: [] };
+    first.hooks ??= [];
+    first.hooks.push({ type: "command", command, timeout: 10 });
+    hooksJson.hooks[eventName][0] = first;
+  } else {
+    hooksJson.hooks[eventName].push({ command, timeout: 10 });
+  }
   await fs.writeFile(target, `${JSON.stringify(hooksJson, null, 2)}\n`, "utf8");
 }
 
@@ -528,6 +583,7 @@ async function main() {
     issues,
   });
   await validateCodexHookPrompt({ issues, registry });
+  await validateCursorHookPrompt({ issues, registry });
 
   const errors = issues.filter((entry) => entry.severity === "error");
   const warnings = issues.filter((entry) => entry.severity === "warning");

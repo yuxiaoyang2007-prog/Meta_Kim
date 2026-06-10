@@ -153,7 +153,11 @@ describe("MCP memory cross-runtime hooks", () => {
       assert.match(saved.body.content, /\[REDACTED/);
 
       const output = JSON.parse(result.stdout);
-      assert.match(output.systemMessage, /Untrusted recalled memory context/);
+      assert.equal(output.hookSpecificOutput.hookEventName, "UserPromptSubmit");
+      assert.match(
+        output.hookSpecificOutput.additionalContext,
+        /Untrusted recalled memory context/,
+      );
       assert.equal(Object.hasOwn(output, "message"), false);
       assert.equal(Object.hasOwn(output, "continue"), false);
       assert.match(result.stdout, /Untrusted recalled memory context/);
@@ -265,15 +269,17 @@ describe("MCP memory cross-runtime hooks", () => {
 
       assert.equal(result.status, 0, result.stderr);
       const output = JSON.parse(result.stdout);
+      const context = output.hookSpecificOutput.additionalContext;
+      assert.equal(output.hookSpecificOutput.hookEventName, "UserPromptSubmit");
       assert.match(
-        output.systemMessage,
+        context,
         /MCP Memory Service 8000 recall bug/,
       );
       assert.match(
-        output.systemMessage,
+        context,
         /Buried third layer MCP Memory Service 8000 recall detail/,
       );
-      assert.doesNotMatch(output.systemMessage, /Claude Code 会话启动/);
+      assert.doesNotMatch(context, /Claude Code 会话启动/);
       assert.ok(
         searchQueries.some((query) => /current problems decisions next steps/.test(query)),
         "expected generic project prompts to trigger broader recall queries",
@@ -404,7 +410,14 @@ describe("MCP memory cross-runtime hooks", () => {
 
     try {
       const codex = await runHook("codex");
-      assert.match(codex.systemMessage, /Reusable project context/);
+      assert.equal(
+        codex.hookSpecificOutput.hookEventName,
+        "UserPromptSubmit",
+      );
+      assert.match(
+        codex.hookSpecificOutput.additionalContext,
+        /Reusable project context/,
+      );
       assert.equal(Object.hasOwn(codex, "message"), false);
 
       const claude = await runHook("claude");
@@ -488,9 +501,16 @@ describe("MCP memory cross-runtime hooks", () => {
 
     assert.equal(result.status, 0, result.stderr);
     const output = JSON.parse(result.stdout);
-    assert.match(output.systemMessage, /Layer 3 MCP Memory Service is not healthy/);
-    assert.match(output.systemMessage, /memory server --http/);
-    assert.match(output.systemMessage, /Cross-session recall\/writeback is unavailable/);
+    assert.equal(output.hookSpecificOutput.hookEventName, "SessionStart");
+    assert.match(
+      output.hookSpecificOutput.additionalContext,
+      /Layer 3 MCP Memory Service is not healthy/,
+    );
+    assert.match(output.hookSpecificOutput.additionalContext, /memory server --http/);
+    assert.match(
+      output.hookSpecificOutput.additionalContext,
+      /Cross-session recall\/writeback is unavailable/,
+    );
   });
 
   test("Claude stop memory hook writes correct memory type", () => {

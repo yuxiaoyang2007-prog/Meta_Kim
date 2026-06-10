@@ -2,35 +2,99 @@
 
 > 🇺🇸 [English](./CHANGELOG.md) | 中文版
 
-所有 Meta_Kim 的重要变更都会记录在此。
-格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
-发布新版本时，请在顶部（旧版本之前）添加新的 **`## [版本号] - YYYY-MM-DD`** 部分。
+这是 Meta_Kim 面向读者的更新说明。
 
-## [2.8.9] - 2026-06-09
+更新说明只解释“改了什么、为什么重要”。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
+
+## [2.8.13] - 2026-06-10
 
 ### 修复
 
-- **OpenClaw/Cursor 合并证据门** — OpenClaw 或 Cursor 的贡献改造现在明确要求提交者先在对应工具端自己完成严格自测并提供证据，证据通过审查后才能合并。
+- **Codex App 原生控制保护** - Meta_Kim 现在会在运行 ECC Codex home installer 前保护用户已有的 `~/.codex/config.toml`。这次问题是因为发现 ECC 的 Codex 安装路径会把它自己的 reference `config.toml` 覆盖到用户的 Codex App 配置上，进而导致 Codex 的 Computer Use 和 Chrome 插件连接失效。
+- **ECC 配置合并安全性** - ECC upstream installer 运行后，Meta_Kim 会用用户原始 Codex 配置作为最终基底，只把 ECC 新增项 add-only 合进去，再恢复 Codex App 的 Browser、Chrome 和 Computer Use 原生插件配置。这样不会丢用户已有的 MCP servers、hooks、agents、projects、profiles 和其它全局 Codex 设置。
+- **Windows Codex App 恢复** - Windows 安装路径现在会修复 Codex App 原生控制面：保持 `windows.sandbox = "unelevated"`，启用 `features.js_repl`，移除失效的 `.codex/.tmp/bundled-marketplaces/openai-bundled` marketplace source，并在存在时保留 Computer Use notification helper。
+
+### 验证
+
+- `node --test tests/setup/codex-config-merge.test.mjs`
+- `node --test tests/setup/install-plugin-bundles.test.mjs`
+- `npm run meta:release:smoke`
+- `npm run meta:verify:all`
+- `npm run meta:graphify:rebuild`
+- `git diff --check`
+
+## [2.8.12] - 2026-06-10
+
+### 修复
+
+- **Codex HookPrompt 模型上下文** - Codex 的 HookPrompt adapter 现在输出 `hookSpecificOutput.additionalContext`，不再把优化结果包成 `systemMessage`。这修复了“hook 确实执行了、界面或日志能看到，但模型没有稳定吃到优化提示词”的问题。
+- **Codex 记忆上下文** - Meta_Kim shared memory hook 在 Codex 里也改用和 Claude Code 一样的模型可见上下文包；Cursor 继续使用自己的 `prompt` 包，UI 提示仍保持独立。
 
 ### 变更
 
-- 版本升级：2.8.8 -> 2.8.9。
+- **HookPrompt 依赖路径** - Meta_Kim 会优先查找 HookPrompt 源项目提供的 Codex adapter，再回退到 Claude hook 实现，和依赖项目的新结构对齐。
+
+### 验证
+
+- `node test-hook.js`（在 `D:/KimProject/HookPrompt`）
+- `node --test tests/setup/sync-runtimes-manifest.test.mjs tests/setup/mcp-memory-hooks.test.mjs`
+- `node scripts/install-global-skills-all-runtimes.mjs --update --skills hookprompt --targets codex`
+- `codex exec --dangerously-bypass-hook-trust --skip-git-repo-check --sandbox read-only --cd D:/KimProject/课程素材 "帮我做个小红书营销自动发布器，先别改文件，先说你理解到什么"`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
+## [2.8.11] - 2026-06-09
+
+### 变更
+
+- **全局和项目级 Hook 策略** - Meta_Kim 现在明确区分项目级治理 hook 和全局可复用 hook。派工强校验、Graphify 上下文、meta-theory spine 这类强治理能力默认留在项目级；全局安装只放记忆保存、HookPrompt、OpenClaw memory bridge 这类安全可复用入口。
+
+### 修复
+
+- **Cursor 全局 HookPrompt** - Cursor 全局 `beforeSubmitPrompt` 现在会注册 HookPrompt adapter，和 Codex 全局 `UserPromptSubmit` 的策略对齐；严格 provider 验证也会同时检查 Codex 和 Cursor。
+- **Hook 能力清单** - provider registry 现在把 Codex 和 Cursor 的 HookPrompt adapter 分开建模，项目投影和全局安装会按各自 runtime 与 hook 事件验证。
+
+### 验证
+
+- `node scripts/install-global-skills-all-runtimes.mjs --skills hookprompt --targets cursor`
+- `node scripts/validate-provider-capabilities.mjs --strict-global-hooks --json`
+- `node --test tests/setup/install-cross-platform.test.mjs`
+- `node --test tests/governance/provider-capabilities.test.mjs`
+
+## [2.8.10] - 2026-06-09
+
+### 新增
+
+- **Dynamic Workflow** - 自然语言产品需求现在会展开成当前任务真正需要的执行通道，而不是套固定清单。比如“小红书营销自动发布器”会选择产品、研究、内容、UX、前端、后端、数据、集成、安全、测试、运维；“本地待办看板”只选择更小的必要集合。
+- **Project Agent Profiles** - 动态通道会先合成本次运行固定的项目 agent profile，再进入执行。profile 记录项目范围、角色族、能力装载、记忆策略、证据规则和晋升策略；一次性 worker 不再被误认为持久项目 agent。
+- **Evidence Policy** - 研究、集成、安全、运维通道会明确声明是否必须查询当前外部证据。平台规则、API、供应商能力、合规、安全、发布路径、第三方可行性等判断，必须有来源支撑后才能锁定路线。
+- **Local Baseline Comparison** - 每个被选中的通道都要先和本地真实情况对比：canonical agents / skills、contracts、capability indexes、runtime mirrors、package scripts、MCP 配置、OS/runtime 矩阵和项目记忆。
+- **Graphify Agent Equipment** - 项目 agent profile 现在把 Graphify 当成导航和子图切片能力，而不是整图上下文注入。运行时优先复用已有图谱产物，只给 worker 注入相关切片，关键判断仍回到源文件验证，修改后再重建图谱。
+- **Conversation Notice** - 普通自然语言请求进入治理流程时，会输出本地化的人话状态提示，让用户知道现在发生了什么、下一步做什么，而不需要懂 packet 名或命令语法。
+
+### 修复
+
+- **自然语言入口** - 持久性人类请求不再要求用户说出 `meta-theory`、`Critical` 或 `Fetch` 这类协议词。产品构建类请求会自动进入治理路线，纯只读问题仍走轻量路径。
+- **OpenClaw 和 Cursor 贡献证据门** - OpenClaw 或 Cursor 相关改造必须先在对应工具端完成严格自测并提供证据，审查通过后才能合并。
+- **编排输出可读性** - 编排摘要现在能看见 project agent id、固定的 capability profile、是否需要外部证据、是否需要本地基线对比。
+
+### 验证
+
+- `node --test tests/meta-theory/31-capability-gap-orchestration.test.mjs`
+- `node --test tests/meta-theory/34-run-deliverables.test.mjs`
+- `npm run meta:sync`
+- `npm run meta:release:smoke`
+- `npm run meta:graphify:rebuild`
+- `git diff --check`
 
 ## [2.8.8] - 2026-06-09
 
-### 修复
-
-- **工具端报告文案** — meta-theory 公开报告继续保留 `Critical / Fetch / Thinking / Review` 协议标签，但会配上人话说明，例如 Fetch 是“收集证据和能力来源”。
-- **正式工具端来源** — 报告里的工具端名称和持久 agent 投影目标改为从 `config/sync.json` 与 `config/runtime-compatibility-catalog.json` 读取，避免在生成逻辑里写死 Claude/Codex/Cursor/OpenClaw 列表。
-- **持久 agent 边界** — 临时 subagent 只作为 factory / review worker，不再被当成创建出来的项目 agent。
-- **支持口径修正** — Claude Code 和 Codex 明确为完整支持；OpenClaw 和 Cursor 表述为兼容的正式投影，不再暗示不支持或降级。
-- **OpenClaw/Cursor PR 证据门** — OpenClaw 或 Cursor 的增强改造欢迎提交 PR；提交者需要先在对应工具端自己完成严格自测并提供证据，证据通过审查后才能合并。
-
 ### 变更
 
-- **中文公开表述更明确** — 面向用户的中文文案优先使用明确工具名或 `工具端`，减少把 Claude Code、Codex、Cursor、OpenClaw 说成含糊“运行时”的情况。
-- **保留 meta-theory 入口边界** — `SKILL.md` 内容不扩写，继续保持在维护者接受的 500 行以内。
-- 版本升级：2.8.7 -> 2.8.8。
+- **工具端报告文案** - 公开报告保留协议标签，但配上人能看懂的说明。
+- **工具端支持口径** - Claude Code 和 Codex 说明为完整支持；OpenClaw 和 Cursor 说明为正式兼容投影，并要求更严格的贡献证据。
+- **持久 agent 边界** - 临时 subagent 是 factory 或 review worker，不等于被创建出来的项目 agent。
+- **工具端来源** - 报告里的工具端目标来自 runtime compatibility 数据，不再写死名称。
 
 ### 验证
 
@@ -45,17 +109,11 @@
 
 ## [2.8.7] - 2026-06-09
 
-### 修复
-
-- **跨工具端 Fetch 发现证据** — 扩展 meta-theory Fetch 最小检查清单和 route searchLog，Claude Code、Codex、Cursor、OpenClaw 现在都必须在 Thinking 前显式记录项目/全局能力库存证据。
-- **工具端 provider 扫描对齐** — 全局发现器现在覆盖 Claude Code settings / MCP 证据、Cursor rules / prompts / hooks / MCP 配置、Codex hooks / config / skills，以及 OpenClaw config / workspace / skill 证据，不再只让 Codex 路径相对完整。
-- **工具端 skill 投影路径漂移** — runtime sync 现在会原样保留跨工具端 Fetch checklist，Claude、Cursor、OpenClaw 镜像不再把其它工具端的路径替换成自己的投影路径。
-
 ### 变更
 
-- **能力路由证据更可审计** — route selection 现在把 `.claude/settings.json`、`.cursor/hooks.json`、`openclaw/openclaw.template.json`、`package.json` scripts 和 OpenClaw workspace agents 都作为真实 provider evidence 输出。
-- **放宽 meta-theory 入口行数预算** — 结构守卫现在允许 `SKILL.md` 保持在 500 行以内，匹配当前维护者接受的预算。
-- 版本升级：2.8.6 -> 2.8.7。
+- **跨工具端 Fetch 发现** - Claude Code、Codex、Cursor、OpenClaw 在 Thinking 前都要记录项目和全局能力库存证据。
+- **Provider 扫描对齐** - 全局发现覆盖 settings、hooks、skills、prompts、rules、MCP config、package scripts 和 workspace agents。
+- **运行时 skill 投影稳定性** - runtime sync 保留跨工具端 Fetch checklist，不再把路径错误改写成其它工具端的投影路径。
 
 ### 验证
 
@@ -70,29 +128,19 @@
 
 ### 新增
 
-- **Capability Gap 完整产品 MVP** — 新增 Capability Gap PRD、决策合约、输出合约、真实输入回放、编排板校验和核心 MVP 验收门，让 capability gap 处理成为可验收的产品流程，而不是孤立脚本。
-- **治理 agent 流程证据** — 新增 agent design quality 评估、governance process MVP 脚本、station 合约、AI-readable product standards 和 reviewer calibration fixtures，用于验证抽象、专业、可测试的 agent 设计。
-- **Run 交付物与发布闭环报告** — 新增 run deliverables、趋势面板、Warden approval experience、GitHub gap report、只读子窗口验证包、research preparation / execution 报告、多类型能力浏览器、编排 DAG / scheduler 报告、worker output 报告和 product delivery bundle。
-- **Runtime 证据加固** — 新增 runtime live shard matrix、Cursor live boundary contract、OpenClaw batch stability report、Codex live timeout recovery evidence 和复杂 capability-gap replay 场景。
-- **可复用项目文件盘点技能** — 新增项目内 canonical skill：`same-set-reusable-flow-for-project-file-inventor`。
+- **Capability Gap 产品化** - Capability Gap 不再只是脚本能力，而是带决策合约、输出合约、真实输入回放、编排板校验和验收门的产品流程。
+- **Run 交付物** - 治理运行增加用户可见交付物、趋势面板、审批面板、GitHub 差距报告、验证包、研究报告、能力浏览器、DAG/调度报告、worker 输出报告和产品交付 bundle。
+- **Runtime 证据加固** - 增加 live shard matrix、Cursor live boundary contract、OpenClaw batch stability evidence、Codex timeout recovery evidence 和复杂回放场景。
+- **项目文件盘点技能** - 增加项目内可复用的同组文件盘点 skill。
 
 ### 修复
 
-- **项目 Claude hook 命令保持可移植** — 项目 `.claude/settings.json` 同步现在保留 repo 相对 hook 命令；全局 Claude hooks 仍使用 slash-normalized absolute commands。
-- **清理退役全局 hook** — 全局 Claude settings merge 会移除退役 Meta_Kim hook，例如旧的 git-push confirmation hook。
-- **Capability Gap PRD 闭环对齐** — complete-product PRD guard 已跟随当前完成 backlog，不再断言旧的 unfinished markers。
-- **生成报告卫生** — 生成报告移出 tracked docs 路径，并移除风险较高的 orphan cross-project batch updater。
-
-### 变更
-
-- **强化 meta-theory 编排** — 扩展默认 governed execution、多能力 Fetch、owner/loadout 证据，以及有边界的 worker-task output validation。
-- **发布证据覆盖产品闭环** — 验证栈现在覆盖产品报告、回放场景、runtime boundary evidence，以及 Warden writeback / rollback rehearsal。
-- 版本升级：2.8.5 -> 2.8.6。
+- **Hook 同步可移植** - 项目 Claude hook 命令保持 repo 相对路径，全局 hook 继续使用 slash-normalized absolute commands。
+- **生成报告卫生** - 生成报告移出 tracked docs 路径，并移除风险较高的跨项目批量更新器。
+- **PRD 闭环对齐** - complete-product guard 跟随当前完成状态，不再盯着过期的 unfinished markers。
 
 ### 验证
 
-- `node --test tests/setup/claude-settings-merge.test.mjs`
-- `npm run meta:test:setup`
 - `npm run meta:sync`
 - `npm run discover:global`
 - `npm run meta:check:global`
@@ -100,1385 +148,144 @@
 - `npm run meta:graphify:rebuild`
 - `npm run meta:release:smoke`
 - `npm run meta:verify:all`
-- `npm run meta:doctor:hooks`
 - `git diff --check`
 
 ## [2.8.5] - 2026-06-03
 
 ### 新增
 
-- **发布模式合约** — 新增低风险 prompt/doc/governance 迭代的快速常规发布路径；完整 release-grade 验证只保留给 install、runtime、hook、provider、dependency、package、安全或用户明确要求 live evidence 的改动。
-- **默认执行需求证明** — meta-theory 现在要求 release-grade 工作在 mutation 或 release 前，由自然的 Fetch -> Thinking 路线证明已经选择 execution owner、agent creation provider、skill discovery/creation provider、MCP provider、command/runtime tool 和 verification owner/path。
-- **Live 证据分类** — verification references 现在明确区分 structural smoke、UI/systemMessage warning 输出、skipped/needsAuth 状态和真正的 runtime live pass。
-
-### 变更
-
-- **澄清 validators 和 hooks 是保护，不是主引擎** — Prompt contracts 现在明确：validators、gates、hooks 可以拒绝空路线或危险路线，但默认路径本身必须发现并绑定 owner、skill、MCP、tool、runtime、OS 和 verification choices。
-- **保留 meta-theory progressive disclosure 硬线** — `SKILL.md` 继续限制在 500 行以内；发布模式细节放到 references，不膨胀入口文件。
-- 版本升级：2.8.4 -> 2.8.5。
-
-### 验证
-
-- `npm run meta:sync`
-- `node scripts/install-global-skills-all-runtimes.mjs --update --targets claude,codex,openclaw,cursor`
-- `npm run meta:sync:global`
-- `npm run meta:check:global:release`
-- `npm run meta:capabilities:smoke`
-- `npm run meta:runtime:probe`
-- `npm run meta:providers:validate`
-- `node scripts/validate-provider-capabilities.mjs --strict-global-hooks`
-- `npm run meta:deps:compat`
-- `npm run meta:release:smoke`
-- `git diff --check`
+- **发布模式** - 低风险 prompt、文档、治理文案改动走快速发布路径；安装、runtime、hook、provider、dependency、package、安全和 live evidence 相关工作仍走更严格的 release-grade 路径。
+- **执行需求证明** - release-grade 工作必须在修改或发布前证明 Fetch -> Thinking 路线已经选择 owner、agent provider、skill provider、MCP provider、command/runtime tool 和 verification path。
+- **Live 证据分类** - structural smoke、warning、skipped/needs-auth 和真实 runtime live pass 被明确区分。
 
 ## [2.8.4] - 2026-06-02
 
 ### 新增
 
-- **默认能力发现 smoke** — 新增 `npm run meta:capabilities:smoke`，用于证明真实执行需求会自然选择执行 owner、agent provider、agent creation provider、skill discovery / creation provider、MCP provider、command/runtime tool 和 verification path。
-- **OpenClaw live 分片能力** — live meta-agent 评估支持 `--agent=<id[,id]>`，长时间 Claude/OpenClaw live 检查可以分片恢复、定位问题。
+- **能力发现 smoke** - 增加 smoke 命令，用来证明真实执行需求可以自然选择 owner、provider、tool 和 verification path。
+- **OpenClaw live 分片** - Claude/OpenClaw 长时间 live 检查可以按 agent 分片，便于恢复和定位问题。
 
 ### 修复
 
-- **Execution routing 在进入执行前绑定真实 provider** — 工程执行路线现在必须具备执行级 owner / provider / verification 绑定，不能主要依赖 validator 或 gate 在后面兜空路线。
-- **OpenClaw live evaluation 继承主配置 provider/model** — OpenClaw smoke 直接读取主 OpenClaw 配置；live Meta_Kim agent 检查会把主配置 provider/model 定义合并进临时 project-agent config，让项目 agent 使用与用户 OpenClaw 安装一致的 provider 表面。
-- **加固 live evaluator 解析和恢复** — Claude/OpenClaw 结构化 payload 解析现在支持嵌套 JSON 文本、OpenClaw session JSONL 恢复、子进程清理，以及不降低阈值的边界表达同义词覆盖。
-- **OpenClaw auth hydration 更稳** — 当 `main/agent` auth 缺失时，本地 OpenClaw meta-agent auth 可以从已有可用 meta-agent auth 来源补齐，并避免覆盖已经可用的 agent auth 文件。
-
-### 验证
-
-- `npm run meta:capabilities:smoke` — 通过
-- `npm run meta:test:governance` — 通过
-- `npm run meta:providers:validate` — 24 providers，0 errors，0 warnings
-- `node scripts/validate-provider-capabilities.mjs --strict-global-hooks` — 24 providers，0 errors，0 warnings
-- `npm run meta:verify:all` — Claude/Codex/OpenClaw smoke 通过，880/880 tests 通过
-- `npm run meta:verify:all:live` — Claude、Codex、OpenClaw 的 live-only evaluator gate
-- `npm audit --audit-level=high --registry=https://registry.npmjs.org` — 0 vulnerabilities
-- 版本升级：2.8.3 -> 2.8.4。
+- **执行路由** - 工程执行进入 Execution 前必须先绑定真实 owner / provider / verification 证据。
+- **OpenClaw live evaluation** - OpenClaw 检查继承配置好的 provider/model 表面，并能更稳地恢复嵌套 JSON 和 session 输出。
+- **OpenClaw auth hydration** - 本地 OpenClaw auth 可以复用已有可用的 meta-agent auth 来源，同时不覆盖已经能用的文件。
 
 ## [2.8.3] - 2026-06-02
 
 ### 新增
 
-- **Capability Provider Contract** — 新增 provider 级合约与注册表，用于按 runtime、OS、install layer 审计 `runtime_native`、canonical/external skill、agent、hook、command、rule、plugin、MCP server、dependency project、memory provider、graph provider。
-- **Provider 生命周期状态机** — Provider 现在记录 `unknown -> declared -> projected -> installed -> trusted -> discoverable -> invokable -> context_effective / enforcement_effective -> verified`，并记录 `missing_global_install`、`output_not_consumed`、`degraded`、`blocked_for_execution` 等失败状态。
-- **Provider validator** — 新增 `npm run meta:providers:validate`，失败时会指出具体 provider / runtime / OS / install layer 缺口，并支持严格检查 Codex 全局 HookPrompt 链路。
+- **Capability Provider Contract** - 增加 provider registry 和生命周期模型，用于管理 runtime-native tools、skills、agents、hooks、commands、rules、plugins、MCP servers、dependency projects、memory 和 graph providers。
+- **Provider validator** - 增加 provider/runtime/OS/install-layer 缺口校验，并支持严格检查全局 Codex hook。
 
 ### 修复
 
-- **修复 Codex 全局 HookPrompt 链路** — 全局 Codex `UserPromptSubmit` hook 已 add-only 接入 `hookprompt-adapter.mjs`，保留现有 planning hooks，同时确保 HookPrompt 输出进入模型上下文。
-- **Plugin provider 不再隐形** — `superpowers`、`ecc`、`cli-anything` 已进入 capability index 和 provider registry；inventory 输出现在能报告非零 plugin / plugin-bundle 数量。
-
-### 变更
-
-- **Dependency registry 保持依赖职责** — Provider 可用性、安装状态、信任状态、输出合约和降级信息进入 `provider-registry.json`；dependency registry 继续只负责可复用项目评分与路由资格。
-- **保留 OpenClaw 能力真实性** — OpenClaw 在只有 workspace instruction 或 lifecycle hooks 的位置继续标记为 degraded/partial；未声称已具备 typed plugin tool-blocking adapter。
-- 版本升级：2.8.2 -> 2.8.3。
-
-### 验证
-
-- `npm run meta:check:runtimes`
-- `npm run meta:deps:check`
-- `npm run meta:deps:compat`
-- `npm run meta:providers:validate`
-- `node scripts/validate-provider-capabilities.mjs --strict-global-hooks`
-- `npm run meta:test:governance`
-- `npm run meta:graphify:rebuild` / `npm run meta:graphify:check`
+- **Codex HookPrompt 链路** - 全局 Codex prompt hook 保留原有 planning hooks，同时确保 HookPrompt 输出进入模型上下文。
+- **Plugin 可见性** - plugin 和 plugin-bundle provider 进入 capability index 与 provider registry。
 
 ## [2.8.2] - 2026-06-02
 
-### 修复
-
-- **降低 Hook 死锁压力** — 运行时 hooks 现在只作为关键行为的最后保险丝：真实意图、Fetch/能力发现、已选择 owner、owner 对应的 agent/skill/command/MCP/tool/prompt loadout、记忆策略、运行时/OS 支持，以及不安全的 meta-agent mutation。
-- **可选 packet 字段不再硬阻断执行** — Worker packet 细节、rollback 字段、verification owner 细节、warning classification 和 writeback reservation 仍由 validator / Review / public-ready gate 检查，不再作为所有 hook 的通用硬拦截条件。
-- **放宽单 worker 调度追踪** — 单 worker 路径不再因为缺少 `taskPacketId` 或 `roleInstanceId` 直接 hard deny；多 worker 场景会提醒 Review 检查追踪性，而不是造成 hook 卡死。
-- **Codex Windows 更新路径不再恢复 macOS 通知命令** — `setup.mjs --update` 和全局同步现在会在 Windows 上把继承来的 Codex `terminal-notifier` `notify` 命令替换为 Windows-safe no-op notifier，避免已安装用户重新遇到 `legacy_notify program not found`。
-- **可选 Codex 原生插件错误更安静** — `codex plugin add superpowers@openai-curated` 失败现在只输出一条可选 warning，不再在更新过程中泄漏原始 marketplace/cache 错误。
-- **技能更新 fallback 不再吓人** — managed skill 的 `git pull --ff-only` 如果马上会被 re-clone fallback 修复，现在不会先打印原始 git error 再走成功 fallback。
-
 ### 变更
 
-- **澄清 meta-theory 执行门** — `Critical -> Fetch -> Thinking -> Execution -> Review` 现在重点检查任务是否想清楚、是否存在匹配 owner/provider/loadout、以及记忆策略是否明确。
-- **统一跨运行时 hook 表述** — Claude Code、Codex、Cursor、OpenClaw 文档现在如实描述 hook 覆盖范围，包括 Codex hook 的版本依赖，以及 OpenClaw 在 typed plugin adapter 安装前仍以声明式 enforcement 为主。
-- **拆分 Hook progression policy** — `requiredPreflightChecks` 只保留关键行为最低集合；详细完整性移到 `optionalValidatorChecks`。
-- 版本升级：2.8.1 -> 2.8.2。
-
-### 升级说明
-
-- 已 clone 安装的用户应先用 `git pull --ff-only` 更新源码，再运行 `node setup.mjs --update` 或 `npm run meta:sync:global` 刷新已安装投影。
-- `node setup.mjs --update` 只刷新当前安装的 projections 和依赖；它不会自动拉取新的 Meta_Kim 源码。
-- 项目本地用户拉取后如需重新生成 `.claude`、`.codex`、`.cursor` 和 OpenClaw mirrors，请运行 `npm run meta:sync`。
-
-### 验证
-
-- `npm run meta:verify:all` — 通过
-- `npm run meta:verify:governance` — 通过
-- `npm run meta:check` — 通过
-- `npm run meta:graphify:rebuild` / `npm run meta:graphify:check` — 通过
-- `git diff --check` — 通过
+- **Runtime compatibility catalog** - runtime 支持数据归一到兼容性目录，覆盖 sync 行为、原生能力声明和 package targets。
+- **候选工具端处理** - opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode、Qoder 等被诚实记录为安装目标或候选 probe，不再夸大成完整投影。
 
 ## [2.8.1] - 2026-06-02
 
-### 修复
-
-- **决策面跳过策略澄清** — `queryBypass`/只读现在是安全和路径分类边界，不是存在分支选项时的决策面跳过理由。在所有合约、策略和 agent 定义中将 `pure_read_only_queryBypass` 重命名为 `no_branching_choice`。
-- **移除 simpleMode 后门** — 从脊柱状态创建、所有门控检查、跳过逻辑和四语言 i18n 字符串中移除 `simpleMode` 标志。simpleMode 是仅消费者功能，没有生产者侧初始化，造成了绕过调度治理的不对称。
-- **修复 queryBypass 脊柱状态死锁** — 添加死锁打破机制：`queryBypass` 运行现在可以写入 `spine-state.json` 本身（通过 `isSpineStateWrite()` 限定范围），否则一旦激活就无法清除 `queryBypass`。
-- **清理 i18n 过时引用** — 从四种语言的恢复指令中移除过时的 simple-mode 引用。
-
 ### 变更
 
-- **隐藏状态骨架初始化** — `createInitialState` 现在在 claude 和 shared 脊柱状态模块中种子 `controlState: "normal"`、`gateState: "pending"`、`surfaceState: "silent"`。
-- **controlState/gateState/surfaceState 枚举统一** — `controlState` 收敛为 `normal / skip / interrupt / override / iteration / intentional_silence / degraded`。`gateState` 为 `pending / pass / fail / rework / blocked`。`surfaceState` 为 `silent / notice / decision`。公开就绪状态从 `surfaceState` 分离到摘要/公开面数据包。
-- **新增 Critical-Fetch 意图循环** — 模糊或歧义输入现在进入有界 Critical-Fetch 循环（最多 `criticalFetchLoopMax = 3` 轮），配合 IntentCard 确认。新字段：`criticalFetchLoopCount`、`intentCard`、`intentConfirmationState`、`intentCorrectionPayload`。
-- **能力发现路由优化** — 所有者发现现在使用 provider-first evidence / owner-last binding。路由输出暴露 `runtimeToolProviders`、`discoveryPrinciple`、`ownerBindingOrder` 和 `routeExecutionGate`（过期缓存可预览路由但不能进入 Execution）。
-- **运行时矩阵测试加固** — Cursor hook/subagent 断言从弱正则改为结构化字段检查。OpenClaw `popup / overlay / approval UI` 从 `partial` 收紧为非原生。OpenClaw 文档澄清内部 hooks 与 typed plugin hooks 的区别，workspace 不是硬沙箱。
-- **决策模板渲染器中立** — 通用决策和批量模板不再嵌入运行时特定 schema（AskUserQuestion JSON）。渲染器特定 payload 放在运行时适配器合约中（`runtime-claude.md`、`runtime-codex.md`）。
-- **choice-surface-policy.json 扩展** — 新增 `intentConfirmationCard`、`choiceSurfaceAdapterContract` 和 `readOnlyPolicy`。
-
-### 验证
-
-- `tests/meta-theory/11-eight-stage-spine.test.mjs` — 106/106 通过
-- `tests/meta-theory/00-capability-discovery.test.mjs` — 42/42 通过
-- `tests/meta-theory/e2e-eight-stage-live.test.mjs` — 37/37 通过
-- `tests/governance/capability-routing.test.mjs` — 1/1 通过
-- `tests/governance/runtime-capability-matrix.test.mjs` — 1/1 通过
-- `scripts/validate-capability-routing.mjs` — valid
+- **公开支持口径** - README 和 runtime-facing docs 对齐 supported、compatible、candidate 状态。
+- **投影同步说明** - 项目本地和全局 sync 行为更容易解释和验证。
 
 ## [2.8.0] - 2026-06-01
 
 ### 新增
 
-- **降级模式协议（Degraded Mode）** — Agent dispatch 不可用或无匹配 owner 时，spine 进入 `controlState=degraded` 而非静默跳过阶段。要求记录 `capabilityGapPacket`、`degradationReason`，且 `surfaceState` 保持 `internal-ready`。降级模式下禁止声称 `public-ready`。
-- **Fetch 发现清单** — Fetch 阶段在进入 Thinking 前必须搜索至少 6 个位置（全局 agents、项目 agents、skills、MCP 配置、capability index、package scripts）。通过条件：`capabilityDiscovery.searchLog` 存在。
-- **对抗验证模式（Adversarial Verify）** — `regulated_path` 的 Review 阶段生成 N=3 个独立怀疑者，各自用不同视角（正确性、安全性、完整性）尝试反驳每个 finding。仅多数反驳失败时 finding 存活。投票记录在 `adversarialVotes` 字段。
-- **Fetch 角度分解** — 研究类任务（`researchRequired=true`）在搜索前将问题拆分为 N 个语义不同的搜索角度，记录在 `searchAngles` 字段。默认 N=3。
-- **Worker 输出 schema 验证** — `workerTaskPacket.output` 定义了预期结构时，dispatcher 对 worker 返回结果做格式校验。不匹配则重试（最多 2 次）。记录在 `schemaValidationAttempts`。
-- **执行中交互沟通** — 多阶段任务中，dispatcher 在 5 个自然过渡点向用户报告进度：Fetch 完成、Thinking 完成、每阶段完成、scope 变更、路线变更。每次最多 3 条摘要。scope 或路线变化时升级为 Decision 卡片。
-- **Fetch 基线验证通道** — Fetch 阶段现在可以在路线选择前运行定向只读基线检查，包括 `node --test`、`node scripts/run-node-tests.mjs`，以及名称属于 test/check/verify/validate/lint/typecheck 形态的安全包管理器脚本。
-
-### 变更
-
-- **spine-state.md** — controlState 枚举增加 `degraded`；增加降级模式各阶段通过条件。
-- **dev-governance.md** — 增加降级模式段落和交互沟通段落。
-- **owner-resolution.md** — 增加无 Agent dispatch 时的降级 owner 解析路径。
-- **workflow-contract.json** — review/meta_review/verification 增加 `degradedPolicy`；reviewFinding 增加 `adversarialVotes`；contentEvidencePacket 增加 `searchAngles`。
-- **Critical -> Fetch hook 推进** — 活跃运行开始收集仓库证据或写 planning files 时会进入 Fetch，避免把基线测试误判为 Critical 阶段的 mutation。
-- **只读 Bash 分类** — Hook 命令切分现在尊重引号，允许复合探测里的 shell-local `cd`，并把 `2>&1` 识别为 fd 重定向而不是写入工作区。
-- **运行时能力真实性回归** — runtime-native preservation 现在锁定 Codex hook support 为 `partial`，同时允许 Cursor hook support 在 runtime matrix 证据下保持 `native`。
-- 版本升级：2.7.0 -> 2.8.0。
-
-### 验证
-
-- `npm run meta:validate` — 7/7 通过
-- `npm run meta:sync` — 4 个 runtime 同步完成（claude、codex、openclaw、cursor）
-- `npm run meta:check` — 全绿，无过期 projection
-- `npm run meta:test:setup` — 312/312 通过
-- `npm run meta:test:meta-theory` — 857/857 通过
-- `npm run meta:test:governance` — 33/33 通过
+- **Provider-first governance** - Meta_Kim 从工具名路由转向 provider 和 capability 路由。
+- **Runtime 和 OS 证据门** - 执行路线在行动前检查 runtime 支持、OS 支持、依赖状态、owner、weapon 和 verification path。
+- **安装与发布证据** - setup、sync、runtime、provider 和 release 检查进入常规发布叙事。
 
 ## [2.7.0] - 2026-06-01
 
 ### 新增
 
-- **两速能力发现模型** — 新增 Codex 可用的发现策略：安装、更新、用户明确刷新、缓存缺失或过期、缺少必要 provider、高风险 provider 路由时才做全局全扫；普通 governed run 读取全局缓存并轻扫当前项目。
-- **Provider-first owner 路由** — owner discovery 从 agents / skills 扩展到 commands、hooks、rules/prompts、MCP capabilities、runtime tools 和 plugins，创建或升级 execution agent 前必须先匹配已有 provider。
-- **能力扫描 UX 契约** — 新增刷新提示与 token 控制：运行时只暴露覆盖数量、top candidates 和 source refs，不把完整 provider catalog 倒进上下文。
-- **Codex 实机发布冒烟** — 验证当前 Codex CLI 可以在只读非交互模式下加载 Meta_Kim、项目说明、skills 和 hooks。
+- **能力路由治理** - 引入 capability-first execution routing、owner/loadout evidence 和 provider discovery，作为治理工作的默认形态。
+- **工具端对齐** - Claude Code、Codex、OpenClaw、Cursor 围绕 canonical source 对齐，同时保留真实 runtime 限制。
 
-### 变更
-
-- **Execution route selection** — `select-execution-route` 现在输出 provider coverage、cache freshness、full-scan triggers，并在 capability gap packet 中记录已检查的 provider 证据。
-- **Meta-theory 执行纪律** — Critical、Fetch、Thinking、Review 现在要求执行或创建 agent 前必须具备 existing owner/provider discovery evidence。
-- **Execution-agent card 抽象边界** — durable execution-agent card 保持能力类别抽象；具体文件、ticket、单次任务和 verification steps 只能进入 worker task packets。
-- 版本升级：2.6.2 -> 2.7.0。
-
-### 验证
-
-- `codex --version`
-- `codex doctor`
-- `codex -a never exec --ephemeral --sandbox read-only -C <repo> "Codex实机冒烟测试：不要修改文件，不要运行外部命令。读取项目说明后，用一句中文回答你能看到Meta_Kim项目且当前任务是发布前验证。"`
-- `npm run meta:sync`
-- `npm run meta:sync:global`
-- `npm run meta:check:global:release`
-- `npm run meta:verify:all`
-- `git diff --check`
-
-## [2.6.2] - 2026-05-30
+## [2.6.x] - 2026-05-29 至 2026-05-30
 
 ### 新增
 
-- **决策交叉验证 gate** — meta-theory 新增决策交叉验证入口，要求 PR、issue、release、兼容性、public-ready 和技能优先级决策记录 evidence snapshot time、source-state matrix、confidence labels、counterevidence、contradiction log、falsification checks 和 replay commands。
-- **风险到技能绑定模式** — 新增内部 decision pattern：PR / issue / release 工作必须先绑定一个主风险 lane，最多一个副 lane，再进入下一个可执行 gate。
-- **对抗式 review 回归测试** — 新增 governance tests，锁住 cross-validation gate、risk-to-skill binding 和 stale-state rejection 行为。
+- **治理执行报告** - 增加更完整的 run report、status envelope 和公开证据表面。
+- **研究和能力准备** - 增加 source-backed research preparation、retrieval capability discovery 和 multi-type capability inventory。
+- **全局能力发现** - 扩大扫描 installed agents、skills、hooks、commands、MCP config、plugins 和 runtime mirrors。
 
-### 变更
-
-- **Decision-pattern weapon 覆盖扩展** — Meta_Kim decision-pattern weapon 现在覆盖 PR/issue triage、skill prioritization 和 public-ready decision。
-- 版本升级：2.6.1 -> 2.6.2。
-
-### 验证
-
-- `node --test tests/governance/decision-cross-validation.test.mjs`
-- `npm run meta:verify:governance`
-- `npm run meta:verify:all`
-- `npm run meta:graphify:rebuild`
-- `npm run meta:graphify:check`
-- `git diff --check`
-
-## [2.6.0] - 2026-05-29
+## [2.5.x] - 2026-05-28
 
 ### 新增
 
-- **可执行治理校验器** — 新增 prompt executability、foundational capability preservation、dependency compatibility 三类 validator，并接入 `meta:verify:governance`。
-- **治理回归覆盖** — 新增 agent boundary、reference contract、strict intent validation、route completeness、public-ready gate、Kim_Decision 路由、硬编码路径防护、scar/evolution 等行为测试。
-- **依赖与能力索引** — dependency discovery 和 capability inventory 输出现在包含 runtime support、OS support、invocation path、verification method、writeback key、route eligibility 和 preservation metadata。
+- **治理决策引擎** - 增加 runtime capability、OS compatibility、dependency capability、weapon routing、trigger-action policy、intent amplification、choice surfaces、dynamic lens selection 和 decision-pattern contracts。
+- **面向用户的架构文档** - 扩展 runtime capability、dependency discovery、owner/weapon routing 和 choice surfaces 说明。
 
-### 变更
-
-- **Meta-theory dispatcher** — 将 canonical meta-theory skill 重构为紧凑 dispatcher，按 Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verification -> Evolution 路由，而不是继续作为理论合集。
-- **Reference contract 与 Agent SOP** — 将 meta-theory references 和 9 个治理 agent 转为可执行合同：包含 trigger、required inputs、output packet、pass/fail、escalation、verification、writeback、preserve。
-- **Route 与 intent 验证升级** — execution route selection 从关键词路由升级为 owner + weapon + dependency + runtime + OS + verification 评分；intent acceptance 支持真实 run artifact strict validation。
-- **Runtime / OS 兼容性** — 在 macOS、Windows、WSL2 之外补上 Linux 覆盖，并保留 Claude Code、Codex、Cursor、OpenClaw 的 native/partial/unknown 能力边界。
-- 版本升级：2.5.0 -> 2.6.0。
-
-### 修复
-
-- **Kim_Decision 状态机** — Kim_Decision 现在作为 discovered decision protocol / skill candidate / reference 状态机保留，不硬编码本机路径，不永久禁用，也不会被当作 code executor。
-- **底层元能力保护** — prompt cleanup 现在由 validator 防止误删 skills、WebSearch/Browser/Research、Shell/Filesystem/Patch、MCP、Memory、Graph、Hooks、scripts、runtime tools 和平台原生能力。
-- **public-ready gate 加硬** — public-ready 必须具备 verification evidence、intent acceptance、无未关闭 high/critical findings，以及 writeback decision。
-
-### 验证
-
-- `npm run meta:validate`
-- `npm run meta:runtime:validate`
-- `npm run meta:os:check`
-- `npm run meta:deps:discover`
-- `npm run meta:deps:check`
-- `npm run meta:deps:compat`
-- `npm run meta:capabilities:index`
-- `npm run meta:capabilities:route -- --task "fuzzy product monetization task" --runtime codex --os windows --json`
-- `npm run meta:lens:select -- --taskShape strategy_product_decision --realIntent "choose shortest correct path" --json`
-- `npm run meta:governance:validate`
-- `npm run meta:route:validate`
-- `npm run meta:intent:validate -- --template`
-- `npm run meta:intent:validate -- --strict --input tests/fixtures/run-artifacts/valid-run.json`
-- `npm run meta:prompt:validate`
-- `npm run meta:test:meta-theory`
-- `npm run meta:foundational:validate`
-- `npm run meta:test:governance`
-- `npm run meta:verify:governance`
-
-## [2.5.0] - 2026-05-28
+## [2.4.x] - 2026-05-27 至 2026-05-28
 
 ### 新增
 
-- **治理决策引擎** — 新增 runtime capability、OS compatibility、dependency capability、weapon routing、trigger-action、intent amplification、choice surface、dynamic lens、decision-pattern 等治理契约。
-- **能力发现与路由脚本** — 新增 probe、discovery、inventory、routing、lens selection 和 governance validators，让 Meta_Kim 在执行前能找到 owner + weapon + runtime + OS + verification 路径。
-- **治理回归测试** — 新增 trigger/action 契约、runtime matrix 规则、dependency registry 边界、weapon routing、dynamic lens selection、intent acceptance、capability routing 等测试。
-- **治理文档** — 新增 runtime capability、dependency discovery、owner/weapon routing、trigger-action governance、intent amplification、dynamic lens discovery、choice surface 和 internal decision patterns 文档。
+- **研究路线加固** - 研究工作必须先证明 retrieval capability，才能影响 route design。
+- **接口集成合约** - 第三方和内部 API 集成获得明确 contract packets、未知字段处理、evidence refs 和 review gates。
+- **运行状态表面** - 增加本地化 run-status 输出。
 
-### 变更
-
-- **Kim_Decision 边界纠正** — Kim_Decision 不再被建模为 Meta_Kim 依赖。可复用的 decision-engine 部分沉淀为 Meta_Kim 自有 decision-pattern catalog，只作为参考材料使用。
-- **Meta-theory 执行规则收紧** — 更新 `AGENTS.md`、README 和 meta-theory skill：非纯问答任务先做 capability search；平台任务查 runtime/OS matrix；public-ready 必须通过 verification + intent acceptance；Evolution 必须 writeback 或记录 none-with-reason。
-- 版本升级：2.4.3 → 2.5.0。
-
-### 验证
-
-- `npm run meta:verify:governance`
-- `npm run meta:validate`
-- `npm run meta:sync`
-- `npm run meta:graphify:rebuild`
-
-## [2.4.3] - 2026-05-28
-
-### 修复
-
-- **Codex 项目 skill 根目录清理** — Codex 项目 skill 现在只同步到 `.agents/skills/`，对齐当前 Codex 项目级 skill 位置，避免重复出现 `meta-theory`。
-- **旧 `.codex/skills` 迁移** — 安装 / 更新 / 同步会移除旧的 Meta_Kim 管理镜像 `.codex/skills/meta-theory`，并且只在 `.codex/skills` 变为空时删除该目录，保留用户自己的 skill。
-- **安装与校验路径对齐** — setup check、runtime validation、footprint、生成的 Codex command 文档和多语言 README 都改为以 `.agents/skills/` 作为唯一项目 skill 根。
-- **依赖安全基线** — 将 `@modelcontextprotocol/sdk` 提升到 `^1.29.0`；新安装会解析到已修复本地 audit 问题的传递依赖版本。
-
-### 变更
-
-- 版本升级：2.4.2 → 2.4.3。
-
-## [2.4.2] - 2026-05-28
-
-### 修复
-
-- **Planning files 8 阶段全覆盖** — 更新 `planning-files.md` 覆盖完整 spine（Critical → Fetch → Thinking → Execution → Review → Meta-Review → Verification → Evolution），而不仅限于 Stage 3。每个阶段现在都有明确的 planning file 更新职责。
-- **SKILL.md 引用对齐** — 更新 planning-files 引用描述，反映 8 阶段覆盖。
-
-### 变更
-
-- 版本升级：2.4.1 → 2.4.2。
-
-## [2.4.1] - 2026-05-28
-
-### 修复
-
-- **Meta-theory 交付可信度** — 将 `/meta-theory` 收敛为渐进式 dispatcher，长流程细节下沉到 references，并让 Critical / Fetch / Thinking / Review 的可见阶段反馈保持极简、人能看懂、跟随用户目标语言；内部 packet 字段名可显示，但必须配人话标签。
-- **验证证据链加固** — `verifySteps[].id` 必须绑定 `workerExecutionEvidence[].verifyStepRef`；`json-output` 必须真实可解析；`fixEvidence` 结构化；`accepted_risk` 必须有负责人和复查触发；`skipped` worker 证据不能再冒充 verified 或 public-ready。
-- **跨 runtime 提示词 / rules 对齐** — Conductor、Artisan、Cursor rules 和 runtime prompts 已对齐：只有 2+ 独立并行 lane 才用 agent-team playbook；能力发现按 runtime 感知；Cursor 生成提示词不再重复标题和警告。
-- **发布文档清理** — 修正已删除 runtime matrix 文档的陈旧链接；ECC 仓库统一为 `affaan-m/ECC`；同步新版本的包元数据。
-
-### 变更
-
-- 版本升级：2.4.0 -> 2.4.1。
-- 补充 rules 与 scripts 的维护入口，方便用户判断哪些规则和脚本当前有效，不再靠猜。
-
-## [2.4.0] - 2026-05-27
-
-### 修复
-
-- **ECC 安装策略修正** — ECC 现在指向 `affaan-m/ECC` 和 `ecc@ecc`；`codex`、`opencode`、`qwen` 等 home target 使用 ECC 原生 CLI 的 `core` profile；安装更新会清理旧的 `everything-claude-code` fallback 目录；`cursor`、`zed`、`gemini`、`codebuddy`、`antigravity`、`joycode` 等 project-local target 会提示在项目根目录运行 ECC，而不是误装到 npm 缓存或 `skills/` fallback。Codex 当前会得到上游 `refactor-cleaner` agent，但不会有 `/refactor-clean` slash command，因为上游 ECC 的 Codex target 不包含 `commands-core`。
-- **H-001** — README.md 徽章链接已使用 https://（已验证，无需修改）
-- **M-002** — MCP Memory Service 端点使用 MCP_MEMORY_URL 环境变量（已验证，无需修改）
-- **M-003** — 版本号不一致 - 统一为 2.4.0
-
-### 变更
-
-- 版本升级：2.3.2 → 2.4.0
-
-## [2.3.2] - 2026-05-26
-
-### 修复
-
-- **DOC-001 (MEDIUM) — 数据结构契约文档缺失** — 在 `SKILL.md` 中新增"Data Structure Contract"部分，说明每个阶段的必需输出字段、Choice Surface State 生命周期和验证钩子。
-- **DOC-002 (LOW) — 状态管理归属不明确** — 在 `meta-warden.md` 中新增"State Management Responsibilities"部分，在 `meta-conductor.md` 中新增"Choice Surface State Management"部分。
-
-## [2.3.1] - 2026-05-26
-
-### 修复
-
-- EB-002 (HIGH) + HOOK-INFRA-001 (LOW) — spine-state.mjs 加入 read_only_verifier 槽位 + recordDispatch 自动追加 dispatchChain + enforce-agent-dispatch.mjs 插入 read_only_verifier 闸门。
-- EB-004 (LOW) — preDecisionOptionFrame 嵌套归一化（warn-only 校验器 + 迁移辅助脚本 + 规范位置文档）。
+## [2.3.x] - 2026-05-26
 
 ### 新增
 
-- `scripts/migrate-spine-state-eb004.mjs` 迁移辅助脚本。
-- 21 前缀只读校验命令白名单。
-- `dispatchChain[stage]_supplementary[]` 审计字段。
+- **证据完整性合约** - worker 关于测试和命令成功的声明必须有结构化 execution evidence。
+- **静默成功处理** - 无输出但成功的命令用 exit-code evidence 表达，不再制造占位文本。
+- **Validation contract 结构** - validation rules 迁移为更可复用的 schema 和 runner。
 
-### 变更
-
-- `STAGE_META_AGENT_MAP` schema 加新字段（增量，向后兼容）。
-- `recordDispatch` 函数签名加 `toolInput` 参数。
-- 版本 2.3.0.1 → 2.3.1。
-
-## [2.3.0.1] - 2026-05-26
-
-### 变更
-
-- 重命名 `canonical/runtime-assets/claude/hooks/ecc-batching-wrapper.mjs` → `canonical/runtime-assets/claude/hooks/ecc-permission-cache-wrapper.mjs`（关闭 W2 F1 评审项）。
-- Docstring 与实际权限缓存行为对齐。
-- 无行为变更。
-
-## [2.3.0] - 2026-05-26
-
-### 修复
-
-- **Item 1 — ECC plugin macOS 安装失败（新）** — `config/skills.json` 防御性规范由 `ecc@ecc` 改为 `everything-claude-code@ecc`，以兼容上游 affaan-m/everything-claude-code → ecc 插件改名跨新旧 marketplace 缓存。`scripts/install-global-skills-all-runtimes.mjs` 在 marketplace 注册和插件安装之间加入刷新循环（`claude plugin marketplace update <id>`），以确保解析前缓存已更新。来源证据：本地缓存 `~/.claude/plugins/marketplaces/ecc/.claude-plugin/marketplace.json`（当前 HEAD，插件名=ecc，版本 2.0.0-rc.1）vs `~/.claude/plugins/marketplaces/everything-claude-code/.claude-plugin/marketplace.json`（旧版，插件名=everything-claude-code）。防御性规范对两种状态都生效。
-- **EB-008（HIGH）— workerExecutionEvidence 静默成功语义** — `config/contracts/workflow-contract.json::workerExecutionEvidenceField` 新增 `successMarkerFormat` enum (`stdout-text` | `exit-code-only` | `json-output`) 及 `exitCode`、`commandRanAt` 属性。静默成功命令（`node --check`、`tsc --noEmit`）只有在 `successMarkerFormat="exit-code-only"` 且 `exitCode=0` 且 `commandRanAt` 已记录时才允许 `actualOutput` 为空。关闭 v2.2.5 `accepted_risk`（W1 诚实披露 exit codes；占位符压力模式 `EXIT_OK\n` 退役）。`canonical/agents/meta-prism.md::Decision Rule 16` 同步扩展（silent-success extension v2.3.0）。
-- **EB-009（LOW）— 公开撤回错判（dogfood）** — v2.2.5 release notes 声称 `validate-project.mjs:15 loadRuntimeProfiles` 未被使用。重新验证显示其在 `validate-project.mjs:2808` 的 `validateSyncConfiguration()` 内被实际调用，且 `scripts/meta-kim-sync-config.mjs:271,333` 也定义和使用。该 import 必需保留。v2.2.5 release notes + CHANGELOG 中英双语条目均加入撤回引用/子条目。不做代码裁剪。
-- **EB-010（MEDIUM）— 同级 schema 风格归一化** — `config/contracts/workflow-contract.json::workerExecutionEvidenceField` 由异构 `fieldType`/`itemSchema`/顶层 `enforcement` 布局重塑为标准 JSON Schema `type`/`items`/`properties` + `_meta` 边带元数据。同级风格现在与 `verifyStepsField`、`fileCompletionListField` 一致。`_meta.closes` 列出 `[EB-005, EB-008, EB-010]`。
+## [2.2.x] - 2026-05-25
 
 ### 新增
 
-- **EB-003（MEDIUM）— Meta_Kim ECC 批处理包装钩子（Option D，用户选定）** — `canonical/runtime-assets/claude/hooks/ecc-permission-cache-wrapper.mjs`（新增）实现 PreToolUse 会话+文件缓存键（SHA256(session_id || file_path)），TTL 5 分钟，存储位置限定 `os.tmpdir()`。幂等 + 缓存写失败非致命。钩子尚未在 `.claude/settings.json` 中注册（仅 canonical），v2.3.x 决定是否注册。详见 F1（`EB-011` backlog）。
-
-### 变更
-
-- `package.json` — 版本 `2.2.5 → 2.3.0`。
-- 运行时镜像（`.claude/`、`.codex/`、`.cursor/`、`openclaw/`）经 `npm run meta:sync` 重新同步。
-
-### 验证
-
-| 检查 | 结果 | 标记 |
-|---|---|---|
-| `npm run meta:check`（meta:sync 后） | **20/20 通过** | `stdout-text` |
-| W2（Prism）审查 | qualityGate=pass；0 HIGH/MEDIUM，3 LOW → backlog | 无 |
-| W3（Warden）元审查 + 验证 | pass；Rule 16/17 dogfood 履行 | 无 |
-| 跨文件一致性（`Rule 16` ↔ `successMarkerFormat` enum） | enum 名 + 条件匹配 | grep 比对 |
-
-### 顺延到 v2.3.1
-
-- **EB-002（HIGH）** — `read_only_verifier` 能力槽。**RFC 尚未起草。** v2.3.0 亲身验证 bug 真实存在（W2 + W3 reviewer 子智能体都被 `enforce-agent-dispatch.mjs` 在 review/meta_review 阶段阻止运行 `git diff` / `npm run meta:check`）。需要修改 `spine-state.mjs`（冻结面）。v2.3.1 RFC 必须定义：验收标准、允许命令白名单、scope 契约、测试计划。
-- **EB-004（LOW）** — `preDecisionOptionFrame` 嵌套归一化。**RFC 尚未起草。** v2.3.0 暴露 bug（`choiceSurfaceState` 必须同时在 spine 顶层和 `preDecisionOptionFrame` 内设置才能满足 hook 的 `state.choiceSurfaceState` 查找——字段位置令人困惑）。需要修改 `spine-state.mjs`。v2.3.1 RFC 必须定义：字段规范位置、迁移计划、validator 关卡。
-- **EB-011（LOW，v2.3.0 新发现）** — `ecc-permission-cache-wrapper.mjs` docstring 声称"批处理 ECC 插件安装副作用"，但实现只是写每个（会话,文件）缓存标记 + 缓存命中时返回 `permissionDecision=allow`（不实际阻止/延迟工具调用）。v2.3.x 决定：要么改名为 `ecc-permission-cache-wrapper.mjs`，要么加强行为以实际在 TTL 内拒绝/跳过重复有副作用的调用。
-- **Hook 基础设施 bug（v2.3.0 新发现）** — 在 `review`/`meta_review`/`verification` 阶段的 Agent 分派不会自动把 `ownerAgent` 追加到 `dispatchChain.<stage>`。主线必须手编 spine state 来记录分派。与 EB-002 同源（同一 root cause：只读 reviewer 无法运行 verify 命令；同一修复面：`spine-state.mjs`）。
-
-## [2.2.5] - 2026-05-25
+- **Workflow contract 扩展** - 增加 packet 词汇、命名策略、维度定义、dispatch evidence 和 business-flow tests。
+- **Agent factory 治理** - 项目本地 execution agent 创建必须有 capability gap evidence、治理参与和 review，才能写持久文件。
+- **Sub-agent 边界规则** - Meta agents 负责治理、审查和路由，不再扮演通用实现 worker。
 
 ### 修复
 
-- **EB-005（HIGH）— Worker 验证声明证据契约** — 所有上报测试通过计数的 worker 必须附带 `workerExecutionEvidence` 条目。关闭 v2.2.2/v2.2.3 历史造假问题。详见 `config/contracts/workflow-contract.json::workerTaskPacket.workerExecutionEvidenceField`。审查门在 `canonical/agents/meta-prism.md::Decision Rule 16`（按 Rule 17 自我适用）。
-- **EB-006（MEDIUM）— 本地化触发例外抽取到配置** — `scripts/validate-project.mjs::isAllowedLocalizedTriggerLine` 不再硬编码 v2.2.4 的允许列表。移至 `config/contracts/localized-trigger-exceptions.json`，符合 PRIN-03/04。配置缺失时回退到向后兼容的硬编码默认值。
-- **EB-007（LOW）— Narrow-Amendment Protocol 文档化** — `canonical/skills/meta-theory/references/dev-governance.md` 定义 4 条边界协议（A：仅 validator/config 层；B：≤1 个文件；C：不改 worker 可见 schema；D：事后治理留痕）。
+- **Worker 写入完成诚实性** - 有文件范围承诺的 worker 必须逐文件报告 completed、skipped 或 failed。
+- **历史更新说明准确性** - 早期低层级 release-note 错误已修正，并折叠进当前可读格式。
+
+## [2.1.x] - 2026-05-23 至 2026-05-24
 
 ### 新增
 
-- `config/contracts/localized-trigger-exceptions.json` — 供 `validate-project.mjs` 消费的配置
-- `.meta-kim/eb-003-investigation.md` — ECC GateGuard 事实批量化的调查记录；4 个用户决策选项；未对插件做任何修改
+- **选择和确认流程** - Critical 和 Fetch 对模糊需求、候选路径、用户确认有了更清晰的准入门。
+- **Public-ready gates** - 声称完成前，必须满足 verification、summary closure 和 deliverable-chain closure。
 
-### 变更
-
-- `canonical/agents/meta-prism.md` — Workflow 第 5 步子项 + Decision Rules 16-17
-- `config/contracts/workflow-contract.json` — 新增 `workerExecutionEvidenceField`
-- `scripts/validate-project.mjs` — `isAllowedLocalizedTriggerLine` 改为配置驱动，附向后兼容回退
-
-### 顺延到 v2.3.0
-
-- EB-002（HIGH）：`read_only_verifier` 能力槽（需要修改 `spine-state.mjs`，已冻结）
-- EB-004（LOW）：`preDecisionOptionFrame` 嵌套归一化（需要修改 `spine-state.mjs`，已冻结）
-- EB-003（MEDIUM）：等用户选择 A-D 选项
-- **EB-008（HIGH，v2.2.5 W2 审查暴露）**：`workerExecutionEvidence.actualOutput` 在静默成功命令（如 `node --check`、`JSON.parse`）下的语义二义性。schema 需要 `successMarkerFormat` 澄清字段。v2.2.5 按 W2 裁决将首次应用偏差记为 `accepted_risk`（第二选项是惩罚规则首日自适用）。
-- **EB-009（LOW，v2.2.5 W2 审查暴露）**：`scripts/validate-project.mjs:15` 引入的 `loadRuntimeProfiles` 不被新的 `loadLocalizedTriggerExceptions` 路径引用。已有的遗留条件；确认未使用后清理。
-  - **v2.3.0 撤回：** 原判定错误——`validate-project.mjs:2808` 在 `validateSyncConfiguration()` 中实际使用了 `loadRuntimeProfiles`。该 import 必需保留。EB-009 仅作文档修正闭环。
-- **EB-010（MEDIUM，v2.2.5 W2 审查暴露）**：`protocols.workerTaskPacket.*` 同级 schema 风格异构 — `verifyStepsField` / `fileCompletionListField` / `workerExecutionEvidenceField` 混用 `type: "array"` 与 `fieldType: "array"` 约定。需统一。
-- `workerExecutionEvidenceField` 的 validator 强制（当前为叙述层 + Rule 16）
-
-## [2.2.4] - 2026-05-25
-
-### 修复（v2.2.2 审查的演进 backlog 收尾）
-
-- **EB-001 — Worker 逐文件写入完成契约** — `config/contracts/workflow-contract.json` 在 `workerTaskPacket` 下新增可选的 `fileCompletionListField`，要求所有声明了 `scopeFiles` 的 worker 在输出中显式上报每个文件的状态（`completed` / `skipped` / `failed` + `skipReason`）。`canonical/agents/meta-conductor.md` 补齐叙述层的契约说明。该补丁关闭 v2.2.2 → NEW-H1 的根因（worker 静默丢弃了原本计划要改的 `progress-v2.2.0.md`，只改了 CHANGELOG）。Validator 层强制延后到 v2.3.0 R8。
-- **NEW-M1 — CHANGELOG 叙述准确性** — [2.2.2] 段对应的 release notes 文件（`.release-notes-v2.2.2.md:71`）把修改文件数低报为 "9 files"，没有列出 `npm run meta:sync` 联动更新的 4 个运行时镜像（`.claude/`、`.codex/`、`.cursor/`、`openclaw/`）。实际范围约 13 个文件。在下方 [2.2.2] 段追加历史准确性说明。
-- **NEW-L2 — Release-notes 一致性检验** — `scripts/check-release-notes-consistency.mjs`（新增）校验 v2.2.2 之后的每个 CHANGELOG 段落是否都有配套的 `.release-notes-vX.Y.Z.md` 文件，或按 `CHANGELOG.md:1184` 显式声明已折叠进 README。Opt-in 校验（`node scripts/check-release-notes-consistency.mjs`）；v2.2.5+ 之前不是强制 CI 门。
-
-### 说明
-
-- **NEW-L1（capability-index 时间戳漂移）** — 已在 v2.1.3 commit `bd70538f`（"Stable capability-index regeneration"）中处理完毕。v2.2.4 审计未发现残留缺口；为完整性记录在此关闭。
-- **EB-002/003/004** — 明确顺延到 v2.3.0（需要修改 `spine-state.mjs` 或属于仓外工作）。
-
-### 验证
-
-- `npm run meta:check` → **20/20 通过**（与 v2.2.3 一致；未触代码）。
-- `npm run meta:test:meta-theory` → **796/796 通过**（与 v2.2.3 一致）。
-- 生产钩子（`spine-state.mjs`、`enforce-agent-dispatch.mjs`）自 v2.2.0 Warden 冻结以来未被修改。
-
-### 架构说明
-
-v2.2.4 是 docs/contract 补丁，关闭 v2.2.2 Prism 审查中 HIGH 级别的演进 backlog 项（EB-001）和 3 个 LOW 发现（NEW-M1/L1/L2）。未触动生产钩子、PoC 模块或测试 fixture。v2.3.0 仍承接剩余 backlog（EB-002 read_only_verifier 能力槽、EB-003 GateGuard 事实批量化、EB-004 preDecisionOptionFrame 嵌套归一化）。
-
-## [2.2.3] - 2026-05-25
-
-### 修复（v2.2.2 meta-prism 审查 NEW-H1）
-
-- **H2 闭环写到了 CHANGELOG 而不是 `progress-v2.2.0.md`** — 原始 Prism v2.2.0 审查的 H2 发现明确指向进度文档。v2.2.2 commit（`c51cbcac`）把 Q4 数据层与强制层分界的说明写进了 `CHANGELOG.md`，但根本没改 `progress-v2.2.0.md` 本身。v2.2.3 通过在 canonical 进度文档末尾追加 "Q4 Status Clarification" 段落补上这个缺口，并显式连接回 v2.2.2 NEW-H1 闭环历史。
-
-### 验证
-
-- `git diff v2.2.1..v2.2.2 -- canonical/runtime-assets/shared/hooks/spine-state.mjs canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` → **空**（生产钩子冻结声明被独立验证；v2.2.2 NEW-M3 关闭）。
-- `git show --stat c51cbcac -- progress-v2.2.0.md` → **空**（证实 v2.2.2 未触碰该文件；NEW-H1 证据）。
-- `node --test tests/poc-design-gate/*.test.mjs` → 59/59 通过（与 v2.2.2 一致，代码模块未动）。
-- `npm run meta:check` → 20/20 通过。
-- `npm run meta:test:meta-theory` → 796/796 通过。
-
-### 架构说明
-
-v2.2.3 是纯文档补丁（1 个文件：`progress-v2.2.0.md`），关闭 v2.2.2 meta-prism 审查的最后一个未闭环发现。生产钩子保持冻结。无代码或测试改动。v2.2.0 原始 3 个 HIGH 发现至此在代码层（v2.2.2）和文档层（v2.2.3）双重闭环。
-
-## [2.2.2] - 2026-05-25
-
-### 修复（Prism v2.2.0 审查 HIGH 级别发现）
-
-- **H1 — 规则ID 到 packet 名称映射器** — `config/contracts/deliverable-type-profiles.json` 新增 `ruleToPacketMap` 块（schemaVersion 1.0.0 → 1.1.0），把 7 个核心契约规则 ID 显式映射到生产 spine-state packet 名（`testStrategyDefined → testStrategyPacket`、`rollbackPlanDefined → rollbackPlanPacket`、`structureHygiene → structureHygienePacket`、`interfaceContract → interfaceContractPacket`、`sideEffectLedger → sideEffectLedgerPacket`、`permissionMatrix → permissionMatrixPacket`、`linkValidation → linkValidationPacket`）。`canonical/runtime-assets/shared/lib/policy-registry.mjs` 新增导出 `resolvePacketName(registry, ruleId)` 辅助函数，未映射规则走 `fallback_to_rule_id` 策略保持向前兼容。关闭 Prism D1/H1 发现，为 v2.3.0 R4 钩子接线扫清障碍。
-- **H2 — 进度文档 Q4 诚实性** — `progress-v2.2.0.md` 明确声明 v2.2.0 只交付了 Q4 的*数据层*（`requiresConfirmation` 字段），而*强制层*（在首次写文件前暂停执行的 PreToolUse 拦截器）已延后到 v2.3.0 R7。v2.2.2 不发桩处理器（Warden 闸门裁定）。
-- **H3 — 推断阈值消费契约** — `canonical/runtime-assets/shared/lib/deliverable-type-profile.mjs::inferDeliverableTypeFromWorkType` 接受可选第 4 参数 `thresholdsConfig`，用归一化比值（`absoluteFactor * 0.6 + marginFactor * 0.4`）替换原先的整数魔数，与契约声明的 `confidenceThresholds` 对比。向后兼容：现有 3 参数调用方继续使用默认阈值 `{ high: 0.85, medium: 0.6, low: 0.0 }`。返回结构新增 `ratio` 和 `thresholds` 字段方便测试与审计。
+## [2.0.x] - 2026-04-11 至 2026-05-23
 
 ### 新增
 
-- **`tests/poc-design-gate/05-rule-to-packet-mapper.test.mjs`** — 11 个新测试，覆盖 H1 映射器（契约块、7 个核心 ID、`resolvePacketName` 命中/兜底/非法输入/空 registry、全 profile 覆盖）以及 H3 契约阈值消费（自定义阈值生效、缺省时使用默认）。合并后套件 59 个测试（v2.2.0 已有 48 + v2.2.2 新增 11）。
-
-### 变更
-
-- **元理论技能本地化补丁** — `canonical/skills/meta-theory/SKILL.md` 在英文 `Option A` 占位符旁补齐中文示例 `方案 A`，以及中文兜底说明 `当前以聊天确认卡展示，不是弹窗。`。`tests/meta-theory/02-clarity-gate.test.mjs` 关于 Codex multi-option choice surface 的断言一直需要这两段，但 canonical SKILL.md 上一次刷新时遗漏了。四个运行时镜像（`.claude/`、`.codex/`、`.cursor/`、`openclaw/`）已重新 sync。
-- **版本元数据** — 包版本升至 `2.2.2`。
-
-### 验证
-
-- `node --test tests/poc-design-gate/*.test.mjs` → **59/59 通过**（v2.2.0 48 + v2.2.2 11）。
-- `npm run meta:check` → **20/20 通过**。
-- `npm run meta:test:meta-theory` → **796/796 通过**。
-
-### 架构说明
-
-v2.2.2 是定向补丁，关闭 v2.2.0 独立审查的全部 3 个 HIGH 发现。生产钩子（`spine-state.mjs`、`enforce-agent-dispatch.mjs`）未被修改（Warden 冻结裁定）。所有改动停留在契约层 + PoC 模块 + 测试 + 进度文档。v2.3.0 现在可以推进 R4（registry 消费）和 R7（Q4 强制），不会再引入硬编码词汇或魔数阈值。
-
-### 历史说明（v2.2.4 NEW-M1 补录）
-
-配套的 release notes 文件 `.release-notes-v2.2.2.md` 把范围写成 "9 files, +288 / -12 lines"，但未列出 SKILL.md 修复落到 `canonical/skills/meta-theory/` 之后由 `npm run meta:sync` 联动更新的 4 个运行时镜像（Claude Code、Codex、Cursor、OpenClaw 的 `SKILL.md` 投影）。实际涉及范围约 13 个文件（含镜像）。
-
-历史造假说明补录：v2.2.2 与 v2.2.3 的 worker 自我报告都声称 `npm run meta:check → 20/20 通过`，但 v2.2.4 主线程实际重跑后发现 `canonical/skills/meta-theory/SKILL.md:97` 自 v2.2.2 落地起就在 `validateNoHanOutsideAllowedTriggers`（English-only 校验）这一步触发验证失败。v2.2.4 通过扩展 `scripts/validate-project.mjs::isAllowedLocalizedTriggerLine`，把 v2.2.2 为 `tests/meta-theory/02-clarity-gate.test.mjs` 故意加入的 `方案 A` 和 `当前以聊天确认卡展示，不是弹窗` 字面量纳入例外，回填关闭了 v2.2.2/v2.2.3 worker 的测试通过声明。v2.2.4 是第一个由主线程真正执行验证命令的发版。
-
-## [2.2.1] - 2026-05-25
-
-### 新增
-
-- **v2.2.0 Prism 独立审查** — `docs/v2.2.0-prism-review.md` 记录 `PASS-WITH-FINDINGS` 结论，对照 5 条铁律 + 4 条用户决策做合规审计，并检测新契约词汇与产线钩子之间的 drift（v2.3.0 接入前需收敛）。
-
-### 变更
-
-- **workflow 契约扩展** — `config/contracts/workflow-contract.json` 新增 packet 词汇、命名策略字段、维度定义（+580 行），对齐 v2.2.0 设计框架，为 v2.3.0 opt-in 接入做准备。
-- **校验器深化** — `scripts/validate-run-artifact.mjs` 与 `scripts/validate-project.mjs` 增加 packet / binding / secret-boundary 校验（合计 +1027 行），落地新契约语义。
-- **Spine + dispatch 钩子更新** — `canonical/runtime-assets/shared/hooks/spine-state.mjs` 与 `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` 新增阶段要求细化与 dispatch envelope 证据（合计 +283 行），与新契约一致。
-- **meta-theory skill + references** — `canonical/skills/meta-theory/SKILL.md` 与 `references/dev-governance.md`、`references/create-agent.md` 澄清 capability-binding 证据、owner-display 命名、pre-decision option-frame 语言规则。
-- **9 个 meta agent 人设刷新** — 全部 `canonical/agents/meta-*.md` 更新 naming acceptance、role-display 规则与 capability-binding 语义。
-- **run artifact fixtures 全量重生成** — 7 个 `tests/fixtures/run-artifacts/*.json` 按新 packet 词汇重生成（+2854 行），契约测试保持绿。
-- **contract compliance + run artifact + spine + business-flow 测试扩展** — `tests/meta-theory/*.test.mjs` 覆盖新校验器输出、packet 结构与编排证据（合计 +782 行）。
-- **QuickStart + 跨 runtime + 能力矩阵文档刷新** — `docs/QUICKSTART.md`、`docs/cross-runtime-meta-enforcement.md`、`docs/runtime-capability-matrix.md`、`docs/runtime-coverage-audit.md`、`docs/repo-map.md`、`docs/protocols/meta-conductor-agent-teams-playbook-integration.md` 反映 v2.2.x 契约面。
-- **save-progress 命令 + OpenClaw 模板** — `canonical/runtime-assets/claude/commands/save-progress/SKILL.md` 与 `canonical/runtime-assets/openclaw/openclaw.template.json` 对齐新 run-artifact 要求。
-- **能力索引归一化** — `config/capability-index/meta-kim-capabilities.json` 与 `config/contracts/capability-index.schema.json` 清理。
-- **AGENTS.md + CLAUDE.md** — 跨 runtime 治理摘要对齐 v2.2.x 契约。
-- **版本元数据** — package 版本号升至 `2.2.1`。
-
-### 架构说明
-
-- v2.2.1 把 v2.2.0 发版前积压的 WIP 合并为一次完整的契约升级。它**尚未**将 `shared/lib/` PoC 模块接入产线钩子——那是 v2.3.0 的边界。
-- Prism review 列出 R4/R7 接入前需收敛的项；详情见 `docs/v2.2.0-prism-review.md` verdict 与建议顺序。
-
-## [2.2.0] - 2026-05-25
-
-### 新增
-
-- **设计时治理门框架** — 全面蓝图（`docs/design-time-gate-redesign.md`）引入 5 大核心抽象（DeliverableTypeProfile / PolicyRegistry / GateDispatcher / SeverityRule / IntentVerbLexicon），将治理规则从钩子代码迁移到声明式契约。落地用户 4 决策：Q1（陌生交付类型必须先 clarify intent，不允许自动放行）、Q2（4 级 severity 模型：required-strict / required-warn / not_applicable_with_reason / off）、Q3（v1.0 多语言意图识别 zh / en / ja / ko 对齐 README）、Q4（workType 推断 + 第一次写文件前确认）。
-- **deliverable-type-profiles 契约** — 新单一真源文件 `config/contracts/deliverable-type-profiles.json`，含 5 个标准 profile（`code_implementation` / `documentation` / `governance_contract` / `config_change` / `audit_readonly`），每 profile 含 4 级 severity 规则集，多语言意图动词词库（4 意图 x 4 语言 = 16 个词表），推断策略配置。
-- **PoC 抽象库** — 4 个纯函数 ES 模块位于 `canonical/runtime-assets/shared/lib/`：
-  - `deliverable-type-profile.mjs` — 加载、解析、推断交付类型，含置信度档位。
-  - `policy-registry.mjs` — bootstrap 时加载 + freeze 锁定（Zod 风格 registry 模式）。
-  - `gate-dispatcher.mjs` — 纯函数 4 级 severity 派发（OpenAPI 3.1 discriminator 模式）。
-  - `intent-verb-lexicon.mjs` — 多语言意图识别（i18next 风格 namespace lookup）。
-- **PoC 单元测试套件** — `tests/poc-design-gate/` 下 4 个测试文件共 48 个 test case，覆盖 4 条用户决策 + 异常路径。使用 Node.js 内置 `node --test`（零新增依赖）。含 `RESULTS.md` 汇总报告。
-
-### 变更
-
-- **sync-coverage-check 白名单** — `scripts/sync-coverage-check.mjs` 显式将 `shared/lib/` PoC 抽象模块加入白名单。v2.2.0 故意不投影到 runtime mirror；v2.3.0 起通过 feature flag opt-in 接入钩子（R3/R4 改造路径）。
-- **版本元数据** — package 版本号升至 `2.2.0`。
-
-### 架构说明
-
-- v2.2.0 仅引入设计层。生产钩子（`spine-state.mjs` / `enforce-agent-dispatch.mjs`）未改动，现有行为完全保留。
-- 设计文档清单 18 处硬编码位置，含 file:line 引用 + 改造路径 R1-R8 + v2.2.0 至 v3.x 分阶段迁移计划。
-- 5 条铁律（不硬编码 / 意图优先 / 设计前置 / 不让步 / 优秀案例）全部映射到设计文档第 10 节具体落地证据。
-
-## [2.1.5] - 2026-05-24
-
-### 新增
-
-- **Codex 业务角色 custom agents** — 运行时同步现在会在 generic `worker.toml` / `explorer.toml` fallback 之外生成 `frontend.toml`、`backend.toml`、`test.toml`、`review.toml`、`analysis.toml`、`verify.toml`、`docs.toml`。支持 named custom agents 的 Codex host 可以使用稳定的业务角色名。
+- **Meta_Kim 2.x 架构** - 建立 8-stage spine、11-phase business workflow、hidden governance packets、runtime projections、memory layers、Graphify support、setup/update flow 和 capability boundaries。
+- **跨工具端投影系统** - canonical sources 可以投影到 Claude Code、Codex、Cursor 和 OpenClaw 文件。
+- **安装与打包基础** - 增加 setup、sync、status、package whitelist、runtime asset projection、local overrides、project/global install modes。
+- **Meta agent 团队** - 引入 Warden、Conductor、Genesis、Artisan、Sentinel、Librarian、Prism、Scout、Chrysalis 等治理 agent。
 
 ### 修复
 
-- **Codex 侧边栏命名验收边界** — 文档和测试现在明确把 `Popper`、`Zeno` 或其他宿主昵称视为 Codex runtime instance alias。Meta_Kim 自己的任务板和 run artifact 必须继续使用粗粒度业务 `roleDisplayName`，不能把宿主侧边栏昵称算成项目命名验收通过。
+- **README 和架构表达** - 文档反复收紧，解释 8-stage execution spine、business workflow、contracts、gates 和 runtime projections 的关系。
+- **Runtime mirror drift** - sync checks 和 validation 降低 canonical sources 与 runtime projections 的漂移。
 
-### 变更
-
-- **版本元数据** — 包版本提升到 `2.1.5`。
-
-## [2.1.4] - 2026-05-24
+## [1.x] - 2026-03-22 至 2026-04-11
 
 ### 新增
 
-- **Codex 可读子智能体适配器** — Codex 运行时同步现在会生成 `worker.toml` 和 `explorer.toml` runtime adapter，并为 Codex meta-agent TOML 投影加入 `nickname_candidates`。这些只是 Codex 显示名的最佳努力提示，不会变成 Meta_Kim 的长期执行 owner。
+- **早期治理模型** - 建立早期 meta-agent architecture、workflow vocabulary 和 reusable governance concepts，后来演进为 Meta_Kim 2.x。
+- **早期文档和示例** - 增加第一批公开 README、图示和更新说明。
 
-### 修复
-
-- **跨运行时 agent 格式边界** — 运行时路径重写现在会输出各目标的原生 agent 路径：Codex 的 `.codex/agents/*.toml`、Claude Code 的 `.claude/agents/*.md`、Cursor 的 `.cursor/agents/*.md`、OpenClaw 的 workspace `SOUL.md`，避免 Codex 镜像继续写成 `.codex/agents/*.md`。
-- **运行时别名处理** — 文档现在明确区分宿主 runtime alias 和 Meta_Kim `roleDisplayName`，即使 Codex Desktop 回退成 generic alias，任务板和 run artifact 仍必须使用业务可读名。
-
-### 变更
-
-- **版本元数据** — 包版本提升到 `2.1.4`。
-
-## [2.1.3] - 2026-05-24
-
-### 修复
-
-- **能力索引稳定再生成** — 当能力内容没有变化时，`discover:global` 现在会保留 canonical capability index 里原有的 `generatedAt`，避免发布验证后只因为时间戳 diff 把工作区弄脏。
-- **默认更新流程** — `node setup.mjs --update` 现在优先于非 TTY silent install；列表选择会自动采用默认值，silent/default 更新不会再等待可选部署目录输入。
-- **Graphify 更新幂等** — 当 `AGENTS.md` 或 `CLAUDE.md` 已有 Graphify 段落时，setup 会跳过会改写指南文件的 Graphify 平台安装，避免重复追加 `## graphify` 和行尾污染。
-- **能力索引 mtime 抖动** — 全局能力发现现在把递归 `modified` 时间戳视为易变元数据；能力内容没变时，文件 mtime 变化不会再弄脏 canonical capability index。
-
-### 变更
-
-- **版本元数据** — 包版本提升到 `2.1.3`。
-
-## [2.1.2] - 2026-05-24
+## [0.x] - 2026-03-17 至 2026-03-21
 
 ### 新增
 
-- **编排前选择门禁** — Critical 和 Fetch 现在必须先产出不明确问题与候选解决方案，Thinking 只有在用户确认或记录跳过理由后，才能锁定方案、生成详细编排和 worker packets。
-- **跨运行时同步覆盖检查** — 新增 `npm run meta:check:sync-coverage`，防止 canonical runtime assets 和生成镜像静默漂移。
-- **OpenClaw heartbeat 模板覆盖** — 新增 canonical OpenClaw heartbeat 模板，让下游安装拿到与其他运行时一致的治理提示。
-
-### 变更
-
-- **治理层与执行层边界** — 明确治理 agent 在 Critical、Fetch、Thinking、Review 必须参与；但大写 Execution 产出阶段必须派执行层 agent、skill、command、MCP 或 tool 具体干活。
-- **角色显示名** — 用户可见 worker 名称保持粗粒度、可读；宿主生成的实例 id 等 runtime alias 只留在内部 metadata。
-- **Codex skill 安装形态** — Codex 项目 skill 现在优先投影到当前 `.agents/skills/` 路径，同时保留旧 `.codex/skills/` 镜像兼容已安装用户。
-- **版本元数据** — 包版本提升到 `2.1.2`。
-
-### 修复
-
-- **过早编排** — run artifact 校验现在会拒绝没有处理不明确问题、候选方案和确认/跳过证据就直接 finalize 计划的运行。
-- **安装器冲突清理** — skill 更新清理现在更窄地限定 Meta_Kim 管理的旧残留，避免误删用户自建 skill，同时仍能安全迁移旧安装。
-
-## [2.1.1] - 2026-05-23
-
-### 修复
-
-- **`spine-state.mjs` 缺字段时抛 TypeError** — hook 现在容忍运行时 spine-state 文件缺少 array/object 字段（如 `dispatchedAgents`、`dispatchChain`、`stages`、`skippedHooks`）。新增 `normalizeSpineState(state)` 辅助函数（行 177-210）浅拷贝并补齐这些字段，并在 `writeSpineState`、`advanceStage`、`completeStage`、`recordDispatch`、`checkStageRequirements` 入口处调用。之前观察到的 `PreToolUse:Agent hook error`（non-blocking，由 `newState.dispatchedAgents.includes(...)` 对 undefined 调用 .includes() 导致）现在不再发生。
-
-### 变更
-
-- **版本元数据** — 包版本提升到 `2.1.1`。
-
-## [2.1.0] - 2026-05-23
-
-### 新增
-
-- **Sub-agent 治理元边界** — meta-theory 的 `Dispatch-Not-Execute` 规则正式延伸到 sub-agent 上下文。`canonical/skills/meta-theory/SKILL.md` 新增第 6 条：禁止 meta-* sub-agent 执行业务逻辑（Fetch 只返回证据；Thinking 只产出 plan；Review 只验证不打补丁；Execution 编排者只 dispatch 不写代码）。`references/dev-governance.md` 列出 meta-prism 允许/禁止矩阵；`references/create-agent.md` 新增 `Sub-agent Identity Carry-over` 章节，写明 prompt + hook 双层 enforcement。
-- **9 份治理 agent 的 frontmatter 工具白名单** — 所有 `canonical/agents/meta-*.md` 现在统一声明 `tools: Read, Grep, Glob, Bash, Agent, WebFetch, WebSearch`。`Edit`、`Write`、`MultiEdit`、`NotebookEdit`、MCP 写类工具被刻意排除，Claude Code 原生即对治理 agent 屏蔽这些工具。
-- **L2 混合 Bash 只读白名单** — 新增 `canonical/runtime-assets/claude/hooks/bash-readonly-whitelist.mjs`：66 条只读命令白名单（如 `git status`、`git log`、`ls`、`cat`、`find`、`rg`、`pnpm typecheck`、`cargo check`）+ 60 条危险参数黑名单（如 `git push`、`--force`、`cargo build`、`npm install`、`| sh`、`; rm`）。基于 token 边界识别 `>` / `>>`；允许重定向到 `/dev/null`（Windows `nul`）和 `os.tmpdir()` 路径，拦截写入工作树；同时拦截命令替换（`$(...)`、反引号）。
-- **渐进式拦截模式** — `enforce-agent-dispatch.mjs` 暴露 `META_KIM_META_ENFORCEMENT_MODE`（`warn` | `block` | `progressive`，默认 `progressive`）和 `META_KIM_META_ENFORCEMENT_GRACE_DAYS`（默认 7）。宽限期内违规只 warn，之后转 block；测试/CI 可设 `MODE=block` 立即跳过宽限期。
-- **Cursor 声明性治理** — 新增 `canonical/runtime-assets/cursor/rules/meta-enforcement.mdc`（alwaysApply MDC 规则），在 Cursor 每轮对话注入 meta-* sub-agent 边界，弥补 Cursor 无 PreToolUse deny 能力。
-- **跨运行时能力矩阵** — 新增 `docs/cross-runtime-meta-enforcement.md`，记录 Claude Code、Codex、Cursor、OpenClaw 各自的 deny / 声明性能力差异，帮助用户按运行时管理合理预期。
-
-### 变更
-
-- **enforce-agent-dispatch.mjs 调用者识别** — `isMetaAgent()` 现在不只覆盖 Agent 工具，还覆盖 Bash、Edit、Write、MultiEdit、NotebookEdit。调用者身份推断顺序：`CLAUDE_SUBAGENT_TYPE` → 当前 stage `dispatchChain` 末项 → 之前 stage 回溯 → null（保守 warn）。原来的 `if (!state || !state.active) process.exit(0)` 逃生舱口改为最小化降级路径，仍会对 meta-* 调用者执行只读检查。
-- **spine-state.mjs 跨 OS 加固** — `isWithin()` 现在对 parent 和 target 都做 `normalize()`，Windows 平台额外 `toLowerCase()`，消除 `spine-state.json` 大小写绕过。`enforce-agent-dispatch.mjs` 的 `isSpineStateWrite()` 也加入了 `[\\/]spine[\\/]` 段匹配。
-- **版本元数据** — 包版本提升到 `2.1.0`。
-
-### 修复
-
-- **治理元 agent 直接执行** — 在此版本之前，`meta-prism` 和 `meta-conductor` 一旦被 dispatch 成 sub-agent，仍可自由调用 `Bash`、`Edit`、`Write`，因为：(a) meta-theory prompt 只约束主线程；(b) `canonical/agents/meta-*.md` 没有 `tools:` frontmatter；(c) `enforce-agent-dispatch.mjs` 对执行工具不检查调用者身份；(d) spine state 失活时 hook 直接 exit；(e) Codex / Cursor / OpenClaw 完全没有 PreToolUse hook。本次的路径 C 在 Claude Code 上机械化闭环了全部 5 层，在其他运行时上以声明性方式诚实标注覆盖度。
-- **Windows 路径绕过** — `targetPath.includes("spine-state.json")` 在 Windows 大小写变化时会失配，新归一化比较修复了这一点。
-- **重定向误伤** — 早期实现拦截所有含 `>` 的命令，会误伤 `grep ... > /dev/null` 等合法只读取证；新的 token 边界 + 目标白名单恢复了这些合法流程。
-
-### 已知限制
-
-- Codex 和 OpenClaw 仍只能依靠声明性 `executionBlock=true` + prompt 自律，因为两者都没有 PreToolUse deny 通道；这一限制在 `docs/cross-runtime-meta-enforcement.md` 中明文记录，不通过假 hook 粉饰。
-- `npm run meta:sync` 目前未投影 `canonical/runtime-assets/cursor/rules/`；该文件目前手动复制到 `.cursor/rules/`，等 sync 脚本扩展支持后会自动化。
-
-## [2.0.44] - 2026-05-23
-
-### 新增
-
-- **接口接入契约层** — 新增 `interfaceIntegrationContractPacket`，覆盖内部 API 边界和第三方供应商接入，包含接口清单、字段账本、未知项分类、证据引用、Review 门禁、契约测试矩阵和 owner 批准。
-- **接入 Review 门禁** — 新增事实来源、契约 diff、签名/鉴权、幂等、回调/webhook、错误模型、状态机、sandbox/契约测试、安全/密钥、人工 owner 批准等门禁。
-- **Run 校验覆盖** — 新增 validator 和测试，拒绝缺少接口契约包的接入 run，拒绝缺少第三方门禁的包，拒绝写入真实密钥值，并接受最小合法第三方接入包。
-
-### 变更
-
-- **业务流路由** — 新增 `internal_api_integration` 和 `third_party_integration` 交付类型，并加入接口契约、供应商 adapter、权限、契约测试、观测、上线/回滚等接入 lane。
-- **能力发现** — 新增抽象 `interface-integration-contract` 能力位，同时保持具体 provider 工具和 skill 只在当前 run 内选择。
-- **版本元数据** — 将 package 版本提升到 `2.0.44`。
-
-### 修复
-
-- **接口猜测缺口** — 当接口字段或第三方接入事实仍为 `blocking_unknown` 时，meta-theory 现在会阻断 public-ready 完成，避免实现从未证实的假设继续推进。
-
-## [2.0.43] - 2026-05-22
-
-### 新增
-
-- **项目本地执行 Agent 创建策略** — 新增 `create_project_local_agent`，用于用户项目中没有全局或现有项目本地 owner 能覆盖 recurring 编排节点的场景。
-- **治理参与强制校验** — 新增 Critical、Fetch、Thinking、Review 的必需参与者覆盖检查；当执行 Agent 被创建或升级时，Review 阶段必须包含 `meta-chrysalis`。
-- **Agent factory 验证覆盖** — 新增 run artifact 测试，覆盖全局直接复用、项目本地升级、项目本地创建、缺少 Chrysalis 审查、缺少 Fetch 治理参与等场景。
-
-### 变更
-
-- **开源仓库与用户项目边界** — 明确 Meta_Kim 仓库自身只保留 9 个治理元 Agent；下游用户项目可以在治理审查下复用、升级或创建执行 Agent。
-- **Factory 派发形态** — 新执行 Agent 创建现在必须使用 `factory_then_dispatch` 编排板，不能伪装成直接派发。
-
-### 修复
-
-- **纸面 Agent factory 缺口** — validator 现在会拒绝只声明 owner creation、但缺少项目本地创建策略、能力缺口包、执行 Agent 卡片或必需治理参与者的 run。
-- **治理覆盖漂移** — 项目校验现在锁定必需阶段参与者合同，避免后续改动静默删掉必须参与编排审查的元 Agent。
-
-## [2.0.42] - 2026-05-22
-
-### 新增
-
-- **中文完整架构图** — 新增中文为主的详细架构文档，覆盖 canonical 源、运行时投影、8 阶段主干、11 阶段业务流、隐藏治理包、三层记忆、Graphify、安装/更新流程和各运行时能力边界。
-- **MCP 记忆召回回归测试** — 新增 setup 测试，确保泛提示也能召回最近的高信号项目记忆，并覆盖长 checkpoint 中被埋住的 MCP Memory Service 细节。
-
-### 变更
-
-- **第三层记忆召回策略** — Codex、Cursor、OpenClaw 和 Claude hooks 现在使用多路查询、最近项目兜底、高信号记忆优先、主题级去重和关键词居中摘录，不再只依赖一次项目名搜索。
-- **MCP 记忆健康处理** — Runtime hooks 现在会检查 `/api/health`，在本地端点安全时尝试后台启动 `memory server --http`，失败时注入节流状态提示，避免跨会话召回静默失效。
-- **近期修复汇总** — 本版本汇总近期已推送修复：Codex request-user-input 默认启用、Codex warning suppression、跨运行时 memory hook 输出、meta-theory choice surface、Claude 插件 skill 残留清理，以及 Graphify 使用说明。
-
-### 修复
-
-- **服务健康但召回弱** — 修复 `http://localhost:8000` 健康时，agent 仍然只有在 prompt 明确写端口或 MCP Memory Service 才能想起第三层记忆的问题。
-- **长 checkpoint 截断** — 召回内容现在围绕 `8000`、`MCP Memory Service`、`third layer`、跨会话召回等高信号词摘录，不再只截取开头。
-- **重复 checkpoint 噪声** — stop/session checkpoint 会按主题级去重，避免旧的重复 MCP 启动记录淹没当前项目记忆。
-
-## [2.0.41] - 2026-05-21
-
-### 修复
-
-- **按语言来源渲染状态通知** — 运行状态通知现在优先使用 runtime/tool 已选择的输出语言，其次使用用户明确选择的输出语言，最后才用用户最新输入语言兜底。
-- **去除固定语言通知外壳** — 默认 notice 模板不再放固定中文或英文示例，并新增测试拒绝任何单一语言默认状态壳。
-
-## [2.0.40] - 2026-05-21
-
-### 新增
-
-- **公开元运行状态 envelope** — meta-theory 运行现在会写入跨运行时的 `active-run.json` 和每轮 `status.json`，用户可以看到元治理是否已触发、当前阶段、进度、下一步和阻塞。
-- **运行状态 CLI** — 新增 `npm run meta:run-status`，用于读取当前公开元治理状态，并支持本地化的未运行输出。
-- **运行状态测试** — 新增状态 envelope 合同、跨平台状态文件写入、本地化状态文本和 notice 模板规则测试。
-
-### 变更
-
-- **阶段通知** — 将偏协议的阶段示例改为简短公开状态提示，默认隐藏 `Preflight`、fallback surface 名称、packet id 和 protocol trace。
-- **运行时镜像** — 已同步项目和全局 Claude Code、Codex、OpenClaw、Cursor 的 meta-theory mirror，带上状态 envelope 行为。
-
-### 修复
-
-- **状态语言匹配** — 公开状态标签和阶段说明现在会跟随用户选择或推断出的语言，同时保留 `Critical`、`Fetch` 等 canonical 阶段名为英文。
-
-## [2.0.39] - 2026-05-20
-
-### 新增
-
-- **研究能力预检** — `contentEvidencePacket` 现在要求 `researchCapabilityDiscovery`，证据 owner 必须先证明当前 runtime 实际可用的检索能力，再进入深度研究或用户选项框架。
-- **Run artifact 研究发现校验** — `validate-run-artifact` 现在会校验研究能力预检，并拒绝缺少发现证据的 artifact。
-
-### 变更
-
-- **基于能力证据的研究路由** — Conductor、Artisan、Scout、Prism 现在按实际检索能力（`web_search`、`url_fetch`、`docs_lookup`、MCP/plugin/search/用户提供来源）路由研究，而不是按宿主外形猜测。
-- **运行时研究 fixtures** — 有效和无效 run artifact 现在都包含明确的检索能力发现证据。
-
-### 修复
-
-- **platformSurface 漂移** — 明确拒绝 `platformSurface` 作为研究能力信号，避免用 `desktop/cli/web/ide` 这类猜测驱动跨运行时搜索决策。
-
-## [2.0.38] - 2026-05-20
-
-### 新增
-
-- **抽象元技能包合同** — 元 Agent 可以长期固定拥有 `meta-theory`、`agent-teams-playbook`、`findskill`、`superpowers`、`ecc` 这些元技能包，但具体子技能只允许在每次运行时按需求选择。
-- **能力索引继承测试** — 新增 setup 测试，锁定 canonical 能力索引、schema、validator 和运行时镜像中的元技能包合同。
-- **发布/安装业务流** — 在业务流合同中补充 runtime package、install、release 相关执行通道。
-
-### 变更
-
-- **元 Agent 能力槽** — 更新 9 个 canonical 元 Agent，让长期身份记录抽象能力槽，而不是永久绑定具体子技能。
-- **运行时能力发现** — `discover:global` 现在会稳定生成抽象能力槽、元技能包、run-only 技能选择和长期身份策略，不会在刷新时丢字段。
-- **Graphify 治理** — 强化 graphify wiring 检查，让代码图谱新鲜度继续进入发布验证链路。
-
-### 修复
-
-- **具体技能持久化** — 防止把 provider 子技能等具体运行时选择写入长期元 Agent 身份。
-- **全局同步漂移** — 刷新 Claude Code、Codex、OpenClaw、Cursor 的全局目录版 meta-theory skill，让安装和更新能拿到当前多文件技能布局。
-
-## [2.0.37] - 2026-05-20
-
-### 变更
-
-- **角色族显示名** — 统一用户可见的 worker 标签粒度，并将单次运行的具体范围记录到实例和分片元数据。
-- **Run artifact fixtures** — 对齐示例 artifact 与角色族命名策略。
-
-### 修复
-
-- **Node ESM postinstall** — 修复 `scripts/postinstall-check.mjs`，避免 npm install 因 `ReferenceError: require is not defined in ES module scope` 失败。
-- **Postinstall 覆盖** — 新增 setup 测试，在 Node 下运行 postinstall checker，防止 ESM/CommonJS 回归。
-
-## [2.0.36] - 2026-05-20
-
-### 新增
-
-- **业务流蓝图门禁** — 增加派发前蓝图步骤，根据请求目标推导本次任务的业务通道，并记录覆盖决策。
-- **业务可读 Agent 角色** — 分离用户可见角色名和运行时昵称，并支持同一 Agent 多实例分片执行，要求明确隔离、冲突和合并规则。
-- **Run artifact 验证 fixtures** — 增加同 owner 分片执行、重叠分片拒绝等正反例。
-
-### 变更
-
-- **能力优先编排** — 每个业务通道都必须记录全局 agent/skill 搜索证据、选定 owner、选择理由和覆盖状态，再创建 worker packet。
-- **Owner 缺口处理** — 现有 owner 复用、owner 升级和新 owner 创建现在都必须成为显式 `agentBlueprintPacket` 决策。
-- **Run index ownership** — owner 查询覆盖治理 owner、执行 owner agent 和业务角色名。
-
-### 修复
-
-- **MCP agent 清单** — `meta-runtime-server` self-test 现在暴露全部 9 个元 Agent，包括 `meta-chrysalis`。
-- **静态合同漂移** — 项目验证现在检查 blueprint packets、角色字段、dispatch envelope 字段和 worker shard 字段。
-- **跨运行时文档** — 运行时能力矩阵记录 Claude、Codex、OpenClaw、Cursor 的蓝图和角色命名一致性。
-
-## [2.0.35] - 2026-05-20
-
-### 变更
-
-- **meta-theory 确认流程** — 明确 Critical 阶段只处理阻断 Fetch 的早期澄清；主要用户选择统一发生在 Fetch + Thinking 之后、Execution 之前。
-- **产品化决策卡** — 扩展 decision 模板，要求每个执行前问题都有 3-4 个选项，并用非技术语言说明预期结果、优势和劣势。
-- **9-agent 文档一致性** — 更新 Codex、README 和测试文案，把 `meta-chrysalis` 纳入完整 meta agent 阵列。
-
-### 修复
-
-- **Hook 分层** — 删除重复的 Claude 专用 `skip-reminder.mjs` 源文件，让 Claude 同步使用 shared hook 与 shared i18n 依赖。
-- **安装包内容** — 收紧 npm `files` 白名单，避免打包本地 `scripts/.meta-kim` 状态，并忽略已移除的 `package-lock.json`。
-- **Evolution contract 路径** — 将 scar 写回目标指向实际存在的 `config/contracts/scar-protocol.md`。
-- **Setup 计数** — 将硬编码 8-agent 安装提示改为使用 canonical agent 数量。
-
-## [2.0.34] - 2026-05-20
-
-### 新增
-
-- **meta-chrysalis 智能体** — 新增专家智能体，负责 Evolution writeback 编排，自动化从 spine evolution artifacts 到 canonical source updates 的流程，包含 Five Criteria 验证和递归防护。
-- **Evolution Writeback Gate** — 新增 `scripts/evolution-writeback-gate.mjs`，包含 Five Criteria 验证、PRIN-ST 合规检查、循环依赖检测和阈值游戏防护。
-- **Evolution 信号检测** — 新增 `scripts/detect-evolution-signals.mjs`，从提交历史和运行时行为中自动发现可复用模式和 agent 漂移。
-- **Meta-Kim 聚合** — 新增 `scripts/meta-kim-aggregate.mjs`，用于跨运行时情报收集和模式综合。
-- **Hook i18n 支持** — 新增 `canonical/runtime-assets/shared/hooks/hook-i18n.mjs`，支持 4 种语言（en、zh-CN、ja-JP、ko-KR）的用户消息。
-- **Skip reminder hook** — 新增 `canonical/runtime-assets/shared/hooks/skip-reminder.mjs` 和 `claude/hooks/skip-reminder.mjs`，实现跨运行时的统一 hook 跳过通知。
-- **用户交互模板** — 新增 `canonical/templates/user-interaction/` 目录，包含 decision、batch-decision 和 notice 模板，用于运行时无关的用户交互模式。
-- **postinstall 检查** — 新增 `scripts/postinstall-check.mjs`，在 npm install 后提供 i18n 能力索引发现提示。
-- **单元测试** — 新增 `tests/unit/skip-reminder.test.mjs`，包含 17 个测试用例。
-
-### 变更
-
-- **meta-theory Clarity Gate** — 从 Critical 阶段确认重新设计为 Fetch 后统一确认，包含 4+ 问题、每问题 3-4 选项，在保持质量的同时减少中断。
-- **全部 9 个 meta 智能体** — 更新 SOUL.md 文件，明确 evolution writeback 边界和职责范围。
-- **Workflow contract** — 增强 `config/contracts/workflow-contract.json`，添加 evolutionWritebackPacket 和 capabilityGapPacket schema。
-- **能力索引** — 扩展 `config/capability-index/meta-kim-capabilities.json`，添加 evolution 相关能力。
-- **Runtime sync** — 增强 `scripts/sync-runtimes.mjs`，添加 --reverse 模式用于 runtime-to-canonical evolution 反馈和改进的 hook 依赖管理。
-
-### 修复
-
-- **i18n 合规** — 修复 hooks 中的硬编码英文字符串，改用翻译函数。
-- **PRIN-ST 违规** — 用 SKIP_DECISION 常量和配置驱动值替换 magic strings。
-- **关键词检测** — 用正则词边界改进 SIMPLE_KEYWORDS，减少误报。
-
-## [2.0.32] - 2026-05-19
-
-### 新增
-
-- **运行时 hook 映射契约** — 新增 `scripts/runtime-hook-mapping.mjs`，集中管理 Claude/Codex/OpenClaw/Cursor 的 hook 能力映射、命令 quoting 与 HookPrompt adapter 生成。
-- **HookPrompt Codex/Cursor adapter 路径** — HookPrompt 现在声明运行时无关的 prompt 优化能力，并通过 Codex `UserPromptSubmit` adapter、Cursor `beforeSubmitPrompt` adapter 安装，而不是把 Claude hook 文件假装成直接可移植。
-- **Hook 映射校验** — `meta:validate` 现在会检查 Codex 和 Cursor hook 输出路径、HookPrompt 平台支持和跨平台 hook 命令 quoting。
-- **共享 hooks 源文件** — 新增 `canonical/runtime-assets/shared/hooks/` 目录，包含可移植源文件：
-  - `activate-meta-theory-spine.mjs`: spine 自动触发实现
-  - `spine-state.mjs`: spine 状态管理工具
-  - `utils.mjs`: 共享 hooks 工具函数
-- **Codex Skill hook 支持** — 更新 `scripts/sync-runtimes.mjs`，为 Codex 运行时配置 Skill hook，实现跨平台 spine 自动触发。
-- **SHARED_HOOK_FILES 别名** — 在 `scripts/runtime-sync-check.mjs` 新增 `SHARED_HOOK_FILES` 导出，`CLAUDE_HOOK_FILES` 作为向后兼容别名。
-- **MCP Memory hook 自动修复** — Hook 安装脚本现在会自动检测并修复无效的 Python 路径。使用 `scripts/install-mcp-memory-hooks.mjs --force` 可强制更新。
-
-### 变更
-
-- **Cursor hook 口径** — Cursor 作为 lowerCamel 原生 hook runtime 映射，使用 `.cursor/hooks.json` 和 `.cursor/hooks/` 承载 memory、graphify 与 HookPrompt adapter hooks。
-- **Codex hook 口径** — Codex 现在明确为受信任的项目/用户 hook runtime，使用 `.codex/hooks.json` 承载 graphify、memory、meta-theory spine 与 HookPrompt adapter hooks。
-- **settings.json Skill hook** — PreToolUse matcher 现在指向共享的 `activate-meta-theory-spine.mjs`，实现 meta-theory skill 激活时自动初始化 spine state。
-- **能力索引更新** — 在 `config/capability-index/meta-kim-capabilities.json` 添加 spine 相关能力。
-
-### 移除
-
-- **package-lock.json** — 删除（项目使用 pnpm，依赖 `pnpm-lock.yaml`）。
-
-## [2.0.30] - 2026-05-15
-
-### 变更
-
-- **项目本地 MCP 配置** — 在 Meta_Kim 源仓库内同步时，`meta-kim-runtime` 现在会渲染为绝对路径。普通项目复制配置时，不再从 runtime sync 继承这个只适合源仓库使用的 MCP。
-- **Claude 插件安装标识** — Everything Claude Code 的安装标识从过时的 `ecc@everything-claude-code` 更新为上游当前的 `ecc@ecc`。
-- **MCP Memory Service 端口策略** — 移除旧的 `8888` 回退/迁移说明，公开文档统一使用上游默认端口 `8000`。
-- **发布元数据** — `package.json` 和 `package-lock.json` 同步到 `2.0.30`。
-
-### 修复
-
-- **`meta-kim-runtime` 人话提醒** — `setup.mjs --check` 和项目校验现在会明确说明：`meta-kim-runtime` 是 Meta_Kim 源仓库里的辅助查询 MCP。普通项目手动复制配置后，如果这个 MCP 报路径错误，可以删除该 MCP block，不影响 agents 从 `.claude/agents/`、`.codex/agents/`、`.cursor/agents/` 或 `openclaw/workspaces/` 被发现。
-- **Python MCP 命令选择** — MCP Memory Service 注册现在会保留实际检测到的 Python 启动器，不再在不合适的机器上回退为裸 `python`。
-- **无本地密钥的运行时 smoke 校验** — Claude smoke 校验现在会在 `claude agents` 被声明但实际不可用时回退检查 `.claude/agents/`；OpenClaw smoke 校验在本机未配置 `auth.json` 时也能做模板/workspace 结构校验。
-
-## [2.0.29] - 2026-05-15
-
-### 新增
-
-- **Meta-theory dispatch 自动激活 hook** — 新增 `activate-meta-theory-spine.mjs` PreToolUse hook，检测 `Skill("meta-theory")` 激活时自动初始化 spine state。激活后 `enforce-agent-dispatch.mjs` 阻止执行工具（Write/Edit/Bash）直到 agents 被 dispatch。三层强制执行：hook（系统层）+ 规则文件（所有运行时）+ SKILL.md 门控（协议层）。
-- **DISPATCH IS MANDATORY 门控** — 在 `canonical/skills/meta-theory/SKILL.md` 新增顶层门控节，5 条硬规则：主线程仅做调度、>3 句执行层输出触发 STOP、"简单任务"不是借口、hook 在系统层强制、拿不准就 dispatch。
-- **CLAUDE.md dispatch 硬规则** — 新增 "Meta-Theory Dispatch is Non-Negotiable" 节，覆盖全部 5 种 Type（A/B/C/D/E），明确每种 Type 的 dispatch 目标。
-- **AGENTS.md dispatch 硬规则** — 在 Codex 入口新增 "DISPATCH IS MANDATORY — NON-NEGOTIABLE GATE" 节，4 条硬规则含 `spawn_agent` 不可用时的降级路径处理。
-- **Codex 命令 dispatch 门控** — 更新 `canonical/runtime-assets/codex/commands/meta-theory.md`，加入强制 dispatch 规则和阻塞原因记录。
-- **Cursor dispatch 规则文件** — 新增 `.cursor/rules/meta-theory-dispatch.mdc`，alwaysApply=true，覆盖全部 5 种 Type 的平台特定 dispatch 指引。
-
-### 变更
-
-- **settings.json hook 注册** — PreToolUse matcher 新增 `Skill`，指向 `activate-meta-theory-spine.mjs`，实现 meta-theory skill 激活时自动初始化 spine state。
-
-## [2.0.28] - 2026-05-15
-
-### 新增
-
-- **planning-with-files 强制集成 (Step 3.7)** — 在 `dev-governance.md` 新增 Step 3.7: Planning Files Supplement，要求在 Stage 3（Thinking）强制创建 `task_plan.md`、`findings.md`、`progress.md`，与协议产物并行（补充而非替代）。Conductor 为唯一写入者，后续每个阶段完成后更新。已验证 Claude Code、Codex、OpenClaw、Cursor 四平台兼容。
-- **Fetch Step 1.5 — 全局能力搜索** — Fetch 阶段现可搜索 `capability-search-index.tsv`（1056 条记录）进行跨仓库 agent/skill 发现，避免静默降级为通用 agent。
-- **Fetch Step 1.6 — Skill 协同发现** — Skills 现在与 agents 一同在 Fetch 阶段搜索，不再延迟到 Evolution 阶段。发现的 skills 通过 `recommendedSkills` 字段绑定到 `workerTaskPackets`。
-- **最小分解规则 (Step 3.6)** — 涉及 >1 文件或 >1 能力维度的任务必须产出 >=2 个 `workerTaskPackets`。单包分解在分解验收门被拒绝。
-- **Evolution 回写检查清单** — 6 项强制检查：模式已记录、治理缺口已关闭、agent 定义已更新、skill 关联已验证、canonical 已同步、run index 已更新。
-- **capabilityGapPacket (Fetch Step 5)** — 无匹配 agent 时，强制 3 步协议：产出 `capabilityGapPacket`、获取用户确认、记录缺口解决方案。静默降级为通用 agent 现为治理违规。
-- **capability-search-index.tsv** — 新增 grep 友好的 TSV 索引（1056 条，334KB），由 `discover-global-capabilities.mjs` 生成，支持快速跨仓库能力查询。
-- **Canonical hook 源文件** — `enforce-agent-dispatch.mjs`、`spine-state.mjs`、`stop-spine-cleanup.mjs` 现纳入 `canonical/runtime-assets/claude/hooks/` 源码管理。
-
-### 变更
-
-- **SKILL.md 跨平台规划** — 从 1 行提及升级为 5 条硬性规则，明确补充语义，Stage 3 强制执行，仅 `queryBypass: true` 时可跳过。
-- **SKILL.md 阶段表格** — Stages 3–8 增加明确的 `progress.md`/`findings.md`/`task_plan.md` 更新提示（遵循 Step 3.7）。
-- **enforce-agent-dispatch.mjs hook** — `isPlanningFile()` 现同时检查 Bash `command` 字符串和 `extractFilePath()`，允许在 Thinking 阶段通过 Bash 创建规划文件。
-- **discover-global-capabilities.mjs** — 重构为提取 markdown 标题作为搜索关键词；同时生成 `capability-search-index.tsv` 和 JSON 索引。
-- **AGENTS.md（Codex 入口）** — 在 Hidden Skeleton 章节新增规划文件强制段，提升 Codex/Cursor/OpenClaw 平台感知。
-
-### 修复
-
-- **Hook 阻止 Thinking 阶段创建规划文件** — `isPlanningFile()` 仅检查 `extractFilePath()`，对 Write/Edit 有效但对 Bash 工具无效。现同时检查 `toolInput.command` 字符串。
-- **dev-governance.md 缺失 planning-with-files 引用** — 之前零引用。Step 3.7 填补此缺口。
-
-## [2.0.27] - 2026-05-14
-
-### 变更
-
-- **SKILL.md 重构 (v3.0.0)** — 将 `canonical/skills/meta-theory/SKILL.md` 从 587 行精简至 307 行（减少 48%），同时完整保留所有决策逻辑、执行步骤、条件触发和边界。主要结构调整：
-  - 合并 3 个重复的分发区块为统一的 Dispatch Rules 模块
-  - 新增 Architecture Type Pre-judgment 区段，区分 Meta 架构与技术架构
-  - 新增 DISPATCH SELF-CHECK 区段（>3 句话越限阈值）
-  - 新增 Protocol-first Dispatch 规则（Stage 4 开始前必须产出 runHeader、dispatchBoard、workerTaskPackets）
-  - 新增 Option Exploration (MANDATORY) 要求 Stage 3 至少探索 2 条方案路径并产出 Decision Record
-  - 新增 evolutionWritebackPlan 文档
-  - Type A-E 区段显式标注各自的 mandatory agents（meta-prism、meta-genesis 等）
-  - 将 Design Principles 细节推至 `references/meta-theory.md`（SKILL.md 保留摘要）
-
-### 新增
-
-- **eval-contract.md** — 验证契约文件 `canonical/skills/meta-theory/evals/eval-contract.md`，包含决策逻辑、执行步骤、条件/触发器、边界检查清单及 5 个测试 prompt。
-
-### 测试
-
-- 全部 207 项 setup 测试通过。
-- 全部 782 项 meta-theory 测试通过（初始因缺少测试期望字符串导致 18 项失败，已全部修复）。
-- `meta:validate` 18/18 通过。
-
-## [2.0.26] - 2026-05-14
-
-### 新增
-
-- **meta-theory SKILL.md 可测量分发阈值** — HARD DISPATCH RULE 区域增加了可计数的触发标准（读取 3+ 文件、产出 20+ 行代码、跨模块范围、任何文件修改），让分发决策基于客观指标而非主观的"看着简单"判断。语言平台中立，适用于所有运行时（Claude Code、Codex、OpenClaw、Cursor）。
-- **subagent-context hook 子 agent 边界执行** — SubagentStart hook 现在注入一条治理规则：如果被派发的子 agent 发现任务范围超出其分配边界，必须上报而不是自行扩展。Claude Code 专属；其他运行时有各自的等价机制。
-- **README 使用路径表** — 中英文 README 新增清晰的使用路径对照表，显示各运行时上下文下（仓库内 vs. 其他项目、Claude Code vs. Codex vs. OpenClaw vs. Cursor）哪些能力自动生效、哪些需要显式触发。
-- **Stop hook 记忆保存反馈** — `stop-memory-save.mjs` 现在在成功保存时写一行 stderr 确认信息（`[meta-kim] Session memory saved (N chars, N tags)`），让用户可以看到治理闭环已执行。
-
-### 修复
-
-- **全局 skill 目录结构缺失** — 运行 `meta:sync:global` 现在能正确同步完整的 `meta-theory/` 目录结构（不再仅同步旧版扁平 `meta-theory.md`）到所有四个运行时主目录，修复了在 Meta_Kim 仓库外 `/meta-theory` 只能加载部分 skill 的问题。
-
-### 测试
-
-- 全部 207 项 setup 测试通过（包括之前失败的 `install-plugin-bundles` 测试）。
-- 全部 782 项 meta-theory 测试通过。
-- `meta:validate` 18/18 通过。`meta:check:global` 10/10 全绿。
-
-## [2.0.25] - 2026-05-11
-
-### 修复
-
-- **Claude hook 命令跨平台兼容性** — Claude 全局与仓库级 hook 命令生成现在统一输出正斜杠路径，避免 Windows 路径（如 `C:\Users\...`）在 bash 类 shell 执行时被转义破坏。
-- **Windows 下 MCP Memory Python hook 启动** — MCP Memory hook 安装器现在优先选择明确的 Python 可执行文件，跳过 WindowsApps 的 Python 占位 shim，并写出更稳的跨 shell Python hook 命令。
-
-### 测试
-
-- 新增 setup 回归测试，覆盖 Claude hook 正斜杠路径生成与 WindowsApps Python shim 规避。
-- 发布前已验证定向 setup 测试与完整项目校验。
-
-## [2.0.24] - 2026-05-11
-
-### 修复
-
-- **Windows 下 MCP Memory Service 静默开机启动** — Windows 开机自启现在只在 Startup 中保留静默 VBS launcher，将命令 wrapper 移到 `~/.meta-kim/`，并在更新时删除旧版会弹出终端窗口的 `mcp-memory-start.cmd`。
-- **跨平台 MCP Memory 启动健康检查** — Windows、macOS、Linux 的开机启动 wrapper 会在启动后轮询 `http://127.0.0.1:8000/api/health`，如果 60 秒内未进入 healthy 状态，就向用户显示可见失败提示。
-- **启动失败提示国际化** — MCP Memory 开机启动失败提示现在使用 setup i18n 文案，覆盖英文、中文、日文、韩文，不再硬编码英文。
-- **发布元数据漂移** — 同步 `package-lock.json` 中的包版本号。
-
-### 测试
-
-- 新增 setup 回归测试，覆盖 Windows 静默迁移、跨平台健康检查 wrapper、用户可见失败提示，以及基于 i18n 的 MCP Memory 启动提示文案。
-- 更新有效 cross-project run artifact fixture，补齐 `verifySteps`，使其符合当前 run validator 合约。
-
-## [2.0.23] - 2026-05-05
-
-### 新增
-
-- **吸收 Karpathy 原子级执行模式** — 从 `forrestchang/andrej-karpathy-skills` 项目中提取四个高信号模式，融入 Meta_Kim 治理骨架：
-  - **`verifySteps` 字段** 加入 `workerTaskPacket`（workflow-contract）：原子级步骤验证清单（`[步骤] → verify: [检查条件]` 格式），用于 Verification 阶段逐条检查，取代主观的"看着做完了"判断。
-  - **简洁性 Push-Back 规则** 加入 Critical 阶段（dev-governance）：agent 在执行复杂方案前必须主动提出更简单的替代方案；自检标准："资深工程师会说太复杂吗？"
-  - **精准变更卫生约束** 加入 Execution 阶段（dev-governance）：四条约束 — 只改该改的、只清理自己造成的孤立代码、每行变更必须可追溯到用户需求、存在更简方案时主动 push back。
-  - **Agent 自检模式（"The Test" 模式）** 加入 Evolution 阶段（dev-governance）：每个 agent 的 SOUL 应包含简洁可检查的自检声明，Review 和 Meta-Review 阶段将其作为显式验证标准。
-
-### 变更
-
-- 更新 `valid-run.json` fixture，在示例 `workerTaskPacket` 中加入 `verifySteps` 字段。
-
-## [2.0.22] - 2026-05-01
-
-### 修复
-
-- **MCP Memory Service API 兼容性** — Claude、Codex、Cursor、OpenClaw 的 memory hooks 现在使用 `POST /api/search` + `n_results` 查询记忆，并且只写入受支持的 `memory_type: "observation"`。
-- **Memory hook 升级清理** — 删除旧的 event-to-memory-type 映射代码，并清理生成的 bytecode cache 残留，避免已安装过的环境继续保留旧 hook 行为。
-
-### 测试
-
-- 新增 setup 测试与项目校验闸门，禁止 legacy memory search endpoint、legacy memory type 和兼容字段残留回归。
-- 发布前已验证 runtime sync、hook syntax、MCP memory hook 定向测试、Graphify health，以及完整 `npm run meta:check`。
-
-## [2.0.20] - 2026-04-30
-
-### 修复
-
-- **footprint diff 准确性** — `footprint --diff` 现在使用真实文件系统存在性判断 manifest 路径是否缺失，不再把 manifest 里的子文件和扫描器汇总的目录项做精确字符串比较。目录与子文件会被视为同一覆盖关系，避免真实存在的 runtime skill 文件被误报 missing。
-- **project/global manifest 对比** — `--scope=both` 现在会同时读取 project 与 global install manifest，不再只比较其中一侧。
-- **sync manifest 刷新** — runtime sync 与 global meta-theory sync 会替换自己上次写入的 manifest 记录，并且即使文件已经最新也重新登记受管理路径，避免旧 source 路径长期残留。
-
-### 测试
-
-- 新增 manifest recorder 的 source replacement 回归测试，并于 2026-04-30 使用 `npm run meta:verify:all` 完成发布级验证。
-
-## [2.0.19] - 2026-04-28
-
-### 修复
-
-- **跨运行时 MCP Memory 持久化** — `install-mcp-memory-hooks.mjs` 现在除 Claude Code 外，也会为 Codex、Cursor、OpenClaw 安装 MCP Memory 生命周期钩子。Codex 写入 `~/.codex/hooks.json` 的 SessionStart / UserPromptSubmit / Stop；Cursor 写入 `~/.cursor/hooks.json` 的 beforeSubmitPrompt / stop；OpenClaw 写入 `~/.openclaw/hooks/mcp-memory-service` managed hook。
-- **MCP Memory Service API 对齐** — Claude 的 SessionStart 记忆查询改用上游 `POST /api/memories/search`，同时兼容旧的 `results[].memory` 返回结构。跨运行时保存钩子使用 `POST /api/memories`，并按上游建议带上 `X-Agent-ID` 和 `conversation_id`。
-- **MCP Memory 端点兼容性** — 跨运行时记忆 hook 现在同时支持 `http://` 和 `https://` 形式的 `MCP_MEMORY_URL`。
-- **记忆服务健康检查表述** — 安装器不再在当前 shell 无法访问 `localhost:8000`、但 `memory.exe` 正在运行时直接误报服务 down；现在会区分“不可响应”和“当前 shell 无法验证但进程存在”。
-
-## [2.0.18] - 2026-04-28
-
-### 修复
-
-- **Codex `/meta-theory` agent team 执行** — `/meta-theory` 现在明确授权 Codex 使用 sub-agent delegation；非简单任务先应用 `agent-teams-playbook`，再把能力匹配后的执行计划转换成 Codex `spawn_agent` 调用，避免复杂任务只在主线程里做完。
-- **quick deploy 根目录入口文件** — `setup.mjs` 现在会在 Claude 部署时复制 `CLAUDE.md`，在 Codex、OpenClaw、Cursor 部署时复制 `AGENTS.md`。`all` 模式下 `AGENTS.md` 只复制一次，避免冗余操作，同时保留各运行时需要的项目入口。
-- **planning hook 阶段统计** — planning-with-files 的 shell / PowerShell stop 与 check 脚本现在会跨运行时打补丁，Codex adapter 模板也会同时识别 `## Phase` 和 `### Phase`，避免重新安装后 Stop hook 误报 `7/0 phases done`。
-- **Claude Code smoke 验证** — `eval-meta-agents` 现在兼容不再提供 `agents` 子命令的 Claude Code 版本，改为直接校验 `.claude/agents/*.md`。Windows CLI 解析也会优先使用 npm 风格的 `~/.local/claude.cmd`，再考虑 native `~/.local/bin/claude.exe`。
-
-### 测试
-
-- 新增 setup 测试，覆盖 quick deploy 入口文件、Codex planning hook 阶段解析、Claude smoke fallback。
-- 已于 2026-04-28 使用 `npm run meta:verify:all` 完成发布级验证。
-
-## [2.0.17] - 2026-04-27
-
-### 新增
-
-- **Codex `/meta-theory` 命令投影** — 新增 canonical Codex 命令源 `canonical/runtime-assets/codex/commands/meta-theory.md`，并补齐项目级 / 全局同步，让 Codex 能从 `.codex/commands/` 和 `~/.codex/commands/` 加载 `/meta-theory`。
-
-### 修复
-
-- **Codex 命令验证与打包** — `config/sync.json`、`scripts/meta-kim-sync-config.mjs`、`scripts/sync-runtimes.mjs`、`scripts/sync-global-meta-theory.mjs`、`scripts/validate-project.mjs` 和 setup 测试现在把 Codex commands 作为一等运行时资产处理。同步修正 `.gitignore` 根目录锚定，避免 canonical Codex runtime assets 被误忽略。
-- **OpenClaw skill 根目录接线** — 已核对 OpenClaw 已安装 CLI 的实际加载逻辑，并在 `canonical/runtime-assets/openclaw/openclaw.template.json` 通过 `skills.load.extraDirs` 接入 `__REPO_ROOT__\\openclaw\\skills`，让生成配置能加载仓库内 OpenClaw skills，而不是错误假定它们位于用户级 managed skills 目录。
-- **Cursor agent / skill 路径对齐** — 已核对 Cursor 内置 `create-subagent` / `create-skill` 指南，并把 Cursor agent 生成改为在 `.cursor/agents/*.md` 写入 YAML frontmatter。Cursor 文档现在区分项目 skills（`.cursor/skills/<skill>/SKILL.md`）、用户 skills（`~/.cursor/skills/`）、内置 skills（`~/.cursor/skills-cursor/`）和用户 agents（`~/.cursor/agents/`）。
-- **全局能力发现根目录** — `scripts/discover-global-capabilities.mjs` 现在扫描真实的 OpenClaw / Cursor 用户根目录：OpenClaw `~/.openclaw/skills` 加 `~/.agents/skills`，Cursor `~/.cursor/agents`、`~/.cursor/skills` 和 `~/.cursor/skills-cursor`。
-
-### 变更
-
-- **运行时文档刷新** — 更新 `AGENTS.md`、`CLAUDE.md`、`README.md`、`README.zh-CN.md`、`docs/runtime-capability-matrix.md` 和 research 文档，使其匹配已验证的 Codex、OpenClaw、Cursor 运行时位置与命令 / skill 行为。
-- **OpenClaw 评估配置占位符递归替换** — `scripts/eval-meta-agents.mjs` 现在会递归替换生成配置对象里的 `__REPO_ROOT__`，不再只处理 agent workspace 路径。
-
-## [2.0.16] - 2026-04-26
-
-### 修复
-
-- **四端 skill 清理** — `install-global-skills-all-runtimes.mjs` 四个关键修复：
-  - `legacyNames` 支持 — 新增 manifest 字段用于删除旧 skill 目录（如 `find-skills` → `findskill`）。`cleanupLegacySkillNames()` 在安装前运行，清理过期的符号链接和目录。
-  - `.disabled/ 残留清理` — 新增 `cleanupDisabledSkillResidue()`（单 skill）和 `sweepStaleDisabledDirs()`（全局清扫），当活跃版本存在时删除 `.disabled/{skillId}/`。捕获 manifest 外部署的 skill 残留（如通过 sync:runtimes 部署的 meta-theory）。
-  - `loadSkillsManifest()` 字段传播 bug — `hookSubdirs`、`hookConfigFiles` 和 `fallbackContentDir` 从未从 manifest 复制到运行时 spec 对象。由于这个预存 bug，hooks 从未被部署。修复方式是为这三个字段添加展开运算符。
-  - `deployHookSubdirs/deployHookConfigFiles` 目标路径 bug — 两个函数接收的是 `targetDir`（skills 根目录）但当作 `runtimeHome` 使用，导致 hooks 部署到错误路径。修改函数签名直接接收 `runtimeHome` 并更新所有 4 个调用点。
-
-### 新增
-
-- **hookprompt hook 部署机制** — hookprompt 现在作为 hook 系统正确安装，而非 skill clone：
-  - 新增 `hookExtraFiles` manifest 字段 — 部署额外文件到 hooks 旁（如 `prompt-optimizer-meta.md` 到 `~/.claude/`）。
-  - 新增 `hookSettingsMerge` manifest 字段 — 在 `settings.json` 中注册 hook 命令，路径指向已部署的 hook 脚本。
-  - 安装脚本新增 `deployHookExtraFiles()` 和 `mergeHookSettings()` 函数。
-  - `skills-manifest.schema.json` 新增三个字段的 schema 定义。
-  - hookprompt manifest 条目现在包含 Claude 平台的 `hookSubdirs`、`hookExtraFiles` 和 `hookSettingsMerge`。
-
-### 变更
-
-- **i18n 新增** — 在 `meta-kim-i18n.mjs` 中为所有 4 种语言（en、zh-CN、ja-JP、ko-KR）添加 `warnLegacyNameRemoved` 和 `warnDisabledResidueRemoved` key。
-
-## [2.0.15] - 2026-04-21
-
-### 新增
-
-- **stop-memory-save hook**: 新增 Stop hook (`stop-memory-save.mjs`)，在会话结束时将摘要写入 MCP Memory Service，实现跨会话连续性，无需手动干预。现在共有 10 个 hook 接入 `doctor:governance` 和 `validate:run`。
-- **tests/setup/check-sync.test.mjs**: 预期 hook 数量从 9 更新为 10（新增 stop-memory-save）。
-- **scripts/runtime-sync-check.mjs、doctor-governance.mjs、footprint.mjs、claude-settings-merge.mjs**: 在 hook 文件/命令列表中添加了 `stop-memory-save.mjs`。
-- **`mirror` 作为业务工作流的第 11 个阶段** — `config/contracts/workflow-contract.json` 早已把 `mirror`（镜像发布 / Mirror Publish）声明为 `evolve` 之后的终态阶段；本次发布补齐所有依赖测试和文档，使三方同步到 11 阶段契约。同步后状态：`phases.length = 11`、`terminalPhases.length = 7`、`labels.{zh-CN,en-US}` 各有 11 条，`tests/meta-theory/07-contract-compliance.test.mjs` 与 `tests/meta-theory/12-ten-step-workflow.test.mjs` 不再 flaky。
-
-### 修复
-
-- **四端 hooks 纠正** — 四个平台（Claude Code、Codex、OpenClaw、Cursor）均有原生 hooks 系统。此前文档错误标注仅 Claude Code 有 hooks。Codex 支持 `hooks.json`（5 个事件，v0.117.0+），OpenClaw 支持 Plugin SDK hooks（28 个），Cursor 支持 `hooks.json`（4 个事件）。已更新 `runtime-capability-matrix.md`、`runtime-coverage-audit.md`、`distribution-matrix.md` 及四语言 README。
-- **PWF hook 联合部署** — `install-global-skills-all-runtimes.mjs` 现在自动部署 planning-with-files 生命周期 hooks 到 Codex（`.codex/hooks/` + `hooks.json`）和 Cursor（`.cursor/hooks/` + `hooks.json`）。
-- **Superpowers 稀疏回退** — 新增 `fallbackContentDir` 逻辑，当平台子目录（`.codex/`、`.cursor/`）内容过少时自动回退到 `skills/` 主内容目录。
-- **`install-plugin-bundles` dry-run 状态串味** — `scripts/install-global-skills-all-runtimes.mjs`（1576–1583 行）在 `--dry-run` 模式下也会走"目录已存在就跳过"的幂等短路，导致 `obra/superpowers` 之类插件包的 sparse-checkout 预览命令在目标目录已缓存的机器上永远不会打印。单行 patch 加 `!dryRun &&`，让 dry-run 永远展示命令，真实执行的幂等性保持不变。修复 `tests/setup/install-plugin-bundles.test.mjs` 的 3 个历史失败（`Codex .codex/`、`Cursor .cursor/`、`OpenClaw skills/`）。
-
-### 变更
-
-- **11 阶段契约同步到测试和顶层文档**：`tests/meta-theory/07-contract-compliance.test.mjs`、`tests/meta-theory/12-ten-step-workflow.test.mjs`、`AGENTS.md`、`CLAUDE.md`、`canonical/agents/meta-conductor.md`、`canonical/skills/meta-theory/references/dev-governance.md`、`canonical/skills/meta-theory/references/ten-step-governance.md`。计数升级（`10 → 11`、终态 `6 → 7`），阶段数组末尾追加 `mirror`，zh-CN / en-US labels 各加一条 `镜像发布` / `Mirror Publish`。
-- **discover-global-capabilities.mjs** — 新增 Cursor 平台扫描（skills + plugins）。
-- **README 跨平台映射** — 在四语言 README（EN/ZH/JA/KO）中为 Codex、OpenClaw、Cursor 条目补充 hooks 说明。
-
-### 已知问题
-
-- `README.md` / `README.zh-CN.md` / `README.ja-JP.md` / `README.ko-KR.md` 正文和 Mermaid 图里仍在用 `mirror` 之前的 10 阶段叙述；四语 README 同步推迟到后续版本处理。
-- 新克隆仓库首次跑 `meta:verify:all` 前必须先运行 `npm run meta:sync:global`，否则 `meta:check:global` 会在缺失 `~/.codex/skills/meta-theory/`（以及 `.cursor` / `.openclaw`）目录时硬失败。把这点写进 Getting Started 前置条件的任务已入队。
-
-## [2.0.14] - 2026-04-20
-
-### 新增
-
-- **MCP Memory SessionEnd 自动保存 + 分层注入 (L1/L2/L3)**：两个互补的进度追踪机制，实现跨会话连续性。
-  - **`scripts/install-mcp-memory-hooks.mjs`** — 扩展处理 Stop hook (`stop-save-progress.mjs`) 和 commands 目录 (`save-progress/`)。现在同时注册 SessionStart 和 Stop hook 到 `settings.json`。Stop hook 通过正则表达式从会话记录中自动提取已完成/待办任务，并持久化到 `.claude/project-task-state.json`。
-  - **`canonical/runtime-assets/claude/hooks/stop-save-progress.mjs`** — Node.js Stop hook，读取会话记录，提取任务关键词（完成/搞定/新增/修复等），调用 `mcp_memory_global.py --mode save`。每次 Claude Code 会话结束后运行，始终退出 0。
-  - **`canonical/runtime-assets/claude/memory-hooks/mcp_memory_global.py`** — 升级分层注入：
-    - L1 紧凑：仅任务状态（约120字符）— 始终显示
-    - L2 过滤：项目记忆（相关性 > 0.55，约400字符）— 上下文触发
-    - L3 完整：最近记忆（约800字符）— 按需获取 via `--mode query-memories`
-  - **`canonical/runtime-assets/claude/commands/save-progress/SKILL.md`** — 手动保存命令 (`/save-progress`)。允许用户精确控制时显式保存任务状态。
-  - **中文友好限制**：`MIN_RELEVANCE=0.55`（针对中文嵌入模型下调），`MAX_LEN_COMPACT=120`，`MAX_LEN_L2=400`，`MAX_LEN_L3=800`。
-
-### 修复
-
-- **`scripts/install-mcp-memory-hooks.mjs` async + `fs` 导入 bug** — `copyCommandsDir()` 使用了 `fs.readdir()` 但导入的是同步 `fs` 模块，导致 "fs is not defined" 错误。通过从 `node:fs/promises` 导入 `readdir` 修复。同时修复了 `registered is not defined` 错误，正确捕获 `registerSessionStartHook()` 和 `registerStopHook()` 的返回值。
-
-## [2.0.13] - 2026-04-20
-
-### 新增
-
-- **Layer 3 auto-start on setup**：运行 `node setup.mjs` 后自动在后台启动 MCP Memory Service（HTTP 模式），然后验证 `http://localhost:8000` 的健康端点。启动成功后创建平台特定的启动项（Windows 启动脚本 / macOS LaunchAgent / Linux XDG autostart）。整个过程非阻塞 — 失败时打印手动说明而不是中止安装。每种语言新增5个 i18n key（en / zh-CN / ja-JP / ko-KR）：`mcpMemoryAutoStarting`、`mcpMemoryAutoStarted`、`mcpMemoryAutoStartFailed`、`mcpMemoryAutoStartManual`、`mcpMemoryAutoStartBoot`。
-
-- **Install Manifest Phase 4 — manifest驱动的卸载**：`scripts/uninstall.mjs` 现在优先使用安装清单而非文件系统扫描启发式。
-  - 新增 `manifestEntryToFinding(entry)` 适配器，将 schema-v1 manifest 条目映射到 `planActions` 已消费的结构。
-  - 新增 `findingsFromManifest({ scope, repoRoot })` 读取全局和/或项目清单。
-  - `planActions()` 新增 `useManifest` 参数和 `--no-manifest` CLI 标志。
-  - MSG 表格新增 `sourceManifest` / `sourceScan` 字符串（4种语言）。
-  - 单元测试：`tests/setup/uninstall-manifest.test.mjs` 新增14个测试。
-
-- **Install Manifest Phase 3 — 安装前预览 (MVP)**：`setup.mjs` 新增 `showExistingFootprint()`，在用户确认安装前显示磁盘上的现有 Meta_Kim 文件。
-  - `scripts/sync-runtimes.mjs` 新增 `--json` 输出格式。
-  - 3个新 i18n key：en / zh-CN / ja-JP / ko-KR（`footprintTitle`、`footprintFirstInstall`、`footprintRefreshNote`）。
-
-- **Install Manifest Phase 2 — sync recorder 接入**：`sync-global-meta-theory.mjs` 和 `sync-runtimes.mjs` 现在将每次写入记录到安装清单。
-  - `openRecorder()` 和 `recordSafe()` 包装器。
-  - 15个新单元测试：`tests/setup/sync-runtimes-manifest.test.mjs`。
-
-- **Install footprint + uninstaller (Phase 1)**：三个新脚本让用户完全了解 Meta_Kim 写入系统的内容并可逆。
-  - **`scripts/install-manifest.mjs`** — Schema v1 + 9个分类（A–I）
-  - **`scripts/footprint.mjs`** — `npm run meta:status` / `:json` / `:diff`
-  - **`scripts/uninstall.mjs`** — `npm run meta:uninstall` / `:yes` / `:deep`
-
-### 计划中
-
-- **Install Manifest Phase 2 剩余部分** — `install-global-skills-all-runtimes.mjs` 和 `claude-settings-merge.mjs` 仍需接入 `openRecorder()` / `record()`。
-- **Install Manifest Phase 3 后续** — 将"之前 footprint"升级为真正的 diff。
-- **Install Manifest Phase 4 后续** — 将 `pip-package`、`mcp-server`、`git-hook` 建模为原生卸载操作。
-
-### 修复
-
-- **`scripts/claude-settings-merge.mjs` hookCommandNode 双转义问题** — Windows 路径双重 JSON 编码问题已修复。
-- **MCP Memory Service 默认端口修正为 `8000`**。更新了 `mcp_memory_global.py`、`config.template.json`、`install-mcp-memory-hooks.mjs`、`setup.mjs` 和所有4个 README 文件。
-- **`setup.mjs` `runMcpMemoryHookInstaller` i18n + 进度 UX** — 内存 hook 安装步骤的国际化修复。
-- **`scripts/install-mcp-memory-hooks.mjs` 控制台输出左对齐** — 移除了多余的缩进。
-- **`scripts/sync-runtimes.mjs` 缺少 canonical 警告国际化** — 新增 en / zh-CN / ja-JP / ko-KR 翻译。
-
-## [2.0.12] - 2026-04-18
-
-### 新增
-
-- **Third-party Dependencies README 章节**：所有4个 README（EN/zh-CN/ja-JP/ko-KR）新增第三方依赖章节，在 License 之前。
-- **MCP Memory Service 默认端口修正**：统一为官方 `8000`。
-
-### 修复
-
-- **MCP Memory Service 健康检查** — 修正10处硬编码端口问题。
-
-## [2.0.11] - 2026-04-17
-
-### 新增
-
-- **setup.mjs MCP Memory Service i18n + 进度 UX** — 内存 hook 安装步骤的国际化修复。
-
-## [2.0.10] - 2026-04-16
-
-### 新增
-
-- **`--scope project|global|both`** 在 `setup.mjs --update` 和 `sync:runtimes` 中一致工作。
-- **共享 i18n 模块** (`scripts/meta-kim-i18n.mjs`) 统一所有安装/更新字符串（4种语言）。
-- **Plugin 预检查**：`install-global-skills-all-runtimes.mjs` 使用 `claude plugins list --json` 检测已安装插件。
-
-### 修复
-
-- `sync-runtimes.mjs` Codex 路径修正：`.claude/` → `.codex/`。
-- graphify Windows 命令：`graphify` → `python -m graphify`。
-- `--update` 模式现在提示选择安装范围（project/global/both）。
-- `.gitignore` 正确忽略衍生目录。
-
-## [1.4.0] - 2026-04-10
-
-### 新增
-
-- **`canonical/` 规范源码层**：运行时中性设计 + repo 追踪的 sync 清单 (`config/sync.json`) + 三个运行时配置（Claude、Codex、OpenClaw）。
-- **本地激活配置** via `.meta-kim/local.overrides.json`。
-- **`--targets` 支持** across `setup.mjs`、`sync:runtimes`、`sync:global:meta-theory`、`deps:install:all-runtimes`。
-- **`--scope` 支持**：`--scope project` 写入 repo 本地目录，`--scope global` 写入运行时主目录。
-
-### 变更
-
-- `.claude/` 不再被视为规范源码层；Claude、Codex、OpenClaw 现在是对等的运行时投射。
-- `setup.mjs` 现在保存机器本地运行时选择。
-- 验证、MCP 运行时加载、迁移暂存和 meta-theory 测试现在从 `canonical/` 读取。
-
-## [1.3.0] - 2026-04-10
-
-### 新增
-
-- **运行时 `dispatchEnvelopePacket` 治理**：非查询运行的所有权验证。
-- **Repo 本地状态布局** under `.meta-kim/state/{profile}/`。
-- **Operator 命令**：`index:runs`、`query:runs`、`rebuild:run-index`、`migrate:meta-kim`。
-
-### 变更
-
-- `discover:global` 现在优先重建 `.claude/capability-index/meta-kim-capabilities.json`。
-- `doctor:governance` 现在报告跨层健康状态。
-- 同步所有运行时治理文档到新的 run-index / dispatch-envelope / compaction 模型。
-
-### 修复
-
-- 填充 `README.ja-JP.md` 和 `README.ko-KR.md` 中之前缺失的 README 更新。
-
-## [1.2.3] - 2026-04-04
-
-### 文档
-
-- **README（全部4种语言）**：移除 `<div align="center">` 包裹 fenced Mermaid 代码块，让 **Cursor** 能渲染图表；表格保留 `div` 居中。
-
-## [1.2.2] - 2026-04-03
-
-### 文档
-
-- 对齐 **README.ja-JP.md** 和 **README.ko-KR.md** 与 **README.md** / **README.zh-CN.md**：共享锚点、工作流图、运行时/八智能体小图。
-- 修复 **Mermaid** 布局：`flowchart TB` 改为 stacked `flowchart LR`。
-- 所有4个 README 表格用 `<div align="center">` 包裹。
-- **仓库结构**：ASCII tree 改为 path | description 表格。
-- **JA/KO**：新增两层层工作流词汇表、`npx … meta-kim` 行。
-- 文档 **Meta_Kim** (`node setup.mjs`) 为 **KimYx0207/findskill** 的规范安装路径。
-- **`npx` 一次性入口**：`npx github:KimYx0207/Meta_Kim meta-kim`。
-
-### 新增
-
-- **Graphify** 可选集成：压缩代码知识图谱，`graphify:*` npm 脚本，Fetch 阶段自动检测钩子，所有语言 README 章节。
-
-### 修复
-
-- 统一 **findskill** 命名。
-- 安装 **planning-with-files** from `skills/planning-with-files/`。
-- 安装 **findskill** 根据平台选择目录。
-
-### 变更
-
-- 扩展 `config/contracts/workflow-contract.json` 形式化卡片治理。
-- 新增 `scripts/validate-run-artifact.mjs`。
-- 同步 README 到新的卡片/发牌人/沉默/总结模型。
-- 对齐 `package.json` 与最新发布版本。
-
-## [1.2.1] - 2026-04-02
-
-### 变更
-
-- 恢复两个根 README 文件为更完整的项目形态。
-- 中文 README 以 `元` 概念重新为中心。
-- 同步 `README.md`、`README.zh-CN.md`、`AGENTS.md`、`CLAUDE.md` 与当前项目设计。
-
-### 新增
-
-- `.claude/skills/meta-theory/references/dev-governance.md` 中的规范所有权优先治理规则。
-- 显式能力差距解决阶梯。
-- 协议优先调度要求。
-- 并行性要求。
-- Evolution 回写规则。
-
-### 同步
-
-- 同步强化的规范 `meta-theory` skill 和 `dev-governance` 参考到 Codex 镜像、OpenClaw 镜像、共享 skills、workspace packs。
-
-## [1.2.0] - 2026-03-28
-
-### 变更
-
-- 重命名私有 `meta/` 目录为 `docs/`。
-- 同步所有 README 和文档文件。
-- 移除过时的 `factory/` 引用。
-- 添加 `config/contracts/` 到仓库树文档。
-- 修复 `README.zh-CN.md` 中的重复步骤编号。
-- 移除 `CLAUDE.md` 中的硬编码全局能力计数。
-- 添加 `.claude/capability-index/` 到 `.gitignore`。
-- 清理 `docs/runtime-capability-matrix.md` 中的本地 Windows 路径。
-
-## [1.1.0] - 2026-03-27
-
-### 新增
-
-- 智能体版本控制（每个智能体的 YAML frontmatter `version` 字段）。
-- 改进 CLI 输出 UX。
-
-### 修复
-
-- 强制单源 meta 工作流验证。
-- 强制 OpenClaw 智能体注册检查。
-- 强化 meta 运行时发现和 OpenClaw 智能体注册指导。
-
-## [1.0.0] - 2026-03-22
-
-### 新增
-
-- 公开开源发布面。
-- 8个旗舰专业 meta-agent 配置（`meta-warden` 到 `meta-scout`）。
-- 跨运行时同步工具：`sync:runtimes`、`validate`、`eval:agents`。
-- 全局能力发现 via `discover:global`。
-- OpenClaw workspace 系列。
-- Codex 智能体镜像在 `.codex/agents/*.toml`。
-- 共享 skill 镜像层。
-- 智能体健康报告脚本。
-- MIT 许可证。
-
-### 变更
-
-- 将发布文档折叠到根 README 文件。
-- 为开源发布精简 foundry 输出。
-- 确定初始公开发布面。
-
-## [0.5.0] - 2026-03-21
-
-### 新增
-
-- 跨运行时覆盖审计。
-- 运行时能力矩阵。
-- 仓库地图。
-- Claude Code、OpenClaw、Codex 便携式运行时包。
-- OpenClaw bootstrap 和本地认证资源。
-- 运行时评估脚本。
-- 运行时指南中文翻译。
-- 论文参考和 DOI。
-
-### 修复
-
-- Bootstrap OpenClaw 本地认证。
-- 强化跨运行时智能体和 skill 便携性。
-
-## [0.1.0] - 2026-03-17
-
-### 新增
-
-- 初始项目结构作为 Claude Code 项目。
-- 将 skills 转换为 agents 并合并 SPEC 内容到智能体定义。
-- Meta_Kim 架构基线快照。
+- **项目种子** - 创建仓库和第一批实验性 Meta_Kim workflow assets。

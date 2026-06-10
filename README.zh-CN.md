@@ -103,13 +103,13 @@ npm run meta:validate
 
 ### 使用路径
 
-全局安装后（`node setup.mjs` 或 `npx`），各场景下什么自动生效、什么需要手动触发：
+全局安装后（`node setup.mjs` 或 `npx`），人类应该直接用自然语言说任务。斜杠命令只保留为维护者快捷方式，不是普通用户入口。
 
-| 你在哪里 | 自动生效的部分 | 需要显式触发 |
+| 你在哪里 | 自动生效的部分 | 人类怎么输入 |
 |---|---|---|
-| Meta_Kim 仓库 + Claude Code | 完整治理（CLAUDE.md 提供 8-stage spine、门、分发规则） | — |
-| 任意其他项目 + Claude Code | Hooks（安全拦截、格式化、记忆保存）+ `/meta-theory` skill | 说"run meta theory"或输入 `/meta-theory` |
-| Codex | AGENTS.md 规则 + 9 个自定义 agent + `/meta-theory` 命令 | 输入"run meta theory"或 `/meta-theory` |
+| Meta_Kim 仓库 + Claude Code | 完整治理（CLAUDE.md 提供 8-stage spine、门、分发规则） | 直接说任务；需要 durable 处理的工作会进入治理路线 |
+| 任意其他项目 + Claude Code | Hooks（安全拦截、格式化、记忆保存）+ meta-theory skill | 直接说任务；`/meta-theory` 只是维护者快捷方式 |
+| Codex | AGENTS.md 规则 + 9 个自定义 agent + meta-theory command | 直接说任务；Codex 会区分 durable 工作、主观模糊输入和纯查询 |
 | OpenClaw | 兼容 workspace agent、skill、config 和 internal lifecycle hooks | 需要配置 OpenClaw config/auth；提交者必须先在 OpenClaw 自己完成严格自测并提供证据，证据通过审查后才能合并 |
 | Cursor | 兼容官方 subagents、`.cursor/rules`、hooks、skills 和 MCP 镜像 | 提交者必须先在 Cursor 自己完成严格自测并提供证据，证据通过审查后才能合并 |
 

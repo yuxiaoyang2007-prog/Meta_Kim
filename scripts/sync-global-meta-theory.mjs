@@ -22,8 +22,7 @@ import {
 } from "./meta-kim-sync-config.mjs";
 import {
   CODEX_REQUEST_USER_INPUT_FEATURE,
-  ensureCodexWindowsNotifyCompat,
-  ensureCodexRequestUserInputFeature,
+  ensureCodexAppNativeControls,
   hasCodexRequestUserInputFeature,
 } from "./codex-config-merge.mjs";
 import { CATEGORIES, openRecorder } from "./install-manifest.mjs";
@@ -234,13 +233,13 @@ async function ensureCodexGlobalConfigChoiceSurface() {
   const prev = (await pathExists(configPath))
     ? await fs.readFile(configPath, "utf8")
     : "";
-  const next = ensureCodexWindowsNotifyCompat(
-    ensureCodexRequestUserInputFeature(prev),
-  );
+  const next = ensureCodexAppNativeControls(prev, {
+    codexHome: runtimeHomes.codex.dir,
+  });
 
   if (prev === next) {
     console.log(
-      `${C.green}✓${C.reset} ${C.dim}Codex ${CODEX_REQUEST_USER_INPUT_FEATURE} already enabled: ${configPath}${C.reset}`,
+      `${C.green}✓${C.reset} ${C.dim}Codex choice surface and App native controls already enabled: ${configPath}${C.reset}`,
     );
     return configPath;
   }
@@ -256,16 +255,25 @@ async function ensureCodexGlobalConfigChoiceSurface() {
   recordSafe((rec) =>
     rec.recordSettingsMerge(
       configPath,
-      [CODEX_REQUEST_USER_INPUT_FEATURE, "notify"],
+      [
+        CODEX_REQUEST_USER_INPUT_FEATURE,
+        "js_repl",
+        "notify",
+        "windows.sandbox",
+        "marketplaces.openai-bundled",
+        "plugins.browser@openai-bundled",
+        "plugins.chrome@openai-bundled",
+        "plugins.computer-use@openai-bundled",
+      ],
       {
         source: "sync-global-meta-theory",
-        purpose: "codex-global-config-choice-surface",
+        purpose: "codex-global-config-choice-surface-and-app-native-controls",
         category: CATEGORIES.C,
       },
     ),
   );
   console.log(
-    `${C.green}✓${C.reset} ${C.dim}Enabled Codex ${CODEX_REQUEST_USER_INPUT_FEATURE}: ${configPath}${C.reset}`,
+    `${C.green}✓${C.reset} ${C.dim}Enabled Codex choice surface and App native controls: ${configPath}${C.reset}`,
   );
   return configPath;
 }

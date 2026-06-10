@@ -857,7 +857,7 @@ function hookEventName(event) {
 
 function emitRuntimeContext(context, runtime, event) {
   let payload;
-  if (runtime === "claude") {
+  if (runtime === "claude" || runtime === "codex") {
     payload = {
       hookSpecificOutput: {
         hookEventName: hookEventName(event),
