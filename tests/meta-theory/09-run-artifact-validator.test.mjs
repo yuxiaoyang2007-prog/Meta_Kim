@@ -1024,6 +1024,35 @@ describe("validate-run-artifact.mjs", () => {
     );
   });
 
+  test("rejects parallel worker packets that are only read-only sidecars", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.workerTaskPackets[0].executionMode = "readonly_fetch_sidecar";
+      const secondTask = {
+        ...artifact.workerTaskPackets[0],
+        taskPacketId: "task-002",
+        executionMode: "readonly_review_sidecar",
+        roleInstanceId: "auth-refresh#2",
+        shardKey: "file-scope-tests",
+        shardScope: ["auth-refresh-hardening:token-refresh-tests"],
+        artifactNamespace: "auth-refresh-tests",
+        dependsOn: [],
+      };
+      artifact.workerTaskPackets.push(secondTask);
+      artifact.workerResultPackets.push({
+        ...artifact.workerResultPackets[0],
+        taskPacketId: "task-002",
+      });
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /read-only sidecar|execution worker|parallelGroup/i,
+    );
+  });
+
   test("rejects missing fetchPacket for governed runs", async (t) => {
     const tempFixture = await writeTempFixture(t, (artifact) => {
       delete artifact.fetchPacket;

@@ -254,10 +254,15 @@ export function buildCodexHooksJson({
 export function buildCursorHooksJson({
   graphifyHookPath = ".cursor/hooks/graphify-context.mjs",
   memoryHookPath = ".cursor/hooks/meta-kim-memory-save.mjs",
+  spineHookPath = ".cursor/hooks/activate-meta-theory-spine.mjs",
   enforceAgentDispatchHookPath = ".cursor/hooks/enforce-agent-dispatch.mjs",
   hookPromptAdapterPath = null,
 } = {}) {
   const beforeSubmitPromptHooks = [
+    {
+      command: nodeHookCommand(spineHookPath),
+      timeout: 5,
+    },
     {
       command: nodeHookCommand(memoryHookPath, ["--event", "user-prompt"]),
       timeout: 10,

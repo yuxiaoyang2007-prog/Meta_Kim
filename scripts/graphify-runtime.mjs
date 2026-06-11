@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 
 export function readProcessText(result) {
   const stdout =
@@ -27,7 +27,100 @@ export function parsePythonVersion(text) {
   };
 }
 
-export function pythonCandidates(platform = process.platform) {
+function pushUniqueCandidate(candidates, seen, command, args = []) {
+  const key = `${command}\0${args.join("\0")}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  candidates.push({ command, args });
+}
+
+export function homebrewPythonCandidates(
+  platform = process.platform,
+  env = process.env,
+) {
+  if (platform !== "darwin" && platform !== "linux") {
+    return [];
+  }
+
+  const prefixes = [];
+  const addPrefix = (value) => {
+    if (typeof value !== "string") return;
+    const trimmed = value.trim();
+    if (trimmed && !prefixes.includes(trimmed)) {
+      prefixes.push(trimmed);
+    }
+  };
+
+  addPrefix(env.HOMEBREW_PREFIX);
+  if (platform === "darwin") {
+    addPrefix("/opt/homebrew");
+    addPrefix("/usr/local");
+  } else {
+    addPrefix("/home/linuxbrew/.linuxbrew");
+  }
+
+  const candidates = [];
+  const seen = new Set();
+  const supportedMinors = Array.from({ length: 11 }, (_, index) => 20 - index);
+
+  for (const prefix of prefixes) {
+    pushUniqueCandidate(candidates, seen, posix.join(prefix, "bin", "python3"));
+    pushUniqueCandidate(candidates, seen, posix.join(prefix, "bin", "python"));
+
+    for (const minor of supportedMinors) {
+      const version = `3.${minor}`;
+      pushUniqueCandidate(
+        candidates,
+        seen,
+        posix.join(prefix, "bin", `python${version}`),
+      );
+      pushUniqueCandidate(
+        candidates,
+        seen,
+        posix.join(
+          prefix,
+          "opt",
+          `python@${version}`,
+          "bin",
+          `python${version}`,
+        ),
+      );
+      pushUniqueCandidate(
+        candidates,
+        seen,
+        posix.join(prefix, "opt", `python@${version}`, "bin", "python3"),
+      );
+      pushUniqueCandidate(
+        candidates,
+        seen,
+        posix.join(
+          prefix,
+          "opt",
+          `python@${version}`,
+          "libexec",
+          "bin",
+          "python3",
+        ),
+      );
+      pushUniqueCandidate(
+        candidates,
+        seen,
+        posix.join(
+          prefix,
+          "opt",
+          `python@${version}`,
+          "libexec",
+          "bin",
+          "python",
+        ),
+      );
+    }
+  }
+
+  return candidates;
+}
+
+export function pythonCandidates(platform = process.platform, env = process.env) {
   if (platform === "win32") {
     return [
       { command: "py", args: ["-3"] },
@@ -38,6 +131,7 @@ export function pythonCandidates(platform = process.platform) {
   return [
     { command: "python3", args: [] },
     { command: "python", args: [] },
+    ...homebrewPythonCandidates(platform, env),
   ];
 }
 
@@ -218,7 +312,8 @@ export function detectPython310(
     return null;
   };
 
-  for (const candidate of pythonCandidates(platform)) {
+  const env = options.env ?? process.env;
+  for (const candidate of pythonCandidates(platform, env)) {
     const hit = tryCandidate(candidate);
     if (hit) return hit;
   }
@@ -231,7 +326,6 @@ export function detectPython310(
       if (hit) return { ...hit, absolutePath: true };
     }
 
-    const env = options.env ?? process.env;
     const discovered = discoverWindowsPythonPaths(env);
     for (const { major, minor, path: exePath } of discovered) {
       if (major < 3 || (major === 3 && minor < 10)) continue;

@@ -239,6 +239,7 @@
       "taskPacketId": "task-cross-001",
       "owner": "meta-conductor",
       "ownerMode": "existing-owner",
+      "executionMode": "primary_execution",
       "todayTask": "extract shared auth patterns from project auth implementations",
       "output": "shared pattern module + verification notes",
       "deliverableLink": "shared-auth-pattern-extraction:pattern-module",

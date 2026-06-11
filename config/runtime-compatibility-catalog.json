@@ -237,7 +237,7 @@
         },
         {
           "type": "command_output",
-          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "ref": "npx --yes --package ecc-universal@latest ecc install --help",
           "claim": "ECC install help lists opencode as a supported target."
         }
       ],
@@ -276,7 +276,7 @@
         },
         {
           "type": "command_output",
-          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "ref": "npx --yes --package ecc-universal@latest ecc install --help",
           "claim": "ECC install help lists qwen as a supported target."
         }
       ],
@@ -315,7 +315,7 @@
         },
         {
           "type": "command_output",
-          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "ref": "npx --yes --package ecc-universal@latest ecc install --help",
           "claim": "ECC install help lists zed as a supported target."
         }
       ],
@@ -354,7 +354,7 @@
         },
         {
           "type": "command_output",
-          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "ref": "npx --yes --package ecc-universal@latest ecc install --help",
           "claim": "ECC install help lists gemini as a supported target."
         }
       ],
@@ -393,7 +393,7 @@
         },
         {
           "type": "command_output",
-          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "ref": "npx --yes --package ecc-universal@latest ecc install --help",
           "claim": "ECC install help lists codebuddy as a supported target."
         }
       ],
@@ -432,7 +432,7 @@
         },
         {
           "type": "command_output",
-          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "ref": "npx --yes --package ecc-universal@latest ecc install --help",
           "claim": "ECC install help lists antigravity as a supported target."
         }
       ],
@@ -471,7 +471,7 @@
         },
         {
           "type": "command_output",
-          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "ref": "npx --yes --package ecc-universal@latest ecc install --help",
           "claim": "ECC install help lists joycode as a supported target."
         }
       ],
@@ -499,7 +499,7 @@
         "ecc": {
           "support": "not_supported",
           "mode": "not_applicable",
-          "evidenceRef": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help"
+          "evidenceRef": "npx --yes --package ecc-universal@latest ecc install --help"
         }
       },
       "evidence": [
@@ -530,7 +530,7 @@
         },
         {
           "type": "command_output",
-          "ref": "npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --help",
+          "ref": "npx --yes --package ecc-universal@latest ecc install --help",
           "claim": "ECC install help does not list qoder as a supported target."
         }
       ],

@@ -1865,12 +1865,14 @@ export function buildCodexProjectHooksJson({
 export function buildCursorProjectHooksJson({
   graphifyHookPath = ".cursor/hooks/graphify-context.mjs",
   memoryHookPath = ".cursor/hooks/meta-kim-memory-save.mjs",
+  spineHookPath = ".cursor/hooks/activate-meta-theory-spine.mjs",
   enforceAgentDispatchHookPath = ".cursor/hooks/enforce-agent-dispatch.mjs",
   hookPromptAdapterPath = null,
 } = {}) {
   return buildCursorHooksJson({
     graphifyHookPath,
     memoryHookPath,
+    spineHookPath,
     enforceAgentDispatchHookPath,
     hookPromptAdapterPath,
   });
@@ -2624,6 +2626,20 @@ Examples:
       ) {
         changedFiles.push(`${dp.cursorHooks}/graphify-context.mjs`);
       }
+      const cursorSpineHookContent = await tryReadCanonical(
+        canonicalSharedSpineHookPath,
+      );
+      if (
+        cursorSpineHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.cursorHooksDir, "activate-meta-theory-spine.mjs"),
+            cursorSpineHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.cursorHooks}/activate-meta-theory-spine.mjs`);
+      }
       // Sync the dispatch-enforcement gate + its bash-readonly classifier from
       // the Claude canonical hooks directory. deny() output adapts to Cursor's
       // official Cursor hook JSON schema at runtime via META_KIM_HOOK_RUNTIME / argv inspection.
@@ -2732,6 +2748,10 @@ Examples:
         scope === "global"
           ? path.join(dirs.cursorHooksDir, "meta-kim-memory-save.mjs")
           : ".cursor/hooks/meta-kim-memory-save.mjs";
+      const spineHookPath =
+        scope === "global"
+          ? path.join(dirs.cursorHooksDir, "activate-meta-theory-spine.mjs")
+          : ".cursor/hooks/activate-meta-theory-spine.mjs";
       const enforceAgentDispatchHookPath =
         scope === "global"
           ? path.join(dirs.cursorHooksDir, "enforce-agent-dispatch.mjs")
@@ -2747,6 +2767,7 @@ Examples:
             buildCursorProjectHooksJson({
               graphifyHookPath,
               memoryHookPath,
+              spineHookPath,
               enforceAgentDispatchHookPath,
               hookPromptAdapterPath,
             }),

@@ -2633,6 +2633,7 @@
         "taskPacketId",
         "owner",
         "ownerMode",
+        "executionMode",
         "ownerAgent",
         "businessRoleId",
         "roleDisplayName",
@@ -2669,11 +2670,35 @@
         "userChoiceState",
         "finalizationGate"
       ],
-      "description": "Execution task packet dispatched to a worker agent. It is a complete work order, not a vague assignment: coreProblem, todayTask, nonGoals, output, acceptanceCriteria, qualityBar, expertLensRefs, evidenceRefs, capabilityRequirements, toolRequirements, handoffContract, and verifySteps must be clear before work starts. ownerMode is the worker-task mode and uses existing-owner or create-owner-first; agentBlueprintPacket.roles[].ownerResolution remains the broader owner-resolution field with reuse_existing_owner, upgrade_existing_owner, or create_owner_first. The three core orchestration fields are dependsOn (upstream dependency, see dependencyContract), parallelGroup (parallel grouping), and mergeOwner (merge owner). roleDisplayName is the user-visible short English business role name; runtimeInstanceAlias records only transient host nicknames and must not replace the business role name. Concrete files, paths, tickets, and one-run work content belong here or in capabilityBindings, never in executionAgentCard durable identity. verifySteps provides atomic completion criteria for Verification. This packet may not finalize before userChoiceState records a user choice or an explicit auto-proceed / choiceGateSkip allowed by preDecisionOptionFrame. Workers MUST populate fileCompletionList in their output when scopeFiles is declared, listing every promised file with explicit status; this closes EB-001 from v2.2.2 review.",
+      "description": "Execution task packet dispatched to a worker agent. It is a complete work order, not a vague assignment: coreProblem, todayTask, nonGoals, output, acceptanceCriteria, qualityBar, expertLensRefs, evidenceRefs, capabilityRequirements, toolRequirements, handoffContract, and verifySteps must be clear before work starts. ownerMode is the worker-task mode and uses existing-owner or create-owner-first; executionMode states whether the packet is a real execution worker, factory dispatch worker, verification worker, approval gate, or read-only sidecar. Read-only Fetch/Review sidecars never count as Stage 4 execution workers or as proof of parallel execution. agentBlueprintPacket.roles[].ownerResolution remains the broader owner-resolution field with reuse_existing_owner, upgrade_existing_owner, or create_owner_first. The three core orchestration fields are dependsOn (upstream dependency, see dependencyContract), parallelGroup (parallel grouping), and mergeOwner (merge owner). roleDisplayName is the user-visible short English business role name; runtimeInstanceAlias records only transient host nicknames and must not replace the business role name. Concrete files, paths, tickets, and one-run work content belong here or in capabilityBindings, never in executionAgentCard durable identity. verifySteps provides atomic completion criteria for Verification. This packet may not finalize before userChoiceState records a user choice or an explicit auto-proceed / choiceGateSkip allowed by preDecisionOptionFrame. Workers MUST populate fileCompletionList in their output when scopeFiles is declared, listing every promised file with explicit status; this closes EB-001 from v2.2.2 review.",
       "ownerModeEnum": [
         "existing-owner",
         "create-owner-first"
       ],
+      "executionModePolicy": {
+        "executionModeEnum": [
+          "primary_execution",
+          "factory_then_dispatch",
+          "verification_execution",
+          "approval_gate",
+          "readonly_fetch_sidecar",
+          "readonly_review_sidecar"
+        ],
+        "executionWorkerModes": [
+          "primary_execution",
+          "factory_then_dispatch",
+          "verification_execution"
+        ],
+        "sidecarModes": [
+          "readonly_fetch_sidecar",
+          "readonly_review_sidecar"
+        ],
+        "approvalGateModes": [
+          "approval_gate"
+        ],
+        "parallelGroupRule": "A parallelGroup with multiple packets must include at least one executionWorkerMode. Executable non-query runs with workerTaskPackets must include an executionWorkerMode unless every packet is an approval_gate. Read-only sidecars and approval gates do not prove Stage 4 execution.",
+        "description": "executionMode prevents fake orchestration: Fetch/Review helpers may run in parallel, but they are sidecars unless a packet declares a real execution worker mode."
+      },
       "handoffContractRequiredFields": [
         "handoffTo",
         "handoffWhen",

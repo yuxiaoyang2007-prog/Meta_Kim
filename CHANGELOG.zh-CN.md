@@ -6,6 +6,96 @@
 
 更新说明只解释“改了什么、为什么重要”。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
+## [2.8.17] - 2026-06-11
+
+### 修复
+
+- **编排任务有真实执行模式** - `workerTaskPacket` 现在会声明 `executionMode`，Meta_Kim 可以区分真正执行 worker、审批门禁，以及只读 Fetch/Review sidecar。只包含 sidecar 或审批步骤的并行组，不能再通过质量门。
+- **Capability Gap 编排验证更严格** - Capability-gap 报告现在会把 execution mode 贯穿到 worker packet、任务板、Review 检查、验证摘要和 run artifact validator。这样“看起来并行、实际没执行”的假并行会被直接暴露并拦下。
+- **ECC 插件更新路径修正** - Claude plugin update 模式在发现已有 ECC 插件记录时，会调用 `claude plugin update ecc@ecc`；更新成功后重新读取插件管理器记录，避免沿用旧路径或旧 SHA。
+- **Graphify Python 发现更稳** - Graphify setup 和 runtime 检查会在普通 `python3` / `python` 之后继续尝试 Homebrew 和 Linuxbrew Python 路径。macOS / Linux 用户即使 Python 没放进 PATH，也更容易完成 Graphify 初始化。
+
+### 验证
+
+- `node --test tests/meta-theory/09-run-artifact-validator.test.mjs`
+- `node --test tests/meta-theory/31-capability-gap-orchestration.test.mjs tests/meta-theory/33-capability-gap-orchestration-quality.test.mjs`
+- `node --test tests/setup/graphify-runtime.test.mjs tests/setup/graphify-wiring-contract.test.mjs tests/setup/install-cross-platform.test.mjs tests/setup/install-plugin-bundles.test.mjs`
+- `node --test tests/integration/agent-teams-playbook-integration.test.mjs tests/meta-theory/39-orchestration-dag-report.test.mjs tests/meta-theory/40-orchestration-scheduler-report.test.mjs`
+- `npm run meta:gap:validate-board`
+- `npm run meta:gap:complex-inputs`
+- `npm run meta:gap:codex-real-test`
+- `npm run meta:test:setup`
+- `npm run meta:test:meta-theory`
+- `npm run meta:check`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:graphify:check`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
+## [2.8.16] - 2026-06-10
+
+### 修复
+
+- **复制后自动初始化 Graphify** - 复制到任意项目根目录的 Meta_Kim 项目级文件夹，不再要求用户记住并手动运行 `node meta-kim-post-copy.mjs`。首次触发 `meta-theory` 时，Meta_Kim 会从最终项目根目录自动启动 post-copy bootstrap。
+- **首次触发不阻塞** - 生成的 `meta-kim-post-copy.mjs` 现在支持 `--auto` 和 `--auto-worker`。hook 只启动一个分离的后台 worker，把一次性状态写入 `.meta-kim/state/default/post-copy-init.json`；即使 Graphify 依赖安装或建图耗时较长，也不会卡住 meta-theory 启动路径。
+- **运行时 hook 覆盖补齐** - Claude Code 和 Codex 的 Skill 激活会调用同一个 shared spine hook；Cursor 的 prompt hook 也能在显式 `meta-theory` 输入时走同一路径自动 bootstrap。需要显式关闭时，可以设置 `META_KIM_POST_COPY_AUTO=off`。
+- **回归测试覆盖** - setup 测试现在锁定自动 bootstrap 契约、Cursor prompt hook 顺序，以及复制后 Graphify 初始化行为。
+
+### 验证
+
+- `npm run meta:test:setup`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:release:smoke`
+- `npm run meta:graphify:check`
+- `git diff --check`
+- `node --check setup.mjs`
+- `node --check canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs`
+- `node --check scripts/runtime-hook-mapping.mjs`
+- `node --check scripts/sync-runtimes.mjs`
+
+## [2.8.15] - 2026-06-10
+
+### 修复
+
+- **可复制目录的 Graphify 初始化** - quick setup 或 install/update 导出的项目级文件夹现在会包含 `meta-kim-post-copy.mjs`。当你先把生成目录放在桌面等临时位置，再把其中全部内容复制到任意项目根目录后，在最终项目里运行 `node meta-kim-post-copy.mjs` 即可为该项目初始化 Graphify。
+- **临时目录边界更清楚** - Meta_Kim 不再把桌面这类生成/暂存目录误当成最终 Graphify root。这样不会为错误目录生成或复制过期的 `graphify-out/`，Graphify 仍然按最终项目逐个初始化。
+- **复制后契约测试覆盖** - setup 测试现在会锁定 copy-ready 契约：运行时文件复制完成后才写入 bootstrap；bootstrap 用自身所在目录作为项目根；install/update 导出不会悄悄在暂存目录里构建 Graphify。
+
+### 验证
+
+- `node --check setup.mjs`
+- `node --test tests/setup/graphify-wiring-contract.test.mjs`
+- `node --test tests/setup/install-cross-platform.test.mjs tests/setup/setup-update-default-flow.test.mjs tests/setup/i18n.test.mjs`
+- `npm run meta:test:setup`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
+## [2.8.14] - 2026-06-10
+
+### 修复
+
+- **安装和更新提示本地化** - ECC、Graphify、Codex 配置保护、原生插件交接、插件市场检查和回环代理处理等安装/更新输出，现在统一走 Meta_Kim shared i18n，不再散落硬编码英文。中文、日文、韩文用户会看到本地化的跳过状态和手动宿主插件步骤。
+- **ECC 上游版本跟随** - ECC 原生安装现在使用 `ecc-universal@latest`，不再使用旧的 `2.0.0-rc.1` release candidate；运行时清单、文档、兼容性证据和 setup 测试都已同步。
+- **插件交接提示不再误导** - 宿主限制导致的预期手动步骤现在显示为跳过/手动处理，不再像失败警告。Codex 和 Cursor 原生插件提示会说明应走宿主插件入口，而不是暗示技能目录回退失败。
+- **Graphify 跳过状态一致** - 已经存在 Graphify 指南章节时，Graphify install 会输出本地化跳过提示；旧的 `[SKIP] graphify ...` 也统一成 Meta_Kim 的跳过状态输出。
+- **HookPrompt Markdown 安全输出** - 上游 HookPrompt 依赖现在会把用户原始输入和优化后的完整提示词都放进 fenced code block；因此 `# Files mentioned by the user:` 这类附件标题不再会在 Codex 中间输出里被渲染成超大 Markdown 标题。
+
+### 验证
+
+- `node --check .claude/hooks/user-prompt-submit.js; node --check .codex/hooks/user-prompt-submit.js; node --check test-hook.js`（在 `D:/KimProject/HookPrompt`）
+- `node test-hook.js`（在 `D:/KimProject/HookPrompt`）
+- `node scripts/install-global-skills-all-runtimes.mjs --dry-run --update --skills ecc,superpowers --targets claude,codex,cursor --lang zh-CN`
+- `node --test tests/setup/install-plugin-bundles.test.mjs tests/setup/graphify-wiring-contract.test.mjs tests/setup/install-cross-platform.test.mjs`
+- `npm run meta:test:setup`
+- `npm run meta:capabilities:smoke`
+- `npm run meta:check`
+- `npm run meta:release:smoke`
+- `npm run meta:verify:all`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
 ## [2.8.13] - 2026-06-10
 
 ### 修复

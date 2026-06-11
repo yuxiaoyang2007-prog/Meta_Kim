@@ -826,9 +826,9 @@ Superpowers 在 Claude Code、Codex 和 Cursor 都有原生 plugin 入口。Meta
 | Codex | Superpowers 走 Codex 插件 UI 或 `/plugins`；其他 bundle 再按 `.codex/` → `.codex-plugin/` → `skills/` 回退 |
 | Cursor | Superpowers 走 `/add-plugin superpowers` 或 Cursor 插件市场；其他 bundle 再按 `.cursor/` → `.cursor-plugin/` → `skills/` 回退 |
 | OpenClaw | `skills/` |
-| opencode | ECC 使用 `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target opencode`；其他 bundle 按 `.opencode/` → `skills/` 回退 |
-| Qwen | ECC 使用 `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target qwen` |
-| Zed、Gemini、CodeBuddy、Antigravity、JoyCode | ECC 是项目本地安装：在每个项目根目录运行 `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target <target>` |
+| opencode | ECC 使用 `npx --yes --package ecc-universal@latest ecc install --profile core --target opencode`；其他 bundle 按 `.opencode/` → `skills/` 回退 |
+| Qwen | ECC 使用 `npx --yes --package ecc-universal@latest ecc install --profile core --target qwen` |
+| Zed、Gemini、CodeBuddy、Antigravity、JoyCode | ECC 是项目本地安装：在每个项目根目录运行 `npx --yes --package ecc-universal@latest ecc install --profile core --target <target>` |
 | Qoder CLI | 仅 candidate probe：通用 bundle 探测可以看 `.qoder/` → `skills/`，但 ECC 不会对 Qoder 执行安装，因为上游 `ecc install --help` 当前没有 `qoder` |
 
 抽取结果装到 `~/.<tool>/skills/<id>/`。只装 Claude 市场 plugin：`npm run meta:deps:install:claude-plugins`；一次覆盖全工具端：`npm run meta:deps:install:all-runtimes`。**升级用户无需手动清理**：老版本的整 repo clone 残留会通过目标目录下的 `.claude-plugin/` 标志自动识别；旧版 Codex/Cursor `skills/superpowers` fallback 也会在更新时移除，并提示安装原生插件。

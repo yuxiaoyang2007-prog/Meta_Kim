@@ -26,6 +26,8 @@ describe("33 — Capability Gap orchestration quality gates", () => {
     assert.equal(validation.status, "pass");
     assert.equal(validation.errors.length, 0);
     assert.equal(validation.checked.workerTaskPacketCount, report.workerTaskPackets.length);
+    assert.ok(validation.checked.executionWorkerCount >= 1);
+    assert.equal(validation.checked.approvalGateCount, report.decisionCounts.blocked_or_needs_approval);
     assert.equal(validation.checked.mergeOwners.length, 1);
     assert.equal(validation.checked.mergeOwners[0], "meta-conductor");
     assert.ok(validation.checked.groupedRepeatedNeeds >= 1);
@@ -61,6 +63,26 @@ describe("33 — Capability Gap orchestration quality gates", () => {
     const validation = validateOrchestrationBoard(report);
     assert.equal(validation.status, "fail");
     assert.match(validation.errors.join("\n"), /conflicting mergeOwner/);
+  });
+
+  test("P-016 fails when a parallel group is made only of read-only sidecars", () => {
+    const report = buildCapabilityGapOrchestration(multiNeedTask);
+    const skillTasks = report.workerTaskPackets.filter(
+      (packet) => packet.shardScope === "prd-review-flow"
+    );
+    assert.ok(skillTasks.length >= 2);
+    for (const packet of skillTasks) {
+      packet.executionMode = "readonly_review_sidecar";
+    }
+    for (const task of report.orchestrationTaskBoardPacket.tasks) {
+      if (skillTasks.some((packet) => packet.taskPacketId === task.taskPacketId)) {
+        task.executionMode = "readonly_review_sidecar";
+      }
+    }
+
+    const validation = validateOrchestrationBoard(report);
+    assert.equal(validation.status, "fail");
+    assert.match(validation.errors.join("\n"), /read-only sidecar|execution worker/i);
   });
 
   test("P-021 scores non-agent capability candidates across boundary, loadout, privilege, verification, and writeback policy", () => {

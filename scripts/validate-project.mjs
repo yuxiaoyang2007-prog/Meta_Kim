@@ -693,6 +693,7 @@ async function validateWorkflowContract() {
     "todayTask",
     "scopeFiles",
     "workType",
+    "executionMode",
     "qualityBar",
     "referenceDirection",
     "verifySteps",
@@ -704,6 +705,18 @@ async function validateWorkflowContract() {
       `workflow-contract.json workerTaskPacket must require ${field}.`,
     );
   }
+  const executionModePolicy =
+    contract.protocols?.workerTaskPacket?.executionModePolicy ?? {};
+  assert(
+    executionModePolicy.executionWorkerModes?.includes("primary_execution") &&
+      executionModePolicy.executionWorkerModes?.includes("factory_then_dispatch"),
+    "workflow-contract.json workerTaskPacket.executionModePolicy must define execution worker modes.",
+  );
+  assert(
+    executionModePolicy.sidecarModes?.includes("readonly_fetch_sidecar") &&
+      executionModePolicy.sidecarModes?.includes("readonly_review_sidecar"),
+    "workflow-contract.json workerTaskPacket.executionModePolicy must define read-only sidecar modes.",
+  );
   const verifySteps = contract.protocols?.workerTaskPacket?.verifyStepsField ?? {};
   assert(
     verifySteps.items?.required?.includes("step") &&

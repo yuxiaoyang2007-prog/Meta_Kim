@@ -829,12 +829,12 @@ For plugin bundles without a native host plugin entry point, the installer still
 | Runtime | Preferred subdir chain |
 | --- | --- |
 | Claude Code | native `claude plugin install <spec>@<marketplace>` (skills without `claudePlugin` fall back to `skills/`) |
-| Codex | Superpowers uses the Codex Plugins pane or `/plugins`; ECC uses `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target codex` and currently installs the `refactor-cleaner` agent, not the `/refactor-clean` slash command because upstream ECC does not expose `commands-core` for Codex; other bundles fall back through `.codex/` → `.codex-plugin/` → `skills/` |
-| Cursor | Superpowers uses `/add-plugin superpowers` or Cursor's plugin marketplace; ECC is project-local: run `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target cursor` from the project root; other bundles fall back through `.cursor/` → `.cursor-plugin/` → `skills/` |
+| Codex | Superpowers uses the Codex Plugins pane or `/plugins`; ECC uses `npx --yes --package ecc-universal@latest ecc install --profile core --target codex` and currently installs the `refactor-cleaner` agent, not the `/refactor-clean` slash command because upstream ECC does not expose `commands-core` for Codex; other bundles fall back through `.codex/` → `.codex-plugin/` → `skills/` |
+| Cursor | Superpowers uses `/add-plugin superpowers` or Cursor's plugin marketplace; ECC is project-local: run `npx --yes --package ecc-universal@latest ecc install --profile core --target cursor` from the project root; other bundles fall back through `.cursor/` → `.cursor-plugin/` → `skills/` |
 | OpenClaw | `skills/` |
-| opencode | ECC uses `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target opencode`; other bundles fall back through `.opencode/` -> `skills/` |
-| Qwen | ECC uses `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target qwen` |
-| Zed, Gemini, CodeBuddy, Antigravity, JoyCode | ECC is project-local: run `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target <target>` from each project root |
+| opencode | ECC uses `npx --yes --package ecc-universal@latest ecc install --profile core --target opencode`; other bundles fall back through `.opencode/` -> `skills/` |
+| Qwen | ECC uses `npx --yes --package ecc-universal@latest ecc install --profile core --target qwen` |
+| Zed, Gemini, CodeBuddy, Antigravity, JoyCode | ECC is project-local: run `npx --yes --package ecc-universal@latest ecc install --profile core --target <target>` from each project root |
 | Qoder CLI | Candidate probe only: generic bundle probing can look for `.qoder/` -> `skills/`, but ECC is not run for Qoder because upstream `ecc install --help` does not list `qoder` |
 
 Sparse-checkout fallback trees land in `~/.<runtime>/skills/<id>/`; native ECC installs do not. Run `npm run meta:deps:install:claude-plugins` for the Claude marketplace path only, or `npm run meta:deps:install:all-runtimes` to cover every supported home runtime at once. Upgrading from an older install? Legacy full-repo clones are auto-detected by the `.claude-plugin/` marker at the target root and re-extracted on the next run; old Codex/Cursor `skills/superpowers`, `skills/ecc`, and `skills/everything-claude-code` fallbacks are removed or replaced with native-install instructions.

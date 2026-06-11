@@ -36,6 +36,28 @@ const OWNER_BY_DECISION = {
   blocked_or_needs_approval: "meta-sentinel",
 };
 
+const FACTORY_DECISIONS = new Set([
+  "create_skill",
+  "create_agent",
+  "create_script",
+  "create_mcp_provider",
+]);
+
+const EXECUTION_WORKER_MODES = new Set([
+  "primary_execution",
+  "factory_then_dispatch",
+  "verification_execution",
+]);
+
+const APPROVAL_GATE_MODES = new Set(["approval_gate"]);
+
+const EXECUTION_MODE_ENUM = new Set([
+  ...EXECUTION_WORKER_MODES,
+  ...APPROVAL_GATE_MODES,
+  "readonly_fetch_sidecar",
+  "readonly_review_sidecar",
+]);
+
 const MULTI_TYPE_CAPABILITY_INVENTORY = [
   {
     capabilityType: "agent",
@@ -994,6 +1016,13 @@ function makeWorkerTaskPacket({ gap, group, groupIndex, itemIndex }) {
   const capabilityLoadout = cloneCapabilityLoadout(lane?.capabilityLoadout);
   const roleSoulPolicy = lane ? buildRoleSoulPolicy(lane) : null;
   const taskPacketId = stableId("worker-task", `${group.groupKey}-${gap.requestId}`);
+  const executionMode = lane
+    ? "primary_execution"
+    : decision === "blocked_or_needs_approval"
+      ? "approval_gate"
+      : FACTORY_DECISIONS.has(decision)
+        ? "factory_then_dispatch"
+        : "primary_execution";
   return {
     taskPacketId,
     owner: gap.owner,
@@ -1002,6 +1031,7 @@ function makeWorkerTaskPacket({ gap, group, groupIndex, itemIndex }) {
       : decision === "worker_task_only"
         ? "existing-owner"
         : "create-owner-first",
+    executionMode,
     workerInstanceMode: lane ? "run-scoped-instance" : "gap-decision-worker",
     ownerAgent: gap.owner,
     projectAgentId: lane?.projectAgentId ?? null,
@@ -1178,6 +1208,7 @@ export function buildCapabilityGapOrchestration(input) {
         dependsOn: packet.dependsOn,
         toolRequirements: packet.toolRequirements,
         capabilityLoadout: packet.capabilityLoadout,
+        executionMode: packet.executionMode,
         ownerMode: packet.ownerMode,
         workerInstanceMode: packet.workerInstanceMode,
         durableIdentityStatus: packet.durableIdentityStatus,
@@ -1271,6 +1302,7 @@ export function buildCapabilityGapOrchestration(input) {
       businessFlowLaneId: packet.businessFlowLaneId,
       businessFlowLaneLabel: packet.businessFlowLaneLabel,
       ownerMode: packet.ownerMode,
+      executionMode: packet.executionMode,
       workerInstanceMode: packet.workerInstanceMode,
       capabilityLoadoutSummary: packet.capabilityLoadout
         ? {
@@ -1345,10 +1377,16 @@ export function buildCapabilityGapOrchestration(input) {
         agent.knowledgeGraphPolicy?.afterMutationPolicy?.rebuildCommand ===
           "npm run meta:graphify:rebuild"
     );
+  const executionModeReady =
+    workerTaskPackets.length > 0 &&
+    workerTaskPackets.every((packet) => EXECUTION_MODE_ENUM.has(packet.executionMode)) &&
+    (workerTaskPackets.some((packet) => EXECUTION_WORKER_MODES.has(packet.executionMode)) ||
+      workerTaskPackets.every((packet) => APPROVAL_GATE_MODES.has(packet.executionMode)));
   const status =
     requests.length > 0 &&
     workerTaskPackets.length === decided.length &&
     workerTaskPackets.every((packet) => packet.mergeOwner === "meta-conductor") &&
+    executionModeReady &&
     dynamicProjectAgentIdentityReady &&
     dynamicProjectAgentEvidenceReady &&
     dynamicProjectAgentGraphReady &&
@@ -1473,6 +1511,16 @@ export function buildCapabilityGapOrchestration(input) {
           orchestrationTaskBoardPacket.triggerChain[0] === "meta-theory-skill-adapter",
         conductorOwnsBoard: orchestrationTaskBoardPacket.synthesisOwner === "meta-conductor",
         eachGapHasWorkerTask: workerTaskPackets.length === decided.length,
+        workerTasksDeclareExecutionMode: workerTaskPackets.every((packet) =>
+          EXECUTION_MODE_ENUM.has(packet.executionMode)
+        ),
+        executionWorkersAreNotSidecars:
+          workerTaskPackets.some((packet) =>
+            EXECUTION_WORKER_MODES.has(packet.executionMode)
+          ) ||
+          workerTaskPackets.every((packet) =>
+            APPROVAL_GATE_MODES.has(packet.executionMode)
+          ),
         sameOwnerInstancesHaveShardScope: workerTaskPackets.every(
           (packet) => packet.roleInstanceId && packet.shardScope && packet.mergeOwner
         ),
@@ -1563,6 +1611,7 @@ async function main() {
           owner: packet.owner,
           projectAgentId: packet.projectAgentId,
           ownerMode: packet.ownerMode,
+          executionMode: packet.executionMode,
           workerInstanceMode: packet.workerInstanceMode,
           durableIdentityStatus: packet.durableIdentityStatus,
           capabilityProfileId: packet.capabilityLoadout?.capabilityProfileId ?? null,
@@ -1606,6 +1655,10 @@ async function main() {
             report.reviewResult.checks.dynamicProjectAgentsHaveGraphPolicies,
           dynamicLanesHaveLoadoutAndSoulPolicy:
             report.reviewResult.checks.dynamicLanesHaveLoadoutAndSoulPolicy,
+          workerTasksDeclareExecutionMode:
+            report.reviewResult.checks.workerTasksDeclareExecutionMode,
+          executionWorkersAreNotSidecars:
+            report.reviewResult.checks.executionWorkersAreNotSidecars,
         },
       },
       null,

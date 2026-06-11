@@ -746,8 +746,8 @@ flowchart TB
 | Cursor | `.cursor/` → `.cursor-plugin/` → `skills/` |
 | OpenClaw | `skills/` |
 | opencode | `.opencode/` → `skills/` |
-| Qwen | ECC는 `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target qwen`을 사용합니다 |
-| Zed, Gemini, CodeBuddy, Antigravity, JoyCode | ECC는 project-local입니다. 각 프로젝트 루트에서 `npx --yes --package ecc-universal@2.0.0-rc.1 ecc install --profile core --target <target>`를 실행합니다 |
+| Qwen | ECC는 `npx --yes --package ecc-universal@latest ecc install --profile core --target qwen`을 사용합니다 |
+| Zed, Gemini, CodeBuddy, Antigravity, JoyCode | ECC는 project-local입니다. 각 프로젝트 루트에서 `npx --yes --package ecc-universal@latest ecc install --profile core --target <target>`를 실행합니다 |
 | Qoder CLI | candidate probe 전용입니다. `.qoder/` → `skills/` 탐색은 가능하지만 upstream ECC가 `qoder`를 나열하지 않으므로 ECC install은 실행하지 않습니다 |
 
 추출 결과는 `~/.<runtime>/skills/<id>/`에 배치됨. Claude marketplace plugin만 설치하려면 `npm run meta:deps:install:claude-plugins`, 모든 런타임을 한 번에 커버하려면 `npm run meta:deps:install:all-runtimes`. **업그레이드 시 수동 정리 불필요**: 이전 버전의 full-repo clone 잔존물은 대상 디렉터리 루트의 `.claude-plugin/` 마커로 자동 감지되어 다음 실행 시 재추출됨.

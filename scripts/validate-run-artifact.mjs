@@ -3131,8 +3131,15 @@ function validateWorkerPackets(contract, artifact) {
   const taskById = new Map();
   const dependenciesByTaskId = new Map();
   const packetsByOwnerAgent = new Map();
+  const packetsByParallelGroup = new Map();
   const workerPolicy = contract.protocols.workerTaskPacket.sameOwnerMultiInstancePolicy;
   const validCollisionPolicies = workerPolicy.collisionPolicyEnum ?? [];
+  const executionModePolicy =
+    contract.protocols.workerTaskPacket.executionModePolicy ?? {};
+  const executionWorkerModes = new Set(
+    executionModePolicy.executionWorkerModes ?? [],
+  );
+  const approvalGateModes = new Set(executionModePolicy.approvalGateModes ?? []);
   const validWorkspaceIsolation = new Set([
     "same_workspace_readonly_overlap",
     "isolated_worktree",
@@ -3159,6 +3166,11 @@ function validateWorkerPackets(contract, artifact) {
       packet.ownerMode,
       contract.protocols.workerTaskPacket.ownerModeEnum ?? [],
       `workerTaskPackets[${index}].ownerMode`,
+    );
+    ensureEnum(
+      packet.executionMode,
+      executionModePolicy.executionModeEnum ?? [],
+      `workerTaskPackets[${index}].executionMode`,
     );
     ensureString(packet.roleDisplayName, `workerTaskPackets[${index}].roleDisplayName`);
     ensureString(packet.ownerAgent, `workerTaskPackets[${index}].ownerAgent`);
@@ -3204,6 +3216,9 @@ function validateWorkerPackets(contract, artifact) {
     const ownerPackets = packetsByOwnerAgent.get(packet.ownerAgent) ?? [];
     ownerPackets.push({ ...packet, index });
     packetsByOwnerAgent.set(packet.ownerAgent, ownerPackets);
+    const parallelPackets = packetsByParallelGroup.get(packet.parallelGroup) ?? [];
+    parallelPackets.push({ ...packet, index });
+    packetsByParallelGroup.set(packet.parallelGroup, parallelPackets);
     taskById.set(packet.taskPacketId, packet);
     if (
       contract.runDiscipline.runArtifactValidation
@@ -3216,6 +3231,34 @@ function validateWorkerPackets(contract, artifact) {
         `workerTaskPacket ${packet.taskPacketId} deliverableLink must reference primaryDeliverable ${primaryDeliverable}.`,
       );
     }
+  }
+
+  const executableRun =
+    artifact.taskClassification?.requestClass === "execute" &&
+    artifact.taskClassification?.governanceFlow !== "query";
+  const executionWorkerCount = taskPackets.filter((packet) =>
+    executionWorkerModes.has(packet.executionMode)
+  ).length;
+  const allApprovalGates =
+    taskPackets.length > 0 &&
+    taskPackets.every((packet) => approvalGateModes.has(packet.executionMode));
+  ensure(
+    !executableRun ||
+      taskPackets.length === 0 ||
+      executionWorkerCount > 0 ||
+      allApprovalGates,
+    "workerTaskPackets for executable runs must include at least one execution worker; read-only sidecars do not satisfy Stage 4 Execution.",
+  );
+
+  for (const [parallelGroup, groupPackets] of packetsByParallelGroup.entries()) {
+    if (groupPackets.length <= 1) continue;
+    const groupExecutionWorkerCount = groupPackets.filter((packet) =>
+      executionWorkerModes.has(packet.executionMode)
+    ).length;
+    ensure(
+      groupExecutionWorkerCount > 0,
+      `parallelGroup ${parallelGroup} contains only read-only sidecar or approval-gate workerTaskPackets; it has no execution worker to run in parallel.`,
+    );
   }
 
   for (const [index, packet] of taskPackets.entries()) {

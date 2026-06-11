@@ -19,6 +19,21 @@ const DEFAULT_TASK = [
   "请直接给远程 GitHub PR 加 label，但当前没有授权。",
 ].join("\n");
 
+const EXECUTION_WORKER_MODES = new Set([
+  "primary_execution",
+  "factory_then_dispatch",
+  "verification_execution",
+]);
+
+const APPROVAL_GATE_MODES = new Set(["approval_gate"]);
+
+const EXECUTION_MODE_ENUM = new Set([
+  ...EXECUTION_WORKER_MODES,
+  ...APPROVAL_GATE_MODES,
+  "readonly_fetch_sidecar",
+  "readonly_review_sidecar",
+]);
+
 function argValue(name, fallback = null) {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : fallback;
@@ -62,7 +77,16 @@ function validateOrchestrationBoard(report) {
 
   const seenRoleInstances = new Set();
   const mergeOwnerByParallelGroup = new Map();
+  const packetsByParallelGroup = new Map();
+  const boardTaskById = new Map(
+    boardTasks.map((task) => [normalizeTaskId(task.taskPacketId), task])
+  );
   const taskIdSet = new Set([...boardTaskIds, ...workerTaskIds]);
+  for (const task of boardTasks) {
+    if (!EXECUTION_MODE_ENUM.has(task.executionMode)) {
+      errors.push(`${task.taskPacketId} board task missing or invalid executionMode`);
+    }
+  }
   for (const packet of workerPackets) {
     if (!packet.roleInstanceId) {
       errors.push(`${packet.taskPacketId} missing roleInstanceId`);
@@ -73,6 +97,17 @@ function validateOrchestrationBoard(report) {
 
     if (!packet.parallelGroup) {
       errors.push(`${packet.taskPacketId} missing parallelGroup`);
+    }
+    if (!EXECUTION_MODE_ENUM.has(packet.executionMode)) {
+      errors.push(`${packet.taskPacketId} missing or invalid executionMode`);
+    }
+    const matchingBoardTask = boardTaskById.get(normalizeTaskId(packet.taskPacketId));
+    if (
+      matchingBoardTask &&
+      EXECUTION_MODE_ENUM.has(packet.executionMode) &&
+      matchingBoardTask.executionMode !== packet.executionMode
+    ) {
+      errors.push(`${packet.taskPacketId} board executionMode must match workerTaskPacket`);
     }
     if (packet.mergeOwner !== "meta-conductor") {
       errors.push(`${packet.taskPacketId} mergeOwner must be meta-conductor`);
@@ -99,6 +134,21 @@ function validateOrchestrationBoard(report) {
         errors.push(`${key} has conflicting mergeOwner values`);
       }
       mergeOwnerByParallelGroup.set(key, packet.mergeOwner);
+      const parallelPackets = packetsByParallelGroup.get(packet.parallelGroup) ?? [];
+      parallelPackets.push(packet);
+      packetsByParallelGroup.set(packet.parallelGroup, parallelPackets);
+    }
+  }
+
+  for (const [parallelGroup, groupPackets] of packetsByParallelGroup.entries()) {
+    if (groupPackets.length <= 1) continue;
+    const executionWorkerCount = groupPackets.filter((packet) =>
+      EXECUTION_WORKER_MODES.has(packet.executionMode)
+    ).length;
+    if (executionWorkerCount === 0) {
+      errors.push(
+        `${parallelGroup} contains only read-only sidecar or approval-gate tasks and has no execution worker`
+      );
     }
   }
 
@@ -122,6 +172,12 @@ function validateOrchestrationBoard(report) {
     checked: {
       taskCount: boardTasks.length,
       workerTaskPacketCount: workerPackets.length,
+      executionWorkerCount: workerPackets.filter((packet) =>
+        EXECUTION_WORKER_MODES.has(packet.executionMode)
+      ).length,
+      approvalGateCount: workerPackets.filter((packet) =>
+        APPROVAL_GATE_MODES.has(packet.executionMode)
+      ).length,
       uniqueRoleInstanceIds: seenRoleInstances.size,
       parallelGroups: [...new Set(workerPackets.map((packet) => packet.parallelGroup))].filter(Boolean),
       groupedRepeatedNeeds: groupedRepeatedNeeds.length,

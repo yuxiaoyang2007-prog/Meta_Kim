@@ -106,7 +106,7 @@
       "repo": "affaan-m/ECC",
       "claudePlugin": "ecc@ecc",
       "installMethod": "upstreamCli",
-      "upstreamPackage": "ecc-universal@2.0.0-rc.1",
+      "upstreamPackage": "ecc-universal@latest",
       "upstreamProfile": "core",
       "legacyNames": ["everything-claude-code"],
       "platformSupport": {

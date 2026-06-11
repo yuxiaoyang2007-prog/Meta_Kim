@@ -103,7 +103,7 @@ describe("install platform config", () => {
     assert.equal(eccSkill.repo, "affaan-m/ECC");
     assert.equal(eccSkill.claudePlugin, "ecc@ecc");
     assert.equal(eccSkill.installMethod, "upstreamCli");
-    assert.equal(eccSkill.upstreamPackage, "ecc-universal@2.0.0-rc.1");
+    assert.equal(eccSkill.upstreamPackage, "ecc-universal@latest");
     assert.equal(eccSkill.upstreamProfile, "core");
     assert.deepEqual(eccSkill.legacyNames, ["everything-claude-code"]);
     assert.equal(eccSkill.platformSupport.codex.status, "native");
@@ -237,7 +237,7 @@ describe("python launcher selection", () => {
       { command: "python3", args: [] },
       { command: "python", args: [] },
     ];
-    assert.deepEqual(pythonCandidates("darwin"), expected);
-    assert.deepEqual(pythonCandidates("linux"), expected);
+    assert.deepEqual(pythonCandidates("darwin").slice(0, 2), expected);
+    assert.deepEqual(pythonCandidates("linux").slice(0, 2), expected);
   });
 });

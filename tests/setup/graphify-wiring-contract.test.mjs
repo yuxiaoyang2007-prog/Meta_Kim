@@ -102,7 +102,7 @@ describe("graphify idempotent wiring (contract)", () => {
     assert.ok(start !== -1 && end !== -1, "installPythonTools body not found");
     const body = lines.slice(start, end).join("\n");
     assert.match(body, /\["-m", "graphify", "hook", "install"\]/);
-    assert.match(body, /for \(const target of activeTargets\)/);
+    assert.match(body, /for \(const target of expandGraphifyTargets\(activeTargets\)\)/);
     assert.match(
       body,
       /\["-m", "graphify", "[a-z]+", "install"\]/,
@@ -122,13 +122,140 @@ describe("graphify idempotent wiring (contract)", () => {
     );
   });
 
+  test("setup.mjs installPythonTools can wire graphify in a final project directory", () => {
+    const src = readFileSync(path.join(root, "setup.mjs"), "utf8");
+
+    assert.match(
+      src,
+      /async function installPythonTools\(\s*activeTargets,\s*inUpdateMode = false,\s*targetDir = PROJECT_DIR,\s*\)/,
+    );
+    assert.match(src, /const graphifyDir = resolve\(targetDir\)/);
+    assert.match(src, /join\(graphifyDir, "\.git"\)/);
+    assert.match(src, /guideAlreadyHasGraphifySection\(platform, graphifyDir\)/);
+    assert.match(
+      src,
+      /runPythonModule\(\s*python,\s*\["-m", "graphify", "hook", "install"\],[\s\S]*?\{ cwd: graphifyDir, stdio: "pipe" \}/,
+    );
+    assert.match(
+      src,
+      /runPythonModule\(\s*python,\s*\["-m", "graphify", platform, "install"\],[\s\S]*?\{ cwd: graphifyDir, stdio: "pipe" \}/,
+    );
+    assert.match(
+      src,
+      /runPythonModule\(\s*python,\s*\["-m", "graphify", "update", "\."\],[\s\S]*?\{ cwd: graphifyDir, stdio: "pipe" \}/,
+    );
+  });
+
+  test("setup deploy export writes a copy-ready graphify bootstrap", () => {
+    const src = readFileSync(path.join(root, "setup.mjs"), "utf8");
+    const start = src.indexOf("async function copyToDeployDir(");
+    const end = src.indexOf("async function runQuickDeploy()", start);
+    assert.notEqual(start, -1);
+    assert.notEqual(end, -1);
+    const body = src.slice(start, end);
+
+    assert.match(src, /const POST_COPY_BOOTSTRAP_FILENAME = "meta-kim-post-copy\.mjs"/);
+    assert.match(body, /writePostCopyBootstrap\(targetDir, activeTargets\)/);
+    assert.match(body, /printPostCopyBootstrapHint\(\)/);
+    assert.doesNotMatch(body, /installGraphify/);
+    assert.doesNotMatch(body, /installPythonTools\(activeTargets, false, targetDir\)/);
+    assert.ok(
+      body.indexOf("deployPlatformFiles(platformId, targetDir)") <
+        body.indexOf("writePostCopyBootstrap(targetDir, activeTargets)"),
+      "the bootstrap must be written after runtime files are copied",
+    );
+  });
+
+  test("install and update deploy exports do not treat the staging directory as the final graphify root", () => {
+    const src = readFileSync(path.join(root, "setup.mjs"), "utf8");
+    const installStart = src.indexOf("async function runInstall()");
+    const updateStart = src.indexOf("async function runUpdate()");
+    const checkStart = src.indexOf("async function runCheck()", updateStart);
+    assert.notEqual(installStart, -1);
+    assert.notEqual(updateStart, -1);
+    assert.notEqual(checkStart, -1);
+    const installBody = src.slice(installStart, updateStart);
+    const updateBody = src.slice(updateStart, checkStart);
+
+    for (const body of [installBody, updateBody]) {
+      assert.doesNotMatch(body, /pythonToolsEnabled/);
+      assert.doesNotMatch(body, /installGraphify/);
+      assert.match(body, /copyToDeployDir\(activeTargets, deployDir\)/);
+    }
+  });
+
+  test("quick deploy writes a portable post-copy bootstrap after copying platform files", () => {
+    const src = readFileSync(path.join(root, "setup.mjs"), "utf8");
+    const start = src.indexOf("async function runQuickDeploy()");
+    const end = src.indexOf("// ── Install scope selection", start);
+    assert.notEqual(start, -1);
+    assert.notEqual(end, -1);
+    const body = src.slice(start, end);
+
+    assert.match(body, /writePostCopyBootstrap\(targetDir, \[platformId\]\)/);
+    assert.match(body, /printPostCopyBootstrapHint\(\)/);
+    assert.doesNotMatch(body, /installPythonTools\([\s\S]*?targetDir/);
+    assert.ok(
+      body.indexOf("deployPlatformFiles(platformId, targetDir)") <
+        body.indexOf("writePostCopyBootstrap(targetDir, [platformId])"),
+      "quick deploy must create the bootstrap after target runtime files are copied",
+    );
+  });
+
+  test("post-copy bootstrap initializes graphify from the copied project root", () => {
+    const src = readFileSync(path.join(root, "setup.mjs"), "utf8");
+    const start = src.indexOf("function buildPostCopyBootstrapScript(");
+    const end = src.indexOf("function writePostCopyBootstrap(", start);
+    assert.notEqual(start, -1);
+    assert.notEqual(end, -1);
+    const body = src.slice(start, end);
+
+    assert.match(body, /fileURLToPath\(import\.meta\.url\)/);
+    assert.match(body, /const scriptPath = fileURLToPath\(import\.meta\.url\)/);
+    assert.match(body, /const rootDir = dirname\(scriptPath\)/);
+    assert.match(body, /\["-m", "pip", "show", "graphifyy"\]/);
+    assert.match(body, /\["-m", "pip", "install", "graphifyy"\]/);
+    assert.match(body, /\["-m", "graphify", "hook", "install"\]/);
+    assert.match(body, /\["-m", "graphify", platform, "install"\]/);
+    assert.match(body, /\["-m", "graphify", "update", "\."\]/);
+    assert.match(body, /homebrewPythonCandidates/);
+    assert.match(body, /\/opt\/homebrew/);
+    assert.match(body, /\/home\/linuxbrew\/\.linuxbrew/);
+    assert.match(body, /process\.argv\.includes\("--auto"\)/);
+    assert.match(body, /process\.argv\.includes\("--auto-worker"\)/);
+    assert.match(body, /post-copy-init\.json/);
+    assert.match(body, /spawn\(process\.execPath, \[scriptPath, "--auto-worker"\]/);
+    assert.match(body, /detached: true/);
+    assert.match(body, /failedRetryMs/);
+    assert.doesNotMatch(body, /PROJECT_DIR/);
+    assert.doesNotMatch(body, /D:[\\/]/);
+    assert.doesNotMatch(body, /Meta_Kim[\\/]/);
+  });
+
+  test("meta-theory activation hook starts post-copy auto-init without blocking startup", () => {
+    const src = readFileSync(
+      path.join(root, "canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs"),
+      "utf8",
+    );
+
+    assert.match(src, /meta-kim-post-copy\.mjs/);
+    assert.match(src, /spawnSync\(process\.execPath, \[scriptPath, "--auto"\]/);
+    assert.match(src, /timeout: 4000/);
+    assert.match(src, /stdio: "ignore"/);
+    assert.match(src, /META_KIM_POST_COPY_AUTO === "off"/);
+    assert.match(src, /catch \{\s*\/\/ Post-copy auto-init is opportunistic/s);
+  });
+
   test("setup.mjs skips guide-mutating graphify platform install when guide section exists", () => {
     const src = readFileSync(path.join(root, "setup.mjs"), "utf8");
 
     assert.match(src, /const GRAPHIFY_GUIDE_TARGETS = \{/);
-    assert.match(src, /function guideAlreadyHasGraphifySection\(platform\)/);
+    assert.match(
+      src,
+      /function guideAlreadyHasGraphifySection\(platform, baseDir = PROJECT_DIR\)/,
+    );
     assert.match(src, /\^##\\s\+graphify\\b\/im/);
-    assert.match(src, /if \(guideAlreadyHasGraphifySection\(platform\)\)/);
+    assert.match(src, /if \(guideAlreadyHasGraphifySection\(platform, graphifyDir\)\)/);
     assert.match(src, /continue;/);
   });
 
@@ -178,7 +305,7 @@ describe("graphify idempotent wiring (contract)", () => {
     assert.match(src, /function guideAlreadyHasGraphifySection\(platform\)/);
     assert.match(src, /\^##\\s\+graphify\\b\/im/);
     assert.match(wiring, /guideAlreadyHasGraphifySection\("claude"\)/);
-    assert.match(wiring, /graphify claude install skipped/);
+    assert.match(wiring, /graphifyInstallSkippedGuideExists\("claude"\)/);
     assert.match(wiring, /\["-m", "graphify", "hook", "install"\]/);
   });
 

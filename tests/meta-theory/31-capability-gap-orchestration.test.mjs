@@ -50,11 +50,22 @@ describe("31 — Capability Gap orchestration through meta-theory Conductor", ()
       report.workerTaskPackets.every(
         (packet) =>
           packet.mergeOwner === "meta-conductor" &&
+          ["primary_execution", "factory_then_dispatch", "approval_gate"].includes(
+            packet.executionMode
+          ) &&
           packet.parallelGroup &&
           packet.roleInstanceId &&
           packet.shardScope &&
           packet.capabilityInventoryRefs.includes("retrieval_capability")
       )
+    );
+    assert.ok(
+      report.orchestrationTaskBoardPacket.tasks.every((task) => {
+        const packet = report.workerTaskPackets.find(
+          (candidate) => candidate.taskPacketId === task.taskPacketId
+        );
+        return packet && task.executionMode === packet.executionMode;
+      })
     );
     assert.deepEqual(
       report.fetchEvidence.capabilityInventory.map((item) => item.capabilityType),
@@ -385,6 +396,8 @@ describe("31 — Capability Gap orchestration through meta-theory Conductor", ()
       assert.equal(summary.reviewChecks.dynamicProjectAgentsHaveEvidencePolicies, true);
       assert.equal(summary.reviewChecks.dynamicProjectAgentsHaveGraphPolicies, true);
       assert.equal(summary.reviewChecks.dynamicLanesHaveLoadoutAndSoulPolicy, true);
+      assert.equal(summary.reviewChecks.workerTasksDeclareExecutionMode, true);
+      assert.equal(summary.reviewChecks.executionWorkersAreNotSidecars, true);
       assert.ok(summary.projectAgentBlueprintPacket.agentCount >= 9);
       assert.ok(
         summary.projectAgentBlueprintPacket.externalEvidenceRequiredAgentIds.some((agentId) =>
@@ -408,6 +421,7 @@ describe("31 — Capability Gap orchestration through meta-theory Conductor", ()
         summary.workerTaskPackets.every(
           (packet) =>
             packet.ownerMode === "project-agent-profile" &&
+            packet.executionMode === "primary_execution" &&
             packet.workerInstanceMode === "run-scoped-instance" &&
             packet.savedIn === "projectAgentBlueprintPacket" &&
             packet.fixedForRun === true &&

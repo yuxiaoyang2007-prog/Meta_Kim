@@ -321,6 +321,28 @@ describe("sync-runtimes / Codex project hooks", () => {
     );
   });
 
+  test("wires meta-theory Skill activation to the spine hook", () => {
+    const config = buildCodexProjectHooksJson();
+    const skillEntry = config.hooks.Skill.find((entry) =>
+      entry.hooks?.some((hook) =>
+        hook.command?.includes("activate-meta-theory-spine.mjs"),
+      ),
+    );
+
+    assert(skillEntry, "meta-theory spine hook should be registered");
+    assert.equal(skillEntry.matcher, "meta-theory");
+    assert.equal(skillEntry.hooks[0].timeout, 5);
+  });
+
+  test("Cursor prompt hooks can bootstrap explicit meta-theory prompts", () => {
+    const config = buildCursorProjectHooksJson();
+    const beforeSubmit = config.hooks.beforeSubmitPrompt;
+
+    assert.match(beforeSubmit[0].command, /activate-meta-theory-spine\.mjs/);
+    assert.equal(beforeSubmit[0].timeout, 5);
+    assert.match(beforeSubmit[1].command, /meta-kim-memory-save\.mjs.*user-prompt/);
+  });
+
   test("can wire HookPrompt through a Codex adapter", () => {
     const config = buildCodexProjectHooksJson({
       hookPromptAdapterPath: ".codex/hooks/hookprompt-adapter.mjs",
@@ -571,10 +593,14 @@ describe("sync-runtimes / Cursor project hooks", () => {
     );
     assert.match(
       config.hooks.beforeSubmitPrompt[0].command,
-      /meta-kim-memory-save\.mjs.*user-prompt/,
+      /activate-meta-theory-spine\.mjs/,
     );
     assert.match(
       config.hooks.beforeSubmitPrompt[1].command,
+      /meta-kim-memory-save\.mjs.*user-prompt/,
+    );
+    assert.match(
+      config.hooks.beforeSubmitPrompt[2].command,
       /hookprompt-adapter\.mjs/,
     );
 
