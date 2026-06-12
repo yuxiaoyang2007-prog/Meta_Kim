@@ -7,11 +7,72 @@ const weapons = await readJson("config/capability-index/weapon-registry.json");
 const dependencies = await readJson("config/capability-index/dependency-project-registry.json");
 const runtimeMatrix = await readJson("config/runtime-capability-matrix.json");
 const osMatrix = await readJson("config/os-compatibility-matrix.json");
+const coreLoop = await readJson("config/contracts/core-loop-contract.json");
 const lensCatalog = await readJson("config/governance/lens-seed-catalog.json");
 const lensPolicy = await readJson("config/governance/lens-discovery-policy.json");
 const choicePolicy = await readJson("config/governance/choice-surface-policy.json");
 const decisionPatterns = await readJson("config/governance/decision-pattern-catalog.json");
 const pkg = await readJson("package.json");
+
+const expectedCoreStages = [
+  "Critical",
+  "Fetch",
+  "Thinking",
+  "Execution",
+  "Review",
+  "Meta-Review",
+  "Verification",
+  "Evolution",
+];
+
+assert(coreLoop.contractId === "meta-kim-core-loop-contract", "core loop contract id mismatch");
+assert(
+  coreLoop.defaultEntry?.entryScript === "scripts/run-meta-theory-governed-execution.mjs" &&
+    coreLoop.defaultEntry?.packageScript === "meta:theory:run" &&
+    pkg.scripts?.["meta:theory:run"] === "node scripts/run-meta-theory-governed-execution.mjs",
+  "core loop contract default entry must point to the real meta:theory:run script",
+);
+assert(
+  (coreLoop.stages ?? []).map((stage) => stage.stage).join("|") ===
+    expectedCoreStages.join("|"),
+  "core loop contract must preserve the eight-stage order",
+);
+for (const stage of coreLoop.stages ?? []) {
+  for (const field of [
+    "requiredInputs",
+    "requiredOutputs",
+    "skipConditions",
+    "gateConditions",
+    "blockingGates",
+    "warningGates",
+    "defaultOwner",
+  ]) {
+    assert(stage[field] !== undefined, `core loop stage ${stage.stage} missing ${field}`);
+  }
+}
+for (const source of [
+  "canonical/agents",
+  "runtime agent mirrors",
+  "tools, scripts, and package commands",
+  "MCP servers and config",
+  "hooks",
+  "Graphify/project map",
+  "global capability inventory",
+]) {
+  assert(
+    coreLoop.capabilityDiscovery?.minimumSources?.includes(source),
+    `core loop capability discovery missing ${source}`,
+  );
+}
+assert(
+  coreLoop.verificationPolicy?.notEveryStepInterceptor === true &&
+    coreLoop.verificationPolicy?.hooksAreLastResortFuse === true,
+  "core loop verification policy must keep verification as fuse, not every-step interception",
+);
+assert(
+  coreLoop.publicReadyClaim?.requiresVerificationEvidence === true,
+  "core loop public-ready claim must require verification evidence",
+);
 
 const actionMap = new Map((triggerMap.actions ?? []).map((action) => [action.id, action]));
 for (const id of GOVERNANCE_ACTIONS) {

@@ -69,32 +69,6 @@ export function buildMetaKimHooksTemplate(absHooksDir) {
         hooks: [cmd("block-dangerous-bash.mjs")],
       },
     ],
-    PostToolUse: [
-      {
-        matcher: "Edit|Write",
-        hooks: [
-          cmd("post-format.mjs"),
-          cmd("post-typecheck.mjs"),
-          cmd("post-console-log-warn.mjs"),
-        ],
-      },
-    ],
-    SubagentStart: [
-      {
-        matcher: "*",
-        hooks: [cmd("subagent-context.mjs")],
-      },
-    ],
-    Stop: [
-      {
-        matcher: "*",
-        hooks: [
-          cmd("stop-compaction.mjs"),
-          cmd("stop-console-log-audit.mjs"),
-          cmd("stop-completion-guard.mjs"),
-        ],
-      },
-    ],
   };
 }
 
@@ -194,11 +168,16 @@ export function mergeGlobalMetaKimHooksIntoSettings(settings, template) {
   if (!next.hooks) {
     next.hooks = {};
   }
-  const hooks = { ...next.hooks };
+  const hooks = {};
+  for (const [event, blocks] of Object.entries(next.hooks)) {
+    const cleaned = stripGlobalMetaKimHookEntriesFromBlocks(blocks || []);
+    if (cleaned.length > 0) {
+      hooks[event] = cleaned;
+    }
+  }
 
   for (const [event, additionBlocks] of Object.entries(template)) {
-    const cleaned = stripGlobalMetaKimHookEntriesFromBlocks(hooks[event] || []);
-    hooks[event] = mergeHookMatcherBlocks(cleaned, additionBlocks);
+    hooks[event] = mergeHookMatcherBlocks(hooks[event] || [], additionBlocks);
   }
 
   next.hooks = hooks;
@@ -214,11 +193,16 @@ export function mergeRepoMetaKimHooksIntoSettings(settings, templateHooks) {
   if (!next.hooks) {
     next.hooks = {};
   }
-  const hooks = { ...next.hooks };
+  const hooks = {};
+  for (const [event, blocks] of Object.entries(next.hooks)) {
+    const cleaned = stripRepoMetaKimHookEntriesFromBlocks(blocks || []);
+    if (cleaned.length > 0) {
+      hooks[event] = cleaned;
+    }
+  }
 
   for (const [event, additionBlocks] of Object.entries(templateHooks)) {
-    const cleaned = stripRepoMetaKimHookEntriesFromBlocks(hooks[event] || []);
-    hooks[event] = mergeHookMatcherBlocks(cleaned, additionBlocks);
+    hooks[event] = mergeHookMatcherBlocks(hooks[event] || [], additionBlocks);
   }
 
   next.hooks = hooks;

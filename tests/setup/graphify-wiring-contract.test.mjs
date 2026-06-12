@@ -180,7 +180,7 @@ describe("graphify idempotent wiring (contract)", () => {
     for (const body of [installBody, updateBody]) {
       assert.doesNotMatch(body, /pythonToolsEnabled/);
       assert.doesNotMatch(body, /installGraphify/);
-      assert.match(body, /copyToDeployDir\(activeTargets, deployDir\)/);
+      assert.match(body, /copyToDeployDirs\(activeTargets, deployDirs\)/);
     }
   });
 

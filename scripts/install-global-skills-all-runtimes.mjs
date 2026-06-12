@@ -3689,7 +3689,15 @@ async function deployHookConfigFiles(spec, runtimeHome, runtimeId) {
     const srcPath = path.join(tmp, ...configFile.split("/").filter(Boolean));
     if (await pathExists(srcPath)) {
       const destPath = path.join(runtimeHome, path.basename(configFile));
-      await fs.copyFile(srcPath, destPath);
+      if (
+        spec.id === "planning-with-files" &&
+        path.basename(configFile) === "hooks.json" &&
+        ["codex", "cursor"].includes(runtimeId)
+      ) {
+        await mergePlanningHookConfigFile(srcPath, destPath);
+      } else {
+        await fs.copyFile(srcPath, destPath);
+      }
       console.log(
         `${C.green}✓${C.reset} ${spec.id} ${path.basename(configFile)} -> ${runtimeHome} ${C.dim}(from ${configFile})${C.reset}`,
       );
@@ -3699,6 +3707,79 @@ async function deployHookConfigFiles(spec, runtimeHome, runtimeId) {
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }
+}
+
+function normalizeHookCommand(command) {
+  return String(command ?? "").replace(/\\/g, "/").trim();
+}
+
+function hookCommandAlreadyRegistered(existingBlocks, generatedHook) {
+  const generatedCommand = normalizeHookCommand(generatedHook?.command);
+  if (!generatedCommand) {
+    return false;
+  }
+  return existingBlocks.some((block) =>
+    (block.hooks ?? [block]).some(
+      (hook) => normalizeHookCommand(hook?.command) === generatedCommand,
+    ),
+  );
+}
+
+function appendMissingHookBlock(existingBlocks, generatedBlock) {
+  const generatedHooks = generatedBlock.hooks ?? [generatedBlock];
+  const missingHooks = generatedHooks.filter(
+    (hook) => !hookCommandAlreadyRegistered(existingBlocks, hook),
+  );
+  if (missingHooks.length === 0) {
+    return existingBlocks;
+  }
+  if (generatedBlock.hooks && existingBlocks.length > 0) {
+    const targetIndex = existingBlocks.findIndex(
+      (block) => (block.matcher ?? "") === (generatedBlock.matcher ?? ""),
+    );
+    const index = targetIndex >= 0 ? targetIndex : 0;
+    const targetBlock = existingBlocks[index];
+    const targetHooks = targetBlock.hooks ?? [targetBlock];
+    existingBlocks[index] = {
+      ...targetBlock,
+      hooks: [...targetHooks, ...missingHooks],
+    };
+    return existingBlocks;
+  }
+  return [...existingBlocks, ...missingHooks];
+}
+
+function mergePlanningHooksJson(existing, generated) {
+  const next = { ...(generated ?? {}), ...(existing ?? {}) };
+  next.hooks = { ...((generated ?? {}).hooks ?? {}), ...((existing ?? {}).hooks ?? {}) };
+  for (const [event, generatedBlocks] of Object.entries((generated ?? {}).hooks ?? {})) {
+    const existingBlocks = Array.isArray(next.hooks[event])
+      ? [...next.hooks[event]]
+      : [];
+    const blocks = Array.isArray(generatedBlocks) ? generatedBlocks : [generatedBlocks];
+    next.hooks[event] = blocks.reduce(appendMissingHookBlock, existingBlocks);
+  }
+  return next;
+}
+
+async function mergePlanningHookConfigFile(srcPath, destPath) {
+  let generated = {};
+  let existing = {};
+  try {
+    generated = JSON.parse(await fs.readFile(srcPath, "utf8"));
+  } catch {
+    await fs.copyFile(srcPath, destPath);
+    return;
+  }
+  if (await pathExists(destPath)) {
+    try {
+      existing = JSON.parse(await fs.readFile(destPath, "utf8"));
+    } catch {
+      existing = {};
+    }
+  }
+  const merged = mergePlanningHooksJson(existing, generated);
+  await fs.writeFile(destPath, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
 }
 
 function codexPlanningHookCommand(runtimeHome, scriptName) {
@@ -3777,6 +3858,50 @@ function buildCodexPlanningHooksJson(runtimeHome) {
   };
 }
 
+function hookCommandContains(block, marker) {
+  return (block.hooks ?? [block]).some((hook) =>
+    String(hook.command ?? "").includes(marker),
+  );
+}
+
+function mergeCodexPlanningHooksJson(existing, generated) {
+  const next = { ...(existing ?? {}), hooks: { ...((existing ?? {}).hooks ?? {}) } };
+  for (const [event, generatedBlocks] of Object.entries(generated.hooks ?? {})) {
+    const existingBlocks = Array.isArray(next.hooks[event])
+      ? [...next.hooks[event]]
+      : [];
+    for (const generatedBlock of generatedBlocks) {
+      const generatedHooks = generatedBlock.hooks ?? [generatedBlock];
+      const missingHooks = generatedHooks.filter((hook) => {
+        const marker = path.basename(String(hook.command ?? ""));
+        return marker && !existingBlocks.some((block) => hookCommandContains(block, marker));
+      });
+      if (missingHooks.length === 0) {
+        continue;
+      }
+
+      const matcher = generatedBlock.matcher;
+      const targetIndex = existingBlocks.findIndex((block) =>
+        matcher ? block.matcher === matcher : !block.matcher,
+      );
+      if (targetIndex >= 0) {
+        const target = existingBlocks[targetIndex];
+        existingBlocks[targetIndex] = {
+          ...target,
+          hooks: [...(target.hooks ?? []), ...missingHooks],
+        };
+      } else {
+        existingBlocks.push({
+          ...generatedBlock,
+          hooks: missingHooks,
+        });
+      }
+    }
+    next.hooks[event] = existingBlocks;
+  }
+  return next;
+}
+
 function buildCodexPlanningHookAdapterPy() {
   return [
     "#!/usr/bin/env python3",
@@ -3847,13 +3972,15 @@ function buildCodexPlanningHookAdapterPy() {
     "def _count_statuses(plan_file: Path) -> tuple[int, int, int, int]:",
     "    lines = _read_lines(plan_file)",
     '    total = sum(1 for line in lines if re.match(r"^#{2,3}\\s+Phase\\b", line))',
-    '    complete = sum(1 for line in lines if "**Status:** complete" in line)',
-    '    in_progress = sum(1 for line in lines if "**Status:** in_progress" in line)',
-    '    pending = sum(1 for line in lines if "**Status:** pending" in line)',
-    "    if complete == 0 and in_progress == 0 and pending == 0:",
-    '        complete = sum(1 for line in lines if "[complete]" in line)',
-    '        in_progress = sum(1 for line in lines if "[in_progress]" in line)',
-    '        pending = sum(1 for line in lines if "[pending]" in line)',
+    '    complete_primary = sum(1 for line in lines if "**Status:** complete" in line)',
+    '    in_progress_primary = sum(1 for line in lines if "**Status:** in_progress" in line)',
+    '    pending_primary = sum(1 for line in lines if "**Status:** pending" in line)',
+    '    complete_inline = sum(1 for line in lines if "[complete]" in line)',
+    '    in_progress_inline = sum(1 for line in lines if "[in_progress]" in line)',
+    '    pending_inline = sum(1 for line in lines if "[pending]" in line)',
+    "    complete = max(complete_primary, complete_inline)",
+    "    in_progress = max(in_progress_primary, in_progress_inline)",
+    "    pending = max(pending_primary, pending_inline)",
     "    return total, complete, in_progress, pending",
     "",
     "",
@@ -3903,6 +4030,8 @@ function buildCodexPlanningHookAdapterPy() {
     "    if not plan_file.is_file():",
     '        return "", ""',
     "    total, complete, _in_progress, _pending = _count_statuses(plan_file)",
+    "    if total <= 0:",
+    '        return "", ""',
     "    if complete == total and total > 0:",
     '        message = f"[planning-with-files] ALL PHASES COMPLETE ({complete}/{total}). If the user has additional work, add new phases to task_plan.md before starting."',
     "    else:",
@@ -4123,19 +4252,19 @@ function buildCodexStopWrapperPy() {
     '    stdout, _ = adapter.run_shell_script("stop.sh", root)',
     "    result = adapter.parse_json(stdout)",
     "",
+    '    decision = result.get("decision")',
+    '    if decision and decision != "allow":',
+    "        adapter.emit_json(result)",
+    "        return",
+    "",
     '    message = result.get("followup_message")',
     "    if not isinstance(message, str) or not message:",
     "        return",
     "",
-    '    if "ALL PHASES COMPLETE" in message:',
-    '        adapter.emit_json({"systemMessage": message})',
+    '    if "(0/0" in message:',
     "        return",
     "",
-    '    if bool(payload.get("stop_hook_active")):',
-    '        adapter.emit_json({"systemMessage": message})',
-    "        return",
-    "",
-    '    adapter.emit_json({"decision": "block", "reason": message})',
+    '    adapter.emit_json({"systemMessage": message})',
     "",
     "",
     'if __name__ == "__main__":',
@@ -4229,9 +4358,22 @@ async function patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId) 
     return;
   }
 
+  const hooksJsonPath = path.join(runtimeHome, "hooks.json");
+  let existingHooksJson = {};
+  if (await pathExists(hooksJsonPath)) {
+    try {
+      existingHooksJson = JSON.parse(await fs.readFile(hooksJsonPath, "utf8"));
+    } catch {
+      existingHooksJson = {};
+    }
+  }
+  const mergedHooksJson = mergeCodexPlanningHooksJson(
+    existingHooksJson,
+    buildCodexPlanningHooksJson(runtimeHome),
+  );
   await fs.writeFile(
-    path.join(runtimeHome, "hooks.json"),
-    `${JSON.stringify(buildCodexPlanningHooksJson(runtimeHome), null, 2)}\n`,
+    hooksJsonPath,
+    `${JSON.stringify(mergedHooksJson, null, 2)}\n`,
     "utf8",
   );
   await fs.writeFile(

@@ -20,7 +20,10 @@ import {
 } from "../../scripts/sync-runtimes.mjs";
 import { mergeRepoClaudeSettings } from "../../scripts/claude-settings-merge.mjs";
 import { CATEGORIES } from "../../scripts/install-manifest.mjs";
-import { buildHookPromptAdapterSource } from "../../scripts/runtime-hook-mapping.mjs";
+import {
+  buildCodexHooksJson,
+  buildHookPromptAdapterSource,
+} from "../../scripts/runtime-hook-mapping.mjs";
 
 const REPO = path.resolve("/fake/repo");
 
@@ -269,7 +272,7 @@ describe("sync-runtimes / Codex project hooks", () => {
               },
               {
                 type: "command",
-                command: "node .claude/hooks/block-dangerous-bash.mjs",
+                command: "node .claude/hooks/enforce-agent-dispatch.mjs",
               },
             ],
           },
@@ -300,25 +303,20 @@ describe("sync-runtimes / Codex project hooks", () => {
     );
 
     assert.ok(commands.includes("node .claude/hooks/graphify-context.mjs"));
-    assert.ok(commands.includes("node .claude/hooks/block-dangerous-bash.mjs"));
+    assert.ok(commands.includes("node .claude/hooks/enforce-agent-dispatch.mjs"));
     assert.equal(commands.some((command) => command.includes("CMD=$(python3")), false);
   });
 
-  test("wires MCP memory across start, prompt, and stop", () => {
+  test("project Codex hooks leave global-only packages out", () => {
     const config = buildCodexProjectHooksJson();
 
-    assert.match(
-      config.hooks.SessionStart[0].hooks[0].command,
-      /meta-kim-memory-save\.mjs.*session-start/,
-    );
-    assert.match(
-      config.hooks.UserPromptSubmit[0].hooks[0].command,
-      /meta-kim-memory-save\.mjs.*user-prompt/,
-    );
-    assert.match(
-      config.hooks.Stop[0].hooks[0].command,
-      /meta-kim-memory-save\.mjs.*stop/,
-    );
+    assert.equal(config.hooks.SessionStart, undefined);
+    assert.equal(config.hooks.UserPromptSubmit, undefined);
+    assert.equal(config.hooks.Stop, undefined);
+    const allCommands = JSON.stringify(config);
+    assert.doesNotMatch(allCommands, /meta-kim-memory-save\.mjs/);
+    assert.doesNotMatch(allCommands, /hookprompt-adapter\.mjs/);
+    assert.doesNotMatch(allCommands, /planning-with-files-adapter\.mjs/);
   });
 
   test("wires meta-theory Skill activation to the spine hook", () => {
@@ -340,11 +338,13 @@ describe("sync-runtimes / Codex project hooks", () => {
 
     assert.match(beforeSubmit[0].command, /activate-meta-theory-spine\.mjs/);
     assert.equal(beforeSubmit[0].timeout, 5);
-    assert.match(beforeSubmit[1].command, /meta-kim-memory-save\.mjs.*user-prompt/);
+    assert.doesNotMatch(JSON.stringify(config), /meta-kim-memory-save\.mjs/);
+    assert.doesNotMatch(JSON.stringify(config), /hookprompt-adapter\.mjs/);
+    assert.doesNotMatch(JSON.stringify(config), /planning-with-files-adapter\.mjs/);
   });
 
-  test("can wire HookPrompt through a Codex adapter", () => {
-    const config = buildCodexProjectHooksJson({
+  test("can wire HookPrompt through a global Codex adapter", () => {
+    const config = buildCodexHooksJson({
       hookPromptAdapterPath: ".codex/hooks/hookprompt-adapter.mjs",
     });
 
@@ -583,26 +583,14 @@ Body instructions`;
 
 describe("sync-runtimes / Cursor project hooks", () => {
   test("uses Cursor native lowerCamel lifecycle hooks", () => {
-    const config = buildCursorProjectHooksJson({
-      hookPromptAdapterPath: ".cursor/hooks/hookprompt-adapter.mjs",
-    });
+    const config = buildCursorProjectHooksJson();
 
-    assert.match(
-      config.hooks.sessionStart[0].command,
-      /meta-kim-memory-save\.mjs.*session-start/,
-    );
+    assert.equal(config.hooks.sessionStart, undefined);
     assert.match(
       config.hooks.beforeSubmitPrompt[0].command,
       /activate-meta-theory-spine\.mjs/,
     );
-    assert.match(
-      config.hooks.beforeSubmitPrompt[1].command,
-      /meta-kim-memory-save\.mjs.*user-prompt/,
-    );
-    assert.match(
-      config.hooks.beforeSubmitPrompt[2].command,
-      /hookprompt-adapter\.mjs/,
-    );
+    assert.equal(config.hooks.beforeSubmitPrompt.length, 1);
 
     const preToolUse = config.hooks.preToolUse;
 
@@ -626,9 +614,9 @@ describe("sync-runtimes / Cursor project hooks", () => {
     );
     assert(graphifyEntry, "graphify-context should still be registered");
 
-    assert.match(
-      config.hooks.stop[0].command,
-      /meta-kim-memory-save\.mjs.*stop/,
-    );
+    assert.equal(config.hooks.stop, undefined);
+    assert.doesNotMatch(JSON.stringify(config), /meta-kim-memory-save\.mjs/);
+    assert.doesNotMatch(JSON.stringify(config), /hookprompt-adapter\.mjs/);
+    assert.doesNotMatch(JSON.stringify(config), /planning-with-files-adapter\.mjs/);
   });
 });

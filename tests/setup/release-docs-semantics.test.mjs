@@ -41,4 +41,84 @@ describe("release documentation semantics", () => {
     assert.match(raw, /`\.agents\/skills\/meta-theory\/SKILL\.md`/);
     assert.doesNotMatch(raw, /docs\/runtime-coverage-audit\.md/);
   });
+
+  test("change readiness checklist covers P1 and P2 release review lanes", () => {
+    const checklist = readFileSync(
+      path.join(root, "config", "contracts", "change-readiness-checklist.md"),
+      "utf8",
+    );
+    const pullRequestTemplate = readFileSync(
+      path.join(root, ".github", "pull_request_template.md"),
+      "utf8",
+    );
+    const combined = `${checklist}\n${pullRequestTemplate}`;
+
+    assert.match(combined, /Host State Impact Matrix/);
+    assert.match(combined, /Existing host state/);
+    assert.match(combined, /Rollback path/);
+    assert.match(combined, /Hook \/ Prompt Protocol Flow/);
+    assert.match(combined, /Model-visible field/);
+    assert.match(combined, /Deletion \/ Refactor Residue Sweep/);
+    assert.match(combined, /Evidence Budget/);
+    assert.match(combined, /Host-side or installed-user self-test/);
+    assert.match(combined, /Execution Mode Classification/);
+    assert.match(combined, /real_execution/);
+    assert.match(combined, /read_only_sidecar/);
+    assert.match(combined, /approval_gate/);
+  });
+
+  test("workflow execution modes are mapped into semantic execution classes", () => {
+    const contract = JSON.parse(
+      readFileSync(
+        path.join(root, "config", "contracts", "workflow-contract.json"),
+        "utf8",
+      ),
+    );
+    const policy =
+      contract.protocols.workerTaskPacket.executionModePolicy;
+
+    assert.deepEqual(policy.executionModeClasses, [
+      "real_execution",
+      "read_only_sidecar",
+      "approval_gate",
+    ]);
+    for (const mode of policy.executionWorkerModes) {
+      assert.equal(policy.executionModeClassMap[mode], "real_execution");
+    }
+    for (const mode of policy.sidecarModes) {
+      assert.equal(policy.executionModeClassMap[mode], "read_only_sidecar");
+    }
+    for (const mode of policy.approvalGateModes) {
+      assert.equal(policy.executionModeClassMap[mode], "approval_gate");
+    }
+    assert.deepEqual(
+      Object.keys(policy.executionModeClassMap).sort(),
+      [...policy.executionModeEnum].sort(),
+    );
+  });
+
+  test("project license documents Apache-2.0 commercial use and NOTICE attribution", () => {
+    const packageJson = JSON.parse(
+      readFileSync(path.join(root, "package.json"), "utf8"),
+    );
+    const notice = readFileSync(path.join(root, "NOTICE"), "utf8");
+
+    assert.equal(packageJson.license, "Apache-2.0");
+    assert.ok(packageJson.files.includes("NOTICE"));
+    assert.match(notice, /Meta_Kim by KimYx0207/);
+    assert.match(notice, /Commercial use is permitted under the Apache License, Version 2\.0/);
+
+    for (const file of readmeFiles) {
+      const raw = readFileSync(path.join(root, file), "utf8");
+
+      assert.match(raw, /license-Apache--2\.0/);
+      assert.match(raw, /Apache License 2\.0/);
+      assert.match(raw, /NOTICE/);
+      assert.match(raw, /Meta_Kim by KimYx0207/);
+      assert.doesNotMatch(raw, /Meta_Kim (?:is|itself is) MIT licensed/);
+      assert.doesNotMatch(raw, /Meta_Kim 本身采用 MIT/);
+      assert.doesNotMatch(raw, /Meta_Kim 自体は MIT/);
+      assert.doesNotMatch(raw, /Meta_Kim 자체는 MIT/);
+    }
+  });
 });

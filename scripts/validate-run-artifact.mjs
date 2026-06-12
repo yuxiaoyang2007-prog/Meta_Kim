@@ -3140,6 +3140,8 @@ function validateWorkerPackets(contract, artifact) {
     executionModePolicy.executionWorkerModes ?? [],
   );
   const approvalGateModes = new Set(executionModePolicy.approvalGateModes ?? []);
+  const executionModeClasses = new Set(executionModePolicy.executionModeClasses ?? []);
+  const executionModeClassMap = executionModePolicy.executionModeClassMap ?? {};
   const validWorkspaceIsolation = new Set([
     "same_workspace_readonly_overlap",
     "isolated_worktree",
@@ -3171,6 +3173,10 @@ function validateWorkerPackets(contract, artifact) {
       packet.executionMode,
       executionModePolicy.executionModeEnum ?? [],
       `workerTaskPackets[${index}].executionMode`,
+    );
+    ensure(
+      executionModeClasses.has(executionModeClassMap[packet.executionMode]),
+      `workerTaskPackets[${index}].executionMode ${packet.executionMode} must map to an execution mode class.`,
     );
     ensureString(packet.roleDisplayName, `workerTaskPackets[${index}].roleDisplayName`);
     ensureString(packet.ownerAgent, `workerTaskPackets[${index}].ownerAgent`);

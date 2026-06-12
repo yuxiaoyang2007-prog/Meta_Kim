@@ -9,7 +9,6 @@ import {
 import {
   buildCodexHooksJson,
   buildCursorHooksJson,
-  buildHookPromptAdapterSource,
   nodeHookCommand,
 } from "./runtime-hook-mapping.mjs";
 import {
@@ -738,12 +737,6 @@ const canonicalCodexCommandPath = path.join(
   "commands",
   "meta-theory.md",
 );
-const canonicalSharedMemoryHookPath = path.join(
-  canonicalRuntimeAssetsDir,
-  "shared",
-  "hooks",
-  "meta-kim-memory-save.mjs",
-);
 const canonicalSharedSpineHookPath = path.join(
   canonicalRuntimeAssetsDir,
   "shared",
@@ -778,6 +771,32 @@ const canonicalOpenClawMemoryHookDir = path.join(
   "hooks",
   "mcp-memory-service",
 );
+
+const PROJECT_CLAUDE_HOOK_FILES = new Set([
+  "bash-readonly-whitelist.mjs",
+  "enforce-agent-dispatch.mjs",
+  "graphify-context.mjs",
+  "hook-i18n.mjs",
+  "post-console-log-warn.mjs",
+  "post-format.mjs",
+  "post-typecheck.mjs",
+  "skip-reminder.mjs",
+  "spine-state.mjs",
+  "stop-compaction.mjs",
+  "stop-completion-guard.mjs",
+  "stop-console-log-audit.mjs",
+  "stop-spine-cleanup.mjs",
+  "subagent-context.mjs",
+  "utils.mjs",
+]);
+
+const REMOVED_PROJECT_CLAUDE_HOOK_FILES = [
+  "block-dangerous-bash.mjs",
+  "ecc-permission-cache-wrapper.mjs",
+  "meta-kim-memory-save.mjs",
+  "stop-memory-save.mjs",
+  "stop-save-progress.mjs",
+];
 
 const preferredOrder = [
   "meta-warden",
@@ -1848,7 +1867,7 @@ export function buildCodexGraphifyContextHook() {
 
 export function buildCodexProjectHooksJson({
   graphifyHookPath = ".codex/hooks/graphify-context.mjs",
-  memoryHookPath = ".codex/hooks/meta-kim-memory-save.mjs",
+  memoryHookPath = null,
   spineHookPath = ".codex/hooks/activate-meta-theory-spine.mjs",
   enforceAgentDispatchHookPath = ".codex/hooks/enforce-agent-dispatch.mjs",
   hookPromptAdapterPath = null,
@@ -1864,7 +1883,7 @@ export function buildCodexProjectHooksJson({
 
 export function buildCursorProjectHooksJson({
   graphifyHookPath = ".cursor/hooks/graphify-context.mjs",
-  memoryHookPath = ".cursor/hooks/meta-kim-memory-save.mjs",
+  memoryHookPath = null,
   spineHookPath = ".cursor/hooks/activate-meta-theory-spine.mjs",
   enforceAgentDispatchHookPath = ".cursor/hooks/enforce-agent-dispatch.mjs",
   hookPromptAdapterPath = null,
@@ -1951,7 +1970,12 @@ async function syncClaudeProjection(
   const hookEntries = (
     await fs.readdir(canonicalClaudeHooksDir, { withFileTypes: true })
   )
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".mjs"))
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        entry.name.endsWith(".mjs") &&
+        PROJECT_CLAUDE_HOOK_FILES.has(entry.name),
+    )
     .sort((left, right) => left.name.localeCompare(right.name));
 
   for (const hookEntry of hookEntries) {
@@ -1974,7 +1998,6 @@ async function syncClaudeProjection(
   const sharedClaudeHookDependencies = [
     "activate-meta-theory-spine.mjs",
     "hook-i18n.mjs",
-    "meta-kim-memory-save.mjs",
     "skip-reminder.mjs",
   ];
   for (const hookName of sharedClaudeHookDependencies) {
@@ -1989,6 +2012,15 @@ async function syncClaudeProjection(
           hookContent,
         )
       ).changed
+    ) {
+      changedFiles.push(`${displayPaths.claudeHooks}/${hookName}`);
+    }
+  }
+
+  for (const hookName of REMOVED_PROJECT_CLAUDE_HOOK_FILES) {
+    if (
+      (await removeGeneratedPath(path.join(claudeHooksProjectionDir, hookName)))
+        .changed
     ) {
       changedFiles.push(`${displayPaths.claudeHooks}/${hookName}`);
     }
@@ -2338,18 +2370,6 @@ Examples:
       ) {
         changedFiles.push(`${dp.codexHooks}/graphify-context.mjs`);
       }
-      const memoryHookContent = await tryReadCanonical(canonicalSharedMemoryHookPath);
-      if (
-        memoryHookContent &&
-        (
-          await writeGeneratedFile(
-            path.join(dirs.codexHooksDir, "meta-kim-memory-save.mjs"),
-            memoryHookContent,
-          )
-        ).changed
-      ) {
-        changedFiles.push(`${dp.codexHooks}/meta-kim-memory-save.mjs`);
-      }
       const spineHookContent = await tryReadCanonical(canonicalSharedSpineHookPath);
       if (
         spineHookContent &&
@@ -2451,24 +2471,22 @@ Examples:
       ) {
         changedFiles.push(`${dp.codexHooks}/hook-i18n.mjs`);
       }
-      if (
-        (
-          await writeGeneratedFile(
-            path.join(dirs.codexHooksDir, "hookprompt-adapter.mjs"),
-            buildHookPromptAdapterSource("codex"),
-          )
-        ).changed
-      ) {
-        changedFiles.push(`${dp.codexHooks}/hookprompt-adapter.mjs`);
+      for (const staleHook of [
+        "hookprompt-adapter.mjs",
+        "meta-kim-memory-save.mjs",
+        "planning-with-files-adapter.mjs",
+      ]) {
+        if (
+          (await removeGeneratedPath(path.join(dirs.codexHooksDir, staleHook)))
+            .changed
+        ) {
+          changedFiles.push(`${dp.codexHooks}/${staleHook}`);
+        }
       }
       const graphifyHookPath =
         scope === "global"
           ? path.join(dirs.codexHooksDir, "graphify-context.mjs")
           : ".codex/hooks/graphify-context.mjs";
-      const memoryHookPath =
-        scope === "global"
-          ? path.join(dirs.codexHooksDir, "meta-kim-memory-save.mjs")
-          : ".codex/hooks/meta-kim-memory-save.mjs";
       const spineHookPath =
         scope === "global"
           ? path.join(dirs.codexHooksDir, "activate-meta-theory-spine.mjs")
@@ -2477,20 +2495,14 @@ Examples:
         scope === "global"
           ? path.join(dirs.codexHooksDir, "enforce-agent-dispatch.mjs")
           : ".codex/hooks/enforce-agent-dispatch.mjs";
-      const hookPromptAdapterPath =
-        scope === "global"
-          ? path.join(dirs.codexHooksDir, "hookprompt-adapter.mjs")
-          : ".codex/hooks/hookprompt-adapter.mjs";
       if (
         (
           await writeGeneratedJson(
             dirs.codexHooksFile,
             buildCodexProjectHooksJson({
               graphifyHookPath,
-              memoryHookPath,
               spineHookPath,
               enforceAgentDispatchHookPath,
-              hookPromptAdapterPath,
             }),
           )
         ).changed
@@ -2604,18 +2616,6 @@ Examples:
     );
 
     if (dirs.cursorHooksDir && dirs.cursorHooksFile) {
-      const memoryHookContent = await tryReadCanonical(canonicalSharedMemoryHookPath);
-      if (
-        memoryHookContent &&
-        (
-          await writeGeneratedFile(
-            path.join(dirs.cursorHooksDir, "meta-kim-memory-save.mjs"),
-            memoryHookContent,
-          )
-        ).changed
-      ) {
-        changedFiles.push(`${dp.cursorHooks}/meta-kim-memory-save.mjs`);
-      }
       if (
         (
           await writeGeneratedFile(
@@ -2730,24 +2730,22 @@ Examples:
       ) {
         changedFiles.push(`${dp.cursorHooks}/hook-i18n.mjs`);
       }
-      if (
-        (
-          await writeGeneratedFile(
-            path.join(dirs.cursorHooksDir, "hookprompt-adapter.mjs"),
-            buildHookPromptAdapterSource("cursor"),
-          )
-        ).changed
-      ) {
-        changedFiles.push(`${dp.cursorHooks}/hookprompt-adapter.mjs`);
+      for (const staleHook of [
+        "hookprompt-adapter.mjs",
+        "meta-kim-memory-save.mjs",
+        "planning-with-files-adapter.mjs",
+      ]) {
+        if (
+          (await removeGeneratedPath(path.join(dirs.cursorHooksDir, staleHook)))
+            .changed
+        ) {
+          changedFiles.push(`${dp.cursorHooks}/${staleHook}`);
+        }
       }
       const graphifyHookPath =
         scope === "global"
           ? path.join(dirs.cursorHooksDir, "graphify-context.mjs")
           : ".cursor/hooks/graphify-context.mjs";
-      const memoryHookPath =
-        scope === "global"
-          ? path.join(dirs.cursorHooksDir, "meta-kim-memory-save.mjs")
-          : ".cursor/hooks/meta-kim-memory-save.mjs";
       const spineHookPath =
         scope === "global"
           ? path.join(dirs.cursorHooksDir, "activate-meta-theory-spine.mjs")
@@ -2756,20 +2754,14 @@ Examples:
         scope === "global"
           ? path.join(dirs.cursorHooksDir, "enforce-agent-dispatch.mjs")
           : ".cursor/hooks/enforce-agent-dispatch.mjs";
-      const hookPromptAdapterPath =
-        scope === "global"
-          ? path.join(dirs.cursorHooksDir, "hookprompt-adapter.mjs")
-          : ".cursor/hooks/hookprompt-adapter.mjs";
       if (
         (
           await writeGeneratedJson(
             dirs.cursorHooksFile,
             buildCursorProjectHooksJson({
               graphifyHookPath,
-              memoryHookPath,
               spineHookPath,
               enforceAgentDispatchHookPath,
-              hookPromptAdapterPath,
             }),
           )
         ).changed

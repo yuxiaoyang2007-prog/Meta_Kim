@@ -1,0 +1,70 @@
+# Change Readiness Checklist
+
+This checklist turns repeated Meta_Kim review findings into a pre-merge contract.
+Use it before changing setup, update, runtime hooks, prompt adapters, provider
+registries, workflow schemas, deletion paths, or release behavior.
+
+## Host State Impact Matrix
+
+For install, update, sync, and runtime-home changes, record these four columns
+before editing implementation code:
+
+| Existing host state | State this change adds | State this change must preserve | Rollback path |
+|---|---|---|---|
+| User config, native host plugin links, local MCP servers, hooks, agents, profiles, credentials, and generated state currently present. | Files, config blocks, hook entries, cache entries, manifest rows, or migration state introduced by this change. | User-owned config, credentials, custom servers, native host controls, and unrelated runtime state. | Command or manual steps that restore the prior state without deleting user-owned data. |
+
+Minimum regression shape: existing user config -> install -> update. A happy-path
+fresh install is not enough for host-preservation changes.
+
+## Hook / Prompt Protocol Flow
+
+For hook, prompt, or adapter changes, draw the data path before implementation:
+
+| Source payload | Runtime adapter field | Model-visible field | UI-visible field | Assertion |
+|---|---|---|---|---|
+| Hook input, command stdout, or dependency adapter output. | Runtime-specific envelope such as Codex `hookSpecificOutput.additionalContext`, Cursor `prompt`, or lifecycle `decision`. | The exact field the model consumes. | The exact field the host displays, if any. | A test or live smoke that proves the hop. |
+
+Keep policy decisions, model context, and UI notices separate. Advisory progress
+messages must not become blocking decisions unless the contract explicitly says
+the hook is a gate.
+
+## Deletion / Refactor Residue Sweep
+
+Before deleting a field, mode, backdoor, state key, or compatibility surface:
+
+- Search old identifiers with `rg`.
+- Check i18n strings and localized docs.
+- Check README, changelog, and release notes.
+- Check runtime mirrors, generated adapters, and install/update projections.
+- Check compatibility exports, persisted state, and migration paths.
+- Check test names, fixtures, assertion text, and skip/reminder wording.
+
+Deletion is complete only when code, state, docs, mirrors, and tests agree.
+
+## Evidence Budget
+
+For third-party runtime, provider, hook, install, update, and release changes,
+define evidence before writing completion prose:
+
+- Local assertion: focused test, validator, or static contract check.
+- Host-side self-test: installed-user, isolated runtime home, or tool-side smoke.
+- User-visible result: release note, generated output, UI-visible behavior, or
+  exact command output that a maintainer can replay.
+
+Do not describe the work as complete until the evidence budget is either
+satisfied or explicitly marked blocked with a reason.
+
+## Execution Mode Classification
+
+Workflow nodes use specific `executionMode` values, but reviews must first map
+them into three classes:
+
+| Class | Modes | Counts as real execution? |
+|---|---|---|
+| `real_execution` | `primary_execution`, `factory_then_dispatch`, `verification_execution` | Yes |
+| `read_only_sidecar` | `readonly_fetch_sidecar`, `readonly_review_sidecar` | No |
+| `approval_gate` | `approval_gate` | No |
+
+Parallel groups and completion statistics must filter by class, not by raw node
+count. Read-only sidecars and approval gates may support execution, but they do
+not prove that executable work happened.

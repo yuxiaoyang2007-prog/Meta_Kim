@@ -35,17 +35,17 @@ describe("setup update default flow", () => {
     );
   });
 
-  test("silent mode update skips optional deploy directory prompt", () => {
+  test("silent mode update skips interactive project deploy prompt unless CLI/saved targets are requested", () => {
     const deployFunctionStart = source.indexOf(
       "async function askDeployDirectory()",
     );
     const deployFunctionEnd = source.indexOf(
-      "async function copyToDeployDir",
+      "function printProjectDeploySummary",
       deployFunctionStart,
     );
     const deploySource = source.slice(deployFunctionStart, deployFunctionEnd);
     const silentBranch = deploySource.indexOf("if (silentMode)");
-    const nullReturn = deploySource.indexOf("return null;", silentBranch);
+    const emptyReturn = deploySource.indexOf("return [];", silentBranch);
     const selectPrompt = deploySource.indexOf("askSelect(");
 
     assert.ok(
@@ -57,17 +57,32 @@ describe("setup update default flow", () => {
       "askDeployDirectory() must special-case silent/default flow",
     );
     assert.ok(
-      nullReturn > silentBranch,
-      "askDeployDirectory() silent/default flow must choose no extra deploy copy",
+      deploySource.indexOf("cliProjectDeployDirs.length > 0") >= 0,
+      "askDeployDirectory() must honor explicit CLI project targets before silent fallback",
+    );
+    assert.ok(
+      deploySource.indexOf("useSavedProjectDirsMode") >= 0,
+      "askDeployDirectory() must honor saved project targets before silent fallback",
+    );
+    assert.ok(
+      emptyReturn > silentBranch,
+      "askDeployDirectory() silent/default flow must choose no extra project deploy copy",
     );
     assert.ok(
       selectPrompt >= 0,
-      "askDeployDirectory() must keep the interactive deploy-directory choice",
+      "askDeployDirectory() must keep the interactive project deploy choice",
     );
     assert.ok(
-      nullReturn < selectPrompt,
-      "askDeployDirectory() must return null before prompting for deploy directory",
+      emptyReturn < selectPrompt,
+      "askDeployDirectory() must return [] before prompting for project deploy directory",
     );
+  });
+
+  test("install and update project deploy exports run as protected batches", () => {
+    assert.match(source, /const deployDirs = await askDeployDirectory\(\);/);
+    assert.match(source, /if \(deployDirs\.length > 0\) \{\s*await copyToDeployDirs\(activeTargets, deployDirs\);/);
+    assert.match(source, /copyToDeployDirs\(activeTargets, targetDirs\)/);
+    assert.match(source, /projectDeployProtectionNote/);
   });
 
   test("install and update sync global Claude hooks for cleanup", () => {

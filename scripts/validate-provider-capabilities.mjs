@@ -300,7 +300,7 @@ async function validateHookPromptAdapter({
     return;
   }
 
-  const projectHooks = await readJson(repoPath(projectHooksPath));
+  const projectHooks = await readJsonIfExists(repoPath(projectHooksPath));
   const projectHasAdapter = hasCommand(
     projectHooks,
     eventName,
@@ -312,17 +312,18 @@ async function validateHookPromptAdapter({
     "hookprompt-adapter.mjs",
   );
 
-  if (!projectHasAdapter) {
+  if (projectHasAdapter) {
     issues.push(
       issue({
-        code: "missing_projection",
+        code: "wrong_install_layer",
         providerId: provider.id,
         providerType: provider.providerType,
         runtimeId,
         installLayer: "project_projection",
-        state: "missing_projection",
+        state: "project_duplicate",
         sourceRef: projectHooksPath,
-        message: `Project ${runtimeId} hooks do not register hookprompt-adapter.mjs`,
+        message:
+          `Project ${runtimeId} hooks register hookprompt-adapter.mjs, but HookPrompt is a global package and must not be duplicated in project hooks`,
       }),
     );
   }

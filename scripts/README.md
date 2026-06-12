@@ -4,11 +4,18 @@ This directory is intentionally large because Meta_Kim exposes most maintenance 
 
 ## Current Shape
 
-- Top-level `.mjs` scripts: 93
+- Top-level `.mjs` scripts: 95
 - MCP server scripts: 1 (`scripts/mcp/meta-runtime-server.mjs`)
-- Direct `package.json` entries: 69
+- Direct `package.json` entries: 105
 - Referenced helper scripts: 21
 - Cleanup candidates with no current external reference evidence: 3
+
+## Core Loop And Discovery Bus
+
+- Default governed execution entry: `npm run meta:theory:run` (`scripts/run-meta-theory-governed-execution.mjs`).
+- Machine contract: `config/contracts/core-loop-contract.json`.
+- Strict run artifact validator: `npm run meta:validate:run -- <artifact.json>` for full workflow-contract artifacts.
+- Local capability discovery bus: `npm run meta:capabilities:index` (`scripts/build-capability-inventory.mjs`), which writes `.meta-kim/state/default/capability-inventory.json` with unified provider records across agents, skills, scripts, commands/tools, MCP, hooks, runtime, OS, memory, graph, and external dependency candidates.
 
 ## Main Buckets
 

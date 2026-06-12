@@ -11,6 +11,20 @@ import {
   mergeCodexConfigAddOnly,
 } from "../../scripts/codex-config-merge.mjs";
 
+function sectionBlock(configText, sectionName) {
+  const lines = String(configText).replace(/\r\n/g, "\n").split("\n");
+  const start = lines.findIndex((line) => line.trim() === `[${sectionName}]`);
+  if (start < 0) return "";
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^\s*\[[^\]]+\]\s*(?:#.*)?$/.test(lines[index])) {
+      end = index;
+      break;
+    }
+  }
+  return lines.slice(start, end).join("\n");
+}
+
 describe("Codex config merge", () => {
   test("adds features section when missing", () => {
     const out = ensureCodexRequestUserInputFeature('model = "gpt-5.5"\n');
@@ -250,5 +264,80 @@ describe("Codex config merge", () => {
     assert.match(out, /\[projects\."D:\/User\/Project"\]\ntrust_level = "trusted"/);
     assert.doesNotMatch(out, /approval_policy = "on-request"/);
     assert.doesNotMatch(out, /sandbox_mode = "read-only"/);
+  });
+
+  test("normalizes MCP server when upstream replaces remote url with stdio command", () => {
+    const originalUserConfig = [
+      "[mcp_servers.exa]",
+      'url = "https://mcp.exa.ai/mcp"',
+      "enabled = false",
+      "",
+    ].join("\n");
+    const upstreamConfig = [
+      "[mcp_servers.exa]",
+      'command = "npx"',
+      'args = ["-y", "mcp-remote", "https://mcp.exa.ai/mcp"]',
+      "startup_timeout_sec = 30",
+      "",
+    ].join("\n");
+
+    const out = mergeCodexConfigAddOnly(originalUserConfig, upstreamConfig);
+    const exa = sectionBlock(out, "mcp_servers.exa");
+
+    assert.match(exa, /command = "npx"/);
+    assert.match(
+      exa,
+      /args = \["-y", "mcp-remote", "https:\/\/mcp\.exa\.ai\/mcp"\]/,
+    );
+    assert.match(exa, /startup_timeout_sec = 30/);
+    assert.match(exa, /enabled = false/);
+    assert.doesNotMatch(exa, /^\s*url\s*=/m);
+  });
+
+  test("normalizes MCP server when upstream replaces stdio command with remote url", () => {
+    const originalUserConfig = [
+      "[mcp_servers.exa]",
+      'command = "npx"',
+      'args = ["-y", "mcp-remote", "https://mcp.exa.ai/mcp"]',
+      "startup_timeout_sec = 30",
+      "",
+    ].join("\n");
+    const upstreamConfig = [
+      "[mcp_servers.exa]",
+      'url = "https://mcp.exa.ai/mcp"',
+      "startup_timeout_sec = 30",
+      "",
+    ].join("\n");
+
+    const out = mergeCodexConfigAddOnly(originalUserConfig, upstreamConfig);
+    const exa = sectionBlock(out, "mcp_servers.exa");
+
+    assert.match(exa, /url = "https:\/\/mcp\.exa\.ai\/mcp"/);
+    assert.match(exa, /startup_timeout_sec = 30/);
+    assert.doesNotMatch(exa, /^\s*command\s*=/m);
+    assert.doesNotMatch(exa, /^\s*args\s*=/m);
+  });
+
+  test("cleans an existing invalid MCP url plus stdio server during app control sync", () => {
+    const input = [
+      "[mcp_servers.exa]",
+      'url = "https://mcp.exa.ai/mcp"',
+      'command = "npx"',
+      'args = ["-y", "mcp-remote", "https://mcp.exa.ai/mcp"]',
+      "startup_timeout_sec = 30",
+      "",
+    ].join("\n");
+
+    const out = ensureCodexAppNativeControls(input, { platformName: "linux" });
+    const exa = sectionBlock(out, "mcp_servers.exa");
+
+    assert.match(exa, /command = "npx"/);
+    assert.match(
+      exa,
+      /args = \["-y", "mcp-remote", "https:\/\/mcp\.exa\.ai\/mcp"\]/,
+    );
+    assert.match(exa, /startup_timeout_sec = 30/);
+    assert.doesNotMatch(exa, /^\s*url\s*=/m);
+    assert.match(out, /default_mode_request_user_input = true/);
   });
 });

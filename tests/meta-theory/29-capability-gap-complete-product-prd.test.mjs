@@ -15,11 +15,12 @@ describe("29 — Capability Gap complete product PRD", () => {
   test("marks local complete-product state with live/native release boundary", () => {
     assert.match(prd, /## 当前完成状态/);
     assert.match(prd, /已测通/);
-    assert.match(prd, /Complete product MVP 已经在本地证明/);
+    assert.match(prd, /本地 planning\/orchestration MVP 已经证明/);
+    assert.match(prd, /还不能宣称“治理 Agent \+ 执行 Agent 实机闭环完成”/);
     assert.match(prd, /还不能宣称“发布级 live\/native 全 runtime 完成”/);
-    assert.match(prd, /Cursor Agent CLI 尚未在本机安装或暴露/);
+    assert.match(prd, /Cursor Agent CLI native live 仍未闭合/);
     assert.match(prd, /Claude 和 OpenClaw 全九个 meta agents shard live evidence 已闭合/);
-    assert.match(prd, /Codex \| live pass/);
+    assert.match(prd, /Codex \| orchestration live artifact pass/);
     assert.match(prd, /Cursor native live 仍返回 structured blocked/);
   });
 
@@ -68,6 +69,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "进行中",
       "部分完成",
       "已测通",
+      "降级",
       "阻塞",
     ]) {
       assert.match(prd, new RegExp(marker), `missing iteration marker ${marker}`);
@@ -76,8 +78,8 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("keeps human-readable natural-language entry work in the single PRD source", () => {
     for (const marker of [
-      "版本：v0.36",
-      "human-readable natural-language entry hardening is PRD-scoped",
+      "版本：v0.37",
+      "真实治理 Agent \\+ 执行 Agent live 链路",
       "自然语言入口与用户体验提示",
       "普通自然语言 durable 任务",
       "没有真实 conversation notice emitted 证据时必须标 partial",
@@ -96,6 +98,14 @@ describe("29 — Capability Gap complete product PRD", () => {
       "多语言阶段说明覆盖",
       "P-066",
       "真实 conversation notice 发射",
+      "P-067",
+      "顺滑能力发现守卫",
+      "P-068",
+      "治理 Agent live result packet",
+      "P-069",
+      "执行 owner / 多能力 live execution evidence",
+      "P-070",
+      "项目能力资产沉淀 validator",
       "不能新增第二份 backlog / PRD",
     ]) {
       assert.match(prd, new RegExp(marker), `missing natural-language PRD marker ${marker}`);
@@ -139,7 +149,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "approved-for-writeback",
       "按 runId 查看",
       "设计、执行、验收、反馈、交付内容",
-      "Codex live pass",
+      "Codex orchestration live artifact pass",
       "Cursor live harness",
       "全 meta agents shard live evidence",
     ]) {
@@ -312,7 +322,7 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records expanded unfinished parallel backlog instead of collapsing to one blocker", () => {
     for (const marker of [
-      "版本：v0.36",
+      "版本：v0.37",
       "未完成但可并行推进的扩展 / 解阻队列",
       "P-025",
       "Cursor WSL live 安装与只读验收子窗口",
@@ -454,8 +464,8 @@ describe("29 — Capability Gap complete product PRD", () => {
   test("records v0.25 wider parallel product backlog", () => {
     for (const marker of [
       "P-025 到 P-060 并行扩展队列",
-      "本 PRD v0.36 的状态更新",
-      "P-025 到 P-066 队列",
+      "本 PRD v0.37 的状态更新",
+      "P-025 到 P-070 队列",
       "researchPreparationPacket",
       "研究完才编排",
       "避免把 capability 简化成 skill",
@@ -491,15 +501,15 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records v0.27 multi-type capability browser closure", () => {
     for (const marker of [
-      "本 PRD v0.36 的状态更新",
-      "P-038 \\| R-007/R-010 \\| 多类型能力库存浏览器[\\s\\S]*?\\| 已测通 \\|",
+      "本 PRD v0.37 的状态更新",
+      "P-038 \\| R-007/R-010 \\| 多类型能力库存浏览器[\\s\\S]*?\\| 已测通（旧十类浏览器） \\|",
       "npm run meta:capabilities:browser",
       ".meta-kim/state/default/multi-type-capability-browser/latest.json",
-      "10/10 capability types covered",
+      "10/10 legacy capability types covered",
       "237 个候选",
       "skillOnly = false",
-      "count、topCandidates、unavailableReasons、innovationNeeded",
-      "skill 只是能力类型之一",
+      "核心类别优先",
+      "不把 MCP/tools 继续压成旧十类",
       "已完成 P-038",
       "P-025 需要安装或暴露 Cursor Agent CLI",
     ]) {
@@ -507,9 +517,61 @@ describe("29 — Capability Gap complete product PRD", () => {
     }
   });
 
+  test("records v0.37 smooth capability discovery without swallowing MCP or tools", () => {
+    for (const marker of [
+      "版本：v0.37",
+      "核心能力类别",
+      "默认发现粒度要顺滑",
+      "MCP 和 tools 是足够重要的一等类别",
+      "MCP",
+      "tools",
+      "no_expansion_needed",
+      "permissionBoundary",
+      "verificationOwner",
+      "按需展开",
+      "workerResult",
+      "把未验证 MCP/tools 冒充已调用",
+      "P-067",
+      "顺滑能力发现守卫",
+      "P-068",
+      "治理 Agent live result packet",
+      "P-069",
+      "执行 owner / 多能力 live execution evidence",
+      "P-070",
+      "项目能力资产沉淀 validator",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.37 capability marker ${marker}`);
+    }
+
+    for (const marker of [
+      "orchestration_artifact_pass",
+      "projection_smoke",
+      "live_governance_agent_pass",
+      "live_execution_pass",
+      "degradedFlag=true",
+      "governanceAgentResultPackets",
+      "workerResultPackets",
+      "workerExecutionEvidence",
+      "只有 board、workerTaskPackets、schema、中文报告、SQLite event 或 projection smoke",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing evidence layering marker ${marker}`);
+    }
+
+    assert.doesNotMatch(
+      prd,
+      /Codex \| live pass/,
+      "Codex orchestration artifact must not be labeled as generic live pass",
+    );
+    assert.doesNotMatch(
+      prd,
+      /Complete product MVP 已经在本地证明/,
+      "local orchestration MVP must not overclaim complete execution",
+    );
+  });
+
   test("records v0.28 orchestration DAG closure and wider parallel product lanes", () => {
     for (const marker of [
-      "版本：v0.36",
+      "版本：v0.37",
       "P-039 \\| R-003/R-007 \\| 编排 DAG 可视化与依赖模拟[\\s\\S]*?\\| 已测通 \\|",
       "npm run meta:orchestration:dag",
       ".meta-kim/state/default/orchestration-dag/latest.json",
@@ -540,7 +602,7 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records v0.29 orchestration scheduler closure", () => {
     for (const marker of [
-      "版本：v0.36",
+      "版本：v0.37",
       "P-050 \\| R-003/R-007 \\| DAG 串行依赖样本扩展[\\s\\S]*?\\| 已测通 \\|",
       "P-051 \\| R-003/R-007 \\| DAG 调度仿真与关键路径[\\s\\S]*?\\| 已测通 \\|",
       "npm run meta:orchestration:schedule",
@@ -568,7 +630,7 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records v0.30 workerTask output contract and retry closure", () => {
     for (const marker of [
-      "版本：v0.36",
+      "版本：v0.37",
       "P-040 \\| R-001/R-007 \\| workerTask 输出合同与返工策略[\\s\\S]*?\\| 已测通 \\|",
       "P-052 \\| R-001/R-007 \\| workerTask 输出 schema registry[\\s\\S]*?\\| 已测通 \\|",
       "P-053 \\| R-001/R-007 \\| workerTask 返工 runner[\\s\\S]*?\\| 已测通 \\|",
@@ -600,7 +662,7 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records v0.31 feedback loop and Review Meta-Review gate closure", () => {
     for (const marker of [
-      "版本：v0.36",
+      "版本：v0.37",
       "P-041 \\| R-002/R-011 \\| 真实用户纠错 replay 池[\\s\\S]*?\\| 已测通 \\|",
       "P-042 \\| R-002/R-010 \\| 反馈入口与状态闭环[\\s\\S]*?\\| 已测通 \\|",
       "P-054 \\| R-008/R-011 \\| Review / Meta-Review 双层接收门[\\s\\S]*?\\| 已测通 \\|",
@@ -629,7 +691,7 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records product delivery bundle and reviewer calibration closure", () => {
     for (const marker of [
-      "版本：v0.36",
+      "版本：v0.37",
       "P-045 \\| R-010/R-011 \\| 产品交付包打包[\\s\\S]*?\\| 已测通 \\|",
       "P-046 \\| R-011 \\| reviewer 校准样本[\\s\\S]*?\\| 已测通 \\|",
       "P-059 \\| R-010/R-011 \\| 产品交付 bundle CLI[\\s\\S]*?\\| 已测通 \\|",
@@ -654,7 +716,7 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records live research execution, freshness, and innovation sandbox closure", () => {
     for (const marker of [
-      "版本：v0.36",
+      "版本：v0.37",
       "P-047 \\| R-007 \\| 真实联网研究执行层[\\s\\S]*?\\| 已测通 \\|",
       "P-048 \\| R-007/R-010 \\| 研究证据缓存与新鲜度策略[\\s\\S]*?\\| 已测通 \\|",
       "P-049 \\| R-007/R-009 \\| 能力创新候选沙箱[\\s\\S]*?\\| 已测通 \\|",
@@ -677,7 +739,7 @@ describe("29 — Capability Gap complete product PRD", () => {
 
   test("records remaining backlog closure without clearing true blockers", () => {
     for (const marker of [
-      "版本：v0.36",
+      "版本：v0.37",
       "P-029 \\| R-010 \\| 跨 run 趋势服务化面板[\\s\\S]*?\\| 已测通 \\|",
       "npm run meta:trend:panel",
       ".meta-kim/state/default/run-trend-panel/latest.json",
@@ -763,13 +825,18 @@ describe("29 — Capability Gap complete product PRD", () => {
     for (const marker of [
       "能力口径",
       "不是 skill-only",
-      "governance / execution agent",
-      "script / command",
-      "MCP provider / MCP tool",
-      "runtime tool / plugin / connector",
-      "retrieval capability",
-      "dependency / external tool package",
+      "governance agent",
+      "execution agent",
+      "command",
+      "script",
+      "MCP",
+      "tools",
+      "hook/runtime adapter",
+      "memory/graph",
+      "retrieval/research",
+      "dependency/external package",
       "workerTask",
+      "workerResult",
       "multi-type capability inventory",
       "researchCapabilityDiscovery",
       "deepResearchPlan",

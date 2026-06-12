@@ -14,7 +14,7 @@
 <p>
   <img alt="Tools" src="https://img.shields.io/badge/tools-Claude%20Code%20%7C%20Codex%20%7C%20OpenClaw%20%7C%20Cursor-111827"/>
   <img alt="Stars" src="https://img.shields.io/github/stars/KimYx0207/Meta_Kim?style=flat&logo=github"/>
-  <img alt="License" src="https://img.shields.io/badge/license-MIT-green"/>
+  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-green"/>
 </p>
 
 <p>
@@ -772,8 +772,26 @@ flowchart TB
 | `node setup.mjs` | 交互式安装/更新/检查向导 |
 | `git pull --ff-only` | clone 安装用户先用它从 GitHub 拉取最新 Meta_Kim 源码 |
 | `node setup.mjs --update` | 刷新当前安装的投影、技能和依赖；不会拉取 Meta_Kim 源码 |
+| `node setup.mjs --update --project-dir <目录> --project-dir <目录>` | 更新指定项目目录里的项目级运行时文件 |
+| `node setup.mjs --update --all-projects` | 更新已保存项目目录里的项目级运行时文件 |
 | `node setup.mjs --check` | 环境检查（不写盘） |
 | `node setup.mjs --lang zh-CN` | 指定中文界面 |
+
+项目目录更新只会作用于你选择、通过 `--project-dir` 传入，或保存复用的目录。
+如果用脚本传入目录，可以加 `--save-project-dirs` 保存这组目录，后续用
+`--all-projects` 复用。已有本地 `settings`、MCP 和 hook 配置会被合并或保留，
+不会被直接替换。
+
+交互式更新流程：
+
+1. 运行 `node setup.mjs --update`。
+2. 如果已经保存过项目目录，选择“更新全部已保存项目目录”即可一次更新。
+3. 第一次配置时，选择“添加或修改已保存项目目录，并立即更新”。
+4. 在一行里输入项目目录，多个目录用分号或逗号隔开：
+   `D:/Project/a; D:/Project/b; D:/Project/c`。
+5. 记住的目录会保存到本 Meta_Kim 仓库的 `.meta-kim/local.overrides.json`，
+   字段名是 `projectDeployDirs`；后续可运行 `node setup.mjs --update --all-projects`
+   一次更新所有已保存项目。
 
 ### 同步与校验
 
@@ -935,7 +953,7 @@ Meta_Kim 使用 MCP（Model Context Protocol）来扩展 agent 的能力边界�
 
 ## 第三方依赖
 
-Meta_Kim 本身采用 MIT 协议。以下可选技能仓库通过 `node setup.mjs` 单独安装，各自的许可证独立适用。
+Meta_Kim 本身采用 Apache License 2.0。以下可选技能仓库通过 `node setup.mjs` 单独安装，各自的许可证独立适用。
 
 ### npm 依赖
 
@@ -970,4 +988,16 @@ Meta_Kim 本身采用 MIT 协议。以下可选技能仓库通过 `node setup.mj
 
 ## License
 
-本项目采用 [MIT License](LICENSE)。
+本项目采用 [Apache License 2.0](LICENSE)。
+
+### 商业使用与署名
+
+允许商业使用。分发 Meta_Kim 或其实质性部分时，请随分发内容保留 [LICENSE](LICENSE) 和 [NOTICE](NOTICE) 文件。
+
+推荐署名格式：
+
+```text
+Meta_Kim by KimYx0207 — https://github.com/KimYx0207/Meta_Kim
+```
+
+署名不得暗示 KimYx0207 或 Meta_Kim 项目对你的产品、服务或分发版本作出背书。第三方依赖和可选技能仓库仍适用各自许可证。

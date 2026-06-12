@@ -170,9 +170,64 @@ describe("install platform config", () => {
     assert.ok(adapterFunction);
     assert.match(adapterFunction, /"import re"/);
     assert.match(adapterFunction, /#\{2,3\}\\\\s\+Phase\\\\b/);
+    assert.match(adapterFunction, /complete = max\(complete_primary, complete_inline\)/);
+    assert.match(adapterFunction, /in_progress = max\(in_progress_primary, in_progress_inline\)/);
+    assert.match(adapterFunction, /if total <= 0:/);
     assert.doesNotMatch(
       adapterFunction,
       /total = sum\(1 for line in lines if "### Phase" in line\)/,
+    );
+  });
+
+  test("Codex planning Stop hook does not block on advisory progress messages", () => {
+    const source = readFileSync(
+      path.join(repoRoot, "scripts", "install-global-skills-all-runtimes.mjs"),
+      "utf8",
+    );
+    const stopWrapper = source.match(
+      /function buildCodexStopWrapperPy[\s\S]*?\n}\n/,
+    )?.[0];
+
+    assert.ok(stopWrapper);
+    assert.match(stopWrapper, /decision = result\.get\("decision"\)/);
+    assert.match(stopWrapper, /adapter\.emit_json\(result\)/);
+    assert.match(stopWrapper, /adapter\.emit_json\(\{"systemMessage": message\}\)/);
+    assert.ok(stopWrapper.includes('if "(0/0" in message:'));
+    assert.doesNotMatch(
+      stopWrapper,
+      /adapter\.emit_json\(\{"decision": "block", "reason": message\}\)/,
+    );
+  });
+
+  test("Codex planning hook registration preserves existing hooks.json entries", () => {
+    const source = readFileSync(
+      path.join(repoRoot, "scripts", "install-global-skills-all-runtimes.mjs"),
+      "utf8",
+    );
+    const deployFunction = source.match(
+      /async function deployHookConfigFiles[\s\S]*?\n}\n\nfunction normalizeHookCommand/,
+    )?.[0];
+    const mergeFunction = source.match(
+      /function mergeCodexPlanningHooksJson[\s\S]*?\n}\n/,
+    )?.[0];
+    const patchFunction = source.match(
+      /async function patchCodexPlanningHooksForPlatform[\s\S]*?\n}\n/,
+    )?.[0];
+
+    assert.ok(deployFunction);
+    assert.ok(mergeFunction);
+    assert.ok(patchFunction);
+    assert.match(deployFunction, /spec\.id === "planning-with-files"/);
+    assert.match(deployFunction, /mergePlanningHookConfigFile\(srcPath, destPath\)/);
+    assert.doesNotMatch(deployFunction, /await fs\.copyFile\(srcPath, destPath\);\s*console\.log/);
+    assert.match(mergeFunction, /existingBlocks/);
+    assert.match(mergeFunction, /missingHooks/);
+    assert.match(mergeFunction, /hookCommandContains/);
+    assert.match(patchFunction, /existingHooksJson/);
+    assert.match(patchFunction, /mergeCodexPlanningHooksJson/);
+    assert.doesNotMatch(
+      patchFunction,
+      /JSON\.stringify\(buildCodexPlanningHooksJson\(runtimeHome\), null, 2\)/,
     );
   });
 

@@ -37,16 +37,18 @@ export const OPENCLAW_WORKSPACE_MD = [
 export const SHARED_HOOK_FILES = [
   "hook-i18n.mjs",
   "skip-reminder.mjs",
-  "block-dangerous-bash.mjs",
   "activate-meta-theory-spine.mjs",
+  "bash-readonly-whitelist.mjs",
+  "enforce-agent-dispatch.mjs",
+  "graphify-context.mjs",
   "post-format.mjs",
   "post-typecheck.mjs",
   "post-console-log-warn.mjs",
   "subagent-context.mjs",
   "stop-compaction.mjs",
-  "stop-memory-save.mjs",
   "stop-console-log-audit.mjs",
   "stop-completion-guard.mjs",
+  "stop-spine-cleanup.mjs",
 ];
 
 // Legacy export alias for backwards compatibility

@@ -6,6 +6,117 @@
 
 更新说明只解释“改了什么、为什么重要”。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
+## [Unreleased]
+
+## [2.8.23] - 2026-06-12
+
+### 变更
+
+- **Run-scoped Worker 实机执行** - `meta:theory:run` 现在会通过本地 run-scoped worker executor 执行 bounded worker task packets，不再停在结构化调度就绪。主线程仍然只负责 scope、dispatch、review 和 synthesize；不会额外派外部 Agent。
+
+### 验证
+
+- 增加 governance 覆盖，要求 worker execution evidence，同时继续保留 public-ready 发布门禁。
+
+## [2.8.22] - 2026-06-12
+
+### 变更
+
+- **核心治理线路发布证据收口** - 补齐 PDR 发布清单和最终发布证据，让最终 tag 内包含 commit、tag、push 和 GitHub Release 证明。
+
+### 验证
+
+- 复用 `2.8.21` 的核心治理线路实现证据，并为最终 `2.8.22` patch 发布重新运行本地发布检查。
+
+## [2.8.21] - 2026-06-12
+
+### 变更
+
+- **核心治理线路修复** - Meta_Kim 现在有了默认 8 阶段治理路径的机器契约，覆盖 Critical、Fetch、Thinking、Execution、Review、Meta-Review、Verification、Evolution 的输入输出、跳过条件、门禁、阻断、警告、public-ready 和写回策略。
+- **默认运行产物闭合** - `meta:theory:run` 现在会为普通自然语言 durable task 输出顶层 request、intent、fetch、能力库存、gap/ready、thinking、dispatch、worker task、execution、review、meta-review、verification、evolution、dynamic workflow 和 public-ready 包。
+- **能力发现总线接入默认入口** - 默认 run 不再只带 skill 或粗粒度摘要，而是接入统一 capability inventory bus。能力记录覆盖 agent、skill、script/tool、MCP、hook、runtime、OS、memory、graph 和外部依赖候选，并使用统一 provider 字段。
+- **发布治理门禁补齐** - 完整发布验证现在会包含 governance validators 和 governance tests，覆盖 strict workflow fixture、PDR 证据映射，以及脚本 registry 的 cleanup candidate 保护。
+
+### 验证
+
+- `npm run meta:sync`
+- `npm run discover:global`
+- `npm run meta:check`
+- `npm run meta:validate`
+- `npm run meta:release:smoke`
+- `npm run meta:verify:governance`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:check:global:release`
+- `npm run meta:verify:all`
+- `npm run meta:validate:run -- tests/fixtures/run-artifacts/valid-core-loop-release-run.json`
+- `git diff --check`
+
+## [2.8.20] - 2026-06-11
+
+### 变更
+
+- **项目 Hook 归属合理化** - 项目级运行时导出现在只保留和 Meta_Kim 项目行为强相关的 hook，例如图谱上下文、能力优先调度和 meta-theory 激活。提示词优化、记忆生命周期、planning 辅助、通用危险命令拦截这类个人通用 hook，统一留在全局运行时目录，不再重复投影到每个项目。
+- **全局 Hook 同步覆盖补齐** - 全局同步和发布检查现在会明确比对被管理的全局 hook 文件；项目同步会清理 Codex / Cursor 项目目录里残留的全局专属 hook adapter。这样依赖项目自己的 hook 可以继续从源项目更新，也避免同一份提示词或上下文被重复注入。
+- **Codex MCP 配置合并规范化** - Codex MCP 配置合并逻辑进一步收紧，ECC 管理的 server 会按统一命名和结构归一化，同时继续保留用户自己的配置。
+
+### 验证
+
+- `npm run meta:release:smoke`
+- `npm run meta:check`
+- `npm run meta:check:global:release`
+- `npm run meta:test:setup`
+- `node scripts/validate-provider-capabilities.mjs`
+- `node scripts/validate-foundational-capabilities.mjs`
+- `node scripts/validate-hook-progression.mjs`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
+## [2.8.19] - 2026-06-11
+
+### 变更
+
+- **Apache-2.0 + NOTICE 署名声明** - Meta_Kim 主项目许可证从 MIT 调整为 Apache License 2.0，并新增根目录 `NOTICE` 文件承载推荐署名。商业使用仍然允许；分发 Meta_Kim 或其实质性部分时，需要保留 Apache 许可证文本和 NOTICE 署名声明。此前已经发布的版本仍按各自发布时附带的许可证适用。
+- **多项目运行时自动更新** - `setup.mjs` 现在可以一次刷新多个显式传入或已保存项目目录里的项目级运行时文件，支持用 `--project-dir` 传入脚本化目标、用 `--save-project-dirs` 保存脚本传入列表，也支持用 `--all-projects` 复用本机保存的目标列表。
+- **已保存项目目录管理器** - 更新向导现在支持管理已保存项目目录列表，可在一行里用分号或逗号输入多个目录，从菜单里更新全部已保存项目，也可用 `--all-projects` 复用。
+- **批量更新时保护项目配置** - 多项目运行时导出会保留并合并已有本地 `settings`、MCP 和 hook 配置，不再直接替换；`.claude/settings.local.json`、Codex 项目配置、OpenClaw workspace 状态等本地状态不会被导出。
+
+### 验证
+
+- `node --check setup.mjs`
+- `node --test tests/setup/project-deploy-protection.test.mjs tests/setup/setup-update-default-flow.test.mjs tests/setup/i18n.test.mjs`
+- `npm run meta:test:setup`
+- `npm run meta:sync`
+- `npm run meta:check`
+- `npm run meta:verify:all`
+- `npm --registry=https://registry.npmjs.org audit --audit-level=high`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
+## [2.8.18] - 2026-06-11
+
+### 修复
+
+- **Codex Planning Stop Hook 改为提示模式** - Codex 的 planning-with-files Stop hook 不再把普通进度提醒转成强制继续执行。这样回答已经完成时，不会因为结尾触发旧计划提醒，就把关键答案折叠进 Codex App 的“已处理”区域。
+- **零 Phase 计划不再误判未完成** - Codex planning hook adapter 遇到 `0/0` phase 计数时会安静跳过，不再当成未完成任务；混合 `**Status:**` 与 inline `[status]` 的计划格式，也会与 shell / PowerShell hook 一样稳定计数。
+
+### 变更
+
+- **变更准备合同** - 运行时、hook、setup、sync、provider、删除和发布类 PR 现在有可复用检查清单，覆盖宿主状态影响矩阵、hook/prompt 协议流、删除残留清扫和证据预算。
+- **执行模式分类** - `executionMode` 现在会明确映射到 `real_execution`、`read_only_sidecar`、`approval_gate` 三类。验证器和 Review 可以按语义类别判断执行是否真实发生，而不是只看任务节点数量。
+
+### 验证
+
+- `node --check scripts/install-global-skills-all-runtimes.mjs`
+- `node --check scripts/validate-project.mjs`
+- `node --check scripts/validate-run-artifact.mjs`
+- `node --test tests/setup/release-docs-semantics.test.mjs tests/setup/install-cross-platform.test.mjs`
+- `node --test tests/meta-theory/09-run-artifact-validator.test.mjs tests/meta-theory/31-capability-gap-orchestration.test.mjs tests/meta-theory/33-capability-gap-orchestration-quality.test.mjs`
+- `node scripts/validate-provider-capabilities.mjs --strict-global-hooks --json`
+- `npm --registry=https://registry.npmjs.org audit --audit-level=high`
+- `npm run meta:verify:all`
+- 本机 Windows Codex planning Stop hook smoke：`0/0` phase 计划不再 block；普通未完成计划只返回 `systemMessage`，不返回 `decision:block`。
+- 已安装用户路径 hook 合并 smoke：重新安装 `planning-with-files` 后，Codex 同时保留 `user_prompt_submit.py` 和 `hookprompt-adapter.mjs`；Cursor 的 `beforeSubmitPrompt` 仍保留 `hookprompt-adapter.mjs`。
+
 ## [2.8.17] - 2026-06-11
 
 ### 修复

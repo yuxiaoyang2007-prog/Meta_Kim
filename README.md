@@ -14,7 +14,7 @@
 <p>
   <img alt="Tools" src="https://img.shields.io/badge/tools-Claude%20Code%20%7C%20Codex%20%7C%20OpenClaw%20%7C%20Cursor-111827"/>
   <img alt="Stars" src="https://img.shields.io/github/stars/KimYx0207/Meta_Kim?style=flat&logo=github"/>
-  <img alt="License" src="https://img.shields.io/badge/license-MIT-green"/>
+  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-green"/>
 </p>
 
 <p>
@@ -65,6 +65,8 @@ The proof path shows five things:
 - work is split into bounded worker tasks instead of one giant chat response
 - review and verification produce artifacts, not just reassuring prose
 - blocked runtime evidence stays blocked, for example Cursor native live is not promoted from smoke evidence
+
+The executable core-loop contract is `config/contracts/core-loop-contract.json`; it binds the default path to `npm run meta:theory:run` and keeps Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verification -> Evolution testable.
 
 For a guided walk-through, start with [examples/first-run/README.md](examples/first-run/README.md).
 
@@ -295,6 +297,7 @@ Meta_Kim contracts are not verbal agreements. They are **structured packets**:
 
 | Contract artifact | Stage | Purpose |
 | --- | --- | --- |
+| `coreLoop` | All stages | Compact evidence that the default governed path followed the eight-stage contract |
 | `intentPacket` | Critical | Lock the real intent and prevent drift |
 | `dispatchBoard` | Thinking | Define owners, dependencies, and parallel groups |
 | `workerTaskPacket` | Execution | Carry the full context for each subtask |
@@ -775,8 +778,29 @@ The three memory layers work together toward two core goals:
 | `node setup.mjs` | Interactive install / update / check wizard |
 | `git pull --ff-only` | For clone installs, pull the latest Meta_Kim source from GitHub |
 | `node setup.mjs --update` | Refresh the current installation projections, skills, and dependencies; it does not pull Meta_Kim source code |
+| `node setup.mjs --update --project-dir <dir> --project-dir <dir>` | Refresh project-level runtime files in explicit project directories |
+| `node setup.mjs --update --all-projects` | Refresh project-level runtime files in saved project directories |
 | `node setup.mjs --check` | Environment check without writing |
 | `node setup.mjs --lang zh-CN` | Force the Chinese UI |
+
+Project directory updates only touch directories you select, pass with
+`--project-dir`, or save for reuse. Add `--save-project-dirs` with
+`--project-dir` to remember a script-provided list for later `--all-projects`
+runs. Existing local `settings`, MCP, and hook configuration files are merged
+or preserved instead of being blindly replaced.
+
+Interactive update flow:
+
+1. Run `node setup.mjs --update`.
+2. If you already saved project directories, choose "Update all saved project
+   directories".
+3. To configure them for the first time, choose "Add or change saved project
+   directories, then update them".
+4. Enter the directories in one line, separated by semicolons or commas:
+   `D:/Project/a; D:/Project/b; D:/Project/c`.
+5. Remembered directories are stored in `.meta-kim/local.overrides.json` under
+   this Meta_Kim checkout as `projectDeployDirs`; later runs can use
+   `node setup.mjs --update --all-projects`.
 
 ### Sync and validation
 
@@ -943,7 +967,7 @@ Meta_Kim uses MCP (Model Context Protocol) to expand the capability boundary of 
 
 ## Third-party Dependencies
 
-Meta_Kim is MIT licensed. The following optional skill repositories are installed separately via `node setup.mjs` — each repo's license applies independently.
+Meta_Kim itself is licensed under Apache License 2.0. The following optional skill repositories are installed separately via `node setup.mjs` — each repo's license applies independently.
 
 ### npm Dependencies
 
@@ -978,4 +1002,16 @@ Meta_Kim is MIT licensed. The following optional skill repositories are installe
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [Apache License 2.0](LICENSE).
+
+### Commercial Use and Attribution
+
+Commercial use is allowed. If you redistribute Meta_Kim or substantial portions of it, keep the [LICENSE](LICENSE) and [NOTICE](NOTICE) files with your distribution.
+
+Recommended attribution:
+
+```text
+Meta_Kim by KimYx0207 — https://github.com/KimYx0207/Meta_Kim
+```
+
+Attribution must not imply endorsement by KimYx0207 or the Meta_Kim project. Third-party dependencies and optional skill repositories keep their own licenses.

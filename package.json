@@ -1,6 +1,6 @@
 {
   "name": "meta-kim",
-  "version": "2.8.17",
+  "version": "2.8.23",
   "description": "Governance layer for AI coding: meta agents, workflow contract, meta-theory; canonical in canonical/, with generated Claude/Codex/OpenClaw/Cursor projections.",
   "private": true,
   "type": "module",
@@ -52,7 +52,7 @@
     "meta:validate": "node scripts/validate-project.mjs",
     "meta:check:sync-coverage": "node scripts/sync-coverage-check.mjs",
     "meta:check": "npm run meta:check:runtimes && npm run meta:check:sync-coverage && npm run meta:validate",
-    "meta:verify:all": "npm run discover:global && npm run meta:check && npm run meta:graphify:check && npm run meta:check:global:release && node scripts/eval-meta-agents.mjs --require-all-runtimes && npm run meta:test:setup && npm run meta:test:meta-theory",
+    "meta:verify:all": "npm run discover:global && npm run meta:check && npm run meta:verify:governance && npm run meta:graphify:check && npm run meta:check:global:release && node scripts/eval-meta-agents.mjs --require-all-runtimes && npm run meta:test:setup && npm run meta:test:meta-theory",
     "meta:verify:all:live": "node scripts/eval-meta-agents.mjs --require-all-runtimes --live",
     "meta:setup:install": "node setup.mjs",
     "meta:setup:update": "node setup.mjs --update",
@@ -134,11 +134,12 @@
     "README.ja-JP.md",
     "README.ko-KR.md",
     "LICENSE",
+    "NOTICE",
     "AGENTS.md",
     "CLAUDE.md"
   ],
   "author": "KimYx0207",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "bin": {
     "meta-kim": "./bin/meta-kim.mjs"
   },

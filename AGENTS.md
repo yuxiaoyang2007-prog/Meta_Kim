@@ -252,10 +252,13 @@ The relationship is simple:
 - the business workflow governs run packaging and deliverable closure
 - business phases do not rename or replace the spine
 
+Machine-readable source: `config/contracts/core-loop-contract.json` defines each stage's required input/output, skip condition, gate condition, blocking vs progressive behavior, Verification fuse policy, Evolution writeback policy, and public-ready claim rule. The default runnable entry is `npm run meta:theory:run`, which emits a `coreLoop` summary in the governed execution artifact.
+
 ## Hidden Governance Packets
 
 A governed run should leave enough structure to audit what happened. Important packets include:
 
+- `coreLoop`
 - `taskClassification`
 - `cardPlanPacket`
 - `businessFlowBlueprintPacket`

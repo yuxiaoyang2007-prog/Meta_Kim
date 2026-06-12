@@ -200,53 +200,66 @@ export function buildCodexHooksJson({
   enforceAgentDispatchHookPath = ".codex/hooks/enforce-agent-dispatch.mjs",
   hookPromptAdapterPath = null,
 } = {}) {
-  const userPromptHooks = [
-    hookCommand(nodeHookCommand(memoryHookPath, ["--event", "user-prompt"]), 10),
-  ];
+  const userPromptHooks = [];
+  if (memoryHookPath) {
+    userPromptHooks.push(
+      hookCommand(nodeHookCommand(memoryHookPath, ["--event", "user-prompt"]), 10),
+    );
+  }
   if (hookPromptAdapterPath) {
     userPromptHooks.push(hookCommand(nodeHookCommand(hookPromptAdapterPath), 10));
   }
 
+  const hooks = {
+    UserPromptSubmit: [
+      {
+        hooks: userPromptHooks,
+      },
+    ],
+    PreToolUse: [
+      // Capability-first + meta-readonly deny gate must run before any other
+      // PreToolUse logic so it can short-circuit unsafe dispatches.
+      {
+        matcher: "Bash|apply_patch|Edit|Write|MultiEdit|NotebookEdit|Agent|spawn_agent",
+        hooks: [hookCommand(nodeHookCommand(enforceAgentDispatchHookPath), 10)],
+      },
+      {
+        matcher: "Bash",
+        hooks: [hookCommand(nodeHookCommand(graphifyHookPath))],
+      },
+    ],
+    Skill: [
+      {
+        matcher: "meta-theory",
+        hooks: [hookCommand(nodeHookCommand(spineHookPath), 5)],
+      },
+    ],
+  };
+
+  if (memoryHookPath) {
+    hooks.SessionStart = [
+      {
+        matcher: "startup|resume",
+        hooks: [
+          hookCommand(nodeHookCommand(memoryHookPath, ["--event", "session-start"]), 10, {
+            statusMessage: "Loading Meta_Kim memory",
+          }),
+        ],
+      },
+    ];
+    hooks.Stop = [
+      {
+        hooks: [hookCommand(nodeHookCommand(memoryHookPath, ["--event", "stop"]), 10)],
+      },
+    ];
+  }
+  if (hooks.UserPromptSubmit[0].hooks.length === 0) {
+    delete hooks.UserPromptSubmit;
+  }
+
   return {
     hooks: {
-      SessionStart: [
-        {
-          matcher: "startup|resume",
-          hooks: [
-            hookCommand(nodeHookCommand(memoryHookPath, ["--event", "session-start"]), 10, {
-              statusMessage: "Loading Meta_Kim memory",
-            }),
-          ],
-        },
-      ],
-      UserPromptSubmit: [
-        {
-          hooks: userPromptHooks,
-        },
-      ],
-      PreToolUse: [
-        // Capability-first + meta-readonly deny gate must run before any other
-        // PreToolUse logic so it can short-circuit unsafe dispatches.
-        {
-          matcher: "Bash|apply_patch|Edit|Write|MultiEdit|NotebookEdit|Agent|spawn_agent",
-          hooks: [hookCommand(nodeHookCommand(enforceAgentDispatchHookPath), 10)],
-        },
-        {
-          matcher: "Bash",
-          hooks: [hookCommand(nodeHookCommand(graphifyHookPath))],
-        },
-      ],
-      Skill: [
-        {
-          matcher: "meta-theory",
-          hooks: [hookCommand(nodeHookCommand(spineHookPath), 5)],
-        },
-      ],
-      Stop: [
-        {
-          hooks: [hookCommand(nodeHookCommand(memoryHookPath, ["--event", "stop"]), 10)],
-        },
-      ],
+      ...hooks,
     },
   };
 }
@@ -263,11 +276,13 @@ export function buildCursorHooksJson({
       command: nodeHookCommand(spineHookPath),
       timeout: 5,
     },
-    {
+  ];
+  if (memoryHookPath) {
+    beforeSubmitPromptHooks.push({
       command: nodeHookCommand(memoryHookPath, ["--event", "user-prompt"]),
       timeout: 10,
-    },
-  ];
+    });
+  }
   if (hookPromptAdapterPath) {
     beforeSubmitPromptHooks.push({
       command: nodeHookCommand(hookPromptAdapterPath),
@@ -275,34 +290,38 @@ export function buildCursorHooksJson({
     });
   }
 
+  const hooks = {
+    beforeSubmitPrompt: beforeSubmitPromptHooks,
+    preToolUse: [
+      // Capability-first + meta-readonly deny gate. failClosed=true ensures
+      // Cursor honors the deny payload even if the hook crashes.
+      {
+        command: nodeHookCommand(enforceAgentDispatchHookPath),
+        timeout: 10,
+        failClosed: true,
+      },
+      {
+        command: nodeHookCommand(graphifyHookPath),
+      },
+    ],
+  };
+  if (memoryHookPath) {
+    hooks.sessionStart = [
+      {
+        command: nodeHookCommand(memoryHookPath, ["--event", "session-start"]),
+        timeout: 10,
+      },
+    ];
+    hooks.stop = [
+      {
+        command: nodeHookCommand(memoryHookPath, ["--event", "stop"]),
+        timeout: 10,
+      },
+    ];
+  }
+
   return {
     version: 1,
-    hooks: {
-      sessionStart: [
-        {
-          command: nodeHookCommand(memoryHookPath, ["--event", "session-start"]),
-          timeout: 10,
-        },
-      ],
-      beforeSubmitPrompt: beforeSubmitPromptHooks,
-      preToolUse: [
-        // Capability-first + meta-readonly deny gate. failClosed=true ensures
-        // Cursor honors the deny payload even if the hook crashes.
-        {
-          command: nodeHookCommand(enforceAgentDispatchHookPath),
-          timeout: 10,
-          failClosed: true,
-        },
-        {
-          command: nodeHookCommand(graphifyHookPath),
-        },
-      ],
-      stop: [
-        {
-          command: nodeHookCommand(memoryHookPath, ["--event", "stop"]),
-          timeout: 10,
-        },
-      ],
-    },
+    hooks,
   };
 }

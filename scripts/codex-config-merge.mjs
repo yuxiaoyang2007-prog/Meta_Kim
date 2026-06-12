@@ -107,6 +107,42 @@ function settingNameFromLine(line) {
   return line.match(/^\s*([A-Za-z0-9_.-]+)\s*=/)?.[1] ?? null;
 }
 
+function isTopLevelMcpServerSection(sectionName = "") {
+  return /^mcp_servers\.(?:"[^"]+"|[A-Za-z0-9_-]+)$/.test(sectionName);
+}
+
+function isStdioTransportType(value = "") {
+  return String(value).trim().toLowerCase() === "stdio";
+}
+
+function isRemoteTransportType(value = "") {
+  return ["http", "sse", "streamable_http", "streamable-http"].includes(
+    String(value).trim().toLowerCase(),
+  );
+}
+
+function mcpTransportForSection(lines, sectionName) {
+  const settings = new Set(
+    sectionSettingLines(lines, sectionName)
+      .map(settingNameFromLine)
+      .filter(Boolean),
+  );
+  const type = sectionSettingValue(lines, sectionName, "type");
+  const hasUrl = settings.has("url");
+  const hasStdioLaunch = settings.has("command") || settings.has("args");
+
+  if (hasUrl && !hasStdioLaunch && !isStdioTransportType(type)) {
+    return "remote";
+  }
+  if (hasStdioLaunch || isStdioTransportType(type)) {
+    return "stdio";
+  }
+  if (hasUrl || isRemoteTransportType(type)) {
+    return "remote";
+  }
+  return null;
+}
+
 function ensureBlankLineBeforeAppend(lines) {
   if (lines.length > 0 && lines[lines.length - 1].trim() !== "") {
     lines.push("");
@@ -123,6 +159,15 @@ function appendWholeSection(lines, sourceLines, sectionName) {
 export function mergeCodexConfigAddOnly(baseConfigText = "", additiveConfigText = "") {
   const baseLines = normalizeLines(baseConfigText);
   const additiveLines = normalizeLines(additiveConfigText);
+  const preferredMcpTransports = new Map(
+    sectionNames(additiveLines)
+      .filter(isTopLevelMcpServerSection)
+      .map((sectionName) => [
+        sectionName,
+        mcpTransportForSection(additiveLines, sectionName),
+      ])
+      .filter(([, transport]) => Boolean(transport)),
+  );
   const existingRootSettings = rootSettingNames(baseLines);
   const missingRootLines = rootSettingLines(additiveLines).filter((line) => {
     const name = settingNameFromLine(line);
@@ -156,6 +201,8 @@ export function mergeCodexConfigAddOnly(baseConfigText = "", additiveConfigText 
       baseLines.splice(latestSection.end, 0, ...missingLines);
     }
   }
+
+  normalizeCodexMcpServerTransportConflicts(baseLines, preferredMcpTransports);
 
   return `${baseLines.join("\n")}\n`;
 }
@@ -346,6 +393,62 @@ function removeSectionSetting(lines, sectionName, settingName) {
   }
 }
 
+function codexMcpServerTransportConflict(lines, sectionName) {
+  const settings = new Set(
+    sectionSettingLines(lines, sectionName)
+      .map(settingNameFromLine)
+      .filter(Boolean),
+  );
+  const type = sectionSettingValue(lines, sectionName, "type");
+  const hasRemote = settings.has("url") || isRemoteTransportType(type);
+  const hasStdio =
+    settings.has("command") ||
+    settings.has("args") ||
+    isStdioTransportType(type);
+
+  return hasRemote && hasStdio;
+}
+
+function removeTransportTypeIf(lines, sectionName, predicate) {
+  const type = sectionSettingValue(lines, sectionName, "type");
+  if (type !== null && predicate(type)) {
+    removeSectionSetting(lines, sectionName, "type");
+  }
+}
+
+function normalizeCodexMcpServerTransportConflicts(
+  lines,
+  preferredTransports = new Map(),
+) {
+  for (const sectionName of sectionNames(lines)) {
+    if (!isTopLevelMcpServerSection(sectionName)) continue;
+    if (!codexMcpServerTransportConflict(lines, sectionName)) continue;
+
+    const preferredTransport =
+      preferredTransports.get(sectionName) ??
+      mcpTransportForSection(lines, sectionName) ??
+      "stdio";
+
+    if (preferredTransport === "remote") {
+      for (const settingName of ["command", "args", "cwd"]) {
+        removeSectionSetting(lines, sectionName, settingName);
+      }
+      removeTransportTypeIf(lines, sectionName, isStdioTransportType);
+      continue;
+    }
+
+    for (const settingName of [
+      "url",
+      "bearer_token_env_var",
+      "oauth_client_id",
+      "oauth_resource",
+    ]) {
+      removeSectionSetting(lines, sectionName, settingName);
+    }
+    removeTransportTypeIf(lines, sectionName, isRemoteTransportType);
+  }
+}
+
 function withoutExtendedWindowsPrefix(filePath = "") {
   return String(filePath).replace(/^\\\\\?\\/, "");
 }
@@ -467,6 +570,8 @@ export function ensureCodexAppNativeControls(configText = "", options = {}) {
       ensureSectionSetting(lines, `plugins."${pluginId}"`, "enabled", "true");
     }
   }
+
+  normalizeCodexMcpServerTransportConflicts(lines);
 
   return ensureCodexWindowsNotifyCompat(
     `${lines.join("\n")}\n`,

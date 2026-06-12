@@ -26,14 +26,13 @@ const execFileAsync = promisify(execFile);
 
 /** @type {string[]} Same order as validate-project.mjs EXPECTED_CLAUDE_HOOK_COMMANDS */
 const EXPECTED_CLAUDE_HOOK_COMMANDS = [
-  "node .claude/hooks/block-dangerous-bash.mjs",
+  "node .claude/hooks/graphify-context.mjs",
   "node .claude/hooks/enforce-agent-dispatch.mjs",
   "node .claude/hooks/post-format.mjs",
   "node .claude/hooks/post-typecheck.mjs",
   "node .claude/hooks/post-console-log-warn.mjs",
   "node .claude/hooks/subagent-context.mjs",
   "node .claude/hooks/stop-compaction.mjs",
-  "node .claude/hooks/stop-memory-save.mjs",
   "node .claude/hooks/stop-console-log-audit.mjs",
   "node .claude/hooks/stop-completion-guard.mjs",
   "node .claude/hooks/stop-spine-cleanup.mjs",

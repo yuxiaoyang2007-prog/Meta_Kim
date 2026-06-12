@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { OS_TARGETS, RUNTIMES, listFiles, readJson, repoPath, stateDir, toPosix, writeJson } from "./governance-lib.mjs";
+import { fileURLToPath } from "node:url";
+import { OS_TARGETS, RUNTIMES, exists, listFiles, readJson, repoPath, stateDir, toPosix, writeJson } from "./governance-lib.mjs";
 
 const outputPath = path.join(stateDir, "capability-inventory.json");
 
@@ -9,6 +10,95 @@ function defaultSupport(runtime = "partial", os = "partial") {
   return {
     runtimeSupport: Object.fromEntries(RUNTIMES.map((name) => [name, runtime])),
     osSupport: Object.fromEntries(OS_TARGETS.map((name) => [name, os])),
+  };
+}
+
+function supportForRuntime(runtimeName, support = "native", fallback = "unknown") {
+  return Object.fromEntries(
+    RUNTIMES.map((name) => [name, name === runtimeName ? support : fallback])
+  );
+}
+
+function supportForOs(osName, support = "native", fallback = "unknown") {
+  return Object.fromEntries(
+    OS_TARGETS.map((name) => [name, name === osName ? support : fallback])
+  );
+}
+
+const PROVIDER_TYPE_BY_TYPE = {
+  agent: "agent",
+  skill: "skill",
+  script: "script",
+  command: "tool",
+  reference: "tool",
+  hook: "hook",
+  runtime_tool: "runtime",
+  weapon: "tool",
+  plugin: "external",
+  plugin_bundle: "external",
+  mcp_config: "MCP",
+  mcp_server: "MCP",
+  config: "tool",
+  os: "OS",
+  memory: "memory",
+  graph: "graph",
+  external: "external",
+};
+
+function riskLevelFor(record) {
+  const riskText = JSON.stringify(record.risk ?? {}).toLowerCase();
+  if (/credential|global|externalwrite|thirdparty|trust|approval|unsafe|delete|uninstall/.test(riskText)) {
+    return "high";
+  }
+  if (/shell|mutate|write|install|network/.test(riskText)) return "medium";
+  return "low";
+}
+
+function ownerBoundaryFor(record) {
+  if (record.ownerBoundary) return record.ownerBoundary;
+  if (record.type === "agent" && String(record.id).startsWith("meta-")) return "governance_owner";
+  if (record.providerType === "MCP" || record.type === "mcp_config") return "provider_boundary";
+  if (record.routeEligibility === "callable") return "callable_provider";
+  if (record.routeEligibility === "reference") return "reference_only";
+  return record.ownerCandidates?.[0] ?? "unknown_owner_boundary";
+}
+
+function canVerify(record) {
+  return Boolean(record.verificationMethod) || /validate|verify|check|test|probe|smoke/i.test(
+    `${record.id} ${record.invocationPath ?? ""} ${record.sourcePath ?? ""}`
+  );
+}
+
+function withUnifiedCapabilityFields(record) {
+  const providerType = record.providerType ?? PROVIDER_TYPE_BY_TYPE[record.type] ?? "tool";
+  const routeEligibility = record.routeEligibility ?? "reference";
+  const executableProvider =
+    !["config", "mcp_config", "reference", "memory", "graph", "external"].includes(record.type) &&
+    record.configOnly !== true;
+  const canExecute =
+    executableProvider &&
+    routeEligibility === "callable" &&
+    record.risk?.blocked !== true;
+  return {
+    ...record,
+    capabilityId: record.capabilityId ?? record.id,
+    providerType,
+    sourceRef: record.sourceRef ?? record.sourcePath,
+    riskLevel: record.riskLevel ?? riskLevelFor({ ...record, providerType }),
+    ownerBoundary: ownerBoundaryFor({ ...record, providerType }),
+    canExecute,
+    canReview:
+      record.canReview ??
+      (Boolean(record.ownerCandidates?.includes("meta-prism")) ||
+        ["agent", "script", "tool", "runtime", "hook", "MCP"].includes(providerType)),
+    canVerify: record.canVerify ?? canVerify(record),
+    canCreateOrUpgrade:
+      record.canCreateOrUpgrade ??
+      ["agent", "skill", "script", "tool", "hook", "MCP", "external"].includes(providerType),
+    missingDependencies: record.missingDependencies ?? [],
+    reason:
+      record.reason ??
+      `${providerType} capability discovered from ${record.sourcePath ?? record.sourceRef ?? "unknown source"}.`,
   };
 }
 
@@ -35,6 +125,46 @@ async function packageScripts() {
   }));
 }
 
+async function fileRecordIfExists(relativePath, options) {
+  if (!(await exists(repoPath(relativePath)))) return [];
+  return [
+    {
+      id: options.id,
+      type: options.type,
+      providerType: options.providerType,
+      sourcePath: relativePath,
+      triggerWords: options.triggerWords ?? [options.id, options.type],
+      ownerCandidates: options.ownerCandidates ?? ["meta-artisan"],
+      weaponCandidates: options.weaponCandidates ?? [],
+      dependencyCandidates: options.dependencyCandidates ?? [],
+      verificationMethod: options.verificationMethod ?? null,
+      risk: options.risk ?? { canMutateFiles: false },
+      configOnly: options.configOnly ?? false,
+      mustPreserve: options.mustPreserve ?? true,
+      routeEligibility: options.routeEligibility ?? "reference",
+      missingFields: [],
+      evidence: { source: "local_file", sourceRef: relativePath, confidence: "verified_local" },
+      confidence: options.confidence ?? "verified_local",
+      invocationPath: options.invocationPath ?? null,
+      writebackKey: `${options.type}:${options.id}`,
+      runtimeSupport: options.runtime
+        ? supportForRuntime(
+            options.runtime,
+            options.runtimeSupport ?? "native",
+            options.fallbackRuntimeSupport ?? "unknown",
+          )
+        : defaultSupport(options.runtimeSupport ?? "partial", options.osSupport ?? "partial").runtimeSupport,
+      osSupport: options.os
+        ? supportForOs(
+            options.os,
+            options.osSupport ?? "native",
+            options.fallbackOsSupport ?? "unknown",
+          )
+        : defaultSupport(options.runtimeSupport ?? "partial", options.osSupport ?? "partial").osSupport,
+    },
+  ];
+}
+
 async function fileCapabilities(root, type, ownerCandidates, options = {}) {
   const files = await listFiles(repoPath(root), (file) => options.match ? options.match(file) : true);
   return files.map((file) => {
@@ -50,6 +180,7 @@ async function fileCapabilities(root, type, ownerCandidates, options = {}) {
       dependencyCandidates: [],
       verificationMethod: options.verificationMethod ?? null,
       risk: options.risk ?? { canMutateFiles: false },
+      configOnly: options.configOnly ?? false,
       mustPreserve: Boolean(options.mustPreserve),
       routeEligibility: options.routeEligibility ?? "reference",
       missingFields: [],
@@ -57,12 +188,76 @@ async function fileCapabilities(root, type, ownerCandidates, options = {}) {
       confidence: "verified_local",
       invocationPath: options.invocationPath ?? null,
       writebackKey: `${type}:${id}`,
-      ...defaultSupport(options.runtime ?? "partial", options.os ?? "partial"),
+      runtimeSupport: options.runtime
+        ? supportForRuntime(
+            options.runtime,
+            options.runtimeSupport ?? "native",
+            options.fallbackRuntimeSupport ?? "unknown",
+          )
+        : defaultSupport(options.runtimeSupport ?? "partial", options.osSupport ?? "partial").runtimeSupport,
+      osSupport: options.os
+        ? supportForOs(
+            options.os,
+            options.osSupport ?? "native",
+            options.fallbackOsSupport ?? "unknown",
+          )
+        : defaultSupport(options.runtimeSupport ?? "partial", options.osSupport ?? "partial").osSupport,
     };
   });
 }
 
-async function inventory() {
+async function runtimeMirrorCapabilities() {
+  return [
+    ...(await fileCapabilities(".claude/agents", "agent", ["meta-warden"], { match: (file) => file.endsWith(".md"), mustPreserve: true, routeEligibility: "governance_owner", runtime: "claude_code" })),
+    ...(await fileCapabilities(".codex/agents", "agent", ["meta-warden"], { match: (file) => file.endsWith(".toml"), mustPreserve: true, routeEligibility: "governance_owner", runtime: "codex" })),
+    ...(await fileCapabilities(".cursor/agents", "agent", ["meta-warden"], { match: (file) => file.endsWith(".md"), mustPreserve: true, routeEligibility: "governance_owner", runtime: "cursor" })),
+    ...(await fileCapabilities("openclaw/workspaces", "agent", ["meta-warden"], {
+      match: (file) => path.basename(file) === "SOUL.md",
+      id: (file) => path.basename(path.dirname(file)),
+      mustPreserve: true,
+      routeEligibility: "governance_owner",
+      runtime: "openclaw",
+    })),
+    ...(await fileCapabilities(".agents/skills", "skill", ["meta-artisan"], { match: (file) => path.basename(file) === "SKILL.md", mustPreserve: true, routeEligibility: "callable", runtime: "codex", invocationPath: "project skill trigger" })),
+    ...(await fileCapabilities(".claude/skills", "skill", ["meta-artisan"], { match: (file) => path.basename(file) === "SKILL.md", mustPreserve: true, routeEligibility: "callable", runtime: "claude_code", invocationPath: "project skill trigger" })),
+    ...(await fileCapabilities(".cursor/skills", "skill", ["meta-artisan"], { match: (file) => path.basename(file) === "SKILL.md", mustPreserve: true, routeEligibility: "callable", runtime: "cursor", invocationPath: "project skill trigger" })),
+    ...(await fileCapabilities("openclaw/skills", "skill", ["meta-artisan"], { match: (file) => path.basename(file) === "SKILL.md", mustPreserve: true, routeEligibility: "callable", runtime: "openclaw", invocationPath: "project skill trigger" })),
+    ...(await fileCapabilities(".claude/hooks", "hook", ["meta-sentinel"], { match: (file) => /\.(mjs|js|cjs|ts|py|sh)$/.test(file), mustPreserve: true, routeEligibility: "callable", runtime: "claude_code" })),
+    ...(await fileCapabilities(".codex/hooks", "hook", ["meta-sentinel"], { match: (file) => /\.(mjs|js|cjs|ts|py|sh)$/.test(file), mustPreserve: true, routeEligibility: "callable", runtime: "codex" })),
+    ...(await fileCapabilities(".cursor/hooks", "hook", ["meta-sentinel"], { match: (file) => /\.(mjs|js|cjs|ts|py|sh)$/.test(file), mustPreserve: true, routeEligibility: "callable", runtime: "cursor" })),
+    ...(await fileCapabilities("openclaw/hooks", "hook", ["meta-sentinel"], { match: (file) => /\.(mjs|js|cjs|ts|py|sh)$/.test(file), mustPreserve: true, routeEligibility: "callable", runtime: "openclaw" })),
+    ...(await fileCapabilities(".claude/commands", "command", ["meta-artisan"], { match: (file) => /\.(md|toml|ya?ml)$/.test(file), mustPreserve: true, routeEligibility: "callable", runtime: "claude_code" })),
+    ...(await fileCapabilities(".codex/commands", "command", ["meta-artisan"], { match: (file) => /\.(md|toml|ya?ml)$/.test(file), mustPreserve: true, routeEligibility: "callable", runtime: "codex" })),
+    ...(await fileCapabilities(".cursor/rules", "reference", ["meta-artisan", "meta-prism"], { match: (file) => /\.(mdc|md)$/.test(file), mustPreserve: true, routeEligibility: "reference", runtime: "cursor" })),
+    ...(await fileRecordIfExists(".claude/settings.json", { id: "claude-settings", type: "config", providerType: "hook", runtime: "claude_code", ownerCandidates: ["meta-sentinel"], routeEligibility: "reference", configOnly: true })),
+    ...(await fileRecordIfExists(".codex/hooks.json", { id: "codex-hooks", type: "config", providerType: "hook", runtime: "codex", ownerCandidates: ["meta-sentinel"], routeEligibility: "reference", configOnly: true })),
+    ...(await fileRecordIfExists(".cursor/hooks.json", { id: "cursor-hooks", type: "config", providerType: "hook", runtime: "cursor", ownerCandidates: ["meta-sentinel"], routeEligibility: "reference", configOnly: true })),
+    ...(await fileRecordIfExists("openclaw/openclaw.template.json", { id: "openclaw-template", type: "hook", runtime: "openclaw", ownerCandidates: ["meta-sentinel"], routeEligibility: "reference" })),
+  ];
+}
+
+async function mcpCapabilities() {
+  return [
+    ...(await fileRecordIfExists(".mcp.json", { id: "project-mcp-config", type: "mcp_config", providerType: "MCP", ownerCandidates: ["meta-artisan", "meta-sentinel"], routeEligibility: "reference", configOnly: true, verificationMethod: "npm run meta:test:mcp" })),
+    ...(await fileRecordIfExists(".cursor/mcp.json", { id: "cursor-mcp-config", type: "mcp_config", providerType: "MCP", runtime: "cursor", ownerCandidates: ["meta-artisan", "meta-sentinel"], routeEligibility: "reference", configOnly: true })),
+    ...(await fileRecordIfExists(".codex/config.toml", { id: "codex-mcp-config", type: "mcp_config", providerType: "MCP", runtime: "codex", ownerCandidates: ["meta-artisan", "meta-sentinel"], routeEligibility: "reference", configOnly: true })),
+    ...(await fileRecordIfExists("scripts/mcp/meta-runtime-server.mjs", { id: "meta-kim-runtime-mcp-server", type: "mcp_server", providerType: "MCP", ownerCandidates: ["meta-artisan", "meta-sentinel"], routeEligibility: "callable", verificationMethod: "npm run meta:test:mcp" })),
+  ];
+}
+
+async function configAndStateCapabilities() {
+  return [
+    ...(await fileCapabilities("config/capability-index", "config", ["meta-artisan", "meta-prism"], { match: (file) => file.endsWith(".json"), mustPreserve: true, routeEligibility: "reference", verificationMethod: "npm run meta:validate" })),
+    ...(await fileCapabilities("config/contracts", "config", ["meta-prism"], { match: (file) => file.endsWith(".json") || file.endsWith(".md"), mustPreserve: true, routeEligibility: "reference", verificationMethod: "npm run meta:validate" })),
+    ...(await fileRecordIfExists(".meta-kim/state/default/capability-index/global-capabilities.json", { id: "cached-global-capability-inventory", type: "external", providerType: "external", ownerCandidates: ["meta-librarian", "meta-artisan"], routeEligibility: "reference", verificationMethod: "npm run discover:global" })),
+    ...(await fileRecordIfExists(".meta-kim/state/default/capability-inventory.json", { id: "local-capability-inventory-state", type: "memory", providerType: "memory", ownerCandidates: ["meta-librarian"], routeEligibility: "reference", verificationMethod: "npm run meta:capabilities:index" })),
+    ...(await fileRecordIfExists(".meta-kim/state/default/run-index.sqlite", { id: "run-index-state", type: "memory", providerType: "memory", ownerCandidates: ["meta-librarian"], routeEligibility: "reference", verificationMethod: "npm run meta:rebuild:run-index" })),
+    ...(await fileRecordIfExists("graphify-out/GRAPH_REPORT.md", { id: "graphify-report", type: "graph", providerType: "graph", ownerCandidates: ["meta-librarian", "meta-conductor"], routeEligibility: "reference", verificationMethod: "npm run meta:graphify:check" })),
+    ...(await fileRecordIfExists("graphify-out/graph.json", { id: "graphify-graph", type: "graph", providerType: "graph", ownerCandidates: ["meta-librarian", "meta-conductor"], routeEligibility: "reference", verificationMethod: "npm run meta:graphify:check" })),
+  ];
+}
+
+export async function buildCapabilityInventory() {
   const dependencies = await readJson("config/capability-index/dependency-project-registry.json");
   const weapons = await readJson("config/capability-index/weapon-registry.json");
   const skills = await readJson("config/skills.json");
@@ -74,8 +269,57 @@ async function inventory() {
     ...(await fileCapabilities("canonical/skills/meta-theory/references", "reference", ["meta-conductor", "meta-prism"], { match: (file) => file.endsWith(".md"), mustPreserve: true })),
     ...(await fileCapabilities("scripts", "script", ["meta-artisan", "meta-prism"], { match: (file) => file.endsWith(".mjs"), mustPreserve: true, routeEligibility: "callable", invocationPath: "node <script>" })),
     ...(await fileCapabilities("canonical/runtime-assets", "hook", ["meta-sentinel"], { match: (file) => /hooks|memory-hooks/.test(file), mustPreserve: true, routeEligibility: "callable" })),
+    ...(await runtimeMirrorCapabilities()),
+    ...(await mcpCapabilities()),
+    ...(await configAndStateCapabilities()),
     ...(await packageScripts()),
   ];
+  for (const platform of runtimeMatrix.platforms ?? []) {
+    records.push({
+      id: `runtime:${platform.platform}`,
+      type: "runtime_tool",
+      providerType: "runtime",
+      sourcePath: "config/runtime-capability-matrix.json",
+      triggerWords: [platform.platform, "runtime"],
+      ownerCandidates: ["meta-sentinel", "meta-artisan"],
+      weaponCandidates: [],
+      dependencyCandidates: [],
+      runtimeSupport: supportForRuntime(platform.platform, "native", "unknown"),
+      osSupport: defaultSupport("partial", "partial").osSupport,
+      verificationMethod: "npm run meta:runtime:validate",
+      risk: { runtimeBoundary: true },
+      mustPreserve: true,
+      routeEligibility: "callable",
+      missingFields: [],
+      evidence: { source: "local_file", sourceRef: "config/runtime-capability-matrix.json", confidence: "repo_claim" },
+      confidence: "repo_claim",
+      invocationPath: "runtime adapter",
+      writebackKey: `runtime:${platform.platform}`,
+    });
+  }
+  for (const osTarget of osMatrix.operatingSystems ?? []) {
+    records.push({
+      id: `os:${osTarget.id}`,
+      type: "os",
+      providerType: "OS",
+      sourcePath: "config/os-compatibility-matrix.json",
+      triggerWords: [osTarget.id, "os"],
+      ownerCandidates: ["meta-sentinel", "meta-artisan"],
+      weaponCandidates: [],
+      dependencyCandidates: [],
+      runtimeSupport: defaultSupport("partial", "partial").runtimeSupport,
+      osSupport: supportForOs(osTarget.id, "native", "partial"),
+      verificationMethod: "npm run meta:os:check",
+      risk: { osBoundary: true },
+      mustPreserve: true,
+      routeEligibility: "reference",
+      missingFields: [],
+      evidence: { source: "local_file", sourceRef: "config/os-compatibility-matrix.json", confidence: "repo_claim" },
+      confidence: "repo_claim",
+      invocationPath: null,
+      writebackKey: `os:${osTarget.id}`,
+    });
+  }
   for (const tool of ["shell", "filesystem", "apply_patch", "browser", "web_search", "online_research", "MCP", "memory", "graph", "graphify", "hook", "command", "subagent", "approval", "sandbox"]) {
     records.push({
       id: tool,
@@ -165,23 +409,66 @@ async function inventory() {
       writebackKey: `provider:${skill.id}`,
     });
   }
+  for (const project of dependencies.projects ?? []) {
+    records.push({
+      id: project.id,
+      type: "external",
+      providerType: "external",
+      ...defaultSupport("partial", "partial"),
+      sourcePath: "config/capability-index/dependency-project-registry.json",
+      triggerWords: [project.id, project.name, ...(project.capabilityCard?.triggerConditions ?? [])].filter(Boolean),
+      ownerCandidates: ["meta-scout", "meta-artisan", "meta-sentinel"],
+      weaponCandidates: [],
+      dependencyCandidates: [project.id],
+      verificationMethod: "npm run meta:deps:compat",
+      risk: {
+        externalProject: true,
+        routeEligibility: project.capabilityCard?.routeEligibility ?? "unknown",
+      },
+      mustPreserve: true,
+      routeEligibility: project.capabilityCard?.routeEligibility ?? "reference",
+      missingFields: [],
+      evidence: {
+        source: "local_file",
+        sourceRef: "config/capability-index/dependency-project-registry.json",
+        confidence: "verified_local",
+      },
+      confidence: "verified_local",
+      invocationPath: project.interface?.invocationPath ?? null,
+      writebackKey: `dependency:${project.id}`,
+      reason: "External or dependency project capability candidate from the dependency registry.",
+    });
+  }
+  const normalizedRecords = records.map(withUnifiedCapabilityFields);
+  const byProviderType = normalizedRecords.reduce((counts, record) => {
+    counts[record.providerType] = (counts[record.providerType] ?? 0) + 1;
+    return counts;
+  }, {});
   return {
     generatedAt: new Date().toISOString(),
-    capabilities: records,
+    capabilities: normalizedRecords,
     runtimeMatrixCapabilities: runtimeMatrix.capabilityNames ?? [],
     osTargets: (osMatrix.operatingSystems ?? []).map((entry) => entry.id),
     dependencyProjects: dependencies.projects ?? [],
     summary: {
-      total: records.length,
-      totalPlugins: records.filter((record) => record.type === "plugin").length,
-      totalPluginBundles: records.filter((record) => record.type === "plugin_bundle").length,
-      mustPreserve: records.filter((record) => record.mustPreserve).length,
-      webSearchBrowserResearch: records.filter((record) => /web|browser|research|fetch|online/i.test(JSON.stringify(record))).length,
-      memoryGraphMcpHook: records.filter((record) => /memory|graph|MCP|hook|graphify/i.test(JSON.stringify(record))).length,
+      total: normalizedRecords.length,
+      byProviderType,
+      totalPlugins: normalizedRecords.filter((record) => record.type === "plugin").length,
+      totalPluginBundles: normalizedRecords.filter((record) => record.type === "plugin_bundle").length,
+      mustPreserve: normalizedRecords.filter((record) => record.mustPreserve).length,
+      webSearchBrowserResearch: normalizedRecords.filter((record) => /web|browser|research|fetch|online/i.test(JSON.stringify(record))).length,
+      memoryGraphMcpHook: normalizedRecords.filter((record) => /memory|graph|MCP|hook|graphify/i.test(JSON.stringify(record))).length,
     },
   };
 }
 
-const result = await inventory();
-await writeJson(outputPath, result);
-console.log(JSON.stringify(result, null, 2));
+export async function writeCapabilityInventory(targetPath = outputPath) {
+  const result = await buildCapabilityInventory();
+  await writeJson(targetPath, result);
+  return result;
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const result = await writeCapabilityInventory();
+  console.log(JSON.stringify(result, null, 2));
+}

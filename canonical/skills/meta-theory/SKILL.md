@@ -18,6 +18,8 @@ description: |
 ## Purpose
 Run Meta_Kim as an executable governance system, not a theory essay. The main thread locks intent, gathers evidence, chooses route, delegates bounded work, reviews, verifies, and synthesizes. It must not become a generic implementation worker for non-trivial work.
 
+Machine contract: `config/contracts/core-loop-contract.json` is the compact default-path contract for this skill. It binds ordinary durable work and explicit meta-theory shortcuts to `npm run meta:theory:run`, requires the eight-stage spine, and defines which gates block, warn, or stay progressive.
+
 ## Trigger
 Activate from ordinary natural-language durable work, not only from command words. If the user asks to plan and start work, organize priorities, produce repair suggestions, build a verification checklist, fix a non-trivial issue, handle multi-file execution, run review/verification, or resolve subjective/taste-dependent quality, classify the entry and choose the governed route automatically. Explicit `/meta-theory`, `meta-theory`, or `元理论` mentions are maintainer shortcuts, not required human behavior.
 

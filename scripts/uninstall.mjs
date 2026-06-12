@@ -293,14 +293,20 @@ function isRetiredHookCommand(command) {
 }
 
 const REPO_HOOK_FILES = new Set([
-  "block-dangerous-bash.mjs",
+  "activate-meta-theory-spine.mjs",
+  "bash-readonly-whitelist.mjs",
+  "enforce-agent-dispatch.mjs",
+  "graphify-context.mjs",
+  "hook-i18n.mjs",
   "post-format.mjs",
   "post-typecheck.mjs",
   "post-console-log-warn.mjs",
+  "skip-reminder.mjs",
   "subagent-context.mjs",
   "stop-compaction.mjs",
   "stop-console-log-audit.mjs",
   "stop-completion-guard.mjs",
+  "stop-spine-cleanup.mjs",
 ]);
 
 function isManagedRepoCommand(command) {

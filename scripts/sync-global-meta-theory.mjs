@@ -64,6 +64,10 @@ const withGlobalHooks =
 const cliArgs = process.argv.slice(2);
 
 const repoHooksDir = path.join(canonicalRuntimeAssetsDir, "claude", "hooks");
+const GLOBAL_HOOK_PACKAGE_FILES = new Set([
+  "block-dangerous-bash.mjs",
+  "utils.mjs",
+]);
 const RETIRED_HOOK_FILES = ["pre-git-push-confirm.mjs"];
 const codexMetaTheoryCommandSource = path.join(
   canonicalRuntimeAssetsDir,
@@ -164,6 +168,34 @@ async function fingerprintDir(rootDir) {
     filePaths.push(filePath);
   }
   filePaths.sort((left, right) => left.localeCompare(right));
+
+  const hash = createHash("sha256");
+  for (const filePath of filePaths) {
+    const relativePath = path.relative(rootDir, filePath).replace(/\\/g, "/");
+    hash.update(relativePath);
+    hash.update("\n");
+    hash.update(await fs.readFile(filePath));
+    hash.update("\n");
+  }
+
+  return {
+    fileCount: filePaths.length,
+    hash: hash.digest("hex"),
+  };
+}
+
+async function fingerprintSelectedFiles(rootDir, allowedNames) {
+  if (!(await pathExists(rootDir))) {
+    return null;
+  }
+
+  const filePaths = [];
+  for (const fileName of [...allowedNames].sort((left, right) => left.localeCompare(right))) {
+    const filePath = path.join(rootDir, fileName);
+    if (await pathExists(filePath)) {
+      filePaths.push(filePath);
+    }
+  }
 
   const hash = createHash("sha256");
   for (const filePath of filePaths) {
@@ -299,7 +331,14 @@ async function copyCanonicalHooksToGlobal() {
   }
   await fs.mkdir(path.dirname(dest), { recursive: true });
   await fs.rm(dest, { recursive: true, force: true });
-  await fs.cp(repoHooksDir, dest, { recursive: true, force: true });
+  await fs.mkdir(dest, { recursive: true });
+  const sourceEntries = await fs.readdir(repoHooksDir, { withFileTypes: true });
+  for (const entry of sourceEntries) {
+    if (!entry.isFile() || !GLOBAL_HOOK_PACKAGE_FILES.has(entry.name)) {
+      continue;
+    }
+    await fs.copyFile(path.join(repoHooksDir, entry.name), path.join(dest, entry.name));
+  }
 
   // Cleanup hooks removed from canonical but still present in older installs.
   for (const retired of RETIRED_HOOK_FILES) {
@@ -465,9 +504,15 @@ async function runCheck() {
   }
 
   if (selectedTargetIds.includes("claude") && withGlobalHooks) {
-    const repoHooksFp = await fingerprintDir(repoHooksDir);
+    const repoHooksFp = await fingerprintSelectedFiles(
+      repoHooksDir,
+      GLOBAL_HOOK_PACKAGE_FILES,
+    );
     const globalHooksPath = globalMetaKimHooksDir();
-    const globalHooksFp = await fingerprintDir(globalHooksPath);
+    const globalHooksFp = await fingerprintSelectedFiles(
+      globalHooksPath,
+      GLOBAL_HOOK_PACKAGE_FILES,
+    );
     const hooksInSync =
       repoHooksFp !== null &&
       globalHooksFp !== null &&

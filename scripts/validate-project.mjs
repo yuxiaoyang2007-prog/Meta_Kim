@@ -265,6 +265,7 @@ async function validateRequiredFiles() {
     "config/contracts/sync-manifest.schema.json",
     "config/contracts/runtime-profile.schema.json",
     "config/contracts/runtime-compatibility-catalog.schema.json",
+    "config/contracts/core-loop-contract.json",
     "config/runtime-compatibility-catalog.json",
     "config/contracts/workflow-contract.json",
     CANONICAL_CAPABILITY_INDEX_RELATIVE,
@@ -277,6 +278,198 @@ async function validateRequiredFiles() {
       `Missing required file: ${relativePath}`,
     );
   }
+}
+
+async function validateCoreLoopContract() {
+  const contractPath = path.join(
+    repoRoot,
+    "config",
+    "contracts",
+    "core-loop-contract.json",
+  );
+  const contract = JSON.parse(await fs.readFile(contractPath, "utf8"));
+  const expectedStages = [
+    "Critical",
+    "Fetch",
+    "Thinking",
+    "Execution",
+    "Review",
+    "Meta-Review",
+    "Verification",
+    "Evolution",
+  ];
+
+  assert(
+    (contract.schemaVersion ?? 0) >= 1 &&
+      contract.contractId === "meta-kim-core-loop-contract",
+    "core-loop-contract.json must define the Meta_Kim core loop contract.",
+  );
+  assert(
+    contract.defaultEntry?.contractIsDefaultPath === true &&
+      contract.defaultEntry?.entryScript ===
+        "scripts/run-meta-theory-governed-execution.mjs" &&
+      contract.defaultEntry?.packageScript === "meta:theory:run",
+    "core-loop-contract.json must bind the default governed execution entrypoint.",
+  );
+  const stages = contract.stages ?? [];
+  assert(
+    stages.map((stage) => stage.stage).join("|") === expectedStages.join("|"),
+    "core-loop-contract.json must define the exact eight-stage spine in order.",
+  );
+  for (const stage of stages) {
+    for (const field of [
+      "requiredInputs",
+      "requiredOutputs",
+      "skipConditions",
+      "gateConditions",
+      "blockingGates",
+      "warningGates",
+      "defaultOwner",
+    ]) {
+      assert(stage[field] !== undefined, `core-loop-contract ${stage.stage} missing ${field}.`);
+    }
+    assert(
+      stage.requiredInputs.length > 0 &&
+        stage.requiredOutputs.length > 0 &&
+        stage.skipConditions.length > 0 &&
+        stage.gateConditions.length > 0,
+      `core-loop-contract ${stage.stage} must have non-empty IO, skip, and gate policy.`,
+    );
+  }
+  const byStage = Object.fromEntries(stages.map((stage) => [stage.stage, stage]));
+  for (const field of [
+    "intentPacket.realIntent",
+    "intentPacket.successCriteria",
+    "intentPacket.nonGoals",
+    "intentPacket.blockingUnknowns",
+    "intentPacket.noQuotaClarification",
+  ]) {
+    assert(
+      byStage.Critical.requiredOutputs.includes(field),
+      `Critical requiredOutputs must include ${field}.`,
+    );
+  }
+  for (const field of [
+    "fetchPacket.capabilityDiscovery.searchLog",
+    "fetchPacket.capabilityDiscovery.capabilityInventory",
+    "fetchPacket.capabilityGap",
+  ]) {
+    assert(byStage.Fetch.requiredOutputs.includes(field), `Fetch requiredOutputs must include ${field}.`);
+  }
+  for (const field of [
+    "thinkingPacket.owner",
+    "thinkingPacket.weapon",
+    "thinkingPacket.workerTaskPackets",
+    "thinkingPacket.reviewOwner",
+    "thinkingPacket.verificationOwner",
+    "thinkingPacket.mergeOwner",
+    "thinkingPacket.parallelGroups",
+    "thinkingPacket.dependencyPolicy",
+    "thinkingPacket.omittedLanesWithReason",
+  ]) {
+    assert(
+      byStage.Thinking.requiredOutputs.includes(field),
+      `Thinking requiredOutputs must include ${field}.`,
+    );
+  }
+  assert(
+    byStage.Review.requiredInputs.includes("thinkingPacket") &&
+      byStage.Review.requiredOutputs.includes("reviewPacket.upstreamQuality"),
+    "Review must check Critical/Fetch/Thinking quality before result polish.",
+  );
+  assert(
+    byStage["Meta-Review"].requiredOutputs.includes(
+      "metaReviewPacket.publicReadyGateCheck",
+    ),
+    "Meta-Review must check the public-ready gate.",
+  );
+  assert(
+    byStage.Verification.gateConditions.includes("public-ready claim") &&
+      byStage.Verification.warningGates.some((gate) => /ordinary low-risk/i.test(gate)),
+    "Verification must act as fuse/public-ready gate, not every-step interception.",
+  );
+  assert(
+    byStage.Evolution.requiredOutputs.includes(
+      "evolutionWritebackPacket.noneWithReason",
+    ) &&
+      byStage.Evolution.blockingGates.includes("missing_writeback_or_none_reason"),
+    "Evolution must require writeback or none-with-reason.",
+  );
+
+  const discovery = contract.capabilityDiscovery ?? {};
+  for (const source of [
+    "canonical/agents",
+    "runtime agent mirrors",
+    "MCP servers and config",
+    "tools, scripts, and package commands",
+    "hooks",
+    "runtime capability matrix",
+    "OS compatibility matrix",
+    "config/capability-index",
+    "global capability inventory",
+    "Graphify/project map",
+  ]) {
+    assert(
+      discovery.minimumSources?.includes(source),
+      `core-loop-contract capabilityDiscovery.minimumSources must include ${source}.`,
+    );
+  }
+  for (const field of [
+    "id",
+    "providerType",
+    "sourcePath",
+    "runtimeSupport",
+    "riskLevel",
+    "ownerBoundary",
+    "canExecute",
+    "canReview",
+    "canVerify",
+    "canCreateOrUpgrade",
+    "missingDependencies",
+    "confidence",
+    "reason",
+  ]) {
+    assert(
+      discovery.inventoryRecordRequiredFields?.includes(field),
+      `capability inventory record contract must require ${field}.`,
+    );
+  }
+  const cards = contract.dynamicWorkflow?.cards ?? [];
+  for (const card of [
+    "Clarify",
+    "Shrink scope",
+    "Options",
+    "Execute",
+    "Verify",
+    "Fix",
+    "Rollback",
+    "Risk",
+    "Nudge",
+    "Pause",
+  ]) {
+    assert(cards.includes(card), `dynamic workflow cards must include ${card}.`);
+  }
+  assert(
+    contract.executionOwnership?.mainThreadRole === "scope_delegate_review_synthesize" &&
+      contract.executionOwnership?.requiresWorkerTaskPackets === true,
+    "Execution ownership must keep the main thread as dispatcher/synthesizer and require workerTaskPackets.",
+  );
+  assert(
+    contract.verificationPolicy?.notEveryStepInterceptor === true &&
+      contract.verificationPolicy?.hooksAreLastResortFuse === true &&
+      contract.verificationPolicy?.validatorsAreReleaseAndContractEvidence === true,
+    "Verification policy must keep hooks as fuses and validators as release/contract gates.",
+  );
+  assert(
+    contract.publicReadyClaim?.requiresVerificationEvidence === true &&
+      contract.publicReadyClaim?.blocksOn?.includes("runtime smoke mislabeled as live"),
+    "Public-ready claims must require verification evidence and block smoke-as-live overclaims.",
+  );
+  assert(
+    contract.crossRuntimeBoundary?.doNotMixFormats === true &&
+      contract.crossRuntimeBoundary?.canonicalSourceFirst === true,
+    "Cross-runtime policy must forbid mixing runtime formats and keep canonical source first.",
+  );
 }
 
 async function validateWorkflowContract() {
@@ -717,6 +910,43 @@ async function validateWorkflowContract() {
       executionModePolicy.sidecarModes?.includes("readonly_review_sidecar"),
     "workflow-contract.json workerTaskPacket.executionModePolicy must define read-only sidecar modes.",
   );
+  const executionModeEnum = executionModePolicy.executionModeEnum ?? [];
+  const executionModeClasses = new Set(executionModePolicy.executionModeClasses ?? []);
+  const executionModeClassMap = executionModePolicy.executionModeClassMap ?? {};
+  for (const expectedClass of [
+    "real_execution",
+    "read_only_sidecar",
+    "approval_gate",
+  ]) {
+    assert(
+      executionModeClasses.has(expectedClass),
+      `workflow-contract.json workerTaskPacket.executionModePolicy must define ${expectedClass}.`,
+    );
+  }
+  for (const mode of executionModeEnum) {
+    assert(
+      executionModeClasses.has(executionModeClassMap[mode]),
+      `workflow-contract.json workerTaskPacket.executionModePolicy must classify ${mode}.`,
+    );
+  }
+  for (const mode of executionModePolicy.executionWorkerModes ?? []) {
+    assert(
+      executionModeClassMap[mode] === "real_execution",
+      `workflow-contract.json execution worker mode ${mode} must classify as real_execution.`,
+    );
+  }
+  for (const mode of executionModePolicy.sidecarModes ?? []) {
+    assert(
+      executionModeClassMap[mode] === "read_only_sidecar",
+      `workflow-contract.json sidecar mode ${mode} must classify as read_only_sidecar.`,
+    );
+  }
+  for (const mode of executionModePolicy.approvalGateModes ?? []) {
+    assert(
+      executionModeClassMap[mode] === "approval_gate",
+      `workflow-contract.json approval gate mode ${mode} must classify as approval_gate.`,
+    );
+  }
   const verifySteps = contract.protocols?.workerTaskPacket?.verifyStepsField ?? {};
   assert(
     verifySteps.items?.required?.includes("step") &&
@@ -1462,6 +1692,7 @@ async function main() {
 
   // 2. Workflow contract
   step(current++, TOTAL, t.val.step02, t.val.step02Detail);
+  await validateCoreLoopContract();
   await validateWorkflowContract();
   pass(t.val.step02Pass);
 

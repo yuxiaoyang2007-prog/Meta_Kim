@@ -6,6 +6,117 @@ This file is the reader-facing release history for Meta_Kim.
 
 The changelog explains what changed and why it matters. It intentionally avoids long internal task ledgers, low-signal backlog ids, and implementation trivia. When exact evidence is needed, use the repository history, tests, generated reports, and PRD artifacts.
 
+## [Unreleased]
+
+## [2.8.23] - 2026-06-12
+
+### Changed
+
+- **Run-Scoped Worker Execution** - `meta:theory:run` now executes bounded worker task packets through a local run-scoped worker executor instead of stopping at structural dispatch readiness. The main thread still scopes, delegates, reviews, and synthesizes; no extra external agent is spawned.
+
+### Verification
+
+- Adds governance coverage that requires worker execution evidence while preserving the public-ready release gate.
+
+## [2.8.22] - 2026-06-12
+
+### Changed
+
+- **Core Loop Release Evidence Closure** - Completed the PDR release checklist and final release evidence for the governed execution repair so the shipped tag includes commit, tag, push, and GitHub Release proof.
+
+### Verification
+
+- Reused the `2.8.21` core-loop implementation evidence and reran the local release checks for the final `2.8.22` patch release.
+
+## [2.8.21] - 2026-06-12
+
+### Changed
+
+- **Core Loop Governed Execution Repair** - Meta_Kim now has a compact machine contract for the default eight-stage governed path, covering Critical, Fetch, Thinking, Execution, Review, Meta-Review, Verification, and Evolution with explicit IO, skip, gate, blocking, warning, public-ready, and writeback policy.
+- **Default Run Artifact Closure** - `meta:theory:run` now emits top-level request, intent, fetch, capability inventory, gap/ready, thinking, dispatch, worker task, execution, review, meta-review, verification, evolution, dynamic workflow, and public-ready packets for durable natural-language work.
+- **Capability Discovery Bus Integration** - The default run now uses the unified capability inventory bus instead of a skill-only or coarse summary. Inventory records cover agents, skills, scripts/tools, MCP, hooks, runtime, OS, memory, graph, and external dependency candidates with shared provider fields.
+- **Release Governance Gates** - Full release verification now includes governance validators and governance tests, including strict workflow fixture validation, PDR evidence mapping, and script registry cleanup-candidate protection.
+
+### Verification
+
+- `npm run meta:sync`
+- `npm run discover:global`
+- `npm run meta:check`
+- `npm run meta:validate`
+- `npm run meta:release:smoke`
+- `npm run meta:verify:governance`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:check:global:release`
+- `npm run meta:verify:all`
+- `npm run meta:validate:run -- tests/fixtures/run-artifacts/valid-core-loop-release-run.json`
+- `git diff --check`
+
+## [2.8.20] - 2026-06-11
+
+### Changed
+
+- **Project Hook Ownership Rationalization** - Project runtime exports now keep project-specific hooks focused on Meta_Kim behavior, such as graph context, capability-first dispatch, and meta-theory activation. Global personal or reusable hooks, including prompt optimization, memory lifecycle helpers, planning helpers, and generic dangerous-command guards, are kept in the global runtime homes instead of being duplicated into every project.
+- **Global Hook Sync Coverage** - Global sync and release checks now compare the selected global hook files explicitly, while project sync removes stale global-only hook adapters from generated Codex and Cursor project folders. This keeps dependency-owned hooks updateable from their source projects and prevents duplicated prompt/context injection.
+- **Codex MCP Config Merge Normalization** - Codex MCP config merging was tightened so ECC-managed servers are normalized consistently while user-owned config remains preserved.
+
+### Verification
+
+- `npm run meta:release:smoke`
+- `npm run meta:check`
+- `npm run meta:check:global:release`
+- `npm run meta:test:setup`
+- `node scripts/validate-provider-capabilities.mjs`
+- `node scripts/validate-foundational-capabilities.mjs`
+- `node scripts/validate-hook-progression.mjs`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
+## [2.8.19] - 2026-06-11
+
+### Changed
+
+- **Apache-2.0 License With NOTICE Attribution** - Meta_Kim's main project license changed from MIT to Apache License 2.0, with a root `NOTICE` file that carries the recommended attribution. Commercial use remains allowed, while redistributions of Meta_Kim or substantial portions of it must keep the Apache license text and NOTICE attribution. Earlier releases remain governed by the license that shipped with those releases.
+- **Automated Multi-Project Runtime Updates** - `setup.mjs` can now refresh project-level runtime files across multiple explicit or saved project directories, including `--project-dir` for scriptable targets, `--save-project-dirs` to remember a script-provided list, and `--all-projects` for saved local targets.
+- **Saved Project Directory Manager** - The update wizard now lets users manage a saved project directory list, enter multiple directories in one semicolon/comma-separated line, update all saved projects from the menu, and rerun saved targets with `--all-projects`.
+- **Project Config Protection During Batch Updates** - Multi-project runtime exports preserve and merge existing local `settings`, MCP, and hook configs instead of blindly replacing them. Local-only state such as `.claude/settings.local.json`, Codex project config, and OpenClaw workspace state is not exported.
+
+### Verification
+
+- `node --check setup.mjs`
+- `node --test tests/setup/project-deploy-protection.test.mjs tests/setup/setup-update-default-flow.test.mjs tests/setup/i18n.test.mjs`
+- `npm run meta:test:setup`
+- `npm run meta:sync`
+- `npm run meta:check`
+- `npm run meta:verify:all`
+- `npm --registry=https://registry.npmjs.org audit --audit-level=high`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
+## [2.8.18] - 2026-06-11
+
+### Fixed
+
+- **Codex Planning Stop Hook Advisory Mode** - Codex planning-with-files Stop hooks no longer turn ordinary progress reminders into blocking continuations. This prevents completed answers from being folded into Codex App's processed section just because a stale or advisory plan reminder fired at the end of the turn.
+- **Zero-Phase Plan Handling** - Codex planning hook adapters now ignore `0/0` phase counts instead of treating them as incomplete work. Mixed `**Status:**` and inline `[status]` phase formats are counted consistently with the shell and PowerShell hooks.
+
+### Changed
+
+- **Change Readiness Contract** - Runtime, hook, setup, sync, provider, deletion, and release PRs now have a reusable checklist for host-state impact matrices, hook/prompt protocol flow, deletion residue sweeps, and evidence budgets.
+- **Execution Mode Classes** - `executionMode` values are now explicitly mapped into `real_execution`, `read_only_sidecar`, and `approval_gate` classes so validators and reviews can reason about execution semantics instead of raw task counts.
+
+### Verification
+
+- `node --check scripts/install-global-skills-all-runtimes.mjs`
+- `node --check scripts/validate-project.mjs`
+- `node --check scripts/validate-run-artifact.mjs`
+- `node --test tests/setup/release-docs-semantics.test.mjs tests/setup/install-cross-platform.test.mjs`
+- `node --test tests/meta-theory/09-run-artifact-validator.test.mjs tests/meta-theory/31-capability-gap-orchestration.test.mjs tests/meta-theory/33-capability-gap-orchestration-quality.test.mjs`
+- `node scripts/validate-provider-capabilities.mjs --strict-global-hooks --json`
+- `npm --registry=https://registry.npmjs.org audit --audit-level=high`
+- `npm run meta:verify:all`
+- Codex planning Stop hook smoke on this Windows host: `0/0` phase plans emit no block; normal incomplete plans emit `systemMessage`, not `decision:block`.
+- Installed-user hook merge smoke: after reinstalling `planning-with-files`, Codex keeps both `user_prompt_submit.py` and `hookprompt-adapter.mjs`; Cursor keeps `beforeSubmitPrompt` with `hookprompt-adapter.mjs`.
+
 ## [2.8.17] - 2026-06-11
 
 ### Fixed

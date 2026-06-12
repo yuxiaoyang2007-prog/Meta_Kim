@@ -2696,8 +2696,21 @@
         "approvalGateModes": [
           "approval_gate"
         ],
+        "executionModeClasses": [
+          "real_execution",
+          "read_only_sidecar",
+          "approval_gate"
+        ],
+        "executionModeClassMap": {
+          "primary_execution": "real_execution",
+          "factory_then_dispatch": "real_execution",
+          "verification_execution": "real_execution",
+          "readonly_fetch_sidecar": "read_only_sidecar",
+          "readonly_review_sidecar": "read_only_sidecar",
+          "approval_gate": "approval_gate"
+        },
         "parallelGroupRule": "A parallelGroup with multiple packets must include at least one executionWorkerMode. Executable non-query runs with workerTaskPackets must include an executionWorkerMode unless every packet is an approval_gate. Read-only sidecars and approval gates do not prove Stage 4 execution.",
-        "description": "executionMode prevents fake orchestration: Fetch/Review helpers may run in parallel, but they are sidecars unless a packet declares a real execution worker mode."
+        "description": "executionMode prevents fake orchestration: Fetch/Review helpers may run in parallel, but they are sidecars unless a packet declares a real execution worker mode. executionModeClassMap normalizes raw modes into real_execution, read_only_sidecar, and approval_gate so completion and parallelism checks filter by execution class instead of node count."
       },
       "handoffContractRequiredFields": [
         "handoffTo",

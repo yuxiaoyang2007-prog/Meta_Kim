@@ -1,0 +1,1527 @@
+{
+  "runHeader": {
+    "department": "engineering",
+    "primaryDeliverable": "core-loop-governed-execution-repair",
+    "audience": "developer",
+    "freshnessRequirement": "current-repo-state",
+    "visualPolicy": "fit_department_nature",
+    "handoffPlan": "meta-warden closes one governed execution release after strict validation and release evidence"
+  },
+  "taskClassification": {
+    "taskClass": "A",
+    "requestClass": "execute",
+    "queryScope": "current_project",
+    "projectRef": "project-core-loop-release",
+    "registryStatus": "known",
+    "crossProjectReason": "default_current_project_scope",
+    "governanceFlow": "complex_dev",
+    "triggerReasons": [
+      "durable_artifact",
+      "cross_runtime_sync",
+      "verification_required"
+    ],
+    "upgradeReasons": [
+      "review_or_verify_required",
+      "parallel_merge_required",
+      "business_workflow_upgrade"
+    ],
+    "bypassReasons": [],
+    "ownerRequired": true,
+    "decisionSource": "classifier-v2",
+    "classifierVersion": "v2",
+    "complexity": "medium"
+  },
+  "fetchPacket": {
+    "projectsChecked": [
+      {
+        "projectRef": "project-core-loop-release",
+        "checkMode": "current_project",
+        "reason": "PDR-scoped core-loop release"
+      }
+    ],
+    "projectLocalSources": [
+      {
+        "projectRef": "project-core-loop-release",
+        "sourceType": "run_index",
+        "sourceRef": ".meta-kim/state/default/run-index.sqlite"
+      },
+      {
+        "projectRef": "project-core-loop-release",
+        "sourceType": "graph",
+        "sourceRef": "graphify-out/graph.json"
+      }
+    ],
+    "globalRegistryHits": [],
+    "capabilityMatches": [
+      {
+        "capability": "core_loop_contract",
+        "owner": "meta-warden",
+        "sourceProject": "project-core-loop-release"
+      },
+      {
+        "capability": "capability_discovery_bus",
+        "owner": "meta-artisan",
+        "sourceProject": "project-core-loop-release"
+      },
+      {
+        "capability": "release_verification",
+        "owner": "meta-warden",
+        "sourceProject": "project-core-loop-release"
+      }
+    ],
+    "capabilityGaps": [],
+    "graphSources": [
+      {
+        "projectRef": "project-core-loop-release",
+        "sourceType": "graph",
+        "sourceRef": "graphify-out/graph.json"
+      }
+    ],
+    "knowledgeSources": [
+      {
+        "projectRef": "project-core-loop-release",
+        "sourceType": "contract",
+        "sourceRef": "config/contracts/core-loop-contract.json"
+      }
+    ]
+  },
+  "intentPacket": {
+    "trueUserIntent": "Repair Meta_Kim so ordinary durable requests enter the governed eight-stage core loop by default and leave auditable release evidence.",
+    "successCriteria": "Core loop contract, default run artifact, capability inventory, gap/evolution policy, dynamic workflow, tests, strict fixture validation, and release evidence are present.",
+    "nonGoals": "No full project rewrite, no script pruning by count, no runtime format mixing, and no public-ready claim without verification evidence.",
+    "intentPacketVersion": "v1",
+    "realIntent": "Repair Meta_Kim so ordinary durable requests enter the governed eight-stage core loop by default and leave auditable release evidence.",
+    "blockingUnknowns": [],
+    "noQuotaClarification": "No core-blocking clarification remains; do not ask filler questions."
+  },
+  "intentGatePacket": {
+    "ambiguitiesResolved": true,
+    "requiresUserChoice": false,
+    "defaultAssumptions": [
+      "Scope is the existing auth refresh path only; no new identity providers.",
+      "Secrets load from environment in test and CI as today."
+    ],
+    "pendingUserChoices": [],
+    "userLanguage": "en",
+    "languageSource": "latest_user_message_or_explicit_preference",
+    "nativeChoiceSurface": "conversation_fallback",
+    "intentGatePacketVersion": "v1",
+    "choiceGateSkip": "explicit_auto_proceed"
+  },
+  "cardPlanPacket": {
+    "dealerOwner": "meta-conductor",
+    "dealerMode": "conductor-primary-warden-escalation",
+    "cards": [
+      {
+        "cardId": "card-clarify",
+        "cardType": "info",
+        "cardIntent": "clarify",
+        "cardDecision": "deal",
+        "cardAudience": "user",
+        "cardTiming": "immediate",
+        "cardShell": "conversation",
+        "cardPriority": 9,
+        "cardReason": "scope must be explicit before cross-file auth changes",
+        "cardSource": "meta-conductor",
+        "cardSuppressed": false,
+        "suppressionReason": "",
+        "deliveryShellId": "shell-structured-status",
+        "choiceSurface": "conversation_fallback",
+        "userLanguage": "en"
+      },
+      {
+        "cardId": "card-risk",
+        "cardType": "risk",
+        "cardIntent": "risk_surface",
+        "cardDecision": "deal",
+        "cardAudience": "governance",
+        "cardTiming": "on_risk",
+        "cardShell": "summary",
+        "cardPriority": 10,
+        "cardReason": "token refresh touches auth boundary",
+        "cardSource": "meta-sentinel",
+        "cardSuppressed": false,
+        "suppressionReason": "",
+        "deliveryShellId": "shell-review-delta",
+        "choiceSurface": "conversation_fallback",
+        "userLanguage": "en"
+      },
+      {
+        "cardId": "card-silence",
+        "cardType": "silence",
+        "cardIntent": "silence",
+        "cardDecision": "defer",
+        "cardAudience": "user",
+        "cardTiming": "after_dependency",
+        "cardShell": "silent_hold",
+        "cardPriority": 4,
+        "cardReason": "avoid pushing another intervention while verification is running",
+        "cardSource": "meta-conductor",
+        "cardSuppressed": true,
+        "suppressionReason": "verification_pending",
+        "deliveryShellId": "shell-quiet",
+        "choiceSurface": "conversation_fallback",
+        "userLanguage": "en"
+      }
+    ],
+    "deliveryShells": [
+      {
+        "deliveryShellId": "shell-structured-status",
+        "shellType": "structured_status",
+        "presentationMode": "direct",
+        "exposureLevel": "internal",
+        "interventionForm": "conversation",
+        "audience": "developer",
+        "contentBoundary": "status + next action only",
+        "userLanguage": "en",
+        "languageSource": "latest_user_message_or_explicit_preference"
+      },
+      {
+        "deliveryShellId": "shell-review-delta",
+        "shellType": "review_delta",
+        "presentationMode": "digest",
+        "exposureLevel": "review",
+        "interventionForm": "task_packet",
+        "audience": "reviewer",
+        "contentBoundary": "finding + evidence + closure target",
+        "userLanguage": "en",
+        "languageSource": "latest_user_message_or_explicit_preference"
+      },
+      {
+        "deliveryShellId": "shell-quiet",
+        "shellType": "one_line",
+        "presentationMode": "quiet",
+        "exposureLevel": "internal",
+        "interventionForm": "none",
+        "audience": "user",
+        "contentBoundary": "suppress until verification result",
+        "userLanguage": "en",
+        "languageSource": "latest_user_message_or_explicit_preference"
+      }
+    ],
+    "silenceDecision": {
+      "silenceDecision": "defer",
+      "noInterventionPreferred": true,
+      "interruptionJustified": false,
+      "deferUntil": "verification-complete",
+      "reasonForSilence": "no clear intervention gain while reviewer is verifying the fix"
+    },
+    "controlDecisions": [
+      {
+        "decisionId": "ctl-001",
+        "decisionType": "interrupt",
+        "skipReason": "",
+        "interruptReason": "security_risk",
+        "overrideReason": "",
+        "insertedGovernanceOwner": "meta-sentinel",
+        "emergencyGovernanceTriggered": true,
+        "returnsToStage": "verification",
+        "rejoinCondition": "security-sensitive auth diff has been reviewed"
+      }
+    ],
+    "defaultShellId": "shell-structured-status"
+  },
+  "dispatchEnvelopePacket": {
+    "ownerAgent": "meta-conductor",
+    "taskRef": "task-001",
+    "allowedCapabilities": [
+      "core_loop_contract",
+      "capability_discovery_bus",
+      "release_verification"
+    ],
+    "blockedCapabilities": [
+      "security_policy_override"
+    ],
+    "route": "project_only",
+    "ownerSelection": "capability_first",
+    "memoryMode": "project_only",
+    "workspaceHint": "core-loop-release",
+    "resultSchemaRef": "config/contracts/workflow-contract.json#/protocols/workerResultPacket",
+    "reviewOwner": "meta-prism",
+    "verificationOwner": "meta-warden",
+    "businessRoleId": "backend",
+    "roleDisplayName": "backend",
+    "roleInstanceId": "auth-refresh#1",
+    "preDecisionOptionFrameRef": "preDecisionOptionFrame",
+    "userChoiceState": "explicit_auto_proceed",
+    "finalizationGate": "after_user_choice_or_explicit_auto_proceed"
+  },
+  "orchestrationTaskBoardPacket": {
+    "dispatchBoardId": "dispatch-001",
+    "boardMode": "direct_dispatch",
+    "tasks": [
+      {
+        "taskId": "task-001",
+        "taskKind": "execution",
+        "owner": "meta-conductor",
+        "sequence": 1,
+        "dependsOn": [],
+        "deliverable": "core-loop-governed-execution-repair",
+        "businessRoleId": "backend",
+        "roleDisplayName": "backend"
+      }
+    ],
+    "synthesisOwner": "meta-warden"
+  },
+  "dispatchBoard": {
+    "boardId": "dispatch-001",
+    "goal": "stabilize refresh token behavior and close one security finding",
+    "ownerResolution": "existing-owner",
+    "primaryDeliverable": "core-loop-governed-execution-repair",
+    "mergeStrategy": "merge owner consolidates worker artifacts into one deliverable",
+    "objective": "Repair Meta_Kim so ordinary durable requests enter the governed eight-stage core loop by default and leave auditable release evidence."
+  },
+  "workerTaskPackets": [
+    {
+      "taskPacketId": "task-001",
+      "owner": "meta-conductor",
+      "ownerMode": "existing-owner",
+      "executionMode": "primary_execution",
+      "todayTask": "update refresh token path and document verification hooks",
+      "output": "code diff + verification notes",
+      "deliverableLink": "core-loop-governed-execution-repair",
+      "qualityBar": "no hardcoded secret and review finding fully closable",
+      "referenceDirection": "follow auth boundary rules",
+      "handoffTarget": "meta-prism",
+      "lengthExpectation": "targeted multi-file change",
+      "visualOrAssetPlan": "none",
+      "dependsOn": [],
+      "parallelGroup": "auth-core",
+      "mergeOwner": "meta-warden",
+      "verifySteps": [
+        {
+          "id": "task-001-verify-1",
+          "step": "replace inline secret fallback with env lookup",
+          "verify": "no hardcoded secret in refresh.ts"
+        },
+        {
+          "id": "task-001-verify-2",
+          "step": "update refresh.test.ts for new env-based path",
+          "verify": "test suite passes"
+        }
+      ],
+      "ownerAgent": "meta-conductor",
+      "businessRoleId": "backend",
+      "roleDisplayName": "backend",
+      "roleInstanceId": "auth-refresh#1",
+      "runtimeInstanceAlias": "",
+      "shardKey": "file-scope",
+      "shardScope": [
+        "core-loop-governed-execution-repair"
+      ],
+      "workspaceIsolation": "same_workspace_readonly_overlap",
+      "artifactNamespace": "auth-refresh",
+      "collisionPolicy": "no_overlap",
+      "preDecisionOptionFrameRef": "preDecisionOptionFrame",
+      "userChoiceState": "explicit_auto_proceed",
+      "finalizationGate": "after_user_choice_or_explicit_auto_proceed",
+      "coreProblem": "Produce auth-refresh-hardening without guessing.",
+      "scopeFiles": [
+        "src/auth/refresh.ts",
+        "tests/auth/refresh.test.ts"
+      ],
+      "workType": "code",
+      "nonGoals": [
+        "No unrelated scope expansion."
+      ],
+      "acceptanceCriteria": [
+        "Declared deliverable exists and verify steps pass."
+      ],
+      "expertLensRefs": [
+        "code"
+      ],
+      "evidenceRefs": [
+        "contentEvidencePacket.decisionImpactMap[0]"
+      ],
+      "capabilityRequirements": [
+        "Run-scoped owner and capability binding selected before execution."
+      ],
+      "toolRequirements": [
+        "Use only tools allowed by the worker task packet."
+      ],
+      "handoffContract": {
+        "handoffTo": "meta-prism",
+        "handoffWhen": "after worker output and evidence are complete",
+        "handoffPayload": "produced artifacts, fileCompletionList, workerExecutionEvidence",
+        "acceptanceSignal": "review owner can verify all acceptance criteria"
+      }
+    }
+  ],
+  "workerResultPackets": [
+    {
+      "taskPacketId": "task-001",
+      "owner": "meta-conductor",
+      "status": "completed",
+      "producedArtifacts": [
+        "src/auth/refresh.ts",
+        "tests/auth/refresh.test.ts"
+      ],
+      "handoffTarget": "meta-prism",
+      "blockingIssues": [],
+      "fileCompletionList": [
+        {
+          "path": "src/auth/refresh.ts",
+          "action": "edit",
+          "scope": "Produced src/auth/refresh.ts",
+          "status": "completed"
+        },
+        {
+          "path": "tests/auth/refresh.test.ts",
+          "action": "edit",
+          "scope": "Produced tests/auth/refresh.test.ts",
+          "status": "completed"
+        }
+      ],
+      "workerExecutionEvidence": [
+        {
+          "verifyStepRef": "task-001-verify-1",
+          "expectedResult": "no hardcoded secret in refresh.ts",
+          "observedResult": "no hardcoded secret in refresh.ts",
+          "workingDirectory": ".",
+          "stderrTail": "",
+          "command": "fixture-verify task-001 1",
+          "actualOutput": "",
+          "passClaim": "no hardcoded secret in refresh.ts",
+          "status": "verified",
+          "successMarkerFormat": "exit-code-only",
+          "exitCode": 0,
+          "commandRanAt": "2026-05-26T00:00:00.000Z",
+          "runBy": "meta-conductor",
+          "runAt": "2026-05-26T00:00:00.000Z"
+        },
+        {
+          "verifyStepRef": "task-001-verify-2",
+          "expectedResult": "test suite passes",
+          "observedResult": "test suite passes",
+          "workingDirectory": ".",
+          "stderrTail": "",
+          "command": "fixture-verify task-001 2",
+          "actualOutput": "",
+          "passClaim": "test suite passes",
+          "status": "verified",
+          "successMarkerFormat": "exit-code-only",
+          "exitCode": 0,
+          "commandRanAt": "2026-05-26T00:00:00.000Z",
+          "runBy": "meta-conductor",
+          "runAt": "2026-05-26T00:00:00.000Z"
+        }
+      ]
+    }
+  ],
+  "reviewPacket": {
+    "ownerCoverage": "PASS",
+    "protocolCompliance": "PASS",
+    "qualityGate": "FAIL",
+    "revisionNeeded": true,
+    "sourceProjects": [
+      "project-core-loop-release"
+    ],
+    "crossProjectContaminationCheck": "pass",
+    "reviews": [
+      {
+        "type": "security",
+        "agent": "meta-sentinel",
+        "result": "FAIL",
+        "issues": [
+          "refresh token fallback still accepted an inline secret"
+        ]
+      }
+    ],
+    "findings": [
+      {
+        "findingId": "finding-001",
+        "severity": "high",
+        "owner": "meta-sentinel",
+        "sourceProject": "project-core-loop-release",
+        "summary": "refresh token fallback still accepted an inline secret",
+        "requiredAction": "remove inline secret fallback and require env-based secret resolution",
+        "fixArtifact": "src/auth/refresh.ts",
+        "verifiedBy": "meta-prism",
+        "closeState": "open",
+        "adversarialVotes": [
+          {
+            "lens": "correctness",
+            "verdict": "survived",
+            "refutationEvidence": "inline secret confirmed in refresh.ts line 42"
+          },
+          {
+            "lens": "security",
+            "verdict": "survived",
+            "refutationEvidence": "hardcoded credential in production path"
+          },
+          {
+            "lens": "completeness",
+            "verdict": "survived",
+            "refutationEvidence": "no alternative env-based resolution found in codebase"
+          }
+        ]
+      }
+    ],
+    "triggerVsSkipReasonCheck": {
+      "status": "pass",
+      "triggerReasons": [
+        "multi_file",
+        "cross_runtime_sync",
+        "durable_artifact",
+        "verification_required"
+      ],
+      "skipReason": "explicit_auto_proceed",
+      "evidence": "fixture records explicit_auto_proceed for pre-decision gate"
+    }
+  },
+  "verificationPacket": {
+    "verified": true,
+    "remainingIssues": [],
+    "evidence": [
+      "tests/auth/refresh.test.ts passes with env-only secret flow"
+    ],
+    "fixEvidence": [
+      {
+        "findingId": "finding-001",
+        "actionId": "fix-001",
+        "verifiedBy": "meta-prism",
+        "verificationMethod": "artifact-inspection",
+        "evidenceRefs": [
+          "src/auth/refresh.ts no longer contains inline fallback secret"
+        ],
+        "resultArtifactRef": "src/auth/refresh.ts",
+        "result": "verified_closed",
+        "failureDisposition": "reopen finding on verification failure"
+      }
+    ],
+    "revisionResponses": [
+      {
+        "findingId": "finding-001",
+        "actionId": "fix-001",
+        "owner": "meta-conductor",
+        "responseType": "code-change",
+        "status": "applied",
+        "fixArtifact": "src/auth/refresh.ts",
+        "responseSummary": "refresh path now resolves secrets from environment only"
+      }
+    ],
+    "verificationResults": [
+      {
+        "findingId": "finding-001",
+        "verifiedBy": "meta-prism",
+        "result": "pass",
+        "evidence": [
+          "src/auth/refresh.ts no longer contains inline fallback secret"
+        ],
+        "closeState": "verified_closed"
+      }
+    ],
+    "closeFindings": [
+      "finding-001"
+    ]
+  },
+  "summaryPacket": {
+    "verifyPassed": true,
+    "summaryClosed": true,
+    "singleDeliverableMaintained": true,
+    "deliverableChainClosed": true,
+    "consolidatedDeliverablePresent": true,
+    "publicReady": true,
+    "commentReviewAcknowledged": true,
+    "sourceProjects": [
+      "project-core-loop-release"
+    ],
+    "deliveryShellsUsed": [
+      "shell-structured-status",
+      "shell-review-delta"
+    ],
+    "blockedBy": [],
+    "summary": "Core-loop release fixture proves the strict workflow artifact validator can accept a governed execution repair run.",
+    "primaryDeliverable": "core-loop-governed-execution-repair"
+  },
+  "compactionPacket": {
+    "packetVersion": "v1",
+    "runRef": "auth-refresh-hardening",
+    "profile": "default",
+    "profileKey": "shared-123456789abc",
+    "openFindings": [],
+    "pendingRevisions": [],
+    "verifyGateState": "verified",
+    "singleDeliverableState": {
+      "singleDeliverableMaintained": true,
+      "deliverableChainClosed": true
+    },
+    "summaryDelta": {
+      "verifyPassed": true,
+      "summaryClosed": true,
+      "publicReady": true,
+      "blockedBy": []
+    },
+    "writebackDecision": "none"
+  },
+  "evolutionWritebackPacket": {
+    "ownerAssessment": "keep-existing",
+    "writebackDecision": "none",
+    "decisionReason": "auth hardening pattern should be captured as a governance example",
+    "writebacks": [
+      {
+        "target": "config/contracts/workflow-contract.json",
+        "reason": "run artifact closure expectations tightened"
+      }
+    ],
+    "retain": [
+      {
+        "target": "meta-conductor",
+        "reason": "Existing owner boundary remains valid for this auth-hardening run."
+      }
+    ],
+    "upgrade": [
+      {
+        "target": "config/contracts/workflow-contract.json",
+        "reason": "Execution-board discipline should be captured as reusable governance policy."
+      }
+    ],
+    "retire": [],
+    "scarIds": [],
+    "syncRequired": true,
+    "noneReason": "Fixture validation does not perform canonical writeback; real writeback decisions are carried by the release PDR and run artifact."
+  },
+  "businessFlowBlueprintPacket": {
+    "deliverableType": "api_service",
+    "requiredLanes": [
+      {
+        "laneId": "backend",
+        "businessLane": "product",
+        "capabilityNeed": "product capability coverage",
+        "capabilitySearchQuery": "product capability owner",
+        "candidateOwners": [
+          "meta-conductor",
+          "meta-artisan"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-conductor",
+        "selectionReason": "meta-conductor matched by Fetch-first capability scan",
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "product_capability_match",
+            "capabilitySlot": "product_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-conductor matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "product_capability_binding",
+            "capabilitySlot": "product_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "product_capability_match"
+          }
+        ]
+      },
+      {
+        "laneId": "backend",
+        "businessLane": "backend",
+        "capabilityNeed": "backend capability coverage",
+        "capabilitySearchQuery": "backend capability owner",
+        "candidateOwners": [
+          "meta-conductor",
+          "meta-artisan"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-conductor",
+        "selectionReason": "meta-conductor matched by Fetch-first capability scan",
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "backend_capability_match",
+            "capabilitySlot": "backend_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-conductor matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "backend_capability_binding",
+            "capabilitySlot": "backend_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "backend_capability_match"
+          }
+        ]
+      },
+      {
+        "laneId": "auth-security",
+        "businessLane": "auth-security",
+        "capabilityNeed": "auth-security capability coverage",
+        "capabilitySearchQuery": "auth-security capability owner",
+        "candidateOwners": [
+          "meta-sentinel",
+          "meta-artisan"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-sentinel",
+        "selectionReason": "meta-sentinel matched by Fetch-first capability scan",
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "auth-security_capability_match",
+            "capabilitySlot": "auth-security_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-sentinel matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "auth-security_capability_binding",
+            "capabilitySlot": "auth-security_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "auth-security_capability_match"
+          }
+        ]
+      },
+      {
+        "laneId": "test",
+        "businessLane": "test",
+        "capabilityNeed": "test capability coverage",
+        "capabilitySearchQuery": "test capability owner",
+        "candidateOwners": [
+          "meta-prism",
+          "meta-artisan"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-prism",
+        "selectionReason": "meta-prism matched by Fetch-first capability scan",
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "test_capability_match",
+            "capabilitySlot": "test_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-prism matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "test_capability_binding",
+            "capabilitySlot": "test_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "test_capability_match"
+          }
+        ]
+      },
+      {
+        "laneId": "review",
+        "businessLane": "review",
+        "capabilityNeed": "review capability coverage",
+        "capabilitySearchQuery": "review capability owner",
+        "candidateOwners": [
+          "meta-prism",
+          "meta-artisan"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-prism",
+        "selectionReason": "meta-prism matched by Fetch-first capability scan",
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "review_capability_match",
+            "capabilitySlot": "review_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-prism matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "review_capability_binding",
+            "capabilitySlot": "review_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "review_capability_match"
+          }
+        ]
+      },
+      {
+        "laneId": "verify",
+        "businessLane": "verify",
+        "capabilityNeed": "verify capability coverage",
+        "capabilitySearchQuery": "verify capability owner",
+        "candidateOwners": [
+          "meta-warden",
+          "meta-artisan"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-warden",
+        "selectionReason": "meta-warden matched by Fetch-first capability scan",
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "verify_capability_match",
+            "capabilitySlot": "verify_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-warden matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "verify_capability_binding",
+            "capabilitySlot": "verify_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "verify_capability_match"
+          }
+        ]
+      }
+    ],
+    "optionalLanes": [
+      {
+        "laneId": "database",
+        "businessLane": "database",
+        "capabilityNeed": "database capability coverage",
+        "capabilitySearchQuery": "database capability owner",
+        "candidateOwners": [
+          "meta-artisan"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-artisan",
+        "selectionReason": "meta-artisan matched by Fetch-first capability scan",
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "database_capability_match",
+            "capabilitySlot": "database_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-artisan matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "database_capability_binding",
+            "capabilitySlot": "database_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "database_capability_match"
+          }
+        ]
+      },
+      {
+        "laneId": "browser-qa",
+        "businessLane": "browser-qa",
+        "capabilityNeed": "browser-qa capability coverage",
+        "capabilitySearchQuery": "browser-qa capability owner",
+        "candidateOwners": [
+          "meta-prism",
+          "meta-artisan"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-prism",
+        "selectionReason": "meta-prism matched by Fetch-first capability scan",
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "browser-qa_capability_match",
+            "capabilitySlot": "browser-qa_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-prism matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "browser-qa_capability_binding",
+            "capabilitySlot": "browser-qa_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "browser-qa_capability_match"
+          }
+        ]
+      },
+      {
+        "laneId": "release",
+        "businessLane": "release",
+        "capabilityNeed": "release capability coverage",
+        "capabilitySearchQuery": "release capability owner",
+        "candidateOwners": [
+          "meta-warden",
+          "meta-artisan"
+        ],
+        "candidateSkills": [
+          "meta-theory"
+        ],
+        "selectedOwner": "meta-warden",
+        "selectionReason": "meta-warden matched by Fetch-first capability scan",
+        "coverageStatus": "covered",
+        "matchedCapabilities": [
+          {
+            "matchId": "release_capability_match",
+            "capabilitySlot": "release_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "confidenceScore": 0.91,
+            "selectionReason": "meta-warden matched by Fetch-first capability scan",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "capabilityGapPacket"
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "release_capability_binding",
+            "capabilitySlot": "release_capability",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory",
+            "source": "config/capability-index/meta-kim-capabilities.json",
+            "evidenceRef": "release_capability_match"
+          }
+        ]
+      }
+    ],
+    "omittedLanes": [
+      {
+        "laneId": "frontend",
+        "lane": "frontend",
+        "reason": "token refresh hardening has no user-facing UI surface",
+        "coverageStatus": "omitted_with_reason"
+      },
+      {
+        "laneId": "motion",
+        "lane": "motion",
+        "reason": "no visual interaction or animation is involved",
+        "coverageStatus": "omitted_with_reason"
+      }
+    ],
+    "laneDependencies": [
+      {
+        "from": "auth-security",
+        "to": "backend",
+        "type": "constraint"
+      },
+      {
+        "from": "backend",
+        "to": "test",
+        "type": "verification"
+      }
+    ],
+    "coverageJudgment": "intentionally_reduced",
+    "blueprintSource": "inferred",
+    "blueprintVersion": "v1"
+  },
+  "agentBlueprintPacket": {
+    "roles": [
+      {
+        "businessRoleId": "backend",
+        "roleDisplayName": "backend",
+        "ownerAgent": "meta-conductor",
+        "capabilityNeed": "auth refresh implementation",
+        "ownerResolution": "reuse_existing_owner",
+        "minInstances": 1,
+        "maxInstances": 1,
+        "parallelizable": false,
+        "handoffInputs": [
+          "security finding",
+          "primary deliverable"
+        ],
+        "handoffOutputs": [
+          "code diff",
+          "verification notes"
+        ],
+        "assignedResponsibilitySlice": [
+          "product",
+          "backend",
+          "auth-security",
+          "test",
+          "review",
+          "verify"
+        ],
+        "ownerResponsibilityDelta": "selected owner covers the assigned business-flow lanes for this run",
+        "agentIterationPlan": "reuse existing owner capability and iterate only if verification finds a role gap",
+        "matchedSkills": [
+          {
+            "matchId": "skill-match-auth-refresh-001",
+            "capabilitySlot": "auth refresh implementation discipline",
+            "providerId": "meta-theory",
+            "skillId": "local-project-code-change",
+            "toolOrCommand": null,
+            "source": "capability-index",
+            "roiScore": 4,
+            "selectionReason": "Represents implementation capability as run-scoped evidence while durable ownership stays with governance meta agents.",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "Block with capabilityGapPacket if no governance owner can supervise the run-scoped capability."
+          }
+        ],
+        "skillSelectionScope": "run_scoped",
+        "governanceStageNodes": [
+          {
+            "stage": "Critical",
+            "ownerAgent": "meta-warden",
+            "responsibility": "classify run and enforce governance boundary"
+          },
+          {
+            "stage": "Fetch",
+            "ownerAgent": "meta-artisan",
+            "responsibility": "match run-scoped skills and capability providers"
+          },
+          {
+            "stage": "Thinking",
+            "ownerAgent": "meta-conductor",
+            "responsibility": "sequence lanes and build dispatch packets"
+          },
+          {
+            "stage": "Review",
+            "ownerAgent": "meta-prism",
+            "responsibility": "verify governance-only owner and quality coverage"
+          }
+        ],
+        "ownerSource": "meta_kim_canonical",
+        "agentCopyPolicy": "meta_kim_governance_only",
+        "matchedCapabilities": [
+          {
+            "matchId": "cap-match-auth-refresh-001",
+            "capabilitySlot": "auth refresh implementation discipline",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory:local-project-code-change",
+            "providerId": "meta-theory",
+            "source": "capability-index",
+            "confidenceScore": 4,
+            "selectionReason": "Represents implementation capability as run-scoped evidence while durable ownership stays with governance meta agents.",
+            "selectionScope": "run_scoped",
+            "persistencePolicy": "do_not_persist_to_agent_identity",
+            "fallback": "Block with capabilityGapPacket if no governance owner can supervise the run-scoped capability."
+          }
+        ],
+        "capabilityBindings": [
+          {
+            "bindingId": "binding-auth-refresh-001",
+            "capabilitySlot": "auth refresh implementation discipline",
+            "bindingType": "skill",
+            "bindingRef": "meta-theory:local-project-code-change",
+            "source": "capability-index",
+            "evidenceRef": "agentBlueprintPacket.roles[0].matchedCapabilities[0]"
+          }
+        ]
+      }
+    ],
+    "roleCoverageGate": "pass",
+    "missingRoles": [],
+    "duplicateRolePolicy": "allow_instances_when_sharded",
+    "namingPolicy": {
+      "roleDisplayNameRequired": true,
+      "businessSemanticNamesOnly": true,
+      "shortRoleNamesRequired": true,
+      "runtimeNicknamesAreAliasesOnly": true,
+      "forbiddenPrimaryNamePattern": "^[A-Z][a-z]+$",
+      "forbiddenScopedNamePattern": "[-_/\\\\:]",
+      "scopeDetailsBelongInInstanceFields": true,
+      "description": "User-visible agent names must be coarse business role-family names such as 前端, 后端, 测试, frontend, backend, test. Do not use scoped work-item names as roleDisplayName; put feature, page, installation, shard, or task detail in roleInstanceId, shardScope, assignedResponsibilitySlice, or task text. Host-generated personal nicknames such as Huygens or Mill may be recorded only as runtimeInstanceAlias."
+    },
+    "governanceStageCoverage": {
+      "Critical": [
+        "meta-warden",
+        "meta-conductor"
+      ],
+      "Fetch": [
+        "meta-conductor",
+        "meta-scout",
+        "meta-artisan",
+        "meta-librarian",
+        "meta-genesis"
+      ],
+      "Thinking": [
+        "meta-conductor",
+        "meta-genesis",
+        "meta-artisan",
+        "meta-sentinel",
+        "meta-warden"
+      ],
+      "Review": [
+        "meta-prism",
+        "meta-warden"
+      ]
+    }
+  },
+  "contentEvidencePacket": {
+    "evidenceScope": "local_project",
+    "researchCapabilityDiscovery": {
+      "requiredCapabilities": [
+        "local_only"
+      ],
+      "runtimeContext": {
+        "os": "unknown",
+        "runtimeFamily": "unknown"
+      },
+      "toolInventorySources": [
+        "capability_index",
+        "user_instruction"
+      ],
+      "availableRetrievalCapabilities": [
+        {
+          "capability": "local_only",
+          "providerKind": "capability_index",
+          "status": "available",
+          "proof": "fixture scope is local project evidence only",
+          "limitations": [
+            "no external freshness validation"
+          ]
+        }
+      ],
+      "selectedResearchPath": {
+        "mode": "local_only",
+        "reason": "local_project_only"
+      },
+      "capabilityGaps": [],
+      "validatedBy": "meta-conductor"
+    },
+    "localSourcesRead": [
+      {
+        "projectRef": "project-core-loop-release",
+        "sourceType": "run_index",
+        "sourceRef": ".meta-kim/state/default/run-index.sqlite"
+      },
+      {
+        "projectRef": "project-core-loop-release",
+        "sourceType": "graph",
+        "sourceRef": "graphify-out/graph.json"
+      }
+    ],
+    "contentFindings": [
+      {
+        "findingId": "evidence-001",
+        "summary": "Fetch evidence collected for complex_dev",
+        "sourceRefs": [
+          "config/contracts/core-loop-contract.json"
+        ]
+      }
+    ],
+    "capabilityEvidence": [
+      {
+        "capability": "auth_refresh_hardening",
+        "owner": "meta-conductor",
+        "sourceProject": "project-core-loop-release"
+      },
+      {
+        "capability": "verification_notes",
+        "owner": "meta-prism",
+        "sourceProject": "project-core-loop-release"
+      }
+    ],
+    "researchRequired": false,
+    "researchSkipReason": "local_project_only",
+    "searchAngles": [],
+    "evidenceLaneValidatedBy": "meta-conductor",
+    "triggerReasons": [
+      "multi_file",
+      "durable_artifact",
+      "verification_required"
+    ],
+    "deepResearchPlan": {
+      "questions": [
+        "Which evidence changes the recommended path?",
+        "Which risks or uncertainties must become user choices?",
+        "Which owners and lanes are justified by Fetch evidence?"
+      ],
+      "sourceCategoriesPlanned": [
+        "local-code",
+        "graph",
+        "capability-index"
+      ],
+      "decisionImpactCriteria": [
+        "candidate option viability",
+        "risk severity",
+        "owner selection confidence"
+      ]
+    },
+    "sourceCategoryCoverage": [
+      "local-code",
+      "graph",
+      "capability-index"
+    ],
+    "crossReferenceMatrix": [
+      {
+        "claim": "fixture has enough local evidence to support post-choice dispatch",
+        "sources": [
+          ".meta-kim/state/default/run-index.sqlite",
+          "graphify-out/graph.json"
+        ],
+        "consistent": true
+      }
+    ],
+    "contradictionLog": [],
+    "assumptionLedger": [
+      {
+        "assumption": "fixture evidence is static and local-only",
+        "risk": "live external drift is outside fixture scope"
+      }
+    ],
+    "decisionImpactMap": [
+      {
+        "finding": "contentEvidencePacket.contentFindings[0]",
+        "impacts": [
+          "preDecisionOptionFrame.candidateOptions[0]",
+          "dispatchEnvelopePacket.ownerSelection"
+        ],
+        "decisionChanged": "Evidence changes the Thinking route, owner selection, and acceptance criteria before execution.",
+        "stageAffected": "Thinking"
+      }
+    ],
+    "evidence": [
+      "Fetch evidence collected for complex_dev"
+    ],
+    "capabilityDiscovery": [
+      "auth_refresh_hardening",
+      "verification_notes"
+    ],
+    "capabilityGap": "none"
+  },
+  "preDecisionOptionFrame": {
+    "decisionTrigger": "non_trivial_executable_decision",
+    "contentEvidence": "contentEvidencePacket",
+    "optionFrame": "pre-decision candidate orchestration",
+    "presentedBeforeDecision": true,
+    "userChoiceState": "explicit_auto_proceed",
+    "builtFromContentEvidence": true,
+    "contentEvidenceRefs": [
+      "contentEvidencePacket"
+    ],
+    "unresolvedQuestions": [],
+    "candidateOptions": [
+      {
+        "optionId": "A",
+        "whatChanges": "Apply the governed run plan recorded in this fixture.",
+        "problemSolved": "Keeps executable work tied to Fetch evidence before dispatch.",
+        "expectedResult": "auth-refresh-hardening",
+        "advantages": [
+          "Preserves the existing fixture intent."
+        ],
+        "disadvantages": [
+          "Uses fixture-level evidence rather than live runtime evidence."
+        ],
+        "candidateOwners": [
+          "meta-conductor",
+          "meta-prism",
+          "meta-artisan"
+        ],
+        "candidateTaskShape": "post-decision dispatch packets",
+        "evidenceRefs": [
+          "contentEvidencePacket.decisionImpactMap[0]"
+        ],
+        "decisionImpact": "Uses Fetch evidence to choose the route, owners, and acceptance standard before dispatch."
+      },
+      {
+        "optionId": "B",
+        "whatChanges": "Audit only before dispatch.",
+        "problemSolved": "Allows a more conservative path when evidence is incomplete.",
+        "expectedResult": "written audit before execution",
+        "advantages": [
+          "Lower execution risk."
+        ],
+        "disadvantages": [
+          "Slower delivery."
+        ],
+        "candidateOwners": [
+          "meta-prism",
+          "meta-artisan"
+        ],
+        "candidateTaskShape": "review-first packet",
+        "evidenceRefs": [
+          "contentEvidencePacket.decisionImpactMap[0]"
+        ],
+        "decisionImpact": "Uses Fetch evidence to choose the route, owners, and acceptance standard before dispatch."
+      }
+    ],
+    "recommendedDefault": "A",
+    "requiresUserChoice": false,
+    "nativeChoiceSurface": "conversation_fallback",
+    "choiceGateSkip": "explicit_auto_proceed",
+    "solutionChoiceState": "explicit_auto_proceed",
+    "reviewOwner": "meta-prism",
+    "skipSource": "user_explicit_auto_proceed",
+    "skipSafetyRationale": "User explicitly allowed auto-proceed after evidence was collected and options were framed."
+  },
+  "productCompletenessPacket": {
+    "outcome": "auth-refresh-hardening",
+    "userValue": "Deliver the requested run outcome without expanding unrelated scope.",
+    "acceptanceCriteria": [
+      "no hardcoded secret in refresh.ts",
+      "test suite passes"
+    ],
+    "nonGoals": [
+      "No unrelated auth flows (login UI, OAuth providers); no production deploy in this run."
+    ],
+    "completenessStatus": "pass",
+    "owner": "meta-conductor",
+    "evidenceRefs": [
+      "intentPacket",
+      "businessFlowBlueprintPacket"
+    ],
+    "designDimensions": [
+      {
+        "dimensionId": "core_highlight",
+        "status": "covered",
+        "evidenceRef": "productCompletenessPacket.acceptanceCriteria"
+      },
+      {
+        "dimensionId": "feature_completeness",
+        "status": "covered",
+        "evidenceRef": "productCompletenessPacket.acceptanceCriteria"
+      },
+      {
+        "dimensionId": "evolution_path",
+        "status": "covered",
+        "evidenceRef": "evolutionWritebackPacket"
+      },
+      {
+        "dimensionId": "api_contract",
+        "status": "covered",
+        "evidenceRef": "businessFlowBlueprintPacket"
+      },
+      {
+        "dimensionId": "frontend_backend_contract",
+        "status": "omitted_with_reason",
+        "omissionReason": "No separate frontend/back-end handoff is present in this fixture; the API contract remains inside the governed service boundary."
+      }
+    ]
+  },
+  "experienceQualityPacket": {
+    "audience": "developer",
+    "criticalJourneys": [
+      "Maintainer can understand the deliverable, review evidence, and rollback path from the run artifact."
+    ],
+    "qualityAttributes": [
+      "bounded scope",
+      "clear verification evidence",
+      "no user-facing UI regression expected"
+    ],
+    "accessibilityConsiderations": [
+      "not_applicable: this fixture has no rendered user interface"
+    ],
+    "experienceStatus": "not_applicable_with_reason",
+    "owner": "meta-prism",
+    "evidenceRefs": [
+      "runHeader",
+      "summaryPacket"
+    ],
+    "experienceDimensions": [
+      {
+        "dimensionId": "ui_ue_ux",
+        "status": "omitted_with_reason",
+        "omissionReason": "No rendered user interface or interaction surface exists for this fixture."
+      },
+      {
+        "dimensionId": "media_audio_motion",
+        "status": "omitted_with_reason",
+        "omissionReason": "No media, audio, motion, or background sound surface exists for this fixture."
+      }
+    ]
+  },
+  "testStrategyPacket": {
+    "strategy": "Use focused verification evidence recorded in worker verifySteps and verificationPacket.",
+    "requiredTestTypes": [
+      "contract_validation",
+      "targeted_regression"
+    ],
+    "executedTests": [
+      "tests/auth/refresh.test.ts passes with env-only secret flow"
+    ],
+    "deferredTests": [],
+    "coverageRationale": "Fixture records a narrow governed change with explicit verification evidence and no deployment side effect.",
+    "testStatus": "pass",
+    "owner": "meta-warden",
+    "evidenceRefs": [
+      "workerTaskPackets[0].verifySteps",
+      "verificationPacket"
+    ],
+    "testDimensions": [
+      {
+        "dimensionId": "real_test_strategy",
+        "status": "covered",
+        "evidenceRef": "testStrategyPacket.requiredTestTypes"
+      }
+    ]
+  },
+  "structureHygienePacket": {
+    "changedAreas": [
+      "src/auth/refresh.ts",
+      "tests/auth/refresh.test.ts"
+    ],
+    "boundaryChecks": [
+      "Changed artifacts remain within the primary deliverable boundary."
+    ],
+    "orphanCleanup": [
+      "No generated orphan artifacts are introduced by this fixture."
+    ],
+    "namingAndLayoutChecks": [
+      "Role display names and artifact namespaces remain stable."
+    ],
+    "hygieneStatus": "pass",
+    "owner": "meta-prism",
+    "evidenceRefs": [
+      "dispatchBoard",
+      "workerResultPackets"
+    ],
+    "structureDimensions": [
+      {
+        "dimensionId": "file_management_extensibility",
+        "status": "covered",
+        "evidenceRef": "structureHygienePacket.boundaryChecks"
+      },
+      {
+        "dimensionId": "directory_structure",
+        "status": "covered",
+        "evidenceRef": "structureHygienePacket.namingAndLayoutChecks"
+      },
+      {
+        "dimensionId": "dead_redundant_cleanup",
+        "status": "covered",
+        "evidenceRef": "structureHygienePacket.orphanCleanup"
+      }
+    ]
+  },
+  "permissionMatrixPacket": {
+    "accessedResources": [
+      "src/auth/refresh.ts",
+      "tests/auth/refresh.test.ts"
+    ],
+    "permissionChecks": [
+      "Repository file changes only; no privileged runtime, database, or credential mutation is recorded."
+    ],
+    "secretsPolicy": "No raw secret values may be stored in the artifact; use environment or secretRef patterns only.",
+    "permissionStatus": "pass",
+    "owner": "meta-sentinel",
+    "evidenceRefs": [
+      "contentEvidencePacket",
+      "reviewPacket"
+    ],
+    "permissionDimensions": [
+      {
+        "dimensionId": "permission_secret_boundary",
+        "status": "covered",
+        "evidenceRef": "permissionMatrixPacket.secretsPolicy"
+      }
+    ]
+  },
+  "sideEffectLedgerPacket": {
+    "sideEffects": [
+      "repository_files_modified"
+    ],
+    "externalSystemsTouched": [],
+    "stateChanges": [
+      "src/auth/refresh.ts",
+      "tests/auth/refresh.test.ts"
+    ],
+    "mitigations": [
+      "Review and verification packets close the changed artifact chain before public-ready status."
+    ],
+    "sideEffectStatus": "tracked",
+    "owner": "meta-sentinel",
+    "evidenceRefs": [
+      "workerResultPackets",
+      "summaryPacket"
+    ],
+    "sideEffectDimensions": [
+      {
+        "dimensionId": "side_effect_ledger",
+        "status": "covered",
+        "evidenceRef": "sideEffectLedgerPacket.sideEffects"
+      }
+    ]
+  },
+  "rollbackPlanPacket": {
+    "rollbackScope": "auth-refresh-hardening",
+    "rollbackTriggers": [
+      "verification failure",
+      "reopened review finding",
+      "unexpected side effect"
+    ],
+    "rollbackSteps": [
+      "Revert or repair the changed artifacts listed in affectedArtifacts, then rerun verification."
+    ],
+    "affectedArtifacts": [
+      "src/auth/refresh.ts",
+      "tests/auth/refresh.test.ts"
+    ],
+    "rollbackStatus": "ready",
+    "owner": "meta-warden",
+    "evidenceRefs": [
+      "sideEffectLedgerPacket",
+      "verificationPacket"
+    ],
+    "rollbackDimensions": [
+      {
+        "dimensionId": "rollback_path",
+        "status": "covered",
+        "evidenceRef": "rollbackPlanPacket.rollbackSteps"
+      }
+    ]
+  }
+}

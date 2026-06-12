@@ -20,9 +20,9 @@ describe("Claude settings hook command rendering", () => {
 
   test("global hook template emits slash-normalized absolute paths", () => {
     const template = buildMetaKimHooksTemplate("C:\\Users\\Example\\.claude\\hooks\\meta-kim");
-    const command = template.Stop[0].hooks[0].command;
+    const command = template.PreToolUse[0].hooks[0].command;
 
-    assert.equal(command, 'node "C:/Users/Example/.claude/hooks/meta-kim/stop-compaction.mjs"');
+    assert.equal(command, 'node "C:/Users/Example/.claude/hooks/meta-kim/block-dangerous-bash.mjs"');
     const commands = Object.values(template)
       .flatMap((blocks) => blocks.flatMap((block) => block.hooks ?? []))
       .map((hook) => hook.command);
@@ -69,6 +69,36 @@ describe("Claude settings hook command rendering", () => {
     assert.ok(commands.includes('node "C:/Users/Example/.claude/hooks/custom.mjs"'));
   });
 
+  test("global settings merge removes old managed events no longer in the template", () => {
+    const template = buildMetaKimHooksTemplate(
+      "C:\\Users\\Example\\.claude\\hooks\\meta-kim",
+    );
+    const merged = mergeGlobalMetaKimHooksIntoSettings(
+      {
+        hooks: {
+          Stop: [
+            {
+              hooks: [
+                {
+                  type: "command",
+                  command:
+                    'node "C:/Users/Example/.claude/hooks/meta-kim/stop-compaction.mjs"',
+                },
+              ],
+            },
+          ],
+        },
+      },
+      template,
+    );
+
+    assert.equal(merged.hooks.Stop, undefined);
+    assert.match(
+      JSON.stringify(merged.hooks),
+      /block-dangerous-bash\.mjs/,
+    );
+  });
+
   test("repo settings merge keeps project hook commands relative", () => {
     const canonical = {
       hooks: {
@@ -78,7 +108,7 @@ describe("Claude settings hook command rendering", () => {
             hooks: [
               {
                 type: "command",
-                command: "node .claude/hooks/block-dangerous-bash.mjs",
+                command: "node .claude/hooks/graphify-context.mjs",
               },
             ],
           },
@@ -91,7 +121,7 @@ describe("Claude settings hook command rendering", () => {
 
     assert.equal(
       command,
-      "node .claude/hooks/block-dangerous-bash.mjs",
+      "node .claude/hooks/graphify-context.mjs",
     );
     assert.doesNotMatch(command, /\/Users\/delphi\/work\/Finance/);
   });
@@ -160,5 +190,44 @@ describe("Claude settings hook command rendering", () => {
       "node .claude/hooks/enforce-agent-dispatch.mjs",
       "node .claude/hooks/stop-spine-cleanup.mjs",
     ]);
+  });
+
+  test("repo settings merge removes old managed events no longer in canonical settings", () => {
+    const merged = mergeRepoClaudeSettings(
+      {
+        hooks: {
+          SessionStart: [
+            {
+              matcher: "startup|resume",
+              hooks: [
+                {
+                  type: "command",
+                  command: "node .claude/hooks/meta-kim-memory-save.mjs --event session-start",
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash",
+              hooks: [
+                {
+                  type: "command",
+                  command: "node .claude/hooks/graphify-context.mjs",
+                },
+              ],
+            },
+          ],
+        },
+      },
+      "/Users/delphi/work/Finance",
+    );
+
+    assert.equal(merged.hooks.SessionStart, undefined);
+    assert.match(JSON.stringify(merged.hooks), /graphify-context\.mjs/);
   });
 });
