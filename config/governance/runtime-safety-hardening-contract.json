@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 1,
+  "contractId": "meta-kim-runtime-safety-hardening-contract",
+  "owner": "meta-sentinel",
+  "reviewOwner": "meta-prism",
+  "verificationOwner": "meta-warden",
+  "purpose": "Turn repeated install, runtime-hook, residue, evidence, and install-message failures into one release-grade safety contract.",
+  "appliesTo": [
+    "setup",
+    "sync",
+    "install",
+    "update",
+    "runtime hooks",
+    "prompt adapters",
+    "runtime matrices",
+    "provider registries",
+    "deletion or refactor work",
+    "release evidence"
+  ],
+  "hostConfigMerge": {
+    "mergeMode": "additive_preserve_user_state",
+    "requiredMatrixColumns": [
+      "existingHostState",
+      "stateAddedByChange",
+      "stateMustPreserve",
+      "rollbackPath"
+    ],
+    "protectedState": [
+      "userOwnedConfig",
+      "credentials",
+      "customMcpServers",
+      "nativeHostControls",
+      "marketplaceSources",
+      "plugins",
+      "hooks",
+      "agents",
+      "profiles",
+      "projectTrust"
+    ],
+    "forbiddenOutcomes": [
+      "overwriteUserConfigWithoutBackup",
+      "removeUnknownMcpServer",
+      "removeUserHook",
+      "disableNativePlugin",
+      "pinStaleBundledMarketplaceSource",
+      "replaceProjectTrustOrSandboxWithoutEvidence"
+    ],
+    "codexNativeControls": {
+      "requiredFeatures": [
+        "default_mode_request_user_input",
+        "js_repl"
+      ],
+      "windowsSandbox": "unelevated",
+      "requiredPluginIds": [
+        "browser@openai-bundled",
+        "chrome@openai-bundled",
+        "computer-use@openai-bundled"
+      ],
+      "marketplaceId": "openai-bundled",
+      "notifyPolicy": [
+        "replaceMacTerminalNotifierOnWindows",
+        "preferCodexComputerUseTurnEndedHelperWhenPresent",
+        "fallbackToWindowsSafeNoopNotify"
+      ],
+      "forbiddenConfigPatterns": [
+        "terminal-notifier",
+        ".codex/.tmp/bundled-marketplaces/openai-bundled"
+      ]
+    }
+  },
+  "hookPromptProtocol": {
+    "requiredLayers": [
+      {
+        "id": "sourcePayload",
+        "description": "The prompt-submission payload or dependency hook output before runtime adaptation."
+      },
+      {
+        "id": "adapterTransform",
+        "description": "Runtime-specific adapter transformation that preserves prompt text and separates policy from context."
+      },
+      {
+        "id": "hostRegistration",
+        "description": "The runtime hook event and config entry that actually invokes the adapter."
+      },
+      {
+        "id": "modelVisibleResult",
+        "description": "The exact field consumed by the model, separate from UI-visible notices."
+      }
+    ],
+    "runtimeAdapters": {
+      "claude": {
+        "event": "UserPromptSubmit",
+        "modelVisibleField": "hookSpecificOutput.additionalContext",
+        "support": "native"
+      },
+      "codex": {
+        "event": "UserPromptSubmit",
+        "modelVisibleField": "hookSpecificOutput.additionalContext",
+        "support": "adapter-required"
+      },
+      "cursor": {
+        "event": "beforeSubmitPrompt",
+        "modelVisibleField": "prompt",
+        "support": "adapter-required"
+      },
+      "openclaw": {
+        "event": "command:new",
+        "modelVisibleField": "workspace instruction",
+        "support": "degraded"
+      }
+    },
+    "badInputRegressionFixtures": [
+      "markdownFence",
+      "delegatedPrompt",
+      "internalGoalFilter"
+    ],
+    "rules": [
+      "Raw user input and optimized prompt bodies are fenced before display.",
+      "Codex adapter emits additionalContext, not systemMessage.",
+      "Cursor adapter emits prompt.",
+      "Host registration must be global for reusable HookPrompt and project-local only for project governance hooks."
+    ]
+  },
+  "residueSweep": {
+    "requiredBuckets": [
+      "runtimeState",
+      "i18n",
+      "docs",
+      "fixtures",
+      "validators",
+      "runtimeMirrors"
+    ],
+    "deprecatedMarkers": [
+      {
+        "marker": "simpleMode",
+        "disallowedIn": [
+          "canonical",
+          "config",
+          "scripts",
+          "README.md",
+          "README.zh-CN.md",
+          "README.ja-JP.md",
+          "README.ko-KR.md",
+          "AGENTS.md",
+          "CLAUDE.md"
+        ],
+        "allowedForRegressionOnly": [
+          "tests",
+          "CHANGELOG.md",
+          "CHANGELOG.zh-CN.md",
+          "config/governance/runtime-safety-hardening-contract.json"
+        ]
+      }
+    ],
+    "preCommitCommand": "rg <removed_identifier>"
+  },
+  "runtimeEvidence": {
+    "allowedEvidenceKinds": [
+      "structural_smoke",
+      "ui_warning_or_system_message",
+      "skipped_or_needs_auth",
+      "runtime_live_pass"
+    ],
+    "evalEvidenceKindMap": {
+      "smoke": "structural_smoke",
+      "skipped": "skipped_or_needs_auth",
+      "unsupported": "skipped_or_needs_auth",
+      "failed": "structural_smoke",
+      "unknown": "ui_warning_or_system_message",
+      "live": "runtime_live_pass"
+    },
+    "blockedEvidenceKinds": [
+      "structural_smoke",
+      "ui_warning_or_system_message",
+      "skipped_or_needs_auth"
+    ],
+    "requiredRecordFields": [
+      "runtime",
+      "mode",
+      "status",
+      "evidenceKind",
+      "failureClass",
+      "command",
+      "artifact",
+      "remainingAction",
+      "strictReleasePass",
+      "blockedFromRelease"
+    ],
+    "releaseGradePredicate": {
+      "evidenceKind": "runtime_live_pass",
+      "strictReleasePass": true,
+      "blockedFromRelease": false
+    },
+    "requiredTemplateFields": [
+      "operationSteps",
+      "toolSideOutput",
+      "hostVisibleResult",
+      "failureBoundary",
+      "reviewStatus"
+    ],
+    "selfTestRequiredFor": [
+      "codex",
+      "cursor",
+      "openclaw",
+      "claude"
+    ],
+    "completionRule": "Do not call host-side runtime changes complete without local assertion, host-side or installed-user self-test evidence, and review pass or explicit blocked reason."
+  },
+  "installStatusSemantics": {
+    "allowedClasses": [
+      "success",
+      "skipped",
+      "manual",
+      "failed"
+    ],
+    "classes": {
+      "success": {
+        "meaning": "The requested action completed or an existing destination is already usable.",
+        "userNextAction": "continue"
+      },
+      "skipped": {
+        "meaning": "The action was intentionally not run because it is optional, already satisfied, or not selected.",
+        "userNextAction": "continue unless the skipped optional capability is needed"
+      },
+      "manual": {
+        "meaning": "The host requires a manual UI or command step that Meta_Kim cannot safely automate.",
+        "userNextAction": "perform the named manual action, then rerun the check"
+      },
+      "failed": {
+        "meaning": "The requested action did not complete and needs intervention or retry.",
+        "userNextAction": "fix the reported cause before declaring install or update complete"
+      }
+    }
+  },
+  "releaseGate": {
+    "validatorScript": "scripts/validate-runtime-safety-contract.mjs",
+    "packageScript": "meta:runtime:safety:validate",
+    "includedIn": [
+      "meta:verify:governance"
+    ]
+  }
+}

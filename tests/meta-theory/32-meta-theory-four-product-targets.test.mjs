@@ -43,6 +43,42 @@ describe("32 — Meta-theory four product targets", () => {
         "meta-conductor"
       );
       assert.equal(report.defaultRuntimePath.workerTaskPackets.length, 4);
+      assert.equal(report.defaultRuntimePath.governanceAgentResultPackets.length, 9);
+      assert.equal(report.defaultRuntimePath.conductorConsumptionEvidence.status, "pass");
+      assert.ok(
+        report.defaultRuntimePath.conductorConsumptionEvidence.consumedPacketRefs.length >= 5
+      );
+      assert.equal(report.defaultRuntimePath.workerResultPackets.length, 4);
+      assert.equal(report.defaultRuntimePath.workerExecutionEvidence.length, 4);
+      assert.equal(report.defaultRuntimePath.traceEvalControlPlane.stageTiming.length, 8);
+      assert.equal(report.defaultRuntimePath.agUiStageEvents.eventCount, 8);
+      assert.ok(report.defaultRuntimePath.performanceCostBudget.highUsePaths.length >= 6);
+      assert.equal(report.defaultRuntimePath.contextEngineeringBudget.status, "pass");
+      assert.equal(report.coreLoop.executionResult.actualWorkerExecution, true);
+      assert.equal(report.coreLoop.traceEvalControlPlane.coverage.coverageStatus, "pass");
+      assert.equal(report.coreLoop.agUiStageEvents.events.every((event) => event.packetDumpPrevented === true), true);
+      assert.equal(report.coreLoop.performanceCostBudget.acceptance.externalPaidWorkRequiresApproval, true);
+      assert.equal(report.coreLoop.contextEngineeringBudget.budgetRules.fixedVariableContextSeparated, true);
+      assert.equal(
+        report.coreLoop.executionResult.mergeResult.governanceResultsConsumed,
+        true
+      );
+      assert.ok(
+        report.coreLoop.executionResult.workerResultPackets.every(
+          (packet) =>
+            packet.status === "executed" &&
+            packet.workerExecutionEvidence.length === 1 &&
+            packet.workerExecutionEvidence[0].status === "verified"
+        )
+      );
+      assert.equal(
+        report.coreLoop.reviewPacket.protocolCompliance.governanceAgentResultPacketsPresent,
+        true
+      );
+      assert.equal(
+        report.coreLoop.reviewPacket.protocolCompliance.conductorConsumptionEvidencePresent,
+        true
+      );
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

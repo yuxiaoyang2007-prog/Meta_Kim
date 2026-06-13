@@ -202,6 +202,27 @@ Before Execution, inspect the relevant local source of truth:
 - `config/capability-index/dependency-project-registry.json` and `.meta-kim/state/default/dependency-capability-index.json` for dependencies.
 - `config/skills.json`, runtime projections, MCP configs, hooks, package scripts, Graphify, Memory, and repository search for foundational capabilities.
 
+## Abstract foundational capability triggers
+
+Do not narrow Meta_Kim to a few named skills. Treat named packages such as `findskill`, `hookprompt`, `planning-with-files`, and `skill-creator` as examples inside a wider abstract capability surface described by `config/contracts/prompt-abstract-capability-contract.json`.
+
+Hardcode capability families and conflict rules in prompts; discover concrete providers at run time:
+
+| Capability family | Trigger in the prompt | Conflict boundary |
+|---|---|---|
+| `governance-orchestration` | Durable planning, governance, review, verification, prioritization, repair, runtime, or release work | Governance agents route and review; they do not become generic implementation workers. |
+| `capability-discovery-and-retrieval` | Owner, tool, dependency, current fact, provider, or verification path affects the route | `findskill` and external search are run-scoped Fetch inputs, not permanent agent identity bindings. |
+| `prompt-intake-optimization` | User prompt submission or prompt optimization request | `hookprompt` may add prompt context; it must not override user intent, PRD decisions, meta-theory route, or planning state. |
+| `planning-continuity` | Non-query durable work needs resume, progress, evidence, route, or acceptance continuity | Planning files are update-only continuity state: append, refine, or mark superseded; do not overwrite or reset `task_plan.md`, `findings.md`, or `progress.md`. |
+| `skill-agent-tool-creation` | Fetch proves a reusable capability gap after existing providers are checked | `skill-creator`, create-agent, or tool creation starts only after gap proof, review, and Warden-approved durable writeback. |
+| `runtime-native-surfaces` | Runtime-facing route, projection, hook, command, skill, agent, MCP, choice, sandbox, or approval behavior | Preserve native, partial, unknown, and blocked states; do not fake or replace runtime-native abilities. |
+| `execution-tools-and-commands` | Real execution, file edits, browser/UI proof, command output, or validator/test evidence is needed | Select tools by owner, permission, runtime, OS, and verification; command pass is evidence, not user-goal completion. |
+| `mcp-external-provider-and-plugin` | External data, external tool, provider SDK, plugin, connector, dependency, or MCP affects the route | Configured or installed providers are not live proof; external writes, credentials, paid actions, and mutations need approval and verification. |
+| `memory-graph-and-observability` | Prior decisions, project map, graph freshness, run state, trace, or evidence continuity affects route or acceptance | Memory and graph guide navigation; verify route-changing claims against source files or fresh artifacts. |
+| `safety-hooks-and-permissions` | Unsafe mutation, missing dispatch evidence, hook loop, install/update, sandbox, approval, or credential risk appears | Hooks are last-resort fuses, not planners; repeated blocks return to the responsible stage. |
+| `verification-eval-and-release` | A prompt, route, runtime, release, or user goal is claimed complete | Do not relabel smoke, config validation, skipped, needsAuth, or old artifacts as live/release-grade proof. |
+| `user-interaction-and-i18n` | Route-changing ambiguity, user choice, progress notice, or output-language handling is visible | Ask only route-changing questions and preserve locale; renderer schemas stay in runtime adapters. |
+
 ## Native ability preservation
 
 Governance may add trigger, evidence, trust review, approval, sandbox, fallback, verification, and risk boundaries. It must not delete, downgrade, or replace runtime-native abilities for Claude Code, Codex, Cursor, or OpenClaw. Unknown or partial native abilities stay `unknown` or `partial` until verified; they are not removed.

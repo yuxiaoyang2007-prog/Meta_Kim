@@ -51,13 +51,21 @@ describe("47 - Meta-theory entry classifier", () => {
     assert.equal(result.shouldAskBeforeFetch, true);
   });
 
-  test("pure read-only question stays on fast path", () => {
+  test("project understanding questions enter governed Fetch path", () => {
     const result = classifyMetaTheoryEntry("这个项目是什么？");
 
-    assert.equal(result.governedEntry, false);
-    assert.equal(result.path, "fast_path");
-    assert.equal(result.taskClassification, "pure_query");
-    assert.equal(result.triggerReason, "pure_query");
+    assert.equal(result.governedEntry, true);
+    assert.equal(result.path, "standard_path");
+    assert.equal(result.taskClassification, "meta_theory_auto");
+    assert.equal(result.triggerReason, "project_understanding_requires_fetch");
+  });
+
+  test("commercialization strategy questions enter governed Fetch path", () => {
+    const result = classifyMetaTheoryEntry("这个项目如果商业化应该怎么发展？");
+
+    assert.equal(result.governedEntry, true);
+    assert.equal(result.path, "standard_path");
+    assert.equal(result.triggerReason, "project_understanding_requires_fetch");
   });
 
   test("existing governed execution CLI exposes entry classification without running a full run", () => {

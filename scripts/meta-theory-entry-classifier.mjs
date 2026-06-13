@@ -26,6 +26,9 @@ const FILE_OR_MUTATION_RE =
 const PRODUCT_BUILD_OBJECT_RE =
   /\b(?:app|web app|dashboard|platform|tool|saas|automation|publisher|scheduler|workflow)\b|(?:系统|平台|工具|应用|网站|面板|看板|自动发布器|发布器|营销.*器|自动化|工作流|小红书)/iu;
 
+const PROJECT_UNDERSTANDING_RE =
+  /\b(?:project|repo|repository|codebase|architecture|commerciali[sz]e|market|competitor|business model|strategy|roadmap)\b|(?:项目|仓库|代码库|架构|怎么玩|干啥|做什么|商业化|市场|竞品|商业模式|发展|路线图|战略)/iu;
+
 function normalizePrompt(prompt) {
   return String(prompt ?? "").trim();
 }
@@ -46,6 +49,7 @@ export function classifyMetaTheoryEntry(prompt) {
   const durableOutputIntent = DURABLE_OUTPUT_RE.test(text);
   const fileOrMutationIntent = FILE_OR_MUTATION_RE.test(text);
   const productBuildIntent = actionIntent && PRODUCT_BUILD_OBJECT_RE.test(text);
+  const projectUnderstandingIntent = PROJECT_UNDERSTANDING_RE.test(text);
   const pureQuery = hasQuestionOnlyShape(text);
 
   if (!text) {
@@ -97,6 +101,18 @@ export function classifyMetaTheoryEntry(prompt) {
       choiceSurfaceState: "not_allowed",
       shouldAskBeforeFetch: false,
       confidence: productBuildIntent && !durableOutputIntent ? 0.82 : 0.86,
+    };
+  }
+
+  if (projectUnderstandingIntent) {
+    return {
+      governedEntry: true,
+      path: "standard_path",
+      taskClassification: "meta_theory_auto",
+      triggerReason: "project_understanding_requires_fetch",
+      choiceSurfaceState: "not_allowed",
+      shouldAskBeforeFetch: false,
+      confidence: 0.84,
     };
   }
 

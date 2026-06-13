@@ -60,6 +60,14 @@ describe("release documentation semantics", () => {
     assert.match(combined, /Model-visible field/);
     assert.match(combined, /Deletion \/ Refactor Residue Sweep/);
     assert.match(combined, /Evidence Budget/);
+    assert.match(combined, /operationSteps/);
+    assert.match(combined, /hostVisibleResult/);
+    assert.match(combined, /reviewStatus/);
+    assert.match(combined, /Install \/ Update Status Semantics/);
+    assert.match(combined, /success/);
+    assert.match(combined, /skipped/);
+    assert.match(combined, /manual/);
+    assert.match(combined, /failed/);
     assert.match(combined, /Host-side or installed-user self-test/);
     assert.match(combined, /Execution Mode Classification/);
     assert.match(combined, /real_execution/);

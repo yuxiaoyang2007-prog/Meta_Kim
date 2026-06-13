@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "runtime-priority-and-compatibility-contract-v0.1",
+  "contractId": "runtime-priority-and-compatibility-contract",
+  "owner": "meta-conductor",
+  "reviewOwner": "meta-prism",
+  "verificationOwner": "verify",
+  "prdTaskIds": ["P-085", "P-092"],
+  "status": "productized",
+  "currentAsOf": "2026-06-13",
+  "purpose": "Make Claude Code and Codex the Tier 0 primary prompt-first full-flow runtimes, while preserving OpenClaw and Cursor as compatibility runtimes that provide smoke, projection, degraded, blocked, and future native-probe evidence without blocking the primary release-grade claim.",
+  "primaryRuntimeTier": ["claude_code", "codex"],
+  "compatibilityRuntimeTier": ["openclaw", "cursor"],
+  "primaryRequiredEvidenceKind": "runtime_live_pass",
+  "compatibilityAllowedEvidenceKinds": [
+    "compatibility_smoke_pass",
+    "projection_smoke",
+    "blocked_with_contract",
+    "native_harness_missing",
+    "candidate_probe",
+    "degraded"
+  ],
+  "priorityRules": {
+    "sameFrameworkPromptRequiredForPrimary": true,
+    "primaryClosureTasks": ["P-087", "P-088", "P-089", "P-090", "P-091"],
+    "primaryBlockers": [
+      "missing claude_code runtime_live_pass",
+      "missing codex runtime_live_pass",
+      "parity failure",
+      "prompt perfection failure",
+      "evidence overclaim"
+    ],
+    "compatibilityDoesNotBlockPrimary": true,
+    "cursorNativeLiveBlockedOnlyBlocksAllToolCompatibility": true,
+    "p024BlocksOnly": "all-tool compatibility claim",
+    "compatibilityPriorityLeakTarget": 0,
+    "openclawCursorPrimaryBlockerTarget": 0
+  },
+  "compatibilityDemotion": {
+    "openclaw": {
+      "tier": "compatibility",
+      "keptEvidence": ["projection", "shard", "smoke", "batch_stability", "blocked_with_reason"],
+      "notAllowedToBlock": ["Claude Code primary release gate", "Codex primary release gate"]
+    },
+    "cursor": {
+      "tier": "compatibility",
+      "keptEvidence": ["smoke", "native_harness_blocked", "WSL candidate probe", "remainingAction"],
+      "notAllowedToBlock": ["Claude Code primary release gate", "Codex primary release gate"],
+      "remainingAction": "Install or expose a parseable Cursor Agent CLI before upgrading P-024 to native live pass."
+    }
+  },
+  "noOverclaimRules": [
+    "OpenClaw or Cursor smoke cannot be renamed primary live pass.",
+    "A blocked Cursor native live harness cannot be renamed release-grade pass.",
+    "A primary Claude Code or Codex pass cannot be broadened into Claude/Codex/Cursor/OpenClaw all-tool compatibility completion.",
+    "P-024 and P-025 remain explicit external-environment blockers until native Cursor Agent CLI evidence exists."
+  ],
+  "crossContractConsistency": [
+    "config/contracts/prompt-first-full-flow-stage-contract.json",
+    "config/contracts/prompt-first-live-acceptance-contract.json"
+  ],
+  "verificationCommand": "npm run meta:prd:runtime-priority:validate"
+}

@@ -54,6 +54,27 @@ define evidence before writing completion prose:
 Do not describe the work as complete until the evidence budget is either
 satisfied or explicitly marked blocked with a reason.
 
+Evidence template:
+
+| Field | Meaning |
+|---|---|
+| `operationSteps` | The exact install, update, sync, hook, or runtime action performed. |
+| `toolSideOutput` | The command, tool, or host-side output that proves the action happened. |
+| `hostVisibleResult` | What the user or runtime can actually see after the action. |
+| `failureBoundary` | What remains untested, blocked, optional, or unsafe to automate. |
+| `reviewStatus` | Review pass, reviewer, or explicit blocked reason. |
+
+## Install / Update Status Semantics
+
+Use one of four status classes in user-visible install/update output:
+
+| Class | Meaning | User next action |
+|---|---|---|
+| `success` | The requested action completed or the existing destination is already usable. | Continue. |
+| `skipped` | The action was intentionally not run because it is optional, already satisfied, or not selected. | Continue unless the skipped optional capability is needed. |
+| `manual` | The host requires a manual UI or command step that Meta_Kim cannot safely automate. | Perform the named manual action, then rerun the check. |
+| `failed` | The requested action did not complete and needs intervention or retry. | Fix the reported cause before declaring install/update complete. |
+
 ## Execution Mode Classification
 
 Workflow nodes use specific `executionMode` values, but reviews must first map

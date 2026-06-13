@@ -20,6 +20,73 @@ const FORMAL_TOOL_PROFILES = Object.freeze(loadFormalToolProfiles());
 const FORMAL_TOOL_NAMES = Object.freeze(FORMAL_TOOL_PROFILES.map((profile) => profile.label));
 const AGENT_PROJECTION_PROFILES = Object.freeze(loadAgentProjectionProfiles());
 
+export const INSTALL_STATUS_CLASSES = Object.freeze([
+  "success",
+  "skipped",
+  "manual",
+  "failed",
+]);
+
+export const INSTALL_STATUS_NEXT_ACTION = Object.freeze({
+  success: "continue",
+  skipped: "continue unless the skipped optional capability is needed",
+  manual: "perform the named manual action, then rerun the check",
+  failed: "fix the reported cause before declaring install or update complete",
+});
+
+export const INSTALL_STATUS_MESSAGE_CLASSES = Object.freeze({
+  okUpdated: "success",
+  warnGitUsableDespiteError: "success",
+  okArchiveInstalled: "success",
+  okCloned: "success",
+  okBasename: "success",
+  allUpToDate: "success",
+  pluginUpdated: "success",
+  codexConfigRestoredAfterEcc: "success",
+  codexChoiceSurfacePreserved: "success",
+  codexChoiceSurfaceRestored: "success",
+  okRemovedObsolete: "success",
+
+  skipExists: "skipped",
+  skipAlreadyInstalled: "skipped",
+  labelUpToDate: "skipped",
+  skillsFilterEmpty: "skipped",
+  skillsFilterNoMatches: "skipped",
+  warnManifestMissing: "skipped",
+  skipGraphifyInstalled: "skipped",
+  graphifyInstallSkippedGuideExists: "skipped",
+  noteSettingsNotAffected: "skipped",
+
+  codexNativePluginManualStep: "manual",
+  cursorNativePluginManualStep: "manual",
+  upstreamProjectLocalSkipped: "manual",
+  codexNativePluginAutoInstallIncomplete: "manual",
+  warnClaNotFound: "manual",
+  pythonNotFound: "manual",
+  pythonNotFoundGraphify: "manual",
+  pythonInstallHint: "manual",
+  pythonInstallHintGraphify: "manual",
+  warnStagingLocked: "manual",
+
+  failManifestLoad: "failed",
+  warnGitInstallFailed: "failed",
+  warnPluginFailed: "failed",
+  warnArchiveFailed: "failed",
+  warnReplaceFailed: "failed",
+  reverseModeValidationFailed: "failed",
+  reverseModeAborted: "failed",
+  warnGraphifySkillFailed: "failed",
+  warnGraphifyPipFailed: "failed",
+});
+
+export function installStatusClassForMessageKey(messageKey) {
+  return INSTALL_STATUS_MESSAGE_CLASSES[messageKey] ?? null;
+}
+
+export function installStatusNextAction(statusClass) {
+  return INSTALL_STATUS_NEXT_ACTION[statusClass] ?? null;
+}
+
 /** Align with setup.mjs LANG_ARG_ALIASES so `--lang zh` resolves to zh-CN. */
 const LANG_ALIASES = { zh: "zh-CN", ja: "ja-JP", ko: "ko-KR" };
 function normalizeLangCode(code) {
@@ -1110,6 +1177,7 @@ const REPORT_STRINGS = {
     blocked: "Blocked",
     workerTask: "WorkerTask",
     candidate: "Candidate",
+    branch: "Branch",
     type: "Type",
     target: "Target",
     dryRunWrites: "Dry-run writes",

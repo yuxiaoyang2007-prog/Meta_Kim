@@ -8,6 +8,108 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [Unreleased]
 
+## [2.8.28] - 2026-06-13
+
+### Added
+
+- **Default Governed Execution Evidence** - Added validators and run artifact packets proving the default Meta-Theory path emits governance agent results, Conductor consumption evidence, worker results, and worker execution evidence without relabeling structural boards as live runtime proof.
+- **Research-to-Native Productization** - Added source-backed productization contracts for research adoption, MCP/provider maturity, trace/eval control, AG-UI-style stage events, performance/cost budgets, and context engineering.
+- **Smooth Capability Discovery Guard** - Added a PRD validator that keeps agents, skills, scripts, MCP, tools, hooks, runtimes, memory, graph, and external providers as first-class discovery categories while allowing safe `no_expansion_needed` cases.
+- **Runtime Priority Contract** - Added a machine-readable contract and validator that keep Claude Code and Codex as primary prompt-first runtimes while preserving OpenClaw and Cursor as compatibility targets only.
+
+### Changed
+
+- **Framework Prompt Architecture** - Prompt assets are now validated across layered system/project/agent/skill/contract/runtime-adapter/eval surfaces, with review dimensions, regression fixtures, and context-sprawl budget rules.
+- **Governance Verification** - `meta:verify:governance` now includes default execution, asset sedimentation, research-native, framework prompt architecture, smooth capability discovery, and runtime priority validators.
+- **Single PRD Source** - The local-private PRD now records P-067, P-068 through P-084, P-085, and P-092 as locally tested while keeping Cursor native live as the remaining all-tool compatibility blocker.
+
+### Verification
+
+- `npm run meta:prd:smooth-capability:validate`
+- `npm run meta:prd:runtime-priority:validate`
+- `node scripts/run-node-tests.mjs "tests/meta-theory/29-capability-gap-complete-product-prd.test.mjs"`
+- `npm run meta:verify:governance`
+- `npm run meta:release:smoke`
+- `git diff --check`
+- `npm run meta:github:gap`
+
+## [2.8.27] - 2026-06-13
+
+### Added
+
+- **Prompt-First Live Acceptance** - Added a PRD-linked live acceptance contract and runner that proves the same framework prompt through Claude Code and Codex before the prompt-first flow can be called complete.
+- **Source-Backed PRD Gates** - Added PRD source-map and dossier validators for product discovery, prompt/runtime, MCP/tools/providers, security, evaluation/observability, and architecture/release categories.
+
+### Changed
+
+- **Abstract Prompt Capability Validation** - `meta:prompt:validate` and governance verification now cover abstract capability families such as capability discovery, prompt intake optimization, planning continuity, runtime-native surfaces, MCP/providers, memory/graph, safety hooks, release evidence, and i18n.
+- **Prompt-First Release Evidence** - Governance verification now includes prompt-first stage contracts, live acceptance fixtures, source-map validation, PRD category dossiers, and public docs image-asset boundaries.
+- **Codex Live Runner Stability** - The Codex live acceptance runner now sends the prompt through stdin with `codex exec -`, avoiding Windows `.cmd` multiline prompt stalls while preserving real Codex execution evidence.
+
+### Verification
+
+- `npm run meta:prd:prompt-first-live:run`
+- `npm run meta:prd:prompt-first-live:validate`
+- `npm run meta:verify:governance`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
+## [2.8.26] - 2026-06-12
+
+### Fixed
+
+- **Meta-Theory Deep Fetch Entry** - Project/repo/codebase understanding and commercialization strategy prompts now enter the governed Fetch path instead of falling through to shallow fast-path answers.
+- **Cross-Runtime Entry Parity** - Added Claude Code `/meta-theory` command projection support, Cursor's native always-on dispatch rule, and OpenClaw HEARTBEAT/SOUL project-understanding requirements so Claude, Codex, Cursor, and OpenClaw all route through the same governed entry contract.
+- **Run Artifact Evidence** - `meta:theory:run` now records project overview, maintainer contract, command inventory, Graphify, MCP, capability-index, machine-contract, and external-research capability source classes for project-understanding runs.
+
+### Verification
+
+- `node --test tests/meta-theory/47-meta-theory-entry-classifier.test.mjs`
+- `node --test tests/setup/sync-runtimes-manifest.test.mjs`
+- `node --test tests/governance/core-loop-contract.test.mjs`
+- `npm run meta:sync`
+- `npm run meta:check`
+- `git diff --check`
+
+## [2.8.25] - 2026-06-12
+
+### Fixed
+
+- **Claude Code Global Hook Cleanup** - Global Meta_Kim sync now validates the Claude Code `settings.json` hook commands, not only the `~/.claude/hooks/meta-kim/` package directory. This catches stale global Meta_Kim hook registrations that point at removed scripts and cause Claude Code `MODULE_NOT_FOUND` Stop hook errors.
+- **Installed-User Recovery Path** - Running the normal setup/update path now cleans stale global Meta_Kim hook entries and leaves only the currently managed global hook command, so existing installations recover without hand-editing Claude settings.
+
+### Verification
+
+- `npm run meta:check:global:release`
+- `npm run meta:test:setup`
+- `npm run meta:verify:governance`
+- `npm run meta:check`
+- `git diff --check`
+
+## [2.8.24] - 2026-06-12
+
+### Changed
+
+- **Runtime Safety Hardening Contract** - Added a release-grade governance contract that binds the five recent repair lanes into one validator: host config merge safety, cross-runtime HookPrompt protocol modeling, deletion/refactor residue sweep, runtime evidence templates, and install/update status semantics.
+- **Install Status Semantics** - Install and update messages now have machine-readable status classes (`success`, `skipped`, `manual`, `failed`) with next-action semantics, so user-facing setup output can distinguish expected skips, manual host steps, and real failures.
+- **HookPrompt Bad-Input Regression Coverage** - Added regression fixtures for markdown fences, delegated prompts, and internal-goal filtering, and verified Codex/Cursor adapters keep optimized prompt content in model-visible fields without reusing UI notices as policy.
+
+### Verification
+
+- Added `npm run meta:runtime:safety:validate` to `meta:verify:governance`.
+- `npm run meta:verify:governance`
+- `npm run meta:test:setup`
+- `npm run meta:sync`
+- `npm run discover:global`
+- `npm run meta:check`
+- `npm run meta:validate`
+- `npm run meta:release:smoke`
+- `npm run meta:setup:check`
+- `npm run meta:validate:run -- tests/fixtures/run-artifacts/valid-core-loop-release-run.json`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:verify:all`
+- `git diff --check`
+
 ## [2.8.23] - 2026-06-12
 
 ### Changed

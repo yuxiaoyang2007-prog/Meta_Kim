@@ -57,7 +57,11 @@ describe("sync-runtimes / inferProjectCategory", () => {
     );
   });
 
-  test("maps Codex slash commands to project settings category", () => {
+  test("maps runtime slash commands to project settings category", () => {
+    assert.equal(
+      inferProjectCategory(p(".claude/commands/meta-theory.md"), REPO),
+      CATEGORIES.G,
+    );
     assert.equal(
       inferProjectCategory(p(".codex/commands/meta-theory.md"), REPO),
       CATEGORIES.G,
@@ -397,6 +401,26 @@ describe("sync-runtimes / OpenClaw template portability", () => {
     assert.match(templateRaw, /__REPO_ROOT__\/openclaw\/workspaces/);
     assert.match(templateRaw, /__REPO_ROOT__\/openclaw\/skills/);
     assert.doesNotMatch(templateRaw, /before_tool_call/);
+  });
+
+  test("Cursor and OpenClaw expose project-understanding deep Fetch entry contracts", async () => {
+    const cursorRule = await readFsFile(
+      "canonical/runtime-assets/cursor/rules/meta-theory-dispatch.mdc",
+      "utf8",
+    );
+    const openclawHeartbeat = await readFsFile(
+      "canonical/runtime-assets/openclaw/HEARTBEAT.template.md",
+      "utf8",
+    );
+    const syncRuntime = await readFsFile("scripts/sync-runtimes.mjs", "utf8");
+
+    for (const source of [cursorRule, openclawHeartbeat, syncRuntime]) {
+      assert.match(source, /npm run meta:theory:run/);
+      assert.match(source, /project understanding|project-understanding/i);
+      assert.match(source, /Graphify/);
+      assert.match(source, /blocked_to_fetch/);
+      assert.match(source, /MCP/);
+    }
   });
 });
 

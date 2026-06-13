@@ -1,0 +1,598 @@
+{
+  "schemaVersion": "prd-category-source-map-contract-v0.1",
+  "contractId": "prd-category-source-map-contract",
+  "owner": "meta-scout",
+  "reviewOwner": "meta-prism",
+  "verificationOwner": "verify",
+  "prdTaskId": "P-094",
+  "status": "all_dossiers_ready",
+  "currentAsOf": "2026-06-13",
+  "purpose": "Require every PRD major category to have source-backed source maps before Meta_Kim may set best-practice decisions, metrics, priorities, or Definition of Done for that category.",
+  "globalRules": {
+    "noModelKnowledgePrdDecisionGate": {
+      "id": "no-model-knowledge-prd-decision-gate",
+      "defaultDecisionWithoutSource": "research_required",
+      "returnToStage": "Fetch",
+      "forbiddenClaims": [
+        "best_practice_without_source",
+        "metric_without_source",
+        "priority_without_source",
+        "definition_of_done_without_source",
+        "live_or_release_grade_claim_without_fresh_evidence"
+      ]
+    },
+    "requiredCategoryFields": [
+      "categoryId",
+      "prdTaskId",
+      "owner",
+      "status",
+      "researchQuestion",
+      "primarySources",
+      "counterevidenceRequirements",
+      "freshnessPolicy",
+      "nativeInsertionPoints",
+      "decisionImpactTargets",
+      "acceptanceMetrics",
+      "mustNotDecideWithout"
+    ],
+    "requiredSourceFields": [
+      "sourceId",
+      "title",
+      "publisher",
+      "url",
+      "sourceClass",
+      "authority",
+      "currentAsOf",
+      "freshnessWindowDays",
+      "claimUses",
+      "nativeInsertionPoints"
+    ],
+    "sourceClassEnum": [
+      "official_docs",
+      "standards_body",
+      "security_framework",
+      "implementation_docs",
+      "observability_standard",
+      "architecture_framework",
+      "local_repo_evidence",
+      "counterevidence"
+    ],
+    "minimums": {
+      "categoryCount": 6,
+      "primarySourcesPerCategory": 3,
+      "counterevidenceRequirementsPerCategory": 1,
+      "nativeInsertionPointsPerCategory": 2,
+      "decisionImpactTargetsPerCategory": 4
+    }
+  },
+  "categories": [
+    {
+      "categoryId": "product-requirements-discovery",
+      "prdTaskId": "P-095",
+      "owner": "docs",
+      "status": "dossier_ready",
+      "dossierId": "product-requirements-discovery-dossier-v0.1",
+      "dossierRef": "docs/prd-category-product-requirements-discovery-dossier.zh-CN.md",
+      "verificationCommand": "npm run meta:prd:product-discovery:validate",
+      "researchQuestion": "How should Meta_Kim define PRD, requirements, and discovery decisions without relying on product intuition alone?",
+      "primarySources": [
+        {
+          "sourceId": "atlassian-prd-requirements",
+          "title": "What is a Product Requirements Document (PRD)?",
+          "publisher": "Atlassian",
+          "url": "https://www.atlassian.com/agile/product-management/requirements",
+          "sourceClass": "official_docs",
+          "authority": "product_practice_reference",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["single_source_of_truth", "user_needs", "success_criteria"],
+          "nativeInsertionPoints": ["docs/ai-native-capability-gap-mvp-prd.zh-CN.md", "P-095 research dossier"]
+        },
+        {
+          "sourceId": "atlassian-prd-template",
+          "title": "Product requirements document template",
+          "publisher": "Atlassian Confluence",
+          "url": "https://www.atlassian.com/software/confluence/templates/product-requirements",
+          "sourceClass": "official_docs",
+          "authority": "product_practice_reference",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["assumptions", "user_stories", "ux_design", "scoping"],
+          "nativeInsertionPoints": ["docs/prd-category-product-requirements-discovery-dossier.zh-CN.md", "P-095 research dossier"]
+        },
+        {
+          "sourceId": "nng-discovery-phase",
+          "title": "Discovery: Definition",
+          "publisher": "Nielsen Norman Group",
+          "url": "https://www.nngroup.com/articles/discovery-phase/",
+          "sourceClass": "official_docs",
+          "authority": "ux_research_reference",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 365,
+          "claimUses": ["problem_space_research", "evidence_before_direction", "build_the_right_thing"],
+          "nativeInsertionPoints": ["docs/ai-native-capability-gap-mvp-prd.zh-CN.md", "P-095 research dossier"]
+        },
+        {
+          "sourceId": "ieee-29148-requirements",
+          "title": "ISO/IEC/IEEE 29148:2018",
+          "publisher": "IEEE Standards Association",
+          "url": "https://standards.ieee.org/standard/29148-2018.html",
+          "sourceClass": "standards_body",
+          "authority": "requirements_engineering_standard",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 730,
+          "claimUses": ["requirements_process", "requirement_attributes", "life_cycle_traceability"],
+          "nativeInsertionPoints": ["config/contracts/prd-category-source-map-contract.json", "P-095 research dossier"]
+        },
+        {
+          "sourceId": "atlassian-jpd-ideas",
+          "title": "Introduction to Jira Product Discovery ideas",
+          "publisher": "Atlassian",
+          "url": "https://www.atlassian.com/software/jira/product-discovery/guides/ideas/overview",
+          "sourceClass": "official_docs",
+          "authority": "product_discovery_tool_reference",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["problems", "opportunities", "potential_solutions", "feature_requests", "feedback_capture"],
+          "nativeInsertionPoints": ["docs/prd-category-product-requirements-discovery-dossier.zh-CN.md", "P-095 research dossier"]
+        }
+      ],
+      "counterevidenceRequirements": [
+        "Record when a PRD template is insufficient without discovery evidence, stakeholder alignment, or requirement traceability."
+      ],
+      "freshnessPolicy": {
+        "freshnessRequired": true,
+        "returnToStageOnStale": "Fetch",
+        "staleIfOlderThanDays": 365
+      },
+      "nativeInsertionPoints": ["unique PRD", "prdCategoryResearchPacket", "PRD tests"],
+      "decisionImpactTargets": ["requirements_shape", "user_discovery", "success_metrics", "priority", "definition_of_done"],
+      "acceptanceMetrics": ["source_map_completeness_100", "source_freshness_recorded_100", "research_to_priority_ordering_violation_0", "product_requirements_discovery_dossier_pass_100"],
+      "mustNotDecideWithout": ["source-backed problem statement", "success criteria source", "requirement quality source"]
+    },
+    {
+      "categoryId": "prompt-context-agent-runtime",
+      "prdTaskId": "P-096",
+      "owner": "meta-genesis",
+      "status": "dossier_ready",
+      "dossierId": "prompt-context-agent-runtime-dossier-v0.1",
+      "dossierRef": "docs/prd-category-prompt-context-agent-runtime-dossier.zh-CN.md",
+      "verificationCommand": "npm run meta:prd:prompt-runtime:validate",
+      "researchQuestion": "How should Meta_Kim define framework prompts, context boundaries, and agent runtime behavior for Claude Code and Codex?",
+      "primarySources": [
+        {
+          "sourceId": "openai-prompt-engineering",
+          "title": "Prompt engineering",
+          "publisher": "OpenAI",
+          "url": "https://developers.openai.com/api/docs/guides/prompt-engineering",
+          "sourceClass": "official_docs",
+          "authority": "model_provider_docs",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 90,
+          "claimUses": ["clear_instructions", "intended_output", "structured_prompt_iteration"],
+          "nativeInsertionPoints": ["config/contracts/prompt-abstract-capability-contract.json", "P-096 research dossier"]
+        },
+        {
+          "sourceId": "openai-prompt-guidance",
+          "title": "Prompt guidance",
+          "publisher": "OpenAI",
+          "url": "https://developers.openai.com/api/docs/guides/prompt-guidance",
+          "sourceClass": "official_docs",
+          "authority": "model_provider_docs",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 90,
+          "claimUses": ["outcome_first_prompts", "legacy_process_stack_reduction", "tool_workflow_preambles"],
+          "nativeInsertionPoints": ["P-096 research dossier", "P-090 prompt perfection validator"]
+        },
+        {
+          "sourceId": "anthropic-prompt-engineering-overview",
+          "title": "Prompt engineering overview",
+          "publisher": "Anthropic",
+          "url": "https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview",
+          "sourceClass": "official_docs",
+          "authority": "model_provider_docs",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["success_criteria_controllable_by_prompting", "prompt_vs_system_design_boundary", "prompt_iteration"],
+          "nativeInsertionPoints": ["P-096 research dossier", "prompt review rubric"]
+        },
+        {
+          "sourceId": "anthropic-context-engineering",
+          "title": "Effective context engineering for AI agents",
+          "publisher": "Anthropic",
+          "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents",
+          "sourceClass": "official_docs",
+          "authority": "agent_context_reference",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["context_state", "tool_context", "agent_workflow_context"],
+          "nativeInsertionPoints": ["canonical/skills/meta-theory/SKILL.md", "P-096 research dossier"]
+        },
+        {
+          "sourceId": "openai-agents-sdk",
+          "title": "Agents SDK",
+          "publisher": "OpenAI",
+          "url": "https://developers.openai.com/api/docs/guides/agents",
+          "sourceClass": "implementation_docs",
+          "authority": "agent_runtime_docs",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 90,
+          "claimUses": ["agent_definitions", "handoffs", "guardrails", "observability"],
+          "nativeInsertionPoints": ["P-086 prompt-first full-flow contract", "P-096 research dossier"]
+        },
+        {
+          "sourceId": "google-gemini-prompt-design",
+          "title": "Prompt design strategies",
+          "publisher": "Google AI for Developers",
+          "url": "https://ai.google.dev/gemini-api/docs/prompting-strategies",
+          "sourceClass": "official_docs",
+          "authority": "model_provider_docs",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["iterative_prompt_design", "observed_response_refinement"],
+          "nativeInsertionPoints": ["P-090 prompt perfection validator", "P-096 research dossier"]
+        }
+      ],
+      "counterevidenceRequirements": [
+        "Record when prompt wording is insufficient and the decision belongs to context selection, tool policy, evals, runtime support, or model choice."
+      ],
+      "freshnessPolicy": {
+        "freshnessRequired": true,
+        "returnToStageOnStale": "Fetch",
+        "staleIfOlderThanDays": 180
+      },
+      "nativeInsertionPoints": ["prompt contract", "runtime adapter docs", "prompt regression fixtures"],
+      "decisionImpactTargets": ["prompt_layering", "context_policy", "agent_runtime", "metrics", "eval", "definition_of_done"],
+      "acceptanceMetrics": ["prompt_layering_violation_0", "required_content_missing_0", "prompt_regression_fixture_minimum_met"],
+      "mustNotDecideWithout": ["provider prompt guidance", "context boundary source", "agent runtime source"]
+    },
+    {
+      "categoryId": "mcp-tools-providers",
+      "prdTaskId": "P-097",
+      "owner": "meta-artisan",
+      "status": "dossier_ready",
+      "dossierId": "mcp-tools-providers-dossier-v0.1",
+      "dossierRef": "docs/prd-category-mcp-tools-providers-dossier.zh-CN.md",
+      "verificationCommand": "npm run meta:prd:mcp-tools:validate",
+      "researchQuestion": "How should Meta_Kim define MCP, tool, provider, and permission boundaries without treating configuration as live proof?",
+      "primarySources": [
+        {
+          "sourceId": "mcp-specification",
+          "title": "Model Context Protocol Specification 2025-11-25",
+          "publisher": "Model Context Protocol",
+          "url": "https://modelcontextprotocol.io/specification/2025-11-25",
+          "sourceClass": "official_docs",
+          "authority": "protocol_specification",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 90,
+          "claimUses": ["protocol_requirements", "schemas", "client_server_boundary"],
+          "nativeInsertionPoints": ["config/capability-index/provider-registry.json", "P-097 research dossier"]
+        },
+        {
+          "sourceId": "mcp-authorization",
+          "title": "Authorization",
+          "publisher": "Model Context Protocol",
+          "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization",
+          "sourceClass": "official_docs",
+          "authority": "protocol_authorization_specification",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 90,
+          "claimUses": ["auth_flow", "restricted_server_requests", "resource_owner_boundary"],
+          "nativeInsertionPoints": ["config/runtime-capability-matrix.json", "P-097 research dossier"]
+        },
+        {
+          "sourceId": "mcp-security-best-practices",
+          "title": "MCP Security Best Practices",
+          "publisher": "Model Context Protocol",
+          "url": "https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices",
+          "sourceClass": "official_docs",
+          "authority": "protocol_security_guidance",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 90,
+          "claimUses": ["threat_vectors", "authorization_security", "server_operator_guidance"],
+          "nativeInsertionPoints": ["P-097 research dossier", "runtime safety contract"]
+        },
+        {
+          "sourceId": "nsa-mcp-security",
+          "title": "Model Context Protocol (MCP): Security Design Considerations",
+          "publisher": "NSA",
+          "url": "https://www.nsa.gov/Press-Room/Press-Releases-Statements/Press-Release-View/Article/4496698/nsa-releases-security-design-considerations-for-ai-driven-automation-leveraging/",
+          "sourceClass": "security_framework",
+          "authority": "government_security_guidance",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["secure_by_default_limits", "implementation_rigor", "validation_tools"],
+          "nativeInsertionPoints": ["config/contracts/runtime-safety", "P-097 research dossier"]
+        },
+        {
+          "sourceId": "openai-agents-tools",
+          "title": "Tools",
+          "publisher": "OpenAI Agents SDK",
+          "url": "https://openai.github.io/openai-agents-python/tools/",
+          "sourceClass": "implementation_docs",
+          "authority": "agent_tool_runtime_docs",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 90,
+          "claimUses": ["hosted_tools", "function_tools", "tool_context", "agent_tool_boundary"],
+          "nativeInsertionPoints": ["P-097 research dossier", "provider registry"]
+        }
+      ],
+      "counterevidenceRequirements": [
+        "Record when MCP provider config exists but auth, tool schema, sandbox, or live invocation evidence is missing."
+      ],
+      "freshnessPolicy": {
+        "freshnessRequired": true,
+        "returnToStageOnStale": "Fetch",
+        "staleIfOlderThanDays": 90
+      },
+      "nativeInsertionPoints": ["provider registry", "runtime matrix", "MCP verification tests"],
+      "decisionImpactTargets": ["tool_schema", "auth_trust_boundary", "runtime_support", "live_proof", "metrics", "definition_of_done"],
+      "acceptanceMetrics": ["provider_config_not_live_proof_0", "auth_boundary_recorded_100", "tool_schema_recorded_100"],
+      "mustNotDecideWithout": ["protocol version source", "authorization source", "security guidance source"]
+    },
+    {
+      "categoryId": "security-safety-red-team",
+      "prdTaskId": "P-098",
+      "owner": "meta-sentinel",
+      "status": "dossier_ready",
+      "dossierId": "security-safety-red-team-dossier-v0.1",
+      "dossierRef": "docs/prd-category-security-safety-red-team-dossier.zh-CN.md",
+      "verificationCommand": "npm run meta:prd:security-safety:validate",
+      "researchQuestion": "How should Meta_Kim define safety, permission, hook, sandbox, approval, and red-team requirements for agentic workflows?",
+      "primarySources": [
+        {
+          "sourceId": "owasp-agentic-top10-2026",
+          "title": "OWASP Top 10 for Agentic Applications 2026",
+          "publisher": "OWASP Gen AI Security Project",
+          "url": "https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/",
+          "sourceClass": "security_framework",
+          "authority": "application_security_framework",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["agent_goal_hijack", "tool_misuse", "identity_privilege", "memory_context_poisoning"],
+          "nativeInsertionPoints": ["security red-team fixtures", "P-098 research dossier"]
+        },
+        {
+          "sourceId": "owasp-llm-top10",
+          "title": "OWASP Top 10 for LLM Applications",
+          "publisher": "OWASP",
+          "url": "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
+          "sourceClass": "security_framework",
+          "authority": "llm_security_framework",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["prompt_injection", "insecure_output_handling", "supply_chain"],
+          "nativeInsertionPoints": ["hook policy", "P-098 research dossier"]
+        },
+        {
+          "sourceId": "nist-ai-600-1",
+          "title": "Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile",
+          "publisher": "NIST",
+          "url": "https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence",
+          "sourceClass": "security_framework",
+          "authority": "risk_management_framework",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 365,
+          "claimUses": ["trustworthiness", "govern_map_measure_manage", "cross_sector_risk"],
+          "nativeInsertionPoints": ["risk policy", "P-098 research dossier"]
+        },
+        {
+          "sourceId": "nsa-mcp-security-red-team",
+          "title": "Model Context Protocol (MCP): Security Design Considerations",
+          "publisher": "NSA",
+          "url": "https://www.nsa.gov/Press-Room/Press-Releases-Statements/Press-Release-View/Article/4496698/nsa-releases-security-design-considerations-for-ai-driven-automation-leveraging/",
+          "sourceClass": "security_framework",
+          "authority": "government_security_guidance",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["secure_by_default_limits", "authorization_risk", "validation_tools"],
+          "nativeInsertionPoints": ["P-098 research dossier", "MCP red-team fixtures"]
+        },
+        {
+          "sourceId": "mitre-advml-threat-matrix",
+          "title": "Adversarial ML Threat Matrix",
+          "publisher": "MITRE",
+          "url": "https://github.com/mitre/advmlthreatmatrix",
+          "sourceClass": "security_framework",
+          "authority": "adversarial_ml_threat_reference",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 365,
+          "claimUses": ["tactics_techniques", "red_team_mapping", "threat_fixture_design"],
+          "nativeInsertionPoints": ["P-098 research dossier", "security red-team fixtures"]
+        }
+      ],
+      "counterevidenceRequirements": [
+        "Record when prompt wording or hook refusal alone cannot mitigate tool misuse, privilege, memory poisoning, or supply-chain risk."
+      ],
+      "freshnessPolicy": {
+        "freshnessRequired": true,
+        "returnToStageOnStale": "Fetch",
+        "staleIfOlderThanDays": 180
+      },
+      "nativeInsertionPoints": ["security red-team fixtures", "runtime safety contract", "hook validator"],
+      "decisionImpactTargets": ["threat_model", "least_privilege", "approval_policy", "sandbox_policy", "metrics", "definition_of_done"],
+      "acceptanceMetrics": ["red_team_fixture_minimum_met", "high_risk_write_without_approval_0", "prompt_as_only_defense_0"],
+      "mustNotDecideWithout": ["agentic security source", "LLM application risk source", "risk-management source"]
+    },
+    {
+      "categoryId": "eval-verification-observability",
+      "prdTaskId": "P-099",
+      "owner": "verify",
+      "status": "dossier_ready",
+      "dossierId": "eval-verification-observability-dossier-v0.1",
+      "dossierRef": "docs/prd-category-eval-verification-observability-dossier.zh-CN.md",
+      "verificationCommand": "npm run meta:prd:eval-observability:validate",
+      "researchQuestion": "How should Meta_Kim define eval, verification, trace, and observability requirements for prompt-first and agentic execution claims?",
+      "primarySources": [
+        {
+          "sourceId": "openai-evaluation-best-practices",
+          "title": "Evaluation best practices",
+          "publisher": "OpenAI",
+          "url": "https://developers.openai.com/api/docs/guides/evaluation-best-practices",
+          "sourceClass": "official_docs",
+          "authority": "model_provider_eval_docs",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 90,
+          "claimUses": ["evals_for_variable_ai_outputs", "production_testing", "eval_transition_risk"],
+          "nativeInsertionPoints": ["eval harness", "P-099 research dossier"]
+        },
+        {
+          "sourceId": "openai-agents-tracing",
+          "title": "Tracing",
+          "publisher": "OpenAI Agents SDK",
+          "url": "https://openai.github.io/openai-agents-python/tracing/",
+          "sourceClass": "implementation_docs",
+          "authority": "agent_trace_docs",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 90,
+          "claimUses": ["model_generations", "tool_calls", "handoffs", "guardrails"],
+          "nativeInsertionPoints": ["runtime evidence packet", "P-099 research dossier"]
+        },
+        {
+          "sourceId": "opentelemetry-genai",
+          "title": "Semantic conventions for generative AI systems",
+          "publisher": "OpenTelemetry",
+          "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/",
+          "sourceClass": "observability_standard",
+          "authority": "observability_standard",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["gen_ai_spans", "gen_ai_events", "metrics", "provider_attributes"],
+          "nativeInsertionPoints": ["trace schema", "P-099 research dossier"]
+        },
+        {
+          "sourceId": "anthropic-agent-evals",
+          "title": "Demystifying evals for AI agents",
+          "publisher": "Anthropic",
+          "url": "https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents",
+          "sourceClass": "official_docs",
+          "authority": "model_provider_eval_docs",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["eval_loop", "agent_evaluation", "graders_and_tasks"],
+          "nativeInsertionPoints": ["P-099 research dossier", "eval harness"]
+        },
+        {
+          "sourceId": "langsmith-evaluation",
+          "title": "Evaluation",
+          "publisher": "LangSmith",
+          "url": "https://docs.langchain.com/langsmith/evaluation",
+          "sourceClass": "implementation_docs",
+          "authority": "agent_eval_platform_docs",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["datasets", "evaluators", "experiment_tracking"],
+          "nativeInsertionPoints": ["P-099 research dossier", "eval harness"]
+        }
+      ],
+      "counterevidenceRequirements": [
+        "Record when a green validator, old artifact, smoke test, skipped state, or config-only proof is not live verification."
+      ],
+      "freshnessPolicy": {
+        "freshnessRequired": true,
+        "returnToStageOnStale": "Fetch",
+        "staleIfOlderThanDays": 90
+      },
+      "nativeInsertionPoints": ["verification gate", "trace/eval schema", "no-overclaim tests"],
+      "decisionImpactTargets": ["eval_design", "trace_metadata", "fresh_verification", "overclaim_gate", "metrics", "definition_of_done"],
+      "acceptanceMetrics": ["fresh_verification_100", "overclaim_count_0", "trace_metadata_required_fields_100"],
+      "mustNotDecideWithout": ["eval source", "trace source", "observability source"]
+    },
+    {
+      "categoryId": "architecture-performance-i18n-release",
+      "prdTaskId": "P-100",
+      "owner": "meta-prism",
+      "status": "dossier_ready",
+      "dossierId": "architecture-performance-i18n-release-dossier-v0.1",
+      "dossierRef": "docs/prd-category-architecture-performance-i18n-release-dossier.zh-CN.md",
+      "verificationCommand": "npm run meta:prd:architecture-release:validate",
+      "researchQuestion": "How should Meta_Kim define architecture, performance, i18n, and release gates with measurable source-backed tradeoffs?",
+      "primarySources": [
+        {
+          "sourceId": "google-cloud-well-architected",
+          "title": "Google Cloud Well-Architected Framework",
+          "publisher": "Google Cloud",
+          "url": "https://docs.cloud.google.com/architecture/framework",
+          "sourceClass": "architecture_framework",
+          "authority": "cloud_architecture_framework",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 180,
+          "claimUses": ["secure_efficient_resilient_cost_optimized", "performance", "operational_excellence"],
+          "nativeInsertionPoints": ["architecture audit metrics", "P-100 research dossier"]
+        },
+        {
+          "sourceId": "w3c-i18n",
+          "title": "About internationalization",
+          "publisher": "W3C",
+          "url": "https://www.w3.org/International/i18n-drafts/nav/about",
+          "sourceClass": "standards_body",
+          "authority": "internationalization_standards_activity",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 365,
+          "claimUses": ["language_script_culture", "global_web_support", "i18n_considerations"],
+          "nativeInsertionPoints": ["i18n guard", "P-100 research dossier"]
+        },
+        {
+          "sourceId": "ieee-29148-architecture-requirements",
+          "title": "ISO/IEC/IEEE 29148:2018",
+          "publisher": "IEEE Standards Association",
+          "url": "https://standards.ieee.org/standard/29148-2018.html",
+          "sourceClass": "standards_body",
+          "authority": "requirements_engineering_standard",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 730,
+          "claimUses": ["quality_requirements", "traceability", "life_cycle_release_requirements"],
+          "nativeInsertionPoints": ["P-100 research dossier", "release gate"]
+        },
+        {
+          "sourceId": "openai-production-best-practices",
+          "title": "Production best practices",
+          "publisher": "OpenAI",
+          "url": "https://developers.openai.com/api/docs/guides/production-best-practices",
+          "sourceClass": "official_docs",
+          "authority": "model_provider_production_docs",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 90,
+          "claimUses": ["production_readiness", "monitoring", "reliability"],
+          "nativeInsertionPoints": ["P-100 research dossier", "release gate"]
+        },
+        {
+          "sourceId": "openai-rate-limits",
+          "title": "Rate limits",
+          "publisher": "OpenAI",
+          "url": "https://developers.openai.com/api/docs/guides/rate-limits",
+          "sourceClass": "official_docs",
+          "authority": "model_provider_rate_limit_docs",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 90,
+          "claimUses": ["rate_limit_policy", "throughput_budget", "backoff_and_capacity"],
+          "nativeInsertionPoints": ["P-100 research dossier", "performance budget"]
+        },
+        {
+          "sourceId": "local-runtime-matrices",
+          "title": "Meta_Kim runtime, OS, provider, and capability matrices",
+          "publisher": "Meta_Kim",
+          "url": "config/runtime-capability-matrix.json",
+          "sourceClass": "local_repo_evidence",
+          "authority": "project_source_of_truth",
+          "currentAsOf": "2026-06-13",
+          "freshnessWindowDays": 30,
+          "claimUses": ["runtime_support", "os_support", "provider_route", "release_boundary"],
+          "nativeInsertionPoints": ["release gate", "P-100 research dossier"]
+        }
+      ],
+      "counterevidenceRequirements": [
+        "Record when a cloud architecture framework is only a reference and must be adapted to local runtime, OS, package, i18n, and release constraints."
+      ],
+      "freshnessPolicy": {
+        "freshnessRequired": true,
+        "returnToStageOnStale": "Fetch",
+        "staleIfOlderThanDays": 180
+      },
+      "nativeInsertionPoints": ["architecture audit validator", "i18n parity tests", "release gate"],
+      "decisionImpactTargets": ["architecture", "performance_budget", "cost_budget", "i18n_parity", "release_gate", "metrics", "definition_of_done"],
+      "acceptanceMetrics": ["p95_budget_recorded_100", "i18n_key_parity_100", "release_overclaim_count_0"],
+      "mustNotDecideWithout": ["architecture framework source", "i18n source", "local runtime and OS evidence"]
+    }
+  ]
+}

@@ -1,0 +1,221 @@
+{
+  "schemaVersion": "prompt-first-full-flow-stage-contract-v0.1",
+  "contractId": "prompt-first-full-flow-stage-contract",
+  "owner": "meta-genesis",
+  "reviewOwner": "meta-prism",
+  "verificationOwner": "verify",
+  "prdTaskId": "P-086",
+  "status": "contract_ready",
+  "currentAsOf": "2026-06-13",
+  "purpose": "Define the required content, failure conditions, return-to-stage policy, owner boundary, and evidence standard for one framework prompt moving through Prompt intake, Critical, Fetch, Thinking, Execution, Review, Meta-Review, Verification, and Evolution before Claude Code and Codex live full-flow runs may claim pass.",
+  "primaryRuntimeTier": ["claude_code", "codex"],
+  "compatibilityRuntimeTier": ["cursor", "openclaw"],
+  "globalRules": {
+    "sameFrameworkPromptRequired": true,
+    "missingRequiredContentTarget": 0,
+    "commandPassIsNotUserGoalDone": true,
+    "configSmokeOrBoardIsNotLiveProof": true,
+    "planningFilesUpdateOnly": true,
+    "capabilityDiscoveryBeforeExecution": true,
+    "reviewBeforeVerification": true,
+    "noOverclaimBeforeLiveEvidence": true,
+    "mustPreserveRuntimeNativeAbilities": true
+  },
+  "hardConflictRules": [
+    {
+      "id": "same-framework-prompt",
+      "rule": "P-087 and P-088 must use the same frameworkPromptPacket; one runtime pass cannot represent both runtimes."
+    },
+    {
+      "id": "planning-files-update-only",
+      "rule": "task_plan.md, findings.md, and progress.md may be appended, refined, or marked superseded; they must not be reset or overwritten by a prompt-first full-flow run."
+    },
+    {
+      "id": "capability-discovery-before-execution",
+      "rule": "Fetch and Thinking must finish capability discovery and owner/loadout selection before any execution claim is accepted."
+    },
+    {
+      "id": "board-not-live-proof",
+      "rule": "orchestrationTaskBoardPacket, workerTaskPackets, schema validation, smoke output, UI notice, or config validation is not live execution proof."
+    },
+    {
+      "id": "worker-evidence-required",
+      "rule": "Execution pass requires workerResultPackets and workerExecutionEvidence produced by the selected owner, skill, command, MCP/tool, runtime tool, or other selected capability."
+    },
+    {
+      "id": "review-meta-review-required",
+      "rule": "Review and Meta-Review must receive and judge the upstream stage evidence before Verification can mark a runtime full-flow pass."
+    }
+  ],
+  "stages": [
+    {
+      "stageId": "prompt_intake",
+      "stageName": "Prompt intake",
+      "owner": "meta-genesis",
+      "requiredInputs": ["userRequest", "runtimeTarget", "projectContext", "permissionBoundary"],
+      "requiredOutputs": [
+        "frameworkPromptPacket.promptId",
+        "frameworkPromptPacket.userOutcome",
+        "frameworkPromptPacket.scope",
+        "frameworkPromptPacket.contextPolicy",
+        "frameworkPromptPacket.outputContract",
+        "frameworkPromptPacket.toolAndDataPolicy",
+        "frameworkPromptPacket.runtimeTargets",
+        "frameworkPromptPacket.evalPlan",
+        "frameworkPromptPacket.version"
+      ],
+      "passCondition": "frameworkPromptPacket is complete and portable across Claude Code and Codex without mixing runtime-specific renderer schemas into canonical prompt content.",
+      "failConditions": ["missing frameworkPromptPacket", "runtime-specific prompt fields leak into canonical prompt", "no eval plan", "no output contract"],
+      "returnToStage": "Prompt intake",
+      "evidenceRequirements": ["prompt source", "context policy", "runtime target list", "eval fixture plan"]
+    },
+    {
+      "stageId": "critical",
+      "stageName": "Critical",
+      "owner": "meta-warden",
+      "requiredInputs": ["frameworkPromptPacket", "userRequest", "permissionBoundary"],
+      "requiredOutputs": [
+        "intentPacket.realIntent",
+        "intentPacket.successCriteria",
+        "intentPacket.nonGoals",
+        "intentPacket.blockingUnknowns",
+        "intentPacket.noQuotaClarification"
+      ],
+      "passCondition": "The real outcome, acceptance standard, non-goals, permissions, and material unknowns are locked before Fetch.",
+      "failConditions": ["unclear outcome", "missing success criteria", "permission ambiguity changes route", "architecture type unclear"],
+      "returnToStage": "Critical",
+      "evidenceRequirements": ["intent packet", "permission boundary", "architecture type decision"]
+    },
+    {
+      "stageId": "fetch",
+      "stageName": "Fetch",
+      "owner": "meta-conductor",
+      "requiredInputs": ["intentPacket", "frameworkPromptPacket", "readBeforeEditEvidence"],
+      "requiredOutputs": [
+        "fetchPacket.evidence",
+        "fetchPacket.decisionImpactMap",
+        "fetchPacket.capabilityDiscovery.searchLog",
+        "fetchPacket.capabilityDiscovery.capabilityInventory",
+        "fetchPacket.contradictionLog",
+        "fileChangeFactCard"
+      ],
+      "passCondition": "Route-changing local and current external evidence has been read, and capability discovery covers the selected owner/loadout route.",
+      "failConditions": ["missing capability discovery", "route-changing source unread", "known unsupported runtime or OS", "stale source used as current fact"],
+      "returnToStage": "Fetch",
+      "evidenceRequirements": ["source reads", "capability inventory", "contradiction log", "file change fact card"]
+    },
+    {
+      "stageId": "thinking",
+      "stageName": "Thinking",
+      "owner": "meta-conductor",
+      "requiredInputs": ["intentPacket", "fetchPacket", "frameworkPromptPacket"],
+      "requiredOutputs": [
+        "thinkingPacket.designFrame",
+        "thinkingPacket.owner",
+        "thinkingPacket.weapon",
+        "thinkingPacket.workerTaskPackets",
+        "thinkingPacket.reviewOwner",
+        "thinkingPacket.verificationOwner",
+        "thinkingPacket.dependencyPolicy",
+        "thinkingPacket.omittedLanesWithReason"
+      ],
+      "passCondition": "The route has owner, weapon/loadout, dependency policy, runtime/OS support state, review owner, verification owner, and bounded worker tasks.",
+      "failConditions": ["owner missing", "weapon missing", "verification owner missing", "governance agent selected as implementation worker", "dependency policy missing"],
+      "returnToStage": "Thinking",
+      "evidenceRequirements": ["owner discovery", "route score", "worker task packets", "omitted lanes"]
+    },
+    {
+      "stageId": "execution",
+      "stageName": "Execution",
+      "owner": "selected execution owner",
+      "requiredInputs": ["thinkingPacket", "workerTaskPackets", "sideEffectLedgerPacket"],
+      "requiredOutputs": [
+        "executionResult.workerResultPackets",
+        "executionResult.workerExecutionEvidence",
+        "executionResult.mergeResult",
+        "executionResult.sideEffectLedger"
+      ],
+      "passCondition": "The selected owner or selected capability produces declared artifacts and fresh execution evidence.",
+      "failConditions": ["only board exists", "only smoke/config/schema pass exists", "worker result missing", "worker execution evidence missing", "unsafe mutation without approval"],
+      "returnToStage": "Thinking",
+      "evidenceRequirements": ["worker result packets", "worker execution evidence", "side-effect ledger", "merge result"]
+    },
+    {
+      "stageId": "review",
+      "stageName": "Review",
+      "owner": "meta-prism",
+      "requiredInputs": ["intentPacket", "fetchPacket", "thinkingPacket", "executionResult"],
+      "requiredOutputs": [
+        "reviewPacket.upstreamQuality",
+        "reviewPacket.ownerCoverage",
+        "reviewPacket.protocolCompliance",
+        "reviewPacket.qualityGate",
+        "reviewPacket.findings"
+      ],
+      "passCondition": "Review checks Critical, Fetch, Thinking, and Execution evidence before output polish.",
+      "failConditions": ["upstream stage incomplete", "owner/loadout unsupported", "execution evidence missing", "quality gate unresolved"],
+      "returnToStage": "Review",
+      "evidenceRequirements": ["review packet", "finding severity", "upstream quality decision"]
+    },
+    {
+      "stageId": "meta_review",
+      "stageName": "Meta-Review",
+      "owner": "meta-warden",
+      "requiredInputs": ["reviewPacket", "verificationPlan", "publicReadyIntent"],
+      "requiredOutputs": [
+        "metaReviewPacket.reviewStandard",
+        "metaReviewPacket.biasCheck",
+        "metaReviewPacket.publicReadyGateCheck",
+        "metaReviewPacket.overclaimCheck"
+      ],
+      "passCondition": "Meta-Review confirms the review standard and blocks overclaims before Verification.",
+      "failConditions": ["review standard too low", "runtime claim overstates evidence", "public-ready evidence missing"],
+      "returnToStage": "Review",
+      "evidenceRequirements": ["review standard", "overclaim check", "public-ready gate check"]
+    },
+    {
+      "stageId": "verification",
+      "stageName": "Verification",
+      "owner": "verify",
+      "requiredInputs": ["reviewPacket", "workerResultPackets", "verificationPlan"],
+      "requiredOutputs": [
+        "verificationResult.status",
+        "verificationResult.evidence",
+        "verificationResult.fixEvidence",
+        "verificationResult.remainingRisk",
+        "verificationResult.userGoalDone"
+      ],
+      "passCondition": "Fresh commands, logs, artifacts, or human acceptance support the completion claim and separate command pass from userGoalDone.",
+      "failConditions": ["verification skipped", "old artifact used as current proof", "command pass equals userGoalDone", "smoke relabeled as live"],
+      "returnToStage": "Verification",
+      "evidenceRequirements": ["fresh command or artifact", "remaining risk", "userGoalDone distinction"]
+    },
+    {
+      "stageId": "evolution",
+      "stageName": "Evolution",
+      "owner": "meta-chrysalis",
+      "requiredInputs": ["reviewPacket", "verificationResult", "capabilityGapPacket"],
+      "requiredOutputs": [
+        "evolutionWritebackDecision",
+        "evolutionWritebackPacket.writebacks",
+        "evolutionWritebackPacket.noneWithReason",
+        "scarPacket"
+      ],
+      "passCondition": "The run records writeback, candidate-writeback, or none-with-reason, and reusable failures get a scar/prevention rule.",
+      "failConditions": ["writeback decision missing", "writeback without Warden approval", "reusable failure has no scar"],
+      "returnToStage": "Evolution",
+      "evidenceRequirements": ["writeback decision", "none-with-reason or approved writeback", "scar packet when needed"]
+    }
+  ],
+  "acceptanceMetrics": {
+    "requiredStageCount": 9,
+    "missingRequiredContentCount": 0,
+    "returnToStageCoverage": "100%",
+    "ownerCoverage": "100%",
+    "evidenceRequirementCoverage": "100%",
+    "claudeCodeFullFlowPassRateTarget": "100%",
+    "codexFullFlowPassRateTarget": "100%",
+    "overclaimCount": 0
+  },
+  "verificationCommand": "npm run meta:prd:prompt-first-flow:validate"
+}

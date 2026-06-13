@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -58,6 +58,40 @@ describe("sync-global-meta-theory hook policy", () => {
       } catch (error) {
         assert.match(error.stdout, /Claude Code global hooks/);
       }
+    });
+  });
+
+  test("--with-global-hooks check rejects stale settings entries for missing Meta_Kim hook files", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      await runScript(["--targets", "claude", "--with-global-hooks"], env);
+
+      const settingsPath = path.join(root, "claude", "settings.json");
+      const settings = JSON.parse(await readFile(settingsPath, "utf8"));
+      settings.hooks.Stop = [
+        {
+          matcher: "*",
+          hooks: [
+            {
+              type: "command",
+              command: `node "${path.join(root, "claude", "hooks", "meta-kim", "stop-compaction.mjs")}"`,
+            },
+          ],
+        },
+      ];
+      await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+
+      await assert.rejects(
+        () => runScript(["--check", "--with-global-hooks", "--targets", "claude"], env),
+        (error) => {
+          assert.match(error.stdout, /Claude Code global settings hooks/);
+          assert.match(error.stdout, /Missing registered Meta_Kim hook scripts: 1/);
+          return true;
+        },
+      );
+
+      await runScript(["--targets", "claude", "--with-global-hooks"], env);
+      const repaired = JSON.parse(await readFile(settingsPath, "utf8"));
+      assert.equal(repaired.hooks.Stop, undefined);
     });
   });
 

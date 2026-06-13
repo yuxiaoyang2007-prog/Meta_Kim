@@ -63,3 +63,36 @@ End with a short "do not delete yet" list for any file whose role is uncertain.
 - Keep one-run task details in workerTaskPackets, not durable identity.
 - Do not delete files as part of inventory classification unless the user separately approves a cleanup action.
 - Do not treat runtime mirrors or generated reports as source of truth when canonical or config sources exist.
+
+## Prompt Acceptance
+
+This skill binds the `execution-tools-and-commands`, `capability-discovery-and-retrieval`, `planning-continuity`, `runtime-native-surfaces`, and `verification-eval-and-release` abstract capability families. It may inspect filesystem, Git, scripts, config, docs, and runtime projections, but it does not mutate the workspace by itself.
+
+## Pass
+
+- Inventory output separates source, runtime projection, generated evidence, planning continuity, reference docs, and cleanup candidates.
+- Each recommendation names the evidence command that supports it.
+- Active `task_plan.md`, `findings.md`, and `progress.md` are preserved as update-only continuity state.
+- Unknown or weakly evidenced files are marked `inspect again` rather than deleted or ignored.
+
+## Fail
+
+- A tracked file is called removable without checking scripts, tests, docs, setup, sync, contracts, and runtime projections.
+- Runtime mirrors, generated reports, or one-run artifacts are treated as the canonical source of truth.
+- The skill recommends deletion, untracking, or canonical writeback without explicit user approval and Warden approval where required.
+
+## Block
+
+Block cleanup or write actions when evidence is missing, Git state is unclear, the file is active planning state, or the user has not explicitly approved mutation.
+
+## Return to stage
+
+Return to Fetch when file purpose or source-of-truth status is unclear. Return to Thinking when the inventory exposes a capability gap or a cleanup path with competing trade-offs. Return to Verification when the classification depends on generated evidence that needs a fresh command.
+
+## Verification
+
+Use read-only commands such as `git status --short --branch`, `git ls-files`, `git ls-files --others --exclude-standard`, `git check-ignore -v <path>`, targeted `rg`, package script inspection, and the most specific validator for the affected file class. Run `npm run meta:prompt:validate` after editing this skill.
+
+## Preserve
+
+Preserve Skills, WebSearch/browser/research, filesystem, shell, apply_patch, MCP, memory, Graphify, graph, hooks, commands, rules, agents, subagents, approval, sandbox, runtime tools, package scripts, setup, sync, install, uninstall, status, doctor, validators, runtime projections, and active planning files.

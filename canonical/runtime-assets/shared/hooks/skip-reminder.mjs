@@ -2,7 +2,7 @@
 /**
  * Skip Reminder Module for Meta_Kim Hooks
  *
- * Provides consistent reminder formatting when hooks are skipped in simple mode.
+ * Provides consistent reminder formatting when hooks are explicitly skipped.
  * Records skipped hooks to spine state for audit trail.
  *
  * Usage:

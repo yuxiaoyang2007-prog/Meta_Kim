@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "prompt-first-live-acceptance-contract-v0.1",
+  "contractId": "prompt-first-live-acceptance-contract",
+  "owner": "verify",
+  "reviewOwner": "meta-prism",
+  "verificationOwner": "meta-warden",
+  "prdTaskIds": ["P-087", "P-088", "P-089", "P-090", "P-091"],
+  "status": "contract_ready",
+  "currentAsOf": "2026-06-13",
+  "purpose": "Validate that the same framework prompt can pass the prompt-first full-flow stage contract on Claude Code and Codex, then verify parity, prompt-perfection fixtures, and no-overclaim boundaries.",
+  "sourceContract": "config/contracts/prompt-first-full-flow-stage-contract.json",
+  "primaryRuntimeTier": ["claude_code", "codex"],
+  "compatibilityRuntimeTier": ["cursor", "openclaw"],
+  "requiredRuntimeEvidenceKind": "runtime_live_pass",
+  "requiredCompatibilitySmokeEvidenceKind": "compatibility_smoke_pass",
+  "fixtureEvidenceKind": "fixture_regression",
+  "frameworkPromptPacketRequiredFields": [
+    "promptId",
+    "version",
+    "userOutcome",
+    "scope",
+    "contextPolicy",
+    "outputContract",
+    "toolAndDataPolicy",
+    "runtimeTargets",
+    "evalPlan"
+  ],
+  "stageEvidence": {
+    "requiredStageCount": 9,
+    "stageIdsFrom": "config/contracts/prompt-first-full-flow-stage-contract.json#stages",
+    "requiredFields": ["stageId", "owner", "status", "requiredContentPresent", "evidenceRefs"]
+  },
+  "requiredPackets": [
+    "frameworkPromptPacket",
+    "stageEvidence",
+    "governanceAgentResultPackets",
+    "workerResultPackets",
+    "workerExecutionEvidence",
+    "reviewPacket",
+    "metaReviewPacket",
+    "verificationResult",
+    "evolutionWritebackPacket",
+    "claimBoundary"
+  ],
+  "promptPerfection": {
+    "promptLayeringViolationTarget": 0,
+    "minimumFixtures": [
+      {
+        "fixtureId": "positive-full-flow",
+        "fixtureType": "positive"
+      },
+      {
+        "fixtureId": "boundary-board-is-not-live",
+        "fixtureType": "boundary"
+      },
+      {
+        "fixtureId": "regression-same-prompt-required",
+        "fixtureType": "regression"
+      }
+    ]
+  },
+  "parityReview": {
+    "sameFrameworkPromptRequired": true,
+    "stageSetMustMatch": true,
+    "parityGapDocumentationRate": "100%",
+    "requiredGapFields": ["gapId", "owner", "reason", "risk", "nextAction"]
+  },
+  "noOverclaim": {
+    "overclaimTarget": 0,
+    "forbiddenLiveProofKinds": [
+      "board_only",
+      "worker_task_only",
+      "schema_only",
+      "structural_smoke",
+      "projection_smoke",
+      "config_only",
+      "ui_warning_or_system_message",
+      "old_artifact",
+      "skipped_or_needs_auth"
+    ],
+    "commandPassIsNotUserGoalDone": true,
+    "fixtureModeCannotClaimLivePass": true
+  },
+  "compatibilitySmoke": {
+    "required": true,
+    "runtimes": ["openclaw", "cursor"],
+    "verificationCommands": [
+      "node scripts/eval-meta-agents.mjs --runtime=openclaw",
+      "node scripts/eval-meta-agents.mjs --runtime=cursor"
+    ],
+    "requiredFields": ["runtime", "mode", "status", "ok", "evidenceKind", "command", "failureClass", "remainingAction"],
+    "cannotClaimPrimaryLivePass": true,
+    "smokeFailureBlocksAcceptanceRun": true
+  },
+  "verificationCommands": {
+    "fixture": "npm run meta:prd:prompt-first-live:validate",
+    "live": "npm run meta:prd:prompt-first-live:run"
+  }
+}

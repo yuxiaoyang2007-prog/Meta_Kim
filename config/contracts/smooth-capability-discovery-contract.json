@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "smooth-capability-discovery-contract-v0.1",
+  "contractId": "smooth-capability-discovery-contract",
+  "owner": "meta-artisan",
+  "reviewOwner": "meta-prism",
+  "verificationOwner": "verify",
+  "prdTaskId": "P-067",
+  "status": "productized",
+  "currentAsOf": "2026-06-13",
+  "purpose": "Keep capability discovery broad enough to preserve MCP, tools, runtime adapters, memory, graph, dependency, and worker-task capabilities as first-class route inputs, while avoiding noisy default expansion into every concrete subtool when no route, risk, authorization, or verification decision depends on that detail.",
+  "corePrinciple": "Fetch records first-class capability families first; Thinking expands only the families that materially affect owner, weapon, runtime, permission, risk, writeback, or verification.",
+  "requiredFirstClassCapabilityFamilies": [
+    "governance_agent",
+    "execution_agent",
+    "skill",
+    "command_script",
+    "mcp_provider",
+    "runtime_tool",
+    "ordinary_tool",
+    "plugin_connector",
+    "retrieval_research",
+    "dependency_provider",
+    "memory_graph",
+    "hook_runtime_adapter",
+    "prompt_rule_workflow",
+    "worker_task"
+  ],
+  "runtimeProviderTypesRequiredInDefaultArtifact": [
+    "agent",
+    "skill",
+    "script",
+    "MCP",
+    "tool",
+    "hook",
+    "runtime",
+    "OS",
+    "memory",
+    "graph",
+    "external"
+  ],
+  "expansionPolicy": {
+    "defaultLevel": "core_category_first",
+    "noExpansionNeededAllowed": true,
+    "expandWhen": [
+      "the capability will be invoked",
+      "authorization, credential, paid action, or external write risk exists",
+      "runtime or OS support changes the route",
+      "verification depends on a concrete provider/tool",
+      "a missing provider blocks execution",
+      "a concrete subtool is needed for rollback, audit, or public-ready evidence"
+    ],
+    "doNotExpandWhen": [
+      "the family is only recorded to preserve first-class status",
+      "no owner, weapon, permission, risk, or verification decision changes",
+      "expansion would dump unrelated subtools into user-facing output"
+    ]
+  },
+  "forbiddenBehaviors": [
+    "skill_only_discovery",
+    "missing_route_critical_capability_family",
+    "mcp_or_tool_swallowed_by_skill_or_script",
+    "configured_provider_relabelled_as_live_invocation",
+    "workerTaskPacket_relabelled_as_workerResult",
+    "default_enumerates_every_subtool_without_route_need",
+    "noExpansionNeeded_rejected_when_route_safe"
+  ],
+  "acceptanceCriteria": {
+    "providerTypeCoverage": "All runtimeProviderTypesRequiredInDefaultArtifact appear in the default governed execution artifact.",
+    "workerTaskCoverage": "Thinking produces workerTaskPackets separately from capabilityInventory so task dispatch is not collapsed into provider discovery.",
+    "searchLogCoverage": "Fetch capabilityDiscovery.searchLog records checked source families, including empty or unavailable sources.",
+    "skillOnlyTarget": false,
+    "noExpansionNeededPolicy": "A safe route may record no_expansion_needed for concrete subtools, but not for the first-class capability family itself.",
+    "overclaimTarget": 0
+  },
+  "verificationCommand": "npm run meta:prd:smooth-capability:validate"
+}

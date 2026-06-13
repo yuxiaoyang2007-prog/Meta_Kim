@@ -16,7 +16,8 @@ describe("29 — Capability Gap complete product PRD", () => {
     assert.match(prd, /## 当前完成状态/);
     assert.match(prd, /已测通/);
     assert.match(prd, /本地 planning\/orchestration MVP 已经证明/);
-    assert.match(prd, /还不能宣称“治理 Agent \+ 执行 Agent 实机闭环完成”/);
+    assert.match(prd, /P-068 \/ P-069 \/ P-070 已在默认本地 governed run 证据层闭合/);
+    assert.match(prd, /不等于 Cursor native live 或 all-runtime release-grade 完成/);
     assert.match(prd, /还不能宣称“发布级 live\/native 全 runtime 完成”/);
     assert.match(prd, /Cursor Agent CLI native live 仍未闭合/);
     assert.match(prd, /Claude 和 OpenClaw 全九个 meta agents shard live evidence 已闭合/);
@@ -79,7 +80,7 @@ describe("29 — Capability Gap complete product PRD", () => {
   test("keeps human-readable natural-language entry work in the single PRD source", () => {
     for (const marker of [
       "版本：v0.37",
-      "真实治理 Agent \\+ 执行 Agent live 链路",
+      "P-068/P-069/P-070 默认治理 \\+ 执行 evidence closure",
       "自然语言入口与用户体验提示",
       "普通自然语言 durable 任务",
       "没有真实 conversation notice emitted 证据时必须标 partial",
@@ -567,6 +568,576 @@ describe("29 — Capability Gap complete product PRD", () => {
       /Complete product MVP 已经在本地证明/,
       "local orchestration MVP must not overclaim complete execution",
     );
+  });
+
+  test("records v0.38 research-to-native and framework prompt architecture direction", () => {
+    for (const marker of [
+      "版本：v0.38",
+      "AI-native research-to-native content loop",
+      "Framework prompt architecture",
+      "v0.38 下一步迭代方向：Research-to-Native Content Loop",
+      "清晰目标定义",
+      "项目整理审计结论",
+      "外部研究到原生落点",
+      "框架型提示词最优写法",
+      "ordinary task prompt",
+      "framework prompt",
+      "System / developer instruction",
+      "AGENTS.md / project rules",
+      "Canonical agent prompt / SOUL",
+      "Skill prompt",
+      "Workflow / contract prompt",
+      "Runtime adapter prompt",
+      "Eval / fixture prompt",
+      "Research-to-native adoption coverage",
+      "AI technology adoption matrix completeness",
+      "Prompt asset layer coverage",
+      "Prompt executability validator pass rate",
+      "Prompt eval fixture coverage",
+      "Prompt ambiguity repeat rate",
+      "Long-context source attribution coverage",
+      "Research-to-native",
+      "Prompt architecture",
+      "可观测",
+      "性能预算",
+      "P-071",
+      "Research-to-native 内容准入合同",
+      "P-072",
+      "AI 技术采纳矩阵 validator",
+      "P-073",
+      "MCP provider maturity and conformance profile",
+      "P-074",
+      "Trace/eval control-plane",
+      "P-075",
+      "Structured output first-pass validity",
+      "P-076",
+      "Prompt-injection resilient execution boundary",
+      "P-077",
+      "AG-UI style user-visible stage events",
+      "P-078",
+      "A2A candidate interop probe",
+      "P-079",
+      "i18n native-content expansion",
+      "P-080",
+      "Performance/cost budget",
+      "P-081",
+      "Framework prompt architecture contract",
+      "P-082",
+      "Prompt asset review matrix",
+      "P-083",
+      "Prompt eval and regression suite",
+      "P-084",
+      "Context engineering and prompt sprawl budget",
+      "P-071 到 P-084 队列",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.38 research/prompt marker ${marker}`);
+    }
+
+    for (const marker of [
+      "OpenAI / Anthropic / Google / Microsoft prompt guidance",
+      "MCP 2025-11-25 spec / roadmap",
+      "OpenTelemetry GenAI",
+      "OWASP Agentic 2026 / NIST AI 600-1 / MITRE ATLAS / CaMeL",
+      "source、native insertion point、why、metric、conflict/compat、verification",
+      "无落点只能 reference-only",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.38 source/native marker ${marker}`);
+    }
+  });
+
+  test("records v0.39 Claude Code and Codex primary prompt-first full flow priority", () => {
+    for (const marker of [
+      "版本：v0.39",
+      "v0.39 主优先级修正：Claude Code \\+ Codex Prompt-First Full Flow",
+      "Claude Code \\+ Codex 是 P0 主链路",
+      "Cursor / OpenClaw 降为兼容项目",
+      "OpenClaw 和 Cursor 继续保留兼容验证价值",
+      "Runtime Priority Tiers",
+      "Tier 0 primary",
+      "Tier 1 compatibility",
+      "Tier 2 compatibility",
+      "Prompt-First Stage Required Content",
+      "frameworkPromptPacket",
+      "Perfection Gate",
+      "Claude Code primary full-flow pass rate",
+      "Codex primary full-flow pass rate",
+      "Prompt-first required-content completeness",
+      "Claude/Codex parity gap documentation",
+      "Compatibility-priority leak count",
+      "OpenClaw/Cursor primary blocker count",
+      "Full-flow evidence overclaim count",
+      "T-011",
+      "Claude Code \\+ Codex prompt-first full-flow perfection",
+      "P-085",
+      "Claude Code \\+ Codex primary runtime priority contract",
+      "P-086",
+      "Prompt-first full-flow stage requirement contract",
+      "P-087",
+      "Claude Code full-flow live run",
+      "P-088",
+      "Codex full-flow live run",
+      "P-089",
+      "Claude/Codex parity reviewer",
+      "P-090",
+      "Prompt perfection validator",
+      "P-091",
+      "Full-flow no-overclaim gate",
+      "P-092",
+      "OpenClaw / Cursor compatibility demotion",
+      "Primary runtime perfection",
+      "Primary release closure",
+      "All-tool compatibility closure",
+      "P-024 只阻塞 all-tool compatibility claim",
+      "P-024 只阻塞 all-tool compatibility，不阻塞 Claude Code \\+ Codex 主链路",
+      "Cursor / OpenClaw blocked 项必须留 remainingAction，但不进入 primary release blocker",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.39 Claude/Codex priority marker ${marker}`);
+    }
+
+    assert.doesNotMatch(
+      prd,
+      /\| Release closure \| P-024 解阻后 \|/,
+      "primary release closure must not be blocked only by Cursor native live",
+    );
+  });
+
+  test("records v0.40 PRD major-category deep research gate", () => {
+    for (const marker of [
+      "版本：v0.40",
+      "v0.40 PRD 大类型 Deep Research Gate",
+      "PRD major category",
+      "prdCategoryResearchPacket",
+      "Product / requirements / discovery",
+      "Prompt / context / agent runtime",
+      "MCP / tools / providers",
+      "Security / safety / red-team",
+      "Eval / verification / observability",
+      "Architecture / performance / i18n / release",
+      "Atlassian PRD",
+      "Nielsen Norman Group discovery",
+      "ISO/IEC/IEEE 29148",
+      "OpenAI prompt engineering",
+      "Anthropic prompt engineering",
+      "Google Gemini prompt design",
+      "Anthropic context engineering",
+      "OpenAI Agents SDK",
+      "OpenTelemetry GenAI",
+      "MCP specification",
+      "MCP Release Candidate",
+      "NSA MCP Security Design",
+      "OWASP Top 10 for Agentic Applications 2026",
+      "Google Cloud Well-Architected Framework",
+      "PRD major-category research coverage",
+      "Major-category source map completeness",
+      "Model-knowledge-only PRD decision count",
+      "Primary/official source coverage",
+      "Counterevidence coverage",
+      "Source freshness recorded",
+      "Research-to-priority ordering violation",
+      "PRD category research-backed",
+      "No model-knowledge PRD decision gate",
+      "T-012",
+      "PRD major-category deep research gate",
+      "P-093",
+      "PRD category research packet contract",
+      "P-094",
+      "Major-category source map validator",
+      "P-095",
+      "Product / requirements / discovery research dossier",
+      "P-096",
+      "Prompt / context / agent runtime research dossier",
+      "P-097",
+      "MCP / tools / providers research dossier",
+      "P-098",
+      "Security / safety / red-team research dossier",
+      "P-099",
+      "Eval / verification / observability research dossier",
+      "P-100",
+      "Architecture / performance / i18n / release research dossier",
+      "PRD category deep research",
+      "P-093 到 P-100",
+      "P-096 到 P-100 已测通",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.40 PRD category research marker ${marker}`);
+    }
+
+    assert.doesNotMatch(
+      prd,
+      /模型知识可以作为.*唯一依据/,
+      "PRD category decisions must not allow model knowledge as the only evidence",
+    );
+  });
+
+  test("records v0.41 local-private prompt acceptance research binding", () => {
+    const gitignore = readFileSync(path.join(REPO_ROOT, ".gitignore"), "utf8");
+
+    for (const marker of [
+      "版本：v0.41",
+      "v0.41 Prompt Acceptance Deep Research Binding",
+      "docs/prompt-acceptance-deep-research.zh-CN.md",
+      "local-private evidence artifact",
+      "不是第二份 PRD",
+      "promptAcceptanceResearchPacket",
+      "prompt-acceptance-deep-research-2026-06-13",
+      "Current Prompt Acceptance Baseline",
+      "totalPromptLikeAssets",
+      "27 pass",
+      "2 partial",
+      "7 research_required",
+      "npm run meta:prompt:validate",
+      "git check-ignore -v docs/prompt-acceptance-deep-research.zh-CN.md",
+      "canonical governance prompt baseline 已通过",
+      "不能宣称：所有 prompt 资产已完全验收通过",
+      "Prompt acceptance deep research report",
+      "local-private 且由 `.gitignore`",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.41 prompt acceptance marker ${marker}`);
+    }
+
+    assert.match(prd, /docs\/\*\*/);
+    assert.match(gitignore, /^docs\/\*\*$/m);
+    assert.doesNotMatch(
+      gitignore,
+      /^!docs\/prompt-acceptance-deep-research\.zh-CN\.md$/m,
+      "prompt acceptance research report must stay local-private and ignored",
+    );
+  });
+
+  test("records v0.42 abstract capability framework prompt acceptance closure", () => {
+    for (const marker of [
+      "版本：v0.42",
+      "v0.42 Abstract Capability Framework Prompt Acceptance",
+      "abstractCapabilityFrameworkPacket",
+      "prompt-abstract-capability-contract",
+      "scripts/validate-prompt-abstract-capabilities.mjs",
+      "full project capability surface",
+      "providerTypes",
+      "modeledProviders",
+      "runtimeCapabilityNames",
+      "packageScripts",
+      "localGlobalInventoryWhenPresent",
+      "governance-orchestration",
+      "capability-discovery-and-retrieval",
+      "prompt-intake-optimization",
+      "planning-continuity",
+      "skill-agent-tool-creation",
+      "runtime-native-surfaces",
+      "execution-tools-and-commands",
+      "mcp-external-provider-and-plugin",
+      "memory-graph-and-observability",
+      "safety-hooks-and-permissions",
+      "verification-eval-and-release",
+      "user-interaction-and-i18n",
+      "planning-files-update-only",
+      "hookprompt-no-route-override",
+      "findskill-run-scoped",
+      "creation-after-gap-proof",
+      "native-ability-preservation",
+      "provider-config-not-live-proof",
+      "36 pass、0 partial、0 research_required",
+      "36 pass, 0 partial, 0 research_required",
+      "P-093 prompt acceptance scope 已测通",
+      "P-094 已测通 source map validator",
+      "P-095 已测通 Product / requirements / discovery dossier",
+      "P-096 到 P-100 已测通",
+      "不把 `findskill` / `hookprompt` / `planning-with-files` / `skill-creator` 当作全部通用能力",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.42 abstract capability marker ${marker}`);
+    }
+
+    assert.doesNotMatch(
+      prd,
+      /findskill.*hookprompt.*planning-with-files.*skill-creator[\s\S]{0,80}全部通用能力(?!，而是|，只是|例子)/,
+      "PRD must not collapse the capability surface into four named examples",
+    );
+  });
+
+  test("records v0.43 PRD major-category source map validator closure", () => {
+    for (const marker of [
+      "版本：v0.43",
+      "v0.43 Major-Category Source Map Gate",
+      "P-094 已测通",
+      "prdCategorySourceMapPacket",
+      "prd-category-source-map-contract",
+      "scripts/validate-prd-category-source-map.mjs",
+      "npm run meta:prd:source-map:validate",
+      "source_map_ready_dossiers_pending",
+      "P-095 到 P-100",
+      "No model-knowledge PRD decision gate",
+      "Category coverage",
+      "Source evidence",
+      "Freshness",
+      "Counterevidence",
+      "No model-knowledge PRD decision gate",
+      "partial_dossiers_ready",
+      "all_dossiers_ready",
+      "P-096 到 P-100 已测通",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.43 source map marker ${marker}`);
+    }
+  });
+
+  test("records v0.44 P-095 product requirements discovery dossier closure", () => {
+    for (const marker of [
+      "版本：v0.44",
+      "v0.44 P-095 Product / Requirements / Discovery Dossier",
+      "productRequirementsDiscoveryDossierPacket",
+      "docs/prd-category-product-requirements-discovery-dossier.zh-CN.md",
+      "scripts/validate-prd-product-requirements-discovery-dossier.mjs",
+      "npm run meta:prd:product-discovery:validate",
+      "dossier_ready",
+      "partial_dossiers_ready",
+      "Atlassian PRD",
+      "Atlassian PRD template",
+      "Nielsen Norman Group discovery",
+      "ISO/IEC/IEEE 29148",
+      "Jira Product Discovery ideas",
+      "problemStatement",
+      "targetUsersOrStakeholders",
+      "sourceBackedEvidence",
+      "successCriteria",
+      "requirementTraceability",
+      "definitionOfDone",
+      "No model-knowledge PRD decision gate",
+      "P-095 已测通",
+      "v0.45 已继续闭合这些剩余大类",
+      "Product / requirements / discovery 大类已有 source-backed dossier",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.44 P-095 dossier marker ${marker}`);
+    }
+  });
+
+  test("records v0.45 P-096 to P-100 PRD category dossier closure", () => {
+    for (const marker of [
+      "版本：v0.45",
+      "v0.45 P-096 到 P-100 PRD Category Dossiers",
+      "allPrdCategoryDossiersPacket",
+      "remainingPrdCategoryDossiersPacket",
+      "all_dossiers_ready",
+      "P-096 到 P-100 已测通",
+      "scripts/validate-prd-remaining-category-dossiers.mjs",
+      "tests/governance/prd-remaining-category-dossiers.test.mjs",
+      "npm run meta:prd:all-dossiers:validate",
+      "npm run meta:prd:remaining-dossiers:validate",
+      "promptContextAgentRuntimeDossierPacket",
+      "mcpToolsProvidersDossierPacket",
+      "securitySafetyRedTeamDossierPacket",
+      "evalVerificationObservabilityDossierPacket",
+      "architecturePerformanceI18nReleaseDossierPacket",
+      "docs/prd-category-prompt-context-agent-runtime-dossier.zh-CN.md",
+      "docs/prd-category-mcp-tools-providers-dossier.zh-CN.md",
+      "docs/prd-category-security-safety-red-team-dossier.zh-CN.md",
+      "docs/prd-category-eval-verification-observability-dossier.zh-CN.md",
+      "docs/prd-category-architecture-performance-i18n-release-dossier.zh-CN.md",
+      "npm run meta:prd:prompt-runtime:validate",
+      "npm run meta:prd:mcp-tools:validate",
+      "npm run meta:prd:security-safety:validate",
+      "npm run meta:prd:eval-observability:validate",
+      "npm run meta:prd:architecture-release:validate",
+      "P-096 已测通",
+      "P-097 已测通",
+      "P-098 已测通",
+      "P-099 已测通",
+      "P-100 已测通",
+      "No model-knowledge PRD decision gate",
+      "不能把这些 PRD dossier 当成治理 Agent \\+ 执行 Agent 实机闭环证据",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.45 P-096..P-100 dossier marker ${marker}`);
+    }
+  });
+
+  test("records v0.46 P-086 prompt-first full-flow stage requirement contract closure", () => {
+    for (const marker of [
+      "版本：v0.46",
+      "v0.46 P-086 Prompt-First Full-Flow Stage Requirement Contract",
+      "promptFirstFullFlowStageRequirementPacket",
+      "config/contracts/prompt-first-full-flow-stage-contract.json",
+      "scripts/validate-prompt-first-full-flow-stage-contract.mjs",
+      "tests/governance/prompt-first-full-flow-stage-contract.test.mjs",
+      "npm run meta:prd:prompt-first-flow:validate",
+      "P-086 已测通",
+      "contract_ready",
+      "Prompt intake",
+      "frameworkPromptPacket",
+      "intentPacket",
+      "fetchPacket",
+      "thinkingPacket",
+      "workerTaskPackets",
+      "workerResultPackets",
+      "workerExecutionEvidence",
+      "reviewPacket",
+      "metaReviewPacket",
+      "verificationResult",
+      "evolutionWritebackPacket",
+      "missingRequiredContentCount = 0",
+      "sameFrameworkPromptRequired",
+      "command pass is not userGoalDone",
+      "P-087",
+      "P-088",
+      "仍不能宣称 Claude Code \\+ Codex prompt-first full-flow live execution 已 release-grade 完成",
+      "P-087 / P-088 必须实际产出同一 framework prompt 下的 live artifacts",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.46 P-086 full-flow contract marker ${marker}`);
+    }
+  });
+
+  test("records v0.47 P-087 to P-091 prompt-first live acceptance closure", () => {
+    for (const marker of [
+      "版本：v0.47",
+      "v0.47 P-087 到 P-091 Prompt-First Live Acceptance Closure",
+      "promptFirstLiveAcceptancePacket",
+      "config/contracts/prompt-first-live-acceptance-contract.json",
+      "scripts/run-prompt-first-full-flow-live-acceptance.mjs",
+      "tests/governance/prompt-first-live-acceptance.test.mjs",
+      "npm run meta:prd:prompt-first-live:validate",
+      "npm run meta:prd:prompt-first-live:run",
+      ".meta-kim/state/default/prompt-first-full-flow-live-acceptance/latest.json",
+      "P-087 已测通",
+      "P-088 已测通",
+      "P-089 已测通",
+      "P-090 已测通",
+      "P-091 已测通",
+      "primaryRuntimePerfection = true",
+      "runtime_live_pass",
+      "compatibility_smoke_pass",
+      "Compatibility smoke 已测通",
+      "compatibilitySmokePacket",
+      "compatibilitySmokeRuntimes",
+      "node scripts/eval-meta-agents.mjs --runtime=openclaw",
+      "node scripts/eval-meta-agents.mjs --runtime=cursor",
+      "smokeFailureBlocksAcceptanceRun",
+      "cannotClaimPrimaryLivePass",
+      "OpenClaw/Cursor smoke 不等于 primary live pass",
+      "fixture_pass_not_live",
+      "same frameworkPromptPacket",
+      "Evidence overclaim count = 0",
+      "prompt layering violation count = 0",
+      "Claude Code \\+ Codex prompt-first full-flow perfection \\| 已测通",
+      "仍不能宣称 Claude/Codex/Cursor/OpenClaw 全工具端兼容完成",
+      "不能把 fixture pass 冒充 live pass",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.47 prompt-first live acceptance marker ${marker}`);
+    }
+  });
+
+  test("records v0.48 P-068 to P-070 default governance and execution evidence closure", () => {
+    for (const marker of [
+      "版本：v0.48",
+      "v0.48 P-068/P-069/P-070 默认治理 \\+ 执行 evidence closure",
+      "npm run meta:prd:default-execution:validate",
+      "npm run meta:prd:asset-sedimentation:validate",
+      "config/contracts/capability-asset-sedimentation-contract.json",
+      "scripts/validate-default-governed-execution-evidence.mjs",
+      "scripts/validate-capability-asset-sedimentation.mjs",
+      "9 个 `governanceAgentResultPackets\\[\\]`",
+      "Conductor 消费 8 个治理包",
+      "4 个 `workerResultPackets\\[\\]`",
+      "4 个 `workerExecutionEvidence\\[\\]`",
+      "execution agent、skill、script、MCP provider、runtime tool、hook、memory/graph、dependency provider、worker_task_only 九类能力",
+      "canonicalWritesWithoutApproval = 0",
+      "P-068 \\| T-006/R-007[\\s\\S]*?\\| 已测通 \\|",
+      "P-069 \\| T-007/R-007[\\s\\S]*?\\| 已测通（默认 run-scoped local execution） \\|",
+      "P-070 \\| T-008/R-009[\\s\\S]*?\\| 已测通 \\|",
+      "不能把默认本地证据扩大成 Cursor native live",
+      "不等于 Cursor native live 或 all-runtime release-grade",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.48 default evidence closure marker ${marker}`);
+    }
+  });
+
+  test("records v0.49 P-071 to P-084 research-to-native and prompt architecture productization closure", () => {
+    for (const marker of [
+      "版本：v0.49",
+      "v0.49 P-071 到 P-084 Research-to-native \\+ framework prompt architecture productization closure",
+      "config/contracts/research-to-native-productization-contract.json",
+      "config/contracts/framework-prompt-architecture-contract.json",
+      "scripts/validate-research-to-native-productization.mjs",
+      "scripts/validate-framework-prompt-architecture.mjs",
+      "npm run meta:prd:research-native:validate",
+      "npm run meta:prd:prompt-architecture:validate",
+      "traceEvalControlPlane",
+      "agUiStageEvents",
+      "performanceCostBudget",
+      "contextEngineeringBudget",
+      "source、native insertion point、why、metric、conflict/compat、verification",
+      "A2A remains candidate-only",
+      "MCP provider maturity profiles separate trust/auth/runtime/conformance",
+      "Prompt asset review matrix 已产品化",
+      "Prompt eval and regression suite 已产品化",
+      "Context engineering and prompt sprawl budget 已产品化",
+      "P-071 到 P-080 已测通",
+      "P-081 到 P-084 已测通",
+      "P-071 到 P-084 已测通",
+      "P-071 \\| T-009/R-007[\\s\\S]*?\\| 已测通 \\|",
+      "P-072 \\| T-009/R-011[\\s\\S]*?\\| 已测通 \\|",
+      "P-073 \\| T-009/R-008[\\s\\S]*?\\| 已测通 \\|",
+      "P-074 \\| T-009/R-004[\\s\\S]*?\\| 已测通 \\|",
+      "P-075 \\| T-009/R-001[\\s\\S]*?\\| 已测通 \\|",
+      "P-076 \\| T-009/R-008[\\s\\S]*?\\| 已测通 \\|",
+      "P-077 \\| T-004/T-009[\\s\\S]*?\\| 已测通 \\|",
+      "P-078 \\| T-009/R-007[\\s\\S]*?\\| 已测通（candidate-only） \\|",
+      "P-079 \\| T-004/T-011[\\s\\S]*?\\| 已测通 \\|",
+      "P-080 \\| T-009/R-004[\\s\\S]*?\\| 已测通 \\|",
+      "P-081 \\| T-010/R-007[\\s\\S]*?\\| 已测通 \\|",
+      "P-082 \\| T-010/R-011[\\s\\S]*?\\| 已测通 \\|",
+      "P-083 \\| T-010/R-001[\\s\\S]*?\\| 已测通 \\|",
+      "P-084 \\| T-010/R-004[\\s\\S]*?\\| 已测通 \\|",
+      "仍不能宣称 Cursor native live 或 all-runtime release-grade",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.49 research/native prompt architecture marker ${marker}`);
+    }
+
+    assert.doesNotMatch(
+      prd,
+      /P-072 到 P-080 \/ P-082 到 P-084 未完成前不能宣称 research-to-native 与 prompt architecture 已产品化/,
+      "old current-unfinished phrase must be removed after v0.49 closure",
+    );
+  });
+
+  test("records v0.50 P-067 P-085 and P-092 capability discovery and runtime priority closure", () => {
+    for (const marker of [
+      "版本：v0.50",
+      "v0.50 P-067/P-085/P-092 Capability Discovery \\+ Runtime Priority Closure",
+      "config/contracts/smooth-capability-discovery-contract.json",
+      "config/contracts/runtime-priority-and-compatibility-contract.json",
+      "scripts/validate-smooth-capability-discovery.mjs",
+      "scripts/validate-runtime-priority-and-compatibility.mjs",
+      "npm run meta:prd:smooth-capability:validate",
+      "npm run meta:prd:runtime-priority:validate",
+      "P-067 已测通",
+      "P-085 已测通",
+      "P-092 已测通",
+      "agent、skill、script、MCP、tool、hook、runtime、OS、memory、graph、external",
+      "workerTaskPackets",
+      "no_expansion_needed",
+      "skill-only",
+      "MCP 与 tools 作为一等能力",
+      "runtime-priority-and-compatibility-contract",
+      "compatibility-priority leak count = 0",
+      "P-024 只阻塞 all-tool compatibility claim",
+      "OpenClaw / Cursor compatibility demotion",
+      "Cursor native live blocked 只能阻塞 all-tool compatibility closure",
+      "P-067/P-085/P-092 已测通，但边界保持不变",
+      "P-067 到 P-085 与 P-092 已测通",
+      "P-085 到 P-092 primary scope 已测通",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.50 closure marker ${marker}`);
+    }
+
+    for (const marker of [
+      "P-067 \\| T-006/T-008[\\s\\S]*?\\| 已测通 \\|",
+      "P-085 \\| T-011/R-007/R-008[\\s\\S]*?\\| 已测通 \\|",
+      "P-092 \\| T-002/T-011/R-008[\\s\\S]*?\\| 已测通 \\|",
+      "T-009 \\| Research-to-native content loop \\| 已测通 \\|",
+      "T-010 \\| Framework prompt architecture \\| 已测通 \\|",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.50 status marker ${marker}`);
+    }
+
+    assert.doesNotMatch(prd, /P-067[\s\S]{0,180}\| 进行中 \|/);
+    assert.doesNotMatch(prd, /P-085[\s\S]{0,180}\| 进行中 \|/);
+    assert.doesNotMatch(prd, /P-092[\s\S]{0,180}\| 进行中 \|/);
+    assert.doesNotMatch(prd, /P-067 \/ P-092 进行中/);
   });
 
   test("records v0.28 orchestration DAG closure and wider parallel product lanes", () => {

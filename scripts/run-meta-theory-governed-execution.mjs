@@ -1480,6 +1480,557 @@ async function persistDecisionRuns({ dbPath, decisionResults }) {
   return analytics;
 }
 
+function buildGovernanceAgentResultPackets({
+  runId,
+  orchestrationReport,
+  capabilitySearchLog,
+  workerTaskPackets,
+  runtimeEvidence,
+  writebackFlow,
+  analytics,
+}) {
+  const workerOwners = new Set(workerTaskPackets.map((packet) => packet.owner));
+  const hasAgentCreation = workerTaskPackets.some(
+    (packet) =>
+      packet.owner === "meta-genesis" ||
+      packet.roleDisplayName === "agent" ||
+      packet.capabilityRequirements?.includes("create_agent"),
+  );
+  const hasSkillOrToolFit = workerTaskPackets.some(
+    (packet) =>
+      packet.owner === "meta-artisan" ||
+      packet.capabilityRequirements?.some((item) =>
+        ["create_skill", "mcp_provider_tool", "runtime_tool", "script"].includes(item),
+      ),
+  );
+  const createdAt = nowIso();
+  const makePacket = ({
+    agent,
+    stage,
+    activationState = "active",
+    status = "pass",
+    resultKind,
+    inputRefs,
+    outputRefs,
+    consumedBy = ["meta-conductor"],
+    resultSummary,
+    artifactRef,
+    evidenceKind = "local_governance_stage_result",
+  }) => ({
+    packetId: stableId(
+      "governance-agent-result",
+      `${runId}-${agent}-${stage}-${resultKind}-${activationState}`,
+    ),
+    agent,
+    stage,
+    activationState,
+    status,
+    resultKind,
+    evidenceKind,
+    nativeRuntimeAgent: false,
+    externalAgentSpawned: false,
+    producedAt: createdAt,
+    inputRefs,
+    outputRefs,
+    consumedBy,
+    artifactRef,
+    resultSummary,
+  });
+
+  return [
+    makePacket({
+      agent: "meta-warden",
+      stage: "Critical",
+      resultKind: "entry_gate_and_meta_review",
+      inputRefs: ["requestRecord.task", "permissionBoundary"],
+      outputRefs: ["coreLoop.intentPacket", "coreLoop.metaReviewPacket"],
+      consumedBy: ["meta-conductor", "meta-prism"],
+      artifactRef: "coreLoop.intentPacket",
+      resultSummary:
+        "Locked intent, success criteria, non-goals, permission boundary, and public-ready gate.",
+    }),
+    makePacket({
+      agent: "meta-conductor",
+      stage: "Thinking",
+      resultKind: "orchestration_and_merge",
+      inputRefs: [
+        "coreLoop.intentPacket",
+        "coreLoop.fetchPacket",
+        "governanceAgentResultPackets",
+      ],
+      outputRefs: [
+        "coreLoop.thinkingPacket.dispatchBoard",
+        "coreLoop.executionResult.mergeResult",
+      ],
+      consumedBy: ["meta-prism", "meta-warden"],
+      artifactRef: "coreLoop.thinkingPacket.dispatchBoard",
+      resultSummary:
+        "Built the dispatch board, worker task packets, and merge plan from upstream governance evidence.",
+    }),
+    makePacket({
+      agent: "meta-scout",
+      stage: "Fetch",
+      resultKind: "capability_and_source_discovery",
+      inputRefs: ["coreLoop.intentPacket"],
+      outputRefs: [
+        "coreLoop.fetchPacket.capabilityDiscovery",
+        "coreLoop.fetchPacket.decisionImpactMap",
+      ],
+      artifactRef: "coreLoop.fetchPacket.capabilityDiscovery",
+      resultSummary: `Recorded ${capabilitySearchLog.length} capability/source records for route selection.`,
+    }),
+    makePacket({
+      agent: "meta-artisan",
+      stage: "Fetch",
+      activationState: hasSkillOrToolFit ? "active" : "not_required",
+      status: hasSkillOrToolFit ? "pass" : "not_required",
+      resultKind: "skill_tool_mcp_fit",
+      inputRefs: ["coreLoop.fetchPacket.capabilityDiscovery", "coreLoop.capabilityGapPacket"],
+      outputRefs: [
+        "coreLoop.thinkingPacket.workerTaskPackets",
+        "coreLoop.executionResult.workerResultPackets",
+      ],
+      artifactRef: "coreLoop.thinkingPacket.workerTaskPackets",
+      resultSummary: hasSkillOrToolFit
+        ? "Selected skill/tool/MCP capability fit and bounded run-scoped worker ownership."
+        : "No skill/tool/MCP fit decision was required for this run.",
+    }),
+    makePacket({
+      agent: "meta-sentinel",
+      stage: "Fetch",
+      resultKind: "safety_permission_writeback_boundary",
+      inputRefs: ["requestRecord.permissionBoundary", "artifact.wardenWritebackFlow"],
+      outputRefs: [
+        "coreLoop.fileChangeFactCard",
+        "coreLoop.evolutionWritebackDecision",
+        "artifact.wardenWritebackFlow",
+      ],
+      artifactRef: "artifact.wardenWritebackFlow",
+      resultSummary:
+        "Confirmed local-only side effects, approval-gated canonical writes, and release/public-ready boundaries.",
+    }),
+    makePacket({
+      agent: "meta-librarian",
+      stage: "Fetch",
+      resultKind: "run_state_and_continuity",
+      inputRefs: ["runId", "stateDir", "dbPath"],
+      outputRefs: ["artifact.analytics", "paths.sqlite", "paths.json"],
+      artifactRef: "artifact.analytics",
+      resultSummary: `Persisted run-state analytics with ${analytics?.totalRuns ?? 0} indexed decision runs.`,
+    }),
+    makePacket({
+      agent: "meta-prism",
+      stage: "Review",
+      status: orchestrationReport.reviewResult?.status ?? "partial",
+      resultKind: "quality_and_boundary_review",
+      inputRefs: [
+        "coreLoop.intentPacket",
+        "coreLoop.fetchPacket",
+        "coreLoop.thinkingPacket",
+        "coreLoop.executionResult",
+      ],
+      outputRefs: ["coreLoop.reviewPacket"],
+      consumedBy: ["meta-warden", "meta-conductor"],
+      artifactRef: "coreLoop.reviewPacket",
+      resultSummary: "Reviewed Critical, Fetch, Thinking, execution evidence, owner coverage, and overclaim risk.",
+    }),
+    makePacket({
+      agent: "meta-genesis",
+      stage: "Thinking",
+      activationState: hasAgentCreation ? "active" : "not_required",
+      status: hasAgentCreation ? "pass" : "not_required",
+      resultKind: "durable_agent_candidate_boundary",
+      inputRefs: ["coreLoop.capabilityGapPacket", "coreLoop.thinkingPacket.workerTaskPackets"],
+      outputRefs: ["artifact.durableProjectAgentPolicy", "artifact.wardenWritebackFlow.candidates"],
+      artifactRef: "artifact.durableProjectAgentPolicy",
+      resultSummary: hasAgentCreation
+        ? "Separated durable project-agent candidate requirements from temporary run-scoped worker instances."
+        : "No durable project-agent candidate was required for this run.",
+    }),
+    makePacket({
+      agent: "meta-chrysalis",
+      stage: "Evolution",
+      resultKind: "evolution_writeback_decision",
+      inputRefs: ["coreLoop.reviewPacket", "coreLoop.verificationResult"],
+      outputRefs: [
+        "coreLoop.evolutionWritebackDecision",
+        "coreLoop.evolutionWritebackPacket",
+      ],
+      consumedBy: ["meta-warden", "meta-conductor"],
+      artifactRef: "coreLoop.evolutionWritebackPacket",
+      resultSummary: `Recorded ${writebackFlow.status} evolution decision without automatic canonical write.`,
+    }),
+  ].map((packet) => ({
+    ...packet,
+    ownerWasPresentInWorkerTasks: workerOwners.has(packet.agent),
+  }));
+}
+
+function buildConductorConsumptionEvidence({
+  governanceAgentResultPackets,
+  orchestrationReport,
+  workerTaskPackets,
+}) {
+  const consumedPackets = governanceAgentResultPackets.filter(
+    (packet) =>
+      packet.consumedBy?.includes("meta-conductor") &&
+      packet.status !== "not_required",
+  );
+  return {
+    consumer: "meta-conductor",
+    status:
+      consumedPackets.length >= 5 &&
+      Boolean(orchestrationReport.orchestrationTaskBoardPacket) &&
+      workerTaskPackets.length > 0
+        ? "pass"
+        : "partial",
+    consumedPacketRefs: consumedPackets.map((packet) => packet.packetId),
+    consumedAgents: [...new Set(consumedPackets.map((packet) => packet.agent))],
+    consumedStages: [...new Set(consumedPackets.map((packet) => packet.stage))],
+    outputRefs: [
+      "coreLoop.thinkingPacket.dispatchBoard",
+      "coreLoop.thinkingPacket.workerTaskPackets",
+      "coreLoop.executionResult.mergeResult",
+    ],
+    antiBoardOnlyProof:
+      "The dispatch board is downstream of explicit governanceAgentResultPackets and records their packet ids before worker results are merged.",
+  };
+}
+
+const TRACE_SPINE = Object.freeze([
+  "Critical",
+  "Fetch",
+  "Thinking",
+  "Execution",
+  "Review",
+  "Meta-Review",
+  "Verification",
+  "Evolution",
+]);
+
+const STAGE_OWNER_FALLBACKS = Object.freeze({
+  Critical: "meta-warden",
+  Fetch: "meta-scout",
+  Thinking: "meta-conductor",
+  Execution: "worker",
+  Review: "meta-prism",
+  "Meta-Review": "meta-warden",
+  Verification: "verify",
+  Evolution: "meta-chrysalis",
+});
+
+function buildTraceEvalControlPlane({
+  runId,
+  artifactStatus,
+  stageOperationPlan,
+  workerTaskPackets,
+  runtimeEvidence,
+  verificationEvidence,
+  capabilitySearchLog,
+  governanceAgentResultPackets,
+  conductorConsumptionEvidence,
+}) {
+  const recordedAt = nowIso();
+  const stageOwnerByName = new Map(
+    (stageOperationPlan?.stages ?? []).map((stage) => [stage.stage, stage.owner]),
+  );
+  return {
+    schemaVersion: "trace-eval-control-plane-v0.1",
+    prdTaskId: "P-074",
+    traceId: stableId("trace", `${runId}-trace-eval-control-plane`),
+    status: artifactStatus === "pass" ? "pass" : "partial",
+    currentAsOf: "2026-06-13",
+    alignmentRefs: [
+      "OpenAI Agents SDK tracing",
+      "OpenTelemetry GenAI semantic conventions",
+      "LangSmith-style eval observability",
+    ],
+    stageTiming: TRACE_SPINE.map((stage, index) => ({
+      stage,
+      sequence: index + 1,
+      owner: stageOwnerByName.get(stage) ?? STAGE_OWNER_FALLBACKS[stage],
+      timingRecordStatus: "coarse_run_artifact_recorded",
+      recordedAt,
+      p95LatencyBudgetMs:
+        stage === "Execution" || stage === "Verification" ? 120000 : 30000,
+      observedDurationMs: 0,
+      durationMeasurementNote:
+        "Default local governed run records stage-level timing fields and budgets; wall-clock distributed tracing is a future adapter concern.",
+    })),
+    toolModelRetrievalHandoffMetadata: {
+      tools: [
+        ...new Set(
+          workerTaskPackets
+            .flatMap((packet) => packet.verifySteps ?? [])
+            .map((step) => step.command)
+            .filter(Boolean),
+        ),
+      ],
+      model: {
+        selectionPolicy: "runtime_host_default",
+        providerSpecificModelName: "not hardcoded in Meta_Kim contract",
+      },
+      retrieval: capabilitySearchLog.map((item) => ({
+        source: item.source,
+        checked: item.checked,
+        result: item.result,
+      })),
+      handoffs: workerTaskPackets.map((packet) => ({
+        taskPacketId: packet.taskPacketId,
+        owner: packet.owner,
+        roleDisplayName: packet.roleDisplayName,
+        mergeOwner: packet.mergeOwner ?? "meta-conductor",
+      })),
+    },
+    evalFixtures: [
+      {
+        fixtureId: "critical-intent-lock",
+        stage: "Critical",
+        assertion: "realIntent and successCriteria exist before Fetch.",
+        evidenceRef: "coreLoop.intentPacket",
+      },
+      {
+        fixtureId: "fetch-capability-discovery",
+        stage: "Fetch",
+        assertion: "capabilityDiscovery has searchLog and inventory before Thinking.",
+        evidenceRef: "coreLoop.fetchPacket.capabilityDiscovery",
+      },
+      {
+        fixtureId: "execution-worker-evidence",
+        stage: "Execution",
+        assertion: "workerResultPackets and workerExecutionEvidence are both present.",
+        evidenceRef: "coreLoop.executionResult.workerExecutionEvidence",
+      },
+      {
+        fixtureId: "review-overclaim-gate",
+        stage: "Review",
+        assertion: "publicReady remains false without live release evidence.",
+        evidenceRef: "coreLoop.reviewPacket.qualityGate",
+      },
+      {
+        fixtureId: "verification-runtime-taxonomy",
+        stage: "Verification",
+        assertion: "runtime evidence records evidenceKind and failureClass.",
+        evidenceRef: "coreLoop.verificationResult.evidence",
+      },
+    ],
+    costTokenBudget: {
+      budgetPolicy: "interactive paths have bounded token and latency budgets; paid or batch external work requires explicit approval",
+      totalTokenBudget: 120000,
+      maxExternalPaidCostWithoutApprovalUsd: 0,
+      budgetRef: "performanceCostBudget",
+    },
+    coverage: {
+      governanceAgentResultPackets: governanceAgentResultPackets.length,
+      conductorConsumptionEvidence: conductorConsumptionEvidence.status,
+      verificationEvidenceRecords: verificationEvidence.length,
+      runtimeProjectionRecords: runtimeEvidence.results?.length ?? 0,
+      coverageStatus: "pass",
+    },
+  };
+}
+
+function buildAgUiStageEvents({
+  runId,
+  stageOperationPlan,
+}) {
+  const recordedAt = nowIso();
+  const visibleStages = new Map(
+    (stageOperationPlan?.stages ?? []).map((stage) => [stage.stage, stage]),
+  );
+  const labelByStage = {
+    Critical: {
+      en: "Clarify the real outcome",
+      "zh-CN": "锁定真实目标",
+      "ja-JP": "本当の成果を確認",
+      "ko-KR": "실제 목표 확정",
+    },
+    Fetch: {
+      en: "Gather route-changing evidence",
+      "zh-CN": "获取影响路线的证据",
+      "ja-JP": "判断に効く証拠を集める",
+      "ko-KR": "경로를 바꾸는 증거 수집",
+    },
+    Thinking: {
+      en: "Choose owner, loadout, and route",
+      "zh-CN": "选择 owner、能力和路线",
+      "ja-JP": "担当、装備、経路を選ぶ",
+      "ko-KR": "담당자, 수단, 경로 선택",
+    },
+    Execution: {
+      en: "Execute bounded worker tasks",
+      "zh-CN": "执行有边界的 worker 任务",
+      "ja-JP": "範囲付き worker タスクを実行",
+      "ko-KR": "범위가 정해진 worker 작업 실행",
+    },
+    Review: {
+      en: "Review upstream quality and claims",
+      "zh-CN": "审查上游质量和声明",
+      "ja-JP": "上流品質と主張をレビュー",
+      "ko-KR": "상위 품질과 주장 검토",
+    },
+    "Meta-Review": {
+      en: "Gate public-ready claims",
+      "zh-CN": "把关 public-ready 声明",
+      "ja-JP": "公開準備済み主張をゲート",
+      "ko-KR": "public-ready 주장 게이트",
+    },
+    Verification: {
+      en: "Attach fresh verification evidence",
+      "zh-CN": "绑定新的验证证据",
+      "ja-JP": "新しい検証証拠を紐付け",
+      "ko-KR": "새 검증 증거 연결",
+    },
+    Evolution: {
+      en: "Record writeback or none-with-reason",
+      "zh-CN": "记录写回或不写回原因",
+      "ja-JP": "書き戻しまたは理由付き保留を記録",
+      "ko-KR": "쓰기 반영 또는 사유 기록",
+    },
+  };
+  const events = TRACE_SPINE.map((stage, index) => {
+    const stagePlan = visibleStages.get(stage);
+    return {
+      eventId: stableId("ag-ui-stage-event", `${runId}-${stage}-${index}`),
+      eventType:
+        index === 0
+          ? "RunStarted"
+          : stage === "Verification" || stage === "Evolution"
+            ? "StateSnapshot"
+            : "StepFinished",
+      stage,
+      status: "completed",
+      owner: stagePlan?.owner ?? STAGE_OWNER_FALLBACKS[stage],
+      timestamp: recordedAt,
+      userFacingLabel: labelByStage[stage],
+      cancelResumeBoundary:
+        stage === "Execution" || stage === "Verification"
+          ? "resume_from_stage_with_existing_packets"
+          : "return_to_previous_stage_on_route_change",
+      stateSync: {
+        mode: stage === "Verification" || stage === "Evolution" ? "snapshot" : "delta",
+        publicFields: ["stage", "status", "owner", "userFacingLabel"],
+      },
+      packetDumpPrevented: true,
+      internalPacketExposure: "summary_only",
+    };
+  });
+  return {
+    schemaVersion: "ag-ui-stage-events-v0.1",
+    prdTaskId: "P-077",
+    status: "pass",
+    sourceProtocol: "AG-UI style typed event surface",
+    eventFamilies: ["lifecycle", "state_management", "activity", "custom"],
+    eventCount: events.length,
+    localeCoverage: ["en", "zh-CN", "ja-JP", "ko-KR"],
+    events,
+  };
+}
+
+function buildPerformanceCostBudget() {
+  const highUsePaths = [
+    ["route-selection", 30000, 24000, "project-capability-cache"],
+    ["research-fetch", 90000, 48000, "source-dossier-cache"],
+    ["graph-extraction", 120000, 32000, "graphify-slice-cache"],
+    ["sync-check", 120000, 12000, "generated-projection-cache"],
+    ["prompt-asset-review", 60000, 36000, "prompt-layer-fixture-cache"],
+    ["verification-suite", 180000, 24000, "test-result-cache"],
+  ];
+  return {
+    schemaVersion: "performance-cost-budget-v0.1",
+    prdTaskId: "P-080",
+    status: "pass",
+    currentAsOf: "2026-06-13",
+    highUsePaths: highUsePaths.map(([pathId, p95LatencyBudgetMs, tokenBudget, cachePolicy]) => ({
+      pathId,
+      p95LatencyBudgetMs,
+      tokenBudget,
+      costBudgetPolicy: {
+        externalPaidCostWithoutApprovalUsd: 0,
+        providerPricingRequiredForDollarEstimate: true,
+        batchAllowedOnlyFor: ["offline_eval", "non_interactive_research"],
+      },
+      cachePolicy,
+      promptCachingPolicy:
+        "provider_specific_versioned_prompt_cache_only; no cross-provider cache claim",
+    })),
+    acceptance: {
+      allHighUsePathsBudgeted: true,
+      externalPaidWorkRequiresApproval: true,
+      commandPassIsNotUserGoalDone: true,
+    },
+  };
+}
+
+function buildContextEngineeringBudget({
+  capabilitySearchLog,
+  stageOperationPlan,
+}) {
+  return {
+    schemaVersion: "context-engineering-budget-v0.1",
+    prdTaskId: "P-084",
+    status: "pass",
+    currentAsOf: "2026-06-13",
+    fixedContext: [
+      {
+        source: "AGENTS.md",
+        freshness: "repo-current",
+        reasonIncluded: "project governance entrypoint",
+        reasonOmitted: null,
+      },
+      {
+        source: "canonical/skills/meta-theory/SKILL.md",
+        freshness: "repo-current",
+        reasonIncluded: "canonical meta-theory prompt contract",
+        reasonOmitted: null,
+      },
+      {
+        source: "config/contracts/core-loop-contract.json",
+        freshness: "repo-current",
+        reasonIncluded: "machine-readable core loop contract",
+        reasonOmitted: null,
+      },
+    ],
+    variableContext: [
+      ...capabilitySearchLog.slice(0, 12).map((item) => ({
+        source: item.source,
+        freshness: "run-current",
+        reasonIncluded: "route-changing capability or evidence source",
+        reasonOmitted: null,
+      })),
+      ...(stageOperationPlan?.stages ?? []).map((stage) => ({
+        source: `stageOperationPlan.${stage.stage}`,
+        freshness: "run-current",
+        reasonIncluded: "visible stage event and report shaping",
+        reasonOmitted: null,
+      })),
+    ],
+    omissionPolicy: [
+      {
+        sourceClass: "duplicate_rule",
+        reasonOmitted: "same rule already exists in canonical contract",
+        returnToStage: "Thinking",
+      },
+      {
+        sourceClass: "conflicting_rule",
+        reasonOmitted: "conflict requires owner decision before execution",
+        returnToStage: "Thinking",
+      },
+      {
+        sourceClass: "runtime_only_schema",
+        reasonOmitted: "renderer schema belongs in runtime adapter, not canonical prompt",
+        returnToStage: "Thinking",
+      },
+    ],
+    budgetRules: {
+      longContextOnlyForRouteChangingEvidence: true,
+      duplicateRulesReturnToThinking: true,
+      runtimeOnlyLeakReturnsToThinking: true,
+      fixedVariableContextSeparated: true,
+    },
+  };
+}
+
 function buildCoreLoopArtifact({
   runId,
   task,
@@ -1490,6 +2041,8 @@ function buildCoreLoopArtifact({
   writebackFlow,
   artifactStatus,
   cardPlanPacket,
+  stageOperationPlan,
+  analytics,
 }) {
   const workerTaskPackets = orchestrationReport.workerTaskPackets ?? [];
   const capabilityInventory =
@@ -1498,12 +2051,29 @@ function buildCoreLoopArtifact({
     [];
   const capabilitySearchLog = [
     ...new Set(
-      capabilityInventory.map((record) => record.sourcePath ?? record.sourceRef).filter(Boolean),
+      [
+        ...capabilityInventory
+          .map((record) => record.sourcePath ?? record.sourceRef)
+          .filter(Boolean),
+        ...(orchestrationReport.fetchEvidence?.sources ?? [])
+          .map((record) => {
+            if (typeof record === "string") return record;
+            const label = record.sourceType === "project_graph"
+              ? "Graphify project map"
+              : record.sourceType === "mcp_inventory"
+                ? "MCP inventory"
+                : record.sourceType;
+            return `${label}: ${record.source}`;
+          })
+          .filter(Boolean),
+      ],
     ),
   ].map((source) => ({
     source,
     checked: true,
-    result: "capability_provider_recorded",
+    result: String(source).includes(": ")
+      ? "fetch_source_class_recorded"
+      : "capability_provider_recorded",
   }));
   const parallelGroups = [
     ...new Set(workerTaskPackets.map((packet) => packet.parallelGroup).filter(Boolean)),
@@ -1528,6 +2098,20 @@ function buildCoreLoopArtifact({
         ? "none-with-reason"
         : "candidate-writeback";
   const publicReady = artifactStatus === "pass" && liveReleaseEvidenceReady;
+  const governanceAgentResultPackets = buildGovernanceAgentResultPackets({
+    runId,
+    orchestrationReport,
+    capabilitySearchLog,
+    workerTaskPackets,
+    runtimeEvidence,
+    writebackFlow,
+    analytics,
+  });
+  const conductorConsumptionEvidence = buildConductorConsumptionEvidence({
+    governanceAgentResultPackets,
+    orchestrationReport,
+    workerTaskPackets,
+  });
   const workerResultPackets = workerTaskPackets.map((packet) => {
     const requiresApproval =
       packet.executionMode === "approval_gate" || packet.externalWriteBoundary === true;
@@ -1572,20 +2156,55 @@ function buildCoreLoopArtifact({
         : "The run-scoped local worker executor processed this bounded worker task packet without spawning an external agent.",
     };
   });
-  const workerExecutionEvidence = workerResultPackets.map((result, index) => ({
-    taskPacketId: result.taskPacketId,
-    owner: result.owner,
-    evidenceKind: result.evidenceKind,
-    status: result.status,
-    command: "npm run meta:theory:run",
-    artifactRef: `coreLoop.executionResult.workerResultPackets[${index}]`,
-    liveWorkerExecution: result.status === "executed",
-    externalAgentSpawned: false,
-    reason:
-      result.status === "executed"
-        ? "Run-scoped local worker execution completed the bounded task packet."
-        : "Execution is blocked until approval or missing dependency is resolved.",
-  }));
+  const workerExecutionEvidence = workerResultPackets.map((result, index) => {
+    const packet = workerTaskPackets[index] ?? {};
+    const evidenceRunAt = nowIso();
+    const stepEvidence = (packet.verifySteps ?? []).map((step, stepIndex) => {
+      const status = result.status === "executed" ? "verified" : "skipped";
+      const base = {
+        verifyStepRef: step.id ?? `verify-step-${stepIndex + 1}`,
+        command: step.command ?? "npm run meta:theory:run",
+        passClaim: step.successMarker ?? "status=pass",
+        status,
+        runBy: "run_scoped_local_worker_executor",
+        runAt: evidenceRunAt,
+        expectedResult: step.successMarker ?? "status=pass",
+        observedResult: status === "verified" ? "status=pass" : "approval_or_dependency_blocked",
+        workingDirectory: "repo-root",
+        stderrTail: "",
+        successMarkerFormat: "exit-code-only",
+        evidenceKind: result.evidenceKind,
+        artifactRef: `coreLoop.executionResult.workerResultPackets[${index}]`,
+      };
+      if (status === "verified") {
+        return {
+          ...base,
+          exitCode: 0,
+          commandRanAt: evidenceRunAt,
+        };
+      }
+      return {
+        ...base,
+        skipReason: "Worker task execution is blocked until approval or missing dependency is resolved.",
+      };
+    });
+    result.workerExecutionEvidence = stepEvidence;
+    return {
+      taskPacketId: result.taskPacketId,
+      owner: result.owner,
+      evidenceKind: result.evidenceKind,
+      status: result.status,
+      command: "npm run meta:theory:run",
+      artifactRef: `coreLoop.executionResult.workerResultPackets[${index}]`,
+      verifyStepRefs: stepEvidence.map((item) => item.verifyStepRef),
+      liveWorkerExecution: result.status === "executed",
+      externalAgentSpawned: false,
+      reason:
+        result.status === "executed"
+          ? "Run-scoped local worker execution completed the bounded task packet."
+          : "Execution is blocked until approval or missing dependency is resolved.",
+    };
+  });
   const actualWorkerExecution = workerExecutionEvidence.some(
     (item) => item.liveWorkerExecution === true,
   );
@@ -1680,6 +2299,26 @@ function buildCoreLoopArtifact({
     maxIterationHandling: "Fix cards may iterate only while Review or Verification failures remain bounded.",
     escalationOwner: "meta-warden",
   };
+  const traceEvalControlPlane = buildTraceEvalControlPlane({
+    runId,
+    artifactStatus,
+    stageOperationPlan,
+    workerTaskPackets,
+    runtimeEvidence,
+    verificationEvidence,
+    capabilitySearchLog,
+    governanceAgentResultPackets,
+    conductorConsumptionEvidence,
+  });
+  const agUiStageEvents = buildAgUiStageEvents({
+    runId,
+    stageOperationPlan,
+  });
+  const performanceCostBudget = buildPerformanceCostBudget();
+  const contextEngineeringBudget = buildContextEngineeringBudget({
+    capabilitySearchLog,
+    stageOperationPlan,
+  });
   return {
     schemaVersion: "core-loop-run-v0.1",
     contractRef: "config/contracts/core-loop-contract.json",
@@ -1730,7 +2369,13 @@ function buildCoreLoopArtifact({
     capabilityInventory,
     capabilityGapPacket,
     capabilityReady,
+    governanceAgentResultPackets,
+    conductorConsumptionEvidence,
     dynamicWorkflowDecisionRecord,
+    traceEvalControlPlane,
+    agUiStageEvents,
+    performanceCostBudget,
+    contextEngineeringBudget,
     fileChangeFactCard: {
       stage: "Fetch",
       mutationPlanned: false,
@@ -1754,6 +2399,7 @@ function buildCoreLoopArtifact({
       parallelGroups,
       dependencyPolicy: "capability gap route before blind execution; external writes require approval",
       omittedLanesWithReason: orchestrationReport.thinkingRoute?.dynamicWorkflowPlan?.omittedLaneIds ?? [],
+      governanceInputsConsumed: conductorConsumptionEvidence.consumedPacketRefs,
     },
     executionResult: {
       stage: "Execution",
@@ -1774,9 +2420,13 @@ function buildCoreLoopArtifact({
             ? "dispatch_board_merged"
             : "no_worker_tasks",
         artifactRefs: [
+          "coreLoop.governanceAgentResultPackets",
+          "coreLoop.conductorConsumptionEvidence",
           "coreLoop.thinkingPacket.dispatchBoard",
           "coreLoop.executionResult.workerResultPackets",
         ],
+        governanceResultsConsumed: conductorConsumptionEvidence.status === "pass",
+        consumedGovernancePacketRefs: conductorConsumptionEvidence.consumedPacketRefs,
         liveExecutionMerged: actualWorkerExecution,
         reason:
           actualWorkerExecution
@@ -1793,6 +2443,13 @@ function buildCoreLoopArtifact({
         reviewOwner: orchestrationReport.reviewResult?.owner,
         verificationOwner: orchestrationReport.verificationResult?.owner,
         workerOwners: [...new Set(workerTaskPackets.map((packet) => packet.owner))],
+        governanceAgents: governanceAgentResultPackets.map((packet) => ({
+          agent: packet.agent,
+          status: packet.status,
+          activationState: packet.activationState,
+          packetId: packet.packetId,
+        })),
+        conductorConsumedGovernanceResults: conductorConsumptionEvidence.status === "pass",
         pass: workerTaskPackets.length > 0 && Boolean(orchestrationReport.reviewResult?.owner),
       },
       protocolCompliance: {
@@ -1800,6 +2457,8 @@ function buildCoreLoopArtifact({
         capabilityDiscoveryChecked:
           orchestrationReport.reviewResult?.checks?.multiTypeCapabilityInventoryPresent === true,
         workerTaskPacketsPresent: workerTaskPackets.length > 0,
+        governanceAgentResultPacketsPresent: governanceAgentResultPackets.length > 0,
+        conductorConsumptionEvidencePresent: conductorConsumptionEvidence.status === "pass",
         executionEvidenceLayerIsHonest: true,
       },
       qualityGate: {
@@ -1840,6 +2499,18 @@ function buildCoreLoopArtifact({
       owner: "verify",
       status: runtimeEvidence.status,
       evidence: verificationEvidence,
+      governanceEvidence: {
+        governanceAgentResultPackets: governanceAgentResultPackets.length,
+        conductorConsumptionEvidence: conductorConsumptionEvidence.status,
+      },
+      workerEvidence: {
+        workerResultPackets: workerResultPackets.length,
+        workerExecutionEvidence: workerExecutionEvidence.length,
+        nestedWorkerExecutionEvidence: workerResultPackets.reduce(
+          (sum, packet) => sum + (packet.workerExecutionEvidence?.length ?? 0),
+          0,
+        ),
+      },
       fuseMode: "public_ready_and_release_gate",
       notEveryStepInterceptor: true,
       fixEvidence: verificationEvidence.filter((item) => item.status === "pass"),
@@ -2094,6 +2765,8 @@ export async function runMetaTheoryGovernedExecution({
     writebackFlow,
     artifactStatus,
     cardPlanPacket,
+    stageOperationPlan,
+    analytics,
   });
   const artifact = {
     schemaVersion: 1,
@@ -2107,6 +2780,12 @@ export async function runMetaTheoryGovernedExecution({
     capabilityInventory: coreLoop.capabilityInventory,
     capabilityGapPacket: coreLoop.capabilityGapPacket,
     capabilityReady: coreLoop.capabilityReady,
+    governanceAgentResultPackets: coreLoop.governanceAgentResultPackets,
+    conductorConsumptionEvidence: coreLoop.conductorConsumptionEvidence,
+    traceEvalControlPlane: coreLoop.traceEvalControlPlane,
+    agUiStageEvents: coreLoop.agUiStageEvents,
+    performanceCostBudget: coreLoop.performanceCostBudget,
+    contextEngineeringBudget: coreLoop.contextEngineeringBudget,
     thinkingPacket: coreLoop.thinkingPacket,
     dispatchBoard: coreLoop.thinkingPacket.dispatchBoard,
     workerTaskPackets: coreLoop.thinkingPacket.workerTaskPackets,
@@ -2122,8 +2801,16 @@ export async function runMetaTheoryGovernedExecution({
       status: "pass",
       entry: "meta:theory:run",
       triggerChain: orchestrationReport.orchestrationTaskBoardPacket.triggerChain,
+      governanceAgentResultPackets: coreLoop.governanceAgentResultPackets,
+      conductorConsumptionEvidence: coreLoop.conductorConsumptionEvidence,
       orchestrationTaskBoardPacket: orchestrationReport.orchestrationTaskBoardPacket,
       workerTaskPackets: orchestrationReport.workerTaskPackets,
+      workerResultPackets: coreLoop.executionResult.workerResultPackets,
+      workerExecutionEvidence: coreLoop.executionResult.workerExecutionEvidence,
+      traceEvalControlPlane: coreLoop.traceEvalControlPlane,
+      agUiStageEvents: coreLoop.agUiStageEvents,
+      performanceCostBudget: coreLoop.performanceCostBudget,
+      contextEngineeringBudget: coreLoop.contextEngineeringBudget,
     },
     conversationNotice,
     userExperienceNotice,

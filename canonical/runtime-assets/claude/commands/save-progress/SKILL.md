@@ -98,3 +98,35 @@ python mcp_memory_global.py --mode query-memories
 
 If the user asks for previous context, history, or remembered notes, use `--mode query-memories`.
 If the user asks for project progress or where the previous session stopped, use `--mode query-project`."
+
+## Prompt Acceptance
+
+This helper binds `planning-continuity`, `memory-graph-and-observability`, `runtime-native-surfaces`, and `verification-eval-and-release`. It saves resumable task context; it does not replace the canonical planning files or prove the user goal is done.
+
+## Pass
+
+- Saved state records the current task, completed work, remaining work, and any meaningful note.
+- The summary is specific enough for a later session to resume.
+- Existing `task_plan.md`, `findings.md`, and `progress.md` remain the active planning continuity source when present.
+
+## Fail
+
+- The command saves generic session noise or duplicates unchanged state.
+- It treats memory write success as task completion.
+- It overwrites planning files, PRD decisions, or canonical governance state.
+
+## Block
+
+Block or report unavailable when the memory hook script cannot be found, Python is unavailable, the project directory is unknown, or the user asks for credential/private-state writes outside the approved memory boundary.
+
+## Return to stage
+
+Return to Fetch when previous context is needed before saving. Return to Verification when the user asks whether saved state actually matches current project files.
+
+## Verification
+
+Use the JSON output fields `saved`, `file`, `total_sessions`, `last_session_completed`, and `last_session_remaining`. For prompt acceptance, run `npm run meta:prompt:validate`.
+
+## Preserve
+
+Preserve Claude Code native hooks, local memory, project planning files, MCP memory service state, filesystem boundaries, and user privacy. This command must not replace planning-with-files or Meta_Kim run artifacts.

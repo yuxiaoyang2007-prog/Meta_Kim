@@ -85,6 +85,7 @@ Use when task_plan.md, findings.md, and progress.md planning state affects route
 - Assign an owner for each action.
 - Produce a checkable packet or artifact.
 - Bind pass/fail to evidence, threshold, or command output.
+- Treat planning files as update-only continuity state. Append, refine, or mark superseded items; preserve the existing phases, evidence, and user decisions while a run is active.
 - Preserve existing foundational and native runtime capabilities.
 
 ## Do not
@@ -92,6 +93,8 @@ Use when task_plan.md, findings.md, and progress.md planning state affects route
 - Do not delete skills, dependencies, web/browser/research, shell, filesystem, apply_patch, MCP, memory, graph, hooks, scripts, runtime tools, or native platform abilities.
 - Do not use vague advice without trigger, output, evidence, and writeback.
 - Do not route reference-only or unknown dependencies into execution.
+- Do not overwrite `task_plan.md`, `findings.md`, or `progress.md` with a fresh plan while they contain active continuity state.
+- Do not reset prior completed, blocked, superseded, or user-accepted planning entries; update their status and add a new entry instead.
 
 ## Required packet
 
@@ -101,6 +104,7 @@ Use when task_plan.md, findings.md, and progress.md planning state affects route
 
 - At least one action has owner, input, output, and verification.
 - Pass criteria include numeric threshold, required field list, command, artifact, or human acceptance record.
+- Existing `task_plan.md`, `findings.md`, and `progress.md` content is preserved or explicitly superseded with reason.
 - Unsupported, unknown, or partial capability is marked rather than removed.
 
 ## Fail

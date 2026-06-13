@@ -4,9 +4,9 @@ This directory is intentionally large because Meta_Kim exposes most maintenance 
 
 ## Current Shape
 
-- Top-level `.mjs` scripts: 95
+- Top-level `.mjs` scripts: 96
 - MCP server scripts: 1 (`scripts/mcp/meta-runtime-server.mjs`)
-- Direct `package.json` entries: 105
+- Direct `package.json` entries: 106
 - Referenced helper scripts: 21
 - Cleanup candidates with no current external reference evidence: 3
 
@@ -25,7 +25,7 @@ This directory is intentionally large because Meta_Kim exposes most maintenance 
 | Product/report generators | Produce PRD-backed evidence reports, panels, bundles, and replay artifacts | `generate-*-report.mjs`, `run-product-reviewer-replay.mjs`, `run-complex-capability-gap-inputs.mjs` | Keep while their package script or meta-theory test exists. |
 | Runtime evidence | Probe or evaluate Claude, Codex, Cursor, OpenClaw, OS, graphify, and live shards | `eval-meta-agents.mjs`, `probe-runtime-capabilities.mjs`, `generate-runtime-live-shard-matrix.mjs`, `graphify-cli.mjs` | Keep. These protect anti-overclaim release boundaries. |
 | Sync/install/release | Install, sync projections, uninstall, migrate, check dependencies, and update global targets | `sync-runtimes.mjs`, `install-global-skills-all-runtimes.mjs`, `postinstall-check.mjs`, `uninstall.mjs` | Keep unless the package script and tests are removed together. |
-| Validators | Validate project, runtime, provider, prompt, route, run artifact, and governance contracts | `validate-*.mjs`, `score-capability-candidates.mjs` | Keep. Validators are release and safety gates. |
+| Validators | Validate project, runtime, provider, prompt, route, run artifact, and governance contracts | `validate-*.mjs`, `validate-runtime-safety-contract.mjs`, `score-capability-candidates.mjs` | Keep. Validators are release and safety gates. |
 | Doctor/status utilities | Human-facing diagnostics, status, compaction, migration, and next-iteration prompts | `doctor-*.mjs`, `footprint.mjs`, `write-compaction.mjs`, `prompt-next-iteration.mjs` | Keep if exposed in `package.json`; otherwise inspect before cleanup. |
 | Shared helpers | Imported by package entries, tests, hooks, or setup flows | `governance-lib.mjs`, `meta-kim-local-state.mjs`, `runtime-hook-mapping.mjs`, `node-spawn-config.mjs` | Keep when referenced by imports, tests, config, or hooks. |
 

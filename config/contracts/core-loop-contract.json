@@ -51,6 +51,7 @@
         "fetchPacket.capabilityDiscovery.searchLog",
         "fetchPacket.capabilityDiscovery.capabilityInventory",
         "fetchPacket.capabilityGap",
+        "contextEngineeringBudget",
         "fileChangeFactCard"
       ],
       "skipConditions": ["fast_path read-only answer with explicit evidence boundary"],
@@ -76,7 +77,9 @@
         "thinkingPacket.mergeOwner",
         "thinkingPacket.parallelGroups",
         "thinkingPacket.dependencyPolicy",
-        "thinkingPacket.omittedLanesWithReason"
+        "thinkingPacket.omittedLanesWithReason",
+        "governanceAgentResultPackets",
+        "conductorConsumptionEvidence"
       ],
       "skipConditions": ["fast_path read-only answer with no execution route"],
       "gateConditions": [
@@ -92,6 +95,8 @@
       "stage": "Execution",
       "requiredInputs": ["thinkingPacket", "workerTaskPackets", "sideEffectLedgerPacket"],
       "requiredOutputs": [
+        "conductorConsumptionEvidence",
+        "agUiStageEvents",
         "executionResult.workerResultPackets",
         "executionResult.workerExecutionEvidence",
         "executionResult.mergeResult"
@@ -151,6 +156,8 @@
       "requiredOutputs": [
         "verificationResult.status",
         "verificationResult.evidence",
+        "traceEvalControlPlane",
+        "performanceCostBudget",
         "verificationResult.fixEvidence",
         "verificationResult.remainingRisk"
       ],

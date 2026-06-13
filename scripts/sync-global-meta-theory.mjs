@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import {
   buildMetaKimHooksTemplate,
   isRetiredMetaKimHookCommand,
+  isGlobalMetaKimManagedHookCommand,
   mergeGlobalMetaKimHooksIntoSettings,
 } from "./claude-settings-merge.mjs";
 import {
@@ -72,6 +73,12 @@ const RETIRED_HOOK_FILES = ["pre-git-push-confirm.mjs"];
 const codexMetaTheoryCommandSource = path.join(
   canonicalRuntimeAssetsDir,
   "codex",
+  "commands",
+  "meta-theory.md",
+);
+const claudeMetaTheoryCommandSource = path.join(
+  canonicalRuntimeAssetsDir,
+  "claude",
   "commands",
   "meta-theory.md",
 );
@@ -251,6 +258,27 @@ async function copyCodexMetaTheoryCommand() {
     rec.recordFile(targetPath, {
       source: "sync-global-meta-theory",
       purpose: "codex-global-command",
+      category: CATEGORIES.A,
+    }),
+  );
+  return targetPath;
+}
+
+async function copyClaudeMetaTheoryCommand() {
+  const commandsDir = path.join(runtimeHomes.claude.dir, "commands");
+  const targetPath = path.join(commandsDir, "meta-theory.md");
+  assertHomeBound(targetPath);
+  if (!(await pathExists(claudeMetaTheoryCommandSource))) {
+    throw new Error(
+      `Missing canonical Claude Code command source: ${claudeMetaTheoryCommandSource}`,
+    );
+  }
+  await fs.mkdir(commandsDir, { recursive: true });
+  await fs.copyFile(claudeMetaTheoryCommandSource, targetPath);
+  recordSafe((rec) =>
+    rec.recordFile(targetPath, {
+      source: "sync-global-meta-theory",
+      purpose: "claude-global-command",
       category: CATEGORIES.A,
     }),
   );
@@ -451,6 +479,82 @@ async function syncClaudeGlobalSettingsHooks() {
   recordSettingsMerge();
 }
 
+async function readClaudeGlobalSettings(settingsPath) {
+  if (!(await pathExists(settingsPath))) {
+    return {};
+  }
+  const raw = await fs.readFile(settingsPath, "utf8");
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error(
+      `Invalid JSON in ${settingsPath}; fix or move aside before sync.`,
+    );
+  }
+}
+
+function flattenHookCommands(hooks = {}) {
+  const commands = [];
+  for (const blocks of Object.values(hooks ?? {})) {
+    for (const block of blocks ?? []) {
+      for (const hook of block?.hooks ?? []) {
+        if (hook?.command) {
+          commands.push(hook.command);
+        }
+      }
+    }
+  }
+  return commands;
+}
+
+function hookCommandScriptPath(command) {
+  const trimmed = String(command ?? "").trim();
+  const quoted = trimmed.match(/^node\s+"([^"]+)"/u);
+  if (quoted) {
+    return quoted[1];
+  }
+  const unquoted = trimmed.match(/^node\s+([^\s]+)/u);
+  return unquoted?.[1] ?? null;
+}
+
+async function checkClaudeGlobalSettingsHooks() {
+  const settingsPath = path.join(runtimeHomes.claude.dir, "settings.json");
+  const absHooks = globalMetaKimHooksDir();
+  const template = buildMetaKimHooksTemplate(absHooks);
+  const settings = await readClaudeGlobalSettings(settingsPath);
+  const expected = mergeGlobalMetaKimHooksIntoSettings(settings, template);
+  stripRetiredGlobalHookEntries(expected);
+
+  const actualHooks = JSON.stringify(settings.hooks ?? {});
+  const expectedHooks = JSON.stringify(expected.hooks ?? {});
+  let inSync = actualHooks === expectedHooks;
+  const missingCommands = [];
+
+  for (const command of flattenHookCommands(settings.hooks)) {
+    if (!isGlobalMetaKimManagedHookCommand(command)) {
+      continue;
+    }
+    const scriptPath = hookCommandScriptPath(command);
+    if (!scriptPath || !(await pathExists(scriptPath))) {
+      missingCommands.push(command);
+    }
+  }
+
+  if (missingCommands.length > 0) {
+    inSync = false;
+  }
+
+  console.log(
+    `${inSync ? `${C.green}✓${C.reset}` : `${C.yellow}⊘${C.reset}`} ${C.dim}Claude Code global settings hooks: ${settingsPath}${C.reset}`,
+  );
+  if (!inSync && missingCommands.length > 0) {
+    console.log(
+      `${C.yellow}⊘${C.reset} ${C.dim}Missing registered Meta_Kim hook scripts: ${missingCommands.length}${C.reset}`,
+    );
+  }
+  return inSync;
+}
+
 function stripRetiredGlobalHookEntries(settings) {
   if (!settings.hooks || typeof settings.hooks !== "object") {
     return;
@@ -524,10 +628,33 @@ async function runCheck() {
     if (!hooksInSync) {
       failed = true;
     }
+    const settingsHooksInSync = await checkClaudeGlobalSettingsHooks();
+    if (!settingsHooksInSync) {
+      failed = true;
+    }
   } else if (selectedTargetIds.includes("claude")) {
     console.log(
       `${C.yellow}⊘${C.reset} ${C.dim}Claude Code global hooks skipped (use --with-global-hooks to check them): ${globalMetaKimHooksDir()}${C.reset}`,
     );
+  }
+
+  if (selectedTargetIds.includes("claude")) {
+    const commandPath = path.join(
+      runtimeHomes.claude.dir,
+      "commands",
+      "meta-theory.md",
+    );
+    const sourceRaw = await fs.readFile(claudeMetaTheoryCommandSource, "utf8");
+    const targetRaw = (await pathExists(commandPath))
+      ? await fs.readFile(commandPath, "utf8")
+      : null;
+    const commandInSync = targetRaw === sourceRaw;
+    console.log(
+      `${commandInSync ? `${C.green}✓${C.reset}` : `${C.yellow}⊘${C.reset}`} ${C.dim}Claude Code /meta-theory command: ${commandPath}${C.reset}`,
+    );
+    if (!commandInSync) {
+      failed = true;
+    }
   }
 
   if (selectedTargetIds.includes("codex")) {
@@ -605,6 +732,13 @@ async function runSync() {
     );
   }
 
+  if (selectedTargetIds.includes("claude")) {
+    const commandPath = await copyClaudeMetaTheoryCommand();
+    console.log(
+      `${C.green}✓${C.reset} ${C.dim}Synced Claude Code /meta-theory command: ${commandPath}${C.reset}`,
+    );
+  }
+
   if (selectedTargetIds.includes("codex")) {
     const commandPath = await copyCodexMetaTheoryCommand();
     console.log(
@@ -649,7 +783,10 @@ function printTargets() {
   console.log("- META_KIM_CODEX_HOME or CODEX_HOME");
   console.log("- META_KIM_CURSOR_HOME or CURSOR_HOME");
   console.log("");
-  console.log("Codex slash command (when codex is an active target):");
+  console.log("Runtime slash commands:");
+  console.log(
+    `- ${path.join(runtimeHomes.claude.dir, "commands", "meta-theory.md")}`,
+  );
   console.log(
     `- ${path.join(runtimeHomes.codex.dir, "commands", "meta-theory.md")}`,
   );

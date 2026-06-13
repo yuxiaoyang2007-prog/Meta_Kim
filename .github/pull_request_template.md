@@ -27,6 +27,12 @@ Use this template for runtime, hook, setup, sync, provider, governance, deletion
 - [ ] Local assertion or unit/integration test:
 - [ ] Host-side or installed-user self-test:
 - [ ] User-visible result or release-note evidence:
+- [ ] Evidence template includes `operationSteps`, `toolSideOutput`, `hostVisibleResult`, `failureBoundary`, and `reviewStatus`.
+
+### Install / Update Status Semantics
+
+- [ ] User-visible install/update output uses only `success`, `skipped`, `manual`, or `failed` semantics.
+- [ ] Each changed message tells the user whether to continue, manually act, retry, or stop for a real failure.
 
 ### Execution Mode Classification
 

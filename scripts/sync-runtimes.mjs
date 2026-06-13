@@ -66,7 +66,7 @@ function recordSafe(fn) {
  *   D = Project runtime skills   (.claude/skills, .agents/skills, ...)
  *   E = Project runtime hooks    (.claude/hooks, .codex/hooks, .cursor/hooks, openclaw/hooks)
  *   F = Project runtime agents   (.claude/agents, .codex/agents, .cursor/agents)
- *   G = Project settings + MCP   (.claude/settings.json, .mcp.json, .codex/*.toml)
+ *   G = Project settings + MCP   (.claude/settings.json, .claude/commands, .mcp.json, .codex/*.toml)
  */
 export function inferProjectCategory(filePath, rootDir = repoRoot) {
   if (typeof filePath !== "string" || !filePath) return null;
@@ -108,6 +108,7 @@ export function inferProjectCategory(filePath, rootDir = repoRoot) {
     return CATEGORIES.D;
   }
   if (
+    rel.startsWith(".claude/commands/") ||
     rel.startsWith(".codex/commands/") ||
     rel === ".codex/hooks.json" ||
     rel === ".cursor/hooks.json" ||
@@ -624,6 +625,7 @@ function resolveProjectionDirs(scope) {
     claudeSkillsProjectionDir: claude.skillsDir,
     claudeSkillProjectionRoot: claude.skillRoot,
     claudeHooksProjectionDir: claude.hooksDir,
+    claudeCommandsDir: claude.commandsDir,
     claudeSettingsProjectionPath: claude.settingsFile,
     claudeMcpProjectionPath: claude.mcpFile,
     claudeCapabilityIndexDir: claude.capabilityIndexDir,
@@ -678,6 +680,7 @@ function resolveProjectionDirs(scope) {
       claudeSkills: claude.display.skillsDir,
       claudeSkill: claude.display.skillRoot,
       claudeHooks: claude.display.hooksDir,
+      claudeCommands: claude.display.commandsDir,
       claudeSettings: claude.display.settingsFile,
       claudeMcp: claude.display.mcpFile,
       claudeCapabilityIndex: claude.display.capabilityIndexDir,
@@ -725,6 +728,12 @@ const canonicalClaudeMcpPath = path.join(
   canonicalRuntimeAssetsDir,
   "claude",
   "mcp.json",
+);
+const canonicalClaudeCommandPath = path.join(
+  canonicalRuntimeAssetsDir,
+  "claude",
+  "commands",
+  "meta-theory.md",
 );
 const canonicalCodexConfigExamplePath = path.join(
   canonicalRuntimeAssetsDir,
@@ -1046,6 +1055,8 @@ Generated from \`${agent.sourceFile}\`. Edit the canonical source first, then ru
 - When the user asks which agents exist, how many agents exist, or who can collaborate right now, query the live runtime registry first through \`agents_list\`. If that tool is unavailable, fall back to an explicit runtime command and state the result source.
 - Stay inside your own responsibility boundary unless the user explicitly asks you to coordinate broader work.
 - The theory source is \`canonical/skills/meta-theory/references/meta-theory.md\`; public runtime behavior must not depend on local narrative notes.
+- For \`meta-theory\`, \`/meta-theory\`, project understanding, architecture, runtime routing, hook/MCP/tool routing, commercialization, market, competitor, pricing, growth, strategy, or roadmap tasks, run or faithfully follow \`npm run meta:theory:run -- "<user request>"\` before Thinking. If command execution or retrieval capability is unavailable, return \`blocked_to_fetch\` with the exact missing capability instead of giving a shallow summary.
+- Project-understanding Fetch must account for README, AGENTS, package scripts, canonical agents/skills/runtime assets, contracts, capability index, runtime projections, MCP configs, hooks, dependency registry, and Graphify when present.
 
 ${agent.body}
 `;
@@ -1941,6 +1952,7 @@ async function syncClaudeProjection(
     claudeAgentsProjectionDir,
     claudeSkillsProjectionDir,
     claudeHooksProjectionDir,
+    claudeCommandsDir,
     claudeSettingsProjectionPath,
     claudeMcpProjectionPath,
     displayPaths,
@@ -1966,6 +1978,21 @@ async function syncClaudeProjection(
     canonicalSkills,
     changedFiles,
   );
+
+  const claudeMetaTheoryCommand = await tryReadCanonical(
+    canonicalClaudeCommandPath,
+  );
+  if (
+    claudeMetaTheoryCommand &&
+    (
+      await writeGeneratedFile(
+        path.join(claudeCommandsDir, "meta-theory.md"),
+        claudeMetaTheoryCommand,
+      )
+    ).changed
+  ) {
+    changedFiles.push(`${displayPaths.claudeCommands}/meta-theory.md`);
+  }
 
   const hookEntries = (
     await fs.readdir(canonicalClaudeHooksDir, { withFileTypes: true })
@@ -2144,6 +2171,7 @@ Examples:
   // Safety assertion: all writes must stay within allowedRoots
   if (!checkOnly) {
     assertHomeBound(dirs.claudeAgentsProjectionDir, dirs.allowedRoots);
+    assertHomeBound(dirs.claudeCommandsDir, dirs.allowedRoots);
     if (dirs.claudeMcpProjectionPath) {
       assertHomeBound(dirs.claudeMcpProjectionPath, dirs.allowedRoots);
     }
@@ -2858,6 +2886,9 @@ Examples:
     claudeHooks: changedFiles.filter((f) =>
       hasDisplayPrefix(f, dirs.displayPaths.claudeHooks),
     ).length,
+    claudeCommands: changedFiles.filter((f) =>
+      hasDisplayPrefix(f, dirs.displayPaths.claudeCommands),
+    ).length,
     claudeSettings: changedFiles.filter(
       (f) =>
         normalizeDisplayPath(f) ===
@@ -2944,6 +2975,11 @@ Examples:
         {
           label: dirs.displayPaths.claudeHooks,
           count: layerCounts.claudeHooks,
+          summaryKind: "files",
+        },
+        {
+          label: dirs.displayPaths.claudeCommands,
+          count: layerCounts.claudeCommands,
           summaryKind: "files",
         },
         {

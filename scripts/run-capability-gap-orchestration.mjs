@@ -921,9 +921,74 @@ function makeGroupKey(result) {
 }
 
 function needsExternalResearch(input) {
-  return /\b(latest|current|today|api|platform|provider|dependency|external|web|search|official|version|price)\b|联网|最新|当前|今天|平台|外部|生态|供应商|依赖|官方|版本|价格|搜索|市场/i.test(
+  return /\b(latest|current|today|api|platform|provider|dependency|external|web|search|official|version|price|market|competitor|commercial|commerciali[sz]e|pricing|customer|investor|strategy)\b|联网|最新|当前|今天|平台|外部|生态|供应商|依赖|官方|版本|价格|搜索|市场|竞品|商业化|定价|客户|投资|战略|发展/i.test(
     String(input ?? "")
   );
+}
+
+function projectFetchSources(input) {
+  const text = String(input ?? "");
+  const sources = [
+    {
+      source: "README.md",
+      sourceType: "project_overview",
+      routeImpact: "explain user-facing purpose and installation surface",
+      requiredForProjectUnderstanding: true,
+    },
+    {
+      source: "AGENTS.md",
+      sourceType: "maintainer_contract",
+      routeImpact: "bind runtime behavior, governance entry, and Graphify policy",
+      requiredForProjectUnderstanding: true,
+    },
+    {
+      source: "package.json",
+      sourceType: "command_inventory",
+      routeImpact: "discover executable product and verification commands",
+      requiredForProjectUnderstanding: true,
+    },
+    {
+      source: "graphify-out/GRAPH_REPORT.md",
+      sourceType: "project_graph",
+      routeImpact: "navigate broad codebase structure before source verification",
+      requiredForProjectUnderstanding: true,
+    },
+    {
+      source: "canonical/skills/meta-theory/SKILL.md",
+      sourceType: "canonical_skill",
+      routeImpact: "bind meta-theory executable governance rules",
+      requiredForProjectUnderstanding: true,
+    },
+    {
+      source: "config/contracts/core-loop-contract.json",
+      sourceType: "machine_contract",
+      routeImpact: "prove the default governed execution entry and stage outputs",
+      requiredForProjectUnderstanding: true,
+    },
+    {
+      source: "config/capability-index/",
+      sourceType: "capability_index",
+      routeImpact: "discover reusable agents, skills, tools, MCPs, hooks, and runtime providers",
+      requiredForProjectUnderstanding: true,
+    },
+    {
+      source: ".mcp.json and runtime MCP configs",
+      sourceType: "mcp_inventory",
+      routeImpact: "detect retrieval and memory/tool providers before Thinking",
+      requiredForProjectUnderstanding: true,
+    },
+  ];
+
+  if (needsExternalResearch(text)) {
+    sources.push({
+      source: "runtime retrieval capability inventory",
+      sourceType: "external_research_capability",
+      routeImpact: "prove web_search/url_fetch/browser/MCP/provider path or block before market claims",
+      requiredForProjectUnderstanding: true,
+    });
+  }
+
+  return sources;
 }
 
 function buildResearchCapabilityDiscovery(input) {
@@ -1437,11 +1502,7 @@ export function buildCapabilityGapOrchestration(input) {
       mustDistinguishTemporarySubagentsFromDurableAgents: true,
     },
     fetchEvidence: {
-      sources: [
-        "canonical/skills/meta-theory/SKILL.md",
-        "config/contracts/workflow-contract.json",
-        "config/contracts/capability-gap-decision-contract.json",
-      ],
+      sources: projectFetchSources(input),
       entryGate: "meta-warden",
       orchestrationOwner: "meta-conductor",
       decisionKernel: "scripts/capability-gap-mvp.mjs",

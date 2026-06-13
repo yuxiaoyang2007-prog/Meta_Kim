@@ -1,0 +1,244 @@
+{
+  "schemaVersion": 1,
+  "contractId": "framework-prompt-architecture-contract",
+  "status": "productized",
+  "currentAsOf": "2026-06-13",
+  "owner": "meta-genesis",
+  "reviewOwner": "meta-prism",
+  "verificationOwner": "verify",
+  "prdTaskIds": ["P-081", "P-082", "P-083", "P-084"],
+  "purpose": "Define the best-practice architecture for durable framework prompts in Meta_Kim: layered assets, review rubric, regression fixtures, and context-engineering budget.",
+  "primaryRuntimeTier": ["claude_code", "codex"],
+  "compatibilityRuntimeTier": ["cursor", "openclaw"],
+  "sourceGuidance": [
+    {
+      "sourceId": "openai-prompt-engineering",
+      "url": "https://developers.openai.com/api/docs/guides/prompt-engineering",
+      "sourceType": "official_doc",
+      "claimUsed": "prompt instructions need clear task goals, context, output contracts, examples, and evaluation feedback"
+    },
+    {
+      "sourceId": "anthropic-prompt-engineering-overview",
+      "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/overview",
+      "sourceType": "official_doc",
+      "claimUsed": "prompt engineering should be empirical and evaluated against success criteria"
+    },
+    {
+      "sourceId": "anthropic-context-engineering",
+      "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents",
+      "sourceType": "official_doc",
+      "claimUsed": "agent context must be selected, compressed, isolated, and evaluated instead of dumped indiscriminately"
+    },
+    {
+      "sourceId": "google-gemini-prompt-design",
+      "url": "https://ai.google.dev/gemini-api/docs/prompting-strategies",
+      "sourceType": "official_doc",
+      "claimUsed": "prompt design should include role/task framing, examples, constraints, and iteration"
+    },
+    {
+      "sourceId": "microsoft-system-message-guidance",
+      "url": "https://learn.microsoft.com/azure/ai-foundry/openai/concepts/system-message",
+      "sourceType": "official_doc",
+      "claimUsed": "system/developer style guidance belongs in the highest-priority instruction layer and must be separated from user/task context"
+    },
+    {
+      "sourceId": "openai-structured-outputs",
+      "url": "https://developers.openai.com/api/docs/guides/structured-outputs",
+      "sourceType": "official_doc",
+      "claimUsed": "schema-backed output contracts should be used when downstream systems consume model output"
+    },
+    {
+      "sourceId": "openai-agent-evals",
+      "url": "https://developers.openai.com/api/docs/guides/agent-evals",
+      "sourceType": "official_doc",
+      "claimUsed": "prompt and agent workflow changes need repeatable datasets, graders, and eval runs once good behavior is defined"
+    }
+  ],
+  "promptAssetLayers": [
+    {
+      "layerId": "system-developer",
+      "owner": "meta-warden",
+      "scope": "highest-priority cross-run behavior and safety boundaries",
+      "inputContract": ["identity", "permissions", "non-negotiable safety", "runtime boundary"],
+      "outputContract": ["stable behavior constraints", "refusal policy"],
+      "fallbackPolicy": "return_to_Critical_when_conflict_changes_scope",
+      "evalPolicy": "system/developer conflict fixture",
+      "versionPolicy": "semver-like contract version",
+      "forbiddenMixing": ["one-run task details", "renderer schema", "private local file paths"]
+    },
+    {
+      "layerId": "agents-project-rules",
+      "owner": "meta-conductor",
+      "scope": "repo-local governance and maintenance instructions",
+      "inputContract": ["project guide", "source-of-truth map", "runtime boundaries"],
+      "outputContract": ["route constraints", "maintenance commands", "release modes"],
+      "fallbackPolicy": "repo source-of-truth wins over runtime mirror",
+      "evalPolicy": "AGENTS/CLAUDE consistency fixture",
+      "versionPolicy": "tracked with repo commits",
+      "forbiddenMixing": ["canonical agent identity", "third-party credentials"]
+    },
+    {
+      "layerId": "canonical-agent-soul",
+      "owner": "meta-genesis",
+      "scope": "durable owner identity, responsibilities, refusals, and review boundary",
+      "inputContract": ["responsibility class", "inputs", "outputs", "refusals"],
+      "outputContract": ["reviewable agent prompt", "projection-safe identity"],
+      "fallbackPolicy": "do not create owner without gap proof and Warden approval",
+      "evalPolicy": "identity cleanliness and no task-bound nickname fixture",
+      "versionPolicy": "canonical source then sync projection",
+      "forbiddenMixing": ["todayTask", "roleInstanceId", "host-generated personal nickname"]
+    },
+    {
+      "layerId": "skill-prompt",
+      "owner": "meta-artisan",
+      "scope": "reusable method, workflow, or capability instruction pack",
+      "inputContract": ["trigger", "workflow", "required references", "tools/scripts"],
+      "outputContract": ["portable skill behavior", "acceptance checklist"],
+      "fallbackPolicy": "missing provider returns capabilityGapPacket",
+      "evalPolicy": "skill activation and conflict fixture",
+      "versionPolicy": "skill schema and changelog marker",
+      "forbiddenMixing": ["runtime-only renderer schema", "single-use issue instructions"]
+    },
+    {
+      "layerId": "workflow-contract-prompt",
+      "owner": "meta-conductor",
+      "scope": "machine-readable workflow, stage, and packet requirements",
+      "inputContract": ["stage IO", "gate policy", "skip policy", "verification policy"],
+      "outputContract": ["validator-readable contract", "required artifact paths"],
+      "fallbackPolicy": "missing field returns to responsible stage",
+      "evalPolicy": "contract validator and fixture suite",
+      "versionPolicy": "schemaVersion plus package script gate",
+      "forbiddenMixing": ["unverifiable prose-only rule", "private docs as public package requirement"]
+    },
+    {
+      "layerId": "runtime-adapter-prompt",
+      "owner": "meta-sentinel",
+      "scope": "runtime-native surfaces, commands, hooks, approvals, choice UI, and degradation rules",
+      "inputContract": ["runtime", "OS", "available native surface", "permission mode"],
+      "outputContract": ["adapter behavior", "degradation boundary", "native preservation"],
+      "fallbackPolicy": "unknown runtime ability stays unknown/partial until verified",
+      "evalPolicy": "runtime projection and native-surface fixture",
+      "versionPolicy": "generated from canonical runtime assets",
+      "forbiddenMixing": ["canonical prompt identity", "fake universal runtime feature"]
+    },
+    {
+      "layerId": "eval-fixture-prompt",
+      "owner": "test",
+      "scope": "positive, boundary, regression, red-team, and user-correction replay fixtures",
+      "inputContract": ["prompt asset", "expected behavior", "failure examples"],
+      "outputContract": ["repeatable fixture", "grader or assertion", "threshold"],
+      "fallbackPolicy": "prompt change cannot claim durable pass without fixture coverage",
+      "evalPolicy": "positive + boundary + regression required for every durable prompt change",
+      "versionPolicy": "fixture id and baseline hash",
+      "forbiddenMixing": ["manual-only acceptance as sole proof", "smoke test labeled live"]
+    }
+  ],
+  "promptAssetReviewMatrix": [
+    {
+      "dimensionId": "clarity",
+      "sourceRefs": ["openai-prompt-engineering", "anthropic-prompt-engineering-overview", "google-gemini-prompt-design"],
+      "question": "Is the real task, user outcome, acceptance standard, and non-goal explicit enough to execute?",
+      "failureMode": "abstract slogan or vague command passes without testable behavior",
+      "requiredEvidence": ["successCriteria", "nonGoals", "passKillCriteria"]
+    },
+    {
+      "dimensionId": "context-separation",
+      "sourceRefs": ["anthropic-context-engineering", "microsoft-system-message-guidance"],
+      "question": "Are fixed instructions, variable evidence, user input, tool output, and untrusted content separated?",
+      "failureMode": "long context dump lets user/task/tool content override durable behavior",
+      "requiredEvidence": ["fixedContext", "variableContext", "untrustedInputBoundary"]
+    },
+    {
+      "dimensionId": "examples-counterexamples",
+      "sourceRefs": ["openai-prompt-engineering", "google-gemini-prompt-design"],
+      "question": "Does the prompt include positive examples, boundary examples, and disallowed counterexamples where ambiguity matters?",
+      "failureMode": "same ambiguity is corrected repeatedly by the user",
+      "requiredEvidence": ["positiveFixture", "boundaryFixture", "regressionFixture"]
+    },
+    {
+      "dimensionId": "output-contract",
+      "sourceRefs": ["openai-structured-outputs"],
+      "question": "Is the output shape explicit enough for the next consumer or validator?",
+      "failureMode": "downstream parser or reviewer must infer fields from prose",
+      "requiredEvidence": ["schemaOrFieldList", "consumer", "missingFieldTarget"]
+    },
+    {
+      "dimensionId": "tool-data-policy",
+      "sourceRefs": ["openai-prompt-engineering", "microsoft-system-message-guidance"],
+      "question": "Does the prompt say when to fetch, use tools, cite evidence, and avoid unsupported current claims?",
+      "failureMode": "model knowledge or config-only evidence is treated as current source truth",
+      "requiredEvidence": ["fetchPolicy", "toolPolicy", "sourceFreshness"]
+    },
+    {
+      "dimensionId": "safety-fallback",
+      "sourceRefs": ["microsoft-system-message-guidance", "openai-agent-evals"],
+      "question": "Are refusal, return-to-stage, approval, sandbox, and unsafe-write fallbacks explicit?",
+      "failureMode": "unsafe or unsupported route continues as a degraded-but-unmarked execution",
+      "requiredEvidence": ["returnToStage", "approvalBoundary", "sandboxOrBlocked"]
+    },
+    {
+      "dimensionId": "versioning",
+      "sourceRefs": ["openai-agent-evals"],
+      "question": "Can a prompt change be compared against a baseline with version, fixture, and review evidence?",
+      "failureMode": "prompt iteration cannot be audited or rolled back",
+      "requiredEvidence": ["version", "baseline", "changeReason"]
+    },
+    {
+      "dimensionId": "performance",
+      "sourceRefs": ["anthropic-context-engineering", "openai-prompt-engineering"],
+      "question": "Does the prompt avoid unnecessary long context, repeated rules, and high-cost work without evidence value?",
+      "failureMode": "prompt sprawl increases token/cost/latency while reducing instruction salience",
+      "requiredEvidence": ["contextBudget", "tokenBudget", "omittedContextReasons"]
+    }
+  ],
+  "promptEvalRegressionSuite": {
+    "minimumFixturesPerDurablePromptChange": {
+      "positive": 1,
+      "boundary": 1,
+      "regression": 1
+    },
+    "fixtureFamilies": [
+      {
+        "fixtureType": "positive",
+        "exampleId": "prompt-first-primary-runtime",
+        "checks": ["Critical before Fetch", "capability discovery before execution", "owner/loadout selected"]
+      },
+      {
+        "fixtureType": "boundary",
+        "exampleId": "ambiguous-compatible-runtime-priority",
+        "checks": ["Claude Code and Codex remain primary", "Cursor/OpenClaw remain compatibility scope"]
+      },
+      {
+        "fixtureType": "regression",
+        "exampleId": "planning-files-update-only",
+        "checks": ["planning files are updated, not reset", "hookprompt cannot override PRD route"]
+      }
+    ],
+    "repeatAmbiguityReductionTarget": 0.3,
+    "manualAcceptanceCanSupplementButNotReplaceFixtures": true
+  },
+  "contextEngineeringBudget": {
+    "sourceRecordsRequiredFields": ["source", "freshness", "reasonIncluded", "reasonOmitted"],
+    "fixedContextKinds": ["system-developer", "project-rules", "canonical-contract"],
+    "variableContextKinds": ["user-request", "source-evidence", "repo-read", "tool-output", "run-state"],
+    "longContextRule": "Only include route-changing evidence, active source files, and acceptance-critical prior decisions.",
+    "returnToThinkingTriggers": ["duplicate_rule", "conflicting_rule", "runtime_only_schema_leak", "private_public_boundary_leak"],
+    "promptSprawlBudget": {
+      "duplicateRuleTarget": 0,
+      "runtimeOnlyLeakTarget": 0,
+      "missingReasonIncludedTarget": 0,
+      "missingReasonOmittedTarget": 0
+    }
+  },
+  "validator": {
+    "script": "scripts/validate-framework-prompt-architecture.mjs",
+    "packageScript": "meta:prd:prompt-architecture:validate",
+    "acceptance": [
+      "all seven prompt asset layers have owner, scope, input, output, fallback, eval, version, and forbiddenMixing",
+      "review matrix contains all eight dimensions and source-backed required evidence",
+      "positive, boundary, and regression fixtures are present",
+      "context engineering budget separates fixed and variable context and defines return-to-Thinking triggers",
+      "default governed run emits contextEngineeringBudget with source attribution"
+    ]
+  }
+}

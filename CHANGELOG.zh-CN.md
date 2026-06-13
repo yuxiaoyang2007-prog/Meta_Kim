@@ -8,6 +8,108 @@
 
 ## [Unreleased]
 
+## [2.8.28] - 2026-06-13
+
+### 新增
+
+- **默认治理执行证据** - 新增 validators 和 run artifact packets，证明默认 Meta-Theory 路径会产出治理 agent result、Conductor consumption evidence、worker result 和 worker execution evidence，同时不会把结构化 board 冒充成 live runtime 证据。
+- **Research-to-native 产品化** - 新增来源化产品合同，覆盖研究采纳矩阵、MCP/provider 成熟度、trace/eval 控制、AG-UI 风格阶段事件、performance/cost budget 和 context engineering。
+- **顺滑能力发现守卫** - 新增 PRD validator，把 agent、skill、script、MCP、tools、hook、runtime、memory、graph、external provider 都保留为一等发现类别，同时允许安全的 `no_expansion_needed`。
+- **Runtime 优先级合同** - 新增机器可读合同和 validator，固定 Claude Code 与 Codex 为 prompt-first 主链路，OpenClaw 与 Cursor 只作为兼容目标保留。
+
+### 变更
+
+- **框架型 Prompt 架构** - Prompt 资产现在按 system/project/agent/skill/contract/runtime-adapter/eval 分层验收，并加入 review dimensions、regression fixtures 和 context-sprawl budget 规则。
+- **治理验证链路** - `meta:verify:governance` 现在纳入 default execution、asset sedimentation、research-native、framework prompt architecture、smooth capability discovery 和 runtime priority validators。
+- **唯一 PRD 源** - local-private PRD 现在把 P-067、P-068 到 P-084、P-085、P-092 标为本地已测通，同时继续保留 Cursor native live 作为 all-tool compatibility 的剩余阻塞。
+
+### 验证
+
+- `npm run meta:prd:smooth-capability:validate`
+- `npm run meta:prd:runtime-priority:validate`
+- `node scripts/run-node-tests.mjs "tests/meta-theory/29-capability-gap-complete-product-prd.test.mjs"`
+- `npm run meta:verify:governance`
+- `npm run meta:release:smoke`
+- `git diff --check`
+- `npm run meta:github:gap`
+
+## [2.8.27] - 2026-06-13
+
+### 新增
+
+- **Prompt-first 实机验收** - 新增和 PRD 绑定的 live acceptance contract 与 runner，要求同一套框架型 prompt 在 Claude Code 和 Codex 上都跑通，才能声明 prompt-first 全流程完成。
+- **PRD 来源化门禁** - 新增 PRD source-map 与分类 dossier validators，覆盖产品发现、prompt/runtime、MCP/tools/providers、安全、评测/可观测性、架构/发布等大类。
+
+### 变更
+
+- **抽象 Prompt 能力验收** - `meta:prompt:validate` 和治理验证现在会覆盖能力发现、prompt intake 优化、planning 连续性、runtime 原生能力、MCP/provider、memory/graph、安全 hook、发布证据和 i18n 等抽象能力族。
+- **Prompt-first 发布证据收口** - 治理验证现在纳入 prompt-first stage contract、live acceptance fixture、source-map 校验、PRD 分类 dossier，以及 public docs 图片资产边界。
+- **Codex 实机 runner 稳定性** - Codex live acceptance runner 现在通过 `codex exec -` 从 stdin 传入 prompt，避免 Windows `.cmd` 多行 prompt 卡住，同时保留真实 Codex 执行证据。
+
+### 验证
+
+- `npm run meta:prd:prompt-first-live:run`
+- `npm run meta:prd:prompt-first-live:validate`
+- `npm run meta:verify:governance`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
+## [2.8.26] - 2026-06-12
+
+### 修复
+
+- **Meta-Theory 深度 Fetch 入口** - 项目/仓库/代码库理解、商业化发展和策略类问题现在会进入治理化 Fetch 路径，不再落到浅层 fast path 回答。
+- **跨运行时入口对齐** - 新增 Claude Code `/meta-theory` command 投影支持、Cursor 原生 always-on dispatch rule、OpenClaw HEARTBEAT/SOUL 项目理解契约，让 Claude、Codex、Cursor、OpenClaw 都走同一条治理入口约束。
+- **Run artifact 证据补齐** - `meta:theory:run` 现在会为项目理解类运行记录项目概览、维护契约、命令库存、Graphify、MCP、能力索引、机器契约和外部检索能力等 Fetch source class。
+
+### 验证
+
+- `node --test tests/meta-theory/47-meta-theory-entry-classifier.test.mjs`
+- `node --test tests/setup/sync-runtimes-manifest.test.mjs`
+- `node --test tests/governance/core-loop-contract.test.mjs`
+- `npm run meta:sync`
+- `npm run meta:check`
+- `git diff --check`
+
+## [2.8.25] - 2026-06-12
+
+### 修复
+
+- **Claude Code 全局 Hook 清理** - 全局 Meta_Kim 同步现在会校验 Claude Code `settings.json` 里的 hook 命令，不再只检查 `~/.claude/hooks/meta-kim/` 包目录。这样可以抓到指向已删除脚本的旧全局 Meta_Kim hook 注册，避免 Claude Code 在 Stop 阶段反复报 `MODULE_NOT_FOUND`。
+- **已安装用户恢复路径** - 正常 setup/update 路径现在会清理旧的全局 Meta_Kim hook 条目，只保留当前被管理的全局 hook 命令；已有安装不需要手工改 Claude settings 也能恢复。
+
+### 验证
+
+- `npm run meta:check:global:release`
+- `npm run meta:test:setup`
+- `npm run meta:verify:governance`
+- `npm run meta:check`
+- `git diff --check`
+
+## [2.8.24] - 2026-06-12
+
+### 变更
+
+- **Runtime Safety 治理契约** - 新增发布级治理契约，把近期 5 条修复线收进同一个 validator：宿主配置安全合并、跨 runtime HookPrompt 协议建模、删除/重构残留清扫、runtime evidence 模板、安装/更新状态语义。
+- **安装状态语义固定** - 安装和更新文案现在有机器可读状态类：`success`、`skipped`、`manual`、`failed`，并绑定用户下一步动作，避免把预期跳过、手工步骤和真实失败混在一起。
+- **HookPrompt 坏输入回归** - 新增 markdown fence、delegated prompt、internal-goal filter 三类回归样本，并验证 Codex / Cursor adapter 会把优化内容放进模型可见字段，不把 UI 提示误当成策略决策。
+
+### 验证
+
+- 新增 `npm run meta:runtime:safety:validate`，并接入 `meta:verify:governance`。
+- `npm run meta:verify:governance`
+- `npm run meta:test:setup`
+- `npm run meta:sync`
+- `npm run discover:global`
+- `npm run meta:check`
+- `npm run meta:validate`
+- `npm run meta:release:smoke`
+- `npm run meta:setup:check`
+- `npm run meta:validate:run -- tests/fixtures/run-artifacts/valid-core-loop-release-run.json`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:verify:all`
+- `git diff --check`
+
 ## [2.8.23] - 2026-06-12
 
 ### 变更

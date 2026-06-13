@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "contractId": "prompt-abstract-capability-contract",
+  "owner": "meta-genesis",
+  "reviewOwner": "meta-prism",
+  "verificationOwner": "verify",
+  "purpose": "Define how durable prompts reference Meta_Kim capability families without narrowing the project to a few named skills or replacing runtime-native abilities.",
+  "inventorySources": [
+    "config/skills.json",
+    "config/capability-index/provider-registry.json",
+    "config/capability-index/meta-kim-capabilities.json",
+    "config/capability-index/weapon-registry.json",
+    "config/capability-index/dependency-project-registry.json",
+    "config/runtime-capability-matrix.json",
+    "config/os-compatibility-matrix.json",
+    "package.json",
+    ".mcp.json",
+    ".meta-kim/state/default/capability-index/global-capabilities.json"
+  ],
+  "capabilityFamilies": [
+    {
+      "id": "governance-orchestration",
+      "kind": "abstract_foundational",
+      "sourceRefs": ["canonical/agents", "canonical/skills/meta-theory/SKILL.md", "config/contracts/core-loop-contract.json"],
+      "examples": ["meta-theory", "meta-warden", "meta-conductor", "agent-teams-playbook"],
+      "promptHardcodePolicy": "hardcode_stage_spine_and_owner_selection_rules",
+      "trigger": "durable planning, governance, review, verification, prioritization, repair, runtime, or release work",
+      "conflictPolicy": "Do not let governance agents become generic implementation workers; concrete work belongs in workerTaskPackets and selected execution providers."
+    },
+    {
+      "id": "capability-discovery-and-retrieval",
+      "kind": "abstract_foundational",
+      "sourceRefs": ["config/capability-index", "config/skills.json", "package.json", ".mcp.json"],
+      "examples": ["repo capability index", "runtime mirrors", "global inventory", "findskill", "web/docs/MCP/plugin/local search"],
+      "promptHardcodePolicy": "hardcode_discovery_order_and_return_to_fetch_on_gap",
+      "trigger": "before route lock when owner, tool, dependency, provider, current fact, or verification path affects the outcome",
+      "conflictPolicy": "findskill and external search are run-scoped discovery inputs, not durable identity bindings or proof that a provider is executable."
+    },
+    {
+      "id": "prompt-intake-optimization",
+      "kind": "abstract_foundational",
+      "sourceRefs": ["config/skills.json", "config/capability-index/provider-registry.json", "canonical/runtime-assets"],
+      "examples": ["hookprompt", "Codex HookPrompt adapter", "Cursor HookPrompt adapter", "Claude UserPromptSubmit"],
+      "promptHardcodePolicy": "hardcode_as_prompt_submission_context_when_runtime_supports_it",
+      "trigger": "user prompt submission or prompt optimization request",
+      "conflictPolicy": "HookPrompt may optimize or add context for the submitted prompt; it must not replace user intent, rewrite PRD decisions, override meta-theory route selection, or mutate planning files."
+    },
+    {
+      "id": "planning-continuity",
+      "kind": "abstract_foundational",
+      "sourceRefs": ["canonical/skills/meta-theory/references/planning-files.md", "config/skills.json"],
+      "examples": ["planning-with-files", "task_plan.md", "findings.md", "progress.md"],
+      "promptHardcodePolicy": "hardcode_for_non_query_durable_work",
+      "trigger": "durable work that needs resume, progress, evidence, route, or acceptance continuity",
+      "conflictPolicy": "Planning files are update-only continuity state: preserve existing phases and evidence, append or revise status, and never reset or overwrite them as a fresh plan while the run is active."
+    },
+    {
+      "id": "skill-agent-tool-creation",
+      "kind": "abstract_foundational",
+      "sourceRefs": ["config/skills.json", "canonical/skills/meta-theory/references/create-agent.md", "config/capability-index/provider-registry.json"],
+      "examples": ["skill-creator", "create-agent pipeline", "meta-genesis", "meta-artisan"],
+      "promptHardcodePolicy": "hardcode_gap_gate_not_provider_name_first",
+      "trigger": "Fetch proves no existing owner/provider/tool/skill can satisfy a reusable capability gap",
+      "conflictPolicy": "Creation starts only after capability discovery, gap proof, route scoring, review, and Warden approval for durable writeback; never create to bypass missing Fetch."
+    },
+    {
+      "id": "runtime-native-surfaces",
+      "kind": "native_preservation",
+      "sourceRefs": ["config/runtime-capability-matrix.json", "canonical/runtime-assets", ".claude", ".codex", ".cursor", "openclaw"],
+      "examples": ["agents", "skills", "commands", "hooks", "MCP", "native choice surface", "sandbox", "approval"],
+      "promptHardcodePolicy": "hardcode_preserve_and_probe_unknowns",
+      "trigger": "any runtime-facing route, projection, hook, command, or user interaction behavior",
+      "conflictPolicy": "Meta_Kim adds evidence and guardrails around native surfaces; it must not delete, hide, downgrade, or replace runtime-native abilities with fake universal abstractions."
+    },
+    {
+      "id": "execution-tools-and-commands",
+      "kind": "tooling_foundational",
+      "sourceRefs": ["package.json", "scripts", "config/capability-index/weapon-registry.json", "config/runtime-capability-matrix.json"],
+      "examples": ["shell", "filesystem", "apply_patch/edit", "browser/web", "package scripts", "validators"],
+      "promptHardcodePolicy": "hardcode_as_selectable_tool_families_with_permission_and_verification",
+      "trigger": "a real task needs command execution, file edits, inspection, local UI/browser verification, or validator/test evidence",
+      "conflictPolicy": "Tools are selected by owner/loadout and permission policy; command pass is evidence only, not user-goal completion."
+    },
+    {
+      "id": "mcp-external-provider-and-plugin",
+      "kind": "provider_foundational",
+      "sourceRefs": [".mcp.json", "config/capability-index/provider-registry.json", "config/skills.json"],
+      "examples": ["MCP servers", "MCP tools", "plugins", "connectors", "cli-anything", "superpowers", "ecc", "gstack"],
+      "promptHardcodePolicy": "hardcode_provider_discovery_and_trust_review_not_concrete_execution",
+      "trigger": "external data, external tools, provider SDK, plugin, connector, or dependency ecosystem affects the route",
+      "conflictPolicy": "Configured, installed, or discoverable does not mean live or safe; external write, credentials, paid action, and provider mutation require explicit approval and verification."
+    },
+    {
+      "id": "memory-graph-and-observability",
+      "kind": "context_foundational",
+      "sourceRefs": ["config/capability-index/provider-registry.json", "graphify-out", ".meta-kim/state/default"],
+      "examples": ["memory", "RunStateStore", "Graphify", "graph", "run reports", "trace/evidence packets"],
+      "promptHardcodePolicy": "hardcode_use_when_history_or_project_map_changes_route",
+      "trigger": "prior decisions, project map, graph freshness, run history, trace, or evidence continuity affects route or acceptance",
+      "conflictPolicy": "Memory and graph are evidence/navigation aids, not the final source of truth; verify route-changing claims against source files or fresh artifacts."
+    },
+    {
+      "id": "safety-hooks-and-permissions",
+      "kind": "safety_foundational",
+      "sourceRefs": ["canonical/runtime-assets", "config/governance", "scripts/validate-hook-progression.mjs", "scripts/validate-runtime-safety-contract.mjs"],
+      "examples": ["hooks", "sandbox", "approval", "permission mode", "runtime safety contract"],
+      "promptHardcodePolicy": "hardcode_last_resort_fuse_and_return_stage_policy",
+      "trigger": "unsafe mutation, external write, missing dispatch evidence, hook loop, runtime install/update, or credential risk",
+      "conflictPolicy": "Hooks are fuses, not the planner; repeated blocks must return to the responsible stage instead of retrying the same action unchanged."
+    },
+    {
+      "id": "verification-eval-and-release",
+      "kind": "verification_foundational",
+      "sourceRefs": ["package.json", "tests", "scripts/validate-*.mjs", "canonical/skills/meta-theory/references/verification-evidence.md"],
+      "examples": ["meta:prompt:validate", "meta:foundational:validate", "meta:verify:governance", "eval harness", "release smoke"],
+      "promptHardcodePolicy": "hardcode_for_completion_or_public_ready_claims",
+      "trigger": "any claim that a prompt, route, runtime, release, or user goal is complete",
+      "conflictPolicy": "Do not relabel smoke, config validation, skipped, needsAuth, or old artifacts as live/release-grade proof."
+    },
+    {
+      "id": "user-interaction-and-i18n",
+      "kind": "surface_foundational",
+      "sourceRefs": ["canonical/templates/user-interaction", "config/governance/choice-surface-policy.json", "config/contracts/localized-trigger-exceptions.json"],
+      "examples": ["native choice surface", "chat decision card fallback", "notice template", "localized labels"],
+      "promptHardcodePolicy": "hardcode_semantic_card_requirements_not_renderer_schema",
+      "trigger": "user choice, route-changing ambiguity, status notice, progress report, or output-language handling",
+      "conflictPolicy": "Ask only route-changing questions; preserve option trade-offs and locale while keeping renderer-specific schemas out of generic prompts."
+    }
+  ],
+  "hardConflictRules": [
+    {
+      "id": "planning-files-update-only",
+      "capabilityFamily": "planning-continuity",
+      "rule": "Existing task_plan.md, findings.md, and progress.md must be iteratively updated, appended, or explicitly marked superseded; they must not be overwritten or reset while the run is active."
+    },
+    {
+      "id": "hookprompt-no-route-override",
+      "capabilityFamily": "prompt-intake-optimization",
+      "rule": "HookPrompt may add prompt context but must not override user intent, PRD source-of-truth decisions, meta-theory stage routing, or planning state."
+    },
+    {
+      "id": "findskill-run-scoped",
+      "capabilityFamily": "capability-discovery-and-retrieval",
+      "rule": "findskill and external skill discovery can justify a current-run selectedSkill but must not become a permanent agent identity binding without Warden-approved evolution."
+    },
+    {
+      "id": "creation-after-gap-proof",
+      "capabilityFamily": "skill-agent-tool-creation",
+      "rule": "skill-creator or create-agent routes require capability discovery, gap proof, review, and Warden approval before durable writeback."
+    },
+    {
+      "id": "native-ability-preservation",
+      "capabilityFamily": "runtime-native-surfaces",
+      "rule": "Runtime-native abilities stay native, partial, unknown, or blocked according to evidence; Meta_Kim must not delete or fake them."
+    },
+    {
+      "id": "provider-config-not-live-proof",
+      "capabilityFamily": "mcp-external-provider-and-plugin",
+      "rule": "Provider config, install, or registry presence is not live execution proof; live claims need invocation evidence."
+    },
+    {
+      "id": "worker-task-not-identity",
+      "capabilityFamily": "governance-orchestration",
+      "rule": "One-run workerTask details must not be written into long-term agent or skill identity."
+    },
+    {
+      "id": "verified-claim-evidence",
+      "capabilityFamily": "verification-eval-and-release",
+      "rule": "Verified and public-ready claims require fresh command, artifact, log, or human acceptance evidence."
+    }
+  ],
+  "promptAcceptance": {
+    "requiredPromptAssetClasses": [
+      "project entry prompt",
+      "canonical meta agent",
+      "canonical skill",
+      "canonical reference",
+      "runtime command adapter",
+      "runtime hook or heartbeat prompt",
+      "user interaction template",
+      "eval contract"
+    ],
+    "passThreshold": "Every durable prompt class names an owner or source boundary, trigger, input/context, output/evidence, pass/fail/block behavior, verification, preservation, and any relevant abstract capability family.",
+    "failThreshold": "A prompt fails when it narrows the project to a few provider names as the whole capability set, overwrites planning continuity, treats provider config as live execution, or allows durable creation before gap proof."
+  }
+}

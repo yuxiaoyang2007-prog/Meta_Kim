@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "contractId": "meta-kim-capability-asset-sedimentation-contract",
+  "owner": "meta-sentinel",
+  "purpose": "Define when an iterated capability becomes a durable Meta_Kim asset and where it may be sedimented.",
+  "approvalBoundary": {
+    "wardenApprovalRequiredForCanonicalWrites": true,
+    "canonicalWritesWithoutApproval": 0,
+    "runtimeMirrorsGeneratedBySyncOnly": true,
+    "credentialsNeverSedimented": true,
+    "externalSideEffectsRequireExplicitApproval": true
+  },
+  "requiredCandidateTypes": [
+    "execution_agent",
+    "skill",
+    "script",
+    "mcp_provider",
+    "runtime_tool",
+    "hook",
+    "memory_graph",
+    "dependency_provider",
+    "worker_task_only"
+  ],
+  "candidatePolicies": {
+    "execution_agent": {
+      "longTermTrigger": "Repeated responsibility class with stable inputs, outputs, refusals, and review boundary.",
+      "sedimentationTargets": ["canonical/agents", "config/capability-index"],
+      "projectionTargets": [".claude/agents", ".codex/agents", ".cursor/agents", "openclaw/workspaces"],
+      "requiresWardenApproval": true,
+      "forbiddenDurableIdentity": ["today task", "runtime nickname", "single issue shard"]
+    },
+    "skill": {
+      "longTermTrigger": "Reusable method, workflow, or instruction pack that does not need a durable owner identity.",
+      "sedimentationTargets": ["canonical/skills", "config/capability-index"],
+      "projectionTargets": [".claude/skills", ".agents/skills", ".cursor/skills", "openclaw/skills"],
+      "requiresWardenApproval": true,
+      "forbiddenDurableIdentity": ["one-run prompt", "temporary checklist"]
+    },
+    "script": {
+      "longTermTrigger": "Repeatable deterministic command or validator with repo-owned source and tests.",
+      "sedimentationTargets": ["scripts", "package.json", "tests"],
+      "projectionTargets": [],
+      "requiresWardenApproval": false,
+      "forbiddenDurableIdentity": ["manual transcript", "unreviewed shell snippet"]
+    },
+    "mcp_provider": {
+      "longTermTrigger": "External capability provider with documented input/output contract, auth boundary, and fallback policy.",
+      "sedimentationTargets": ["config/capability-index", "config/contracts", "canonical/runtime-assets"],
+      "projectionTargets": [".mcp.json", ".cursor/mcp.json", "codex/config.toml.example"],
+      "requiresWardenApproval": true,
+      "forbiddenDurableIdentity": ["credential value", "unverified paid provider"]
+    },
+    "runtime_tool": {
+      "longTermTrigger": "Runtime-native tool or plugin capability with verified support matrix and degradation path.",
+      "sedimentationTargets": ["config/runtime-capability-matrix.json", "config/capability-index", "canonical/runtime-assets"],
+      "projectionTargets": [".claude", ".codex", ".cursor", "openclaw"],
+      "requiresWardenApproval": true,
+      "forbiddenDurableIdentity": ["host-generated nickname", "projection-only proof labeled live"]
+    },
+    "hook": {
+      "longTermTrigger": "Safety or workflow fuse that has a narrow blocking rule, failure mode, and runtime coverage note.",
+      "sedimentationTargets": ["canonical/runtime-assets", "config/contracts"],
+      "projectionTargets": [".claude/hooks", ".codex/hooks", ".cursor/hooks"],
+      "requiresWardenApproval": true,
+      "forbiddenDurableIdentity": ["broad policy engine", "unbounded denial rule"]
+    },
+    "memory_graph": {
+      "longTermTrigger": "Reusable continuity, graph, or retrieval signal with freshness, privacy, and source boundary.",
+      "sedimentationTargets": ["config/capability-index", "canonical/runtime-assets", "graphify-out"],
+      "projectionTargets": [],
+      "requiresWardenApproval": false,
+      "forbiddenDurableIdentity": ["private credential", "unscoped personal note"]
+    },
+    "dependency_provider": {
+      "longTermTrigger": "External reusable project, package, or service with explicit input/output and risk contract.",
+      "sedimentationTargets": ["config/capability-index/dependency-project-registry.json", "config/contracts"],
+      "projectionTargets": [],
+      "requiresWardenApproval": true,
+      "forbiddenDurableIdentity": ["reference-only project copied as dependency", "unknown license provider"]
+    },
+    "worker_task_only": {
+      "longTermTrigger": "Single-run execution shard or temporary worker instance.",
+      "sedimentationTargets": ["run-scoped artifact only"],
+      "projectionTargets": [],
+      "requiresWardenApproval": false,
+      "forbidCanonicalIdentity": true,
+      "forbiddenDurableIdentity": ["today task", "temporary worker", "roleInstanceId", "runtime nickname"]
+    }
+  },
+  "validator": {
+    "script": "scripts/validate-capability-asset-sedimentation.mjs",
+    "packageScript": "meta:prd:asset-sedimentation:validate",
+    "acceptance": [
+      "all required candidate types have sedimentation targets",
+      "canonical writes require Warden approval",
+      "runtime mirrors are generated by sync only",
+      "worker_task_only cannot become a durable identity",
+      "credential and one-run side effects are forbidden from long-term assets"
+    ]
+  }
+}
