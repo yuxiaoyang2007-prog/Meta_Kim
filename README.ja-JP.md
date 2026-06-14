@@ -73,9 +73,11 @@ Meta_Kim は、互換性のある面をすべて「完全対応」とは呼び�
 |---|---|---|
 | 正式 runtime projection | Claude Code、Codex、OpenClaw、Cursor | canonical の統治層を runtime 固有ファイルへ投影し、`npm run meta:sync` / `npm run meta:check` で検証します。 |
 | ネイティブ依存インストール対象 | opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode | ECC の upstream installer は対応していますが、Meta_Kim の正式 runtime projection ではありません。 |
-| candidate probe | Qoder CLI | Qoder 公式ドキュメントでは skills、subagents、hooks、MCP が確認できます。Meta_Kim では候補として追跡し、正式対応とは扱いません。 |
+| candidate probe | Qoder CLI、Trae、Kiro、Windsurf / Devin Desktop Cascade、Cline、Roo Code、Continue | 公式ドキュメントで rules / instructions、skills、agents / modes、hooks、MCP、commands、memory、permission controls などの互換 primitive が確認できます。Meta_Kim では候補として追跡し、正式対応とは扱いません。 |
 
 事実のソース: `config/runtime-compatibility-catalog.json`。
+
+Surface compatibility は formal runtime support より弱い扱いです。adapter、profile/layout、sync tests、live validation が揃うまでは正式 projection には昇格しません。
 
 ---
 
@@ -727,8 +729,8 @@ flowchart TB
 
 | コマンド | 役割 |
 | --- | --- |
-| `npm run meta:deps:install` | 9 個のコミュニティ skill を全体へインストール |
-| `npm run meta:deps:install:all-runtimes` | すべての runtime にインストール |
+| `npm run meta:deps:install` | デフォルトの Claude Code + Codex 経路へ 9 個のコミュニティ skill をインストール |
+| `npm run meta:deps:install:all-runtimes` | Claude Code、Codex、OpenClaw、Cursor へ明示的にインストール |
 | `npm run meta:deps:install:claude-plugins` | Claude Code marketplace plugin のみインストール |
 | `npm run discover:global` | グローバル能力をスキャン |
 | `npm run meta:sync:global` | meta-theory をユーザー級へ同期 |
@@ -747,8 +749,9 @@ flowchart TB
 | Qwen | ECC は `npx --yes --package ecc-universal@latest ecc install --profile core --target qwen` を使います |
 | Zed、Gemini、CodeBuddy、Antigravity、JoyCode | ECC は project-local です。各プロジェクトルートで `npx --yes --package ecc-universal@latest ecc install --profile core --target <target>` を実行します |
 | Qoder CLI | candidate probe のみです。`.qoder/` → `skills/` の探索は可能ですが、upstream ECC が `qoder` を列挙していないため ECC install は実行しません |
+| Trae、Kiro、Windsurf / Devin Desktop Cascade、Cline、Roo Code、Continue | candidate probe のみです。互換 primitive は `config/runtime-compatibility-catalog.json` で追跡しますが、adapter、sync path、validation suite が揃うまでは install / projection しません |
 
-抽出結果は `~/.<runtime>/skills/<id>/` に配置される。Claude marketplace plugin のみをインストールするには `npm run meta:deps:install:claude-plugins`、全 runtime を一括カバーするには `npm run meta:deps:install:all-runtimes`。**アップグレード時に手動クリーンアップは不要**：旧版の full-repo clone 残留はターゲットディレクトリ直下の `.claude-plugin/` マーカーで自動検出され、次回実行時に再抽出される。
+抽出結果は `~/.<runtime>/skills/<id>/` に配置される。インストール/更新で Enter を押すと、デフォルトは Claude Code + Codex になる。Claude marketplace plugin のみをインストールするには `npm run meta:deps:install:claude-plugins`、Claude Code、Codex、OpenClaw、Cursor を明示的にカバーするには `npm run meta:deps:install:all-runtimes`。**アップグレード時に手動クリーンアップは不要**：旧版の full-repo clone 残留はターゲットディレクトリ直下の `.claude-plugin/` マーカーで自動検出され、次回実行時に再抽出される。
 
 ### 上級運用
 
@@ -805,7 +808,7 @@ Meta_Kim は 3 ヶ所に書き込みます：
 
 ### Q: どのプラットフォームに対応していますか?
 
-正式な runtime projection は Claude Code、Codex、OpenClaw、Cursor です。ECC はさらに opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode を native install target として扱います。Qoder CLI は candidate probe です。公式ドキュメントで skills、subagents、hooks、MCP は確認できますが、Meta_Kim の正式 runtime projection ではありません。正確な境界は `config/runtime-compatibility-catalog.json` を参照してください。
+正式な runtime projection は Claude Code、Codex、OpenClaw、Cursor です。ECC はさらに opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode を native install target として扱います。Qoder CLI、Trae、Kiro、Windsurf / Devin Desktop Cascade、Cline、Roo Code、Continue は candidate probe です。公式ドキュメントで互換 primitive は確認できますが、Meta_Kim の正式 runtime projection ではありません。正確な境界は `config/runtime-compatibility-catalog.json` を参照してください。
 
 ### Q: インストールは難しいですか?
 

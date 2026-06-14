@@ -136,6 +136,92 @@ function validateWorkerExecutionEvidence(report) {
   assert.equal(report.coreLoop.publicReadyDecision.publicReady, false);
 }
 
+function validateProductExperienceEvidence(report) {
+  assert.equal(report.coreLoop.goalContractPacket.status, "pass");
+  assert.equal(report.coreLoop.langGraphRunPacket.status, "pass");
+  assert.equal(report.coreLoop.peerAgentMeshPacket.status, "pass");
+  assert.equal(report.coreLoop.agentTeamsPlaybookPacket.status, "pass");
+  assert.equal(report.coreLoop.agentTeamsPlaybookPacket.selected, true);
+  assert.equal(report.coreLoop.agentTeamsPlaybookPacket.acceptance.waveSizeWithinCap, true);
+  assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "pass");
+  assert.ok(["pass", "partial"].includes(report.coreLoop.visibleMetaTheorySurfacePacket.status));
+  assert.ok(["pass", "partial"].includes(report.coreLoop.userPerceptionPacket.status));
+  assert.equal(report.coreLoop.langGraphRunPacket.checkpoint.count, report.coreLoop.langGraphRunPacket.nodes.length);
+  assert.ok(report.coreLoop.langGraphRunPacket.eventLog.length >= 8);
+  assert.ok(report.coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingCoverage.hooks);
+  assert.ok(report.coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingCoverage.abstractPromptCapability);
+  assert.ok(report.coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingCoverage.workerResults);
+  assert.ok(report.coreLoop.peerAgentMeshPacket.peers.length > 0);
+  assert.equal(report.coreLoop.visibleMetaTheorySurfacePacket.capabilityInventory.notSkillOnly, true);
+  assert.equal(report.coreLoop.visibleMetaTheorySurfacePacket.capabilityInvocationTruth.status, "pass");
+  assert.equal(
+    report.coreLoop.visibleMetaTheorySurfacePacket.dynamicWorkflow.status,
+    report.coreLoop.dynamicWorkflowRuntimePacket.status,
+  );
+  assert.equal(report.coreLoop.visibleMetaTheorySurfacePacket.peerAgentMesh.status, "pass");
+  assert.equal(report.coreLoop.visibleMetaTheorySurfacePacket.langGraph.status, "pass");
+  assert.ok(report.coreLoop.userPerceptionPacket.plainLanguageCues.length >= 6);
+  assert.deepEqual(
+    report.coreLoop.productExperiencePacket.goals.map((goal) => goal.id),
+    ["P-102", "P-103", "P-104"]
+  );
+  assert.deepEqual(
+    report.coreLoop.productExperiencePacket.supportGates.map((gate) => gate.id),
+    ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"]
+  );
+  assert.equal(report.coreLoop.productExperiencePacket.noOverclaimGate.status, "pass");
+  assert.equal(report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.status, "pass");
+  assert.equal(
+    report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.liveRuntimeBoundary.status,
+    "not_claimed_by_structural_runner"
+  );
+  assert.equal(
+    report.coreLoop.productExperiencePacket.repeatFailureDesignGate.actionOnSecondOccurrence,
+    "bottom_design_failure_return_to_critical_fetch_thinking"
+  );
+  assert.equal(report.coreLoop.productExperiencePacket.generalizationGate.status, "pass");
+  assert.equal(report.coreLoop.productExperiencePacket.capabilityInvocationTruthGate.status, "partial");
+  assert.equal(report.coreLoop.productExperiencePacket.agentTeamsPlaybookGate.status, "pass");
+  const invocationByFamily = new Map(
+    report.coreLoop.capabilityInvocationTruthPacket.rows.map((row) => [row.family, row])
+  );
+  assert.equal(invocationByFamily.get("agent_subagent").state, "selected_not_invoked");
+  assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
+  assert.equal(invocationByFamily.get("worker_task").state, "invoked");
+  assert.equal(invocationByFamily.get("prompt_rule").state, "applied");
+  assert.equal(invocationByFamily.get("agent_teams_playbook").state, "selected_not_invoked");
+  assert.equal(report.coreLoop.capabilityInvocationProbePacket.status, "not_run");
+  assert.ok(
+    ["selected_not_invoked", "discovered_not_selected", "not_required"].includes(
+      invocationByFamily.get("mcp").state,
+    ),
+  );
+  assert.equal(report.coreLoop.capabilityInvocationTruthPacket.truthAssertions.noLiveSubagentOverclaim, true);
+  assert.equal(report.coreLoop.capabilityInvocationTruthPacket.truthAssertions.noHostUiSubagentOverclaim, true);
+  assert.equal(report.coreLoop.capabilityInvocationTruthPacket.truthAssertions.noMcpCallOverclaim, true);
+  assert.ok(
+    ["product_experience_pass", "partial"].includes(report.coreLoop.productExperiencePacket.status),
+    "default execution must expose product experience status without overclaiming"
+  );
+  assert.equal(
+    report.coreLoop.dynamicWorkflowRuntimePacket.status,
+    report.coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingCoverage.skill &&
+      report.coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingCoverage.mcp &&
+      report.coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingCoverage.command &&
+      report.coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingCoverage.tools
+      ? "pass"
+      : "partial"
+  );
+  assert.equal(
+    report.coreLoop.reviewPacket.protocolCompliance.productExperienceEvidencePresent,
+    report.coreLoop.productExperiencePacket.status === "product_experience_pass"
+  );
+  assert.equal(
+    report.coreLoop.verificationResult.productExperienceEvidence.acceptanceCommand,
+    "npm run meta:prd:product-experience:validate"
+  );
+}
+
 async function main() {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-default-evidence-"));
   try {
@@ -150,6 +236,7 @@ async function main() {
     assert.equal(report.defaultRuntimePath.status, "pass");
     validateGovernanceEvidence(report);
     validateWorkerExecutionEvidence(report);
+    validateProductExperienceEvidence(report);
 
     process.stdout.write(
       `${JSON.stringify({
@@ -157,7 +244,8 @@ async function main() {
         governanceAgentResultPackets: report.coreLoop.governanceAgentResultPackets.length,
         consumedGovernancePackets: report.coreLoop.conductorConsumptionEvidence.consumedPacketRefs.length,
         workerResultPackets: report.coreLoop.executionResult.workerResultPackets.length,
-        workerExecutionEvidence: report.coreLoop.executionResult.workerExecutionEvidence.length
+        workerExecutionEvidence: report.coreLoop.executionResult.workerExecutionEvidence.length,
+        productExperience: report.coreLoop.productExperiencePacket.status
       }, null, 2)}\n`
     );
   } finally {

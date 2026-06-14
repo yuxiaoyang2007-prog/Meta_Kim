@@ -253,6 +253,13 @@ describe("Clarity Gate unified execution confirmation", async () => {
     assert.match(policyText, /deep research/i);
     assert.match(policyText, /decision impact/i);
     assert.match(policyText, /evidence owner|Conductor/i);
+    assert.match(policyText, /deepResearchPlanQualityGate/);
+    assert.match(policyText, /sourceQualityLadder/);
+    assert.match(policyText, /deepReadTargets/);
+    assert.match(policyText, /claimAttributionRules/);
+    assert.match(policyText, /originalSynthesisRules/);
+    assert.match(policyText, /copying third-party prompt text/);
+    assert.match(policyText, /cosmetic rewrites/);
   });
 
   test("contentEvidencePacket requires capability-proof research discovery without platformSurface", () => {
@@ -296,7 +303,7 @@ describe("Clarity Gate unified execution confirmation", async () => {
     );
   });
 
-  test("Codex uses request_user_input when available and falls back to localized card", () => {
+  test("Codex uses request_user_input and blocks instead of downgrading", () => {
     const codexSurface =
       workflowContractJson.runDiscipline?.runtimeNativeChoiceSurfaces?.codex;
     assert.ok(codexSurface, "Codex native choice surface policy must exist");
@@ -306,21 +313,18 @@ describe("Clarity Gate unified execution confirmation", async () => {
       codexSurface.recommendedConfig,
       "[features].default_mode_request_user_input = true",
     );
-    assert.ok(
-      codexSurface.fallbackSurfaces?.includes("conversation_fallback"),
-      "Codex must allow conversation_fallback",
-    );
+    assert.deepEqual(codexSurface.fallbackSurfaces, []);
+    assert.equal(codexSurface.unavailableAction, "block_before_execution");
 
     const codexPolicyText = `${codexSurface.triggerDescription} ${codexSurface.implementation}`;
-    assert.match(codexPolicyText, /pause/i);
-    assert.match(codexPolicyText, /localized confirmation card/i);
     assert.match(codexPolicyText, /request_user_input/i);
     assert.match(codexPolicyText, /default_mode_request_user_input/i);
     assert.match(codexPolicyText, /API 400|api_error/i);
-    assert.match(codexPolicyText, /do not retry blindly|retry blindly/i);
-    assert.match(codexPolicyText, /choiceSurfaceFallback/i);
+    assert.match(codexPolicyText, /block before Execution|blocks before Execution/i);
+    assert.match(codexPolicyText, /nativeChoiceSurfaceBlocked/i);
     assert.match(codexPolicyText, /exec|hook adapters/i);
-    assert.match(codexPolicyText, /chat card.*popup|popup.*chat card/i);
+    assert.match(codexPolicyText, /chat cards must not claim a popup|must not claim a popup/i);
+    assert.doesNotMatch(codexPolicyText, /localized confirmation card/i);
   });
 
   test("Claude Code uses native AskUserQuestion for branch-changing decisions", () => {
@@ -328,29 +332,28 @@ describe("Clarity Gate unified execution confirmation", async () => {
       workflowContractJson.runDiscipline?.runtimeNativeChoiceSurfaces?.claude;
     assert.ok(claudeSurface, "Claude native choice surface policy must exist");
     assert.equal(claudeSurface.primarySurface, "AskUserQuestion_tool");
-    assert.ok(
-      claudeSurface.fallbackSurfaces?.includes("conversation_fallback"),
-      "Claude must allow conversation_fallback when the native tool is unavailable",
-    );
+    assert.deepEqual(claudeSurface.fallbackSurfaces, []);
+    assert.equal(claudeSurface.unavailableAction, "block_before_execution");
 
     const claudePolicyText = `${claudeSurface.triggerDescription} ${claudeSurface.implementation}\n${runtimeClaude}`;
     assert.match(claudePolicyText, /AskUserQuestion/);
-    assert.match(claudePolicyText, /v2\.0\.21/);
     assert.match(claudePolicyText, /questions array/i);
-    assert.match(claudePolicyText, /popup/i);
-    assert.match(claudePolicyText, /conversation_fallback/i);
-    assert.match(claudePolicyText, /wait.*before Execution|wait.*user.*answer.*Execution/i);
+    assert.match(claudePolicyText, /popup|host UI/i);
+    assert.match(claudePolicyText, /nativeChoiceSurfaceBlocked/i);
+    assert.match(claudePolicyText, /deferred `AskUserQuestion`|deferred AskUserQuestion/i);
     assert.match(claudePolicyText, /two to four meaningful options/i);
     assert.match(claudePolicyText, /No filler questions/i);
     assert.match(claudePolicyText, /issue #12031/);
+    assert.doesNotMatch(claudePolicyText, /fall back to .*localized chat decision card/i);
   });
 
-  test("Codex meta-theory choice surfaces embed options without exposing protocol logs", () => {
+  test("Codex meta-theory choice surfaces use native UI without exposing protocol logs", () => {
     assert.match(skillContent, /Codex Multi-Option Choice Surface Rule/);
     assert.match(skillContent, /default_mode_request_user_input/);
     assert.match(skillContent, /request_user_input/);
     assert.match(skillContent, /confirmation or decision surface/s);
-    assert.match(skillContent, /clean choice card/i);
+    assert.match(skillContent, /native interactive surface|native choice surface/i);
+    assert.match(skillContent, /block before Execution/i);
     assert.match(skillContent, /Do not show a `Preflight` block/i);
     assert.match(skillContent, /unless the user explicitly asks for debug, audit, protocol, or governance trace output/i);
     assert.match(skillContent, /at least two viable options/i);
@@ -373,7 +376,7 @@ describe("Clarity Gate unified execution confirmation", async () => {
       codexPolicy.appliesTo,
       "every_user_visible_codex_meta_theory_confirmation_or_decision_surface",
     );
-    assert.equal(codexPolicy.normalPresentation, "embedded_clean_choice_card");
+    assert.equal(codexPolicy.normalPresentation, "native_request_user_input");
     assert.equal(codexPolicy.debugLabel, "Multi-Option Snapshot");
     assert.equal(codexPolicy.visibleLabelRequired, false);
     assert.equal(codexPolicy.internalPreflightHiddenByDefault, true);

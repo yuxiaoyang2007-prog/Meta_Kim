@@ -709,17 +709,19 @@
     "runtimeNativeChoiceSurfaces": {
       "claude": {
         "primarySurface": "AskUserQuestion_tool",
-        "fallbackSurfaces": ["conversation_fallback"],
-        "triggerDescription": "Use AskUserQuestion (native since v2.0.21) for blocking Critical clarification when Fetch cannot proceed or subjective quality wording is too ambiguous to choose evidence, then use it once for Execution confirmation after contentEvidencePacket and preDecisionOptionFrame are complete. PreToolUse hooks must whitelist AskUserQuestion to avoid stripping return data (issue #12031).",
-        "implementation": "Invoke AskUserQuestion with a questions array; platform renders an interactive Ink popup. If unavailable or returns empty, label the route conversation_fallback, render a localized chat decision card, and wait before Execution."
+        "fallbackSurfaces": [],
+        "unavailableAction": "block_before_execution",
+        "triggerDescription": "Use AskUserQuestion for blocking Critical clarification when Fetch cannot proceed or subjective quality wording is too ambiguous to choose evidence, then use it once for Execution confirmation after contentEvidencePacket and preDecisionOptionFrame are complete. PreToolUse hooks must whitelist AskUserQuestion to avoid stripping return data (issue #12031). Claude Code non-interactive integrations may defer AskUserQuestion to the caller; that deferred tool call is acceptable trigger evidence when recorded. Chat decision cards are not accepted as completion evidence for this primary runtime.",
+        "implementation": "Invoke AskUserQuestion with a questions array when available. If unavailable, rejected, stripped, or returning empty, record nativeChoiceSurfaceBlocked and stop before Execution. A non-interactive deferred AskUserQuestion must be handed to the host UI and resumed with an answer before the run continues. A cardPlanPacket, run report, hook notice, or chat card is not native popup evidence."
       },
       "codex": {
         "primarySurface": "request_user_input",
-        "fallbackSurfaces": ["conversation_fallback"],
+        "fallbackSurfaces": [],
+        "unavailableAction": "block_before_execution",
         "featureFlag": "default_mode_request_user_input",
         "recommendedConfig": "[features].default_mode_request_user_input = true",
-        "triggerDescription": "Use Codex request_user_input only when it is listed in the active tool set and the payload has 1-3 valid choice questions. The official default_mode_request_user_input feature flag enables this tool in Default mode when the host supports it; otherwise pause with a localized confirmation card. If the host returns API 400 or another validation error, do not retry blindly; fall back once to a localized chat card and record choiceSurfaceFallback=api_error. Codex exec and repository hook adapters must not claim a popup.",
-        "implementation": "Invoke request_user_input when available and valid; otherwise emit a localized markdown confirmation card, record conversation_fallback or choiceSurfaceFallback=api_error, and state that it is a chat card rather than a popup."
+        "triggerDescription": "Use Codex request_user_input only when it is listed in the active tool set and the payload has 1-3 valid choice questions. The official default_mode_request_user_input feature flag enables this tool in Default mode when the host supports it. If the host does not expose the tool, returns API 400, returns empty, or rejects the payload, block before Execution with nativeChoiceSurfaceBlocked. Codex exec, repository hook adapters, run artifacts, conversation notices, markdown cards, and chat cards must not claim a popup or complete a required Codex decision.",
+        "implementation": "Invoke request_user_input when available and valid. If it cannot run, record nativeChoiceSurfaceBlocked and return to Critical or Thinking; do not continue with conversation_fallback. A cardPlanPacket or CLI conversationNotice is artifact-only and does not complete the native choice trigger."
       },
       "openclaw": {
         "primarySurface": "workspace_agent",
@@ -767,6 +769,19 @@
         "business_clarification_needed",
         "risk_acknowledgment_required"
       ],
+      "triggerProofPolicy": {
+        "nativeSurfaceAvailableMeansCallIt": true,
+        "primaryRuntimesNoDowngrade": ["codex", "claude_code"],
+        "primaryRuntimeUnavailableAction": "block_before_execution",
+        "artifactOnlyIsNotTriggered": true,
+        "completionEvidence": [
+          "native_tool_answer",
+          "deferred_native_tool_call",
+          "valid_choice_gate_skip"
+        ],
+        "compatibilityOnlyEvidence": ["conversation_fallback_reason"],
+        "description": "When Codex or Claude Code requires a branch-changing user decision, completion requires an actual native tool answer, a deferred native tool call handed to the host and resumed with an answer, or a valid strict choiceGateSkip. Generated card plans, conversation notices, markdown reports, hook warnings, and chat cards are not trigger evidence. Conversation fallback is compatibility-only for non-primary runtimes."
+      },
       "optionQualityStandard": {
         "requiredDimensions": [
           "what_changes",
@@ -788,7 +803,7 @@
         "required": true,
         "minimumOptions": 2,
         "appliesTo": "every_user_visible_codex_meta_theory_confirmation_or_decision_surface",
-        "normalPresentation": "embedded_clean_choice_card",
+        "normalPresentation": "native_request_user_input",
         "debugLabel": "Multi-Option Snapshot",
         "visibleLabelRequired": false,
         "internalPreflightHiddenByDefault": true,
@@ -806,7 +821,7 @@
         "requiresRejectedAlternativeWhenOnlyOnePracticalPathExists": true,
         "fallbackMustDeclareNotPopup": true,
         "claudeNativeChoiceSurfaceUnchanged": true,
-        "description": "Codex meta-theory confirmation and decision surfaces must show short multi-option content embedded in a clean user-facing choice card, written according to the runtime/tool selected output language first when Codex or the host has already chosen one, then the user's explicit output-language choice, then the user's latest input language when no stronger language source exists, while keeping protocol identifiers canonical. This is a Codex presentation rule and does not replace preDecisionOptionFrame, formal confirmation gates, or Claude Code native AskUserQuestion behavior. Normal users should not see Preflight, nativeChoiceSurface, conversation_fallback, Multi-Option Snapshot, packet ids, or protocol plumbing unless they explicitly ask for debug, audit, protocol, or governance trace output. When Codex falls back to conversation_fallback and this matters to the user's expectation, it must be described in plain language as a chat card rather than a popup."
+        "description": "Codex meta-theory confirmation and decision surfaces must show short multi-option content through request_user_input for required branch-changing choices, written according to the runtime/tool selected output language first when Codex or the host has already chosen one, then the user's explicit output-language choice, then the user's latest input language when no stronger language source exists, while keeping protocol identifiers canonical. This is a Codex presentation rule and does not replace preDecisionOptionFrame, formal confirmation gates, or Claude Code native AskUserQuestion behavior. Normal users should not see Preflight, nativeChoiceSurface, conversation_fallback, Multi-Option Snapshot, packet ids, or protocol plumbing unless they explicitly ask for debug, audit, protocol, or governance trace output. If Codex cannot call request_user_input, the run blocks before Execution rather than falling back to chat-card acceptance."
       },
       "choiceSurfaceGate": {
         "required": true,
@@ -826,7 +841,7 @@
           "multiple_options_without_fetch_evidence",
           "execution_confirmation_before_preDecisionOptionFrame"
         ],
-        "humanCheck": "No candidate paths means no execution confirmation; no Fetch evidence means Thinking is not complete; no Thinking result means no pre-Execution confirmation.",
+        "humanCheck": "No candidate paths means no execution confirmation; no Fetch evidence means Thinking is not complete; no Thinking result means no pre-Execution confirmation. A cardPlanPacket, conversationNotice, markdown report, or hook warning is not proof that a native choice surface triggered.",
         "description": "Visible choice surfaces are gated by stage and evidence. A user request to test a popup is treated as a task requirement to route through Critical -> Fetch -> Thinking, not permission to call request_user_input before evidence-backed options exist."
       }
     },
@@ -1397,7 +1412,7 @@
         "complex_dev",
         "meta_analysis"
       ],
-      "description": "intentPacket is required in run artifacts when taskClassification.governanceFlow is listed in intentPacketRequiredWhenGovernanceFlows (IntentGate-style intent lock-in). intentGatePacket is required for the same flows (structured ambiguity / assumptions gate before Execution). contentEvidencePacket and preDecisionOptionFrame are required before AskUserQuestion / native choice / conversation fallback for non-trivial non-query work; they prove Fetch evidence and Thinking option framing happened before interruption. dispatchEnvelopePacket, dispatchBoard, and workerTaskPacket are finalized only after user choice or an allowed recorded skip. dispatchEnvelopePacket is required for all non-pure-query flows so every executable run has an explicit owner, capability boundary, memory mode, and review / verification routing before dispatch. orchestrationTaskBoardPacket is the mandatory Conductor task board for the same executable flows. businessFlowBlueprintPacket, product / experience / test / structure gate packets, permission / side-effect / rollback packets, and agentBlueprintPacket are required before workerTaskPacket so Conductor proves the full business flow and release risks were considered before dispatch. interfaceIntegrationContractPacket is required before execution when triggerReasons indicate internal interface boundary work or third-party integration, or when the business deliverable type is an interface integration. capabilityGapPacket is required when taskClassification.upgradeReasons records owner_creation_required, or when agentBlueprintPacket.roleCoverageGate fails with missing roles whose ownerResolution is upgrade_existing_owner or create_owner_first. In the Meta_Kim repository itself, owner creation or upgrade means a governance meta-owner decision plus run-scoped matchedCapabilities / capabilityBindings, with matchedSkills accepted only as legacy compatibility evidence. In user projects, executionAgentCard is used only when a global agent must be copied/modified locally or a new project-local agent must be created."
+      "description": "intentPacket is required in run artifacts when taskClassification.governanceFlow is listed in intentPacketRequiredWhenGovernanceFlows (IntentGate-style intent lock-in). intentGatePacket is required for the same flows (structured ambiguity / assumptions gate before Execution). contentEvidencePacket and preDecisionOptionFrame are required before AskUserQuestion / native choice / compatibility conversation fallback for non-trivial non-query work; they prove Fetch evidence and Thinking option framing happened before interruption. In Codex and Claude Code, conversation fallback cannot complete a required branch-changing decision. dispatchEnvelopePacket, dispatchBoard, and workerTaskPacket are finalized only after user choice or an allowed recorded skip. dispatchEnvelopePacket is required for all non-pure-query flows so every executable run has an explicit owner, capability boundary, memory mode, and review / verification routing before dispatch. orchestrationTaskBoardPacket is the mandatory Conductor task board for the same executable flows. businessFlowBlueprintPacket, product / experience / test / structure gate packets, permission / side-effect / rollback packets, and agentBlueprintPacket are required before workerTaskPacket so Conductor proves the full business flow and release risks were considered before dispatch. interfaceIntegrationContractPacket is required before execution when triggerReasons indicate internal interface boundary work or third-party integration, or when the business deliverable type is an interface integration. capabilityGapPacket is required when taskClassification.upgradeReasons records owner_creation_required, or when agentBlueprintPacket.roleCoverageGate fails with missing roles whose ownerResolution is upgrade_existing_owner or create_owner_first. In the Meta_Kim repository itself, owner creation or upgrade means a governance meta-owner decision plus run-scoped matchedCapabilities / capabilityBindings, with matchedSkills accepted only as legacy compatibility evidence. In user projects, executionAgentCard is used only when a global agent must be copied/modified locally or a new project-local agent must be created."
     },
     "localState": {
       "root": ".meta-kim/state",
@@ -1650,6 +1665,50 @@
         "defaultCount": 3,
         "constraint": "angles must be semantically distinct; rephrasing the same angle is forbidden"
       },
+      "deepResearchPlanQualityGate": {
+        "description": "Meta_Kim-native Fetch research gate. It internalizes external research practice as decision-grade evidence without copying third-party prompt text, report templates, command snippets, or visible structure into canonical governance.",
+        "requiredWhen": "contentEvidencePacket.researchRequired = true",
+        "requiredPlanFields": [
+          "decisionUse",
+          "questions",
+          "sourceCategoriesPlanned",
+          "deepReadTargets",
+          "sourceQualityLadder",
+          "claimAttributionRules",
+          "crossCheckStrategy",
+          "originalSynthesisRules",
+          "decisionImpactCriteria"
+        ],
+        "sourceQualityLadder": [
+          "primary_official_docs",
+          "source_code_or_release_notes",
+          "standards_or_regulatory_sources",
+          "peer_reviewed_or_benchmark_sources",
+          "reputable_news_or_analysis",
+          "community_or_forum_evidence_only_with_label"
+        ],
+        "minimumSearchAngles": 3,
+        "minimumKeySourcesToDeepRead": 3,
+        "minimumIndependentSourcesForRouteChangingClaim": 2,
+        "snippetOnlyPolicy": "Search snippets may discover candidates, but route-changing claims require full source reading or an explicit blocked / unverified label.",
+        "singleSourceClaimPolicy": "A claim supported by only one source must be flagged unverified and cannot alone decide owner, route, scope, acceptance, or release readiness.",
+        "originalSynthesisPolicy": {
+          "required": [
+            "extract abstract invariant",
+            "rename to Meta_Kim-native packet language",
+            "bind to Critical -> Fetch -> Thinking handoff",
+            "state what evidence changes the decision",
+            "record source references in research notes when external methods influenced the design"
+          ],
+          "forbidden": [
+            "copying third-party prompt text",
+            "copying third-party report template structure",
+            "copying provider-specific command examples into canonical governance",
+            "removing attribution from private research evidence",
+            "using cosmetic rewrites to disguise copied wording"
+          ]
+        }
+      },
       "evidenceScopeEnum": [
         "local_project",
         "external_research",
@@ -1820,7 +1879,7 @@
         "no_branching_choice",
         "explicit_auto_proceed"
       ],
-      "description": "Thinking-stage pre-decision frame for non-trivial executable work before AskUserQuestion, native choice, or fallback. It must list unresolvedQuestions, present contentEvidence-backed candidate solution paths, and record solutionChoiceState before detailed orchestration is locked. A skipped choice must include skipSource and skipSafetyRationale, and may only use strict skip reasons. Read-only/queryBypass is a safety and path-classification boundary, not a choice-surface skip reason by itself; use no_branching_choice only when no user answer would change route, scope, risk, owner, permission, non-goal, or acceptance. It contains candidate orchestration paths and trade-offs only; it is not a finalized dispatchEnvelopePacket, dispatchBoard, or workerTaskPacket."
+      "description": "Thinking-stage pre-decision frame for non-trivial executable work before AskUserQuestion, native choice, or compatibility fallback. It must list unresolvedQuestions, present contentEvidence-backed candidate solution paths, and record solutionChoiceState before detailed orchestration is locked. Codex and Claude Code cannot use compatibility fallback as completion evidence for required branch-changing decisions. A skipped choice must include skipSource and skipSafetyRationale, and may only use strict skip reasons. Read-only/queryBypass is a safety and path-classification boundary, not a choice-surface skip reason by itself; use no_branching_choice only when no user answer would change route, scope, risk, owner, permission, non-goal, or acceptance. It contains candidate orchestration paths and trade-offs only; it is not a finalized dispatchEnvelopePacket, dispatchBoard, or workerTaskPacket."
     },
     "intentPacket": {
       "requiredFields": [

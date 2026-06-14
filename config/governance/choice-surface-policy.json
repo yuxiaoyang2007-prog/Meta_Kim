@@ -16,29 +16,39 @@
     "choice does not alter route/scope/risk/acceptance/owner/permission/non-goal"
   ],
   "readOnlyPolicy": "Read-only/queryBypass is a safety and path-classification boundary, not a choice-surface skip reason by itself. Ask when branch-changing options exist; skip only when no user answer would change the route, scope, risk, owner, permission, non-goal, or acceptance.",
+  "triggerProofPolicy": {
+    "nativeSurfaceAvailableMeansCallIt": true,
+    "primaryRuntimesNoDowngrade": ["codex", "claude_code"],
+    "primaryRuntimeUnavailableAction": "block_before_execution",
+    "artifactOnlyIsNotTriggered": true,
+    "completionEvidence": [
+      "native_tool_answer",
+      "deferred_native_tool_call",
+      "valid_choice_gate_skip"
+    ],
+    "compatibilityOnlyEvidence": ["conversation_fallback_reason"],
+    "artifactOnlySignals": [
+      "cardPlanPacket",
+      "conversationNotice",
+      "markdown_report",
+      "hook_warning",
+      "generated_run_artifact"
+    ],
+    "description": "When Codex or Claude Code needs a branch-changing choice, the runtime assistant must actually call or defer the native tool. Generated packets and notices only prove that a choice is needed; they do not prove the user saw a popup. If the primary native surface is unavailable, block before Execution instead of accepting a chat-card fallback. Conversation fallback is compatibility-only for non-primary runtimes."
+  },
   "platformChoiceSurfaces": {
     "claude_code": [
       {
-        "surface": "native_choice_or_elicitation_when_available",
-        "support": "partial",
-        "notes": "Use native choice, Elicitation, or interactive hook support when verified; permission questions use permission hooks, not product cards."
-      },
-      {
-        "surface": "chat_decision_card",
+        "surface": "AskUserQuestion",
         "support": "native",
-        "notes": "Fallback when native choice is unavailable."
+        "notes": "Primary runtime surface. Required branch-changing decisions must use AskUserQuestion or deferred AskUserQuestion; no chat-card downgrade is accepted."
       }
     ],
     "codex": [
       {
-        "surface": "request_user_input_when_tool_available",
-        "support": "partial",
-        "notes": "Do not assume this tool is present in every Codex mode."
-      },
-      {
-        "surface": "chat_decision_card",
+        "surface": "request_user_input",
         "support": "native",
-        "notes": "Do not call this a popup. Approval overlays are only for sandbox/permission."
+        "notes": "Primary runtime surface. Required branch-changing decisions must use request_user_input; no chat-card downgrade is accepted."
       }
     ],
     "openclaw": [
@@ -91,7 +101,7 @@
     "confirmationStates": ["pending", "confirmed", "corrected", "skipped"],
     "allowedSkipReasons": ["trivial", "explicit_auto_proceed"],
     "renderHint": "Show confirmed items as checkmarks, uncertain items as numbered questions. Prompt: reply 'yes' to confirm, or correct specific items.",
-    "surfacePreference": "Use the current runtime adapter's verified native choice surface when available. Fall back to chat card via the standard fallback chain."
+    "surfacePreference": "For Codex and Claude Code, use the primary native choice surface and block if it cannot run. For compatibility runtimes only, fall back to chat card via the standard fallback chain."
   },
   "choiceSurfaceAdapterContract": {
     "purpose": "Separate the canonical decision card from runtime-specific renderer schemas.",
@@ -104,7 +114,8 @@
       "option count",
       "option trade-offs",
       "selection result",
-      "fallback reason",
+      "blocking reason or compatibility fallback reason",
+      "native trigger proof or artifact-only boundary",
       "writeback target"
     ],
     "canonicalMustNotContain": [

@@ -253,4 +253,172 @@ describe("meta-theory run status envelope", () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  test("status CLI summarizes latest governed execution artifact", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-status-cli-"));
+    try {
+      const executionDir = path.join(
+        tempDir,
+        ".meta-kim",
+        "state",
+        "default",
+        "governed-executions",
+      );
+      await mkdir(executionDir, { recursive: true });
+
+      const runId = "meta-latest-demo";
+      const jsonPath = `.meta-kim/state/default/governed-executions/${runId}.json`;
+      const markdownPath = `.meta-kim/state/default/governed-executions/${runId}.zh-CN.md`;
+      await writeFile(
+        path.join(executionDir, "latest.json"),
+        JSON.stringify(
+          {
+            runId,
+            jsonPath,
+            markdownPath,
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+      await writeFile(
+        path.join(executionDir, `${runId}.json`),
+        JSON.stringify(
+          {
+            runId,
+            status: "pass",
+            task: "demo task",
+            publicReadyDecision: {
+              publicReady: false,
+              status: "partial",
+            },
+            runReportPanelContract: {
+              decisionSummary: {
+                plainLanguageSummary: "demo summary",
+              },
+              ownerHandoff: [
+                {
+                  owner: "meta-conductor",
+                  mergeOwner: "meta-warden",
+                  verificationOwner: "verify",
+                },
+              ],
+            },
+            runtimeEvidencePacket: {
+              records: [
+                {
+                  runtime: "codex",
+                  status: "pass",
+                  evidenceKind: "runtime_live_pass",
+                  failureClass: "pass",
+                  strictReleasePass: true,
+                },
+                {
+                  runtime: "cursor",
+                  status: "blocked",
+                  evidenceKind: "unsupported",
+                  failureClass: "native_harness_missing",
+                  strictReleasePass: false,
+                  remainingAction:
+                    "Keep Cursor as compatibility until native harness is available.",
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          path.join(__dirname, "..", "..", "scripts", "meta-run-status.mjs"),
+          "--latest",
+        ],
+        {
+          cwd: tempDir,
+          encoding: "utf8",
+        },
+      );
+
+      assert.equal(result.status, 0);
+      assert.match(result.stdout, /latest_run=meta-latest-demo/);
+      assert.match(result.stdout, /task=demo task/);
+      assert.match(result.stdout, /status=pass/);
+      assert.match(result.stdout, /public_ready=false/);
+      assert.match(result.stdout, /summary=demo summary/);
+      assert.match(
+        result.stdout,
+        /owner_handoff=meta-conductor->meta-warden\/verify/,
+      );
+      assert.match(
+        result.stdout,
+        /runtime_evidence=codex:pass\/runtime_live_pass\/pass; cursor:blocked\/unsupported\/native_harness_missing/,
+      );
+      assert.match(
+        result.stdout,
+        /release_boundary=cursor: Keep Cursor as compatibility until native harness is available\./,
+      );
+      assert.match(result.stdout, new RegExp(`report=${markdownPath}`));
+      assert.match(
+        result.stdout,
+        /next_command=npm run meta:theory:report -- --run-id meta-latest-demo/,
+      );
+      const escapedTempDir = tempDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      assert.doesNotMatch(result.stdout, new RegExp(escapedTempDir));
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("status CLI rejects latest artifact paths outside governed execution state", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-status-cli-"));
+    try {
+      const executionDir = path.join(
+        tempDir,
+        ".meta-kim",
+        "state",
+        "default",
+        "governed-executions",
+      );
+      await mkdir(executionDir, { recursive: true });
+      await writeFile(
+        path.join(executionDir, "latest.json"),
+        JSON.stringify(
+          {
+            runId: "unsafe-demo",
+            jsonPath: "outside.json",
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+      await writeFile(
+        path.join(tempDir, "outside.json"),
+        JSON.stringify({ runId: "unsafe-demo" }, null, 2),
+        "utf8",
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          path.join(__dirname, "..", "..", "scripts", "meta-run-status.mjs"),
+          "--latest",
+        ],
+        {
+          cwd: tempDir,
+          encoding: "utf8",
+        },
+      );
+
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /Refusing to read governed execution artifact/);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

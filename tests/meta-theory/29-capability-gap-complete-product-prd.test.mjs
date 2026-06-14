@@ -19,10 +19,10 @@ describe("29 — Capability Gap complete product PRD", () => {
     assert.match(prd, /P-068 \/ P-069 \/ P-070 已在默认本地 governed run 证据层闭合/);
     assert.match(prd, /不等于 Cursor native live 或 all-runtime release-grade 完成/);
     assert.match(prd, /还不能宣称“发布级 live\/native 全 runtime 完成”/);
-    assert.match(prd, /Cursor Agent CLI native live 仍未闭合/);
+    assert.match(prd, /Cursor Agent CLI native live 是低优先级 compatibility 待验证项/);
     assert.match(prd, /Claude 和 OpenClaw 全九个 meta agents shard live evidence 已闭合/);
     assert.match(prd, /Codex \| orchestration live artifact pass/);
-    assert.match(prd, /Cursor native live 仍返回 structured blocked/);
+    assert.match(prd, /Cursor native live 记录为低优先级 compatibility 待验证/);
   });
 
   test("defines remaining complete-product scope with measurable acceptance", () => {
@@ -74,6 +74,30 @@ describe("29 — Capability Gap complete product PRD", () => {
       "阻塞",
     ]) {
       assert.match(prd, new RegExp(marker), `missing iteration marker ${marker}`);
+    }
+  });
+
+  test("records v0.54 runtime candidate compatibility framework without promotion", () => {
+    for (const marker of [
+      "版本：v0.54",
+      "docs/runtime-candidate-compatibility-deep-research.zh-CN.md",
+      "P-101 泛运行时候选兼容框架已测通",
+      "泛运行时候选兼容框架",
+      "Qoder CLI、Trae、Kiro、Windsurf / Devin Desktop Cascade、Cline、Roo Code、Continue",
+      "surfaceTaxonomy",
+      "noFormalClaimFromSurfaceMatch = true",
+      "instruction_context",
+      "skill_workflow",
+      "agent_mode",
+      "hook_automation",
+      "mcp_tooling",
+      "command_cli",
+      "memory_context",
+      "permission_safety",
+      "不能宣称 install、projection、live pass 或 release-grade",
+      "候选工具端在 adapter / sync / validation / live proof 前不能宣称正式支持",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.54 marker ${marker}`);
     }
   });
 
@@ -181,7 +205,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "P-004",
       "Cursor native live-turn harness 设计",
       "P-005",
-      "Cursor native live-turn harness 实现或明确阻塞",
+      "Cursor native live-turn harness 兼容边界",
       "P-006",
       "Claude 全 meta agents shard",
       "P-007",
@@ -224,7 +248,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "P-023",
       "AI 可读案例包",
       "P-024",
-      "Cursor native live pass 解阻",
+      "Cursor compatibility native live 待验证",
       "当前主干闭合顺序",
       "当前可并行批次",
       "Runtime evidence",
@@ -242,9 +266,9 @@ describe("29 — Capability Gap complete product PRD", () => {
       "tests/meta-theory/33-capability-gap-orchestration-quality.test.mjs",
       "当前 GitHub 差距",
       "P-015 到 P-021 编排质量轨",
-      "仍未完成且不能对 GitHub 宣称完成",
+      "不能宣称 Claude/Codex/Cursor/OpenClaw 全工具端兼容完成",
       "P-012 / P-013 / P-014 / P-023",
-      "P-024 Cursor native live pass 解阻",
+      "P-024 Cursor native live pass 仍是低优先级 compatibility 待验证项",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.16 marker ${marker}`);
     }
@@ -268,7 +292,7 @@ describe("29 — Capability Gap complete product PRD", () => {
     }
   });
 
-  test("records user deliverables completion without clearing Cursor native blocker", () => {
+  test("records user deliverables completion while keeping Cursor compatibility pending", () => {
     for (const marker of [
       "npm run meta:theory:deliverables",
       "run-panel.html",
@@ -278,7 +302,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "ai-readable-case-pack.zh-CN.md",
       "tests/meta-theory/34-run-deliverables.test.mjs",
       "P-012 / P-013 / P-014 / P-023 用户交付轨",
-      "P-024 Cursor native live pass 解阻",
+      "P-024 Cursor native live pass 仍是低优先级 compatibility 待验证项",
       "用户交付轨已有面板数据合同、静态 Web/UI、可读性 review、AI 可读评分表和案例包",
       "后续只能扩展真实 reviewer 样本，不能把某一类交付物冒充另一类",
     ]) {
@@ -286,10 +310,10 @@ describe("29 — Capability Gap complete product PRD", () => {
     }
   });
 
-  test("records all meta agents shard evidence with only Cursor native still blocked", () => {
+  test("records all meta agents shard evidence with Cursor compatibility still pending", () => {
     for (const marker of [
       "P-006 / P-007 全 meta agents shard live evidence",
-      "仍未完成且不能对 GitHub 宣称完成：P-024 Cursor native live pass 解阻",
+      "P-024 Cursor native live pass 仍是低优先级 compatibility 待验证项",
       "Claude 和 OpenClaw 全九个 meta agents shard live evidence 已闭合",
       "P-006",
       "9/9 agentResults ok",
@@ -306,7 +330,7 @@ describe("29 — Capability Gap complete product PRD", () => {
     }
   });
 
-  test("records v0.20 Cursor WSL candidate while preserving native-live blocker", () => {
+  test("records v0.20 Cursor WSL candidate while keeping native-live compatibility pending", () => {
     for (const marker of [
       "P-024 官方 WSL candidate probe",
       "官方 Windows WSL `cursor-agent`",
@@ -315,7 +339,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "Windows native、Cursor IDE subcommand、官方 Windows WSL `cursor-agent` 三个候选",
       "Windows WSL 可用 `cursor-agent --version` 验证",
       "failureClass = \"native_harness_missing\"",
-      "不能对 GitHub 宣称完成：P-024 Cursor native live pass 解阻",
+      "P-024 Cursor native live pass 仍是低优先级 compatibility 待验证项",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.20 Cursor marker ${marker}`);
     }
@@ -326,7 +350,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "版本：v0.37",
       "未完成但可并行推进的扩展 / 解阻队列",
       "P-025",
-      "Cursor WSL live 安装与只读验收子窗口",
+      "Cursor WSL live 只读验收候选",
       "P-026",
       "Cursor 官方文档 source-backed refresh",
       "P-027",
@@ -420,7 +444,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       ".meta-kim/state/default/subwindow-verification-packets/latest.json",
       "P-036 \\| PRD governance \\| PRD 状态完整性守卫[\\s\\S]*?\\| 已测通 \\|",
       "tests/meta-theory/35-release-closure-deliverables.test.mjs",
-      "P-024 仍保持真实 native live 阻塞",
+      "P-024 仍保持低优先级 compatibility native live 待验证",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.22 closure marker ${marker}`);
     }
@@ -433,14 +457,14 @@ describe("29 — Capability Gap complete product PRD", () => {
       ".meta-kim/state/default/runtime-live-shard-matrix/latest.json",
       "Claude / Codex / OpenClaw / Cursor",
       "releaseGradeCandidate",
-      "Cursor blocked 与 fixture-only 边界",
+      "Cursor compatibility pending 与 fixture-only 边界",
       "P-035 \\| R-001/R-007/R-011 \\| 真实复杂输入扩展集[\\s\\S]*?\\| 已测通 \\|",
       "npm run meta:gap:complex-inputs",
       ".meta-kim/state/default/complex-capability-gap-inputs/latest.json",
       "10/10 pass",
       "research-first、multi-capability、approval-blocked、workerTask-only",
       "P-033 / P-035",
-      "P-025 需要安装或暴露 Cursor Agent CLI",
+      "P-025 如需升级兼容证据再安装或暴露 Cursor Agent CLI",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.23 marker ${marker}`);
     }
@@ -456,7 +480,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "6 条误解点与修订建议",
       "fixture pass、release-grade、GitHub complete、Warden approval",
       "P-026 / P-027 / P-028 / P-029 / P-030 / P-031 / P-032 / P-033 / P-034 / P-035 / P-036 / P-037 / P-038 / P-039 / P-040 / P-041 / P-042 / P-043 / P-044 / P-045 / P-046 / P-047 / P-048 / P-049 / P-050 / P-051 / P-052 / P-053 / P-054 / P-055 / P-056 / P-057 / P-058 / P-059 / P-060 / P-061 / P-062 / P-063 / P-064 / P-065 / P-066 已测通",
-      "P-025 需要安装或暴露 Cursor Agent CLI",
+      "P-025 如需升级兼容证据再安装或暴露 Cursor Agent CLI",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.24 marker ${marker}`);
     }
@@ -479,7 +503,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "一条命令生成 bundle manifest",
       "能力不等于 skill",
       "真实联网研究、反馈闭环、审批体验、runtime probe 变体、交付打包、reviewer 校准",
-      "P-024 解阻前不能宣称全 runtime release-grade 完成",
+      "P-024 兼容验证前不能宣称全 runtime release-grade 完成",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.25 marker ${marker}`);
     }
@@ -512,7 +536,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "核心类别优先",
       "不把 MCP/tools 继续压成旧十类",
       "已完成 P-038",
-      "P-025 需要安装或暴露 Cursor Agent CLI",
+      "P-025 如需升级兼容证据再安装或暴露 Cursor Agent CLI",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.27 marker ${marker}`);
     }
@@ -664,7 +688,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "Prompt-first required-content completeness",
       "Claude/Codex parity gap documentation",
       "Compatibility-priority leak count",
-      "OpenClaw/Cursor primary blocker count",
+      "OpenClaw/Cursor primary release leak count",
       "Full-flow evidence overclaim count",
       "T-011",
       "Claude Code \\+ Codex prompt-first full-flow perfection",
@@ -687,17 +711,17 @@ describe("29 — Capability Gap complete product PRD", () => {
       "Primary runtime perfection",
       "Primary release closure",
       "All-tool compatibility closure",
-      "P-024 只阻塞 all-tool compatibility claim",
-      "P-024 只阻塞 all-tool compatibility，不阻塞 Claude Code \\+ Codex 主链路",
-      "Cursor / OpenClaw blocked 项必须留 remainingAction，但不进入 primary release blocker",
+      "P-024 只影响 all-tool compatibility claim",
+      "P-024 只影响 all-tool compatibility，不阻塞 Claude Code \\+ Codex 主链路",
+      "Cursor / OpenClaw compatibility pending 项必须留 remainingAction，但不进入 primary release decision",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.39 Claude/Codex priority marker ${marker}`);
     }
 
-    assert.doesNotMatch(
+    assert.match(
       prd,
-      /\| Release closure \| P-024 解阻后 \|/,
-      "primary release closure must not be blocked only by Cursor native live",
+      /\| Primary release closure \| P-087 \/ P-088 \/ P-089 \/ P-090 \/ P-091 已测通 \|/,
+      "primary release closure must stay tied to Claude Code + Codex evidence",
     );
   });
 
@@ -1114,9 +1138,9 @@ describe("29 — Capability Gap complete product PRD", () => {
       "MCP 与 tools 作为一等能力",
       "runtime-priority-and-compatibility-contract",
       "compatibility-priority leak count = 0",
-      "P-024 只阻塞 all-tool compatibility claim",
+      "P-024 只影响 all-tool compatibility claim",
       "OpenClaw / Cursor compatibility demotion",
-      "Cursor native live blocked 只能阻塞 all-tool compatibility closure",
+      "Cursor native live pending 只影响 all-tool compatibility closure",
       "P-067/P-085/P-092 已测通，但边界保持不变",
       "P-067 到 P-085 与 P-092 已测通",
       "P-085 到 P-092 primary scope 已测通",
@@ -1165,7 +1189,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "P-058 \\| R-008 \\| runtime probe 变体矩阵[\\s\\S]*?\\| 已测通 \\|",
       "P-059 \\| R-010/R-011 \\| 产品交付 bundle CLI[\\s\\S]*?\\| 已测通 \\|",
       "P-060 \\| R-011 \\| reviewer 评分校准与反例库[\\s\\S]*?\\| 已测通 \\|",
-      "P-025 需要安装或暴露 Cursor Agent CLI",
+      "P-025 如需升级兼容证据再安装或暴露 Cursor Agent CLI",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.28 marker ${marker}`);
     }
@@ -1193,7 +1217,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "fanout-then-merge",
       "approval blocked wait reason",
       "已完成 P-050 / P-051",
-      "P-025 需要安装或暴露 Cursor Agent CLI",
+      "P-025 如需升级兼容证据再安装或暴露 Cursor Agent CLI",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.29 marker ${marker}`);
     }
@@ -1225,7 +1249,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "schema 不合格",
       "Review 不接收无 owner/evidence/schema 的输出",
       "已完成 P-040 / P-052 / P-053",
-      "P-025 需要安装或暴露 Cursor Agent CLI",
+      "P-025 如需升级兼容证据再安装或暴露 Cursor Agent CLI",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.30 marker ${marker}`);
     }
@@ -1254,7 +1278,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "缺 writeback boundary 置 blocked",
       "canonicalWritesWithoutApproval = 0",
       "已完成 P-041 / P-042 / P-054 / P-055 / P-056",
-      "P-025 需要安装或暴露 Cursor Agent CLI",
+      "P-025 如需升级兼容证据再安装或暴露 Cursor Agent CLI",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.31 marker ${marker}`);
     }
@@ -1279,7 +1303,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "privacyStatus = \"pass\"",
       "missingPitfalls = \\[\\]",
       "已完成 P-045 / P-046 / P-059 / P-060",
-      "P-025 需要安装或暴露 Cursor Agent CLI",
+      "P-025 如需升级兼容证据再安装或暴露 Cursor Agent CLI",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.35 marker ${marker}`);
     }
@@ -1302,7 +1326,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "2 个 innovationCandidatePacket",
       "canonicalWrites = 0",
       "已完成 P-047 / P-048 / P-049",
-      "P-025 需要安装或暴露 Cursor Agent CLI",
+      "P-025 如需升级兼容证据再安装或暴露 Cursor Agent CLI",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.35 research marker ${marker}`);
     }
@@ -1336,8 +1360,8 @@ describe("29 — Capability Gap complete product PRD", () => {
       "至少 12 个 runtime/environment variant",
       "18. 已完成 P-029 / P-032 / P-043 / P-044 / P-057 / P-058",
       "19. 已完成 P-031",
-      "P-025 需要安装或暴露 Cursor Agent CLI",
-      "P-024 解阻前不能宣称全 runtime release-grade 完成",
+      "P-025 如需升级兼容证据再安装或暴露 Cursor Agent CLI",
+      "P-024 兼容验证前不能宣称全 runtime release-grade 完成",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.35 remaining backlog marker ${marker}`);
     }
@@ -1354,7 +1378,7 @@ describe("29 — Capability Gap complete product PRD", () => {
       "OpenClaw",
       "MiniMax M3",
       "Cursor",
-      "native live blocked-with-contract",
+      "native live compatibility pending",
       "cursor-live-turn-harness-v0.1",
       "native_harness_missing",
       "evidenceKind = \"unsupported\"",

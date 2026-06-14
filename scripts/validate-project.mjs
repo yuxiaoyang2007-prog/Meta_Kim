@@ -652,6 +652,45 @@ async function validateWorkflowContract() {
     capabilityDiscovery.forbiddenFields?.includes("platformSurface"),
     "workflow-contract.json researchCapabilityDiscovery must forbid platformSurface guessing.",
   );
+  const researchQualityGate =
+    contract.protocols?.contentEvidencePacket?.deepResearchPlanQualityGate ?? {};
+  for (const field of [
+    "decisionUse",
+    "questions",
+    "sourceCategoriesPlanned",
+    "deepReadTargets",
+    "sourceQualityLadder",
+    "claimAttributionRules",
+    "crossCheckStrategy",
+    "originalSynthesisRules",
+    "decisionImpactCriteria",
+  ]) {
+    assert(
+      researchQualityGate.requiredPlanFields?.includes(field),
+      `workflow-contract.json deepResearchPlanQualityGate must require ${field}.`,
+    );
+  }
+  assert(
+    researchQualityGate.minimumSearchAngles >= 3,
+    "workflow-contract.json deepResearchPlanQualityGate must require at least 3 search angles.",
+  );
+  assert(
+    researchQualityGate.minimumKeySourcesToDeepRead >= 3,
+    "workflow-contract.json deepResearchPlanQualityGate must require key-source deep reading.",
+  );
+  assert(
+    researchQualityGate.minimumIndependentSourcesForRouteChangingClaim >= 2,
+    "workflow-contract.json deepResearchPlanQualityGate must require cross-source route evidence.",
+  );
+  assert(
+    researchQualityGate.originalSynthesisPolicy?.forbidden?.includes(
+      "copying third-party prompt text",
+    ) &&
+      researchQualityGate.originalSynthesisPolicy?.forbidden?.includes(
+        "using cosmetic rewrites to disguise copied wording",
+      ),
+    "workflow-contract.json deepResearchPlanQualityGate must forbid copied prompt text and cosmetic disguise.",
+  );
 
   const optionFrame = contract.protocols?.preDecisionOptionFrame ?? {};
   for (const field of [
@@ -1359,6 +1398,10 @@ async function validateSyncConfiguration() {
     "config/sync.json defaultTargets must be a subset of supportedTargets.",
   );
   assert(
+    JSON.stringify(defaultTargets) === JSON.stringify(["claude", "codex"]),
+    "config/sync.json defaultTargets must keep direct-Enter install/update on Claude Code and Codex only.",
+  );
+  assert(
     availableTargets.every((target) =>
       Object.prototype.hasOwnProperty.call(profiles, target),
     ),
@@ -1440,9 +1483,27 @@ async function validateRuntimeCompatibilityCatalog() {
   );
   assert(
     catalog.decisionBoundary?.noAutoPromotionFromDependencyInstall === true &&
-      catalog.decisionBoundary?.noAutoPromotionFromGenericSkillPath === true,
-    "runtime compatibility catalog must forbid automatic promotion from dependency installs or generic paths.",
+      catalog.decisionBoundary?.noAutoPromotionFromGenericSkillPath === true &&
+      catalog.decisionBoundary?.noFormalClaimFromSurfaceMatch === true,
+    "runtime compatibility catalog must forbid automatic promotion from dependency installs, generic paths, or primitive surface matches.",
   );
+  const requiredSurfaces = [
+    "instruction_context",
+    "skill_workflow",
+    "agent_mode",
+    "hook_automation",
+    "mcp_tooling",
+    "command_cli",
+    "memory_context",
+    "permission_safety",
+  ];
+  for (const surface of requiredSurfaces) {
+    assert(
+      typeof catalog.surfaceTaxonomy?.[surface] === "string" &&
+        catalog.surfaceTaxonomy[surface].trim(),
+      `runtime compatibility catalog surfaceTaxonomy missing ${surface}.`,
+    );
+  }
 
   const products = catalog.products ?? [];
   assert(
@@ -1536,6 +1597,112 @@ async function validateRuntimeCompatibilityCatalog() {
         .length >= 4,
     "qoder candidate must be anchored to issue #7 and official Qoder docs.",
   );
+
+  const candidateProfiles = [
+    {
+      id: "qoder",
+      minDocs: 4,
+      surfaces: [
+        "instruction_context",
+        "skill_workflow",
+        "agent_mode",
+        "hook_automation",
+        "mcp_tooling",
+      ],
+      status: "verified_current",
+    },
+    {
+      id: "trae",
+      minDocs: 4,
+      surfaces: [
+        "instruction_context",
+        "skill_workflow",
+        "agent_mode",
+        "mcp_tooling",
+        "memory_context",
+      ],
+      status: "partial",
+    },
+    {
+      id: "kiro",
+      minDocs: 4,
+      surfaces: [
+        "instruction_context",
+        "skill_workflow",
+        "hook_automation",
+        "mcp_tooling",
+        "command_cli",
+      ],
+      status: "partial",
+    },
+    {
+      id: "windsurf",
+      minDocs: 4,
+      surfaces: [
+        "instruction_context",
+        "skill_workflow",
+        "hook_automation",
+        "mcp_tooling",
+        "memory_context",
+      ],
+      status: "partial",
+    },
+    {
+      id: "cline",
+      minDocs: 2,
+      surfaces: ["instruction_context", "mcp_tooling", "permission_safety"],
+      status: "partial",
+    },
+    {
+      id: "roo-code",
+      minDocs: 4,
+      surfaces: [
+        "instruction_context",
+        "skill_workflow",
+        "agent_mode",
+        "mcp_tooling",
+        "command_cli",
+        "permission_safety",
+      ],
+      status: "partial",
+    },
+    {
+      id: "continue",
+      minDocs: 4,
+      surfaces: [
+        "instruction_context",
+        "agent_mode",
+        "mcp_tooling",
+        "command_cli",
+        "permission_safety",
+      ],
+      status: "partial",
+    },
+  ];
+  for (const profile of candidateProfiles) {
+    const product = byId.get(profile.id);
+    assert(product, `runtime compatibility catalog must include candidate ${profile.id}.`);
+    assert(
+      product.tier === "candidate_probe" &&
+        product.formalProjection?.inSyncManifest === false &&
+        product.dependencyInstall?.ecc?.support === "not_supported" &&
+        product.genericCompatibility?.status === profile.status,
+      `${profile.id} must remain a candidate_probe with honest projection and ECC boundaries.`,
+    );
+    assert(
+      !eccTargets.has(profile.id) && !supportedTargets.has(profile.id),
+      `${profile.id} must not be in ECC targets or sync supportedTargets until promoted.`,
+    );
+    const surfaces = new Set(product.compatibilitySurfaces ?? []);
+    for (const surface of profile.surfaces) {
+      assert(surfaces.has(surface), `${profile.id} candidate missing ${surface} surface.`);
+    }
+    assert(
+      (product.evidence ?? []).filter((entry) => entry.type === "official_docs")
+        .length >= profile.minDocs,
+      `${profile.id} candidate must cite enough official docs evidence.`,
+    );
+  }
 
   const cursor = byId.get("cursor");
   assert(cursor, "runtime compatibility catalog must include cursor.");

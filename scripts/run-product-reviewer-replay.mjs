@@ -46,7 +46,7 @@ function recommendationForConfusion(confusion) {
     return "runtime evidence 表必须显示 releaseGradeCandidate 和 remainingAction。";
   }
   if (/GitHub complete/i.test(confusion)) {
-    return "GitHub 差距报告继续保留 cannotClaimGithubComplete 与 P-024 reason。";
+    return "GitHub 差距报告分开保留 cannotClaimGithubComplete 与 cannotClaimAllToolCompatibility。";
   }
   if (/Warden approval/i.test(confusion)) {
     return "AI 可读案例包增加 Warden approval 是安全边界而非流程仪式的教学说明。";

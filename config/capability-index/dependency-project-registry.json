@@ -8,8 +8,8 @@
         "type": "github",
         "uri": "https://github.com/KimYx0207/agent-teams-playbook",
         "localPath": null,
-        "inspectionStatus": "external_reference",
-        "lastInspectedAt": null
+        "inspectionStatus": "installed_skill_candidate",
+        "lastInspectedAt": "2026-06-14"
       },
       "capabilityCard": {
         "oneLine": "Parallel agent-team orchestration playbook.",
@@ -34,11 +34,14 @@
           "Critical/Fetch replacement"
         ],
         "knownRisks": [
-          "external skill must be installed"
+          "external skill must be installed or present in a discovered dependency root",
+          "selected provider must not be relabeled as live Skill/Agent Team/spawn_agent invocation"
         ],
         "verificationMethods": [
           "config/skills.json entry",
-          "discover global capabilities"
+          "discover global capabilities",
+          "npm run meta:prd:product-experience:validate",
+          "npm run meta:test:integration"
         ],
         "canDo": [
           "multi_lane_execution"
@@ -46,15 +49,16 @@
         "canNotDo": [
           "Critical/Fetch replacement"
         ],
-        "verificationMethod": "config/skills.json entry",
+        "verificationMethod": "npm run meta:prd:product-experience:validate",
         "risk": [
-          "external skill must be installed"
+          "external skill must be installed or present in a discovered dependency root",
+          "selected provider must not be relabeled as live Skill/Agent Team/spawn_agent invocation"
         ],
-        "routeEligibility": "external_reference",
+        "routeEligibility": "installed_skill_candidate",
         "writebackKey": "dependency:agent-teams-playbook"
       },
       "interface": {
-        "invokeAs": "reference",
+        "invokeAs": "skill",
         "preferredWeaponId": "agent-teams-playbook-skill",
         "fallbackWeaponId": null,
         "requiredFiles": [],
@@ -65,16 +69,16 @@
           "openclaw",
           "cursor"
         ],
-        "invocationPath": null
+        "invocationPath": "runtime-discovered skill root"
       },
       "scoring": {
-        "taskFit": 78,
-        "inputOutputClarity": 75,
-        "runtimeAvailability": 70,
-        "verificationStrength": 65,
-        "reusePotential": 80,
-        "risk": 25,
-        "overall": 74
+        "taskFit": 88,
+        "inputOutputClarity": 82,
+        "runtimeAvailability": 82,
+        "verificationStrength": 82,
+        "reusePotential": 86,
+        "risk": 20,
+        "overall": 84
       },
       "reusePolicy": {
         "reuseWhenScoreAbove": 80,
@@ -83,11 +87,14 @@
         "recordUsageStats": true
       },
       "evolution": {
-        "usageCount": 0,
-        "successCount": 0,
+        "usageCount": 1,
+        "successCount": 1,
         "failureCount": 0,
         "lastFailureReason": null,
-        "nextRunHints": []
+        "nextRunHints": [
+          "Use only after Thinking when 2+ executable worker lanes exist.",
+          "Record agent_teams_playbook as selected_not_invoked unless live Skill/Agent Team/spawn_agent evidence is attached."
+        ]
       },
       "runtimeSupport": {
         "claude_code": "partial",
@@ -102,10 +109,10 @@
         "wsl2": "partial"
       },
       "supportEvidence": {
-        "source": "repo_claim",
-        "confidence": "repo_claim",
-        "verificationCommand": "npm run meta:deps:compat",
-        "lastVerifiedAt": null
+        "source": "local_runner_and_installed_skill_candidate",
+        "confidence": "validated_default_route",
+        "verificationCommand": "npm run meta:prd:product-experience:validate",
+        "lastVerifiedAt": "2026-06-14"
       }
     },
     {

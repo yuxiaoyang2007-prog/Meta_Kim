@@ -14,9 +14,7 @@
   ],
   "defaultTargets": [
     "claude",
-    "codex",
-    "openclaw",
-    "cursor"
+    "codex"
   ],
   "canonicalRoots": {
     "agents": "canonical/agents",

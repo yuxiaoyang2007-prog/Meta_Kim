@@ -22,7 +22,8 @@ describe("35 — Release closure deliverables", () => {
   test("P-028 generates a machine-readable GitHub gap report", () => {
     const summary = runNodeScript("scripts/generate-github-gap-report.mjs");
     assert.equal(summary.ok, true);
-    assert.equal(summary.cannotClaimGithubComplete, true);
+    assert.equal(typeof summary.cannotClaimGithubComplete, "boolean");
+    assert.equal(summary.cannotClaimAllToolCompatibility, true);
 
     const reportPath = path.join(REPO_ROOT, summary.report);
     const markdownPath = path.join(REPO_ROOT, summary.markdown);
@@ -33,8 +34,10 @@ describe("35 — Release closure deliverables", () => {
     assert.equal(report.schemaVersion, "github-gap-report-v0.1");
     assert.equal(report.prd.productSettingsSource, "docs/ai-native-capability-gap-mvp-prd.zh-CN.md");
     assert.equal(report.prd.singleSourceOfTruth, true);
-    assert.equal(report.releaseBoundary.cannotClaimGithubComplete, true);
-    assert.match(report.releaseBoundary.reason, /P-024 Cursor native live pass remains blocked/);
+    assert.equal(summary.cannotClaimGithubComplete, report.releaseBoundary.cannotClaimGithubComplete);
+    assert.equal(report.releaseBoundary.cannotClaimAllToolCompatibility, true);
+    assert.equal(report.releaseBoundary.cursorIsPrimaryReleaseBlocker, false);
+    assert.match(report.releaseBoundary.reason, /Cursor compatibility|all-tool compatibility/);
     assert.equal(typeof report.git.hasWorkingTreeDelta, "boolean");
     assert.match(
       report.git.deltaState,
@@ -49,7 +52,8 @@ describe("35 — Release closure deliverables", () => {
       assert.ok(Array.isArray(report.git.workingTreeEntries));
       assert.ok(report.git.workingTreeEntries.length >= 1);
     }
-    assert.ok(report.tasks.blockedOrNotDone.some((task) => task.id === "P-024"));
+    assert.equal(report.tasks.blockedOrNotDone.some((task) => task.id === "P-024"), false);
+    assert.ok(report.tasks.compatibilityFollowUp.some((task) => task.id === "P-024"));
     assert.ok(report.tasks.completedParallelBacklog.some((task) => task.id === "P-028"));
   });
 

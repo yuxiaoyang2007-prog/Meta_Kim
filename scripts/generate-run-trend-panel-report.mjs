@@ -76,6 +76,19 @@ async function buildTrendReport() {
         source: feedback.path,
       }
     : null;
+  const githubDelta = githubGap
+    ? {
+        cannotClaimGithubComplete:
+          githubGap.report?.releaseBoundary?.cannotClaimGithubComplete ?? false,
+        cannotClaimAllToolCompatibility:
+          githubGap.report?.releaseBoundary?.cannotClaimAllToolCompatibility ?? false,
+        compatibilityFollowUpTaskIds:
+          githubGap.report?.releaseBoundary?.compatibilityFollowUpTaskIds ?? [],
+        cursorIsPrimaryReleaseBlocker:
+          githubGap.report?.releaseBoundary?.cursorIsPrimaryReleaseBlocker ?? false,
+        source: githubGap.path,
+      }
+    : null;
 
   const filters = [
     {
@@ -129,7 +142,7 @@ async function buildTrendReport() {
       title: "Blocked Reasons",
       dataSource: "blockedReasonTrend",
       rowCount: blockedReasonTrend.length,
-      reviewerUse: "Keep Cursor native live and approval blockers visible instead of hiding them behind green checks.",
+      reviewerUse: "Keep compatibility follow-up evidence and approval blockers visible without promoting smoke evidence to live proof.",
     },
     {
       id: "owner-failure-rate",
@@ -182,7 +195,7 @@ async function buildTrendReport() {
       ownerFailureTrend,
       reviewerScoreTrend,
       feedbackTrend,
-      githubDelta: githubGap ? { cannotClaimGithubComplete: true, source: githubGap.path } : null,
+      githubDelta,
     },
     privacyCheck: {
       status: privacyLeaks.length === 0 ? "pass" : "fail",

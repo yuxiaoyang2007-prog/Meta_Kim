@@ -78,6 +78,11 @@
         "thinkingPacket.parallelGroups",
         "thinkingPacket.dependencyPolicy",
         "thinkingPacket.omittedLanesWithReason",
+        "dynamicWorkflowRuntimePacket.capabilityBindingRows",
+        "agentTeamsPlaybookPacket",
+        "peerAgentMeshPacket.peers",
+        "capabilityInvocationTruthPacket",
+        "visibleMetaTheorySurfacePacket",
         "governanceAgentResultPackets",
         "conductorConsumptionEvidence"
       ],
@@ -97,6 +102,14 @@
       "requiredOutputs": [
         "conductorConsumptionEvidence",
         "agUiStageEvents",
+        "langGraphRunPacket.nodes",
+        "langGraphRunPacket.edges",
+        "langGraphRunPacket.stateTransition",
+        "langGraphRunPacket.eventLog",
+        "langGraphRunPacket.checkpoint",
+        "peerAgentMeshPacket.handoffs",
+        "agentTeamsPlaybookPacket",
+        "capabilityInvocationTruthPacket.rows",
         "executionResult.workerResultPackets",
         "executionResult.workerExecutionEvidence",
         "executionResult.mergeResult"
@@ -119,7 +132,11 @@
         "reviewPacket.ownerCoverage",
         "reviewPacket.protocolCompliance",
         "reviewPacket.qualityGate",
-        "reviewPacket.findings"
+        "reviewPacket.findings",
+        "productExperiencePacket.goals",
+        "productExperiencePacket.supportGates",
+        "productExperiencePacket.capabilityInvocationTruthGate",
+        "productExperiencePacket.noOverclaimGate"
       ],
       "skipConditions": ["fast_path read-only answer with no durable artifact"],
       "gateConditions": [
@@ -158,6 +175,11 @@
         "verificationResult.evidence",
         "traceEvalControlPlane",
         "performanceCostBudget",
+        "goalContractPacket",
+        "capabilityInvocationTruthPacket",
+        "visibleMetaTheorySurfacePacket",
+        "userPerceptionPacket",
+        "productExperiencePacket",
         "verificationResult.fixEvidence",
         "verificationResult.remainingRisk"
       ],
@@ -274,6 +296,124 @@
       "maxIterationHandling",
       "escalation"
     ]
+  },
+  "productExperienceCoreGoals": {
+    "sourcePrdVersion": "v0.61",
+    "goalContractMethod": "outcome + verification + constraints + boundaries + iteration + completion evidence + stop/pause",
+    "evidenceTierRequired": "product_experience_pass",
+    "requiredPackets": [
+      "goalContractPacket",
+      "langGraphRunPacket",
+      "dynamicWorkflowRuntimePacket",
+      "peerAgentMeshPacket",
+      "agentTeamsPlaybookPacket",
+      "capabilityInvocationProbePacket",
+      "capabilityInvocationTruthPacket",
+      "visibleMetaTheorySurfacePacket",
+      "userPerceptionPacket",
+      "productExperiencePacket"
+    ],
+    "requiredGoalIds": ["P-102", "P-103", "P-104"],
+    "supportGateIds": ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"],
+    "langGraphStyleRequirements": [
+      "nodes",
+      "edges",
+      "state",
+      "stateTransition",
+      "eventLog",
+      "checkpoint",
+      "replay"
+    ],
+    "dynamicWorkflowRequirements": [
+      "skills",
+      "mcp",
+      "commands",
+      "runtimeTools",
+      "hookMatches",
+      "abstractPromptCapability",
+      "agentTeamsPlaybook",
+      "workerResultPackets"
+    ],
+    "capabilityInvocationTruthRequirements": [
+      "stateTaxonomy includes invoked, applied, host_visible_observed, selected_not_invoked, discovered_not_selected, unavailable, blocked, not_required",
+      "agent/subagent live invocation is selected_not_invoked unless external agent spawn evidence exists",
+      "app-visible host UI subagents are recorded separately from runner Agent/spawn_agent tool invocation",
+      "agent-teams-playbook is selected for 2+ executable parallel lanes but is not relabeled as a live Skill/Agent Team/spawn_agent call",
+      "MCP binding is not relabeled as MCP tool call without invocation evidence",
+      "hook match or file is not relabeled as triggered hook",
+      "command selection is not relabeled as command execution without fresh command output",
+      "run-scoped worker execution is not relabeled as live subagent invocation",
+      "product-experience pass requires capabilityInvocationProbePacket fresh local probes for callable MCP, command/script, and runtime-tool families when they are selected"
+    ],
+    "userPerceptionRequirements": [
+      "what_to_do",
+      "what_is_happening",
+      "how_it_will_run",
+      "acceptance_standard",
+      "pause_condition"
+    ],
+    "forbiddenCompletionEvidence": [
+      "contract_ready only",
+      "fixture_pass_not_live",
+      "local_runner_pass without user perception",
+      "runtime_json_pass",
+      "projection_smoke",
+      "internal packet dump",
+      "hidden orchestration artifacts",
+      "chat_card_as_native_popup",
+      "demo_fixture_as_framework_goal",
+      "selected_capability_as_invoked_tool",
+      "configured_mcp_as_called_tool",
+      "selected_command_as_executed",
+      "selected_runtime_tool_as_called",
+      "hook_file_or_match_as_triggered_hook",
+      "run_scoped_worker_as_live_subagent"
+      ,
+      "app_visible_subagent_as_runner_agent_spawn"
+    ],
+    "supportGateRequirements": {
+      "P-105": [
+        "goal has outcome",
+        "goal has verification",
+        "goal has constraints",
+        "goal has boundaries",
+        "goal has iteration policy",
+        "goal has stop/pause",
+        "no evidence-tier overclaim"
+      ],
+      "P-106": [
+        "Codex branch-changing choices require request_user_input before Execution",
+        "Claude Code branch-changing choices require AskUserQuestion before Execution",
+        "chat card, markdown card, hook warning, CLI notice, fixture transcript, or after-the-fact insertion cannot be native-popup proof",
+        "structural runner may record not_claimed_by_structural_runner but must not claim native live pass"
+      ],
+      "P-107": [
+        "same failure class appearing a second time means bottom_design_failure",
+        "return to Critical/Fetch/Thinking before retry",
+        "changed design or evidence path is required before another attempt",
+        "regression test or scar must record the prevention rule"
+      ],
+      "P-108": [
+        "durable goals, PRD, contracts, validators, and prompts stay task-agnostic",
+        "desktop sticky notes or other fixtures may test the framework but cannot become the framework goal",
+        "demo app stack, file path, or one-off product request cannot be a pass criterion"
+      ],
+      "P-109": [
+        "capabilityInvocationTruthPacket.rows covers agent/subagent, app-visible host subagent, worker task, skill, MCP, hook, prompt/rule, command/script, and runtime tool families",
+        "capabilityInvocationTruthPacket.rows also records agent_teams_playbook when fan-out orchestration is selected",
+        "each family records invoked, applied, host_visible_observed, selected_not_invoked, discovered_not_selected, unavailable, blocked, or not_required",
+        "selected, discovered, configured, or matched capabilities cannot be displayed as invoked without attached invocation evidence",
+        "run-scoped worker execution and app-visible host subagent UI evidence cannot be displayed as live runner Agent/spawn_agent invocation",
+        "MCP config/binding and hook file/match cannot be displayed as MCP call or hook trigger",
+        "callableInvocationCoverage.status must be pass for product-experience pass, with fresh probes for selected MCP, command/script, and runtime-tool families"
+      ],
+      "P-110": [
+        "agentTeamsPlaybookPacket is not_required for fewer than 2 executable worker lanes",
+        "2+ executable worker lanes must discover and select agent-teams-playbook as the fan-out orchestration adapter",
+        "fan-out waves must be capped at 5 parallel agents and preserve workerTaskPackets",
+        "the Node runner must not claim a live Skill, Agent Team, or Codex spawn_agent call without host tool-call evidence"
+      ]
+    }
   },
   "verificationPolicy": {
     "role": "fuse_and_completion_evidence",

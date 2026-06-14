@@ -11,6 +11,9 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(scriptDir, "..");
 const PRD_PATH = path.join(REPO_ROOT, "docs", "ai-native-capability-gap-mvp-prd.zh-CN.md");
 const OUTPUT_DIR = path.join(REPO_ROOT, ".meta-kim", "state", "default", "github-gap-report");
+const INCOMPLETE_PRIMARY_STATUS_RE = /阻塞|未开始|进行中|部分完成/;
+const COMPATIBILITY_PENDING_STATUS_RE = /兼容待验证|低优先级兼容待验证/;
+const COMPATIBILITY_TASK_RE = /^P-02[45]$/;
 
 function runGit(args) {
   const result = spawnSync("git", args, {
@@ -101,6 +104,22 @@ function buildMarkdown(report, outputPath) {
       (task) => `- ${task.id} [${task.status}] ${task.task}`,
     ),
     "",
+    `## ${labels.compatibilityFollowUp}`,
+    "",
+    ...report.tasks.compatibilityFollowUp.map(
+      (task) => `- ${task.id} [${task.status}] ${task.task}`,
+    ),
+    "",
+    `## ${labels.releaseBoundary}`,
+    "",
+    `- ${labels.cannotClaimGithubComplete}: ${labels.boolean(
+      report.releaseBoundary.cannotClaimGithubComplete,
+    )}`,
+    `- ${labels.cannotClaimAllToolCompatibility}: ${labels.boolean(
+      report.releaseBoundary.cannotClaimAllToolCompatibility,
+    )}`,
+    `- ${labels.reason}: ${report.releaseBoundary.reason}`,
+    "",
     `## ${labels.completedParallelBacklogEvidence}`,
     "",
     ...report.tasks.completedParallelBacklog.map(
@@ -132,6 +151,21 @@ async function main() {
           ? "dirty"
           : "clean_synced";
   const tasks = parsePrdTasks(prd);
+  const primaryReleaseBlockingTasks = tasks.filter(
+    (task) => INCOMPLETE_PRIMARY_STATUS_RE.test(task.status) && !COMPATIBILITY_TASK_RE.test(task.id),
+  );
+  const compatibilityFollowUp = tasks.filter(
+    (task) =>
+      COMPATIBILITY_PENDING_STATUS_RE.test(task.status) ||
+      (COMPATIBILITY_TASK_RE.test(task.id) && /native_harness_missing|cursor-agent/.test(task.evidence)),
+  );
+  const gitDeltaBlocksGithubComplete =
+    Number.isFinite(aheadOfOriginMain) && aheadOfOriginMain > 0
+      ? true
+      : hasWorkingTreeDelta;
+  const cannotClaimGithubComplete =
+    gitDeltaBlocksGithubComplete || primaryReleaseBlockingTasks.length > 0;
+  const cannotClaimAllToolCompatibility = compatibilityFollowUp.some((task) => task.id === "P-024");
   const report = {
     schemaVersion: "github-gap-report-v0.1",
     generatedAt: new Date().toISOString(),
@@ -156,18 +190,22 @@ async function main() {
     },
     tasks: {
       total: tasks.length,
-      blockedOrNotDone: tasks.filter((task) =>
-        /阻塞|未开始|进行中|部分完成/.test(task.status),
-      ),
+      blockedOrNotDone: primaryReleaseBlockingTasks,
+      compatibilityFollowUp,
       completedParallelBacklog: tasks.filter((task) =>
         /^P-0(?:26|27|28|34|36)$/.test(task.id) && /已测通/.test(task.status),
       ),
     },
     releaseBoundary: {
-      cannotClaimGithubComplete: tasks.some(
-        (task) => task.id === "P-024" && /阻塞/.test(task.status),
-      ),
-      reason: "P-024 Cursor native live pass remains blocked until a parseable native Cursor Agent CLI is available.",
+      cannotClaimGithubComplete,
+      cannotClaimAllToolCompatibility,
+      githubDeltaBlocksGithubComplete: gitDeltaBlocksGithubComplete,
+      primaryReleaseBlockingTaskIds: primaryReleaseBlockingTasks.map((task) => task.id),
+      compatibilityFollowUpTaskIds: compatibilityFollowUp.map((task) => task.id),
+      cursorIsPrimaryReleaseBlocker: false,
+      reason: cannotClaimGithubComplete
+        ? "GitHub completion still depends on clean sync and zero primary release gaps; Cursor compatibility follow-up is tracked separately."
+        : "Cursor compatibility is outside primary GitHub completion; all-tool compatibility remains a separate follow-up.",
     },
   };
 
@@ -186,6 +224,7 @@ async function main() {
         aheadOfOriginMain: report.git.aheadOfOriginMain,
         hasWorkingTreeDelta: report.git.hasWorkingTreeDelta,
         cannotClaimGithubComplete: report.releaseBoundary.cannotClaimGithubComplete,
+        cannotClaimAllToolCompatibility: report.releaseBoundary.cannotClaimAllToolCompatibility,
       },
       null,
       2,

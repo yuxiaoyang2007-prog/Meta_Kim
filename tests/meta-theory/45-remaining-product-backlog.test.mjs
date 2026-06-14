@@ -47,6 +47,7 @@ describe("45 — Remaining product backlog reports", () => {
     runNodeScript("scripts/run-product-reviewer-replay.mjs");
     runNodeScript("scripts/generate-feedback-loop-report.mjs");
     runNodeScript("scripts/generate-runtime-live-shard-matrix.mjs");
+    runNodeScript("scripts/generate-github-gap-report.mjs");
 
     const summary = runNodeScript("scripts/generate-run-trend-panel-report.mjs");
     assert.equal(summary.ok, true);
@@ -64,7 +65,10 @@ describe("45 — Remaining product backlog reports", () => {
     );
     assert.ok(report.endpoints.length >= 5);
     assert.ok(report.trends.blockedReasonTrend.length >= 1);
-    assert.equal(report.trends.githubDelta?.cannotClaimGithubComplete, true);
+    assert.equal(typeof report.trends.githubDelta?.cannotClaimGithubComplete, "boolean");
+    assert.equal(report.trends.githubDelta?.cannotClaimAllToolCompatibility, true);
+    assert.equal(report.trends.githubDelta?.cursorIsPrimaryReleaseBlocker, false);
+    assert.ok(report.trends.githubDelta?.compatibilityFollowUpTaskIds.includes("P-024"));
     assert.equal(hasLocalAbsolutePath(report), false);
     assert.match(markdown, /Run Trend Panel/);
   });
@@ -95,7 +99,7 @@ describe("45 — Remaining product backlog reports", () => {
     assert.match(markdown, /Warden Approval Experience/);
   });
 
-  test("P-044/P-058 generate runtime install/probe playbook and variant matrix without clearing Cursor blocker", () => {
+  test("P-044/P-058 generate runtime install/probe playbook and variant matrix while keeping Cursor compatibility pending", () => {
     const packageJson = JSON.parse(readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"));
     assert.equal(
       packageJson.scripts["meta:runtime:probe-playbook"],

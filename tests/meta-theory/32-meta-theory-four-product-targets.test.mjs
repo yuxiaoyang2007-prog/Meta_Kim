@@ -18,7 +18,7 @@ const multiGapTask = [
   "内部知识库需要 MCP provider 边界。",
 ].join("\n");
 
-describe("32 — Meta-theory four product targets", () => {
+describe("32 — Meta-theory three product goals and support gates", () => {
   test("T-001 runs the default governed orchestration runtime path", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-governed-run-"));
     try {
@@ -54,6 +54,67 @@ describe("32 — Meta-theory four product targets", () => {
       assert.equal(report.defaultRuntimePath.agUiStageEvents.eventCount, 8);
       assert.ok(report.defaultRuntimePath.performanceCostBudget.highUsePaths.length >= 6);
       assert.equal(report.defaultRuntimePath.contextEngineeringBudget.status, "pass");
+      assert.equal(report.defaultRuntimePath.langGraphRunPacket.status, "pass");
+      assert.equal(report.defaultRuntimePath.peerAgentMeshPacket.status, "pass");
+      assert.equal(report.defaultRuntimePath.agentTeamsPlaybookPacket.status, "pass");
+      assert.equal(report.defaultRuntimePath.agentTeamsPlaybookPacket.selected, true);
+      assert.equal(report.defaultRuntimePath.capabilityInvocationTruthPacket.status, "pass");
+      const invocationByFamily = new Map(
+        report.defaultRuntimePath.capabilityInvocationTruthPacket.rows.map((row) => [
+          row.family,
+          row,
+        ])
+      );
+      assert.equal(invocationByFamily.get("agent_subagent").state, "selected_not_invoked");
+      assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
+      assert.equal(invocationByFamily.get("worker_task").state, "invoked");
+      assert.equal(invocationByFamily.get("prompt_rule").state, "applied");
+      assert.equal(invocationByFamily.get("agent_teams_playbook").state, "selected_not_invoked");
+      assert.equal(report.defaultRuntimePath.capabilityInvocationProbePacket.status, "not_run");
+      assert.ok(
+        ["selected_not_invoked", "discovered_not_selected", "not_required"].includes(
+          invocationByFamily.get("mcp").state
+        )
+      );
+      assert.ok(["pass", "partial"].includes(report.defaultRuntimePath.visibleMetaTheorySurfacePacket.status));
+      assert.equal(report.defaultRuntimePath.visibleMetaTheorySurfacePacket.capabilityInventory.notSkillOnly, true);
+      assert.equal(
+        report.defaultRuntimePath.visibleMetaTheorySurfacePacket.capabilityInvocationTruth.status,
+        "pass"
+      );
+      assert.equal(
+        report.defaultRuntimePath.visibleMetaTheorySurfacePacket.dynamicWorkflow.status,
+        report.defaultRuntimePath.dynamicWorkflowRuntimePacket.status
+      );
+      assert.equal(report.defaultRuntimePath.visibleMetaTheorySurfacePacket.peerAgentMesh.status, "pass");
+      assert.equal(report.defaultRuntimePath.visibleMetaTheorySurfacePacket.langGraph.status, "pass");
+      assert.ok(["pass", "partial"].includes(report.defaultRuntimePath.userPerceptionPacket.status));
+      assert.deepEqual(
+        report.defaultRuntimePath.productExperiencePacket.goals.map((goal) => goal.id),
+        ["P-102", "P-103", "P-104"]
+      );
+      assert.deepEqual(
+        report.defaultRuntimePath.productExperiencePacket.supportGates.map((gate) => gate.id),
+        ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"]
+      );
+      assert.equal(report.defaultRuntimePath.productExperiencePacket.noOverclaimGate.status, "pass");
+      assert.equal(
+        report.defaultRuntimePath.productExperiencePacket.nativeChoiceSurfaceGate.liveRuntimeBoundary.status,
+        "not_claimed_by_structural_runner"
+      );
+      assert.equal(
+        report.defaultRuntimePath.productExperiencePacket.repeatFailureDesignGate.actionOnSecondOccurrence,
+        "bottom_design_failure_return_to_critical_fetch_thinking"
+      );
+      assert.equal(report.defaultRuntimePath.productExperiencePacket.generalizationGate.status, "pass");
+      assert.equal(
+        report.defaultRuntimePath.productExperiencePacket.capabilityInvocationTruthGate.status,
+        "partial"
+      );
+      assert.equal(
+        report.defaultRuntimePath.productExperiencePacket.agentTeamsPlaybookGate.status,
+        "pass"
+      );
       assert.equal(report.coreLoop.executionResult.actualWorkerExecution, true);
       assert.equal(report.coreLoop.traceEvalControlPlane.coverage.coverageStatus, "pass");
       assert.equal(report.coreLoop.agUiStageEvents.events.every((event) => event.packetDumpPrevented === true), true);
@@ -212,7 +273,12 @@ describe("32 — Meta-theory four product targets", () => {
 
       assert.equal(readBack.artifact.runId, "test-run-readable-report");
       assert.equal(readBack.artifact.runReport.status, "pass");
-      assert.equal(readBack.artifact.runReportPanelContract.status, "pass");
+      assert.equal(readBack.artifact.runReportPanelContract.status, "partial");
+      assert.equal(
+        readBack.artifact.runReportPanelContract.capabilityInvocationTruth.callableInvocationCoverage
+          .status,
+        "not_run",
+      );
       assert.equal(
         readBack.artifact.runReportPanelContract.schemaVersion,
         "run-report-panel-contract-v0.1"
@@ -247,6 +313,7 @@ describe("32 — Meta-theory four product targets", () => {
         sectionLabels.whyDecision,
         sectionLabels.ownerHandoff,
         sectionLabels.toolEvidenceFull(toolList),
+        "三目标产品验收",
         sectionLabels.capabilityUpgrade,
         sectionLabels.wardenApproval,
         sectionLabels.verificationStatus,
@@ -259,6 +326,40 @@ describe("32 — Meta-theory four product targets", () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  test("T-005 validates the three product goals and support gates", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["scripts/validate-product-experience-core-goals.mjs"],
+      { encoding: "utf8", timeout: 120_000 }
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "pass");
+    assert.equal(output.evidenceTier, "product_experience_pass");
+    assert.deepEqual(output.goals.map((goal) => goal.id), ["P-102", "P-103", "P-104"]);
+    assert.deepEqual(output.supportGates.map((gate) => gate.id), ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"]);
+    assert.equal(output.nativeChoiceSurface, "not_claimed_by_structural_runner");
+    assert.equal(output.repeatFailureDesign, "bottom_design_failure_return_to_critical_fetch_thinking");
+    assert.equal(output.generalizationGate, "pass");
+    assert.ok(output.langGraph.nodes >= 8);
+    assert.ok(output.langGraph.edges >= 7);
+    assert.equal(output.dynamicWorkflow.skill, true);
+    assert.equal(output.dynamicWorkflow.mcp, true);
+    assert.equal(output.dynamicWorkflow.command, true);
+    assert.equal(output.dynamicWorkflow.tools, true);
+    assert.equal(output.dynamicWorkflow.hooks, true);
+    assert.ok(output.peers > 0);
+    assert.equal(output.capabilityInvocationTruth.status, "pass");
+    assert.equal(output.capabilityInvocationTruth.states.invoked >= 1, true);
+    assert.equal(output.capabilityInvocationTruth.appVisibleSubagentState, "not_required");
+    assert.equal(output.capabilityInvocationTruth.callableInvocationCoverage.status, "pass");
+    assert.equal(output.capabilityInvocationTruth.agentTeamsPlaybookState, "selected_not_invoked");
+    assert.equal(output.agentTeamsPlaybook.status, "pass");
+    assert.equal(output.agentTeamsPlaybook.selected, true);
+    assert.equal(output.visibleMetaTheorySurface, "pass");
+    assert.ok(output.userPerceptionCues >= 6);
   });
 
   test("CLI accepts natural language task text and reports the runId", async () => {

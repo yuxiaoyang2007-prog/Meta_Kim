@@ -301,9 +301,28 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.match(markdown, /用户只用普通自然语言输入/);
       assert.match(markdown, /还没有发出 runtime conversation notice/);
       assert.match(markdown, /内部 artifact/);
+      assert.match(markdown, /## Meta-Theory 可见编排面/);
+      assert.match(markdown, /Dynamic Workflow/);
+      assert.match(markdown, /能力发现/);
+      assert.match(markdown, /Peer Agent Mesh/);
+      assert.match(markdown, /LangGraph-style/);
+      assert.match(markdown, /能力发现矩阵/);
+      assert.match(markdown, /真实能力调用状态/);
+      assert.match(markdown, /agent_subagent/);
+      assert.match(markdown, /app_visible_subagent/);
+      assert.match(markdown, /selected_not_invoked/);
       assert.match(markdown, /## 阶段执行说明/);
       assert.match(markdown, /要做什么/);
       assert.match(markdown, /结果长什么样/);
+      assert.match(markdown, /## 三目标产品验收/);
+      assert.match(markdown, /P-102/);
+      assert.match(markdown, /P-103/);
+      assert.match(markdown, /P-104/);
+      assert.match(markdown, /P-105/);
+      assert.match(markdown, /P-106/);
+      assert.match(markdown, /P-107/);
+      assert.match(markdown, /P-108/);
+      assert.match(markdown, /P-109/);
       assert.match(markdown, /## 执行编排明细/);
       assert.match(markdown, /Agent/);
       assert.match(markdown, /Skill/);
@@ -405,9 +424,56 @@ describe("34 — Meta-theory run deliverables", () => {
           .workerTasks.length,
         runArtifact.runReportPanelContract.ownerHandoff.length
       );
+      assert.equal(runArtifact.visibleMetaTheorySurfacePacket.status, "pass");
+      assert.equal(runArtifact.visibleMetaTheorySurfacePacket.capabilityInventory.notSkillOnly, true);
+      assert.equal(runArtifact.capabilityInvocationTruthPacket.status, "pass");
+      const invocationByFamily = new Map(
+        runArtifact.capabilityInvocationTruthPacket.rows.map((row) => [row.family, row])
+      );
+      assert.equal(invocationByFamily.get("agent_subagent").state, "selected_not_invoked");
+      assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
+      assert.equal(invocationByFamily.get("worker_task").state, "invoked");
+      assert.equal(invocationByFamily.get("prompt_rule").state, "applied");
+      assert.equal(invocationByFamily.get("agent_teams_playbook").state, "selected_not_invoked");
+      assert.equal(invocationByFamily.get("mcp").state, "selected_not_invoked");
+      assert.equal(runArtifact.capabilityInvocationProbePacket.status, "not_run");
+      assert.equal(runArtifact.agentTeamsPlaybookPacket.status, "pass");
+      assert.equal(runArtifact.agentTeamsPlaybookPacket.selected, true);
+      assert.equal(runArtifact.visibleMetaTheorySurfacePacket.capabilityInvocationTruth.status, "pass");
+      assert.equal(runArtifact.visibleMetaTheorySurfacePacket.dynamicWorkflow.status, "pass");
+      assert.equal(runArtifact.visibleMetaTheorySurfacePacket.agentTeamsPlaybook.status, "pass");
+      assert.equal(runArtifact.visibleMetaTheorySurfacePacket.peerAgentMesh.status, "pass");
+      assert.equal(runArtifact.visibleMetaTheorySurfacePacket.langGraph.status, "pass");
+      assert.deepEqual(
+        runArtifact.productExperiencePacket.goals.map((goal) => goal.id),
+        ["P-102", "P-103", "P-104"]
+      );
+      assert.deepEqual(
+        runArtifact.productExperiencePacket.supportGates.map((gate) => gate.id),
+        ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"]
+      );
+      assert.equal(runArtifact.productExperiencePacket.noOverclaimGate.status, "pass");
+      assert.equal(
+        runArtifact.productExperiencePacket.nativeChoiceSurfaceGate.liveRuntimeBoundary.status,
+        "not_claimed_by_structural_runner"
+      );
+      assert.equal(
+        runArtifact.productExperiencePacket.repeatFailureDesignGate.actionOnSecondOccurrence,
+        "bottom_design_failure_return_to_critical_fetch_thinking"
+      );
+      assert.equal(runArtifact.productExperiencePacket.generalizationGate.status, "pass");
+      assert.equal(runArtifact.productExperiencePacket.capabilityInvocationTruthGate.status, "partial");
+      assert.equal(runArtifact.productExperiencePacket.agentTeamsPlaybookGate.status, "pass");
       const markdown = await readFile(path.join(tempDir, "natural-user-task.zh-CN.md"), "utf8");
+      assert.match(markdown, /## Meta-Theory 可见编排面/);
+      assert.match(markdown, /Dynamic Workflow/);
+      assert.match(markdown, /能力发现/);
+      assert.match(markdown, /Agent Teams Playbook/);
+      assert.match(markdown, /Peer Agent Mesh/);
+      assert.match(markdown, /LangGraph-style/);
       assert.match(markdown, /## 阶段执行说明/);
       assert.match(markdown, /## 执行编排明细/);
+      assert.match(markdown, /## 三目标产品验收/);
       assert.match(markdown, /用户只用普通自然语言输入/);
       assert.match(markdown, /要做什么/);
       assert.match(markdown, /结果长什么样/);
@@ -474,6 +540,8 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(artifact.userExperienceNotice.pendingPrimarySurface, null);
       assert.equal(artifact.userExperienceNotice.conversationNoticeEmitted, true);
       assert.equal(artifact.defaultRuntimePath.workerTaskPackets.length, 11);
+      assert.equal(artifact.defaultRuntimePath.agentTeamsPlaybookPacket.status, "pass");
+      assert.equal(artifact.defaultRuntimePath.agentTeamsPlaybookPacket.selected, true);
       assert.deepEqual(
         artifact.defaultRuntimePath.workerTaskPackets.map((packet) => packet.businessFlowLaneId),
         [

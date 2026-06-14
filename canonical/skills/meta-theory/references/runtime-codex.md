@@ -20,6 +20,8 @@ If `spawn_agent` is available and the user explicitly authorized subagents:
 - distinguish temporary `runtimeInstanceAlias` from durable `roleDisplayName` and `ownerAgent`
 - do not describe the temporary subagent prompt as the created/iterated project agent
 
+`agent-teams-playbook` is the Codex fan-out adapter after Thinking, not a substitute for Thinking. Select it when there are 2+ executable independent `workerTaskPackets`; record `not_required` for single-lane work. A selected playbook provider is `agent_teams_playbook=selected_not_invoked` until a live Skill/Agent Team/spawn_agent call is actually attached as host evidence.
+
 ## Codex Durable Agent Projection
 
 Codex project-retained agents use `.codex/agents/<agent>.toml` with a stable `name`, `description`, and `developer_instructions`. When `GapDecision.decision=create_agent` or the user asks to iterate an agent, Codex must produce or update a durable project-local agent candidate for this TOML surface after Warden/user approval. Temporary `spawn_agent` workers only execute the factory/review tasks; they do not satisfy the durable agent deliverable.
@@ -34,9 +36,11 @@ Other formal tool projections follow `config/sync.json` and `config/runtime-comp
 
 ## Choice Surfaces
 
-Use native `request_user_input` only when exposed, and only with a valid 1-3 question payload that offers meaningful options. Otherwise use a short chat decision card. Do not call a chat fallback a popup.
+Use native `request_user_input` only when exposed, and only with a valid 1-3 question payload that offers meaningful options. Codex is a primary Meta_Kim runtime, so required branch-changing decisions must not be downgraded to a chat decision card.
 
-If `request_user_input` returns API 400 or another host validation error, do not retry blindly. Fall back once to a localized markdown decision card, record `choiceSurfaceFallback=api_error`, and wait for the user's answer in chat.
+If `request_user_input` is unavailable, returns API 400, returns empty, or is rejected by the host, record `nativeChoiceSurfaceBlocked` with the concrete reason, stop before Execution, and return to Critical or Thinking. Do not continue with a localized markdown decision card as acceptance evidence.
+
+Trigger proof rule: when `request_user_input` is present in the active Codex tool set and `choiceSurfaceState` is `critical_clarification_allowed` or `execution_confirmation_allowed`, the assistant must call `request_user_input` in the current chat turn before Execution. A `cardPlanPacket`, CLI `conversationNotice`, markdown report, hook warning, or generated artifact only records that a choice is needed; it is not evidence that a native Codex choice surface was shown. Completion proof is the returned `request_user_input` answer, or a blocking `nativeChoiceSurfaceBlocked` record when the native surface cannot run.
 
 Visible Decision cards need at least two meaningful options and a recommended default. Critical clarification can appear before Fetch when the user's wording is too ambiguous to collect the right evidence. Notices can stay concise.
 
@@ -70,7 +74,7 @@ There is no question quota. Each visible question must change an execution branc
 
 ## Codex Multi-Option Choice Surface Rule
 
-For every confirmation or decision surface in Codex, use `default_mode_request_user_input` and `request_user_input` when available; otherwise render a clean choice card. Do not show a `Preflight` block unless the user explicitly asks for debug, audit, protocol, or governance trace output. Always show at least two viable options, include an explicit output-language choice when language is unresolved, use the latest input language, and render Option A placeholders as resolved user-facing language instead of hardcoding any single human language. Claude Code native question tool remains unchanged.
+For every required confirmation or decision surface in Codex, use `default_mode_request_user_input` and `request_user_input`. Do not show a `Preflight` block unless the user explicitly asks for debug, audit, protocol, or governance trace output. Always show at least two viable options, include an explicit output-language choice when language is unresolved, use the latest input language, and render Option A placeholders as resolved user-facing language instead of hardcoding any single human language. If `request_user_input` is unavailable, block instead of treating a chat card as an accepted Codex decision. Claude Code native question tool remains unchanged.
 
 Choice Surface Gate states: `not_allowed`, `critical_clarification_allowed`, `execution_confirmation_allowed`, `completed`. FORBIDDEN: premature choice surface for test a popup / interactive box / popup_test_request. Critical -> Fetch -> Thinking must happen before execution confirmation. If the intent frame is missing or conflicting and the missing answer changes route, scope, risk, acceptance, owner, permission, or non-goal, ask Critical clarification and must not present execution options. `contentEvidencePacket` precedes `preDecisionOptionFrame`. No candidate paths means no execution confirmation; no Fetch evidence means Thinking is not complete; no Thinking result means no pre-Execution confirmation.
 

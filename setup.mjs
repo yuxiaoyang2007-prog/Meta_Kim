@@ -4526,18 +4526,10 @@ async function selectActiveTargets(runtimes) {
     return cliTargets;
   }
 
-  const detected = detectedTargetIds(runtimes);
-  const suggestedTargets =
-    localOverrides.activeTargets?.length > 0
-      ? localOverrides.activeTargets
-      : detected.length > 0
-        ? detected
-        : defaultTargets;
-
   const chosenTargets = await askMultiSelectTargets(
     t.selectRuntimeTargets,
     RUNTIME_CHOICES,
-    suggestedTargets,
+    defaultTargets,
   );
 
   await writeLocalOverrides({
@@ -4661,11 +4653,12 @@ function cleanupLegacySkills(scope = "project") {
 
 // ── Step 3: Auto-configure project files ────────────────
 
-async function autoConfigure(installScope = "project") {
-  const syncResult = runNodeScript("scripts/sync-runtimes.mjs", [
-    "--scope",
-    installScope,
-  ]);
+async function autoConfigure(installScope = "project", activeTargets = []) {
+  const syncArgs = ["--scope", installScope];
+  if (activeTargets.length > 0) {
+    syncArgs.push("--targets", activeTargets.join(","));
+  }
+  const syncResult = runNodeScript("scripts/sync-runtimes.mjs", syncArgs);
   if (syncResult.status === 0) {
     ok(t.okRepoSynced);
     return true;
@@ -6295,7 +6288,7 @@ async function runInstall() {
 
     stepNum++;
     await withProgress(t.stepLabel(stepNum, t.progressSyncConfig), async () => {
-      const configResult = await autoConfigure(installScope);
+      const configResult = await autoConfigure(installScope, activeTargets);
       if (!configResult) {
         warn(t.warnConfigSyncFailed);
       }
@@ -6389,8 +6382,7 @@ async function runInstall() {
   stepNum++;
   await withProgress(t.stepLabel(stepNum, t.progressValidate), async () => {
     if (needProject) {
-      const { supportedTargets } = await resolveTargetContext(args);
-      checkSync(runtimes, supportedTargets);
+      checkSync(runtimes, activeTargets);
     }
     await validate();
   });
@@ -6408,7 +6400,7 @@ async function runInstall() {
 async function runUpdate() {
   heading(t.updateHeading);
   const runtimes = await detectRuntimes();
-  const reselectTargets = await askYesNo(t.askReselectRuntimes, false);
+  const reselectTargets = await askYesNo(t.askReselectRuntimes, true);
   const activeTargets = reselectTargets
     ? await selectActiveTargets(runtimes)
     : (await resolveTargetContext(args)).activeTargets;
@@ -6457,6 +6449,8 @@ async function runUpdate() {
     const syncResult = runNodeScript("scripts/sync-runtimes.mjs", [
       "--scope",
       updateScope,
+      "--targets",
+      activeTargets.join(","),
     ]);
     if (syncResult.status === 0) ok(t.updateSyncDone);
     else warn(t.updateSyncSkip);

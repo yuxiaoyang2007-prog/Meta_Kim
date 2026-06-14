@@ -5,6 +5,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const syncManifest = JSON.parse(
+  readFileSync(path.join(repoRoot, "config", "sync.json"), "utf8"),
+);
+const packageJson = JSON.parse(
+  readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+);
 
 describe("setup update default flow", () => {
   const source = readFileSync(path.join(repoRoot, "setup.mjs"), "utf8");
@@ -32,6 +38,34 @@ describe("setup update default flow", () => {
       source,
       /async function keyboardMultiSelect[\s\S]*?if \(silentMode\) return defaultIds;/,
       "multi-select prompts must choose default ids in silent mode",
+    );
+  });
+
+  test("install/update direct-enter defaults stay on Claude Code and Codex", () => {
+    assert.deepEqual(syncManifest.defaultTargets, ["claude", "codex"]);
+    assert.match(
+      packageJson.scripts["meta:deps:install"],
+      /--targets claude,codex$/,
+    );
+    assert.match(
+      packageJson.scripts["meta:deps:update"],
+      /--update --targets claude,codex$/,
+    );
+    assert.match(
+      packageJson.scripts["meta:deps:install:all-runtimes"],
+      /--targets claude,codex,openclaw,cursor$/,
+    );
+    assert.match(
+      packageJson.scripts["meta:deps:update:all-runtimes"],
+      /--update --targets claude,codex,openclaw,cursor$/,
+    );
+    assert.match(
+      source,
+      /askMultiSelectTargets\(\s*t\.selectRuntimeTargets,\s*RUNTIME_CHOICES,\s*defaultTargets,\s*\)/,
+    );
+    assert.match(
+      source,
+      /const reselectTargets = await askYesNo\(t\.askReselectRuntimes, true\)/,
     );
   });
 

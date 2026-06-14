@@ -8,6 +8,67 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [Unreleased]
 
+## [2.8.31] - 2026-06-14
+
+### Added
+
+- **Agent Teams Playbook Gate** - Added the P-110 support gate and `agentTeamsPlaybookPacket` so the default governed route selects `agent-teams-playbook` for two or more independent executable worker lanes, caps fan-out waves at five agents, and records `not_required` for single-lane work.
+- **Capability Invocation Truth Layer** - Added explicit `agent_teams_playbook` truth states so selected providers, live subagent calls, MCP calls, skills, commands, hooks, and local workers cannot be relabeled as each other.
+- **Product Experience Validator** - Added a PRD/product validator that checks the three core goals plus support gates, including LangGraph-style run packets, Dynamic Workflow coverage, user-visible run surfaces, capability invocation truth, and the agent-teams adapter.
+
+### Changed
+
+- **Codex Meta-Theory Runtime** - Tightened the Codex `/meta-theory` adapter and meta-conductor prompt so `agent-teams-playbook` is selected only for real parallel worker lanes, not for every non-trivial task.
+- **Dependency Registry** - Promoted `agent-teams-playbook` from an external reference to an installed skill candidate with compatibility validation and a no-overclaim boundary.
+- **Release Smoke Coverage** - Extended release smoke to include the `agent-teams-playbook` integration test.
+
+### Verification
+
+- `npm run meta:deps:compat`
+- `npm run meta:prd:product-experience:validate`
+- `npm run meta:prd:default-execution:validate`
+- `npm run meta:prompt:validate`
+- `npm run meta:graphify:check`
+- `npm run meta:release:smoke`
+- Codex live probe created reviewer subagent `019ec274-15a4-7603-9986-335dad22c699` from thread `019ec26d-8837-77b2-95c8-1361bcb91128`; the `wait_agent` return was interrupted, so full review-return closure remains partial evidence.
+
+## [2.8.30] - 2026-06-13
+
+### Changed
+
+- **Primary Install Defaults** - Changed direct-Enter install/update defaults to Claude Code + Codex while keeping OpenClaw and Cursor available through explicit all-runtime or `--targets` selection.
+- **Fetch Research Quality Gate** - Internalized ECC-style deep research as a Meta_Kim-native Fetch contract with source-quality ladders, key-source deep reading, claim attribution, cross-checking, and original synthesis boundaries.
+- **Compatibility Candidate Framework** - Added a source-backed primitive-surface framework for Qoder CLI, Trae, Kiro, Windsurf / Devin Desktop Cascade, Cline, Roo Code, and Continue while keeping them as candidate probes instead of formal runtime projections.
+- **Compatibility Evidence Boundary** - Split GitHub completion from all-tool compatibility evidence so generated reports keep Cursor in the compatibility follow-up lane, separate from primary release decisions.
+
+### Verification
+
+- `npm run meta:sync`
+- `npm run meta:release:smoke`
+- `git diff --check`
+- `node setup.mjs --update --lang zh --targets claude,codex --project-dir <dir>...`
+
+## [2.8.29] - 2026-06-13
+
+### Added
+
+- **Native Choice Surface Guard** - Added regression coverage that prevents Codex and Claude Code branch-changing decisions from being completed by chat-card or artifact-only fallbacks.
+- **Run Status Surface** - Added localized run-status envelopes and commands so governed runs can expose reader-facing progress without leaking internal packet names.
+
+### Changed
+
+- **Codex and Claude Code No-Downgrade Rule** - Required Codex to use `request_user_input` and Claude Code to use `AskUserQuestion` or deferred `AskUserQuestion` for required execution decisions; unavailable or empty native surfaces now block before Execution instead of degrading silently.
+- **Runtime Mirror Mapping** - Synced the canonical meta-theory skill, meta agents, runtime references, and project-local runtime mirrors across Claude Code, Codex, Cursor, and OpenClaw.
+
+### Verification
+
+- `npm run meta:sync`
+- `npm run meta:governance:validate`
+- `npm run meta:prompt:validate`
+- `npm run meta:check:runtimes`
+- `npm run meta:test:meta-theory`
+- `git diff --check`
+
 ## [2.8.28] - 2026-06-13
 
 ### Added
@@ -21,7 +82,7 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 - **Framework Prompt Architecture** - Prompt assets are now validated across layered system/project/agent/skill/contract/runtime-adapter/eval surfaces, with review dimensions, regression fixtures, and context-sprawl budget rules.
 - **Governance Verification** - `meta:verify:governance` now includes default execution, asset sedimentation, research-native, framework prompt architecture, smooth capability discovery, and runtime priority validators.
-- **Single PRD Source** - The local-private PRD now records P-067, P-068 through P-084, P-085, and P-092 as locally tested while keeping Cursor native live as the remaining all-tool compatibility blocker.
+- **Single PRD Source** - The local-private PRD now records P-067, P-068 through P-084, P-085, and P-092 as locally tested while keeping Cursor native live evidence in the compatibility follow-up lane.
 
 ### Verification
 

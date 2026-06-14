@@ -30,6 +30,16 @@ describe("runtime compatibility catalog", () => {
     assert.deepEqual(sorted(projectionIds), sorted(syncManifest.supportedTargets));
   });
 
+  test("direct-enter defaults select only the primary Claude Code and Codex path", () => {
+    assert.deepEqual(syncManifest.defaultTargets, ["claude", "codex"]);
+
+    const byId = new Map(catalog.products.map((product) => [product.id, product]));
+    assert.equal(byId.get("claude").formalProjection.isDefaultTarget, true);
+    assert.equal(byId.get("codex").formalProjection.isDefaultTarget, true);
+    assert.equal(byId.get("openclaw").formalProjection.isDefaultTarget, false);
+    assert.equal(byId.get("cursor").formalProjection.isDefaultTarget, false);
+  });
+
   test("non-projection products cannot claim sync/profile/layout support", () => {
     const supportedTargets = new Set(syncManifest.supportedTargets);
     const defaultTargets = new Set(syncManifest.defaultTargets);
@@ -79,6 +89,52 @@ describe("runtime compatibility catalog", () => {
     assert.ok(
       qoder.evidence.filter((entry) => entry.type === "official_docs").length >= 4,
     );
+  });
+
+  test("candidate probes are surface-mapped without becoming formal projections", () => {
+    const candidates = new Map(
+      catalog.products
+        .filter((product) => product.tier === "candidate_probe")
+        .map((product) => [product.id, product]),
+    );
+    const requiredCandidates = [
+      "qoder",
+      "trae",
+      "kiro",
+      "windsurf",
+      "cline",
+      "roo-code",
+      "continue",
+    ];
+    const requiredSurfaces = [
+      "instruction_context",
+      "skill_workflow",
+      "agent_mode",
+      "hook_automation",
+      "mcp_tooling",
+      "command_cli",
+      "memory_context",
+      "permission_safety",
+    ];
+
+    assert.equal(catalog.decisionBoundary.noFormalClaimFromSurfaceMatch, true);
+    for (const surface of requiredSurfaces) {
+      assert.ok(catalog.surfaceTaxonomy[surface], surface);
+    }
+    for (const id of requiredCandidates) {
+      const product = candidates.get(id);
+      assert.ok(product, id);
+      assert.equal(syncManifest.supportedTargets.includes(id), false, id);
+      assert.equal(product.formalProjection.hasRuntimeProfile, false, id);
+      assert.equal(product.formalProjection.hasProjectionLayout, false, id);
+      assert.equal(product.dependencyInstall.ecc.support, "not_supported", id);
+      assert.ok(product.compatibilitySurfaces.includes("mcp_tooling"), id);
+      assert.ok(
+        product.evidence.filter((entry) => entry.type === "official_docs").length >= 2,
+        id,
+      );
+      assert.match(product.decision, /candidate_probe only/i, id);
+    }
   });
 
   test("formal projection wording preserves support and self-test boundaries", () => {

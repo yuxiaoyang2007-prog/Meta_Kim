@@ -156,6 +156,14 @@ test("governed execution emits a coreLoop artifact summary", () => {
     "agUiStageEvents",
     "performanceCostBudget",
     "contextEngineeringBudget",
+    "goalContractPacket",
+    "langGraphRunPacket",
+    "dynamicWorkflowRuntimePacket",
+    "peerAgentMeshPacket",
+    "agentTeamsPlaybookPacket",
+    "visibleMetaTheorySurfacePacket",
+    "userPerceptionPacket",
+    "productExperiencePacket",
     "dispatchBoard",
     "workerTaskPackets",
     "executionResult",
@@ -235,6 +243,97 @@ test("governed execution emits a coreLoop artifact summary", () => {
     assert.ok(dynamicCards.has(label), `dynamic workflow missing ${label}`);
   }
   assert.ok(artifact.coreLoop.thinkingPacket.workerTaskPackets.length > 0);
+  assert.equal(artifact.coreLoop.goalContractPacket.status, "pass");
+  assert.equal(artifact.coreLoop.langGraphRunPacket.status, "pass");
+  assert.equal(artifact.coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingCoverage.hooks, true);
+  assert.equal(
+    artifact.coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingCoverage.abstractPromptCapability,
+    true,
+  );
+  assert.equal(artifact.coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingCoverage.workerResults, true);
+  assert.equal(artifact.coreLoop.peerAgentMeshPacket.status, "pass");
+  assert.ok(["pass", "not_required"].includes(artifact.coreLoop.agentTeamsPlaybookPacket.status));
+  if (artifact.coreLoop.thinkingPacket.workerTaskPackets.length >= 2) {
+    assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.status, "pass");
+    assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.selected, true);
+    assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.acceptance.waveSizeWithinCap, true);
+  } else {
+    assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.status, "not_required");
+    assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.selected, false);
+  }
+  assert.ok(artifact.coreLoop.peerAgentMeshPacket.peers.length > 0);
+  assert.equal(artifact.coreLoop.capabilityInvocationTruthPacket.status, "pass");
+  const invocationByFamily = new Map(
+    artifact.coreLoop.capabilityInvocationTruthPacket.rows.map((row) => [row.family, row]),
+  );
+  assert.equal(invocationByFamily.get("agent_subagent").state, "selected_not_invoked");
+  assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
+  assert.equal(invocationByFamily.get("worker_task").state, "invoked");
+  assert.equal(invocationByFamily.get("prompt_rule").state, "applied");
+  assert.equal(
+    invocationByFamily.get("agent_teams_playbook").state,
+    artifact.coreLoop.agentTeamsPlaybookPacket.status === "pass"
+      ? "selected_not_invoked"
+      : "not_required",
+  );
+  assert.ok(
+    ["selected_not_invoked", "discovered_not_selected", "not_required"].includes(
+      invocationByFamily.get("mcp").state,
+    ),
+  );
+  assert.equal(invocationByFamily.get("hook").state, "selected_not_invoked");
+  assert.equal(artifact.coreLoop.capabilityInvocationProbePacket.status, "not_run");
+  assert.equal(
+    artifact.coreLoop.capabilityInvocationTruthPacket.callableInvocationCoverage.status,
+    "not_run",
+  );
+  assert.equal(
+    artifact.coreLoop.capabilityInvocationTruthPacket.truthAssertions.noLiveSubagentOverclaim,
+    true,
+  );
+  assert.equal(
+    artifact.coreLoop.capabilityInvocationTruthPacket.truthAssertions.noHostUiSubagentOverclaim,
+    true,
+  );
+  assert.equal(
+    artifact.coreLoop.capabilityInvocationTruthPacket.truthAssertions.noAgentTeamsPlaybookOverclaim,
+    true,
+  );
+  assert.equal(
+    artifact.coreLoop.capabilityInvocationTruthPacket.truthAssertions.noMcpCallOverclaim,
+    true,
+  );
+  assert.ok(["pass", "partial"].includes(artifact.coreLoop.visibleMetaTheorySurfacePacket.status));
+  assert.equal(artifact.coreLoop.visibleMetaTheorySurfacePacket.capabilityInventory.notSkillOnly, true);
+  assert.equal(artifact.coreLoop.visibleMetaTheorySurfacePacket.capabilityInvocationTruth.status, "pass");
+  assert.equal(
+    artifact.coreLoop.visibleMetaTheorySurfacePacket.dynamicWorkflow.status,
+    artifact.coreLoop.dynamicWorkflowRuntimePacket.status,
+  );
+  assert.equal(artifact.coreLoop.visibleMetaTheorySurfacePacket.peerAgentMesh.status, "pass");
+  assert.equal(artifact.coreLoop.visibleMetaTheorySurfacePacket.langGraph.status, "pass");
+  assert.ok(["pass", "partial"].includes(artifact.coreLoop.userPerceptionPacket.status));
+  assert.ok(artifact.coreLoop.userPerceptionPacket.plainLanguageCues.length >= 6);
+  assert.deepEqual(
+    artifact.coreLoop.productExperiencePacket.goals.map((goal) => goal.id),
+    ["P-102", "P-103", "P-104"],
+  );
+  assert.deepEqual(
+    artifact.coreLoop.productExperiencePacket.supportGates.map((gate) => gate.id),
+    ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"],
+  );
+  assert.equal(artifact.coreLoop.productExperiencePacket.noOverclaimGate.status, "pass");
+  assert.equal(
+    artifact.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.liveRuntimeBoundary.status,
+    "not_claimed_by_structural_runner",
+  );
+  assert.equal(
+    artifact.coreLoop.productExperiencePacket.repeatFailureDesignGate.actionOnSecondOccurrence,
+    "bottom_design_failure_return_to_critical_fetch_thinking",
+  );
+  assert.equal(artifact.coreLoop.productExperiencePacket.generalizationGate.status, "pass");
+  assert.equal(artifact.coreLoop.productExperiencePacket.capabilityInvocationTruthGate.status, "partial");
+  assert.equal(artifact.coreLoop.productExperiencePacket.agentTeamsPlaybookGate.status, "pass");
   assert.ok(artifact.coreLoop.governanceAgentResultPackets.length > 0);
   assert.equal(artifact.coreLoop.conductorConsumptionEvidence.status, "pass");
   assert.ok(artifact.coreLoop.thinkingPacket.governanceInputsConsumed.length > 0);
@@ -265,6 +364,109 @@ test("governed execution emits a coreLoop artifact summary", () => {
   assert.ok(artifact.coreLoop.scarPacket.preventionRule);
   assert.equal(artifact.coreLoop.publicReadyDecision.publicReady, false);
   assert.ok(artifact.coreLoop.publicReadyDecision.blockedBy.length > 0);
+});
+
+test("host-visible subagents are observed, not relabeled as runner invocations", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "scripts/run-meta-theory-governed-execution.mjs",
+      "--task",
+      "需要一次能产生多 worker 的 meta-theory governed run。",
+      "--run-id",
+      "core-loop-host-visible-subagent-test",
+      "--host-visible-subagents",
+      "Galileo,Codebase Analysis",
+    ],
+    { encoding: "utf8", timeout: 120_000 },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const artifact = JSON.parse(
+    readFileSync(
+      ".meta-kim/state/default/governed-executions/core-loop-host-visible-subagent-test.json",
+      "utf8",
+    ),
+  );
+  const invocationByFamily = new Map(
+    artifact.coreLoop.capabilityInvocationTruthPacket.rows.map((row) => [row.family, row]),
+  );
+  assert.equal(invocationByFamily.get("app_visible_subagent").state, "host_visible_observed");
+  assert.equal(invocationByFamily.get("app_visible_subagent").observedCount, 2);
+  assert.equal(invocationByFamily.get("agent_subagent").state, "selected_not_invoked");
+  assert.equal(
+    artifact.coreLoop.capabilityInvocationTruthPacket.truthAssertions.noHostUiSubagentOverclaim,
+    true,
+  );
+});
+
+test("core-loop contract declares three product goals plus support gates", () => {
+  assert.equal(
+    CORE_LOOP.productExperienceCoreGoals.evidenceTierRequired,
+    "product_experience_pass",
+  );
+  assert.deepEqual(CORE_LOOP.productExperienceCoreGoals.requiredGoalIds, [
+    "P-102",
+    "P-103",
+    "P-104",
+  ]);
+  assert.deepEqual(CORE_LOOP.productExperienceCoreGoals.supportGateIds, [
+    "P-105",
+    "P-106",
+    "P-107",
+    "P-108",
+    "P-109",
+    "P-110",
+  ]);
+  assert.deepEqual(CORE_LOOP.productExperienceCoreGoals.requiredPackets, [
+    "goalContractPacket",
+    "langGraphRunPacket",
+    "dynamicWorkflowRuntimePacket",
+    "peerAgentMeshPacket",
+    "agentTeamsPlaybookPacket",
+    "capabilityInvocationProbePacket",
+    "capabilityInvocationTruthPacket",
+    "visibleMetaTheorySurfacePacket",
+    "userPerceptionPacket",
+    "productExperiencePacket",
+  ]);
+  assert.ok(CORE_LOOP.productExperienceCoreGoals.langGraphStyleRequirements.includes("checkpoint"));
+  assert.ok(CORE_LOOP.productExperienceCoreGoals.dynamicWorkflowRequirements.includes("mcp"));
+  assert.ok(
+    CORE_LOOP.productExperienceCoreGoals.dynamicWorkflowRequirements.includes("agentTeamsPlaybook"),
+  );
+  assert.ok(
+    CORE_LOOP.productExperienceCoreGoals.capabilityInvocationTruthRequirements.some((rule) =>
+      rule.includes("app-visible host UI subagents"),
+    ),
+  );
+  assert.ok(
+    CORE_LOOP.productExperienceCoreGoals.capabilityInvocationTruthRequirements.some((rule) =>
+      rule.includes("capabilityInvocationProbePacket"),
+    ),
+  );
+  assert.deepEqual(CORE_LOOP.productExperienceCoreGoals.userPerceptionRequirements, [
+    "what_to_do",
+    "what_is_happening",
+    "how_it_will_run",
+    "acceptance_standard",
+    "pause_condition",
+  ]);
+  assert.ok(CORE_LOOP.productExperienceCoreGoals.supportGateRequirements["P-106"].some(
+    (rule) => rule.includes("request_user_input"),
+  ));
+  assert.ok(CORE_LOOP.productExperienceCoreGoals.supportGateRequirements["P-107"].some(
+    (rule) => rule.includes("bottom_design_failure"),
+  ));
+  assert.ok(CORE_LOOP.productExperienceCoreGoals.supportGateRequirements["P-108"].some(
+    (rule) => rule.includes("desktop sticky notes"),
+  ));
+  assert.ok(CORE_LOOP.productExperienceCoreGoals.supportGateRequirements["P-109"].some(
+    (rule) => rule.includes("app-visible host subagent"),
+  ));
+  assert.ok(CORE_LOOP.productExperienceCoreGoals.supportGateRequirements["P-110"].some(
+    (rule) => rule.includes("agent-teams-playbook"),
+  ));
 });
 
 test("project-understanding governed run records deep Fetch source classes", () => {

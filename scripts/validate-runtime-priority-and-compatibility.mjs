@@ -143,7 +143,7 @@ function validatePrdMarkers() {
     "scripts/validate-runtime-priority-and-compatibility.mjs",
     "npm run meta:prd:runtime-priority:validate",
     "compatibility-priority leak count = 0",
-    "P-024 只阻塞 all-tool compatibility claim",
+    "P-024 只影响 all-tool compatibility claim",
     "OpenClaw / Cursor compatibility demotion",
     "Primary runtime perfection",
   ]) {

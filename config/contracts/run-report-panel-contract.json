@@ -8,6 +8,9 @@
     "ownerHandoff",
     "blockedReasons",
     "runtimeEvidence",
+    "productExperience",
+    "visibleMetaTheorySurface",
+    "capabilityInvocationTruth",
     "approvalRequest",
     "aiReadableRubric",
     "deliverables"
@@ -51,6 +54,83 @@
         "strictReleasePass"
       ],
       "blockedOrUnsupportedIsNotPass": true
+    },
+    "productExperience": {
+      "requiredFields": [
+        "status",
+        "evidenceTier",
+        "nativeRuntimeBoundary",
+        "goals",
+        "supportGates",
+        "nativeChoiceSurfaceGate",
+        "repeatFailureDesignGate",
+        "generalizationGate",
+        "capabilityInvocationTruthGate",
+        "agentTeamsPlaybookGate",
+        "noOverclaimGate"
+      ],
+      "allowedStatuses": ["product_experience_pass", "partial"],
+      "fullPassRequiredBy": "npm run meta:prd:product-experience:validate",
+      "requiredGoalIds": ["P-102", "P-103", "P-104"],
+      "supportGateIds": ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"]
+    },
+    "visibleMetaTheorySurface": {
+      "requiredFields": [
+        "status",
+        "requiredVisibleTopics",
+        "orchestration",
+        "dynamicWorkflow",
+        "capabilityInventory",
+        "capabilityInvocationTruth",
+        "agentTeamsPlaybook",
+        "peerAgentMesh",
+        "langGraph"
+      ],
+      "requiredTopics": [
+        "orchestration",
+        "dynamic_workflow",
+        "capability_inventory_not_skill_only",
+        "capability_invocation_truth",
+        "agent_teams_playbook",
+        "peer_agent_mesh",
+        "langgraph_style_control_graph"
+      ],
+      "allowedStatuses": ["pass", "partial"],
+      "fullPassRequiredBy": "npm run meta:prd:product-experience:validate"
+    },
+    "capabilityInvocationTruth": {
+      "requiredFields": [
+        "status",
+        "stateTaxonomy",
+        "stateCounts",
+        "requiredFamilies",
+        "truthAssertions",
+        "callableInvocationCoverage",
+        "rows"
+      ],
+      "requiredFamilies": [
+        "agent_subagent",
+        "app_visible_subagent",
+        "worker_task",
+        "skill",
+        "mcp",
+        "hook",
+        "prompt_rule",
+        "command_script",
+        "runtime_tool",
+        "agent_teams_playbook"
+      ],
+      "allowedStates": [
+        "invoked",
+        "applied",
+        "host_visible_observed",
+        "selected_not_invoked",
+        "discovered_not_selected",
+        "unavailable",
+        "blocked",
+        "not_required"
+      ],
+      "fullPassRequiredBy": "npm run meta:prd:product-experience:validate"
     },
     "approvalRequest": {
       "requiredFields": [

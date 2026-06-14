@@ -9,6 +9,7 @@
     "lastReviewedAt",
     "decisionBoundary",
     "tierDefinitions",
+    "surfaceTaxonomy",
     "promotionRules",
     "products"
   ],
@@ -27,11 +28,13 @@
       "required": [
         "noAutoPromotionFromDependencyInstall",
         "noAutoPromotionFromGenericSkillPath",
+        "noFormalClaimFromSurfaceMatch",
         "formalRuntimeSource"
       ],
       "properties": {
         "noAutoPromotionFromDependencyInstall": { "type": "boolean" },
         "noAutoPromotionFromGenericSkillPath": { "type": "boolean" },
+        "noFormalClaimFromSurfaceMatch": { "type": "boolean" },
         "formalRuntimeSource": { "type": "string" }
       }
     },
@@ -47,6 +50,30 @@
         "runtime_projection": { "type": "string" },
         "dependency_install_target": { "type": "string" },
         "candidate_probe": { "type": "string" }
+      }
+    },
+    "surfaceTaxonomy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instruction_context",
+        "skill_workflow",
+        "agent_mode",
+        "hook_automation",
+        "mcp_tooling",
+        "command_cli",
+        "memory_context",
+        "permission_safety"
+      ],
+      "properties": {
+        "instruction_context": { "type": "string" },
+        "skill_workflow": { "type": "string" },
+        "agent_mode": { "type": "string" },
+        "hook_automation": { "type": "string" },
+        "mcp_tooling": { "type": "string" },
+        "command_cli": { "type": "string" },
+        "memory_context": { "type": "string" },
+        "permission_safety": { "type": "string" }
       }
     },
     "promotionRules": {
@@ -136,6 +163,24 @@
                 ]
               }
             }
+          },
+          "compatibilitySurfaces": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "instruction_context",
+                "skill_workflow",
+                "agent_mode",
+                "hook_automation",
+                "mcp_tooling",
+                "command_cli",
+                "memory_context",
+                "permission_safety"
+              ]
+            },
+            "uniqueItems": true,
+            "minItems": 1
           },
           "dependencyInstall": {
             "type": "object",

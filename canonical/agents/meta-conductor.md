@@ -78,7 +78,9 @@ Conductor manages the `choiceSurfaceState` field lifecycle as part of pre-decisi
 2. Set to `critical_clarification_allowed` only when `intentFrameAssessment` marks a missing or conflicting dimension as execution-changing
 3. Set to `execution_confirmation_allowed` only after both `fetchRecord.capabilitySearchPerformed = true` AND `preDecisionOptionFrame` exists
 4. Set to `completed` after user responds via native question tool OR `solutionChoiceState` records a valid skip (`trivial`/`no_branching_choice`/`auto-proceed`)
-5. Reset to `not_allowed` if scope materially changes
+5. If the active runtime is Codex or Claude Code, Conductor must use that runtime's primary native choice surface named by its runtime reference for the allowed state; missing, empty, rejected, or stripped native UI blocks or returns to the responsible stage and must not be treated as a chat-card fallback
+6. For compatibility runtimes only, a verified conversation fallback may keep the run inspectable; it does not change the Codex / Claude Code no-downgrade rule
+7. Reset to `not_allowed` if scope materially changes
 
 **Synchronization with `solutionChoiceState`**:
 - `preDecisionOptionFrame.solutionChoiceState` records the user's decision: `pending` → `user_confirmed`/`auto_skipped`/`trivial_skip`
@@ -152,7 +154,7 @@ If Warden rejects the same board twice without new evidence, Conductor must trig
 4. **Resolve Team** — `resolveAgentDependencies(teamId)`
 5. **Validate Evidence Lane** — require `contentEvidencePacket` before asking broad execution-choice questions; if the intent frame is missing or conflicting, ask only minimal blocking Critical clarification
 6. **Generate Pre-decision Option Frame** — turn evidence into >=2 candidate paths, candidate lanes, trade-offs, risks, and a recommended default without finalizing dispatch
-7. **Resolve User Decision** — use native choice or conversation fallback for non-trivial executable work unless explicit auto-proceed / trivial / no-branching skip is recorded
+7. **Resolve User Decision** — for Codex / Claude Code, use the native interactive choice surface for non-trivial executable work unless explicit auto-proceed / trivial / no-branching skip is recorded; do not accept conversation fallback as completion in these primary runtimes
 8. **Generate Dispatch Board** — `generateWorkflowConfig({ workflowFamily, department, goal })` only after the user decision or allowed skip is recorded
 9. **Generate Business Flow Blueprint** — infer deliverable type, derive task-specific business lanes from outcome and scope, use dimensions like product / UX / UI / engineering / QA / release / feedback only when relevant, and record lane-level global scan evidence (`capabilitySearchQuery`, `candidateOwners`, `matchedCapabilities`, `capabilityBindings`, `selectedOwner`, `selectionReason`, `coverageStatus`)
 10. **Generate Agent Role Blueprint** — assign coarse English business role-family names such as `frontend`, `backend`, `test`, `review`, `analysis`, `verify`, or `docs`; map them to governance meta owner agents in the public repo; and record concrete work scope and run-scoped capability evidence in `roleInstanceId`, `shardScope`, `assignedResponsibilitySlice`, `ownerResponsibilityDelta`, `agentIterationPlan`, `ownerResolution`, `matchedCapabilities`, and `capabilityBindings`
@@ -243,7 +245,7 @@ For every non-query run, execution also requires Fetch/content evidence and a po
 
 Conductor must brief the evidence owner with the Research Capability Discovery gate before any deep research: identify the retrieval capabilities needed (`web_search`, `url_fetch`, `docs_lookup`, `browser_open`, `mcp_search`, `plugin_search`, `local_only`, or user-supplied sources), inspect the current runtime's actual tool inventory sources, record available retrieval capabilities with provider kind, status, proof, and limitations, then choose `selectedResearchPath` as `external_web`, `mixed`, `local_only`, `user_fallback`, or `blocked`. Conductor must not accept host-form-factor guesses such as `platformSurface`; the path must be justified by capability proof. If external research is required and the selected path is `blocked` or only `local_only` without a valid skip reason, Conductor pauses before Thinking/Execution and surfaces the blocker or user-fallback choice.
 
-Conductor must also brief the evidence owner with the Deep Research Requirement: define the questions to answer, inspect enough source categories for the domain, cross-check material claims, record contradictions and assumptions, and map every material finding to a candidate option, user question, risk, or rejected path. A list of links without decision impact is not acceptable evidence for orchestration.
+Conductor must also brief the evidence owner with the Deep Research Requirement: define the decision use, split the topic into distinct questions, inspect enough source categories for the domain, deep-read the strongest primary or official sources, apply a source-quality ladder, cross-check material claims, record contradictions and assumptions, preserve attribution in private research evidence, and map every material finding to a candidate option, user question, risk, blocker, owner, route, or rejected path. A list of links, search snippets, or a cosmetically rewritten external method is not acceptable evidence for orchestration.
 
 **preDecisionOptionFrame** (candidate orchestration only):
 
@@ -702,7 +704,7 @@ Constitutional principles for ALL Meta_Kim agents and every system they create o
 
 ### 4.1 Skill Invocation
 
-After Thinking and before Stage 4 (Execution), use the `agent-teams-playbook` provider package only when `workerTaskPackets` contain 2+ independent parallel worker lanes. See **Long-Term Capability Slot** for the provider boundary; concrete sub-skill choices remain run-scoped. For serial work, keep orchestration in the dispatch board and do not call the playbook.
+After Thinking and before Stage 4 (Execution), select the `agent-teams-playbook` provider package when `workerTaskPackets` contain 2+ independent parallel worker lanes that are executable. Record `not_required` for serial or single-lane work. See **Long-Term Capability Slot** for the provider boundary; concrete sub-skill choices remain run-scoped. Cap default parallel waves at 5 agents, preserve `workerTaskPackets`, and do not relabel a selected playbook provider as a live Skill call, Agent Team, or Codex `spawn_agent` invocation without host tool-call evidence. For serial work, keep orchestration in the dispatch board and do not call the playbook.
 
 **Invocation Context**: Pass the workflow context including:
 - Current stage state from the run header contract

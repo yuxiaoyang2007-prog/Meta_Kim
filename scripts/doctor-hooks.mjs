@@ -124,22 +124,161 @@ function resolveLang(cliLang) {
   );
 }
 
-function extractCommandPath(command) {
-  if (typeof command !== "string") return null;
-  const quoted = command.match(/"([^"]+)"/);
-  if (quoted) return quoted[1];
-  const tokens = command.trim().split(/\s+/);
-  for (let i = 1; i < tokens.length; i += 1) {
-    if (
-      /[\\/]/.test(tokens[i]) ||
-      tokens[i].endsWith(".mjs") ||
-      tokens[i].endsWith(".js") ||
-      tokens[i].endsWith(".py") ||
-      tokens[i].endsWith(".sh")
-    ) {
-      return tokens[i];
+export function parseCommandTokens(command) {
+  const tokens = [];
+  let current = "";
+  let inQuotes = false;
+  let quoteChar = "";
+
+  for (let i = 0; i < command.length; i++) {
+    const char = command[i];
+    if ((char === '"' || char === "'") && (i === 0 || command[i - 1] !== '\\')) {
+      if (inQuotes && char === quoteChar) {
+        inQuotes = false;
+      } else if (!inQuotes) {
+        inQuotes = true;
+        quoteChar = char;
+      } else {
+        current += char;
+      }
+    } else if (char === " " && !inQuotes) {
+      if (current) {
+        tokens.push(current);
+        current = "";
+      }
+    } else {
+      current += char;
     }
   }
+  if (current) {
+    tokens.push(current);
+  }
+  return tokens;
+}
+
+function customBasename(p) {
+  const lastSlash = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  if (lastSlash === -1) return p;
+  return p.slice(lastSlash + 1);
+}
+
+function trimShellPunctuation(token) {
+  return token.replace(/^[;&|]+|[;&|]+$/g, "");
+}
+
+export function extractCommandPath(command) {
+  if (typeof command !== "string") return null;
+  const tokens = parseCommandTokens(command.trim());
+  if (tokens.length === 0) return null;
+
+  const runners = [
+    "node",
+    "python",
+    "python3",
+    "bash",
+    "sh",
+    "pwsh",
+    "powershell",
+    "cmd",
+    "npx",
+    "tsx",
+    "ts-node",
+    "bun",
+    "deno",
+  ];
+
+  // Helper to check if token is a runner
+  const runnerName = (token) => {
+    const base = customBasename(token).toLowerCase();
+    const withoutExe = base.endsWith(".exe") ? base.slice(0, -4) : base;
+    return runners.includes(withoutExe) ? withoutExe : null;
+  };
+
+  // Helper to check if token is script-like/path-like
+  const isScriptLike = (t) => {
+    if (!t) return false;
+    const token = trimShellPunctuation(t);
+    const lower = token.toLowerCase();
+    const scriptExtension = /\.(mjs|js|cjs|py|sh|ts|tsx|bat|cmd|ps1)$/i;
+    return (
+      scriptExtension.test(lower) ||
+      (/^(?:\.{1,2}|~)[\\/]/.test(token) && scriptExtension.test(lower))
+    );
+  };
+
+  const isShellRunner = (runner) =>
+    ["bash", "sh", "pwsh", "powershell", "cmd"].includes(runner);
+
+  const isShellPayloadFlag = (token, runner) => {
+    const lower = token.toLowerCase();
+    if (!isShellRunner(runner)) return false;
+    if (runner === "bash" || runner === "sh") return /^-[a-z]*c[a-z]*$/.test(lower);
+    if (runner === "cmd") return lower === "/c" || lower === "/k";
+    return lower === "-command" || lower === "--command" || lower === "-c";
+  };
+
+  const isShellSeparator = (token) =>
+    ["&&", "||", ";", "|", "&"].includes(token);
+
+  let activeRunner = null;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    const normalized = trimShellPunctuation(token);
+    const lower = normalized.toLowerCase();
+
+    // 1. Skip known runners
+    const currentRunner = runnerName(normalized);
+    if (currentRunner) {
+      activeRunner = currentRunner;
+      continue;
+    }
+
+    // 2. Shell command payload: recursively parse that payload
+    if (isShellPayloadFlag(normalized, activeRunner)) {
+      if (i + 1 < tokens.length) {
+        return extractCommandPath(tokens[i + 1]);
+      }
+      return null;
+    }
+
+    // 3. Skip options that take an argument
+    if (
+      normalized === "-r" ||
+      normalized === "--require" ||
+      normalized === "--loader" ||
+      normalized === "--experimental-loader" ||
+      normalized === "--import" ||
+      normalized === "-m"
+    ) {
+      i++; // Skip the option parameter/argument token
+      continue;
+    }
+
+    // 4. Skip shell flow control that commonly appears inside -c payloads.
+    if (isShellSeparator(normalized)) {
+      continue;
+    }
+
+    // 5. Skip "cd <dir>" so the directory is not mistaken for a hook target.
+    if (lower === "cd" || lower === "pushd" || lower === "popd") {
+      if (lower !== "popd") i++;
+      continue;
+    }
+
+    // 6. Skip other flags (e.g. --inspect, -v).
+    if (
+      normalized.startsWith("-") ||
+      (normalized.startsWith("/") && normalized.length === 2)
+    ) {
+      continue;
+    }
+
+    // 7. Check if it's a script/path-like target
+    if (isScriptLike(normalized)) {
+      return normalized;
+    }
+  }
+
   return null;
 }
 
@@ -327,9 +466,14 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(
-    `${C.red}doctor-hooks failed: ${err?.message ?? err}${C.reset}`,
-  );
-  process.exit(1);
-});
+const isMain = process.argv[1] && (
+  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))
+);
+if (isMain) {
+  main().catch((err) => {
+    console.error(
+      `${C.red}doctor-hooks failed: ${err?.message ?? err}${C.reset}`,
+    );
+    process.exit(1);
+  });
+}

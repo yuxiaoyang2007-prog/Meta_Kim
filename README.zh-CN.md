@@ -53,7 +53,8 @@ Meta_Kim 就是干这个的。它是**AI 之上的 AI**——一套统一的治�
 Meta_Kim 最好不是靠读完整套规则理解，而是先看一次 governed run。
 
 ```bash
-npm run meta:theory:run
+npm run meta:theory:demo
+npm run meta:run-status:latest
 npm run meta:theory:report -- --run-id latest
 npm run meta:delivery:bundle
 ```
@@ -64,7 +65,7 @@ npm run meta:delivery:bundle
 - 先搜索能力，再决定谁执行
 - 复杂任务会拆成有边界的 worker task，而不是一段万能聊天回复
 - Review 和 Verification 会留下产物证据，而不是只给安慰性结论
-- 被阻塞的工具端证据会继续保持阻塞，例如 Cursor native live 不会被 smoke evidence 冒充完成
+- 兼容证据会保持分层，smoke evidence 不会被冒充成 native live proof
 
 带着示例看第一遍：[`examples/first-run/README.md`](examples/first-run/README.md)。
 
@@ -121,9 +122,11 @@ Meta_Kim 现在把平台支持分成几层，而不是把所有“看起来兼�
 |---|---|---|
 | 正式工具端投影 | Claude Code、Codex、OpenClaw、Cursor | canonical 治理层会同步成对应工具端文件，并由 `npm run meta:sync` / `npm run meta:check` 校验。 |
 | 原生依赖安装目标 | opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode | ECC 上游安装器支持这些目标，但 Meta_Kim 不会在没有 profile、layout、sync、测试前宣称完整工具端投影。 |
-| 候选 probe | Qoder CLI | Qoder 官方文档确认它有 skills、subagents、hooks、MCP 表面；Meta_Kim 先记录为候选兼容，不宣称正式支持。 |
+| 候选 probe | Qoder CLI、Trae、Kiro、Windsurf / Devin Desktop Cascade、Cline、Roo Code、Continue | 官方文档暴露了 rules / instructions、skills、agents / modes、hooks、MCP、commands、memory 或 permission controls 等可兼容原始能力；Meta_Kim 先记录为候选兼容，不宣称正式支持。 |
 
 事实源：`config/runtime-compatibility-catalog.json`。
+
+能力表面兼容不等于工具端正式支持。一个工具可以共享 Meta_Kim 可映射的原始能力，但仍必须补齐 adapter 设计、profile/layout 生成、sync 测试和 live 验证，才可以升级为正式投影。
 
 ---
 
@@ -568,11 +571,11 @@ Claude/Codex/Cursor/OpenClaw 四个工具端都是 Meta_Kim 的正式投影，�
 
 | 能力面 | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
-| **agent** | 原生 agents/subagents，项目级与用户级都成熟 | custom agents/subagents 很强 | workspace 型 agent，支持 agent-to-agent | 官方 `.cursor/agents` subagents 可用，但作为治理宿主仍较轻 |
-| **skill/references** | 原生 skill、references、全局技能生态完整 | `.agents/skills/` 是项目 skill 根 | workspace skill + installable skill | skill/references 接入较轻 |
+| **agent** | 原生 agents/subagents，项目级与用户级都成熟 | custom agents/subagents 很强 | workspace 型 agent，支持 agent-to-agent | 官方 `.cursor/agents` subagents 与项目规则兼容治理上下文 |
+| **skill/references** | 原生 skill、references、全局技能生态完整 | `.agents/skills/` 是项目 skill 根 | workspace skill + installable skill | 项目 skill/reference 镜像 |
 | **hook/自动化** | 项目级 hooks + settings.json + 插件生态 | 可信 `.codex/hooks.json` 项目/用户 hooks | internal lifecycle hooks；阻断/取消策略需要 typed plugin hooks | `.cursor/hooks.json` lowerCamel lifecycle hooks，支持 `preToolUse` / `failClosed` |
-| **MCP/配置** | 原生 MCP 与配置面完整 | 可接工具端 adapter 与 MCP | workspace config 明确 | 可接 MCP，但整体较轻 |
-| **治理闭环支持** | 通过 Claude-native 表面完整支持 | 通过 Codex-native 表面完整支持 | 通过 OpenClaw-native 表面兼容；typed plugin 工具阻断改造需提交者严格自测并提供证据，证据通过审查后才能合并 | 通过 Cursor-native 表面兼容；选择弹窗在未验证前使用 chat-card fallback |
+| **MCP/配置** | 原生 MCP 与配置面完整 | 可接工具端 adapter 与 MCP | workspace config 明确 | 项目 MCP 与配置镜像 |
+| **治理闭环支持** | 通过 Claude-native 表面完整支持 | 通过 Codex-native 表面完整支持 | 通过 OpenClaw-native 表面兼容；typed plugin 工具阻断改造需提交者严格自测并提供证据，证据通过审查后才能合并 | 通过 Cursor-native 表面兼容；项目决策卡与官方 hook gate 保持兼容语义 |
 
 重点不是排座次，而是兼容纪律：每个正式工具端都保留自己的 agent、skill、hook、MCP、选择面和配置面，不把某一个宿主格式伪装成通用格式。
 
@@ -824,8 +827,8 @@ flowchart TB
 
 | 命令 | 作用 |
 | --- | --- |
-| `npm run meta:deps:install` | 安装 9 个社区技能到全局 |
-| `npm run meta:deps:install:all-runtimes` | 安装到所有工具端 |
+| `npm run meta:deps:install` | 按默认 Claude Code + Codex 主链安装 9 个社区技能到全局 |
+| `npm run meta:deps:install:all-runtimes` | 显式安装到 Claude Code、Codex、OpenClaw、Cursor |
 | `npm run meta:deps:install:claude-plugins` | 只安装 Claude Code marketplace plugin |
 | `npm run discover:global` | 扫描全局能力 |
 | `npm run meta:sync:global` | 同步 meta-theory 到用户级 |
@@ -848,8 +851,9 @@ Superpowers 在 Claude Code、Codex 和 Cursor 都有原生 plugin 入口。Meta
 | Qwen | ECC 使用 `npx --yes --package ecc-universal@latest ecc install --profile core --target qwen` |
 | Zed、Gemini、CodeBuddy、Antigravity、JoyCode | ECC 是项目本地安装：在每个项目根目录运行 `npx --yes --package ecc-universal@latest ecc install --profile core --target <target>` |
 | Qoder CLI | 仅 candidate probe：通用 bundle 探测可以看 `.qoder/` → `skills/`，但 ECC 不会对 Qoder 执行安装，因为上游 `ecc install --help` 当前没有 `qoder` |
+| Trae、Kiro、Windsurf / Devin Desktop Cascade、Cline、Roo Code、Continue | 仅 candidate probe：兼容原始能力已进入 `config/runtime-compatibility-catalog.json`，但没有 adapter、sync 路径和验证套件前不会安装或投影 |
 
-抽取结果装到 `~/.<tool>/skills/<id>/`。只装 Claude 市场 plugin：`npm run meta:deps:install:claude-plugins`；一次覆盖全工具端：`npm run meta:deps:install:all-runtimes`。**升级用户无需手动清理**：老版本的整 repo clone 残留会通过目标目录下的 `.claude-plugin/` 标志自动识别；旧版 Codex/Cursor `skills/superpowers` fallback 也会在更新时移除，并提示安装原生插件。
+抽取结果装到 `~/.<tool>/skills/<id>/`。安装/更新时直接回车会走 Claude Code + Codex 主链；只装 Claude 市场 plugin：`npm run meta:deps:install:claude-plugins`；显式覆盖 Claude Code、Codex、OpenClaw、Cursor：`npm run meta:deps:install:all-runtimes`。**升级用户无需手动清理**：老版本的整 repo clone 残留会通过目标目录下的 `.claude-plugin/` 标志自动识别；旧版 Codex/Cursor `skills/superpowers` fallback 也会在更新时移除，并提示安装原生插件。
 
 ### 高级运维
 
@@ -905,7 +909,7 @@ Meta_Kim 把产物写到 3 个地方：
 
 ### Q：支持哪些平台？
 
-Claude Code、Codex、OpenClaw、Cursor 是正式工具端投影。ECC 另外原生支持 opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode 这些安装目标。Qoder CLI 目前是 candidate probe：官方文档确认它有 skills、subagents、hooks、MCP 表面，但 Meta_Kim 还没有把它升级成正式工具端投影。精确边界见 `config/runtime-compatibility-catalog.json`。
+Claude Code、Codex、OpenClaw、Cursor 是正式工具端投影。ECC 另外原生支持 opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode 这些安装目标。Qoder CLI、Trae、Kiro、Windsurf / Devin Desktop Cascade、Cline、Roo Code、Continue 目前是 candidate probe：官方文档确认它们有可映射的兼容原始能力，但 Meta_Kim 还没有把它们升级成正式工具端投影。精确边界见 `config/runtime-compatibility-catalog.json`。
 
 ### Q：安装复杂吗？
 

@@ -65,6 +65,30 @@ const RETRIEVAL_CAPABILITIES = [
   },
 ];
 
+const SOURCE_QUALITY_LADDER = [
+  "primary_official_docs",
+  "source_code_or_release_notes",
+  "standards_or_regulatory_sources",
+  "peer_reviewed_or_benchmark_sources",
+  "reputable_news_or_analysis",
+  "community_or_forum_evidence_only_with_label",
+];
+
+const ORIGINAL_SYNTHESIS_POLICY = {
+  required: [
+    "extract abstract invariant",
+    "rename to Meta_Kim-native packet language",
+    "bind to Critical -> Fetch -> Thinking handoff",
+    "state what evidence changes the decision",
+  ],
+  forbidden: [
+    "copying third-party prompt text",
+    "copying third-party report template structure",
+    "copying provider-specific command examples into canonical governance",
+    "using cosmetic rewrites to disguise copied wording",
+  ],
+};
+
 function relativeToRepo(filePath) {
   return path.relative(REPO_ROOT, filePath).replaceAll("\\", "/");
 }
@@ -212,6 +236,28 @@ function buildDecisionImpactMap(testCase, sourceList) {
   }));
 }
 
+function buildDeepReadTargets(sourceList) {
+  return sourceList
+    .filter((source) =>
+      [
+        "official_docs",
+        "canonical_source",
+        "contract",
+        "prd",
+        "external_ecosystem",
+        "mcp_inventory",
+        "pricing",
+      ].includes(source.sourceType),
+    )
+    .slice(0, 5)
+    .map((source) => ({
+      sourceId: source.sourceId,
+      sourceName: source.sourceName,
+      reason: source.routeImpact,
+      requiredForRouteChangingClaim: true,
+    }));
+}
+
 function buildPacket(testCase, cursorContract) {
   const sourceList = buildSourceList(testCase, cursorContract);
   const blocked = Boolean(testCase.blockedReason);
@@ -232,10 +278,27 @@ function buildPacket(testCase, cursorContract) {
     stageGate,
     blocked,
     blockedReason: testCase.blockedReason ?? null,
+    decisionUse: testCase.researchRequired
+      ? "Choose owner, route, risk boundary, acceptance, and verification before Thinking."
+      : "Record why local evidence is enough before Thinking.",
     searchAngles: buildSearchAngles(testCase),
     retrievalCapabilityReadiness: RETRIEVAL_CAPABILITIES,
     sourceRequirements: testCase.requiredSourceCategories ?? [],
     sourceList,
+    sourceQualityLadder: SOURCE_QUALITY_LADDER,
+    deepReadTargets: buildDeepReadTargets(sourceList),
+    claimAttributionPolicy: {
+      materialClaimsNeedSource: true,
+      singleSourceClaims: "flag_unverified",
+      snippetsOnly: "candidate_discovery_only",
+      unsupportedClaims: "insufficient_data_found",
+    },
+    crossCheckStrategy: [
+      "compare route-changing claims across independent sources",
+      "separate fact, inference, and assumption",
+      "record contradictions before Thinking",
+    ],
+    originalSynthesisPolicy: ORIGINAL_SYNTHESIS_POLICY,
     freshnessPolicy: testCase.researchRequired
       ? "current facts and official/provider claims must be refreshed during Fetch"
       : "repo-current local evidence is enough",
@@ -297,6 +360,18 @@ function validatePacket(packet, testCase) {
     packet.decisionImpactMap.some((item) => item.impact === impact),
   );
   const searchAnglesOk = packet.searchAngles.length >= 3;
+  const sourceQualityOk =
+    packet.sourceQualityLadder.includes("primary_official_docs") &&
+    packet.sourceQualityLadder.includes("community_or_forum_evidence_only_with_label");
+  const deepReadOk = packet.deepReadTargets.length >= 3;
+  const attributionOk =
+    packet.claimAttributionPolicy.materialClaimsNeedSource === true &&
+    packet.claimAttributionPolicy.singleSourceClaims === "flag_unverified" &&
+    packet.claimAttributionPolicy.snippetsOnly === "candidate_discovery_only";
+  const originalSynthesisOk =
+    packet.originalSynthesisPolicy.required.includes("rename to Meta_Kim-native packet language") &&
+    packet.originalSynthesisPolicy.forbidden.includes("copying third-party prompt text") &&
+    packet.originalSynthesisPolicy.forbidden.includes("using cosmetic rewrites to disguise copied wording");
   const blockedOk = testCase.blockedReason
     ? packet.blocked === true &&
       packet.stageGate === "blocked_return_to_fetch" &&
@@ -311,6 +386,10 @@ function validatePacket(packet, testCase) {
       hasFreshness &&
       hasCredibility &&
       hasDecisionImpact &&
+      sourceQualityOk &&
+      deepReadOk &&
+      attributionOk &&
+      originalSynthesisOk &&
       blockedOk
         ? "pass"
         : "fail",
@@ -321,6 +400,10 @@ function validatePacket(packet, testCase) {
       hasFreshness,
       hasCredibility,
       hasDecisionImpact,
+      sourceQualityOk,
+      deepReadOk,
+      attributionOk,
+      originalSynthesisOk,
       blockedOk,
     },
   };
@@ -355,6 +438,7 @@ function buildMarkdown(report) {
     "## Audit Notes",
     "",
     "- Every packet records searchAngles, sourceList, freshness, credibility, blockedReason, decisionImpactMap, and thinkingHandoff.",
+    "- Every packet records a source-quality ladder, key-source deep-read targets, claim attribution policy, cross-check strategy, and original-synthesis boundary.",
     "- Blocked research returns to Fetch or approval instead of pretending Thinking can safely proceed.",
     "- Local-only work still records why external research is not needed.",
   ];

@@ -46,7 +46,7 @@ If cache freshness could change the route, show one short user-facing hint with 
 
 ## Agent Teams Playbook
 
-Use `agent-teams-playbook` after Thinking and before Execution only when there are 2+ independent parallel worker lanes. It advises parallelization; it does not replace Critical, Fetch, Thinking, owner selection, or verification planning.
+Use `agent-teams-playbook` after Thinking and before Execution when there are 2+ executable independent parallel worker lanes. Record `not_required` when there are fewer than 2 executable lanes. It advises bounded fan-out and wave sizing; it does not replace Critical, Fetch, Thinking, owner selection, or verification planning. A selected playbook provider remains `selected_not_invoked` unless a live Skill/Agent Team/spawn_agent call is attached as evidence.
 
 ## Use when
 

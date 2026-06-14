@@ -20,7 +20,8 @@ From the repository root:
 
 ```bash
 npm install
-npm run meta:theory:run
+npm run meta:theory:demo
+npm run meta:run-status:latest
 npm run meta:theory:report -- --run-id latest
 npm run meta:delivery:bundle
 ```
@@ -63,7 +64,7 @@ Avoid overclaiming:
 Record a short terminal demo with this sequence:
 
 1. Show the original request.
-2. Run `npm run meta:theory:run`.
+2. Run `npm run meta:theory:demo`.
 3. Open the latest report.
 4. Point at the owner route, worker tasks, review evidence, and blocked runtime boundary.
 5. End on the delivery bundle.

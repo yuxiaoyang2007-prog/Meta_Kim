@@ -6,9 +6,11 @@ Project-retained Claude Code agents live in `.claude/agents/<agent>.md`. When th
 
 ## Native Question Surface
 
-Claude Code exposes the native `AskUserQuestion` tool (added v2.0.21) for branch-changing user decisions. It renders an interactive Ink popup with 2–4 selectable options and waits for the user's choice before continuing.
+Claude Code exposes the native `AskUserQuestion` tool for branch-changing user decisions. Current Claude Code hooks documentation also describes `AskUserQuestion` as the typical deferred tool-use case for non-interactive `claude -p` integrations, where the calling process surfaces the question and resumes the session with the answer. Reference: https://code.claude.com/docs/en/hooks
 
-Known limitation: PreToolUse hooks strip `AskUserQuestion` return data (GitHub issue #12031). Meta_Kim hooks whitelist `AskUserQuestion` to bypass this by not intercepting it. If the native tool is unavailable or returns empty, fall back to `conversation_fallback` with a localized chat decision card.
+Known limitation: PreToolUse hooks strip `AskUserQuestion` return data (GitHub issue #12031). Meta_Kim hooks whitelist `AskUserQuestion` to bypass this by not intercepting it. Claude Code is a primary Meta_Kim runtime, so if the native tool is unavailable, returns empty, or is stripped by hooks, record `nativeChoiceSurfaceBlocked` and stop before Execution instead of accepting a localized chat decision card.
+
+Trigger proof rule: when `AskUserQuestion` is available and `choiceSurfaceState` is `critical_clarification_allowed` or `execution_confirmation_allowed`, Claude Code must call `AskUserQuestion` or produce a deferred `AskUserQuestion` tool call for the host UI before Execution. A `cardPlanPacket`, CLI report, hook notification, or markdown decision card is not proof that the native question surface appeared. In non-interactive `claude -p` flows, acceptable proof is a deferred `AskUserQuestion` tool call handled by the caller or a non-empty resumed answer. Missing native proof blocks the run.
 
 Use `AskUserQuestion` in exactly these cases:
 
@@ -77,7 +79,7 @@ Do not copy the external hook's wording into durable Meta_Kim instructions. Keep
 - Record unavailable providers as evidence, not as permission to fake delegation.
 - Cite `workerTaskPackets[].taskPacketId` in every Agent dispatch prompt.
 - Build `fileChangeFactCard` before file mutation, and use it to answer write-time fact gates before retrying the same operation.
-- Fall back to `conversation_fallback` with a localized decision card when `AskUserQuestion` is unavailable or returns empty.
+- Block with `nativeChoiceSurfaceBlocked` when `AskUserQuestion` is unavailable, returns empty, or cannot be deferred to the host UI.
 
 ## Do not
 
@@ -98,7 +100,7 @@ Do not copy the external hook's wording into durable Meta_Kim instructions. Keep
 
 - Every dispatched provider returned a result matching its declared output schema.
 - Every mutated file has a recorded target, consumer, overlap decision, and data-shape note where applicable.
-- `AskUserQuestion` returned a non-empty answer, or `conversation_fallback` was used with recorded reason.
+- `AskUserQuestion` returned a non-empty answer, or non-interactive mode produced a deferred `AskUserQuestion` tool call that the host UI handles before resume.
 - `workerResultPackets[].schemaValidationAttempts[].passed === true` for each lane.
 - The main thread did not directly edit, write, or run implementation commands.
 
@@ -106,14 +108,14 @@ Do not copy the external hook's wording into durable Meta_Kim instructions. Keep
 
 - Main thread directly executed implementation work without dispatching a provider.
 - File mutation started without `fileChangeFactCard` when the change was non-trivial, new-file, data-file, runtime-facing, or hook-gated.
-- `AskUserQuestion` returned empty and no `conversation_fallback` fallback was recorded.
+- `AskUserQuestion` returned empty and the run did not block with `nativeChoiceSurfaceBlocked`.
 - `workerTaskPackets` missing `taskPacketId` or `roleInstanceId`.
 - `capabilityBindings` missing or referencing a provider not found during Fetch.
 
 ## Block conditions
 
 - `AskUserQuestion` called outside blocking Critical clarification or post-Thinking execution confirmation.
-- Critical clarification needed for a subjective quality complaint, but mutation or execution starts without `choiceSurfaceState=critical_clarification_allowed` followed by a completed answer or recorded fallback.
+- Critical clarification needed for a subjective quality complaint, but mutation or execution starts without `choiceSurfaceState=critical_clarification_allowed` followed by a completed native answer or deferred native answer.
 - Agent dispatch in execution stage without `capabilitySearchPerformed === true` in spine state.
 - `choiceSurfaceState` not `completed` when Execution attempts mutation tools.
 - Same write-time fact gate blocks the same action twice after `fileChangeFactCard` was presented; record `hookFailurePacket` and return to Thinking.
@@ -124,13 +126,13 @@ Do not copy the external hook's wording into durable Meta_Kim instructions. Keep
 - Missing `fetchPacket.capabilityMatches` → return to Fetch.
 - Missing `dispatchEnvelopePacket` or `capabilityBindings` → return to Thinking.
 - Missing or incomplete `fileChangeFactCard` for a write-time fact gate → return to Fetch, complete the card, then retry the same operation.
-- Empty `AskUserQuestion` response → record `choiceSurfaceFallback=hook_strip`, return to Thinking or use `conversation_fallback`.
+- Empty `AskUserQuestion` response → record `nativeChoiceSurfaceBlocked=hook_strip`, return to Thinking, and do not execute.
 - Provider dispatch fails → return to Thinking with `capabilityGapPacket`.
 
 ## Verification
 
 - Confirm each Agent dispatch prompt cites a `workerTaskPackets[].taskPacketId`.
-- Confirm `AskUserQuestion` popup appeared by checking the returned answer is non-empty, or `conversation_fallback` reason is recorded.
+- Confirm `AskUserQuestion` popup appeared by checking the returned answer is non-empty, or confirm non-interactive deferred native UI by checking `deferred_tool_use.name === "AskUserQuestion"` and the resumed answer is present.
 - Run `npm run meta:test:meta-theory` to verify all 8-stage spine tests pass with the Claude Code adapter loaded.
 - Check `enforce-agent-dispatch.mjs` whitelists `AskUserQuestion` to avoid issue #12031.
 

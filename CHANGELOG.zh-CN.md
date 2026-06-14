@@ -8,6 +8,67 @@
 
 ## [Unreleased]
 
+## [2.8.31] - 2026-06-14
+
+### 新增
+
+- **Agent Teams Playbook 门禁** - 新增 P-110 支撑门和 `agentTeamsPlaybookPacket`，让默认治理路线在出现两条及以上独立可执行 worker lane 时选中 `agent-teams-playbook`，按最多 5 个 agent 分 wave；单 lane 任务记录为 `not_required`。
+- **能力调用真实性层** - 新增 `agent_teams_playbook` 调用状态，避免把 selected provider、live subagent 调用、MCP、skill、command、hook 或本地 worker 互相冒充。
+- **产品体验 Validator** - 新增 PRD/product validator，覆盖三大核心目标和支撑门，包括 LangGraph-style run packet、Dynamic Workflow 覆盖、用户可见运行面、能力调用真实性和 agent-teams 适配。
+
+### 变更
+
+- **Codex Meta-Theory Runtime** - 收紧 Codex `/meta-theory` 适配器和 meta-conductor prompt：`agent-teams-playbook` 只在真实并行 worker lane 中选中，不会套到所有非平凡任务上。
+- **依赖登记** - 将 `agent-teams-playbook` 从 external reference 提升为 installed skill candidate，并加入兼容验证与不得越级宣称 live 调用的边界。
+- **发布 Smoke 覆盖** - `meta:release:smoke` 现在包含 `agent-teams-playbook` 集成测试。
+
+### 验证
+
+- `npm run meta:deps:compat`
+- `npm run meta:prd:product-experience:validate`
+- `npm run meta:prd:default-execution:validate`
+- `npm run meta:prompt:validate`
+- `npm run meta:graphify:check`
+- `npm run meta:release:smoke`
+- Codex live probe 从线程 `019ec26d-8837-77b2-95c8-1361bcb91128` 创建 reviewer 子智能体 `019ec274-15a4-7603-9986-335dad22c699`；`wait_agent` 回流被中断，因此完整 Review 回流闭环仍只算 partial 证据。
+
+## [2.8.30] - 2026-06-13
+
+### 变更
+
+- **主链安装默认项** - 将安装/更新时直接回车的默认目标改为 Claude Code + Codex，同时保留 OpenClaw、Cursor 的显式 all-runtime 或 `--targets` 选择路径。
+- **Fetch 研究质量门** - 将 ECC 式 deep research 抽象内化为 Meta_Kim 原生 Fetch 合同，加入来源质量阶梯、关键来源深读、声明归因、交叉验证和原创综合边界。
+- **兼容候选框架** - 基于官方资料新增 Qoder CLI、Trae、Kiro、Windsurf / Devin Desktop Cascade、Cline、Roo Code、Continue 的原始能力表面框架，同时保持 candidate probe，不升级为正式工具端投影。
+- **兼容证据边界** - 将 GitHub 主完成判断与全工具端兼容证据拆开，Cursor 在 local-private PRD 与生成报告中保留为兼容后续项，并与主发布判断分离。
+
+### 验证
+
+- `npm run meta:sync`
+- `npm run meta:release:smoke`
+- `git diff --check`
+- `node setup.mjs --update --lang zh --targets claude,codex --project-dir <dir>...`
+
+## [2.8.29] - 2026-06-13
+
+### 新增
+
+- **原生选择面守卫** - 新增回归测试，防止 Codex 和 Claude Code 的关键分支决策被聊天卡片或纯 artifact fallback 冒充完成。
+- **运行状态面** - 新增本地化 run-status envelope 和命令，让治理运行能展示用户可读进度，同时不泄漏内部 packet 名称。
+
+### 变更
+
+- **Codex 与 Claude Code 不降级规则** - Codex 必须用 `request_user_input`，Claude Code 必须用 `AskUserQuestion` 或 deferred `AskUserQuestion` 完成必需执行决策；原生交互面不可用或返回空时，会在 Execution 前阻断，而不是静默降级。
+- **Runtime 镜像映射** - 已把 canonical meta-theory skill、meta agents、runtime references 和项目内 runtime mirrors 同步到 Claude Code、Codex、Cursor、OpenClaw。
+
+### 验证
+
+- `npm run meta:sync`
+- `npm run meta:governance:validate`
+- `npm run meta:prompt:validate`
+- `npm run meta:check:runtimes`
+- `npm run meta:test:meta-theory`
+- `git diff --check`
+
 ## [2.8.28] - 2026-06-13
 
 ### 新增
@@ -21,7 +82,7 @@
 
 - **框架型 Prompt 架构** - Prompt 资产现在按 system/project/agent/skill/contract/runtime-adapter/eval 分层验收，并加入 review dimensions、regression fixtures 和 context-sprawl budget 规则。
 - **治理验证链路** - `meta:verify:governance` 现在纳入 default execution、asset sedimentation、research-native、framework prompt architecture、smooth capability discovery 和 runtime priority validators。
-- **唯一 PRD 源** - local-private PRD 现在把 P-067、P-068 到 P-084、P-085、P-092 标为本地已测通，同时继续保留 Cursor native live 作为 all-tool compatibility 的剩余阻塞。
+- **唯一 PRD 源** - local-private PRD 现在把 P-067、P-068 到 P-084、P-085、P-092 标为本地已测通，同时把 Cursor native live 证据保留在兼容后续项中。
 
 ### 验证
 

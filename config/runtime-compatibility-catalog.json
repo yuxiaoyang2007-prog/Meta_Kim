@@ -1,16 +1,27 @@
 {
   "$schema": "./contracts/runtime-compatibility-catalog.schema.json",
   "schemaVersion": 1,
-  "lastReviewedAt": "2026-06-01",
+  "lastReviewedAt": "2026-06-13",
   "decisionBoundary": {
     "noAutoPromotionFromDependencyInstall": true,
     "noAutoPromotionFromGenericSkillPath": true,
+    "noFormalClaimFromSurfaceMatch": true,
     "formalRuntimeSource": "config/sync.json supportedTargets plus runtimeProfileCatalog/runtimeProjectionLayouts in scripts/meta-kim-sync-config.mjs"
   },
   "tierDefinitions": {
     "runtime_projection": "Meta_Kim has a formal repo projection, runtime profile, projection layout, sync manifest entry, and validation coverage.",
     "dependency_install_target": "A dependency installer can target the product, but Meta_Kim does not own a formal runtime projection for it.",
     "candidate_probe": "External docs or user demand suggest compatibility, but Meta_Kim needs a probe, adapter design, and validation before promotion."
+  },
+  "surfaceTaxonomy": {
+    "instruction_context": "Persistent project or global instructions such as AGENTS.md, rules, steering, memories, or custom instruction files.",
+    "skill_workflow": "Portable procedure bundles such as SKILL.md folders, skills, workflows, powers, or equivalent reusable playbooks.",
+    "agent_mode": "Named agents, subagents, custom modes, assistants, or role-specific execution contexts.",
+    "hook_automation": "Pre/post tool hooks, prompt hooks, lifecycle hooks, file event automation, or workflow automation triggers.",
+    "mcp_tooling": "MCP server configuration, MCP tools, or compatible external tool provider wiring.",
+    "command_cli": "Slash commands, CLI commands, prompt files, or invokable command templates.",
+    "memory_context": "Persistent memory, context retrieval, docs search, or codebase context features.",
+    "permission_safety": "Approval, sandbox, tool permission, auto-approve, deny, or file-access restriction controls."
   },
   "promotionRules": {
     "requiredForRuntimeProjection": [
@@ -110,7 +121,7 @@
         "inSyncManifest": true,
         "hasRuntimeProfile": true,
         "hasProjectionLayout": true,
-        "isDefaultTarget": true
+        "isDefaultTarget": false
       },
       "genericCompatibility": {
         "skillPath": "openclaw/skills/{skill-name}/SKILL.md",
@@ -130,7 +141,7 @@
         {
           "type": "local_file",
           "ref": "config/sync.json",
-          "claim": "OpenClaw is a supported and default sync target."
+          "claim": "OpenClaw is a supported compatibility sync target; it is not selected by the primary default."
         },
         {
           "type": "local_file",
@@ -159,7 +170,7 @@
         "inSyncManifest": true,
         "hasRuntimeProfile": true,
         "hasProjectionLayout": true,
-        "isDefaultTarget": true
+        "isDefaultTarget": false
       },
       "genericCompatibility": {
         "skillPath": ".cursor/skills/{skill-name}/SKILL.md",
@@ -179,7 +190,7 @@
         {
           "type": "local_file",
           "ref": "config/sync.json",
-          "claim": "Cursor is a supported and default sync target."
+          "claim": "Cursor is a supported compatibility sync target; it is not selected by the primary default."
         },
         {
           "type": "local_file",
@@ -479,6 +490,359 @@
       "nextAction": "Probe JoyCode runtime surfaces before any sync manifest change."
     },
     {
+      "id": "trae",
+      "label": "Trae",
+      "tier": "candidate_probe",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": "Trae Skills / SKILL.md-compatible skill packages; exact project and global paths need probe",
+        "agentPath": "Trae custom agents in IDE settings; exact exported file path needs probe",
+        "hookConfig": null,
+        "mcpConfig": "Trae MCP settings / Add MCP servers UI; exact file path needs probe",
+        "status": "partial"
+      },
+      "compatibilitySurfaces": [
+        "instruction_context",
+        "skill_workflow",
+        "agent_mode",
+        "mcp_tooling",
+        "memory_context"
+      ],
+      "dependencyInstall": {
+        "ecc": {
+          "support": "not_supported",
+          "mode": "not_applicable",
+          "evidenceRef": "npx --yes --package ecc-universal@latest ecc install --help"
+        }
+      },
+      "evidence": [
+        {
+          "type": "official_docs",
+          "ref": "https://docs.trae.ai/ide/agent",
+          "claim": "Trae documents custom agents with prompts, MCP servers, built-in tools, and task-specific configuration."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.trae.ai/ide/rules",
+          "claim": "Trae documents rules as persistent behavioral guidance."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.trae.ai/ide/skills",
+          "claim": "Trae documents skills as task procedures that can be combined with MCP servers."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.trae.ai/ide/model-context-protocol",
+          "claim": "Trae documents MCP server integration for external tools and services."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.trae.ai/ide/memories",
+          "claim": "Trae documents memory for persisted preferences and context."
+        }
+      ],
+      "decision": "Admit Trae as candidate_probe only: official docs expose compatible primitives, but Meta_Kim lacks profile/layout/sync validation and local runtime probe evidence.",
+      "nextAction": "Design a Trae adapter only after probing actual project/global paths, export format, MCP config shape, and validation hooks."
+    },
+    {
+      "id": "kiro",
+      "label": "Kiro",
+      "tier": "candidate_probe",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": "Kiro skills or powers packages; exact install path needs probe",
+        "agentPath": null,
+        "hookConfig": ".kiro/hooks/ or IDE Agent Hooks; exact serialized shape needs probe",
+        "mcpConfig": "Kiro MCP Servers / powers MCP configuration; exact file path needs probe",
+        "status": "partial"
+      },
+      "compatibilitySurfaces": [
+        "instruction_context",
+        "skill_workflow",
+        "hook_automation",
+        "mcp_tooling",
+        "command_cli",
+        "memory_context"
+      ],
+      "dependencyInstall": {
+        "ecc": {
+          "support": "not_supported",
+          "mode": "not_applicable",
+          "evidenceRef": "npx --yes --package ecc-universal@latest ecc install --help"
+        }
+      },
+      "evidence": [
+        {
+          "type": "official_docs",
+          "ref": "https://kiro.dev/docs/steering/",
+          "claim": "Kiro documents workspace and global steering files plus AGENTS.md support."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://kiro.dev/docs/specs/",
+          "claim": "Kiro documents specs as structured planning artifacts."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://kiro.dev/docs/hooks/",
+          "claim": "Kiro documents Agent Hooks for IDE events, tool events, prompt submission, and shell commands."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://kiro.dev/docs/skills/",
+          "claim": "Kiro documents skills as portable open-standard packages."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://kiro.dev/docs/powers/",
+          "claim": "Kiro documents powers as bundles of POWER.md, MCP server configuration, steering, and hooks."
+        }
+      ],
+      "decision": "Admit Kiro as candidate_probe only: steering, specs, hooks, skills, powers, and MCP are compatible primitives, not a Meta_Kim runtime projection.",
+      "nextAction": "Probe .kiro artifact layouts, power packaging, CLI behavior, and hook denial semantics before promotion."
+    },
+    {
+      "id": "windsurf",
+      "label": "Windsurf / Devin Desktop Cascade",
+      "tier": "candidate_probe",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": ".devin/skills/{skill-name}/SKILL.md or legacy Windsurf skill locations; exact current path needs probe",
+        "agentPath": null,
+        "hookConfig": "Cascade Hooks; exact project/global file path needs probe",
+        "mcpConfig": "Cascade MCP configuration; exact file path needs probe",
+        "status": "partial"
+      },
+      "compatibilitySurfaces": [
+        "instruction_context",
+        "skill_workflow",
+        "hook_automation",
+        "mcp_tooling",
+        "command_cli",
+        "memory_context"
+      ],
+      "dependencyInstall": {
+        "ecc": {
+          "support": "not_supported",
+          "mode": "not_applicable",
+          "evidenceRef": "npx --yes --package ecc-universal@latest ecc install --help"
+        }
+      },
+      "evidence": [
+        {
+          "type": "official_docs",
+          "ref": "https://docs.devin.ai/desktop/cascade/skills",
+          "claim": "Cascade documents skills as SKILL.md workflow bundles with progressive disclosure."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.devin.ai/desktop/cascade/memories",
+          "claim": "Cascade documents memories, rules, workflows, skills, and AGENTS.md-style customization surfaces."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.devin.ai/desktop/cascade/mcp",
+          "claim": "Cascade documents MCP integration and remote/local MCP server configuration."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.devin.ai/desktop/cascade/hooks",
+          "claim": "Cascade documents pre/post hooks for logging, validation, guardrails, and governance."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.devin.ai/desktop/cascade/agents-md",
+          "claim": "Cascade documents AGENTS.md as location-scoped instructions feeding the rules engine."
+        }
+      ],
+      "decision": "Admit Windsurf/Devin Desktop Cascade as candidate_probe only: Cascade has multiple compatible primitives, but current Meta_Kim has no formal profile, layout, or live acceptance for it.",
+      "nextAction": "Probe current Devin Desktop and legacy Windsurf folder names, skill priority, hook behavior, and MCP config before any adapter."
+    },
+    {
+      "id": "cline",
+      "label": "Cline",
+      "tier": "candidate_probe",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": null,
+        "agentPath": null,
+        "hookConfig": null,
+        "mcpConfig": "~/.cline/mcp.json or IDE MCP settings; project-level behavior needs probe",
+        "status": "partial"
+      },
+      "compatibilitySurfaces": [
+        "instruction_context",
+        "mcp_tooling",
+        "command_cli",
+        "permission_safety"
+      ],
+      "dependencyInstall": {
+        "ecc": {
+          "support": "not_supported",
+          "mode": "not_applicable",
+          "evidenceRef": "npx --yes --package ecc-universal@latest ecc install --help"
+        }
+      },
+      "evidence": [
+        {
+          "type": "official_docs",
+          "ref": "https://docs.cline.bot/customization/cline-rules",
+          "claim": "Cline documents workspace and global rules, AGENTS.md compatibility, and conditional rule activation."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.cline.bot/mcp/mcp-overview",
+          "claim": "Cline documents MCP server configuration, CLI MCP wizard, autoApprove, and tool approval guidance."
+        }
+      ],
+      "decision": "Admit Cline as candidate_probe only: rules and MCP are compatible primitives, but skills/agents/hooks projection is not proven for Meta_Kim.",
+      "nextAction": "Probe Cline CLI and extension project config behavior before designing a runtime adapter."
+    },
+    {
+      "id": "roo-code",
+      "label": "Roo Code",
+      "tier": "candidate_probe",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": ".roo/skills/{skill-name}/SKILL.md; ~/.roo/skills/{skill-name}/SKILL.md; .agents/skills/{skill-name}/SKILL.md",
+        "agentPath": ".roomodes or settings/custom_modes.yaml for custom modes",
+        "hookConfig": null,
+        "mcpConfig": ".roo/mcp.json or global mcp_settings.json",
+        "status": "partial"
+      },
+      "compatibilitySurfaces": [
+        "instruction_context",
+        "skill_workflow",
+        "agent_mode",
+        "mcp_tooling",
+        "command_cli",
+        "permission_safety"
+      ],
+      "dependencyInstall": {
+        "ecc": {
+          "support": "not_supported",
+          "mode": "not_applicable",
+          "evidenceRef": "npx --yes --package ecc-universal@latest ecc install --help"
+        }
+      },
+      "evidence": [
+        {
+          "type": "official_docs",
+          "ref": "https://roocodeinc.github.io/Roo-Code/features/custom-modes/",
+          "claim": "Roo Code documents project/global custom modes with tool groups and mode-specific instructions."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://roocodeinc.github.io/Roo-Code/features/skills/",
+          "claim": "Roo Code documents SKILL.md-based skills under .roo, ~/.roo, and .agents skill roots."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://roocodeinc.github.io/Roo-Code/features/custom-instructions/",
+          "claim": "Roo Code documents workspace/global rule directories and AGENTS.md integration."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://roocodeinc.github.io/Roo-Code/features/mcp/using-mcp-in-roo/",
+          "claim": "Roo Code documents project .roo/mcp.json and global MCP settings."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://roocodeinc.github.io/Roo-Code/features/slash-commands/",
+          "claim": "Roo Code documents project/global markdown slash commands."
+        }
+      ],
+      "decision": "Admit Roo Code as candidate_probe only: it is highly compatible at the primitive level, but Meta_Kim has no Roo runtime projection or live validation yet.",
+      "nextAction": "Probe Roo mode, skill, MCP, command, and permission behavior before considering a formal projection."
+    },
+    {
+      "id": "continue",
+      "label": "Continue",
+      "tier": "candidate_probe",
+      "formalProjection": {
+        "inSyncManifest": false,
+        "hasRuntimeProfile": false,
+        "hasProjectionLayout": false,
+        "isDefaultTarget": false
+      },
+      "genericCompatibility": {
+        "skillPath": null,
+        "agentPath": "config.yaml assistant definitions; exact Meta_Kim agent projection needs design",
+        "hookConfig": null,
+        "mcpConfig": ".continue/mcpServers/ and config.yaml mcpServers",
+        "status": "partial"
+      },
+      "compatibilitySurfaces": [
+        "instruction_context",
+        "agent_mode",
+        "mcp_tooling",
+        "command_cli",
+        "permission_safety"
+      ],
+      "dependencyInstall": {
+        "ecc": {
+          "support": "not_supported",
+          "mode": "not_applicable",
+          "evidenceRef": "npx --yes --package ecc-universal@latest ecc install --help"
+        }
+      },
+      "evidence": [
+        {
+          "type": "official_docs",
+          "ref": "https://docs.continue.dev/customize/deep-dives/rules",
+          "claim": "Continue documents local and global rules under .continue/rules and ~/.continue/rules."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.continue.dev/customize/deep-dives/mcp",
+          "claim": "Continue documents MCP servers under .continue/mcpServers and config mcpServers."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.continue.dev/customize/deep-dives/prompts",
+          "claim": "Continue documents invokable prompts as slash commands in Chat, Plan, and Agent modes."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.continue.dev/reference",
+          "claim": "Continue config.yaml defines agents with models, rules, tools, prompts, context, and MCP servers."
+        },
+        {
+          "type": "official_docs",
+          "ref": "https://docs.continue.dev/guides/cli",
+          "claim": "Continue CLI supports slash commands, MCP tools, and tool permission flags."
+        }
+      ],
+      "decision": "Admit Continue as candidate_probe only: rules, config agents, MCP, prompts, and CLI permissions are compatible primitives, not a Meta_Kim projection.",
+      "nextAction": "Probe Continue config.yaml projection, local rule precedence, MCP block files, prompt commands, and CLI permission semantics before promotion."
+    },
+    {
       "id": "qoder",
       "label": "Qoder CLI",
       "tier": "candidate_probe",
@@ -495,6 +859,14 @@
         "mcpConfig": "qodercli mcp add; ~/.qoder/settings.json; .qoder/settings.local.json; .mcp.json",
         "status": "verified_current"
       },
+      "compatibilitySurfaces": [
+        "instruction_context",
+        "skill_workflow",
+        "agent_mode",
+        "hook_automation",
+        "mcp_tooling",
+        "permission_safety"
+      ],
       "dependencyInstall": {
         "ecc": {
           "support": "not_supported",

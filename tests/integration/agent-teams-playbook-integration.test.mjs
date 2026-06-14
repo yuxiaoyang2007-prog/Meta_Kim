@@ -1,12 +1,12 @@
 /**
- * Meta_Kim + agent-team-playbook Integration Test
+ * Meta_Kim + agent-teams-playbook Integration Test
  *
- * This test demonstrates the Stage 4 Execution integration with agent-team-playbook.
+ * This test demonstrates the Stage 4 Execution integration with agent-teams-playbook.
  * Run: node tests/integration/agent-teams-playbook-integration.test.mjs
  */
 
 // =============================================================================
-// Mock: Simulated agent-team-playbook natural language output
+// Mock: Simulated agent-teams-playbook natural language output
 // =============================================================================
 
 const mockPlaybookOutput = `
@@ -351,7 +351,7 @@ if (failed > 0) {
   console.log(`
 【Step 1: Skill Invocation】
 Skill(
-  skill="agent-team-playbook",
+  skill="agent-teams-playbook",
   args="Task: 实现用户认证服务
         Department: AI Department
         Deliverable: OAuth2 + JWT 认证"
