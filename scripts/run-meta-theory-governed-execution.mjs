@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { promises as fs } from "node:fs";
+import { existsSync, readFileSync, promises as fs } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import path from "node:path";
@@ -85,7 +85,8 @@ const RUNTIME_SMOKE_PROJECTIONS = {
 };
 
 const AGENT_TEAMS_PLAYBOOK_ID = "agent-teams-playbook";
-const AGENT_TEAMS_MAX_PARALLEL_AGENTS = 5;
+const CODEX_DEFAULT_AGENT_MAX_THREADS = 6;
+const AGENT_TEAMS_MAX_PARALLEL_ENV = "META_KIM_AGENT_TEAMS_MAX_PARALLEL";
 
 const CARD_DECK_TEMPLATE = Object.freeze([
   {
@@ -2150,19 +2151,239 @@ function taskIsExecutableWorker(packet) {
   return packet?.executionMode !== "approval_gate" && packet?.externalWriteBoundary !== true;
 }
 
-function buildAgentTeamsWaves(workerTaskPackets) {
+function parsePositiveInteger(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseAgentsMaxThreadsFromToml(text) {
+  let inAgentsSection = false;
+  for (const rawLine of String(text ?? "").split(/\r?\n/u)) {
+    const line = rawLine.replace(/#.*/u, "").trim();
+    if (!line) continue;
+    const sectionMatch = line.match(/^\[([^\]]+)\]$/u);
+    if (sectionMatch) {
+      inAgentsSection = sectionMatch[1].trim() === "agents";
+      continue;
+    }
+    if (!inAgentsSection) continue;
+    const match = line.match(/^max_threads\s*=\s*(\d+)\s*$/u);
+    if (match) return parsePositiveInteger(match[1]);
+  }
+  return null;
+}
+
+function readAgentsMaxThreadsCandidate(filePath) {
+  if (!filePath || !existsSync(filePath)) return null;
+  try {
+    const value = parseAgentsMaxThreadsFromToml(readFileSync(filePath, "utf8"));
+    if (!value) return null;
+    return { value, source: filePath };
+  } catch {
+    return null;
+  }
+}
+
+function resolveCodexAgentMaxThreads() {
+  const envOverride = parsePositiveInteger(process.env[AGENT_TEAMS_MAX_PARALLEL_ENV]);
+  if (envOverride) {
+    return {
+      value: envOverride,
+      source: AGENT_TEAMS_MAX_PARALLEL_ENV,
+      sourceKind: "env_override",
+    };
+  }
+  const candidatePaths = [
+    path.join(REPO_ROOT, ".codex", "config.toml"),
+    process.env.CODEX_HOME ? path.join(process.env.CODEX_HOME, "config.toml") : null,
+    homeDir() ? path.join(homeDir(), ".codex", "config.toml") : null,
+    path.join(REPO_ROOT, "codex", "config.toml.example"),
+    path.join(REPO_ROOT, "canonical", "runtime-assets", "codex", "config.toml.example"),
+  ];
+  for (const candidatePath of candidatePaths) {
+    const candidate = readAgentsMaxThreadsCandidate(candidatePath);
+    if (candidate) {
+      return {
+        value: candidate.value,
+        source: relative(candidate.source),
+        sourceKind: candidate.source.endsWith(".example")
+          ? "project_example_fallback"
+          : "active_config",
+      };
+    }
+  }
+  return {
+    value: CODEX_DEFAULT_AGENT_MAX_THREADS,
+    source: "codex_official_default_agents.max_threads",
+    sourceKind: "official_default",
+  };
+}
+
+function resolveAgentTeamsParallelBudget(executableLaneCount) {
+  const resolvedCapacity = resolveCodexAgentMaxThreads();
+  const runtimeCapacity = resolvedCapacity.value;
+  return {
+    schemaVersion: "agent-teams-parallel-budget-v0.1",
+    requestedParallelAgents: executableLaneCount,
+    maxConcurrentAgents: Math.max(1, Math.min(executableLaneCount || 1, runtimeCapacity)),
+    runtimeCapacity,
+    capacitySource: resolvedCapacity.source,
+    capacitySourceKind: resolvedCapacity.sourceKind,
+    noArbitraryMetaKimCap: true,
+    overflowPolicy:
+      executableLaneCount > runtimeCapacity
+        ? "run all independent lanes in runtime-capacity waves"
+        : "run all independent lanes in one wave",
+  };
+}
+
+function arrayOfStrings(value) {
+  return Array.isArray(value)
+    ? value.filter((item) => typeof item === "string" && item.trim())
+    : [];
+}
+
+function taskDependencyIds(packet) {
+  return arrayOfStrings(packet?.dependsOn).filter(
+    (value, index, array) => array.indexOf(value) === index,
+  );
+}
+
+function taskCollisionScopes(packet) {
+  const scopeFiles = arrayOfStrings(packet?.scopeFiles).map((item) => `file:${item}`);
+  if (scopeFiles.length > 0) return scopeFiles;
+  if (packet?.artifactNamespace) return [`artifact:${packet.artifactNamespace}`];
+  if (packet?.shardKey) return [`shard:${packet.shardKey}`];
+  if (packet?.workspaceIsolation === "run_scoped" && packet?.taskPacketId) {
+    return [`run-scoped:${packet.taskPacketId}`];
+  }
+  return packet?.taskPacketId ? [`task:${packet.taskPacketId}`] : ["unknown-scope"];
+}
+
+function detectDependencyCycles(tasks) {
+  const taskIds = new Set(tasks.map((packet) => packet.taskPacketId));
+  const visiting = new Set();
+  const visited = new Set();
+  const cycleTaskIds = new Set();
+  const visit = (taskId, stack = []) => {
+    if (visited.has(taskId)) return;
+    if (visiting.has(taskId)) {
+      for (const id of stack.slice(stack.indexOf(taskId))) cycleTaskIds.add(id);
+      return;
+    }
+    visiting.add(taskId);
+    const task = tasks.find((packet) => packet.taskPacketId === taskId);
+    for (const dependencyId of taskDependencyIds(task).filter((id) => taskIds.has(id))) {
+      visit(dependencyId, [...stack, taskId]);
+    }
+    visiting.delete(taskId);
+    visited.add(taskId);
+  };
+  for (const task of tasks) visit(task.taskPacketId);
+  return [...cycleTaskIds];
+}
+
+function buildFanoutSafetyPacket(executableTasks) {
+  const taskIds = new Set(executableTasks.map((packet) => packet.taskPacketId));
+  const rows = executableTasks.map((packet) => {
+    const dependencyIds = taskDependencyIds(packet);
+    return {
+      taskPacketId: packet.taskPacketId,
+      parallelGroup: packet.parallelGroup ?? null,
+      dependsOn: dependencyIds,
+      collisionPolicy: packet.collisionPolicy ?? "unspecified",
+      workspaceIsolation: packet.workspaceIsolation ?? "unspecified",
+      mutationScopes: taskCollisionScopes(packet),
+      externalWriteBoundary: packet.externalWriteBoundary === true,
+    };
+  });
+  const missingDependencies = rows.flatMap((row) =>
+    row.dependsOn
+      .filter((dependencyId) => !taskIds.has(dependencyId))
+      .map((dependencyId) => ({
+        taskPacketId: row.taskPacketId,
+        dependencyId,
+      }))
+  );
+  const selfDependencies = rows
+    .filter((row) => row.dependsOn.includes(row.taskPacketId))
+    .map((row) => row.taskPacketId);
+  const cycleTaskIds = detectDependencyCycles(executableTasks);
+  const scopeOwners = new Map();
+  for (const row of rows) {
+    for (const scope of row.mutationScopes) {
+      if (!scopeOwners.has(scope)) scopeOwners.set(scope, []);
+      scopeOwners.get(scope).push(row.taskPacketId);
+    }
+  }
+  const collisionConflicts = [...scopeOwners.entries()]
+    .filter(([, owners]) => owners.length > 1)
+    .map(([scope, owners]) => ({ scope, taskPacketIds: owners }));
+  const explicitParallelMetadata = rows.every(
+    (row) =>
+      Boolean(row.parallelGroup) &&
+      row.collisionPolicy !== "unspecified" &&
+      row.workspaceIsolation !== "unspecified",
+  );
+  const initialReadyLaneCount = rows.filter((row) => row.dependsOn.length === 0).length;
+  const safeForParallelFanout =
+    rows.length >= 2 &&
+    explicitParallelMetadata &&
+    missingDependencies.length === 0 &&
+    selfDependencies.length === 0 &&
+    cycleTaskIds.length === 0 &&
+    collisionConflicts.length === 0 &&
+    rows.every((row) => row.externalWriteBoundary === false);
+  return {
+    schemaVersion: "agent-teams-fanout-safety-v0.1",
+    status: safeForParallelFanout ? "pass" : rows.length >= 2 ? "partial" : "not_required",
+    executableLaneCount: rows.length,
+    initialReadyLaneCount,
+    explicitParallelMetadata,
+    missingDependencies,
+    selfDependencies,
+    cycleTaskIds,
+    collisionConflicts,
+    dependencySafe:
+      missingDependencies.length === 0 && selfDependencies.length === 0 && cycleTaskIds.length === 0,
+    collisionSafe: collisionConflicts.length === 0,
+    externalWriteSafe: rows.every((row) => row.externalWriteBoundary === false),
+    safeForParallelFanout,
+    rows,
+  };
+}
+
+function buildAgentTeamsWaves(workerTaskPackets, parallelBudget = null, fanoutSafetyPacket = null) {
   const executableTasks = workerTaskPackets.filter(taskIsExecutableWorker);
+  const budget = parallelBudget ?? resolveAgentTeamsParallelBudget(executableTasks.length);
+  const safetyPacket = fanoutSafetyPacket ?? buildFanoutSafetyPacket(executableTasks);
+  if (!safetyPacket.safeForParallelFanout) return [];
   const waves = [];
-  for (let index = 0; index < executableTasks.length; index += AGENT_TEAMS_MAX_PARALLEL_AGENTS) {
-    const tasks = executableTasks.slice(index, index + AGENT_TEAMS_MAX_PARALLEL_AGENTS);
+  const remaining = new Map(executableTasks.map((task) => [task.taskPacketId, task]));
+  const completed = new Set();
+  while (remaining.size > 0) {
+    const readyTasks = [...remaining.values()].filter((task) =>
+      taskDependencyIds(task).every((dependencyId) => completed.has(dependencyId) || !remaining.has(dependencyId))
+    );
+    if (readyTasks.length === 0) break;
+    const tasks = readyTasks.slice(0, budget.maxConcurrentAgents);
     waves.push({
       waveId: `agent-team-wave-${waves.length + 1}`,
       mode: waves.length === 0 ? "primary_parallel_wave" : "followup_parallel_wave",
       taskPacketIds: tasks.map((packet) => packet.taskPacketId),
       roleDisplayNames: tasks.map((packet) => packet.roleDisplayName),
       parallelCount: tasks.length,
+      requestedParallelAgents: budget.requestedParallelAgents,
+      runtimeCapacity: budget.runtimeCapacity,
+      capacitySource: budget.capacitySource,
+      capacitySourceKind: budget.capacitySourceKind,
       mergeOwner: "meta-conductor",
     });
+    for (const task of tasks) {
+      completed.add(task.taskPacketId);
+      remaining.delete(task.taskPacketId);
+    }
   }
   return waves;
 }
@@ -2225,13 +2446,21 @@ function buildAgentTeamsPlaybookPacket({
   workerExecutionEvidence,
 }) {
   const executableTasks = workerTaskPackets.filter(taskIsExecutableWorker);
+  const fanoutSafetyPacket = buildFanoutSafetyPacket(executableTasks);
   const triggered = executableTasks.length >= 2;
-  const selected = triggered && (
+  const providerAvailable = (
     providerResolution?.found === true ||
     providerResolution?.configuredInSkills === true ||
     providerResolution?.providerRegistryState === "registered"
   );
-  const waves = buildAgentTeamsWaves(workerTaskPackets);
+  const parallelBudget = resolveAgentTeamsParallelBudget(executableTasks.length);
+  const waves = buildAgentTeamsWaves(workerTaskPackets, parallelBudget, fanoutSafetyPacket);
+  const hasParallelWave = waves.some((wave) => wave.parallelCount >= 2);
+  const selected =
+    triggered &&
+    fanoutSafetyPacket.safeForParallelFanout === true &&
+    hasParallelWave &&
+    providerAvailable;
   const externalAgentSpawned = (workerExecutionEvidence ?? []).some(
     (item) => item.externalAgentSpawned === true
   );
@@ -2258,15 +2487,23 @@ function buildAgentTeamsPlaybookPacket({
     selected,
     selectedAs: selected ? "parallel_fanout_orchestration_adapter" : "not_selected",
     providerResolution,
-    maxParallelAgents: AGENT_TEAMS_MAX_PARALLEL_AGENTS,
+    maxParallelAgents: parallelBudget.maxConcurrentAgents,
+    requestedParallelAgents: parallelBudget.requestedParallelAgents,
+    runtimeCapacity: parallelBudget.runtimeCapacity,
+    capacitySource: parallelBudget.capacitySource,
+    capacitySourceKind: parallelBudget.capacitySourceKind,
+    parallelBudget,
+    fanoutSafetyPacket,
     executableLaneCount: executableTasks.length,
     totalWorkerTaskCount: workerTaskPackets.length,
     waves,
     fanoutPolicy: {
       defaultParallelism: "only real independent worker lanes",
-      maxParallelAgents: AGENT_TEAMS_MAX_PARALLEL_AGENTS,
-      overflowHandling:
-        waves.length > 1 ? "split into bounded waves" : "single bounded wave",
+      requestedParallelAgents: parallelBudget.requestedParallelAgents,
+      maxConcurrentAgents: parallelBudget.maxConcurrentAgents,
+      runtimeCapacity: parallelBudget.runtimeCapacity,
+      capacitySource: parallelBudget.capacitySource,
+      overflowHandling: parallelBudget.overflowPolicy,
       mergeOwner: "meta-conductor",
       avoidRoleInflation: true,
     },
@@ -2279,9 +2516,20 @@ function buildAgentTeamsPlaybookPacket({
     },
     acceptance: {
       selectedWhenParallelLanes: !triggered || selected,
-      waveSizeWithinCap: waves.every(
-        (wave) => wave.parallelCount <= AGENT_TEAMS_MAX_PARALLEL_AGENTS
+      independentLanesProven: !triggered || fanoutSafetyPacket.safeForParallelFanout === true,
+      parallelWaveExists: !triggered || hasParallelWave,
+      dagAndCollisionSafe: !triggered || (
+        fanoutSafetyPacket.dependencySafe === true &&
+        fanoutSafetyPacket.collisionSafe === true &&
+        fanoutSafetyPacket.externalWriteSafe === true
       ),
+      waveSizeWithinCap: waves.every(
+        (wave) => wave.parallelCount <= parallelBudget.maxConcurrentAgents
+      ),
+      waveSizeWithinRuntimeCapacity: waves.every(
+        (wave) => wave.parallelCount <= parallelBudget.runtimeCapacity
+      ),
+      noArbitraryMetaKimCap: parallelBudget.noArbitraryMetaKimCap === true,
       workerPacketsPreserved:
         waves.flatMap((wave) => wave.taskPacketIds).length === executableTasks.length,
       noLiveSubagentOverclaim: !externalAgentSpawned
@@ -2292,6 +2540,72 @@ function buildAgentTeamsPlaybookPacket({
       "config/skills.json#agent-teams-playbook",
       "config/capability-index/dependency-project-registry.json#agent-teams-playbook",
       "coreLoop.thinkingPacket.workerTaskPackets",
+      "coreLoop.executionResult.workerExecutionEvidence[].externalAgentSpawned",
+    ],
+  };
+}
+
+function buildRuntimeSubagentInvocationPacket({
+  entryClassification,
+  agentTeamsPlaybookPacket,
+  workerExecutionEvidence,
+}) {
+  const externalAgentSpawned = (workerExecutionEvidence ?? []).some(
+    (item) => item.externalAgentSpawned === true,
+  );
+  const fanoutEligible =
+    entryClassification?.fanoutEligible === true ||
+    agentTeamsPlaybookPacket?.triggered === true;
+  const authorizationSource =
+    agentTeamsPlaybookPacket?.triggered &&
+    !["explicit_meta_theory", "direct_parallel_agent_request"].includes(
+      entryClassification?.subagentAuthorizationSource,
+    )
+      ? "meta_theory_run_entry"
+      : entryClassification?.subagentAuthorizationSource !== "not_required"
+        ? entryClassification?.subagentAuthorizationSource
+        : agentTeamsPlaybookPacket?.triggered
+          ? "meta_theory_run_entry"
+          : "not_required";
+  const authorized =
+    authorizationSource !== "not_required" &&
+    authorizationSource !== "native_choice_surface_required";
+  const status = externalAgentSpawned
+    ? "invoked"
+    : !fanoutEligible
+      ? "not_required"
+      : authorized
+        ? "unavailable"
+        : "not_authorized";
+  return {
+    schemaVersion: "runtime-subagent-invocation-v0.1",
+    status,
+    fanoutEligible,
+    authorizationSource,
+    runnerCanCallHostSpawnAgent: false,
+    hostSpawnAgentEvidenceAttached: externalAgentSpawned,
+    selectedWorkerLaneCount: agentTeamsPlaybookPacket?.executableLaneCount ?? 0,
+    expectedIndependentLaneCount:
+      entryClassification?.expectedIndependentLaneCount ??
+      agentTeamsPlaybookPacket?.executableLaneCount ??
+      0,
+    degradationReason:
+      status === "unavailable"
+        ? "The Node governed runner cannot call the Codex App/CLI spawn_agent host tool directly; host-layer evidence must be attached by the runtime adapter."
+        : status === "not_authorized"
+          ? "Codex subagent dispatch needs direct parallel-agent wording, explicit /meta-theory authorization, or a completed native choice surface before Execution."
+          : null,
+    requiredHostEvidence:
+      status === "invoked"
+        ? []
+        : [
+            "spawn_agent tool-call id",
+            "wait_agent completed status",
+            "worker task packet id to spawned agent id mapping",
+          ],
+    evidenceRefs: [
+      "coreLoop.requestRecord.entryClassification",
+      "coreLoop.agentTeamsPlaybookPacket",
       "coreLoop.executionResult.workerExecutionEvidence[].externalAgentSpawned",
     ],
   };
@@ -2954,6 +3268,7 @@ function buildCapabilityInvocationTruthPacket({
   hostVisibleSubagents,
   agentTeamsPlaybookPacket,
   capabilityInvocationProbePacket,
+  runtimeSubagentInvocationPacket,
 }) {
   const bindingRows = dynamicWorkflowRuntimePacket?.capabilityBindingRows ?? [];
   const hasSelected = (selector) => bindingRows.some(selector);
@@ -2999,16 +3314,28 @@ function buildCapabilityInvocationTruthPacket({
   const rows = [
     makeRow({
       family: "agent_subagent",
-      state: externalAgentSpawned ? "invoked" : "selected_not_invoked",
-      selectedCount: peerAgentMeshPacket?.peers?.length ?? 0,
+      state: externalAgentSpawned
+        ? "invoked"
+        : runtimeSubagentInvocationPacket?.status === "unavailable"
+          ? "unavailable"
+          : runtimeSubagentInvocationPacket?.status === "not_authorized"
+            ? "blocked"
+            : runtimeSubagentInvocationPacket?.status === "not_required"
+              ? "not_required"
+              : "selected_not_invoked",
+      selectedCount: runtimeSubagentInvocationPacket?.fanoutEligible
+        ? peerAgentMeshPacket?.peers?.length ?? 0
+        : 0,
       invokedCount: externalAgentSpawned ? peerAgentMeshPacket?.peers?.length ?? 0 : 0,
       evidenceRefs: [
         "coreLoop.peerAgentMeshPacket.peers",
         "coreLoop.executionResult.workerExecutionEvidence[].externalAgentSpawned",
+        "coreLoop.runtimeSubagentInvocationPacket",
       ],
       truthBoundary: externalAgentSpawned
         ? "A runtime Agent/subagent tool invocation is attached."
-        : "No runtime Agent/subagent tool invocation evidence is attached; peer workers are run-scoped structural workers only.",
+        : runtimeSubagentInvocationPacket?.degradationReason ??
+          "No runtime Agent/subagent tool invocation evidence is attached; peer workers are run-scoped structural workers only.",
       mustNotClaimAs: externalAgentSpawned
         ? []
         : ["live_subagent_invocation", "peer_to_peer_runtime_agent_call"],
@@ -3381,7 +3708,10 @@ function buildVisibleMetaTheorySurfacePacket({
       providerId: agentTeamsPlaybookPacket?.providerId ?? AGENT_TEAMS_PLAYBOOK_ID,
       selectedSource: agentTeamsPlaybookPacket?.providerResolution?.selectedSource ?? null,
       executableLaneCount: agentTeamsPlaybookPacket?.executableLaneCount ?? 0,
-      maxParallelAgents: agentTeamsPlaybookPacket?.maxParallelAgents ?? AGENT_TEAMS_MAX_PARALLEL_AGENTS,
+      maxParallelAgents: agentTeamsPlaybookPacket?.maxParallelAgents ?? 0,
+      requestedParallelAgents: agentTeamsPlaybookPacket?.requestedParallelAgents ?? 0,
+      runtimeCapacity: agentTeamsPlaybookPacket?.runtimeCapacity ?? null,
+      capacitySource: agentTeamsPlaybookPacket?.capacitySource ?? null,
       waveCount: agentTeamsPlaybookPacket?.waves?.length ?? 0,
       liveRuntimeBoundary:
         agentTeamsPlaybookPacket?.runtimeInvocationBoundary?.codexRule ??
@@ -3696,7 +4026,12 @@ function buildAgentTeamsPlaybookGate({ agentTeamsPlaybookPacket }) {
       agentTeamsPlaybookPacket?.triggered === true &&
       agentTeamsPlaybookPacket?.selected === true &&
       agentTeamsPlaybookPacket?.acceptance?.selectedWhenParallelLanes === true &&
+      agentTeamsPlaybookPacket?.acceptance?.independentLanesProven === true &&
+      agentTeamsPlaybookPacket?.acceptance?.parallelWaveExists === true &&
+      agentTeamsPlaybookPacket?.acceptance?.dagAndCollisionSafe === true &&
       agentTeamsPlaybookPacket?.acceptance?.waveSizeWithinCap === true &&
+      agentTeamsPlaybookPacket?.acceptance?.waveSizeWithinRuntimeCapacity === true &&
+      agentTeamsPlaybookPacket?.acceptance?.noArbitraryMetaKimCap === true &&
       agentTeamsPlaybookPacket?.acceptance?.workerPacketsPreserved === true &&
       agentTeamsPlaybookPacket?.acceptance?.noLiveSubagentOverclaim === true
     )
@@ -3715,7 +4050,7 @@ function buildAgentTeamsPlaybookGate({ agentTeamsPlaybookPacket }) {
       "coreLoop.capabilityInvocationTruthPacket.rows[family=agent_teams_playbook]",
     ],
     passIf:
-      "2+ executable lanes select agent-teams-playbook as the fan-out orchestration adapter, cap each wave at 5, preserve workerTaskPackets, and avoid live subagent overclaim.",
+      "2+ executable lanes select agent-teams-playbook as the fan-out orchestration adapter, prove DAG/collision/workspace/external-write safety, run safe lanes through runtime-capacity waves, preserve workerTaskPackets, and avoid live subagent overclaim.",
     failIf:
       "Parallel worker lanes exist but agent-teams-playbook is only a registry entry, is not selected into the default route, inflates agent count without lane evidence, or is relabeled as a live Agent Team/spawn_agent call without host evidence.",
   };
@@ -3990,6 +4325,7 @@ function buildCoreLoopArtifact({
   agentTeamsPlaybookProvider,
   invokeCapabilityProbes = false,
 }) {
+  const entryClassification = classifyMetaTheoryEntry(task);
   const workerTaskPackets = orchestrationReport.workerTaskPackets ?? [];
   const capabilityInventory =
     capabilityInventoryBus?.capabilities ??
@@ -4283,6 +4619,11 @@ function buildCoreLoopArtifact({
     providerResolution: agentTeamsPlaybookProvider,
     workerExecutionEvidence,
   });
+  const runtimeSubagentInvocationPacket = buildRuntimeSubagentInvocationPacket({
+    entryClassification,
+    agentTeamsPlaybookPacket,
+    workerExecutionEvidence,
+  });
   const dynamicWorkflowRuntimePacket = buildDynamicWorkflowRuntimePacket({
     orchestrationReport,
     workerTaskPackets,
@@ -4302,6 +4643,7 @@ function buildCoreLoopArtifact({
     hostVisibleSubagents,
     agentTeamsPlaybookPacket,
     capabilityInvocationProbePacket,
+    runtimeSubagentInvocationPacket,
   });
   const visibleMetaTheorySurfacePacket = buildVisibleMetaTheorySurfacePacket({
     orchestrationReport,
@@ -4326,6 +4668,7 @@ function buildCoreLoopArtifact({
     dynamicWorkflowRuntimePacket,
     peerAgentMeshPacket,
     agentTeamsPlaybookPacket,
+    runtimeSubagentInvocationPacket,
     visibleMetaTheorySurfacePacket,
     capabilityInvocationTruthPacket,
     userPerceptionPacket,
@@ -4345,6 +4688,7 @@ function buildCoreLoopArtifact({
       task,
       entry: "meta:theory:run",
       requestType: "ordinary natural-language durable task or explicit meta-theory shortcut",
+      entryClassification,
       permissionBoundary: "local run artifact and repo-local state writes unless explicit approval is supplied",
     },
     spine: [
@@ -4395,6 +4739,7 @@ function buildCoreLoopArtifact({
     dynamicWorkflowRuntimePacket,
     peerAgentMeshPacket,
     agentTeamsPlaybookPacket,
+    runtimeSubagentInvocationPacket,
     capabilityInvocationProbePacket,
     capabilityInvocationTruthPacket,
     visibleMetaTheorySurfacePacket,
@@ -4865,6 +5210,7 @@ export async function runMetaTheoryGovernedExecution({
     dynamicWorkflowRuntimePacket: coreLoop.dynamicWorkflowRuntimePacket,
     peerAgentMeshPacket: coreLoop.peerAgentMeshPacket,
     agentTeamsPlaybookPacket: coreLoop.agentTeamsPlaybookPacket,
+    runtimeSubagentInvocationPacket: coreLoop.runtimeSubagentInvocationPacket,
     capabilityInvocationProbePacket: coreLoop.capabilityInvocationProbePacket,
     capabilityInvocationTruthPacket: coreLoop.capabilityInvocationTruthPacket,
     visibleMetaTheorySurfacePacket: coreLoop.visibleMetaTheorySurfacePacket,
@@ -4887,6 +5233,7 @@ export async function runMetaTheoryGovernedExecution({
       dynamicWorkflowRuntimePacket: coreLoop.dynamicWorkflowRuntimePacket,
       peerAgentMeshPacket: coreLoop.peerAgentMeshPacket,
       agentTeamsPlaybookPacket: coreLoop.agentTeamsPlaybookPacket,
+      runtimeSubagentInvocationPacket: coreLoop.runtimeSubagentInvocationPacket,
       capabilityInvocationProbePacket: coreLoop.capabilityInvocationProbePacket,
       capabilityInvocationTruthPacket: coreLoop.capabilityInvocationTruthPacket,
       visibleMetaTheorySurfacePacket: coreLoop.visibleMetaTheorySurfacePacket,

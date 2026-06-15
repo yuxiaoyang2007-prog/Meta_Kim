@@ -46,7 +46,7 @@ If cache freshness could change the route, show one short user-facing hint with 
 
 ## Agent Teams Playbook
 
-Use `agent-teams-playbook` after Thinking and before Execution when there are 2+ executable independent parallel worker lanes. Record `not_required` when there are fewer than 2 executable lanes. It advises bounded fan-out and wave sizing; it does not replace Critical, Fetch, Thinking, owner selection, or verification planning. A selected playbook provider remains `selected_not_invoked` unless a live Skill/Agent Team/spawn_agent call is attached as evidence.
+Use `agent-teams-playbook` after Thinking and before Execution when there are 2+ executable worker lanes whose DAG dependencies, collision boundaries, workspace isolation, and external-write policy prove safe fan-out. Record `not_required` when there are fewer than 2 executable lanes, and record partial/degraded rather than pass when independence is not proven. It advises bounded fan-out and runtime-capacity wave sizing; it does not replace Critical, Fetch, Thinking, owner selection, or verification planning. A selected playbook provider remains `selected_not_invoked` unless a live Skill/Agent Team/spawn_agent call is attached as evidence.
 
 ## Use when
 

@@ -256,7 +256,15 @@ test("governed execution emits a coreLoop artifact summary", () => {
   if (artifact.coreLoop.thinkingPacket.workerTaskPackets.length >= 2) {
     assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.status, "pass");
     assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.selected, true);
+    assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.fanoutSafetyPacket.safeForParallelFanout, true);
+    assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.acceptance.independentLanesProven, true);
+    assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.acceptance.parallelWaveExists, true);
+    assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.acceptance.dagAndCollisionSafe, true);
     assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.acceptance.waveSizeWithinCap, true);
+    assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.acceptance.waveSizeWithinRuntimeCapacity, true);
+    assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.acceptance.noArbitraryMetaKimCap, true);
+    assert.ok(artifact.coreLoop.agentTeamsPlaybookPacket.runtimeCapacity >= 2);
+    assert.ok(artifact.coreLoop.agentTeamsPlaybookPacket.capacitySource);
   } else {
     assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.status, "not_required");
     assert.equal(artifact.coreLoop.agentTeamsPlaybookPacket.selected, false);
@@ -266,7 +274,14 @@ test("governed execution emits a coreLoop artifact summary", () => {
   const invocationByFamily = new Map(
     artifact.coreLoop.capabilityInvocationTruthPacket.rows.map((row) => [row.family, row]),
   );
-  assert.equal(invocationByFamily.get("agent_subagent").state, "selected_not_invoked");
+  assert.equal(
+    artifact.coreLoop.runtimeSubagentInvocationPacket.status,
+    artifact.coreLoop.agentTeamsPlaybookPacket.status === "pass" ? "unavailable" : "not_required",
+  );
+  assert.equal(
+    invocationByFamily.get("agent_subagent").state,
+    artifact.coreLoop.agentTeamsPlaybookPacket.status === "pass" ? "unavailable" : "not_required",
+  );
   assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
   assert.equal(invocationByFamily.get("worker_task").state, "invoked");
   assert.equal(invocationByFamily.get("prompt_rule").state, "applied");
@@ -393,7 +408,7 @@ test("host-visible subagents are observed, not relabeled as runner invocations",
   );
   assert.equal(invocationByFamily.get("app_visible_subagent").state, "host_visible_observed");
   assert.equal(invocationByFamily.get("app_visible_subagent").observedCount, 2);
-  assert.equal(invocationByFamily.get("agent_subagent").state, "selected_not_invoked");
+  assert.equal(invocationByFamily.get("agent_subagent").state, "not_required");
   assert.equal(
     artifact.coreLoop.capabilityInvocationTruthPacket.truthAssertions.noHostUiSubagentOverclaim,
     true,

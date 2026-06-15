@@ -1575,7 +1575,7 @@
     },
     {
       "platform": "codex",
-      "summary": "Native governance runtime with AGENTS.md, project skills, hooks, MCP, sandbox/approval, and explicitly requested subagent support. Current session may override configured sandbox and approval.",
+      "summary": "Native governance runtime with AGENTS.md, project skills, hooks, MCP, sandbox/approval, and officially verified explicitly requested subagent support. Current session may override configured sandbox and approval.",
       "capabilities": [
         {
           "platform": "codex",
@@ -1636,11 +1636,11 @@
         {
           "platform": "codex",
           "capability": "subagent",
-          "support": "partial",
-          "confidence": "repo_claim",
+          "support": "native",
+          "confidence": "verified_docs",
           "trigger": {
-            "userTrigger": "Subagents must be explicitly requested by the user or by an explicit /meta-theory multi-agent task.",
-            "autoTrigger": "Do not auto-spawn by default; use only after explicit governed task need.",
+            "userTrigger": "Subagents must be explicitly requested by the user, authorized by explicit /meta-theory, or confirmed through a native choice surface that names parallel-agent fan-out.",
+            "autoTrigger": "Do not hidden-auto-spawn by default; meta-architecture may fan out only after a user-visible authorization source and Thinking proves independent worker lanes.",
             "configTrigger": "codex runtime projection and registry configuration.",
             "hookTrigger": "None unless the runtime maps it to a lifecycle event."
           },
@@ -1682,12 +1682,13 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": ".codex/config.toml; .codex/hooks.json; .codex/agents; .agents/skills",
-            "lastVerifiedAt": "2026-05-28",
-            "verificationCommand": "codex --version"
+            "source": "official_docs",
+            "sourceRef": "https://developers.openai.com/codex/subagents; https://developers.openai.com/codex/concepts/subagents; .codex/agents; .agents/skills",
+            "lastVerifiedAt": "2026-06-15",
+            "verificationCommand": "codex --version; codex features list; official docs fetch on 2026-06-15; host spawn_agent evidence must be attached separately before claiming live invocation",
+            "claim": "Current Codex releases document subagent workflows, parallel specialized agents, app/CLI activity surfaces, and [agents].max_threads / max_depth concurrency and nesting bounds; live invocation still requires attached host spawn_agent evidence."
           },
-          "notes": "Codex support depends on host mode; subagents must be explicitly requested and hooks require trust review."
+          "notes": "Codex support depends on host mode; subagents need a user-visible authorization source, concurrent work is bounded by agents.max_threads/max_depth plus task collision boundaries, and hooks require trust review."
         },
         {
           "platform": "codex",
@@ -6571,7 +6572,7 @@
   ],
   "knownConstraints": {
     "codex": [
-      "Subagents must be explicitly requested or selected by a governed task; do not auto-spawn by default.",
+      "Subagents require direct subagent/parallel-agent wording, explicit /meta-theory, or native choice confirmation before fan-out; do not hidden-auto-spawn by default.",
       "Subagents inherit current sandbox policy.",
       "Inactive subagent approval may surface in interactive sessions.",
       "Non-interactive sessions fail fresh approval actions that cannot present UI.",

@@ -8,11 +8,24 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [Unreleased]
 
+## [2.8.32] - 2026-06-15
+
+### Changed
+
+- **Codex Meta-Theory Fan-Out** - Made explicit `/meta-theory` and complex governed work fan-out eligible when there are multiple safe worker lanes, so Codex should plan real parallel work instead of silently falling back to one main-thread executor.
+- **Runtime Capacity Sizing** - Replaced the stale fixed five-agent wave cap with runtime capacity detection from Codex config and the official default, while still proving DAG dependencies, collision boundaries, workspace isolation, and external-write safety before fan-out.
+- **Invocation Truth Evidence** - Tightened run evidence so live subagents are reported as `invoked` only with host spawn evidence; unavailable host dispatch is reported as `unavailable`, single-lane work as `not_required`, and provider selection can no longer masquerade as execution.
+
+### Verification
+
+- `npm run meta:release:smoke`
+- `git diff --check`
+
 ## [2.8.31] - 2026-06-14
 
 ### Added
 
-- **Agent Teams Playbook Gate** - Added the P-110 support gate and `agentTeamsPlaybookPacket` so the default governed route selects `agent-teams-playbook` for two or more independent executable worker lanes, caps fan-out waves at five agents, and records `not_required` for single-lane work.
+- **Agent Teams Playbook Gate** - Added the P-110 support gate and `agentTeamsPlaybookPacket` so the default governed route selects `agent-teams-playbook` for two or more independent executable worker lanes, proves DAG/collision/workspace/external-write safety, sizes waves by runtime agent capacity, and records `not_required` for single-lane work.
 - **Capability Invocation Truth Layer** - Added explicit `agent_teams_playbook` truth states so selected providers, live subagent calls, MCP calls, skills, commands, hooks, and local workers cannot be relabeled as each other.
 - **Product Experience Validator** - Added a PRD/product validator that checks the three core goals plus support gates, including LangGraph-style run packets, Dynamic Workflow coverage, user-visible run surfaces, capability invocation truth, and the agent-teams adapter.
 

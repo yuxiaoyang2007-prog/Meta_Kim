@@ -336,7 +336,7 @@
     ],
     "capabilityInvocationTruthRequirements": [
       "stateTaxonomy includes invoked, applied, host_visible_observed, selected_not_invoked, discovered_not_selected, unavailable, blocked, not_required",
-      "agent/subagent live invocation is selected_not_invoked unless external agent spawn evidence exists",
+      "agent/subagent live invocation is invoked only with external agent spawn evidence; otherwise use unavailable, blocked, not_required, or selected_not_invoked according to host-tool availability and authorization evidence",
       "app-visible host UI subagents are recorded separately from runner Agent/spawn_agent tool invocation",
       "agent-teams-playbook is selected for 2+ executable parallel lanes but is not relabeled as a live Skill/Agent Team/spawn_agent call",
       "MCP binding is not relabeled as MCP tool call without invocation evidence",
@@ -410,7 +410,7 @@
       "P-110": [
         "agentTeamsPlaybookPacket is not_required for fewer than 2 executable worker lanes",
         "2+ executable worker lanes must discover and select agent-teams-playbook as the fan-out orchestration adapter",
-        "fan-out waves must be capped at 5 parallel agents and preserve workerTaskPackets",
+        "fan-out waves use the current runtime agent capacity such as Codex [agents].max_threads, not an arbitrary Meta_Kim hard cap, prove DAG/collision/workspace/external-write safety, and preserve workerTaskPackets",
         "the Node runner must not claim a live Skill, Agent Team, or Codex spawn_agent call without host tool-call evidence"
       ]
     }

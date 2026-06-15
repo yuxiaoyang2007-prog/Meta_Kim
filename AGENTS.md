@@ -158,7 +158,7 @@ That means:
 - Review checks whether Critical, Fetch, and Thinking were good enough before judging final output polish
 - Execution work is dispatched to agents, skills, commands, MCP capabilities, runtime tools, or workers selected by Thinking instead of collapsing into the main thread
 
-For Codex, explicit meta-theory activation is also explicit permission to use subagents. The main thread scopes, delegates, reviews, and synthesizes; it does not become the all-purpose executor for complex work.
+For Codex, explicit meta-theory activation is also user-visible permission to use subagents when Thinking finds multiple independent worker lanes and proves DAG/collision/workspace/external-write safety. The main thread scopes, delegates, reviews, and synthesizes; it does not become the all-purpose executor for complex work. Without an explicit `/meta-theory` mention or a direct subagent/parallel-agent request, Codex can still reach the same route by presenting a native choice surface that names the parallel-agent fan-out before Execution.
 
 ### Production Correctness Before Execution
 
@@ -200,7 +200,7 @@ Hard rules before Execution:
 - Multi-lens judgment uses dynamic lens discovery; user-mentioned books, people, or theories are seeds/fallbacks, not a fixed list.
 - Execution requires owner + weapon + verification owner.
 - Dependency projects require input/output contracts before use.
-- Codex subagents require explicit request or explicit governed task need, and hooks require trust review.
+- Codex subagents require a user-visible authorization source: direct subagent/parallel-agent wording, explicit `/meta-theory`, or a completed native choice surface for a route that names parallel-agent fan-out. Hooks require trust review.
 - OpenClaw skills require third-party risk and sandbox review.
 - Cursor capabilities remain unknown/partial until verified; do not mark them native from projection files alone.
 - Public-ready requires verification plus intent acceptance; workflow completion alone is not user-goal completion.
@@ -401,7 +401,7 @@ Do not treat structural smoke, systemMessage/UI warning output, auth-present che
 - `node setup.mjs` installs selected platform projections and graphify wiring idempotently.
 - Runtime target selection has two layers: repo defaults in `config/sync.json`, machine-active targets in `.meta-kim/local.overrides.json`.
 - MCP Memory Service uses port `8000`.
-- `stop-memory-save.mjs` saves session summaries to the MCP Memory Service on session end.
+- `stop-memory-save.mjs` is a canonical/global MCP memory lifecycle asset installed by `scripts/install-mcp-memory-hooks.mjs`; it is not registered in the project `.claude/settings.json` projection.
 
 ## Reading Order
 

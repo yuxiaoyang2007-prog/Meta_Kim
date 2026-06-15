@@ -12,6 +12,7 @@ describe("47 - Meta-theory entry classifier", () => {
     assert.equal(result.path, "regulated_path");
     assert.equal(result.taskClassification, "meta_theory_explicit");
     assert.equal(result.triggerReason, "explicit_meta_theory");
+    assert.equal(result.fanoutEligible, false);
   });
 
   test("ordinary natural-language durable work enters governed path", () => {
@@ -39,6 +40,35 @@ describe("47 - Meta-theory entry classifier", () => {
     assert.equal(result.taskClassification, "meta_theory_auto");
     assert.equal(result.triggerReason, "natural_language_product_build");
     assert.equal(result.shouldAskBeforeFetch, false);
+    assert.equal(result.fanoutEligible, true);
+    assert.ok(result.fanoutSignals.includes("product_build_has_multiple_execution_lanes"));
+    assert.equal(result.requiresSubagentAuthorization, true);
+    assert.equal(result.subagentAuthorizationSource, "native_choice_surface_required");
+  });
+
+  test("review plus fix plus verify is fan-out eligible before execution", () => {
+    const result = classifyMetaTheoryEntry(
+      "review + fix + verify 这个仓库的 hook、runner、测试，做完再告诉我。",
+    );
+
+    assert.equal(result.governedEntry, true);
+    assert.equal(result.fanoutEligible, true);
+    assert.ok(result.expectedIndependentLaneCount >= 3);
+    assert.equal(result.requiresSubagentAuthorization, false);
+    assert.equal(result.subagentAuthorizationSource, "direct_parallel_agent_request");
+  });
+
+  test("explicit meta-theory with serial-agent complaint authorizes fan-out", () => {
+    const result = classifyMetaTheoryEntry(
+      "你太慢了，没看到多个 agent 并行，critical and fetch thinking and review /meta-theory",
+    );
+
+    assert.equal(result.governedEntry, true);
+    assert.equal(result.path, "regulated_path");
+    assert.equal(result.fanoutEligible, true);
+    assert.equal(result.requiresSubagentAuthorization, false);
+    assert.equal(result.subagentAuthorizationSource, "explicit_meta_theory");
+    assert.ok(result.fanoutSignals.includes("user_reported_serial_or_slow_agent_route"));
   });
 
   test("subjective quality request asks through Critical before Fetch", () => {
@@ -105,6 +135,8 @@ describe("47 - Meta-theory entry classifier", () => {
     assert.equal(payload.path, "standard_path");
     assert.equal(payload.triggerReason, "natural_language_product_build");
     assert.equal(payload.taskClassification, "meta_theory_auto");
+    assert.equal(payload.fanoutEligible, true);
+    assert.equal(payload.subagentAuthorizationSource, "native_choice_surface_required");
   });
 
   test("user-facing docs present natural language as the normal entry path", async () => {

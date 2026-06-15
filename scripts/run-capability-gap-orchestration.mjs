@@ -668,6 +668,16 @@ function inferDynamicWorkflowIntent(input) {
     /(原型|demo|只要页面|不要后端|先看样子)/u,
     /\b(prototype|demo|mockup)\b/i,
   ]);
+  const externalWritesExplicitlyForbidden = matchesAny(normalized, [
+    /(不要真实发布|不真实发布|不使用生产凭证|不要使用生产凭证|不要真实外部写|不要实际发布|不要登录真实账号)/u,
+    /\b(no real publish|do not publish|without production credentials|no production credentials|no external writes?)\b/i,
+  ]);
+  const requestsLiveExternalAction =
+    !externalWritesExplicitlyForbidden &&
+    matchesAny(normalized, [
+      /(现在发布|直接发布|立刻发布|发到小红书|登录账号|使用凭证|使用生产凭证|真实发布|实际发布|真实外部写)/u,
+      /\b(publish now|post now|use production credentials|log in|real publish|external write)\b/i,
+    ]);
   const requiresReleaseOps =
     !prototypeOnly &&
     (matchesAny(normalized, [
@@ -694,6 +704,8 @@ function inferDynamicWorkflowIntent(input) {
     requiresExternalResearch,
     requiresReleaseOps,
     prototypeOnly,
+    externalWritesExplicitlyForbidden,
+    requestsLiveExternalAction,
   };
 }
 
@@ -764,6 +776,11 @@ function resolveCapabilityLoadout(slot, projectProfile, intent) {
 function materializeProjectCapabilitySlot(slot, projectProfile, intent) {
   const projectAgentId = projectAgentIdFor(slot, projectProfile);
   const capabilityLoadout = resolveCapabilityLoadout(slot, projectProfile, intent);
+  const externalWriteRiskBoundary = slot.externalWriteBoundary === true;
+  const externalWriteBoundary =
+    externalWriteRiskBoundary &&
+    intent.requestsLiveExternalAction === true &&
+    intent.externalWritesExplicitlyForbidden !== true;
   return {
     laneId: slot.laneId,
     publicLabel: slot.publicLabel,
@@ -776,7 +793,15 @@ function materializeProjectCapabilitySlot(slot, projectProfile, intent) {
     dependsOn: [...slot.dependsOn],
     toolRequirements: [...slot.toolRequirements],
     capabilityLoadout,
-    externalWriteBoundary: slot.externalWriteBoundary === true,
+    externalWriteRiskBoundary,
+    externalWriteBoundary,
+    externalWritePolicy: externalWriteRiskBoundary
+      ? {
+          mode: externalWriteBoundary ? "approval_gate_for_live_external_action" : "design_and_sandbox_only",
+          realExternalWriteAllowed: false,
+          requiresExplicitApprovalForLiveWrite: true,
+        }
+      : null,
     slotSource: "capability_slot_catalog",
     projectAgentSource: "synthesized_from_project_profile_and_capability_requirements",
   };
@@ -835,6 +860,8 @@ function sanitizeDynamicWorkflowIntent(intent) {
     requiresExternalResearch: intent.requiresExternalResearch,
     requiresReleaseOps: intent.requiresReleaseOps,
     prototypeOnly: intent.prototypeOnly,
+    externalWritesExplicitlyForbidden: intent.externalWritesExplicitlyForbidden,
+    requestsLiveExternalAction: intent.requestsLiveExternalAction,
   };
 }
 
@@ -1116,6 +1143,8 @@ function makeWorkerTaskPacket({ gap, group, groupIndex, itemIndex }) {
       "Do not turn one-run details into durable identity.",
       ...(lane?.externalWriteBoundary
         ? ["Do not perform real third-party publish actions without explicit user approval."]
+        : lane?.externalWriteRiskBoundary
+        ? ["Do not perform real third-party publish actions without explicit user approval."]
         : []),
     ],
     output: gap.outputKind,
@@ -1143,7 +1172,9 @@ function makeWorkerTaskPacket({ gap, group, groupIndex, itemIndex }) {
     capabilityLoadout,
     capabilityBindings: capabilityLoadout,
     roleSoulPolicy,
+    externalWriteRiskBoundary: lane?.externalWriteRiskBoundary === true,
     externalWriteBoundary: lane?.externalWriteBoundary === true,
+    externalWritePolicy: lane?.externalWritePolicy ?? null,
     durableIdentityStatus: lane
       ? "project_agent_profile_synthesized_and_capability_pinned_for_run"
       : decision === "create_agent"

@@ -165,7 +165,8 @@ function assertCapabilityInvocationTruth(report) {
   for (const family of REQUIRED_INVOCATION_FAMILIES) {
     assert.ok(byFamily.has(family), `missing invocation family ${family}`);
   }
-  assert.equal(byFamily.get("agent_subagent").state, "selected_not_invoked");
+  assert.equal(report.coreLoop.runtimeSubagentInvocationPacket.status, "unavailable");
+  assert.equal(byFamily.get("agent_subagent").state, "unavailable");
   assert.equal(byFamily.get("app_visible_subagent").state, "not_required");
   assert.equal(byFamily.get("worker_task").state, "invoked");
   assert.equal(byFamily.get("mcp").state, "invoked");
@@ -223,8 +224,16 @@ function assertAgentTeamsPlaybook(report) {
   assert.equal(packet.providerId, "agent-teams-playbook");
   assert.ok(packet.executableLaneCount >= 2);
   assert.ok(packet.waves.length >= 1);
+  assert.equal(packet.fanoutSafetyPacket.safeForParallelFanout, true);
   assert.equal(packet.acceptance.selectedWhenParallelLanes, true);
+  assert.equal(packet.acceptance.independentLanesProven, true);
+  assert.equal(packet.acceptance.parallelWaveExists, true);
+  assert.equal(packet.acceptance.dagAndCollisionSafe, true);
   assert.equal(packet.acceptance.waveSizeWithinCap, true);
+  assert.equal(packet.acceptance.waveSizeWithinRuntimeCapacity, true);
+  assert.equal(packet.acceptance.noArbitraryMetaKimCap, true);
+  assert.ok(packet.runtimeCapacity >= 2);
+  assert.ok(packet.capacitySource);
   assert.equal(packet.acceptance.workerPacketsPreserved, true);
   assert.equal(packet.acceptance.noLiveSubagentOverclaim, true);
   assert.ok(

@@ -1,6 +1,6 @@
 # Codex Runtime Adapter
 
-In Codex, `/meta-theory` is authorization to use available subagent/delegation tools when the user explicitly requests governed subagent work or the active user request names Critical / Fetch / Thinking / Review with meta-theory. Only claim delegation when a real tool was called successfully.
+In Codex, `/meta-theory` is user-visible authorization to use available subagent/delegation tools when the task has multiple independent worker lanes. A prompt that explicitly asks for subagents, parallel agents, one-agent-per-point review, or `/meta-theory` may satisfy Codex's explicit subagent trigger; a hidden governance-only inference does not. Only claim delegation when a real tool was called successfully.
 
 Codex must not self-degrade to "single-thread dispatcher" merely because it is running in Codex App. If `spawn_agent` / subagent tooling is exposed, Thinking may select it after Fetch evidence and the dispatcher must show which temporary workers were spawned. If the tool is absent or fails, record `subagentCapabilityStatus=unavailable` and a concrete `degradationReason`.
 
@@ -16,11 +16,12 @@ If `spawn_agent` is available and the user explicitly authorized subagents:
 
 - use it for independent, bounded worker or review lanes after Thinking creates `workerTaskPackets`
 - keep each worker's write scope disjoint when it edits files
+- size fan-out from Codex `[agents].max_threads`, current runtime capacity, task DAG, and collision boundaries instead of a fixed Meta_Kim cap
 - show the dispatch board before or alongside dispatch
 - distinguish temporary `runtimeInstanceAlias` from durable `roleDisplayName` and `ownerAgent`
 - do not describe the temporary subagent prompt as the created/iterated project agent
 
-`agent-teams-playbook` is the Codex fan-out adapter after Thinking, not a substitute for Thinking. Select it when there are 2+ executable independent `workerTaskPackets`; record `not_required` for single-lane work. A selected playbook provider is `agent_teams_playbook=selected_not_invoked` until a live Skill/Agent Team/spawn_agent call is actually attached as host evidence.
+`agent-teams-playbook` is the Codex fan-out adapter after Thinking, not a substitute for Thinking. Select it when there are 2+ executable `workerTaskPackets` with proven DAG, collision, workspace-isolation, and external-write safety; record `not_required` for single-lane work and partial/degraded for unsafe fan-out. A selected playbook provider is `agent_teams_playbook=selected_not_invoked` until a live Skill/Agent Team/spawn_agent call is actually attached as host evidence.
 
 ## Codex Durable Agent Projection
 

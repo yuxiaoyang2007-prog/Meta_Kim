@@ -142,7 +142,15 @@ function validateProductExperienceEvidence(report) {
   assert.equal(report.coreLoop.peerAgentMeshPacket.status, "pass");
   assert.equal(report.coreLoop.agentTeamsPlaybookPacket.status, "pass");
   assert.equal(report.coreLoop.agentTeamsPlaybookPacket.selected, true);
+  assert.equal(report.coreLoop.agentTeamsPlaybookPacket.fanoutSafetyPacket.safeForParallelFanout, true);
+  assert.equal(report.coreLoop.agentTeamsPlaybookPacket.acceptance.independentLanesProven, true);
+  assert.equal(report.coreLoop.agentTeamsPlaybookPacket.acceptance.parallelWaveExists, true);
+  assert.equal(report.coreLoop.agentTeamsPlaybookPacket.acceptance.dagAndCollisionSafe, true);
   assert.equal(report.coreLoop.agentTeamsPlaybookPacket.acceptance.waveSizeWithinCap, true);
+  assert.equal(report.coreLoop.agentTeamsPlaybookPacket.acceptance.waveSizeWithinRuntimeCapacity, true);
+  assert.equal(report.coreLoop.agentTeamsPlaybookPacket.acceptance.noArbitraryMetaKimCap, true);
+  assert.ok(report.coreLoop.agentTeamsPlaybookPacket.runtimeCapacity >= 2);
+  assert.ok(report.coreLoop.agentTeamsPlaybookPacket.capacitySource);
   assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "pass");
   assert.ok(["pass", "partial"].includes(report.coreLoop.visibleMetaTheorySurfacePacket.status));
   assert.ok(["pass", "partial"].includes(report.coreLoop.userPerceptionPacket.status));
@@ -185,7 +193,8 @@ function validateProductExperienceEvidence(report) {
   const invocationByFamily = new Map(
     report.coreLoop.capabilityInvocationTruthPacket.rows.map((row) => [row.family, row])
   );
-  assert.equal(invocationByFamily.get("agent_subagent").state, "selected_not_invoked");
+  assert.equal(report.coreLoop.runtimeSubagentInvocationPacket.status, "unavailable");
+  assert.equal(invocationByFamily.get("agent_subagent").state, "unavailable");
   assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
   assert.equal(invocationByFamily.get("worker_task").state, "invoked");
   assert.equal(invocationByFamily.get("prompt_rule").state, "applied");

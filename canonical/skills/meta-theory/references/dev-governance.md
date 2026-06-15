@@ -170,7 +170,7 @@ They supplement packets. They do not replace `businessFlowBlueprintPacket`, `dis
 
 ## Execution
 
-Dispatch from Thinking artifacts and selected capabilities. Execution may be parallel or sequential based on dependencies. `agent-teams-playbook` is selected only after Thinking and before Execution when there are 2+ executable independent parallel worker lanes; fewer than 2 lanes record `not_required`. Selection proves bounded fan-out planning, not a live Skill/Agent Team/spawn_agent call without attached host evidence.
+Dispatch from Thinking artifacts and selected capabilities. Execution may be parallel or sequential based on dependencies. `agent-teams-playbook` is selected only after Thinking and before Execution when there are 2+ executable worker lanes whose DAG dependencies, collision boundaries, workspace isolation, and external-write policy prove safe fan-out; fewer than 2 lanes record `not_required`, and unsafe fan-out records partial/degraded. Selection proves bounded fan-out planning, not a live Skill/Agent Team/spawn_agent call without attached host evidence.
 
 Surgical hygiene: touch only files required by the task, remove only unused code caused by the change, and preserve unrelated user changes.
 

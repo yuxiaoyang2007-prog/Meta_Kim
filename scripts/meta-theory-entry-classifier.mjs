@@ -29,6 +29,15 @@ const PRODUCT_BUILD_OBJECT_RE =
 const PROJECT_UNDERSTANDING_RE =
   /\b(?:project|repo|repository|codebase|architecture|commerciali[sz]e|market|competitor|business model|strategy|roadmap)\b|(?:项目|仓库|代码库|架构|怎么玩|干啥|做什么|商业化|市场|竞品|商业模式|发展|路线图|战略)/iu;
 
+const PARALLEL_AGENT_RE =
+  /\b(?:parallel|subagents?|agent team|multi-agent|fan[- ]?out|delegate|spawn|review\s*\+\s*fix\s*\+\s*verify)\b|(?:并行|子智能体|子agent|多个\s*agent|多智能体|编排|分工|派发|噼里啪啦)/iu;
+
+const COMPLEXITY_COMPLAINT_RE =
+  /\b(?:too slow|slow|serial|not using agents?|missing agents?|no agents?)\b|(?:太慢|慢|不用\s*agent|没用\s*agent|没有\s*agent|没看到.*agent|串行|不会判断.*复杂|做的.*差)/iu;
+
+const MULTI_LANE_WORD_RE =
+  /\b(?:review|fix|verify|test|release|sync|hook|security|frontend|backend|database|api|docs|research|runtime|mcp|tool|agent|skill)\b|(?:审查|修复|验证|测试|发布|同步|钩子|安全|前端|后端|数据库|接口|文档|调研|运行时|工具|智能体|技能)/giu;
+
 function normalizePrompt(prompt) {
   return String(prompt ?? "").trim();
 }
@@ -38,6 +47,83 @@ function hasQuestionOnlyShape(text) {
   if (ACTION_RE.test(text) && DURABLE_OUTPUT_RE.test(text)) return false;
   if (FILE_OR_MUTATION_RE.test(text) && ACTION_RE.test(text)) return false;
   return true;
+}
+
+function countDistinctMatches(text, regex) {
+  return new Set([...String(text ?? "").matchAll(regex)].map((match) => match[0].toLowerCase())).size;
+}
+
+function estimateIndependentLaneCount(text, {
+  explicitMetaTheory,
+  productBuildIntent,
+  durableOutputIntent,
+  fileOrMutationIntent,
+}) {
+  const lineCount = normalizePrompt(text).split(/\n+/u).filter(Boolean).length;
+  const multiLaneTerms = countDistinctMatches(text, MULTI_LANE_WORD_RE);
+  const commaLikeSegments = normalizePrompt(text).split(/[，,、；;]+/u).filter((item) => item.trim()).length;
+  const base = Math.max(lineCount, multiLaneTerms, commaLikeSegments > 2 ? commaLikeSegments : 1);
+  if (productBuildIntent) return Math.max(base, 4);
+  if (/review\s*\+\s*fix\s*\+\s*verify|审查.*修复.*验证|修复.*测试.*发布/iu.test(text)) {
+    return Math.max(base, 3);
+  }
+  if (explicitMetaTheory && (durableOutputIntent || fileOrMutationIntent || base >= 2)) {
+    return Math.max(base, 2);
+  }
+  return base;
+}
+
+function buildFanoutSignals(text, context) {
+  const signals = [];
+  if (context.explicitMetaTheory) signals.push("explicit_meta_theory_authorization");
+  if (/critical\s+and\s+fetch\s+thinking\s+and\s+review/iu.test(text)) {
+    signals.push("critical_fetch_thinking_review_requested");
+  }
+  if (PARALLEL_AGENT_RE.test(text)) signals.push("parallel_agent_or_fanout_requested");
+  if (COMPLEXITY_COMPLAINT_RE.test(text)) signals.push("user_reported_serial_or_slow_agent_route");
+  if (context.productBuildIntent) signals.push("product_build_has_multiple_execution_lanes");
+  if (context.durableOutputIntent && context.fileOrMutationIntent) {
+    signals.push("durable_output_plus_repo_mutation");
+  }
+  if (context.expectedIndependentLaneCount >= 2) {
+    signals.push("multiple_independent_lane_terms_detected");
+  }
+  return [...new Set(signals)];
+}
+
+function buildFanoutMetadata(text, context) {
+  const expectedIndependentLaneCount = estimateIndependentLaneCount(text, context);
+  const directParallelAgentRequest = PARALLEL_AGENT_RE.test(text);
+  const signals = buildFanoutSignals(text, {
+    ...context,
+    expectedIndependentLaneCount,
+  });
+  const fanoutEligible = expectedIndependentLaneCount >= 2 && (
+    signals.length >= 2 ||
+    directParallelAgentRequest ||
+    (context.explicitMetaTheory && signals.length >= 1)
+  );
+  return {
+    fanoutEligible,
+    fanoutSignals: fanoutEligible ? signals : signals.filter((signal) => signal !== "explicit_meta_theory_authorization"),
+    expectedIndependentLaneCount,
+    requiresSubagentAuthorization:
+      fanoutEligible && !context.explicitMetaTheory && !directParallelAgentRequest,
+    subagentAuthorizationSource: !fanoutEligible
+      ? "not_required"
+      : context.explicitMetaTheory
+        ? "explicit_meta_theory"
+        : directParallelAgentRequest
+          ? "direct_parallel_agent_request"
+          : "native_choice_surface_required",
+  };
+}
+
+function withFanoutMetadata(base, text, context) {
+  return {
+    ...base,
+    ...buildFanoutMetadata(text, context),
+  };
 }
 
 export function classifyMetaTheoryEntry(prompt) {
@@ -51,9 +137,15 @@ export function classifyMetaTheoryEntry(prompt) {
   const productBuildIntent = actionIntent && PRODUCT_BUILD_OBJECT_RE.test(text);
   const projectUnderstandingIntent = PROJECT_UNDERSTANDING_RE.test(text);
   const pureQuery = hasQuestionOnlyShape(text);
+  const fanoutContext = {
+    explicitMetaTheory,
+    productBuildIntent,
+    durableOutputIntent,
+    fileOrMutationIntent,
+  };
 
   if (!text) {
-    return {
+    return withFanoutMetadata({
       governedEntry: false,
       path: "fast_path",
       taskClassification: "empty_input",
@@ -61,11 +153,11 @@ export function classifyMetaTheoryEntry(prompt) {
       choiceSurfaceState: "not_allowed",
       shouldAskBeforeFetch: false,
       confidence: 1,
-    };
+    }, text, fanoutContext);
   }
 
   if (explicitMetaTheory) {
-    return {
+    return withFanoutMetadata({
       governedEntry: true,
       path: "regulated_path",
       taskClassification: "meta_theory_explicit",
@@ -73,11 +165,11 @@ export function classifyMetaTheoryEntry(prompt) {
       choiceSurfaceState: "not_allowed",
       shouldAskBeforeFetch: false,
       confidence: 1,
-    };
+    }, text, fanoutContext);
   }
 
   if (subjectiveQuality && actionIntent) {
-    return {
+    return withFanoutMetadata({
       governedEntry: true,
       path: "standard_path",
       taskClassification: "meta_theory_auto",
@@ -85,11 +177,11 @@ export function classifyMetaTheoryEntry(prompt) {
       choiceSurfaceState: "critical_clarification_allowed",
       shouldAskBeforeFetch: true,
       confidence: 0.9,
-    };
+    }, text, fanoutContext);
   }
 
   if (actionIntent && (durableOutputIntent || fileOrMutationIntent || productBuildIntent)) {
-    return {
+    return withFanoutMetadata({
       governedEntry: true,
       path: "standard_path",
       taskClassification: "meta_theory_auto",
@@ -101,11 +193,11 @@ export function classifyMetaTheoryEntry(prompt) {
       choiceSurfaceState: "not_allowed",
       shouldAskBeforeFetch: false,
       confidence: productBuildIntent && !durableOutputIntent ? 0.82 : 0.86,
-    };
+    }, text, fanoutContext);
   }
 
   if (projectUnderstandingIntent) {
-    return {
+    return withFanoutMetadata({
       governedEntry: true,
       path: "standard_path",
       taskClassification: "meta_theory_auto",
@@ -113,11 +205,11 @@ export function classifyMetaTheoryEntry(prompt) {
       choiceSurfaceState: "not_allowed",
       shouldAskBeforeFetch: false,
       confidence: 0.84,
-    };
+    }, text, fanoutContext);
   }
 
   if (pureQuery) {
-    return {
+    return withFanoutMetadata({
       governedEntry: false,
       path: "fast_path",
       taskClassification: "pure_query",
@@ -125,11 +217,11 @@ export function classifyMetaTheoryEntry(prompt) {
       choiceSurfaceState: "not_allowed",
       shouldAskBeforeFetch: false,
       confidence: 0.84,
-    };
+    }, text, fanoutContext);
   }
 
   if (lower.includes("?") || text.includes("？")) {
-    return {
+    return withFanoutMetadata({
       governedEntry: false,
       path: "fast_path",
       taskClassification: "read_only_question",
@@ -137,10 +229,10 @@ export function classifyMetaTheoryEntry(prompt) {
       choiceSurfaceState: "not_allowed",
       shouldAskBeforeFetch: false,
       confidence: 0.7,
-    };
+    }, text, fanoutContext);
   }
 
-  return {
+  return withFanoutMetadata({
     governedEntry: false,
     path: "fast_path",
     taskClassification: "unclassified_low_signal",
@@ -148,7 +240,7 @@ export function classifyMetaTheoryEntry(prompt) {
     choiceSurfaceState: "not_allowed",
     shouldAskBeforeFetch: false,
     confidence: 0.55,
-  };
+  }, text, fanoutContext);
 }
 
 function main() {

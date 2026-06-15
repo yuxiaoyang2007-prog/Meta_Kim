@@ -255,14 +255,13 @@ Meta agents govern. They do not become generic implementation workers when a bet
 
 Claude Code has project hooks generated from canonical runtime assets. The expected hook commands are:
 
-- `node .claude/hooks/activate-meta-theory-spine.mjs`
-- `node .claude/hooks/block-dangerous-bash.mjs`
+- `node .claude/hooks/graphify-context.mjs`
 - `node .claude/hooks/enforce-agent-dispatch.mjs`
+- `node .claude/hooks/activate-meta-theory-spine.mjs`
 - `node .claude/hooks/post-format.mjs`
 - `node .claude/hooks/post-typecheck.mjs`
 - `node .claude/hooks/post-console-log-warn.mjs`
 - `node .claude/hooks/subagent-context.mjs`
-- `node .claude/hooks/stop-memory-save.mjs`
 - `node .claude/hooks/stop-compaction.mjs`
 - `node .claude/hooks/stop-console-log-audit.mjs`
 - `node .claude/hooks/stop-completion-guard.mjs`
@@ -271,17 +270,17 @@ Claude Code has project hooks generated from canonical runtime assets. The expec
 They cover:
 
 - meta-theory spine activation
-- dangerous command blocking
-- git-push reminder
-- dispatch enforcement
+- graph/context preload
+- capability-first dispatch enforcement and dangerous command blocking
 - formatting and typecheck follow-ups
 - console logging warnings
 - subagent graph/context hints
-- session-end memory save
 - session-end compaction
 - session-end console audit
 - optional premature-completion guard
 - spine-state cleanup
+
+Shared hook dependencies such as `bash-readonly-whitelist.mjs`, `spine-state.mjs`, `hook-i18n.mjs`, `skip-reminder.mjs`, and `utils.mjs` are copied as support files. They are not direct `.claude/settings.json` hook commands.
 
 Hook behavior differs across runtimes. Do not assume Claude's `SubagentStart`-style behavior exists in Codex, OpenClaw, or Cursor unless the runtime adapter explicitly verifies it.
 
@@ -356,7 +355,7 @@ Use supporting commands as needed:
 - `node setup.mjs` installs selected runtime projections and graphify wiring idempotently.
 - Runtime target selection has two layers: repo defaults in `config/sync.json`, machine-active targets in `.meta-kim/local.overrides.json`.
 - MCP Memory Service uses port `8000`.
-- `stop-memory-save.mjs` saves session summaries to the MCP Memory Service on session end.
+- `stop-memory-save.mjs` is a canonical/global MCP memory lifecycle asset installed by `scripts/install-mcp-memory-hooks.mjs`; it is not registered in the project `.claude/settings.json` projection.
 
 ## Reading Order
 

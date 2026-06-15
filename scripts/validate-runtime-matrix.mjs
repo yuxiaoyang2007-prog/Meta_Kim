@@ -39,7 +39,16 @@ assert(cursor.get("subagent")?.support === "native", "Cursor subagents must be n
 assert(cursor.get("subagent")?.confidence === "verified_docs", "Cursor subagents must cite official docs evidence");
 
 const codex = platformMap.get("codex");
+const codexCapabilities = supportMap(codex);
+assert(codexCapabilities.get("subagent")?.support === "native", "Codex subagents must be native now that official docs verify subagent workflows");
+assert(codexCapabilities.get("subagent")?.confidence === "verified_docs", "Codex subagents must cite official docs evidence");
+assert(JSON.stringify(codex).includes("host spawn_agent evidence must be attached separately"), "Codex matrix must not overclaim attached host spawn evidence");
 assert(JSON.stringify(codex).includes("explicitly requested"), "Codex subagent constraint must require explicit trigger");
+assert(JSON.stringify(codex).includes("/meta-theory"), "Codex subagent record must treat explicit /meta-theory as a user-visible authorization source");
+assert(JSON.stringify(codex).includes("native choice surface"), "Codex subagent record must support native choice confirmation as an authorization source");
+assert(JSON.stringify(codex).includes("hidden-auto-spawn"), "Codex subagent record must forbid hidden auto-spawn");
+assert(JSON.stringify(codex).includes("agents.max_threads"), "Codex subagent record must preserve thread-cap boundary");
+assert(JSON.stringify(codex).includes("max_depth"), "Codex subagent record must preserve nesting-depth boundary");
 assert(JSON.stringify(codex).includes("trust review"), "Codex hooks must mention trust review");
 const openclaw = supportMap(platformMap.get("openclaw"));
 assert(openclaw.get("hook")?.confidence === "verified_docs", "OpenClaw hooks must cite official docs evidence");

@@ -430,7 +430,8 @@ describe("34 — Meta-theory run deliverables", () => {
       const invocationByFamily = new Map(
         runArtifact.capabilityInvocationTruthPacket.rows.map((row) => [row.family, row])
       );
-      assert.equal(invocationByFamily.get("agent_subagent").state, "selected_not_invoked");
+      assert.equal(runArtifact.runtimeSubagentInvocationPacket.status, "unavailable");
+      assert.equal(invocationByFamily.get("agent_subagent").state, "unavailable");
       assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
       assert.equal(invocationByFamily.get("worker_task").state, "invoked");
       assert.equal(invocationByFamily.get("prompt_rule").state, "applied");
@@ -439,6 +440,12 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(runArtifact.capabilityInvocationProbePacket.status, "not_run");
       assert.equal(runArtifact.agentTeamsPlaybookPacket.status, "pass");
       assert.equal(runArtifact.agentTeamsPlaybookPacket.selected, true);
+      assert.equal(runArtifact.agentTeamsPlaybookPacket.fanoutSafetyPacket.safeForParallelFanout, true);
+      assert.equal(runArtifact.agentTeamsPlaybookPacket.acceptance.independentLanesProven, true);
+      assert.equal(runArtifact.agentTeamsPlaybookPacket.acceptance.parallelWaveExists, true);
+      assert.equal(runArtifact.agentTeamsPlaybookPacket.acceptance.dagAndCollisionSafe, true);
+      assert.equal(runArtifact.agentTeamsPlaybookPacket.acceptance.waveSizeWithinRuntimeCapacity, true);
+      assert.equal(runArtifact.agentTeamsPlaybookPacket.acceptance.noArbitraryMetaKimCap, true);
       assert.equal(runArtifact.visibleMetaTheorySurfacePacket.capabilityInvocationTruth.status, "pass");
       assert.equal(runArtifact.visibleMetaTheorySurfacePacket.dynamicWorkflow.status, "pass");
       assert.equal(runArtifact.visibleMetaTheorySurfacePacket.agentTeamsPlaybook.status, "pass");
@@ -542,6 +549,30 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(artifact.defaultRuntimePath.workerTaskPackets.length, 11);
       assert.equal(artifact.defaultRuntimePath.agentTeamsPlaybookPacket.status, "pass");
       assert.equal(artifact.defaultRuntimePath.agentTeamsPlaybookPacket.selected, true);
+      assert.equal(
+        artifact.defaultRuntimePath.agentTeamsPlaybookPacket.fanoutSafetyPacket.safeForParallelFanout,
+        true
+      );
+      assert.equal(
+        artifact.defaultRuntimePath.agentTeamsPlaybookPacket.acceptance.independentLanesProven,
+        true
+      );
+      assert.equal(
+        artifact.defaultRuntimePath.agentTeamsPlaybookPacket.acceptance.parallelWaveExists,
+        true
+      );
+      assert.equal(
+        artifact.defaultRuntimePath.agentTeamsPlaybookPacket.acceptance.dagAndCollisionSafe,
+        true
+      );
+      assert.equal(
+        artifact.defaultRuntimePath.agentTeamsPlaybookPacket.acceptance.waveSizeWithinRuntimeCapacity,
+        true
+      );
+      assert.equal(
+        artifact.defaultRuntimePath.agentTeamsPlaybookPacket.acceptance.noArbitraryMetaKimCap,
+        true
+      );
       assert.deepEqual(
         artifact.defaultRuntimePath.workerTaskPackets.map((packet) => packet.businessFlowLaneId),
         [

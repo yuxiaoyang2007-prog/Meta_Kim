@@ -8,11 +8,24 @@
 
 ## [Unreleased]
 
+## [2.8.32] - 2026-06-15
+
+### 变更
+
+- **Codex Meta-Theory 并行编排** - 显式 `/meta-theory` 和复杂治理任务在存在多条安全 worker lane 时，会进入 fan-out eligible 路线，避免 Codex 静默退回主线程单干。
+- **运行时容量分 wave** - 移除旧的固定 5 个 agent 上限，改为读取 Codex 配置和官方默认容量，同时在 fan-out 前证明 DAG 依赖、冲突边界、workspace 隔离和 external-write 安全。
+- **能力调用真实性证据** - 收紧运行证据：只有存在 host spawn 证据时才把 live subagent 标为 `invoked`；host 不可用标为 `unavailable`，单 lane 标为 `not_required`，不能再把 provider 选中冒充为真实执行。
+
+### 验证
+
+- `npm run meta:release:smoke`
+- `git diff --check`
+
 ## [2.8.31] - 2026-06-14
 
 ### 新增
 
-- **Agent Teams Playbook 门禁** - 新增 P-110 支撑门和 `agentTeamsPlaybookPacket`，让默认治理路线在出现两条及以上独立可执行 worker lane 时选中 `agent-teams-playbook`，按最多 5 个 agent 分 wave；单 lane 任务记录为 `not_required`。
+- **Agent Teams Playbook 门禁** - 新增 P-110 支撑门和 `agentTeamsPlaybookPacket`，让默认治理路线在出现两条及以上独立可执行 worker lane 时选中 `agent-teams-playbook`，先证明 DAG/冲突/workspace/external-write 安全，再按 runtime agent capacity 分 wave；单 lane 任务记录为 `not_required`。
 - **能力调用真实性层** - 新增 `agent_teams_playbook` 调用状态，避免把 selected provider、live subagent 调用、MCP、skill、command、hook 或本地 worker 互相冒充。
 - **产品体验 Validator** - 新增 PRD/product validator，覆盖三大核心目标和支撑门，包括 LangGraph-style run packet、Dynamic Workflow 覆盖、用户可见运行面、能力调用真实性和 agent-teams 适配。
 

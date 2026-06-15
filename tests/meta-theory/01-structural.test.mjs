@@ -220,7 +220,8 @@ describe("SKILL.md structural integrity", async () => {
         raw,
         /Thinking[\s\S]{0,120}Execution[\s\S]{0,240}agent-teams-playbook/i,
       );
-      assert.match(raw, /2\+.*parallel worker lane|two or more.*parallel worker lane/i);
+      assert.match(raw, /2\+ executable worker lanes/i);
+      assert.match(raw, /DAG.*collision/i);
       assert.doesNotMatch(
         raw,
         /Apply `agent-teams-playbook`[\s\S]{0,80}before substantive work/i,
@@ -229,7 +230,8 @@ describe("SKILL.md structural integrity", async () => {
 
     test("runtime command does not force agent-teams-playbook for all non-trivial work", async () => {
       const command = await readFile("canonical/runtime-assets/codex/commands/meta-theory.md");
-      assert.match(command, /2\+ independent parallel worker lanes/i);
+      assert.match(command, /2\+ executable worker lanes/i);
+      assert.match(command, /DAG.*collision/i);
       assert.doesNotMatch(command, /For any non-trivial task,\s*first apply `agent-teams-playbook`/i);
     });
 
@@ -489,7 +491,8 @@ describe("Canonical meta-agent boundary structure", () => {
 
   test("meta-conductor scopes agent-teams-playbook to parallel lanes only", async () => {
     const conductor = await readFile("canonical/agents/meta-conductor.md");
-    assert.match(conductor, /2\+ independent parallel worker lanes/i);
+    assert.match(conductor, /2\+ executable worker lanes/i);
+    assert.match(conductor, /DAG.*collision/i);
     assert.doesNotMatch(
       conductor,
       /At the start of Stage 4 \(Execution\), use the `agent-teams-playbook` provider package/i,

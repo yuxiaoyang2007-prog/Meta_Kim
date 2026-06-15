@@ -58,6 +58,30 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.equal(report.defaultRuntimePath.peerAgentMeshPacket.status, "pass");
       assert.equal(report.defaultRuntimePath.agentTeamsPlaybookPacket.status, "pass");
       assert.equal(report.defaultRuntimePath.agentTeamsPlaybookPacket.selected, true);
+      assert.equal(
+        report.defaultRuntimePath.agentTeamsPlaybookPacket.fanoutSafetyPacket.safeForParallelFanout,
+        true
+      );
+      assert.equal(
+        report.defaultRuntimePath.agentTeamsPlaybookPacket.acceptance.independentLanesProven,
+        true
+      );
+      assert.equal(
+        report.defaultRuntimePath.agentTeamsPlaybookPacket.acceptance.parallelWaveExists,
+        true
+      );
+      assert.equal(
+        report.defaultRuntimePath.agentTeamsPlaybookPacket.acceptance.dagAndCollisionSafe,
+        true
+      );
+      assert.equal(
+        report.defaultRuntimePath.agentTeamsPlaybookPacket.acceptance.waveSizeWithinRuntimeCapacity,
+        true
+      );
+      assert.equal(
+        report.defaultRuntimePath.agentTeamsPlaybookPacket.acceptance.noArbitraryMetaKimCap,
+        true
+      );
       assert.equal(report.defaultRuntimePath.capabilityInvocationTruthPacket.status, "pass");
       const invocationByFamily = new Map(
         report.defaultRuntimePath.capabilityInvocationTruthPacket.rows.map((row) => [
@@ -65,7 +89,8 @@ describe("32 — Meta-theory three product goals and support gates", () => {
           row,
         ])
       );
-      assert.equal(invocationByFamily.get("agent_subagent").state, "selected_not_invoked");
+      assert.equal(report.defaultRuntimePath.runtimeSubagentInvocationPacket.status, "unavailable");
+      assert.equal(invocationByFamily.get("agent_subagent").state, "unavailable");
       assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
       assert.equal(invocationByFamily.get("worker_task").state, "invoked");
       assert.equal(invocationByFamily.get("prompt_rule").state, "applied");
