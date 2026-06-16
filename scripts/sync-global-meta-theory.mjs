@@ -65,8 +65,11 @@ const withGlobalHooks =
 const cliArgs = process.argv.slice(2);
 
 const repoHooksDir = path.join(canonicalRuntimeAssetsDir, "claude", "hooks");
+const sharedHooksDir = path.join(canonicalRuntimeAssetsDir, "shared", "hooks");
 const GLOBAL_HOOK_PACKAGE_FILES = new Set([
+  "activate-meta-theory-spine.mjs",
   "block-dangerous-bash.mjs",
+  "spine-state.mjs",
   "utils.mjs",
 ]);
 const RETIRED_HOOK_FILES = ["pre-git-push-confirm.mjs"];
@@ -219,6 +222,57 @@ async function fingerprintSelectedFiles(rootDir, allowedNames) {
   };
 }
 
+async function canonicalHookSourcePath(fileName) {
+  const claudeSpecific = path.join(repoHooksDir, fileName);
+  if (await pathExists(claudeSpecific)) {
+    return claudeSpecific;
+  }
+  const shared = path.join(sharedHooksDir, fileName);
+  if (await pathExists(shared)) {
+    return shared;
+  }
+  return null;
+}
+
+async function fingerprintGlobalHookSources() {
+  const hash = createHash("sha256");
+  let fileCount = 0;
+  for (const fileName of [...GLOBAL_HOOK_PACKAGE_FILES].sort((left, right) => left.localeCompare(right))) {
+    const filePath = await canonicalHookSourcePath(fileName);
+    if (!filePath) continue;
+    hash.update(fileName);
+    hash.update("\n");
+    hash.update(await fs.readFile(filePath));
+    hash.update("\n");
+    fileCount += 1;
+  }
+  return {
+    fileCount,
+    hash: hash.digest("hex"),
+  };
+}
+
+async function fingerprintInstalledGlobalHooks(rootDir) {
+  if (!(await pathExists(rootDir))) {
+    return null;
+  }
+  const hash = createHash("sha256");
+  let fileCount = 0;
+  for (const fileName of [...GLOBAL_HOOK_PACKAGE_FILES].sort((left, right) => left.localeCompare(right))) {
+    const filePath = path.join(rootDir, fileName);
+    if (!(await pathExists(filePath))) continue;
+    hash.update(fileName);
+    hash.update("\n");
+    hash.update(await fs.readFile(filePath));
+    hash.update("\n");
+    fileCount += 1;
+  }
+  return {
+    fileCount,
+    hash: hash.digest("hex"),
+  };
+}
+
 async function copyCanonicalSkill(targetDir, targetId) {
   assertHomeBound(targetDir);
   await fs.mkdir(path.dirname(targetDir), { recursive: true });
@@ -354,18 +408,15 @@ function globalMetaKimHooksDir() {
 async function copyCanonicalHooksToGlobal() {
   const dest = globalMetaKimHooksDir();
   assertHomeBound(dest);
-  if (!(await pathExists(repoHooksDir))) {
-    throw new Error(`Missing canonical hooks source: ${repoHooksDir}`);
-  }
   await fs.mkdir(path.dirname(dest), { recursive: true });
   await fs.rm(dest, { recursive: true, force: true });
   await fs.mkdir(dest, { recursive: true });
-  const sourceEntries = await fs.readdir(repoHooksDir, { withFileTypes: true });
-  for (const entry of sourceEntries) {
-    if (!entry.isFile() || !GLOBAL_HOOK_PACKAGE_FILES.has(entry.name)) {
+  for (const fileName of GLOBAL_HOOK_PACKAGE_FILES) {
+    const sourcePath = await canonicalHookSourcePath(fileName);
+    if (!sourcePath) {
       continue;
     }
-    await fs.copyFile(path.join(repoHooksDir, entry.name), path.join(dest, entry.name));
+    await fs.copyFile(sourcePath, path.join(dest, fileName));
   }
 
   // Cleanup hooks removed from canonical but still present in older installs.
@@ -415,7 +466,7 @@ async function syncClaudeGlobalSettingsHooks() {
   const settingsPath = path.join(runtimeHomes.claude.dir, "settings.json");
   assertHomeBound(settingsPath);
 
-  const template = buildMetaKimHooksTemplate(absHooks);
+  const template = buildMetaKimHooksTemplate(absHooks, repoRoot);
   const recordSettingsMerge = () => {
     recordSafe((rec) => {
       const managedCommands = [];
@@ -520,7 +571,7 @@ function hookCommandScriptPath(command) {
 async function checkClaudeGlobalSettingsHooks() {
   const settingsPath = path.join(runtimeHomes.claude.dir, "settings.json");
   const absHooks = globalMetaKimHooksDir();
-  const template = buildMetaKimHooksTemplate(absHooks);
+  const template = buildMetaKimHooksTemplate(absHooks, repoRoot);
   const settings = await readClaudeGlobalSettings(settingsPath);
   const expected = mergeGlobalMetaKimHooksIntoSettings(settings, template);
   stripRetiredGlobalHookEntries(expected);
@@ -608,15 +659,9 @@ async function runCheck() {
   }
 
   if (selectedTargetIds.includes("claude") && withGlobalHooks) {
-    const repoHooksFp = await fingerprintSelectedFiles(
-      repoHooksDir,
-      GLOBAL_HOOK_PACKAGE_FILES,
-    );
+    const repoHooksFp = await fingerprintGlobalHookSources();
     const globalHooksPath = globalMetaKimHooksDir();
-    const globalHooksFp = await fingerprintSelectedFiles(
-      globalHooksPath,
-      GLOBAL_HOOK_PACKAGE_FILES,
-    );
+    const globalHooksFp = await fingerprintInstalledGlobalHooks(globalHooksPath);
     const hooksInSync =
       repoHooksFp !== null &&
       globalHooksFp !== null &&

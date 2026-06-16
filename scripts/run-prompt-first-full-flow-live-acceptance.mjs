@@ -80,6 +80,7 @@ const frameworkPromptPacket = {
 };
 
 const stringArraySchema = { type: "array", items: { type: "string" } };
+const trueBooleanSchema = { type: "boolean", enum: [true] };
 const stageEvidenceItemSchema = {
   type: "object",
   additionalProperties: false,
@@ -214,23 +215,55 @@ const outputSchema = {
     reviewPacket: {
       type: "object",
       additionalProperties: false,
-      required: ["status", "upstreamQuality", "findings", "noOverclaimReview"],
+      required: [
+        "status",
+        "upstreamQuality",
+        "findings",
+        "cleanVerdictReason",
+        "noOverclaimReview",
+        "depthStrategy",
+      ],
       properties: {
         status: { type: "string", enum: ["pass"] },
         upstreamQuality: { type: "string", enum: ["pass"] },
         findings: stringArraySchema,
+        cleanVerdictReason: { type: "string" },
         noOverclaimReview: {
           type: "object",
           additionalProperties: false,
           required: ["overclaimCount"],
           properties: { overclaimCount: { type: "number" } },
         },
+        depthStrategy: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "evidenceQualityChecked",
+            "counterEvidenceChecked",
+            "decisionImpactChecked",
+            "falsificationChecked",
+            "upstreamStageTrace",
+          ],
+          properties: {
+            evidenceQualityChecked: trueBooleanSchema,
+            counterEvidenceChecked: trueBooleanSchema,
+            decisionImpactChecked: trueBooleanSchema,
+            falsificationChecked: trueBooleanSchema,
+            upstreamStageTrace: stringArraySchema,
+          },
+        },
       },
     },
     metaReviewPacket: {
       type: "object",
       additionalProperties: false,
-      required: ["status", "reviewStandard", "overclaimCheck", "publicReadyGateCheck"],
+      required: [
+        "status",
+        "reviewStandard",
+        "overclaimCheck",
+        "publicReadyGateCheck",
+        "reviewDepthAudit",
+      ],
       properties: {
         status: { type: "string", enum: ["pass"] },
         reviewStandard: { type: "string", enum: ["pass"] },
@@ -241,6 +274,22 @@ const outputSchema = {
           properties: { overclaimCount: { type: "number" } },
         },
         publicReadyGateCheck: { type: "string" },
+        reviewDepthAudit: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "shallowPacketPassRejected",
+            "adversarialCoverageChecked",
+            "reviewBlindSpotChecked",
+            "publicReadyEvidenceSeparated",
+          ],
+          properties: {
+            shallowPacketPassRejected: trueBooleanSchema,
+            adversarialCoverageChecked: trueBooleanSchema,
+            reviewBlindSpotChecked: trueBooleanSchema,
+            publicReadyEvidenceSeparated: trueBooleanSchema,
+          },
+        },
       },
     },
     verificationResult: {
@@ -264,10 +313,26 @@ const outputSchema = {
     evolutionWritebackPacket: {
       type: "object",
       additionalProperties: false,
-      required: ["writebackDecision", "noneWithReason"],
+      required: ["writebackDecision", "noneWithReason", "strategy"],
       properties: {
         writebackDecision: { type: "string", enum: ["none-with-reason"] },
         noneWithReason: { type: "string" },
+        strategy: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "reusablePatternAssessed",
+            "writebackTargetAssessed",
+            "scarNeedAssessed",
+            "nextRunReuseKey",
+          ],
+          properties: {
+            reusablePatternAssessed: trueBooleanSchema,
+            writebackTargetAssessed: trueBooleanSchema,
+            scarNeedAssessed: trueBooleanSchema,
+            nextRunReuseKey: { type: "string" },
+          },
+        },
       },
     },
     claimBoundary: {
@@ -288,6 +353,33 @@ const outputSchema = {
     },
   },
 };
+const looseObjectSchema = { type: "object" };
+const looseArraySchema = { type: "array" };
+const claudeOutputSchema = {
+  type: "object",
+  additionalProperties: true,
+  required: ["runtime", ...liveContract.requiredPackets],
+  properties: {
+    runtime: { type: "string" },
+    frameworkPromptPacket: looseObjectSchema,
+    stageEvidence: {
+      anyOf: [looseObjectSchema, looseArraySchema],
+    },
+    governanceAgentResultPackets: looseArraySchema,
+    workerResultPackets: looseArraySchema,
+    workerExecutionEvidence: looseArraySchema,
+    reviewPacket: looseObjectSchema,
+    metaReviewPacket: looseObjectSchema,
+    verificationResult: looseObjectSchema,
+    evolutionWritebackPacket: looseObjectSchema,
+    claimBoundary: looseObjectSchema,
+  },
+};
+
+if (args.has("--self-test-strict-live-normalization")) {
+  runStrictLiveNormalizationSelfTest();
+  process.exit(0);
+}
 
 const runtimeResults = {};
 for (const runtime of requestedRuntimes) {
@@ -570,13 +662,28 @@ function buildDeterministicPayload(runtime, evidenceKind, options = {}) {
       status: "pass",
       upstreamQuality: "pass",
       findings: [],
+      cleanVerdictReason:
+        "No unresolved finding survived source-quality, counterevidence, decision-impact, and falsification checks.",
       noOverclaimReview: { overclaimCount: 0 },
+      depthStrategy: {
+        evidenceQualityChecked: true,
+        counterEvidenceChecked: true,
+        decisionImpactChecked: true,
+        falsificationChecked: true,
+        upstreamStageTrace: ["critical", "fetch", "thinking", "execution"],
+      },
     },
     metaReviewPacket: {
       status: "pass",
       reviewStandard: "pass",
       overclaimCheck: { overclaimCount: 0 },
       publicReadyGateCheck: "primary-runtime-only",
+      reviewDepthAudit: {
+        shallowPacketPassRejected: true,
+        adversarialCoverageChecked: true,
+        reviewBlindSpotChecked: true,
+        publicReadyEvidenceSeparated: true,
+      },
     },
     verificationResult: {
       status: "pass",
@@ -591,6 +698,12 @@ function buildDeterministicPayload(runtime, evidenceKind, options = {}) {
     evolutionWritebackPacket: {
       writebackDecision: "none-with-reason",
       noneWithReason: "Acceptance gate is reusable and already represented by this validator.",
+      strategy: {
+        reusablePatternAssessed: true,
+        writebackTargetAssessed: true,
+        scarNeedAssessed: true,
+        nextRunReuseKey: "prompt-first-live-depth-gate",
+      },
     },
     claimBoundary: {
       liveExecutionPass: options.liveExecutionPass ?? evidenceKind === "runtime_live_pass",
@@ -625,7 +738,7 @@ async function runClaudeCodeLive() {
     "--agent",
     "meta-warden",
     "--json-schema",
-    JSON.stringify(outputSchema),
+    JSON.stringify(claudeOutputSchema),
     prompt,
   ]), {
     cwd: repoRoot,
@@ -694,6 +807,9 @@ function buildRuntimePrompt(runtime) {
     "Include at least one workerResultPackets item and one workerExecutionEvidence item.",
     'workerExecutionEvidence.evidenceKind must be "runtime_live_pass".',
     "reviewPacket.status, metaReviewPacket.status, and verificationResult.status must be pass.",
+    "reviewPacket must prove review depth: cleanVerdictReason plus depthStrategy.evidenceQualityChecked, counterEvidenceChecked, decisionImpactChecked, and falsificationChecked all true; upstreamStageTrace must include critical, fetch, thinking, and execution.",
+    "metaReviewPacket must prove the Review was not shallow: reviewDepthAudit.shallowPacketPassRejected, adversarialCoverageChecked, reviewBlindSpotChecked, and publicReadyEvidenceSeparated must all be true.",
+    "evolutionWritebackPacket must prove reusable learning was considered: strategy.reusablePatternAssessed, writebackTargetAssessed, scarNeedAssessed true, with a non-empty nextRunReuseKey.",
     "evolutionWritebackPacket.writebackDecision must be none-with-reason.",
     "reviewPacket, metaReviewPacket, verificationResult, evolutionWritebackPacket, and claimBoundary must all be present.",
     "claimBoundary must not use board_only, worker_task_only, schema_only, structural_smoke, projection_smoke, config_only, ui_warning_or_system_message, old_artifact, or skipped_or_needs_auth as live proof.",
@@ -703,34 +819,189 @@ function buildRuntimePrompt(runtime) {
 }
 
 function normalizeRuntimePayload(runtime, payload, evidence) {
-  const fallback = buildDeterministicPayload(runtime, evidence.evidenceKind, {
-    artifact: evidence.artifact,
-    commandOrMethod: evidence.commandOrMethod,
-    liveExecutionPass: true,
-  });
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return fallback;
+    return {
+      _runtimeExtractionError:
+        "target runtime did not return a structured prompt-first full-flow artifact",
+      _runtimeCommandOrMethod: evidence.commandOrMethod,
+      stageEvidence: [],
+      workerExecutionEvidence: [],
+      claimBoundary: {
+        liveExecutionPass: false,
+        releaseGradeFullFlowClaim: false,
+        noOverclaim: false,
+        forbiddenEvidenceUsed: ["missing_runtime_artifact"],
+      },
+    };
   }
   return {
-    ...fallback,
     ...payload,
-    runtime,
-    frameworkPromptPacket,
-    stageEvidence: normalizeStageEvidence(payload.stageEvidence ?? fallback.stageEvidence),
+    stageEvidence: normalizeStageEvidence(payload.stageEvidence),
     workerExecutionEvidence:
       Array.isArray(payload.workerExecutionEvidence) &&
       payload.workerExecutionEvidence.length > 0
-        ? payload.workerExecutionEvidence.map((item) => ({
-            ...item,
-            evidenceKind: "runtime_live_pass",
-          }))
-        : fallback.workerExecutionEvidence,
+        ? payload.workerExecutionEvidence
+        : [],
+    claimBoundary: payload.claimBoundary ?? {},
+  };
+}
+
+function runStrictLiveNormalizationSelfTest() {
+  const validStageEvidenceObject = Object.fromEntries(
+    fullFlowContract.stages.map((stage) => [
+      stage.stageId,
+      {
+        stageId: stage.stageId,
+        owner: stage.owner,
+        status: "pass",
+        requiredContentPresent: true,
+        evidenceRefs: stage.evidenceRequirements,
+      },
+    ]),
+  );
+  const baseRuntimePayload = {
+    runtime: "codex",
+    frameworkPromptPacket,
+    stageEvidence: validStageEvidenceObject,
+    governanceAgentResultPackets: [
+      {
+        ownerAgent: "meta-warden",
+        stageId: "critical",
+        verdict: "pass",
+        evidenceSummary: "self-test",
+      },
+      {
+        ownerAgent: "meta-conductor",
+        stageId: "thinking",
+        verdict: "pass",
+        evidenceSummary: "self-test",
+      },
+      {
+        ownerAgent: "meta-prism",
+        stageId: "review",
+        verdict: "pass",
+        evidenceSummary: "self-test",
+      },
+    ],
+    workerResultPackets: [
+      {
+        taskPacketId: "workerTask:self-test",
+        owner: "verify",
+        roleDisplayName: "verify",
+        status: "pass",
+        deliverable: "strict live normalization self-test",
+        schemaValidationAttempts: [{ attempt: 1, passed: true }],
+        fileCompletionList: [],
+      },
+    ],
+    workerExecutionEvidence: [
+      {
+        verifyStepRef: "verify:self-test",
+        evidenceKind: "runtime_live_pass",
+        artifact: "self-test-runtime-artifact",
+        commandOrMethod: "self-test",
+        result: "pass",
+      },
+    ],
+    reviewPacket: {
+      status: "pass",
+      upstreamQuality: "pass",
+      findings: [],
+      noOverclaimReview: { overclaimCount: 0 },
+    },
+    metaReviewPacket: {
+      status: "pass",
+      reviewStandard: "pass",
+      overclaimCheck: { overclaimCount: 0 },
+      publicReadyGateCheck: "self-test",
+    },
+    verificationResult: {
+      status: "pass",
+      evidenceKind: "runtime_live_pass",
+      userGoalDone: true,
+      commandPassIsUserGoalDone: false,
+      remainingRisk: "self-test",
+    },
+    evolutionWritebackPacket: {
+      writebackDecision: "none-with-reason",
+      noneWithReason: "self-test shallow evolution packet",
+    },
     claimBoundary: {
-      ...fallback.claimBoundary,
-      ...(payload.claimBoundary ?? {}),
       liveExecutionPass: true,
+      releaseGradeFullFlowClaim: true,
+      noOverclaim: true,
+      forbiddenEvidenceUsed: [],
     },
   };
+
+  const partialNormalized = normalizeRuntimePayload("codex", baseRuntimePayload, {
+    evidenceKind: "runtime_live_pass",
+    artifact: "self-test",
+    commandOrMethod: "self-test",
+  });
+  const partialValidation = validateRuntimePayload("codex", partialNormalized, "live");
+  const requiredFailures = [
+    "codex: reviewPacket.cleanVerdictReason missing",
+    "codex: reviewPacket.depthStrategy.evidenceQualityChecked must be true",
+    "codex: reviewPacket.depthStrategy.counterEvidenceChecked must be true",
+    "codex: reviewPacket.depthStrategy.decisionImpactChecked must be true",
+    "codex: reviewPacket.depthStrategy.falsificationChecked must be true",
+    "codex: metaReviewPacket.reviewDepthAudit.shallowPacketPassRejected must be true",
+    "codex: evolutionWritebackPacket.strategy.reusablePatternAssessed must be true",
+  ];
+  for (const expected of requiredFailures) {
+    if (!partialValidation.failures.includes(expected)) {
+      throw new Error(
+        `strict live normalization self-test missing expected failure: ${expected}`,
+      );
+    }
+  }
+
+  const missingPacketPayload = { ...baseRuntimePayload };
+  delete missingPacketPayload.reviewPacket;
+  delete missingPacketPayload.metaReviewPacket;
+  delete missingPacketPayload.evolutionWritebackPacket;
+  const missingPacketValidation = validateRuntimePayload(
+    "codex",
+    normalizeRuntimePayload("codex", missingPacketPayload, {
+      evidenceKind: "runtime_live_pass",
+      artifact: "self-test",
+      commandOrMethod: "self-test",
+    }),
+    "live",
+  );
+  for (const expected of [
+    "codex: missing packet reviewPacket",
+    "codex: missing packet metaReviewPacket",
+    "codex: missing packet evolutionWritebackPacket",
+  ]) {
+    if (!missingPacketValidation.failures.includes(expected)) {
+      throw new Error(
+        `strict live normalization self-test missing expected packet failure: ${expected}`,
+      );
+    }
+  }
+
+  const missingNormalized = normalizeRuntimePayload("codex", null, {
+    evidenceKind: "runtime_live_pass",
+    artifact: "self-test",
+    commandOrMethod: "self-test",
+  });
+  const missingValidation = validateRuntimePayload("codex", missingNormalized, "live");
+  if (missingValidation.status !== "fail") {
+    throw new Error("missing live runtime artifact must fail validation");
+  }
+  if (missingNormalized.claimBoundary.liveExecutionPass === true) {
+    throw new Error("missing live runtime artifact must not claim liveExecutionPass");
+  }
+  if (
+    missingNormalized.workerExecutionEvidence.some(
+      (item) => item.evidenceKind === "runtime_live_pass",
+    )
+  ) {
+    throw new Error("missing live runtime artifact must not synthesize runtime_live_pass");
+  }
+  console.log("strict live normalization self-test passed");
 }
 
 function normalizeStageEvidence(stageEvidence) {
@@ -826,6 +1097,56 @@ function validateRuntimePayload(runtime, payload, mode) {
   if (payload.metaReviewPacket?.status !== "pass") {
     failures.push(`${runtime}: metaReviewPacket.status must be pass`);
   }
+  if (
+    typeof payload.reviewPacket?.cleanVerdictReason !== "string" ||
+    payload.reviewPacket.cleanVerdictReason.trim().length === 0
+  ) {
+    failures.push(`${runtime}: reviewPacket.cleanVerdictReason missing`);
+  }
+  requireTrueFields(
+    failures,
+    runtime,
+    payload.reviewPacket?.depthStrategy,
+    "reviewPacket.depthStrategy",
+    [
+      "evidenceQualityChecked",
+      "counterEvidenceChecked",
+      "decisionImpactChecked",
+      "falsificationChecked",
+    ],
+  );
+  for (const stageId of ["critical", "fetch", "thinking", "execution"]) {
+    if (!payload.reviewPacket?.depthStrategy?.upstreamStageTrace?.includes(stageId)) {
+      failures.push(
+        `${runtime}: reviewPacket.depthStrategy.upstreamStageTrace missing ${stageId}`,
+      );
+    }
+  }
+  requireTrueFields(
+    failures,
+    runtime,
+    payload.metaReviewPacket?.reviewDepthAudit,
+    "metaReviewPacket.reviewDepthAudit",
+    [
+      "shallowPacketPassRejected",
+      "adversarialCoverageChecked",
+      "reviewBlindSpotChecked",
+      "publicReadyEvidenceSeparated",
+    ],
+  );
+  requireTrueFields(
+    failures,
+    runtime,
+    payload.evolutionWritebackPacket?.strategy,
+    "evolutionWritebackPacket.strategy",
+    ["reusablePatternAssessed", "writebackTargetAssessed", "scarNeedAssessed"],
+  );
+  if (
+    typeof payload.evolutionWritebackPacket?.strategy?.nextRunReuseKey !== "string" ||
+    payload.evolutionWritebackPacket.strategy.nextRunReuseKey.trim().length === 0
+  ) {
+    failures.push(`${runtime}: evolutionWritebackPacket.strategy.nextRunReuseKey missing`);
+  }
   if (payload.verificationResult?.status !== "pass") {
     failures.push(`${runtime}: verificationResult.status must be pass`);
   }
@@ -849,6 +1170,14 @@ function validateRuntimePayload(runtime, payload, mode) {
     status: failures.length === 0 ? "pass" : "fail",
     failures,
   };
+}
+
+function requireTrueFields(failures, runtime, object, prefix, fields) {
+  for (const field of fields) {
+    if (object?.[field] !== true) {
+      failures.push(`${runtime}: ${prefix}.${field} must be true`);
+    }
+  }
 }
 
 function validateParity(results) {
@@ -945,12 +1274,17 @@ function validateCompatibilitySmoke(smokeResults) {
 }
 
 function buildPrdTaskStatuses(runtimePackets, promptPacket, parityPacket, overclaimPacket, mode) {
-  const liveStatus = (runtime) =>
-    mode === "live" && runtimePackets[runtime]?.status === "pass"
+  const liveStatus = (runtime) => {
+    if (!requestedRuntimes.includes(runtime)) {
+      return "not_requested";
+    }
+    if (mode === "fixture") {
+      return "fixture_pass_not_live";
+    }
+    return mode === "live" && runtimePackets[runtime]?.status === "pass"
       ? "pass"
-      : mode === "fixture"
-        ? "fixture_pass_not_live"
-        : "blocked";
+      : "blocked";
+  };
   return {
     "P-087": liveStatus("claude_code"),
     "P-088": liveStatus("codex"),

@@ -15,8 +15,8 @@ const fuzzy = route("fuzzy strategy task: choose a product monetization path and
 assert(fuzzy.candidateWeapons.includes("meta-kim-decision-patterns"), "Fuzzy strategy/product task must recall internal Meta_Kim decision patterns");
 assert(fuzzy.ownerDiscoveryPacket?.governanceStages?.Critical?.requiredAgents?.includes("meta-warden"), "Route output must expose Critical governance owner discovery");
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.projectRuntimeAgents), "Route output must expose project runtime agent discovery");
-assert(fuzzy.ownerDiscoveryPacket?.discoveryPrinciple === "provider_first_evidence_owner_last_binding", "Route output must use provider-first evidence and owner-last binding");
-assert(fuzzy.ownerDiscoveryPacket?.searchOrder?.[0] === "available_capability_providers_skills_tools_mcp", "Provider evidence must precede owner binding");
+assert(fuzzy.ownerDiscoveryPacket?.discoveryPrinciple === "canonical_index_first_capability_discovery_owner_last_binding", "Route output must use canonical/index-first discovery before provider matching");
+assert(fuzzy.ownerDiscoveryPacket?.searchOrder?.[0] === "repo_canonical_capability_index", "Canonical capability index must be searched before provider matching");
 assert(fuzzy.ownerDiscoveryPacket?.ownerBindingOrder?.includes("project_runtime_agent_inventory"), "Route owner binding must include project runtime agent inventory");
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.projectRuntimeSkillProviders), "Route output must expose project runtime skill provider discovery");
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.localGlobalSkillProviders), "Route output must expose local/global skill provider discovery");
@@ -56,7 +56,7 @@ assert(typeof fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.refreshRequi
 assert(fuzzy.routeExecutionGate?.canPreviewRoute === true, "Stale cache may still allow route preview");
 assert(typeof fuzzy.routeExecutionGate?.canEnterExecution === "boolean", "Route output must expose whether Execution may start");
 assert(fuzzy.ownerDiscoveryPacket?.candidateReusableCapabilityProviders?.length > 0, "Route output must expose reusable capability providers before agent creation");
-assert(fuzzy.ownerDiscoveryPacket?.searchOrder?.includes("available_capability_providers_skills_tools_mcp"), "Route owner discovery must include provider-first skill/tool/MCP inventory");
+assert(fuzzy.ownerDiscoveryPacket?.searchOrder?.includes("available_capability_providers_skills_tools_mcp"), "Route owner discovery must include skill/tool/MCP provider inventory after agent/index discovery");
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.capabilityDiscoverySearchLog), "Route output must expose Fetch capabilityDiscovery.searchLog evidence");
 const routeSearchRefs = fuzzy.ownerDiscoveryPacket.capabilityDiscoverySearchLog
   .map((entry) => `${entry.source}:${entry.sourceRef}`)
@@ -125,6 +125,12 @@ assert(fuzzy.recommendedRoute?.verificationMethod, "Recommended route needs veri
 const code = route("complex code refactor with tests");
 assert(!code.rankedRoutes.some((item) => item.dependencyProject === "kim-decision"), "Kim_Decision must not become implementation owner for pure code execution");
 
+const codexAgentSearch = route("Create a provider smoke test that discovers an execution agent and finds a skill provider", "codex", "windows");
+assert(
+  codexAgentSearch.recommendedRoute?.selectedCapabilityProviders?.agent?.platformId !== "claudeCode",
+  "Codex execution owner selection must not bind Claude Code global agents",
+);
+
 const hook = route("platform hook install for Codex and Cursor");
 assert(hook.candidateWeapons.includes("runtime-capability-matrix") || hook.candidateOwners.includes("meta-sentinel"), "Platform hook task must recall runtime matrix or sentinel");
 
@@ -142,6 +148,20 @@ assert(missing.capabilityGapDecision?.decisionEvidence?.status === "pass", "Capa
 assert(missing.capabilityGapDecision?.decisionEvidence?.missingEvidence?.length === 0, "Capability-gap route decision must not miss required evidence");
 assert(missing.routeExecutionGate?.canEnterExecution === false, "Blocked capability-gap decision must close the Execution gate");
 assert(missing.routeExecutionGate?.blockedBy?.includes("capability_gap_decision_blocks_execution"), "Execution gate must name the capability-gap blocker");
+
+const claudeAgentSearch = route("在 Claude Code 里运行 agent 搜索不对 critical and fetch thinking and review", "claude_code", "windows");
+assert(
+  claudeAgentSearch.recommendedRoute?.id === "execution-capability-discovery:claude_code:windows",
+  "Claude Code agent-search complaints must route to execution capability discovery, not dependency-project registry",
+);
+assert(
+  claudeAgentSearch.recommendedRoute?.selectedCapabilityProviders?.agent?.runtime !== "codex",
+  "Claude Code execution owner selection must not bind Codex project agent adapters",
+);
+assert(
+  !String(claudeAgentSearch.recommendedRoute?.selectedCapabilityProviders?.agent?.sourceRef ?? "").startsWith(".codex/agents/"),
+  "Claude Code agent search must not select .codex/agents adapters as callable Claude agents",
+);
 
 const createAgentGap = route("create agent for long-term test coverage strategy owner");
 assert(createAgentGap.capabilityGapDetected === true, "Explicit create agent request must trigger capability-gap detection");

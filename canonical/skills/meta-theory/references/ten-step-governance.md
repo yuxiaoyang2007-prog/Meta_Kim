@@ -24,6 +24,44 @@ Direction(1) → Plan(2) → Execute(3) → Review(4) → Meta-review(5) → Rev
 
 ---
 
+## Trigger accuracy standard
+
+The 11-phase workflow is not proven by listing eleven phase names. A run must
+prove the decision for each phase:
+
+- `trigger`: the phase ran because current evidence met its activation rule.
+- `skip`: the phase did not run and the skip is justified by evidence.
+- `block`: the phase cannot run and the blocker is named.
+- `wait`: the phase correctly waits for external input, usually user feedback.
+
+Each phase decision needs:
+
+- a concrete activation rule
+- a trigger score, passing at `80` or higher
+- at least three quantitative signals with `signal`, `observed`, `expected`, and `pass`
+- evidence references to the run artifact, review result, runtime evidence, or writeback flow
+- falsification checks that would make the decision fail
+
+This follows the deep-research pattern: a claim is not accepted because it is
+well-worded; it is accepted because key signals, evidence references,
+counterfactual checks, and decision impact all line up.
+
+Examples:
+
+- `revision` should be `accurate_skip` when Review passed and there are no open findings. That is not a missing phase; it is a correct skip.
+- `feedback` should be `pending_external_input` until the user has accepted, rejected, or redirected the result. A command pass must not fake user feedback.
+- `summary` should not trigger merely because a markdown file exists; it must see Review and Verification decisions first.
+
+At run start, explain the route in short human-facing language:
+
+- why the 8-stage spine is needed before execution
+- why the 11-phase workflow is needed for closure
+- which evidence made that route necessary
+
+This start reason is a product surface, not an audit log. Keep it brief.
+
+---
+
 ## Phase by phase
 
 ### Phase 1: Direction

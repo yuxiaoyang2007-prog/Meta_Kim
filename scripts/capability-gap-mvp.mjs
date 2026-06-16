@@ -20,6 +20,15 @@ const DEFAULT_PROVIDERS_CHECKED = [
   "repo_canonical_skills",
   "config_capability_index",
   "runtime_mirrors",
+  "global_execution_agents",
+  "global_skills",
+  "global_commands",
+  "global_mcp_servers_and_tools",
+  "global_runtime_tools",
+  "global_hooks",
+  "global_plugins",
+  "global_memory_graph_providers",
+  "global_dependency_providers",
   "commands",
   "mcp_providers",
   "runtime_tools",
@@ -643,6 +652,18 @@ function makeDecisionEvidence({
       evidence: capabilityGap.currentProvidersChecked,
     },
     {
+      key: "fetch.global_professional_providers_checked",
+      owner: "meta-scout",
+      status: "pass",
+      evidence: {
+        checkedProviderFamilies: capabilityGap.currentProvidersChecked.filter((provider) =>
+          String(provider).startsWith("global_")
+        ),
+        boundary:
+          "Prefer existing professional global providers before create_agent; workerTaskPacket stays a run-scoped work order.",
+      },
+    },
+    {
       key: "thinking.decision_rule_applied",
       owner: "meta-artisan",
       status: "pass",
@@ -716,8 +737,8 @@ function makeDecisionEvidence({
       {
         stage: "Fetch",
         owner: "meta-scout",
-        question: "查过哪些现有能力，为什么不够？",
-        output: "provider search log",
+        question: "查过哪些全局/项目专业能力，为什么不够？",
+        output: "professional provider search log",
         event: "providers_checked",
       },
       {
@@ -860,6 +881,16 @@ export function decideCapabilityGap(input, options = {}) {
   const events = [
     ["run_started", "critical", { input }],
     ["providers_checked", "fetch", { providers: currentProvidersChecked }],
+    [
+      "global_professional_providers_checked",
+      "fetch",
+      {
+        providers: currentProvidersChecked.filter((provider) =>
+          String(provider).startsWith("global_")
+        ),
+        workerTaskBoundary: "run_scoped_work_order_not_agent_identity",
+      },
+    ],
     ["capability_gap_detected", "thinking", { gapId }],
     ["gap_decision_made", "thinking", { decision }],
     ["decision_evidence_recorded", "thinking", { status: decisionEvidence.status }],

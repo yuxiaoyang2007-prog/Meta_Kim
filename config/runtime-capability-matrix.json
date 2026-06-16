@@ -1365,7 +1365,7 @@
           "confidence": "repo_claim",
           "trigger": {
             "userTrigger": "Skill inventory request.",
-            "autoTrigger": "Fetch capability search.",
+            "autoTrigger": "setup/update and global dependency install/update refresh the local global capability inventory; Fetch capability search consumes the refreshed cache.",
             "configTrigger": "config/skills.json",
             "hookTrigger": "None"
           },
@@ -1412,7 +1412,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "npm run discover:global"
           },
-          "notes": "Description quality affects matching."
+          "notes": "Description quality affects matching. `npm run discover:global` remains the manual refresh command when a runtime home changes outside Meta_Kim-managed install/update."
         },
         {
           "platform": "claude_code",
@@ -3047,7 +3047,7 @@
           "confidence": "verified_local",
           "trigger": {
             "userTrigger": "User explicitly requests skill discovery or a governed task requires it.",
-            "autoTrigger": "Meta_Kim may select skill discovery only after Fetch and Thinking identify it as a valid route component.",
+            "autoTrigger": "setup/update and global dependency install/update refresh the local global capability inventory; Meta_Kim may select skill discovery only after Fetch and Thinking identify it as a valid route component.",
             "configTrigger": "codex runtime projection and registry configuration.",
             "hookTrigger": "None unless the runtime maps it to a lifecycle event."
           },
@@ -3094,7 +3094,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "codex --version"
           },
-          "notes": "Codex support depends on host mode; subagents require explicit request and hooks require trust review."
+          "notes": "Codex support depends on host mode; subagents require explicit request and hooks require trust review. `npm run discover:global` remains the manual refresh command when a runtime home changes outside Meta_Kim-managed install/update."
         },
         {
           "platform": "codex",
@@ -4697,7 +4697,7 @@
           "confidence": "verified_local",
           "trigger": {
             "userTrigger": "User explicitly requests skill discovery or a governed task requires it.",
-            "autoTrigger": "Meta_Kim may select skill discovery only after Fetch and Thinking identify it as a valid route component.",
+            "autoTrigger": "setup/update and global dependency install/update refresh the local global capability inventory; Meta_Kim may select skill discovery only after Fetch and Thinking identify it as a valid route component.",
             "configTrigger": "openclaw runtime projection and registry configuration.",
             "hookTrigger": "None unless the runtime maps it to a lifecycle event."
           },
@@ -4742,7 +4742,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "openclaw --version"
           },
-          "notes": "OpenClaw third-party skills require risk review; distinguish host tools from sandbox tools."
+          "notes": "OpenClaw third-party skills require risk review; distinguish host tools from sandbox tools. `npm run discover:global` remains the manual refresh command when a runtime home changes outside Meta_Kim-managed install/update."
         },
         {
           "platform": "openclaw",
@@ -6355,7 +6355,7 @@
           "confidence": "repo_claim",
           "trigger": {
             "userTrigger": "User explicitly requests skill discovery or a governed task requires it.",
-            "autoTrigger": "Meta_Kim may select skill discovery only after Fetch and Thinking identify it as a valid route component.",
+            "autoTrigger": "setup/update and global dependency install/update refresh the local global capability inventory; Meta_Kim may select skill discovery only after Fetch and Thinking identify it as a valid route component.",
             "configTrigger": "cursor runtime projection and registry configuration.",
             "hookTrigger": "None unless the runtime maps it to a lifecycle event."
           },
@@ -6400,7 +6400,7 @@
             "lastVerifiedAt": "2026-05-28",
             "verificationCommand": "cursor --version"
           },
-          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native."
+          "notes": "Cursor remains a compatible formal projection; unknown capability claims need strict Cursor test evidence before being treated as native. `npm run discover:global` remains the manual refresh command when a runtime home changes outside Meta_Kim-managed install/update."
         },
         {
           "platform": "cursor",

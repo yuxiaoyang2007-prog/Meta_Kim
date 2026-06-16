@@ -11,6 +11,7 @@ import {
   buildCursorHooksJson,
   nodeHookCommand,
 } from "./runtime-hook-mapping.mjs";
+import { ensureCodexAppNativeControls } from "./codex-config-merge.mjs";
 import {
   canonicalAgentsDir,
   canonicalCapabilityIndexDir,
@@ -646,6 +647,7 @@ function resolveProjectionDirs(scope) {
     codexHooksDir: globalScope ? null : codex.hooksDir,
     codexHooksFile: globalScope ? null : codex.hooksFile,
     codexCommandsDir: codex.commandsDir,
+    codexConfigPath: globalScope ? null : codex.configFile,
     codexConfigExamplePath: codex.configExampleFile,
     codexCapabilityIndexDir: codex.capabilityIndexDir,
 
@@ -690,7 +692,8 @@ function resolveProjectionDirs(scope) {
       codexHooks: globalScope ? null : codex.display.hooksDir,
       codexHooksFile: globalScope ? null : codex.display.hooksFile,
       codexCommands: codex.display.commandsDir,
-      codexConfig: codex.display.configExampleFile,
+      codexConfig: globalScope ? null : codex.display.configFile,
+      codexConfigExample: codex.display.configExampleFile,
       codexCapabilityIndex: codex.display.capabilityIndexDir,
       openclawWorkspaces: globalScope
         ? openclaw.baseDir
@@ -1547,6 +1550,25 @@ function renderMetaKimRuntimeMcp(content, rootDir) {
   return content.replaceAll("__REPO_ROOT__", normalizedRoot);
 }
 
+function renderCodexConfigExample(content, rootDir) {
+  const normalizedRoot = rootDir.replace(/\\/g, "/");
+  return content.replaceAll("REPLACE_WITH_REPO_ROOT", normalizedRoot);
+}
+
+export function buildCodexProjectConfig(
+  currentContent,
+  configExampleContent,
+  options = {},
+) {
+  const seed = String(currentContent ?? "").trim()
+    ? String(currentContent ?? "")
+    : renderCodexConfigExample(configExampleContent, repoRoot);
+  return ensureCodexAppNativeControls(seed, {
+    codexHome: resolveRuntimeHomeDir("codex"),
+    ...options,
+  });
+}
+
 function emptyMcpConfigContent() {
   return `${JSON.stringify({ mcpServers: {} }, null, 2)}\n`;
 }
@@ -2172,6 +2194,9 @@ Examples:
   if (!checkOnly) {
     assertHomeBound(dirs.claudeAgentsProjectionDir, dirs.allowedRoots);
     assertHomeBound(dirs.claudeCommandsDir, dirs.allowedRoots);
+    if (dirs.codexConfigPath) {
+      assertHomeBound(dirs.codexConfigPath, dirs.allowedRoots);
+    }
     if (dirs.claudeMcpProjectionPath) {
       assertHomeBound(dirs.claudeMcpProjectionPath, dirs.allowedRoots);
     }
@@ -2369,7 +2394,27 @@ Examples:
         )
       ).changed
     ) {
-      changedFiles.push(dp.codexConfig);
+      changedFiles.push(dp.codexConfigExample);
+    }
+    if (dirs.codexConfigPath && codexConfigExample) {
+      let currentCodexConfig = null;
+      try {
+        currentCodexConfig = await fs.readFile(dirs.codexConfigPath, "utf8");
+      } catch (error) {
+        if (error.code !== "ENOENT") {
+          throw error;
+        }
+      }
+      const nextCodexConfig = buildCodexProjectConfig(
+        currentCodexConfig,
+        codexConfigExample,
+      );
+      if (
+        (await writeGeneratedFile(dirs.codexConfigPath, nextCodexConfig))
+          .changed
+      ) {
+        changedFiles.push(dp.codexConfig);
+      }
     }
 
     const codexMetaTheoryCommand = await tryReadCanonical(
@@ -2910,9 +2955,14 @@ Examples:
       hasDisplayPrefix(f, dirs.displayPaths.codexHooks),
     ).length,
     codexConfig: changedFiles.filter(
-      (f) =>
-        normalizeDisplayPath(f) ===
-        normalizeDisplayPath(dirs.displayPaths.codexConfig),
+      (f) => {
+        const normalized = normalizeDisplayPath(f);
+        return (
+          normalized === normalizeDisplayPath(dirs.displayPaths.codexConfig) ||
+          normalized ===
+            normalizeDisplayPath(dirs.displayPaths.codexConfigExample)
+        );
+      },
     ).length,
     codexHooksFile: changedFiles.filter(
       (f) =>

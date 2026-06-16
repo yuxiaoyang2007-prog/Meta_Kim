@@ -239,13 +239,15 @@ For every non-query run, execution also requires Fetch/content evidence and a po
 - `contradictionLog`
 - `assumptionLedger`
 - `decisionImpactMap`
+- `iterationLog`
+- `claimEvidenceCards`
 - `researchRequired`
 - `researchSkipReason`
 - `evidenceLaneValidatedBy`
 
 Conductor must brief the evidence owner with the Research Capability Discovery gate before any deep research: identify the retrieval capabilities needed (`web_search`, `url_fetch`, `docs_lookup`, `browser_open`, `mcp_search`, `plugin_search`, `local_only`, or user-supplied sources), inspect the current runtime's actual tool inventory sources, record available retrieval capabilities with provider kind, status, proof, and limitations, then choose `selectedResearchPath` as `external_web`, `mixed`, `local_only`, `user_fallback`, or `blocked`. Conductor must not accept host-form-factor guesses such as `platformSurface`; the path must be justified by capability proof. If external research is required and the selected path is `blocked` or only `local_only` without a valid skip reason, Conductor pauses before Thinking/Execution and surfaces the blocker or user-fallback choice.
 
-Conductor must also brief the evidence owner with the Deep Research Requirement: define the decision use, split the topic into distinct questions, inspect enough source categories for the domain, deep-read the strongest primary or official sources, apply a source-quality ladder, cross-check material claims, record contradictions and assumptions, preserve attribution in private research evidence, and map every material finding to a candidate option, user question, risk, blocker, owner, route, or rejected path. A list of links, search snippets, or a cosmetically rewritten external method is not acceptable evidence for orchestration.
+Conductor must also brief the evidence owner with the Deep Research Requirement: define the decision use, split the topic into distinct questions, identify key information targets, inspect enough source categories for the domain, deep-read the strongest primary or official sources, apply a source-quality ladder, cross-check material claims, record contradictions and assumptions, preserve attribution in private research evidence, and map every material finding to a candidate option, user question, risk, blocker, owner, route, or rejected path. The evidence owner must record iteration steps, stop condition, decision update rule, and claim evidence cards with source refs, counterevidence, confidence, and falsification status before Conductor allows Thinking. A list of links, search snippets, or a cosmetically rewritten external method is not acceptable evidence for orchestration.
 
 **preDecisionOptionFrame** (candidate orchestration only):
 

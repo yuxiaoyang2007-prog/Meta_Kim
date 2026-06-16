@@ -78,7 +78,9 @@ Please respond with your choices, e.g., "1A, 2B" or "Question 1: A, Question 2: 
 
 For platforms that support multi-question native choice surfaces, the runtime adapter may render the independent questions as one interaction. The canonical batch remains a semantic decision list, not a renderer-specific schema.
 
-The adapter must preserve each question id, dependency group, recommended default, option count, trade-offs, and selection result. If the host cannot render all independent questions in one native surface, it must use a localized chat decision card rather than inventing a fake popup.
+The adapter must preserve each question id, dependency group, recommended default, runtime-native maximum option policy, trade-offs, and selection result. If the host cannot render all independent questions in one native surface, it must use a localized chat decision card rather than inventing a fake popup.
+
+For primary native runtimes, batch rendering must still preserve structured panel semantics: AI understanding, AI additions, Capability route, Candidate paths, expected result, advantages, disadvantages or risk, and verification impact. Runtime adapters must use the active host's maximum meaningful option count and obey native payload limits rather than sending an oversized native payload.
 
 ## When to Use
 
@@ -119,7 +121,7 @@ Return to Critical for unclear user intent. Return to Fetch when evidence is ins
 
 ## Verification
 
-Validate option count, dependency grouping, recommended default, trade-off completeness, fallback reason, and locale preservation. Run `npm run meta:prompt:validate` after editing this template.
+Validate runtime-native maximum option policy, dependency grouping, recommended default, trade-off completeness, fallback reason, and locale preservation. Run `npm run meta:prompt:validate` after editing this template.
 
 ## Preserve
 

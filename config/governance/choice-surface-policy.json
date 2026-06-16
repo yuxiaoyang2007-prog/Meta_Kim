@@ -79,7 +79,7 @@
   "fallback": "chat_decision_card",
   "cardContract": {
     "optionsMin": 2,
-    "optionsMax": 4,
+    "maximumOptionsPolicy": "use_active_runtime_native_schema_maximum_meaningful_options_without_meta_kim_lower_cap",
     "requiresRecommendedDefault": true,
     "eachOptionMustHave": [
       "bestFor",
@@ -88,6 +88,51 @@
       "risk",
       "expectedResult",
       "verification"
+    ]
+  },
+  "nativeStructuredPanelContract": {
+    "requiredForPrimaryRuntimes": ["codex", "claude_code"],
+    "hostOwnsVisualSkin": true,
+    "metaKimOwnsPayloadStructure": true,
+    "requiredPanelSections": [
+      "AI understanding",
+      "AI additions",
+      "Capability route",
+      "Candidate paths"
+    ],
+    "requiredOptionSemantics": [
+      "recommended default",
+      "expected result",
+      "advantages",
+      "disadvantages or risk",
+      "verification impact"
+    ],
+    "runtimeNativeOptionPolicy": {
+      "optionsMin": 2,
+      "strategy": "use_active_host_schema_maximum_meaningful_options",
+      "noMetaKimLowerCap": true,
+      "overActiveHostMaximumBehavior": "show_host_maximum_best_options_and_record_omitted_alternatives",
+      "currentObservedHostMaximums": {
+        "codex": {
+          "source": "active request_user_input tool schema",
+          "questionsMax": 3,
+          "optionsMax": 3,
+          "notProductCap": true
+        },
+        "claude_code": {
+          "source": "active AskUserQuestion host schema",
+          "optionsMax": 4,
+          "notProductCap": true
+        }
+      }
+    },
+    "forbidden": [
+      "plain_yes_no_prompt_for_branching_decision",
+      "meta_kim_lower_option_cap",
+      "fixed_codex_option_cap",
+      "oversized_native_payload_retry_unchanged",
+      "unstyled_question_without_tradeoffs",
+      "chat_card_as_primary_runtime_completion"
     ]
   },
   "intentConfirmationCard": {
@@ -111,8 +156,10 @@
       "decision purpose",
       "route-changing dimension",
       "recommended default",
-      "option count",
+      "runtime-native maximum option policy",
       "option trade-offs",
+      "structured panel sections",
+      "runtime payload limits and host maximums",
       "selection result",
       "blocking reason or compatibility fallback reason",
       "native trigger proof or artifact-only boundary",

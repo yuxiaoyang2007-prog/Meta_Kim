@@ -258,6 +258,82 @@ function buildDeepReadTargets(sourceList) {
     }));
 }
 
+function buildKeyInformationTargets(testCase, sourceList) {
+  const sourceImpacts = unique(sourceList.map((source) => source.routeImpact)).slice(0, 4);
+  const requiredCategories = testCase.requiredSourceCategories ?? [];
+  return unique([
+    ...sourceImpacts.map((impact) => `Decide whether ${impact} changes owner, route, risk, or verification.`),
+    ...requiredCategories.map((category) => `Close evidence gap for ${category} before Thinking.`),
+    testCase.blockedReason
+      ? "Confirm approval, credential, or paid boundary before any provider activation."
+      : "Identify the minimum evidence that would change the route.",
+  ]).slice(0, 6);
+}
+
+function buildIterationPlan(testCase, searchAngles) {
+  const firstAngles = searchAngles.slice(0, 3).map((item) => item.angle).join("; ");
+  return [
+    `Iteration 1: cover independent angles (${firstAngles}) and record route-changing gaps.`,
+    "Iteration 2: deep-read the highest quality sources and convert claims into evidence cards.",
+    testCase.blockedReason
+      ? "Stop on approval or credential boundary and return to Fetch or user approval."
+      : "Run a falsification pass against the recommended route before Thinking.",
+  ];
+}
+
+function buildIterationLog(testCase, searchAngles, decisionImpactMap) {
+  const primaryImpact = decisionImpactMap[0]?.impact ?? "route_selection";
+  return [
+    {
+      iteration: 1,
+      trigger: testCase.researchRequired
+        ? "research_required_before_thinking"
+        : "local_evidence_sufficiency_check",
+      queryOrAction: searchAngles.map((item) => item.angle).join(" | "),
+      observation: `Initial evidence targets ${primaryImpact} and records remaining gaps before Thinking.`,
+      gapClosed: !testCase.blockedReason,
+      nextStepDecision: testCase.blockedReason
+        ? "Return to Fetch or approval before Thinking because a boundary is blocked."
+        : "Continue to source deep read and claim evidence card synthesis.",
+      stopCheck: testCase.blockedReason
+        ? "Stop because approval or credential evidence is missing."
+        : "Do not stop until claim cards and counterevidence are recorded.",
+    },
+    {
+      iteration: 2,
+      trigger: "claim_confidence_update",
+      queryOrAction: "Deep-read selected sources and check counterevidence for route-changing claims.",
+      observation: testCase.blockedReason
+        ? "Boundary evidence cannot be completed without approval."
+        : "Claim evidence can update owner, scope, and verification choices.",
+      gapClosed: testCase.blockedReason ? "blocked" : true,
+      nextStepDecision: testCase.blockedReason
+        ? "Keep Thinking blocked until the boundary is resolved."
+        : "Stop research and hand off decision-ready evidence to Thinking.",
+      stopCheck: testCase.blockedReason
+        ? "Blocked condition is explicit and not silently downgraded."
+        : "Stop because key information targets, evidence cards, and falsification pass are recorded.",
+    },
+  ];
+}
+
+function buildClaimEvidenceCards(testCase, sourceList, decisionImpactMap) {
+  const sourceRefs = sourceList.slice(0, 3).map((source) => source.sourceId);
+  return decisionImpactMap.slice(0, Math.max(1, Math.min(3, decisionImpactMap.length))).map(
+    (impact, index) => ({
+      claim: `${impact.impact} changes the pre-Execution route.`,
+      sourceRefs,
+      evidenceAnchor: sourceList[index % sourceList.length]?.claimUse ?? "route-changing evidence",
+      confidence: testCase.blockedReason ? "low" : index === 0 ? "high" : "moderate",
+      counterevidence: testCase.blockedReason
+        ? [testCase.blockedReason]
+        : ["Checked for single-source weakness, stale source risk, and owner mismatch."],
+      decisionImpact: impact.thinkingHandoff,
+      falsificationStatus: testCase.blockedReason ? "blocked" : "tested_survived",
+    }),
+  );
+}
+
 function buildPacket(testCase, cursorContract) {
   const sourceList = buildSourceList(testCase, cursorContract);
   const blocked = Boolean(testCase.blockedReason);
@@ -267,6 +343,7 @@ function buildPacket(testCase, cursorContract) {
       ? "must_complete_before_thinking"
       : "recorded_before_thinking";
   const decisionImpactMap = buildDecisionImpactMap(testCase, sourceList);
+  const searchAngles = buildSearchAngles(testCase);
   return {
     schemaVersion: "research-preparation-packet-v0.1",
     id: testCase.id,
@@ -281,7 +358,14 @@ function buildPacket(testCase, cursorContract) {
     decisionUse: testCase.researchRequired
       ? "Choose owner, route, risk boundary, acceptance, and verification before Thinking."
       : "Record why local evidence is enough before Thinking.",
-    searchAngles: buildSearchAngles(testCase),
+    searchAngles,
+    keyInformationTargets: buildKeyInformationTargets(testCase, sourceList),
+    iterationPlan: buildIterationPlan(testCase, searchAngles),
+    stopCondition: blocked
+      ? "Stop research and return to Fetch or approval when external action boundaries cannot be resolved."
+      : "Stop only after key information targets are closed, claim cards exist, and counterevidence has been checked.",
+    decisionUpdateRule:
+      "Any new evidence that changes owner, route, scope, risk, or verification must update decisionImpactMap before Thinking.",
     retrievalCapabilityReadiness: RETRIEVAL_CAPABILITIES,
     sourceRequirements: testCase.requiredSourceCategories ?? [],
     sourceList,
@@ -303,6 +387,8 @@ function buildPacket(testCase, cursorContract) {
       ? "current facts and official/provider claims must be refreshed during Fetch"
       : "repo-current local evidence is enough",
     decisionImpactMap,
+    iterationLog: buildIterationLog(testCase, searchAngles, decisionImpactMap),
+    claimEvidenceCards: buildClaimEvidenceCards(testCase, sourceList, decisionImpactMap),
     thinkingHandoff: {
       readyForThinking: !blocked,
       returnToStage: blocked ? "Fetch" : null,
@@ -372,6 +458,23 @@ function validatePacket(packet, testCase) {
     packet.originalSynthesisPolicy.required.includes("rename to Meta_Kim-native packet language") &&
     packet.originalSynthesisPolicy.forbidden.includes("copying third-party prompt text") &&
     packet.originalSynthesisPolicy.forbidden.includes("using cosmetic rewrites to disguise copied wording");
+  const keyInfoOk = packet.keyInformationTargets.length >= 2;
+  const iterationOk =
+    packet.iterationPlan.length >= 2 &&
+    packet.iterationLog.length >= 1 &&
+    packet.iterationLog.every((item) => item.nextStepDecision && item.stopCheck);
+  const claimCardsOk =
+    packet.claimEvidenceCards.length >= 1 &&
+    packet.claimEvidenceCards.every(
+      (item) =>
+        item.claim &&
+        item.sourceRefs.length >= 1 &&
+        item.decisionImpact &&
+        item.falsificationStatus,
+    );
+  const decisionUpdateOk =
+    packet.stopCondition.includes("Stop") &&
+    packet.decisionUpdateRule.includes("decisionImpactMap");
   const blockedOk = testCase.blockedReason
     ? packet.blocked === true &&
       packet.stageGate === "blocked_return_to_fetch" &&
@@ -390,6 +493,10 @@ function validatePacket(packet, testCase) {
       deepReadOk &&
       attributionOk &&
       originalSynthesisOk &&
+      keyInfoOk &&
+      iterationOk &&
+      claimCardsOk &&
+      decisionUpdateOk &&
       blockedOk
         ? "pass"
         : "fail",
@@ -404,6 +511,10 @@ function validatePacket(packet, testCase) {
       deepReadOk,
       attributionOk,
       originalSynthesisOk,
+      keyInfoOk,
+      iterationOk,
+      claimCardsOk,
+      decisionUpdateOk,
       blockedOk,
     },
   };
@@ -438,6 +549,7 @@ function buildMarkdown(report) {
     "## Audit Notes",
     "",
     "- Every packet records searchAngles, sourceList, freshness, credibility, blockedReason, decisionImpactMap, and thinkingHandoff.",
+    "- Every packet records keyInformationTargets, iterationPlan, iterationLog, stopCondition, decisionUpdateRule, and claimEvidenceCards.",
     "- Every packet records a source-quality ladder, key-source deep-read targets, claim attribution policy, cross-check strategy, and original-synthesis boundary.",
     "- Blocked research returns to Fetch or approval instead of pretending Thinking can safely proceed.",
     "- Local-only work still records why external research is not needed.",

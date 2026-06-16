@@ -141,6 +141,7 @@ function compactAgent(entry, source) {
     id: entry.id,
     layer,
     source,
+    platformId: entry.platformId ?? null,
     sourceRef: toPosix(sourceRef),
     executionBlock: entry.executionBlock ?? layer === "meta",
   };
@@ -427,21 +428,34 @@ const governanceStages = Object.fromEntries(
   ]),
 );
 const governanceStageOwners = [...new Set(Object.values(governanceStages).flatMap((stage) => [...stage.requiredAgents, ...stage.allowedAgents]))];
+function platformMatchesRuntime(agent) {
+  if (!agent?.platformId) return true;
+  const normalized = String(agent.platformId).toLowerCase();
+  if (runtime === "claude_code") return normalized === "claudecode" || normalized === "claude_code";
+  if (runtime === "codex") return normalized === "codex" || normalized === "codexapp";
+  if (runtime === "cursor") return normalized === "cursor";
+  if (runtime === "openclaw") return normalized === "openclaw";
+  return false;
+}
+
+const runtimeScopedProjectExecutionAgents = projectRuntimeAgentCandidates
+  .filter((agent) => agent.runtime === runtime || agent.runtime === "shared");
+const runtimeScopedLocalGlobalAgents = localGlobalAgents.filter(platformMatchesRuntime);
 const candidateExistingExecutionOwners = [
-  ...projectRuntimeAgentCandidates,
-  ...localGlobalAgents,
+  ...runtimeScopedProjectExecutionAgents,
+  ...runtimeScopedLocalGlobalAgents,
 ]
   .filter((agent) => agent.layer !== "meta" && agent.executionBlock !== true)
   .map((agent) => agent.id);
 const ownerDiscoveryPacket = {
-  discoveryPrinciple: "provider_first_evidence_owner_last_binding",
+  discoveryPrinciple: "canonical_index_first_capability_discovery_owner_last_binding",
   searchOrder: [
-    "available_capability_providers_skills_tools_mcp",
-    "runtime_tool_provider_inventory",
     "repo_canonical_capability_index",
     "runtime_mirror_indexes",
     "project_runtime_agent_inventory",
     "local_global_agent_inventory",
+    "available_capability_providers_skills_tools_mcp",
+    "runtime_tool_provider_inventory",
   ],
   ownerBindingOrder: workflowContract.runDiscipline?.executionOwnership?.existingOwnerEvidenceOrder ?? [
     "repo_canonical_capability_index",
@@ -680,6 +694,7 @@ function selectProvider(type, preferredIds = []) {
 function selectExecutionOwner() {
   const available = new Set(ownerDiscoveryPacket.candidateExistingExecutionOwners);
   const preferenceGroups = [
+    { terms: ["agent", "subagent", "owner", "search", "discover", "find", "智能体", "代理", "搜索", "寻找", "发现"], owners: ["codebase-search", "search-specialist", "analysis", "worker"] },
     { terms: ["test", "smoke", "verify", "validation", "测试", "验证"], owners: ["test", "verify", "e2e-runner", "pr-test-analyzer", "worker"] },
     { terms: ["doc", "docs", "readme", "文档"], owners: ["docs", "api-documenter", "worker"] },
     { terms: ["frontend", "ui", "react", "前端"], owners: ["frontend", "worker"] },
@@ -694,14 +709,21 @@ function selectExecutionOwner() {
   return ["worker", "analysis", "backend", "test", "verify"].find((candidate) => available.has(candidate)) ?? null;
 }
 
-function engineeringExecutionRoute() {
-  if (taskShape !== "engineering_execution") return null;
+function capabilityDiscoveryTaskRequested() {
+  const discoveryVerb = /find|discover|search|match|route|寻找|发现|搜索|检索|匹配|路由/.test(taskText);
+  const discoveryTarget = /agent|subagent|owner|skill|provider|capability|mcp|tool|智能体|代理|技能|能力|工具/.test(taskText);
+  return discoveryVerb && discoveryTarget;
+}
+
+function executionCapabilityDiscoveryRoute() {
+  const explicitDiscoveryRoute = capabilityDiscoveryTaskRequested();
+  if (taskShape !== "engineering_execution" && !explicitDiscoveryRoute) return null;
   const selectedOwner = selectExecutionOwner();
   const selectedAgentProvider = [
-    ...projectRuntimeAgentCandidates,
-    ...localGlobalAgents,
+    ...runtimeScopedProjectExecutionAgents,
+    ...runtimeScopedLocalGlobalAgents,
   ].find((agent) => agent.id === selectedOwner) ?? null;
-  const wantsDiscovery = /find|discover|search|寻找|发现/.test(taskText);
+  const wantsDiscovery = explicitDiscoveryRoute || /find|discover|search|寻找|发现/.test(taskText);
   const wantsCreation = /create|scaffold|generate|创建|生成/.test(taskText);
   const selectedSkillDiscovery = selectProvider("skills", ["findskill", "skill-scout", "skill-stocktake"]);
   const selectedSkillCreation = selectProvider("skills", ["skill-creator", "create-agent", "agent-teams-playbook"]);
@@ -719,7 +741,7 @@ function engineeringExecutionRoute() {
   if (!selectedOwner) blockedReasons.push("execution owner missing");
   if (!selectedSkill) blockedReasons.push("skill provider missing");
   if (!selectedMcpServer && !selectedMcpTool) blockedReasons.push("MCP provider missing");
-  const routeScore = blockedReasons.length ? 49 : 88;
+  const routeScore = blockedReasons.length ? 49 : explicitDiscoveryRoute ? 92 : 88;
   return {
     id: `execution-capability-discovery:${runtime}:${osTarget}`,
     owner: selectedOwner,
@@ -733,7 +755,7 @@ function engineeringExecutionRoute() {
     verification: {
       command: "npm run meta:route:validate",
       artifact: "route JSON",
-      passCondition: "Engineering execution route has a non-governance owner plus discovered skill, MCP, command/tool, runtime, OS, and verification owner.",
+      passCondition: "Execution capability discovery route has a runtime-valid non-governance owner plus discovered skill, MCP, command/tool, runtime, OS, and verification owner.",
     },
     score: routeScore,
     scoreBand: routeScore >= 85 ? "execute" : "blocked",
@@ -774,7 +796,7 @@ function engineeringExecutionRoute() {
   };
 }
 
-const syntheticRoutes = [engineeringExecutionRoute()].filter(Boolean);
+const syntheticRoutes = [executionCapabilityDiscoveryRoute()].filter(Boolean);
 const rankedRoutes = [...candidateWeapons.map(routeForWeapon), ...syntheticRoutes].sort((a, b) => b.score - a.score);
 const recommendedRoute = rankedRoutes.find((route) => route.score >= 85) ?? rankedRoutes.find((route) => route.score >= 70) ?? null;
 const capabilityGapPacket = recommendedRoute ? null : {

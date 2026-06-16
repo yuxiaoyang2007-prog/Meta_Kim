@@ -25,13 +25,13 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     "project runtime agents must be listed even when none are selected",
   );
   assert.ok(
-    fuzzy.ownerDiscoveryPacket?.discoveryPrinciple === "provider_first_evidence_owner_last_binding",
-    "route discovery must expose provider-first evidence and owner-last binding principle",
+    fuzzy.ownerDiscoveryPacket?.discoveryPrinciple === "canonical_index_first_capability_discovery_owner_last_binding",
+    "route discovery must expose canonical/index-first discovery and owner-last binding principle",
   );
   assert.equal(
     fuzzy.ownerDiscoveryPacket?.searchOrder?.[0],
-    "available_capability_providers_skills_tools_mcp",
-    "provider evidence must be collected before owner binding",
+    "repo_canonical_capability_index",
+    "canonical capability index must be collected before provider matching",
   );
   assert.ok(
     fuzzy.ownerDiscoveryPacket?.ownerBindingOrder?.includes("local_global_agent_inventory"),
@@ -39,7 +39,7 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   );
   assert.ok(
     fuzzy.ownerDiscoveryPacket?.searchOrder?.includes("available_capability_providers_skills_tools_mcp"),
-    "skill/tool/MCP providers must be checked before agent creation",
+    "skill/tool/MCP providers must still be checked before agent creation",
   );
   assert.ok(
     fuzzy.ownerDiscoveryPacket?.projectRuntimeSkillProviders?.some((provider) => provider.id === "meta-theory"),
@@ -110,6 +110,11 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   assert.equal(smoke.recommendedRoute?.selectedCapabilityProviders?.skillDiscovery?.id, "findskill");
   assert.equal(smoke.recommendedRoute?.selectedCapabilityProviders?.skillCreation?.id, "skill-creator");
   assert.ok(smoke.recommendedRoute?.selectedCapabilityProviders?.agent, "Engineering smoke route must bind an execution agent provider");
+  assert.notEqual(
+    smoke.recommendedRoute?.selectedCapabilityProviders?.agent?.platformId,
+    "claudeCode",
+    "Codex smoke route must not bind Claude Code global agents as execution owners",
+  );
   assert.equal(smoke.recommendedRoute?.selectedCapabilityProviders?.agentCreation?.id, "create-agent");
   assert.ok(smoke.recommendedRoute?.selectedCapabilityProviders?.skill, "Engineering smoke route must bind a skill provider");
   assert.ok(
@@ -118,6 +123,26 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   );
   assert.ok(smoke.recommendedRoute?.selectedCapabilityProviders?.command || smoke.recommendedRoute?.selectedCapabilityProviders?.runtimeTool);
   assert.equal(smoke.routeExecutionGate?.canEnterExecution, true);
+
+  const claudeAgentSearch = route(
+    "在 Claude Code 里运行 agent 搜索不对 critical and fetch thinking and review",
+    "claude_code",
+    "windows",
+  );
+  assert.equal(
+    claudeAgentSearch.recommendedRoute?.id,
+    "execution-capability-discovery:claude_code:windows",
+    "Claude Code agent-search complaints must route to execution capability discovery",
+  );
+  assert.notEqual(
+    claudeAgentSearch.recommendedRoute?.selectedCapabilityProviders?.agent?.runtime,
+    "codex",
+    "Claude Code must not bind Codex project agent adapters as execution owners",
+  );
+  assert.ok(
+    !String(claudeAgentSearch.recommendedRoute?.selectedCapabilityProviders?.agent?.sourceRef ?? "").startsWith(".codex/agents/"),
+    "Claude Code agent search must not select .codex/agents adapters as callable Claude agents",
+  );
 
   const hook = route("platform hook install");
   assert.ok(hook.candidateWeapons.includes("runtime-capability-matrix"));

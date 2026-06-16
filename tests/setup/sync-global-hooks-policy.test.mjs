@@ -61,6 +61,37 @@ describe("sync-global-meta-theory hook policy", () => {
     });
   });
 
+  test("--with-global-hooks installs prompt-entry bootstrap hook package", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      await runScript(["--targets", "claude", "--with-global-hooks"], env);
+
+      const hookDir = path.join(root, "claude", "hooks", "meta-kim");
+      for (const fileName of [
+        "activate-meta-theory-spine.mjs",
+        "block-dangerous-bash.mjs",
+        "spine-state.mjs",
+        "utils.mjs",
+      ]) {
+        await readFile(path.join(hookDir, fileName), "utf8");
+      }
+
+      const settings = JSON.parse(
+        await readFile(path.join(root, "claude", "settings.json"), "utf8"),
+      );
+      const promptHooks = settings.hooks?.UserPromptSubmit?.flatMap(
+        (block) => block.hooks ?? [],
+      ) ?? [];
+      assert.ok(
+        promptHooks.some(
+          (hook) =>
+            hook.command.includes("activate-meta-theory-spine.mjs") &&
+            hook.command.includes("--package-root"),
+        ),
+        "global Claude settings must register prompt-entry project bootstrap hook with package-root evidence",
+      );
+    });
+  });
+
   test("--with-global-hooks check rejects stale settings entries for missing Meta_Kim hook files", async () => {
     await withTempRuntimeHomes(async ({ env, root }) => {
       await runScript(["--targets", "claude", "--with-global-hooks"], env);

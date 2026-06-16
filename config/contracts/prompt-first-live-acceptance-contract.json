@@ -42,6 +42,38 @@
     "evolutionWritebackPacket",
     "claimBoundary"
   ],
+  "depthQuality": {
+    "purpose": "Prevent Review, Meta-Review, and Evolution from passing only because packets exist. The runtime artifact must show deep-research-grade evidence judgment, adversarial review of the review, and reusable learning assessment.",
+    "reviewPacket": {
+      "requiredFields": ["cleanVerdictReason", "depthStrategy"],
+      "requiredDepthStrategyFields": [
+        "evidenceQualityChecked",
+        "counterEvidenceChecked",
+        "decisionImpactChecked",
+        "falsificationChecked",
+        "upstreamStageTrace"
+      ],
+      "requiredUpstreamStageTrace": ["critical", "fetch", "thinking", "execution"]
+    },
+    "metaReviewPacket": {
+      "requiredFields": ["reviewDepthAudit"],
+      "requiredReviewDepthAuditFields": [
+        "shallowPacketPassRejected",
+        "adversarialCoverageChecked",
+        "reviewBlindSpotChecked",
+        "publicReadyEvidenceSeparated"
+      ]
+    },
+    "evolutionWritebackPacket": {
+      "requiredFields": ["strategy"],
+      "requiredStrategyFields": [
+        "reusablePatternAssessed",
+        "writebackTargetAssessed",
+        "scarNeedAssessed",
+        "nextRunReuseKey"
+      ]
+    }
+  },
   "promptPerfection": {
     "promptLayeringViolationTarget": 0,
     "minimumFixtures": [

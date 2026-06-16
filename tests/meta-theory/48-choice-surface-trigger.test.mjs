@@ -51,9 +51,16 @@ test("runtime contract distinguishes native choice trigger from generated artifa
   assert.equal(surfaces.claude?.unavailableAction, "block_before_execution");
   assert.deepEqual(surfaces.claude?.fallbackSurfaces, []);
   assert.match(surfaces.claude?.implementation ?? "", /deferred/i);
+  assert.match(surfaces.claude?.implementation ?? "", /AI understanding/);
+  assert.match(surfaces.claude?.implementation ?? "", /Candidate paths/);
   assert.doesNotMatch(surfaces.claude?.implementation ?? "", /render a localized chat decision card/i);
   assert.doesNotMatch(surfaces.codex?.implementation ?? "", /render a localized chat decision card/i);
   assert.match(surfaces.codex?.implementation ?? "", /do not continue with conversation_fallback/i);
+  assert.match(
+    surfaces.codex?.triggerDescription ?? "",
+    /active schema's maximum meaningful option count|active host schema/i,
+  );
+  assert.match(surfaces.codex?.implementation ?? "", /host-maximum set/i);
 });
 
 test("Codex and Claude adapters require real native calls and block instead of downgrading", async () => {
@@ -66,8 +73,70 @@ test("Codex and Claude adapters require real native calls and block instead of d
   assert.match(claude, /must call `AskUserQuestion`/);
   assert.match(claude, /deferred `AskUserQuestion` tool call/i);
   assert.match(claude, /Missing native proof blocks the run/);
+  assert.match(codex, /active runtime-native maximum meaningful option count/i);
+  assert.match(codex, /observed host capacity, not a permanent Meta_Kim limit/i);
+  assert.match(codex, /Native structured panel content/i);
+  assert.match(codex, /AI understanding[\s\S]*AI additions[\s\S]*Capability route[\s\S]*Candidate paths/i);
+  assert.match(codex, /expected result[\s\S]*advantage[\s\S]*disadvantage\/risk[\s\S]*verification impact/i);
+  assert.match(claude, /Native structured panel content/i);
+  assert.match(claude, /AI understanding[\s\S]*AI additions[\s\S]*Capability route[\s\S]*Candidate paths/i);
   assert.doesNotMatch(codex, /fall back once/i);
   assert.doesNotMatch(claude, /Fall back to `conversation_fallback`/i);
+});
+
+test("primary native choice panels preserve structure and runtime maximum option policy", async () => {
+  const contract = await readJson("config/contracts/workflow-contract.json");
+  const policy = await readJson("config/governance/choice-surface-policy.json");
+  const panel = contract.runDiscipline?.userInteractionPolicy?.nativeStructuredPanelContract;
+  assert.ok(panel, "workflow contract must define nativeStructuredPanelContract");
+  assert.deepEqual(panel.requiredForPrimaryRuntimes, ["codex", "claude_code"]);
+  assert.equal(panel.hostOwnsVisualSkin, true);
+  assert.equal(panel.metaKimOwnsPayloadStructure, true);
+  for (const section of [
+    "AI understanding",
+    "AI additions",
+    "Capability route",
+    "Candidate paths",
+  ]) {
+    assert.ok(panel.requiredPanelSections.includes(section), `missing section ${section}`);
+  }
+  for (const semantic of [
+    "recommended default",
+    "expected result",
+    "advantages",
+    "disadvantages or risk",
+    "verification impact",
+  ]) {
+    assert.ok(panel.requiredOptionSemantics.includes(semantic), `missing semantic ${semantic}`);
+  }
+  assert.equal(panel.runtimeNativeOptionPolicy?.optionsMin, 2);
+  assert.equal(
+    panel.runtimeNativeOptionPolicy?.strategy,
+    "use_active_host_schema_maximum_meaningful_options",
+  );
+  assert.equal(panel.runtimeNativeOptionPolicy?.noMetaKimLowerCap, true);
+  assert.equal(
+    panel.runtimeNativeOptionPolicy?.overActiveHostMaximumBehavior,
+    "show_host_maximum_best_options_and_record_omitted_alternatives",
+  );
+  assert.equal(
+    panel.runtimeNativeOptionPolicy?.currentObservedHostMaximums?.codex
+      ?.notProductCap,
+    true,
+  );
+  assert.equal(
+    panel.runtimeNativeOptionPolicy?.currentObservedHostMaximums?.claude_code
+      ?.notProductCap,
+    true,
+  );
+  assert.ok(panel.forbidden.includes("meta_kim_lower_option_cap"));
+  assert.ok(panel.forbidden.includes("fixed_codex_option_cap"));
+  assert.ok(panel.forbidden.includes("oversized_native_payload_retry_unchanged"));
+  assert.ok(!panel.forbidden.includes("four_option_codex_request_user_input_payload"));
+  assert.deepEqual(
+    policy.nativeStructuredPanelContract?.runtimeNativeOptionPolicy,
+    panel.runtimeNativeOptionPolicy,
+  );
 });
 
 test("generated card plans mark choice cards as adapter-required, not native-triggered", async () => {

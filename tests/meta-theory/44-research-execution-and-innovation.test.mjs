@@ -39,6 +39,9 @@ describe("44 — Research execution, freshness, and innovation sandbox", () => {
     assert.ok(contract.requiredSourceCategories.includes("official_docs"));
     assert.ok(contract.requiredSourceCategories.includes("news_version"));
     assert.ok(contract.requiredSourceCategories.includes("third_party_tool"));
+    assert.ok(contract.requiredResearchExecutionFields.includes("queryIterationCount"));
+    assert.ok(contract.requiredResearchExecutionFields.includes("falsificationAttempt"));
+    assert.ok(contract.iterationQualityGate.confidenceEnum.includes("high"));
     assert.equal(contract.innovationCandidatePacket.canonicalWritesMustEqual, 0);
 
     const summary = runResearchExecution();
@@ -75,6 +78,10 @@ describe("44 — Research execution, freshness, and innovation sandbox", () => {
       assert.ok(packet.byteLength > 500);
       assert.match(packet.contentHash, /^[a-f0-9]{64}$/);
       assert.equal(packet.freshnessPolicy.state, "fresh");
+      assert.ok(packet.queryIterationCount >= 1);
+      assert.equal(packet.evidenceGapClosed, true);
+      assert.notEqual(packet.confidenceBefore, packet.confidenceAfter);
+      assert.equal(packet.falsificationAttempt.status, "tested_survived");
       assert.equal(packet.thinkingHandoff.readyForThinking, true);
       assert.ok(packet.decisionImpactMap.every((impact) => impact.changesThinkingRoute));
     }
@@ -84,6 +91,8 @@ describe("44 — Research execution, freshness, and innovation sandbox", () => {
       .filter((packet) => packet.executionStatus === "blocked");
     assert.equal(blockedPackets.length, 2);
     assert.ok(blockedPackets.every((packet) => packet.thinkingHandoff.returnToStage === "Fetch"));
+    assert.ok(blockedPackets.every((packet) => packet.evidenceGapClosed === false));
+    assert.ok(blockedPackets.every((packet) => packet.falsificationAttempt.status === "blocked"));
 
     assert.ok(
       report.freshnessExamples.some((item) => item.state === "stale_refresh_required"),
@@ -101,6 +110,7 @@ describe("44 — Research execution, freshness, and innovation sandbox", () => {
 
     const markdown = readFileSync(markdownPath, "utf8");
     assert.match(markdown, /prepared research, live fetched evidence, stale evidence refresh/);
+    assert.match(markdown, /iteration\/confidence updates/);
     assert.match(markdown, /canonical/i);
   });
 });

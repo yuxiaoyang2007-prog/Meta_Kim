@@ -318,6 +318,36 @@ describe("validate-run-artifact.mjs", () => {
     );
   });
 
+  test("rejects research evidence without iteration logs", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      delete artifact.contentEvidencePacket.iterationLog;
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /iterationLog/,
+    );
+  });
+
+  test("rejects claim evidence cards with unresolved source refs", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.contentEvidencePacket.claimEvidenceCards[0].sourceRefs = [
+        "contentEvidencePacket.missingEvidence[0]",
+      ];
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /claimEvidenceCards.*sourceRefs/,
+    );
+  });
+
   test("rejects missing Critical production-correctness intent fields", async (t) => {
     const tempFixture = await writeTempFixture(t, (artifact) => {
       delete artifact.intentPacket.realIntent;

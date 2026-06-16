@@ -27,20 +27,26 @@ const eccSkill = skillsManifest.skills.find((skill) => skill.id === "ecc");
 describe("install platform config", () => {
   test("quick deploy copies root runtime guide files", () => {
     const source = readFileSync(path.join(repoRoot, "setup.mjs"), "utf8");
-    const match = source.match(
+    const deployMatch = source.match(
       /function deployPlatformFiles\(platformId, targetDir\) \{[\s\S]*?\n\}/,
     );
-    assert.ok(match, "deployPlatformFiles body not found");
-    const body = match[0];
+    const rootsMatch = source.match(
+      /function projectDeployRootsForPlatform\(platformId\) \{[\s\S]*?\n\}/,
+    );
+    assert.ok(deployMatch, "deployPlatformFiles body not found");
+    assert.ok(rootsMatch, "projectDeployRootsForPlatform body not found");
+    const deployBody = deployMatch[0];
+    const rootsBody = rootsMatch[0];
 
-    assert.match(body, /copyIfExists\("CLAUDE\.md", "CLAUDE\.md"\)/);
-    assert.match(body, /copyIfExists\("AGENTS\.md", "AGENTS\.md"\)/);
-    assert.match(body, /platformId === "claude" \|\| platformId === "all"/);
-    assert.match(body, /platformId === "openclaw"/);
-    assert.match(body, /platformId === "codex"/);
-    assert.match(body, /platformId === "cursor"/);
+    assert.match(deployBody, /projectDeployRootsForPlatform\(platformId\)/);
+    assert.match(rootsBody, /add\("CLAUDE\.md"\)/);
+    assert.match(rootsBody, /add\("AGENTS\.md"\)/);
+    assert.match(rootsBody, /platformId === "claude" \|\| platformId === "all"/);
+    assert.match(rootsBody, /platformId === "openclaw"/);
+    assert.match(rootsBody, /platformId === "codex"/);
+    assert.match(rootsBody, /platformId === "cursor"/);
     assert.equal(
-      body.match(/copyIfExists\("AGENTS\.md", "AGENTS\.md"\)/g)?.length,
+      rootsBody.match(/add\("AGENTS\.md"\)/g)?.length,
       1,
     );
   });

@@ -201,6 +201,9 @@ export function buildCodexHooksJson({
   hookPromptAdapterPath = null,
 } = {}) {
   const userPromptHooks = [];
+  if (spineHookPath) {
+    userPromptHooks.push(hookCommand(nodeHookCommand(spineHookPath), 5));
+  }
   if (memoryHookPath) {
     userPromptHooks.push(
       hookCommand(nodeHookCommand(memoryHookPath, ["--event", "user-prompt"]), 10),

@@ -8,6 +8,163 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [Unreleased]
 
+## [2.8.40] - 2026-06-16
+
+### Changed
+
+- **Prompt-Entry Governance Activation** - Claude Code and Codex project prompt entries now run the meta-theory spine hook, so natural-language durable work and `critical/fetch/thinking/review` wording can trigger governance before execution instead of relying only on explicit skill activation.
+- **Global Claude Project Readiness Detection** - Claude Code global hooks now install the prompt-entry bootstrap hook package with package-root evidence, allowing stale or unbootstrapped projects to receive a concise project readiness reason before any bootstrap write.
+- **Project Bootstrap Safety Boundary** - Project bootstrap remains dry-run first and confirmation-gated; stale or equivalent projects surface `status`, active targets, reason, and the native choice requirement without silently applying project files.
+- **Spine Deadlock Breaker** - Spine-state writes are now allowed even when Fetch is waiting for `fetchRecord`, preventing prompt-entry smoke runs from locking maintainers out of the state file needed to record Fetch evidence.
+- **Global Capability Evidence Refresh** - Refreshed global capability discovery after installing the new hook package; the inventory now includes the Meta_Kim global prompt-entry hook alongside agents, skills, commands, MCP servers/tools, plugins, and runtime hooks.
+
+### Verification
+
+- `node --test tests/setup/graphify-wiring-contract.test.mjs tests/meta-theory/11-eight-stage-spine.test.mjs tests/setup/sync-runtimes-manifest.test.mjs tests/setup/sync-global-hooks-policy.test.mjs tests/meta-theory/47-meta-theory-entry-classifier.test.mjs tests/governance/capability-routing.test.mjs`
+- `node --check canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs`
+- `node --check canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs`
+- `npm run meta:sync`
+- `npm run meta:sync:global -- --with-global-hooks`
+- `npm run discover:global`
+- Claude Code global `UserPromptSubmit` smoke in `D:/KimProject/游戏策划案`
+- Codex project `UserPromptSubmit` smoke in `D:/KimProject/Meta_Kim`
+
+## [2.8.39] - 2026-06-16
+
+### Changed
+
+- **Card Dealing Accuracy Standard** - Upgraded `cardPlanPacket` to v0.2 so every card records a deal/suppress/defer/skip/interrupt/escalate decision with an 80-point standard, quantitative signals, evidence refs, and falsification checks.
+- **User-Visible Card Trigger Reason** - Added a concise run-start and report line explaining why card dealing triggered, how many cards activated, and whether the minimum score passed.
+- **Contract-Backed Card Proof** - Made `dealStandard` a required `cardPlanPacket` field, aligned generated card shells/sources/silence/control decisions with the workflow contract, and refreshed validator fixtures.
+- **Deep Research-Style Card Review** - Bound each card decision to decision impact and counterfactual checks, so unused cards suppress with evidence instead of lingering as vague defers.
+- **Global Discovery Readiness** - Synced the updated meta-theory skill into project and global runtime homes, then refreshed the global capability inventory for Claude Code, Codex, OpenClaw, and Cursor.
+
+### Verification
+
+- `node --test tests/meta-theory/14-card-deck-complete.test.mjs tests/meta-theory/34-run-deliverables.test.mjs tests/meta-theory/12-ten-step-workflow.test.mjs tests/meta-theory/07-contract-compliance.test.mjs`
+- `node scripts/run-meta-theory-governed-execution.mjs --task "帮我做个小红书营销自动发布器" --run-id card-proof --emit-conversation-notice`
+- `npm run meta:check`
+- `npm run meta:test:meta-theory`
+- `npm run discover:global`
+- `npm run meta:sync:global`
+- `npm run meta:check:global`
+- `npm run meta:release:smoke`
+
+## [2.8.38] - 2026-06-16
+
+### Changed
+
+- **11-Phase Trigger Standard** - Upgraded `businessPhasePlanPacket` to v0.2 so every phase records a trigger/skip/block/wait decision, score, evidence refs, quantitative signals, and falsification checks instead of passing because eleven phase names were listed.
+- **Business Workflow Coverage Truth** - Replaced the old phase-count-only coverage string with contract-aligned `complete` / `incomplete` judgment plus `coverageDetail`, so "recorded" and "accurately triggered" are no longer conflated.
+- **Concise Start Reason** - Added a run-start user-facing explanation for why the 8-stage spine and 11-phase workflow triggered, kept short and evidence-backed rather than exposing internal packets.
+- **Deep Research-Style Phase Proof** - Bound phase decisions to key signals, counterfactual checks, and decision evidence; accurate skips such as Revision and pending Feedback are now explicitly represented.
+- **Report Visibility** - Added trigger state, trigger score, and start-reason visibility to the user-readable meta-theory report and CLI conversation notice.
+
+### Verification
+
+- `node --test tests/meta-theory/34-run-deliverables.test.mjs`
+- `node --test tests/meta-theory/12-ten-step-workflow.test.mjs tests/meta-theory/09-run-artifact-validator.test.mjs`
+- `npm run meta:check`
+- `npm run meta:test:meta-theory`
+- `npm run discover:global`
+- `npm run meta:check:global`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
+## [2.8.37] - 2026-06-16
+
+### Changed
+
+- **Deep Review Gates** - Upgraded prompt-first live acceptance so Review must prove evidence quality, counterevidence, decision impact, falsification checks, and upstream stage trace instead of passing on packet presence alone.
+- **Meta-Review Depth Audit** - Added a mechanical depth audit that rejects shallow packet-only Review, checks adversarial coverage and blind spots, and keeps public-ready evidence separate from live/runtime proof.
+- **Evolution Strategy Evidence** - Required Evolution to show reusable-pattern, writeback-target, scar-need, and next-run reuse-key assessment before a `none-with-reason` writeback decision can pass.
+- **Strict Live Acceptance Regression** - Added regression coverage so missing or shallow Review / Meta-Review / Evolution packets fail strict live normalization rather than being filled by fallback data.
+
+### Verification
+
+- `node --test tests/governance/prompt-first-live-acceptance.test.mjs`
+- `node --test tests/governance/decision-cross-validation.test.mjs tests/governance/prompt-first-live-acceptance.test.mjs`
+- `npm run meta:check`
+- `npm run meta:test:meta-theory`
+- `npm run meta:sync`
+- `npm run discover:global`
+- `npm run meta:check:global`
+- `npm run meta:prd:prompt-first-live:validate`
+- `git diff --check`
+
+## [2.8.36] - 2026-06-16
+
+### Changed
+
+- **Professional Provider-First Routing** - Made governed routes prefer existing global/project professional providers before creating or upgrading execution agents, with explicit coverage for agents, skills, commands, MCP providers/tools, runtime tools, hooks, plugins, memory/graph providers, and dependency providers.
+- **WorkerTask Identity Boundary** - Clarified and validated that `workerTaskPacket` is a run-scoped work order for a selected owner/loadout, not a temporary small agent, subagent definition, or durable provider identity.
+- **Automatic Global Capability Refresh** - Updated setup/update and global dependency install/update flows to refresh the local global capability inventory automatically after runtime homes change, while keeping machine-specific inventory out of GitHub source.
+- **Capability Gap Evidence** - Added `fetch.global_professional_providers_checked` evidence and regression coverage so `create_agent` decisions must prove existing professional providers were checked first.
+- **Setup Regression Coverage** - Added release tests for automatic global inventory refresh and fixed the project-deploy protected JSON merge test to match the current planning/write split.
+
+### Verification
+
+- `npm run meta:release:smoke`
+- `npm run meta:test:setup`
+- `npm run meta:validate`
+- `npm run discover:global`
+- `npm run meta:gap:real-input-replay`
+- `npm run meta:prd:smooth-capability:validate`
+- `npm run meta:runtime:validate`
+- `npm run meta:graphify:rebuild`
+- `git diff --check`
+
+## [2.8.35] - 2026-06-16
+
+### Changed
+
+- **Decision-Grade Deep Research** - Upgraded Fetch evidence from source collection to key-information targeting, iterative query/read/update logs, explicit stop conditions, and decision-update rules before Thinking.
+- **Claim Evidence Cards** - Added `claimEvidenceCards` and stricter run-artifact validation so route-changing claims must cite resolvable evidence refs, counterevidence, confidence, falsification status, and decision impact.
+- **Research Execution Proof** - Extended live research execution packets with query iteration counts, evidence-gap closure, confidence-before/after updates, and falsification attempts, keeping blocked evidence out of Thinking.
+- **Canonical Governance Alignment** - Updated Scout, Conductor, Prism, and the meta-theory dispatcher so deep research quality is enforced by role responsibilities, generated packets, validators, fixtures, and regression tests rather than prompt wording alone.
+
+### Verification
+
+- `node scripts/run-node-tests.mjs "tests/meta-theory/02-clarity-gate.test.mjs" "tests/meta-theory/37-research-preparation-layer.test.mjs" "tests/meta-theory/44-research-execution-and-innovation.test.mjs" "tests/meta-theory/09-run-artifact-validator.test.mjs"`
+- `npm run meta:check`
+- `npm run meta:release:smoke`
+- `node scripts/run-node-tests.mjs "tests/meta-theory/09-run-artifact-validator.test.mjs"`
+- `git diff --check`
+
+## [2.8.34] - 2026-06-16
+
+### Changed
+
+- **Install Scope Boundary** - Restored the default install/update model to "global reusable capabilities + current project projection", now explicitly target-selected: the Enter default projects Claude Code + Codex, while Cursor and OpenClaw project files appear only when those formal projection compatibility targets are selected.
+- **Open-Source Runtime Projection Boundary** - Added a release validator that keeps generated runtime projection directories such as `.codex/`, `.agents/`, `.claude/`, `.cursor/`, and `openclaw/` out of GitHub source and package files, while documenting that Codex adapter/business-role TOML files are local host projections rather than governance agents.
+- **Platform Compatibility Tiers** - Made the install contract and verification output distinguish formal projections, dependency-owned targets, and candidate probes, while public docs avoid repeating upstream dependency install matrices as Meta_Kim support claims.
+- **Public Platform Wording** - Updated README badges, platform tables, and cross-platform mapping copy so default formal projections, explicit formal compatibility projections, and candidate compatibility probes are visible separately; refreshed Qoder official doc links and added Cline's official Skills primitive to the catalog.
+- **Project Governance UX** - Updated the PRD, setup, and README copy so global skills are reusable discovery entrypoints, project governance requires dry-run bootstrap confirmation, and `AGENTS.md` is described as platform-specific context rather than a universal Codex/Cursor/OpenClaw entrypoint.
+- **Install Scope Verification** - Added `npm run meta:install-scope:verify` to exercise temp global homes and temp project bootstraps, then report global-layer and project-layer surfaces by platform.
+
+## [2.8.33] - 2026-06-15
+
+### Added
+
+- **Global-First Project Bootstrap** - Added `meta-kim project bootstrap` and `npm run meta:project:bootstrap` so a global Meta_Kim install can dry-run and apply project-level Claude Code / Codex projections without asking users to manually maintain both global and project state.
+- **First-Trigger Bootstrap Probe** - Extended the meta-theory activation hook to run a dry-run project bootstrap probe on first meta-theory activation and save source-chain evidence without silently applying project files.
+- **Lazy Bootstrap Acceptance Tests** - Added fixture coverage for empty projects, existing user config, stale manifests, read-only failures, managed-block replacement, protected JSON merge, backup manifests, and `.codex/config.toml` never-touch behavior.
+
+### Changed
+
+- **Project Source Chain Evidence** - Project bootstrap plans now expose the installed package root, canonical roots, `config/sync.json`, generated runtime mirrors, target project, file actions, merge policies, and skipped files before any write.
+- **Runtime Choice Surfaces** - Updated Claude Code and Codex choice-surface contracts to preserve structured decision-panel semantics while using the active host schema's maximum meaningful option count instead of a Meta_Kim hard cap.
+- **Capability Routing** - Moved capability discovery to canonical/index-first routing and prevented Codex and Claude Code routes from binding the other runtime's project agent adapters as callable execution owners.
+
+### Verification
+
+- `npm run meta:check`
+- `npm run meta:test:setup`
+- `npm run meta:test:governance`
+- `npm run meta:runtime:safety:validate`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
 ## [2.8.32] - 2026-06-15
 
 ### Changed

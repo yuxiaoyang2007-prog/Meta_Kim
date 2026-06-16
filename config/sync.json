@@ -39,6 +39,7 @@
       ".codex/hooks",
       ".codex/hooks.json",
       ".codex/commands",
+      ".codex/config.toml",
       "codex/config.toml.example"
     ],
     "openclaw": [

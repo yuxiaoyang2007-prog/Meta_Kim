@@ -133,7 +133,22 @@ function isSpineStateWrite() {
   if (normalized.endsWith(spineFile)) return true;
   // Also reject anything under a ".../spine/..." segment so adjacent ledger
   // files do not become a back door.
-  return /[\\/]spine[\\/]/.test(normalized);
+  return /[\\/]spine[\\/]/.test(normalized) || isBashSpineStateWrite();
+}
+
+function isBashSpineStateWrite() {
+  if (toolName !== "Bash") return false;
+  const command = String(toolInput?.command || "");
+  if (!command.trim()) return false;
+  const normalized = command.replace(/\\/g, "/").toLowerCase();
+  const stateDir = SPINE_STATE_DIR.replace(/\\/g, "/").toLowerCase();
+  const touchesSpine =
+    normalized.includes(`${stateDir}/`) ||
+    normalized.includes(".meta-kim/state/default/spine/") ||
+    normalized.includes("spine-state.json");
+  if (!touchesSpine) return false;
+
+  return /(^|[\s|;&])(?:set-content|out-file|add-content|new-item|remove-item|move-item|copy-item)\b|[>]{1,2}/i.test(command);
 }
 
 function isPlanningFile() {
@@ -924,20 +939,20 @@ if (state.queryBypass) {
 
 // Execution tools: enforce dispatch chain
 if (isExecutionTool(toolName)) {
+  if (isSpineStateWrite()) {
+    process.exit(0);
+  }
+
   // Meta-agent readonly enforcement (covers Bash/Edit/Write/MultiEdit/NotebookEdit).
-  // This runs BEFORE the spine-state-write / planning-file exemptions so that a
-  // meta-* caller cannot, for example, push hand-crafted Bash through the
-  // planning-file shortcut. Spine-state writes themselves are still exempt
-  // only for non-meta callers (they fall through this guard untouched).
+  // This runs before the planning-file exemption so that a meta-* caller cannot,
+  // for example, push hand-crafted Bash through the planning-file shortcut.
+  // Spine-state writes are the deadlock breaker and stay exempt above.
   const caller = inferCallerIdentity(state);
   if (caller.name && isMetaAgent(caller.name)) {
     enforceMetaReadonly(toolName, toolInput, state, caller);
     // warn-mode falls through; block-mode already exited.
   }
 
-  if (isSpineStateWrite()) {
-    process.exit(0);
-  }
   if (isPlanningFile()) {
     if (state.active && state.currentStage === "critical") {
       const advanced = advanceStage(state, "fetch");

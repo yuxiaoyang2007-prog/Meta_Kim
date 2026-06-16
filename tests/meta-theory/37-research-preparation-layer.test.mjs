@@ -60,6 +60,12 @@ describe("37 — Research preparation layer", () => {
         packet.sourceQualityLadder.includes("community_or_forum_evidence_only_with_label"),
       );
       assert.ok(packet.deepReadTargets.length >= 3);
+      assert.ok(packet.keyInformationTargets.length >= 2);
+      assert.ok(packet.iterationPlan.length >= 2);
+      assert.ok(packet.iterationLog.length >= 1);
+      assert.ok(packet.claimEvidenceCards.length >= 1);
+      assert.match(packet.stopCondition, /Stop/);
+      assert.match(packet.decisionUpdateRule, /decisionImpactMap/);
       assert.equal(packet.claimAttributionPolicy.materialClaimsNeedSource, true);
       assert.equal(packet.claimAttributionPolicy.singleSourceClaims, "flag_unverified");
       assert.equal(packet.claimAttributionPolicy.snippetsOnly, "candidate_discovery_only");
@@ -72,6 +78,12 @@ describe("37 — Research preparation layer", () => {
         packet.originalSynthesisPolicy.forbidden.includes("copying third-party prompt text"),
       );
       assert.ok(packet.decisionImpactMap.every((impact) => impact.changesThinkingRoute));
+      assert.ok(
+        item.validation.checks.keyInfoOk &&
+          item.validation.checks.iterationOk &&
+          item.validation.checks.claimCardsOk &&
+          item.validation.checks.decisionUpdateOk,
+      );
       assert.match(packet.plainLanguageSummary, /研究/);
     }
 

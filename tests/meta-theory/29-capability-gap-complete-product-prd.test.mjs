@@ -101,6 +101,121 @@ describe("29 — Capability Gap complete product PRD", () => {
     }
   });
 
+  test("records v0.63 P-111 global-first lazy project bootstrap acceptance", () => {
+    for (const marker of [
+      "版本：v0.63",
+      "v0.63 全局优先项目懒初始化",
+      "P-111",
+      "lazyProjectBootstrap",
+      "setup.mjs --project-bootstrap",
+      "meta-kim project bootstrap",
+      "dry-run 必须输出 `sourceChain`",
+      "package root",
+      "canonical roots",
+      "`config/sync.json`",
+      "runtime mirrors",
+      "project target",
+      "apply 前必须有 native choice 或 trusted-auto 依据",
+      "`.meta-kim/state/default/project-bootstrap.json`",
+      "`AGENTS.md` / `CLAUDE.md` 只写 Meta_Kim managed block",
+      "`.claude/settings.json`、`.codex/hooks.json`、`.cursor/hooks.json`、`.mcp.json` 保护式 merge",
+      "`.codex/config.toml`、credentials、project trust、本地 runtime state 永不作为项目级来源复制",
+      "项目级来源链必须从 installed package root -> canonical/config/sync.json -> generated runtime mirrors -> `setup.mjs --project-bootstrap` -> project manifest 全程可 Fetch",
+      "不能把 dry-run JSON 冒充 popup",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.63 P-111 marker ${marker}`);
+    }
+  });
+
+  test("records v0.64 P-112 install scope and project projection acceptance", () => {
+    for (const marker of [
+      "版本：v0.64",
+      "v0.64 安装体验范围合同",
+      "P-112",
+      "installExperienceModel",
+      "全局通用能力 \\+ 当前项目完整投影",
+      "`global-only` 不得询问或写项目目录",
+      "`project-only` 不得询问或写用户 home",
+      "no-skill 只表示跳过可选第三方 skill 套装",
+      "不能跳过项目投影",
+      "project bootstrap apply",
+      "sourceChain、backup、manifest、rollbackPlan",
+      "用户配置保护语义",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.64 P-112 marker ${marker}`);
+    }
+  });
+
+  test("records v0.65 PRD source and target-conditional projection acceptance", () => {
+    for (const marker of [
+      "版本：v0.65",
+      "v0.65 PRD 唯一源与平台条件投影纠偏",
+      "对所选 `activeTargets` 的完整投影",
+      "不是把 Claude Code / Codex / Cursor / OpenClaw 四端文件无条件铺进每个项目",
+      "默认 `activeTargets = \\[\"claude\", \"codex\"\\]`",
+      "Claude Code 使用 `CLAUDE.md`、`.claude/`、`.mcp.json`",
+      "Codex 使用 `AGENTS.md`、`.codex/`、`.agents/skills/`",
+      "Cursor 只有显式选择时生成 `AGENTS.md` 上下文、`.cursor/agents/`、`.cursor/rules/`、`.cursor/skills/`、`.cursor/hooks.json`、`.cursor/mcp.json`",
+      "OpenClaw 只有显式选择时生成 `AGENTS.md` 团队/上下文材料、`openclaw/workspaces/`、`openclaw/skills/`、`openclaw/hooks/`、`openclaw/openclaw.template.json`",
+      "`AGENTS.md` 不能被写成 Codex/Cursor/OpenClaw 的统一侧入口",
+      "在 Codex 是项目上下文入口之一",
+      "在 Cursor 是 repository context 的一部分",
+      "在 OpenClaw 只是 workspace/team context 资产",
+      "执行入口、agent 格式、hook schema、skill path 和 config surface 必须按平台特性分别描述",
+      "npm run meta:install-scope:verify",
+      "全局层/项目层分类结果",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.65 P-112 marker ${marker}`);
+    }
+  });
+
+  test("records v0.66 full-platform compatibility tier correction", () => {
+    for (const marker of [
+      "版本：v0.66",
+      "v0.66 全平台兼容分层纠偏",
+      "platformSupportTiers",
+      "正式投影目标、依赖项目自有目标、候选 probe 三类",
+      "依赖项目自有目标只作为内部 promotion guard",
+      "从依赖项目事实源、dependency registry 和 `config/runtime-compatibility-catalog.json` 取证",
+      "不在公开 README / FAQ / 更新说明里重复写成 Meta_Kim 支持承诺",
+      "候选 probe 目标 `qoder` / `trae` / `kiro` / `windsurf` / `cline` / `roo-code` / `continue`",
+      "OpenClaw / Cursor 只表示“显式选择的正式投影兼容目标”",
+      "不是全平台兼容的全部",
+      "runtime profile",
+      "projection layout",
+      "generated target paths",
+      "sync tests",
+      "install policy",
+      "live 或 official probe evidence",
+      "不得被项目 bootstrap 投影",
+      "不得宣称正式 runtime projection",
+      "npm run meta:runtime:safety:validate",
+      "npm run meta:install-scope:verify",
+      "config/runtime-compatibility-catalog.json",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.66 marker ${marker}`);
+    }
+  });
+
+  test("records v0.67 public platform wording and badge correction", () => {
+    assert.match(prd, /- 版本：v0\.\d+/);
+    for (const marker of [
+      "v0.67 公开平台支持口径校准",
+      "README / FAQ / 徽章 / 跨平台映射段",
+      "`default formal projections = Claude Code \\+ Codex`",
+      "`explicit formal compatibility projections = OpenClaw \\+ Cursor`",
+      "`candidate compatibility probes = Qoder CLI / Trae / Kiro / Windsurf 或 Devin Desktop Cascade / Cline / Roo Code / Continue`",
+      "徽章不能只露 OpenClaw/Cursor",
+      "也不能把候选 probe 写成正式 runtime projection",
+      "Qoder 官方证据源必须使用当前 docs 路径 `/en/cli/Skills`、`/subagent`、`/hooks`、`/mcp-servers`",
+      "Cline 必须把官方 Skills primitive 纳入 catalog",
+      "仍保持 candidate probe",
+      "过宽“任意 agent-to-agent 平台即可映射”残留",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.67 marker ${marker}`);
+    }
+  });
+
   test("keeps human-readable natural-language entry work in the single PRD source", () => {
     for (const marker of [
       "版本：v0.37",
@@ -1041,6 +1156,22 @@ describe("29 — Capability Gap complete product PRD", () => {
       "不能把 fixture pass 冒充 live pass",
     ]) {
       assert.match(prd, new RegExp(marker), `missing v0.47 prompt-first live acceptance marker ${marker}`);
+    }
+  });
+
+  test("records v0.68 strict live normalization correction for prompt-first acceptance", () => {
+    for (const marker of [
+      "v0.68 correction",
+      "strict live normalization",
+      "Codex P-088 live pass",
+      "Claude Code P-087 blocked",
+      "P-089 parity fail",
+      "P-091 fail",
+      "primaryRuntimePerfection = false",
+      "prompt-first live normalization does not synthesize Review Meta-Review or Evolution pass packets",
+      "harness fallback",
+    ]) {
+      assert.match(prd, new RegExp(marker), `missing v0.68 strict live correction marker ${marker}`);
     }
   });
 

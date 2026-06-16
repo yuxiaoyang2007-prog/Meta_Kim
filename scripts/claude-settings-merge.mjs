@@ -56,13 +56,26 @@ export function hookCommandNode(absScriptPath) {
 }
 
 /** Hook blocks matching Meta_Kim canonical runtime (absolute paths under meta-kim/). */
-export function buildMetaKimHooksTemplate(absHooksDir) {
-  const cmd = (name) => ({
+export function buildMetaKimHooksTemplate(absHooksDir, packageRoot = null) {
+  const cmd = (name, args = []) => ({
     type: "command",
-    command: hookCommandNode(path.join(absHooksDir, name)),
+    command: [
+      hookCommandNode(path.join(absHooksDir, name)),
+      ...args.map((arg) => JSON.stringify(String(arg).replace(/\\/g, "/"))),
+    ].join(" "),
   });
 
   return {
+    UserPromptSubmit: [
+      {
+        hooks: [
+          cmd(
+            "activate-meta-theory-spine.mjs",
+            packageRoot ? ["--package-root", packageRoot] : [],
+          ),
+        ],
+      },
+    ],
     PreToolUse: [
       {
         matcher: "Bash",

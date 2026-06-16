@@ -87,6 +87,34 @@ card:
 4. **If `interrupt_trigger` fires**: preempting card to front
 5. **Iteration cards**: at most `max_iterations`; else escalate to Warden
 
+### Dealing accuracy standard
+
+The deck is not proven by listing ten cards. Each card must prove the current
+decision:
+
+- `deal`: the card should be shown or executed now because its trigger matches current evidence.
+- `suppress`: the card should not be shown because there is no clear intervention gain.
+- `defer`: the card is useful, but a dependency or deadline must happen first.
+- `skip`: the card is already satisfied or not applicable.
+- `interrupt_insert`: the card preempts the normal order because risk or urgency changed the route.
+- `escalate`: Warden must arbitrate because the card cannot be safely decided locally.
+
+Each card decision needs:
+
+- a concrete activation rule
+- an accuracy score, passing at `80` or higher
+- quantitative signals with `signal`, `observed`, `expected`, and `pass`
+- evidence references to the run artifact, route, runtime evidence, review result, or control decision
+- falsification checks that would make the decision fail
+
+This follows the deep-research pattern: a card is not accurate because it appears
+in a deck; it is accurate because key signals, evidence references,
+counterfactual checks, and decision impact explain why it was dealt or withheld.
+
+At run start, show a short user-facing card summary: how many cards became
+active, whether any interrupt card preempted the deck, and the minimum accuracy
+score. Do not expose raw packets as the user-facing explanation.
+
 ### Dealing flow
 
 ```

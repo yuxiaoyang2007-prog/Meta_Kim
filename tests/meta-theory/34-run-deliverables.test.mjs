@@ -196,7 +196,7 @@ describe("34 — Meta-theory run deliverables", () => {
         buildAgentProjectionTargets()
       );
       assert.ok(runArtifact.capabilityRoute.length >= 10);
-      assert.equal(runArtifact.cardPlanPacket.schemaVersion, "card-plan-v0.1");
+      assert.equal(runArtifact.cardPlanPacket.schemaVersion, "card-plan-v0.2");
       assert.equal(
         runArtifact.userExperienceNotice.schemaVersion,
         "user-experience-notice-v0.1"
@@ -269,9 +269,69 @@ describe("34 — Meta-theory run deliverables", () => {
         ]
       );
       assert.ok(runArtifact.cardPlanPacket.dealOrder.includes("pause"));
+      assert.equal(runArtifact.cardPlanPacket.dealStandard.coveragePass, true);
+      assert.equal(runArtifact.cardPlanPacket.dealStandard.passThreshold, 80);
+      assert.ok(runArtifact.cardPlanPacket.dealStandard.minimumScore >= 80);
+      assert.ok(runArtifact.cardPlanPacket.dealStandard.activeCount >= 1);
+      assert.ok(runArtifact.cardPlanPacket.dealStandard.suppressedCount >= 1);
+      for (const card of runArtifact.cardPlanPacket.cards) {
+        assert.equal(typeof card.decisionEvaluation.activationRule, "string");
+        assert.notEqual(card.decisionEvaluation.activationRule.trim(), "");
+        assert.ok(
+          card.decisionEvaluation.accuracyScore >= card.decisionEvaluation.passThreshold,
+          `${card.cardKey} card decision should pass`
+        );
+        assert.ok(
+          Array.isArray(card.decisionEvaluation.quantitativeSignals),
+          `${card.cardKey} should expose quantitative signals`
+        );
+        assert.ok(
+          card.decisionEvaluation.quantitativeSignals.length >= 3,
+          `${card.cardKey} should expose at least 3 quantitative signals`
+        );
+        assert.ok(
+          card.decisionEvaluation.quantitativeSignals.every(
+            (signal) =>
+              typeof signal.signal === "string" &&
+              "observed" in signal &&
+              "expected" in signal &&
+              typeof signal.pass === "boolean"
+          ),
+          `${card.cardKey} should expose signal/observed/expected/pass fields`
+        );
+        assert.ok(card.decisionEvaluation.evidenceRefs.length >= 1);
+        assert.ok(card.decisionEvaluation.falsificationChecks.length >= 1);
+      }
+      assert.equal(
+        runArtifact.cardPlanPacket.cards.find((item) => item.cardKey === "risk")
+          .decisionEvaluation.decisionState,
+        "accurate_interrupt"
+      );
+      assert.equal(
+        runArtifact.cardPlanPacket.cards.find((item) => item.cardKey === "fix")
+          .decisionEvaluation.decisionState,
+        "accurate_suppress"
+      );
+      assert.equal(
+        runArtifact.governanceStartReasonPacket.schemaVersion,
+        "governance-start-reason-v0.1"
+      );
+      assert.equal(runArtifact.governanceStartReasonPacket.placement, "run_start");
+      assert.match(runArtifact.governanceStartReasonPacket.summary, /进入 Meta-Theory/);
+      assert.match(runArtifact.governanceStartReasonPacket.spineReason, /触发 8 阶段/);
+      assert.match(runArtifact.governanceStartReasonPacket.workflowReason, /触发 11 阶段/);
+      assert.match(runArtifact.governanceStartReasonPacket.cardReason, /触发发牌/);
+      for (const line of [
+        runArtifact.governanceStartReasonPacket.summary,
+        runArtifact.governanceStartReasonPacket.spineReason,
+        runArtifact.governanceStartReasonPacket.workflowReason,
+        runArtifact.governanceStartReasonPacket.cardReason,
+      ]) {
+        assert.ok(line.length <= 120, `start reason should stay concise: ${line}`);
+      }
       assert.equal(
         runArtifact.businessPhasePlanPacket.schemaVersion,
-        "business-phase-plan-v0.1"
+        "business-phase-plan-v0.2"
       );
       assert.equal(runArtifact.businessPhasePlanPacket.phaseCount, 11);
       assert.deepEqual(
@@ -290,13 +350,75 @@ describe("34 — Meta-theory run deliverables", () => {
           "mirror",
         ]
       );
+      assert.equal(runArtifact.businessPhasePlanPacket.triggerStandard.coveragePass, true);
+      assert.equal(runArtifact.businessPhasePlanPacket.triggerStandard.passThreshold, 80);
+      assert.ok(runArtifact.businessPhasePlanPacket.triggerStandard.minimumScore >= 80);
+      for (const phase of runArtifact.businessPhasePlanPacket.phases) {
+        assert.equal(typeof phase.triggerEvaluation.activationRule, "string");
+        assert.notEqual(phase.triggerEvaluation.activationRule.trim(), "");
+        assert.ok(
+          phase.triggerEvaluation.triggerScore >= phase.triggerEvaluation.passThreshold,
+          `${phase.phase} trigger score should pass`
+        );
+        assert.ok(
+          Array.isArray(phase.triggerEvaluation.quantitativeSignals),
+          `${phase.phase} should expose quantitative signals`
+        );
+        assert.ok(
+          phase.triggerEvaluation.quantitativeSignals.length >= 3,
+          `${phase.phase} should expose at least 3 quantitative signals`
+        );
+        assert.ok(
+          phase.triggerEvaluation.quantitativeSignals.every(
+            (signal) =>
+              typeof signal.signal === "string" &&
+              "observed" in signal &&
+              "expected" in signal &&
+              typeof signal.pass === "boolean"
+          ),
+          `${phase.phase} should expose signal/observed/expected/pass fields`
+        );
+        assert.ok(
+          phase.triggerEvaluation.evidenceRefs.length >= 1,
+          `${phase.phase} should cite evidence refs`
+        );
+        assert.ok(
+          phase.triggerEvaluation.falsificationChecks.length >= 1,
+          `${phase.phase} should expose falsification checks`
+        );
+      }
+      assert.equal(
+        runArtifact.businessPhasePlanPacket.phases.find((item) => item.phase === "revision")
+          .triggerEvaluation.activationState,
+        "accurate_skip"
+      );
+      assert.equal(
+        runArtifact.businessPhasePlanPacket.phases.find((item) => item.phase === "feedback")
+          .triggerEvaluation.activationState,
+        "pending_external_input"
+      );
       assert.equal(
         runArtifact.businessFlowBlueprintPacket.coverageJudgment,
-        "pass_all_11_business_phases_recorded"
+        "complete"
+      );
+      assert.equal(
+        runArtifact.businessFlowBlueprintPacket.coverageDetail,
+        "pass_all_11_business_phases_trigger_evaluated"
+      );
+      assert.equal(
+        runArtifact.businessFlowBlueprintPacket.phaseTriggerStandard.coveragePass,
+        true
       );
       const markdown = await readFile(path.join(tempDir, "test-run-deliverables.zh-CN.md"), "utf8");
       assert.match(markdown, /Critical \/ Fetch \/ Thinking \/ Review/);
+      assert.match(markdown, /## 开始原因/);
+      assert.match(markdown, /触发 8 阶段/);
+      assert.match(markdown, /触发 11 阶段/);
+      assert.match(markdown, /触发发牌/);
       assert.match(markdown, /## 发牌/);
+      assert.match(markdown, /Deal standard/);
+      assert.match(markdown, /accurate_interrupt/);
+      assert.match(markdown, /accurate_suppress/);
       assert.match(markdown, /## 用户体验提示/);
       assert.match(markdown, /用户只用普通自然语言输入/);
       assert.match(markdown, /还没有发出 runtime conversation notice/);
@@ -329,6 +451,9 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.match(markdown, /MCP/);
       assert.match(markdown, /npm run meta:gap:orchestrate/);
       assert.match(markdown, /11 阶段业务流/);
+      assert.match(markdown, /Trigger standard/);
+      assert.match(markdown, /accurate_skip/);
+      assert.match(markdown, /pending_external_input/);
       assert.match(markdown, /能力路线/);
       assert.match(markdown, /持久 Agent 策略/);
       assert.match(markdown, /\.claude\/agents\/\{agent\}\.md/);
@@ -513,6 +638,10 @@ describe("34 — Meta-theory run deliverables", () => {
       );
       assert.equal(result.status, 0, result.stderr);
       assert.match(result.stdout, /^Meta_Kim 对话提示:/u);
+      assert.match(result.stdout, /开始原因: 进入 Meta-Theory/u);
+      assert.match(result.stdout, /8 阶段: 触发 8 阶段/u);
+      assert.match(result.stdout, /11 阶段: 触发 11 阶段/u);
+      assert.match(result.stdout, /发牌: 触发发牌/u);
       assert.match(result.stdout, /许愿式自然语言需求/u);
       assert.match(result.stdout, /阶段进度/u);
       assert.match(result.stdout, /能力路线/u);
@@ -532,6 +661,16 @@ describe("34 — Meta-theory run deliverables", () => {
       const artifact = JSON.parse(
         await readFile(path.join(tempDir, "wish-style-conversation-notice.json"), "utf8")
       );
+      assert.equal(
+        artifact.governanceStartReasonPacket.schemaVersion,
+        "governance-start-reason-v0.1"
+      );
+      assert.ok(artifact.governanceStartReasonPacket.spineReason.length <= 120);
+      assert.ok(artifact.governanceStartReasonPacket.workflowReason.length <= 120);
+      assert.match(artifact.governanceStartReasonPacket.cardReason, /触发发牌/);
+      assert.ok(artifact.governanceStartReasonPacket.cardReason.length <= 120);
+      assert.equal(artifact.cardPlanPacket.dealStandard.coveragePass, true);
+      assert.ok(artifact.cardPlanPacket.dealStandard.minimumScore >= 80);
       const emittedHash = createHash("sha256").update(emittedText, "utf8").digest("hex");
       assert.equal(artifact.conversationNotice.status, "emitted");
       assert.equal(artifact.conversationNotice.routeSummary.workerTaskCount, 11);

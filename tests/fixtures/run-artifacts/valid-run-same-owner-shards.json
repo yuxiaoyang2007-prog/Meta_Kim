@@ -213,7 +213,19 @@
         "rejoinCondition": "security-sensitive auth diff has been reviewed"
       }
     ],
-    "defaultShellId": "shell-structured-status"
+    "defaultShellId": "shell-structured-status",
+    "dealStandard": {
+      "schemaVersion": "card-deal-standard-v0.1",
+      "passThreshold": 80,
+      "minimumScore": 100,
+      "averageScore": 100,
+      "coveragePass": true,
+      "activeCount": 2,
+      "suppressedCount": 1,
+      "interruptCount": 0,
+      "rule": "Deck presence or hardcoded order is not enough evidence; each fixture card decision must retain measurable deal-standard coverage.",
+      "deepResearchAnalogy": "Like deep-research claim evidence cards, fixture card decisions need a visible standard rather than packet presence only."
+    }
   },
   "dispatchEnvelopePacket": {
     "ownerAgent": "meta-conductor",
@@ -1295,6 +1307,42 @@
         "candidate option viability",
         "risk severity",
         "owner selection confidence"
+      ],
+      "decisionUse": [
+        "Choose owner, route, scope, risk boundary, and verification path before Execution."
+      ],
+      "keyInformationTargets": [
+        "Evidence that changes owner selection.",
+        "Evidence that changes route, scope, risk, or verification."
+      ],
+      "iterationPlan": [
+        "Iteration 1: inspect local source, graph, and capability-index evidence.",
+        "Iteration 2: map route-changing claims to evidence and counterevidence."
+      ],
+      "stopCondition": [
+        "Stop only after route-changing claims have evidence cards and unresolved gaps are explicit."
+      ],
+      "decisionUpdateRule": [
+        "Update decisionImpactMap whenever evidence changes owner, route, scope, risk, or verification."
+      ],
+      "deepReadTargets": [
+        "contentEvidencePacket.contentFindings[0]",
+        "contentEvidencePacket.capabilityEvidence[0]",
+        "contentEvidencePacket.decisionImpactMap[0]"
+      ],
+      "sourceQualityLadder": [
+        "canonical_source",
+        "contract",
+        "capability_index"
+      ],
+      "claimAttributionRules": [
+        "Every route-changing claim must point to artifact evidence."
+      ],
+      "crossCheckStrategy": [
+        "Compare content findings, capability evidence, assumptions, and contradictions before Thinking."
+      ],
+      "originalSynthesisRules": [
+        "Extract Meta_Kim-native invariants and avoid copying external prompt structures."
       ]
     },
     "sourceCategoryCoverage": [
@@ -1337,7 +1385,34 @@
       "auth_refresh_hardening",
       "verification_notes"
     ],
-    "capabilityGap": "none"
+    "capabilityGap": "none",
+    "iterationLog": [
+      {
+        "iteration": 1,
+        "trigger": "research_required_before_thinking",
+        "queryOrAction": "Inspect local source, capability index, and decision impact evidence.",
+        "observation": "Evidence identifies owner, route, risk, and verification changes before Thinking.",
+        "gapClosed": true,
+        "nextStepDecision": "Stop research and hand decision-ready evidence to Thinking.",
+        "stopCheck": "Key information targets, claim evidence card, and decisionImpactMap are present."
+      }
+    ],
+    "claimEvidenceCards": [
+      {
+        "claim": "Fetch evidence changes owner, route, scope, or verification before Execution.",
+        "sourceRefs": [
+          "contentEvidencePacket.contentFindings[0]",
+          "contentEvidencePacket.capabilityEvidence[0]"
+        ],
+        "evidenceAnchor": "contentEvidencePacket.contentFindings[0].summary",
+        "confidence": "high",
+        "counterevidence": [
+          "No contradiction in contradictionLog overrides the selected route."
+        ],
+        "decisionImpact": "Bind owner, route, scope, risk, and verification before Execution.",
+        "falsificationStatus": "tested_survived"
+      }
+    ]
   },
   "preDecisionOptionFrame": {
     "decisionTrigger": "non_trivial_executable_decision",

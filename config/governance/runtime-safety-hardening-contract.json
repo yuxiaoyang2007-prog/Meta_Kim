@@ -68,6 +68,254 @@
       ]
     }
   },
+  "installExperienceModel": {
+    "goal": "global_common_capabilities_plus_project_projection_with_directory_authorized_governance",
+    "principles": [
+      "global common capabilities are reusable across projects",
+      "project-level complete projections are preserved and are not replaced by global skills",
+      "governance applies only to explicitly enabled directories",
+      "existing user configuration always wins over generated defaults"
+    ],
+    "layers": {
+      "globalCommonCapabilityLayer": {
+        "purpose": "Reusable host-level capability library for meta-theory entry, foundational skills, plugins, commands, and dependency skills.",
+        "allowedWrites": [
+          "~/.claude/skills/",
+          "~/.codex/skills/",
+          "~/.cursor/skills/",
+          "~/.openclaw/skills/",
+          "~/.meta-kim/install-manifest.json"
+        ],
+        "mustNotDo": [
+          "enable Meta_Kim governance for every project automatically",
+          "write global AGENTS.md or CLAUDE.md",
+          "treat optional third-party skill suite selection as required for project projection"
+        ]
+      },
+      "projectCompleteProjectionLayer": {
+        "purpose": "Per-enabled-directory runtime surface generated from canonical sources and runtime mirrors.",
+        "defaultActiveTargets": [
+          "claude",
+          "codex"
+        ],
+        "defaultProjectionSet": [
+          "CLAUDE.md",
+          "AGENTS.md",
+          ".claude/",
+          ".codex/",
+          ".agents/skills/",
+          ".mcp.json",
+          ".meta-kim/state",
+          ".meta-kim/backups"
+        ],
+        "targetConditionalProjectionSets": {
+          "claude": [
+            "CLAUDE.md",
+            ".claude/",
+            ".mcp.json",
+            ".meta-kim/state",
+            ".meta-kim/backups"
+          ],
+          "codex": [
+            "AGENTS.md",
+            ".codex/",
+            ".agents/skills/",
+            ".meta-kim/state",
+            ".meta-kim/backups"
+          ],
+          "cursor": [
+            "AGENTS.md",
+            ".cursor/",
+            ".meta-kim/state",
+            ".meta-kim/backups"
+          ],
+          "openclaw": [
+            "AGENTS.md",
+            "openclaw/",
+            ".meta-kim/state",
+            ".meta-kim/backups"
+          ]
+        },
+        "selectionInvariant": "Project bootstrap and install/update project sync must deploy only effective activeTargets. Repo default Enter resolves to claude,codex; explicit --targets or saved .meta-kim/local.overrides.json activeTargets may override the effective activeTargets. Cursor and OpenClaw project files appear only when explicitly selected.",
+        "compatibilityTargetsAvailableWhenExplicitlySelected": [
+          "openclaw",
+          "cursor"
+        ],
+        "mergePolicy": "managed-block/add-only/preserve-user-state; never blind overwrite existing user files"
+      },
+      "directoryAuthorizationLayer": {
+        "purpose": "Only user-approved directories receive governance projection and project hooks.",
+        "firstTriggerRequirement": "dry-run plus native choice surface before apply unless trusted-auto is explicit",
+        "unenabledProjectPolicy": "global entry may report capability and dry-run plan, but must not write project files before confirmation"
+      }
+    },
+    "platformSupportTiers": {
+      "sourceOfTruth": "config/runtime-compatibility-catalog.json",
+      "formalProjectionTargets": [
+        "claude",
+        "codex",
+        "openclaw",
+        "cursor"
+      ],
+      "defaultFormalProjectionTargets": [
+        "claude",
+        "codex"
+      ],
+      "explicitFormalCompatibilityProjectionTargets": [
+        "openclaw",
+        "cursor"
+      ],
+      "dependencyInstallTargets": [
+        "opencode",
+        "qwen",
+        "zed",
+        "gemini",
+        "codebuddy",
+        "antigravity",
+        "joycode"
+      ],
+      "candidateProbeTargets": [
+        "qoder",
+        "trae",
+        "kiro",
+        "windsurf",
+        "cline",
+        "roo-code",
+        "continue"
+      ],
+      "boundary": "OpenClaw and Cursor are the explicit formal project-projection compatibility targets, not the whole platform compatibility universe.",
+      "promotionInvariant": "dependency_install_target and candidate_probe products must not be treated as project projections until runtime profile, projection layout, generated target paths, sync tests, install policy, and live or official probe evidence exist."
+    },
+    "installOptions": [
+      {
+        "id": "both",
+        "label": "recommended",
+        "behavior": "install global common capability layer and generate/update the current project projection",
+        "defaultOnEnter": true
+      },
+      {
+        "id": "project",
+        "label": "project only",
+        "behavior": "generate/update only the current project projection; do not write user home",
+        "defaultOnEnter": false
+      },
+      {
+        "id": "global",
+        "label": "global only",
+        "behavior": "install global common capabilities only; do not ask for or write project directories",
+        "defaultOnEnter": false
+      },
+      {
+        "id": "advanced_global_controls",
+        "label": "advanced global hooks/rules/settings",
+        "behavior": "write Claude Code global hooks/settings only after a second explicit confirmation",
+        "defaultOnEnter": false
+      }
+    ],
+    "noSkillSemantics": {
+      "meaning": "Skip optional third-party skill suite installation only.",
+      "mustNotSkip": [
+        "project projection when project scope is selected",
+        "global meta-theory core sync when global scope is selected",
+        "host safety/control preservation such as Codex native choice-surface controls"
+      ]
+    },
+    "dryRunDisclosure": {
+      "mustShow": [
+        "globalWrites",
+        "projectWrites",
+        "mergePolicy",
+        "backupBeforeApply",
+        "rollbackPlan"
+      ]
+    }
+  },
+  "lazyProjectBootstrap": {
+    "mode": "global_first_first_trigger_project_projection",
+    "entrypoints": [
+      "meta-kim project bootstrap --dry-run --project-dir <dir>",
+      "meta-kim project bootstrap --apply --project-dir <dir>",
+      "node setup.mjs --project-bootstrap --dry-run --project-dir <dir>",
+      "node setup.mjs --project-bootstrap --apply --project-dir <dir>"
+    ],
+    "sourceChain": {
+      "globalEntrypoint": "bin/meta-kim.mjs",
+      "packageRoot": "installed Meta_Kim package root",
+      "canonicalRoots": [
+        "canonical/agents",
+        "canonical/skills",
+        "canonical/runtime-assets",
+        "config/contracts",
+        "config/capability-index"
+      ],
+      "syncManifest": "config/sync.json",
+      "runtimeMirrorSource": "generated runtime projection folders inside the installed package root",
+      "projectTarget": "current working project directory selected by --project-dir or host cwd"
+    },
+    "firstTriggerFlow": [
+      "run dry-run probe from the global skill or command",
+      "present Claude Code AskUserQuestion or Codex request_user_input before apply when the runtime exposes the native choice surface",
+      "fall back only for compatibility runtimes and never call fallback a primary native popup",
+      "run apply only after user confirmation or an explicit trusted-auto policy",
+      "write project manifest under .meta-kim/state/default/project-bootstrap.json"
+    ],
+    "projectFilePolicies": {
+      "create": [
+        "missing generated runtime projections",
+        "missing project-level meta-theory skill mirror",
+        "missing project-level capability indexes"
+      ],
+      "merge": [
+        ".claude/settings.json",
+        ".mcp.json",
+        ".codex/hooks.json",
+        ".cursor/hooks.json",
+        ".cursor/mcp.json",
+        "openclaw/openclaw.template.json"
+      ],
+      "managedTextBlock": [
+        "AGENTS.md",
+        "CLAUDE.md"
+      ],
+      "neverTouch": [
+        ".claude/settings.local.json",
+        ".claude/project-task-state.json",
+        ".claude/scheduled_tasks.lock",
+        ".codex/config.toml",
+        "openclaw/**/.openclaw/workspace-state.json",
+        "credentials",
+        "project trust state"
+      ]
+    },
+    "rollback": {
+      "requiredBeforeApply": true,
+      "backupRootPattern": ".meta-kim/backups/project-bootstrap/<timestamp>",
+      "manifest": "backup-manifest.json",
+      "mustRecord": [
+        "relPath",
+        "mergePolicy",
+        "backupRelPath"
+      ]
+    },
+    "scenarioAcceptance": [
+      "empty project dry-run exposes sourceChain and writes nothing",
+      "empty project apply creates project projections and manifest",
+      "current project dry-run after apply reports ready, requires no confirmation, and lists no project writes",
+      "existing user AGENTS.md or CLAUDE.md keeps user text and adds a managed block",
+      "existing hooks and MCP config keep user entries and append Meta_Kim-managed entries",
+      ".codex/config.toml remains global-owned and is never copied into project bootstrap",
+      "stale project manifest reports stale before update",
+      "readonly or permission-denied apply returns failed/blocked and must not claim bootstrap pass",
+      "conflicting managed block is replaced only inside Meta_Kim markers"
+    ],
+    "forbiddenOutcomes": [
+      "silent project writes before dry-run and user confirmation",
+      "project-level source described without packageRoot/canonical/syncManifest/runtimeMirror chain",
+      "AGENTS.md or CLAUDE.md blind overwrite when the target already has user content",
+      "copying .codex/config.toml as project bootstrap source",
+      "claiming compatibility fallback as Claude Code or Codex native choice proof"
+    ]
+  },
   "hookPromptProtocol": {
     "requiredLayers": [
       {

@@ -11,6 +11,8 @@ const syncManifest = JSON.parse(
 const packageJson = JSON.parse(
   readFileSync(path.join(repoRoot, "package.json"), "utf8"),
 );
+const readmeEn = readFileSync(path.join(repoRoot, "README.md"), "utf8");
+const readmeZh = readFileSync(path.join(repoRoot, "README.zh-CN.md"), "utf8");
 
 describe("setup update default flow", () => {
   const source = readFileSync(path.join(repoRoot, "setup.mjs"), "utf8");
@@ -69,6 +71,59 @@ describe("setup update default flow", () => {
     );
   });
 
+  test("install scope direct-enter default is global capability plus current project projection", () => {
+    const askScopeStart = source.indexOf("async function askInstallScope()");
+    const askScopeEnd = source.indexOf("// ── Directory structure explanation", askScopeStart);
+    const askScopeSource = source.slice(askScopeStart, askScopeEnd);
+
+    assert.match(
+      askScopeSource,
+      /if \(silentMode \|\| !promptInstallScope\) return "both";/,
+      "non-interactive scope default must be the recommended global+project path",
+    );
+    assert.ok(
+      askScopeSource.indexOf('id: "both"') < askScopeSource.indexOf('id: "project"'),
+      "interactive direct-Enter must choose the recommended both scope before project-only",
+    );
+    assert.ok(
+      askScopeSource.indexOf('id: "both"') < askScopeSource.indexOf('id: "global"'),
+      "interactive direct-Enter must choose the recommended both scope before global-only",
+    );
+  });
+
+  test("install copy preserves project projection as the default governance boundary", () => {
+    assert.doesNotMatch(
+      source,
+      /Existing projects can use Meta_Kim without setup|现有项目无需安装即可使用|既存プロジェクトもセットアップ不要|기존 프로젝트도 설치 없이/,
+      "setup copy must not claim global install automatically governs every existing project",
+    );
+    assert.match(
+      source,
+      /Global \+ project \(recommended\)/,
+      "English setup copy must name the recommended default as global plus project",
+    );
+    assert.match(
+      source,
+      /全局 \+ 项目（推荐）/,
+      "Chinese setup copy must name the recommended default as global plus project",
+    );
+    assert.match(
+      readmeEn,
+      /global reusable capabilities \+ the current project's target-selected projection/,
+      "README must describe the default install as global capabilities plus target-selected project projection",
+    );
+    assert.match(
+      readmeZh,
+      /全局通用能力 \+ 当前项目按目标平台选择的完整投影/,
+      "Chinese README must describe the default install as global capabilities plus target-selected project projection",
+    );
+    assert.doesNotMatch(
+      `${readmeEn}\n${readmeZh}`,
+      /global installation .* work in any project|全局安装后在任何项目中都能工作/s,
+      "README must not collapse global capability into automatic project governance",
+    );
+  });
+
   test("silent mode update skips interactive project deploy prompt unless CLI/saved targets are requested", () => {
     const deployFunctionStart = source.indexOf(
       "async function askDeployDirectory()",
@@ -112,20 +167,66 @@ describe("setup update default flow", () => {
     );
   });
 
-  test("install and update project deploy exports run as protected batches", () => {
-    assert.match(source, /const deployDirs = await askDeployDirectory\(\);/);
+  test("install and update project deploy exports run only for project-enabled scopes", () => {
+    assert.match(
+      source,
+      /const deployDirs = needProject \? await askDeployDirectory\(\) : \[\];/,
+      "global-only install/update must not ask for or write project deploy directories",
+    );
     assert.match(source, /if \(deployDirs\.length > 0\) \{\s*await copyToDeployDirs\(activeTargets, deployDirs\);/);
     assert.match(source, /copyToDeployDirs\(activeTargets, targetDirs\)/);
     assert.match(source, /projectDeployProtectionNote/);
   });
 
-  test("install and update sync global Claude hooks for cleanup", () => {
-    assert.match(source, /function metaTheoryGlobalSyncArgs\(targets\)/);
-    assert.match(source, /syncArgs\.push\("--with-global-hooks"\)/);
+  test("external project deploy reuses protected project bootstrap apply", () => {
+    assert.match(source, /async function applyProjectBootstrapToDir\(activeTargets, targetDir\)/);
     assert.match(
       source,
-      /runNodeScript\(\s*"scripts\/sync-global-meta-theory\.mjs",\s*metaTheoryGlobalSyncArgs\(activeTargets\)/,
-      "install/update global meta-theory sync must opt into Claude hook cleanup",
+      /const bootstrapResult = await applyProjectBootstrapToDir\(activeTargets, targetDir\);/,
+    );
+    assert.match(source, /writeProjectBootstrapManifest\(targetDir, plan, backup\)/);
+    assert.match(source, /createProjectBootstrapBackup\(targetDir, plan\.files\)/);
+  });
+
+  test("install and update keep advanced global hooks behind explicit second confirmation", () => {
+    assert.match(source, /function metaTheoryGlobalSyncArgs\(targets,\s*options = \{\}\)/);
+    assert.match(source, /options\.includeGlobalHooks/);
+    assert.match(source, /askAdvancedGlobalControls\(activeTargets\)/);
+    assert.match(source, /askYesNo\(t\.askAdvancedGlobalControls, false\)/);
+    assert.match(
+      source,
+      /metaTheoryGlobalSyncArgs\(activeTargets,\s*\{\s*includeGlobalHooks: includeAdvancedGlobalControls,\s*\}\)/,
+      "install/update global meta-theory sync must pass hooks only after second confirmation",
+    );
+  });
+
+  test("project-only update does not ask for global skill or meta-theory writes", () => {
+    assert.match(
+      source,
+      /const wantGlobalSkills = needGlobal\s*\?\s*await askYesNo\(t\.askGlobalSkillsUpdate, true\)\s*:\s*false;/,
+    );
+    assert.match(
+      source,
+      /const wantMetaTheory = needGlobal\s*\?\s*await askYesNo\(t\.askMetaTheoryUpdate, true\)\s*:\s*false;/,
+    );
+  });
+
+  test("global-only install/update does not run project Graphify wiring", () => {
+    assert.match(
+      source,
+      /installPythonTools\(activeTargets,\s*false,\s*PROJECT_DIR,\s*\{\s*projectWiring: needProject,\s*\}\)/,
+    );
+    assert.match(
+      source,
+      /installPythonTools\(activeTargets,\s*true,\s*PROJECT_DIR,\s*\{\s*projectWiring: needProject,\s*\}\)/,
+    );
+    assert.match(
+      source,
+      /const projectWiring = options\.projectWiring !== false;/,
+    );
+    assert.match(
+      source,
+      /if \(!projectWiring\) \{\s*skip\(t\.graphifyProjectWiringSkipped\);\s*return true;\s*\}/,
     );
   });
 });

@@ -90,6 +90,38 @@ const AMBER_BRIGHT = "\x1b[38;2;200;160;80m";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 
+function refreshGlobalCapabilityInventory() {
+  if (dryRun) {
+    console.log(
+      `${C.dim}[dry-run] refresh global capability inventory (discover:global)${C.reset}`,
+    );
+    return true;
+  }
+  console.log(
+    `\n${C.bold}${AMBER}${t.refreshGlobalCapabilityInventory ?? "Refreshing global capability inventory"}${C.reset}`,
+  );
+  const result = spawnSync(
+    process.execPath,
+    [path.join(repoRoot, "scripts", "discover-global-capabilities.mjs")],
+    {
+      cwd: repoRoot,
+      stdio: "inherit",
+      shell: false,
+      env: process.env,
+    },
+  );
+  if (result.status === 0) {
+    console.log(
+      `${C.green}✓${C.reset} ${C.dim}${t.globalCapabilityInventoryRefreshed ?? "Global capability inventory refreshed"}${C.reset}`,
+    );
+    return true;
+  }
+  console.warn(
+    `${C.yellow}⚠${C.reset} ${C.dim}${t.globalCapabilityInventoryRefreshFailed ?? "Global capability discovery failed; run `npm run discover:global` after install/update."}${C.reset}`,
+  );
+  return false;
+}
+
 const GRAPHIFY_GUIDE_TARGETS = {
   claude: "CLAUDE.md",
 };
@@ -3377,6 +3409,7 @@ async function main() {
   await installUpstreamCliSpecs(homes, activeTargets);
   await installPluginBundlesForNonClaudeRuntimes(homes, activeTargets);
   await ensureCodexChoiceSurfaceAfterInstall(homes, activeTargets);
+  refreshGlobalCapabilityInventory();
 
   // Optional: graphify (code knowledge graph)
   if (!pluginsOnly) {

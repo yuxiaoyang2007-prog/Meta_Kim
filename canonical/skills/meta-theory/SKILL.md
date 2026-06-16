@@ -23,6 +23,8 @@ Machine contract: `config/contracts/core-loop-contract.json` is the compact defa
 ## Trigger
 Activate from ordinary natural-language durable work, not only from command words. If the user asks to plan and start work, organize priorities, produce repair suggestions, build a verification checklist, fix a non-trivial issue, handle multi-file execution, run review/verification, or resolve subjective/taste-dependent quality, classify the entry and choose the governed route automatically. Explicit `/meta-theory`, `meta-theory`, or `元理论` mentions are maintainer shortcuts, not required human behavior.
 
+At run start, show a concise human-readable reason for the route. If the 8-stage spine triggers, say briefly why governance is needed before execution. If the 11-phase business workflow triggers, say briefly why closure, feedback, evolution, or mirror tracking is needed. Keep this to short user-facing lines; do not dump packet names or internal reasoning.
+
 ## Path classification
 - `fast_path`: read-only query, no mutation, no durable artifact. Output may be direct, but evidence claims still need source.
 - `standard_path`: ordinary executable work. Use the 8-stage spine and capability-first route.
@@ -75,6 +77,29 @@ When fan-out eligible, Thinking must produce `workerTaskPackets` before Executio
 
 **MANDATORY**: Use the current runtime adapter's verified native choice surface at key decision points. Keep the canonical card contract platform-neutral; renderer-specific schemas and tool names belong in runtime references such as `runtime-claude.md` or `runtime-codex.md`, not in the generic contract. For Codex and Claude Code, required branch-changing decisions must use `request_user_input` or `AskUserQuestion`; if that native interactive surface is unavailable, empty, rejected, stripped, or not deferred to host UI, block before Execution and return to Critical/Thinking. Only compatibility runtimes may fall back to a localized chat decision card, and that fallback must not be reported as a Codex or Claude Code popup.
 
+## Global-First Project Bootstrap
+
+When this skill is reached from a global installation and the current project is missing or stale for Meta_Kim project-level projections, do not make the human maintain global and project state manually. Run the project bootstrap probe first, then ask through the runtime-native choice surface before writing.
+
+Source chain for project-level files:
+
+```text
+installed Meta_Kim package root
+-> canonical/ and config/sync.json
+-> generated runtime mirrors inside the installed package
+-> setup.mjs --project-bootstrap dry-run/apply
+-> current project .meta-kim/state/default/project-bootstrap.json
+```
+
+Required behavior:
+
+- Before project writes, run a dry-run probe such as `meta-kim project bootstrap --dry-run --project-dir <current-project> --json` or `node setup.mjs --project-bootstrap --dry-run --project-dir <current-project> --json` from the installed Meta_Kim package root.
+- The dry-run output must expose `sourceChain`, target state, active targets, file actions, merge policies, skipped files, and stale manifest status. If `sourceChain` is missing, return to Fetch; do not design or apply from memory.
+- If the target needs initialization or update, ask the user through Claude Code `AskUserQuestion` or Codex `request_user_input` before `--apply`. Compatibility runtimes may show a localized decision card, but that is not Claude/Codex native proof.
+- Apply only after confirmation or an explicit trusted-auto policy. The apply path must create a backup under `.meta-kim/backups/project-bootstrap/<timestamp>` before overwriting or merging existing files and must write `.meta-kim/state/default/project-bootstrap.json`.
+- Preserve user-owned content: JSON configs use additive preserve-user-state merge; existing `AGENTS.md` and `CLAUDE.md` keep user text and receive or update only a Meta_Kim managed block; `.codex/config.toml`, credentials, project trust state, local runtime state, and workspace state are never copied as project bootstrap files.
+- Stale, readonly, permission-denied, or conflicting managed-block cases are not success. Record the blocker, show the next safe action, and do not claim project bootstrap pass until a fresh probe or apply result proves it.
+
 **When to ask:**
 
 | Stage | When to Ask | Example |
@@ -85,9 +110,11 @@ When fan-out eligible, Thinking must produce `workerTaskPackets` before Executio
 | Review | Issues found that need user preference to resolve | "Quality concern: rebuild or patch?" |
 
 **Question format:**
-- 2–4 meaningful options with clear trade-offs
+- Use the active runtime-native maximum meaningful option count; Meta_Kim must not add a lower option cap of its own
 - One recommended default labeled clearly
 - User's language, not internal packet field names
+- For Codex, inspect the active `request_user_input` schema and use its maximum accepted meaningful option count. If the active host exposes 2-3 options per question, use up to 3; if a future or different host exposes more, use that larger maximum. If semantic options exceed the active host maximum, show the strongest host-maximum set and record omitted alternatives instead of retrying an oversized payload unchanged.
+- The native payload is a structured decision panel: preserve AI understanding, AI additions, Capability route, Candidate paths, expected result, advantages, disadvantages/risk, and verification impact when those fields affect the decision.
 - Stop and wait — do not proceed until the user answers
 
 **Do not ask:**
@@ -115,6 +142,10 @@ Dispatch to `meta-prism` and `meta-warden`; optional `meta-scout`, `meta-sentine
 
 Dispatch to `meta-conductor` for dynamic business-flow blueprint and parallel lane orchestration, then `meta-warden` for synthesis. Conductor must classify the user's natural-language intent, choose lanes by evidence and dependency signals, record omitted lanes with reasons, and only then fan out worker tasks. Thinking to Execution must select `agent-teams-playbook` as the fan-out orchestration adapter when there are 2+ executable worker lanes whose DAG dependencies, collision boundaries, workspace isolation, and external-write policy prove safe fan-out; fewer than 2 executable lanes record `not_required`, and unsafe fan-out records partial/degraded rather than pass. The playbook is an adapter after `workerTaskPackets` exist, not a replacement for Critical, Fetch, Thinking, owner selection, or verification planning. Size parallel waves from the runtime's current agent capacity and the task DAG rather than an arbitrary Meta_Kim hard cap; use all independent lanes that are safe to run, split only when runtime capacity or collision boundaries require it, and avoid role inflation. Independent sub-tasks must be parallelized when safe; avoid fake parallelism.
 
+The 11-phase business workflow must prove phase decisions, not only list phase names. `businessPhasePlanPacket` requires a trigger standard: every phase records whether it triggered, skipped, blocked, or waits; the phase decision must score at least 80 with quantitative signals, evidence references, and falsification checks. Accurate skips such as `revision` after a clean Review and waits such as `feedback` before user acceptance are valid only when the evidence explains them.
+
+Card dealing must prove card decisions, not only list the deck. `cardPlanPacket` requires a deal accuracy standard: every card records whether it was dealt, suppressed, deferred, skipped, interrupted, or escalated; the decision must score at least 80 with quantitative signals, evidence references, and falsification checks. At run start and in the readable report, show a short card summary so the user sees why cards triggered without reading raw packets.
+
 Routine Type E release work defaults to lightweight smoke when the change is low-risk prompt/docs/governance wording, changelog, or version metadata. Use `meta:release:smoke` plus `git diff --check`, then commit/tag/publish without upgrading to full live gates unless risk or the user asks. Release-grade Type E is reserved for install/update, global sync, hooks, runtime matrix, provider registry, dependency compatibility, probes, package contents, security-sensitive behavior, or explicit full/live evidence requests; detailed evidence chains live in `dev-governance.md`, `owner-resolution.md`, and `verification-evidence.md`. Validators, gates, and hooks are protection, not the engine; if they patch missing route evidence after the fact, return to Thinking before public-ready or release.
 
 ## Dispatch Self-Check
@@ -122,7 +153,9 @@ Before Stage 4, record the minimum Protocol-first Dispatch evidence: intent, Fet
 
 ## Fetch Evidence Inventory
 
-Research -> Inventory -> Thinking Handoff. Fetch first records the question, source requirements, retrieval capability readiness, and multi-type capability inventory. Thinking determines needed execution capabilities after Fetch, matches existing capabilities, and creates or upgrades only for gaps. Fetch material claims include version, price, third-party, platform, current web state, dependency, provider, and tool assertions. If current facts matter, set `contentEvidencePacket.researchRequired = true`, run `researchCapabilityDiscovery`, and prefer `web_search`, `url_fetch`, `docs_lookup`, `browser_open`, `mcp_search`, or `plugin_search` before route design. If research is blocked, return `blocked` with `user_fallback` rather than guessing. Run command/script discovery by package.json script scan and npm run inventory. Apply DRY conflict detection: overlap detect, duplicate reject, and keep one owner per capability. Capability selection ROI = (Task Coverage x Usage Frequency) / (Context Cost + Learning Curve).
+Research -> Inventory -> Thinking Handoff. Fetch first records the question, source requirements, retrieval capability readiness, and multi-type capability inventory. Thinking determines needed execution capabilities after Fetch, matches existing capabilities, and creates or upgrades only for gaps. Fetch material claims include version, price, third-party, platform, current web state, dependency, provider, and tool assertions. If current facts matter, set `contentEvidencePacket.researchRequired = true`, run `researchCapabilityDiscovery`, and prefer `web_search`, `url_fetch`, `docs_lookup`, `browser_open`, `mcp_search`, or `plugin_search` before route design. Deep research must identify key information targets, run iterative query / read / update loops, record stop conditions, update `decisionImpactMap` when evidence changes owner/route/scope/risk/verification, and convert route-changing claims into `claimEvidenceCards` with source refs, counterevidence, confidence, and falsification status. If research is blocked, return `blocked` with `user_fallback` rather than guessing. Run command/script discovery by package.json script scan and npm run inventory. Apply DRY conflict detection: overlap detect, duplicate reject, and keep one owner per capability. Capability selection ROI = (Task Coverage x Usage Frequency) / (Context Cost + Learning Curve).
+
+Global professional provider first: a governed route must prefer already-discovered professional capability providers over inventing temporary small agents. Global execution agents, skills, MCP providers/tools, commands, runtime tools, hooks, plugins, memory/graph providers, and dependency providers are candidate professional owners or weapons when their contracts fit the task. `workerTaskPacket` is only a run-scoped work order for a selected professional owner/loadout; it is not an agent, not a subagent identity, and not a durable provider. Create or upgrade an execution agent only after Fetch proves no existing global or project provider can own the recurring responsibility class, and only through `GapDecision = create_agent` plus the Type B review path.
 
 Fetch discovery minimum checklist: before Thinking, search at least these locations (even if results are empty):
 - canonical sources and capability indexes: `canonical/agents/`, `canonical/skills/`, `canonical/runtime-assets/`, `config/capability-index/*.json`, and runtime capability-index mirrors
@@ -144,6 +177,8 @@ Decision-grade research synthesis: Fetch must turn external research practice in
 Graphify knowledge policy: Graphify is an agent capability, not a context dump. At run start, use existing `graphify-out/GRAPH_REPORT.md`, `graphify-out/graph.json`, or wiki indexes as navigation if present; do not run a global freshness check or rebuild just because a graph exists. Use graph queries and subgraph slices to locate relevant modules, concepts, and file anchors, then verify route-changing claims against source files. Inject only worker-relevant graph slices, short hints, and file anchors; never inject the full `graph.json`, full `GRAPH_REPORT.md`, or broad graph dumps into every worker. After code, canonical, contract, or runtime-facing doc mutation, rebuild Graphify in Verification/Evolution; reserve `meta:graphify:check` for verification, release, public-ready, or explicit graph validation.
 
 Execution-agent identity must stay abstract and provider-first. Durable `executionAgentCard` content may describe a reusable capability class, boundaries, abstract dependencies, inputs, and outputs; it must not contain repo paths, file lists, tickets, one-run work instructions, `todayTask`, `scopeFiles`, `deliverableLink`, or `verifySteps`. Match existing agents, skills, commands, hooks, rules/prompts, MCP tools, runtime tools, and plugins before creating or upgrading an execution agent. Put concrete work in `workerTaskPackets`, `capabilityBindings`, and `orchestrationTaskBoardPacket` only. If a card cannot be written without concrete task binding, return to Thinking and reuse an existing owner/provider or emit `capabilityGapPacket`. When `GapDecision = create_agent`, require a `GeneratedAgentSpec` review artifact with flow position, handoff, loadout slots, scoped memory, gap policy, verification policy, install projection, and identity-cleanliness proof before any agent file is written.
+
+Temporary small-agent prohibition: do not create a new agent merely to execute this run's task, shard, file set, or role instance. If the work is one-run, keep it in `workerTaskPackets` and bind it to an existing professional provider. If the work is recurring but the best global provider is partial, prefer `upgrade_existing_owner` or a project-local professional profile over a throwaway runtime agent. A runtime adapter may expose a coarse role name for host routing, but it must not become the professional owner unless it has its own reviewed capability contract.
 
 Capability scan UX: full global scans happen on install, update, explicit refresh, missing cache, cache older than 14 days, missing required provider, or high-risk provider routes. Normal execution reads cached global inventory, performs a lightweight project scan, shows only counts/top candidates/source refs, and avoids dumping full provider definitions into chat. If the last full scan is older than 2 weeks, tell the user this run will update first to match newly added content and reach the best capability route, then refresh before execution.
 

@@ -137,6 +137,35 @@ describe("runtime compatibility catalog", () => {
     }
   });
 
+  test("current official evidence keeps Qoder paths and Cline skill primitive fresh", () => {
+    const byId = new Map(catalog.products.map((product) => [product.id, product]));
+    const qoder = byId.get("qoder");
+    const cline = byId.get("cline");
+
+    assert.ok(qoder);
+    assert.ok(cline);
+    for (const ref of [
+      "https://docs.qoder.com/en/cli/Skills",
+      "https://docs.qoder.com/en/cli/subagent",
+      "https://docs.qoder.com/en/cli/hooks",
+      "https://docs.qoder.com/en/cli/mcp-servers",
+    ]) {
+      assert.ok(
+        qoder.evidence.some((entry) => entry.ref === ref),
+        `missing Qoder evidence ${ref}`,
+      );
+    }
+    assert.ok(cline.compatibilitySurfaces.includes("skill_workflow"));
+    assert.match(cline.genericCompatibility.skillPath, /\.cline\/skills/);
+    assert.ok(
+      cline.evidence.some(
+        (entry) => entry.ref === "https://docs.cline.bot/customization/skills",
+      ),
+    );
+    assert.match(cline.decision, /rules, skills, CLI, and MCP/);
+    assert.match(cline.decision, /candidate_probe only/);
+  });
+
   test("formal projection wording preserves support and self-test boundaries", () => {
     const byId = new Map(catalog.products.map((product) => [product.id, product]));
     const claude = byId.get("claude");

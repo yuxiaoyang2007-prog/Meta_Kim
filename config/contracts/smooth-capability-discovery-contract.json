@@ -9,6 +9,24 @@
   "currentAsOf": "2026-06-13",
   "purpose": "Keep capability discovery broad enough to preserve MCP, tools, runtime adapters, memory, graph, dependency, and worker-task capabilities as first-class route inputs, while avoiding noisy default expansion into every concrete subtool when no route, risk, authorization, or verification decision depends on that detail.",
   "corePrinciple": "Fetch records first-class capability families first; Thinking expands only the families that materially affect owner, weapon, runtime, permission, risk, writeback, or verification.",
+  "globalProfessionalProviderFirst": {
+    "principle": "Prefer existing professional global or project providers before creating or upgrading an execution agent.",
+    "providerFamilies": [
+      "execution_agent",
+      "skill",
+      "command_script",
+      "mcp_provider",
+      "runtime_tool",
+      "ordinary_tool",
+      "plugin_connector",
+      "dependency_provider",
+      "memory_graph",
+      "hook_runtime_adapter",
+      "prompt_rule_workflow"
+    ],
+    "workerTaskBoundary": "worker_task is a run-scoped dispatch packet for a selected owner/loadout; it is not a temporary agent identity, subagent definition, or durable provider.",
+    "creationGate": "create_agent is allowed only when global and project professional providers have been checked and cannot own the recurring responsibility class."
+  },
   "requiredFirstClassCapabilityFamilies": [
     "governance_agent",
     "execution_agent",
@@ -61,6 +79,9 @@
     "mcp_or_tool_swallowed_by_skill_or_script",
     "configured_provider_relabelled_as_live_invocation",
     "workerTaskPacket_relabelled_as_workerResult",
+    "workerTaskPacket_relabelled_as_execution_agent",
+    "temporary_small_agent_created_for_one_run_task",
+    "global_professional_provider_skipped_before_create_agent",
     "default_enumerates_every_subtool_without_route_need",
     "noExpansionNeeded_rejected_when_route_safe"
   ],
@@ -68,6 +89,8 @@
     "providerTypeCoverage": "All runtimeProviderTypesRequiredInDefaultArtifact appear in the default governed execution artifact.",
     "workerTaskCoverage": "Thinking produces workerTaskPackets separately from capabilityInventory so task dispatch is not collapsed into provider discovery.",
     "searchLogCoverage": "Fetch capabilityDiscovery.searchLog records checked source families, including empty or unavailable sources.",
+    "professionalProviderFirst": "Before create_agent or upgrade_existing_owner, the route records checked global/project professional providers across agent, skill, command_script, MCP, runtime_tool, plugin_connector, dependency_provider, memory_graph, hook_runtime_adapter, and prompt_rule_workflow families.",
+    "workerTaskIdentityBoundary": "workerTaskPackets may carry concrete run work, but they must not be counted as execution_agent providers or durable identities.",
     "skillOnlyTarget": false,
     "noExpansionNeededPolicy": "A safe route may record no_expansion_needed for concrete subtools, but not for the first-class capability family itself.",
     "overclaimTarget": 0

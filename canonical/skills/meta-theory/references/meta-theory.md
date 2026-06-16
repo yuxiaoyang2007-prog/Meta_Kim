@@ -358,6 +358,16 @@ Four dimensions for shell choice:
 > Phases 1–3 = “it moves.” 4–11 = “it matures.”
 > No review → blind rush. No verification → theater. No evolution → repeat mistakes.
 
+### Trigger accuracy
+
+The 11-phase workflow is not accepted by `phaseCount=11`. Each phase decision
+must record `trigger`, `skip`, `block`, or `wait`, pass an 80-point trigger
+score, cite evidence, and include falsification checks. Correctly skipped or
+waiting phases still count only when the evidence explains the decision.
+
+Examples: `revision` can be `accurate_skip` after a clean Review; `feedback`
+must stay `pending_external_input` until user acceptance exists.
+
 ### Complexity routing
 
 | Complexity | Rule | Business phases |
@@ -367,6 +377,21 @@ Four dimensions for shell choice:
 | Complex | >5 files / multi-module | All 11 |
 
 > Detail: `references/ten-step-governance.md` (legacy file name, current 11-phase content)
+
+---
+
+## Card dealing accuracy (summary)
+
+The card deck is not accepted by card count or hardcoded order. Each card
+decision must record whether it was dealt, suppressed, deferred, skipped,
+interrupted, or escalated; pass an 80-point accuracy score; cite evidence; and
+include falsification checks.
+
+The run-start user surface should briefly explain how many cards became active,
+whether an interrupt card preempted the deck, and the minimum deal accuracy
+score. Do not expose raw packets as the visible reason.
+
+> Detail: `references/rhythm-orchestration.md`
 
 ---
 

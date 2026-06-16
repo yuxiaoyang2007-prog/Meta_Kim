@@ -47,6 +47,70 @@ describe("Part A: 11-phase business workflow structure", async () => {
     assert.deepEqual(phases.sort(), expected.sort());
   });
 
+  test("phase trigger standard is measurable and evidence-backed", () => {
+    const standard = contract.businessWorkflow?.phaseTriggerStandard ?? {};
+    assert.equal(standard.schemaVersion, "business-phase-trigger-standard-v0.1");
+    assert.equal(standard.passThreshold, 80);
+    for (const decision of ["trigger", "skip", "block", "wait"]) {
+      assert.ok(standard.decisionEnum?.includes(decision), `missing decision: ${decision}`);
+    }
+    for (const state of [
+      "triggered",
+      "accurate_skip",
+      "blocked_with_evidence",
+      "pending_external_input",
+      "weak_trigger",
+      "unsupported_skip",
+    ]) {
+      assert.ok(
+        standard.activationStateEnum?.includes(state),
+        `missing activation state: ${state}`
+      );
+    }
+    for (const field of [
+      "decision",
+      "activationState",
+      "triggerScore",
+      "passThreshold",
+      "activationRule",
+      "quantitativeSignals",
+      "evidenceRefs",
+      "falsificationChecks",
+    ]) {
+      assert.ok(standard.requiredFields?.includes(field), `missing field: ${field}`);
+    }
+    for (const field of ["signal", "observed", "expected", "pass"]) {
+      assert.ok(
+        standard.signalRequiredFields?.includes(field),
+        `missing signal field: ${field}`
+      );
+    }
+    assert.match(standard.rule ?? "", /phaseCount=11 is never enough evidence/i);
+    assert.match(standard.deepResearchBinding ?? "", /deep-research claim evidence/i);
+  });
+
+  test("start reason policy keeps 8-stage and 11-phase triggers user-readable", () => {
+    const policy = contract.businessWorkflow?.startReasonPolicy ?? {};
+    assert.equal(policy.schemaVersion, "governance-start-reason-v0.1");
+    assert.equal(policy.required, true);
+    assert.equal(policy.placement, "run_start");
+    assert.equal(policy.maxLineCharacters, 120);
+    assert.ok(policy.covers?.includes("8_stage_spine"));
+    assert.ok(policy.covers?.includes("11_phase_business_workflow"));
+    assert.ok(policy.covers?.includes("card_dealing"));
+    for (const field of [
+      "summary",
+      "spineReason",
+      "workflowReason",
+      "cardReason",
+      "evidenceRefs",
+    ]) {
+      assert.ok(policy.requiredFields?.includes(field), `missing field: ${field}`);
+    }
+    assert.match(policy.rule ?? "", /concise human-readable reason/i);
+    assert.match(policy.rule ?? "", /without dumping packets/i);
+  });
+
   test("distinctFromCanonicalSpine is true", () => {
     assert.equal(contract.businessWorkflow?.distinctFromCanonicalSpine, true);
   });

@@ -68,6 +68,8 @@ Treat these as generated mirrors or runtime adapters unless the task explicitly 
 
 After changing canonical sources, sync projections instead of hand-forking runtime copies.
 
+Open-source boundary: runtime projection directories are generated local outputs, not GitHub source. `.claude/`, `.codex/`, `.agents/`, `.cursor/`, `openclaw/`, `.mcp.json`, and `codex/` must stay gitignored and excluded from package files. The nine governance agents are sourced from `canonical/agents/`; Codex adapter and business-role `.toml` files may be generated for the local host, but they are not durable Meta_Kim owners and must not be force-added or published as repository source.
+
 ## Codex Runtime Map
 
 When this repository is opened in Codex:

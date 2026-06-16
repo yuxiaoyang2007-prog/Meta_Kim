@@ -144,6 +144,11 @@
       "rule": "findskill and external skill discovery can justify a current-run selectedSkill but must not become a permanent agent identity binding without Warden-approved evolution."
     },
     {
+      "id": "global-professional-provider-first",
+      "capabilityFamily": "capability-discovery-and-retrieval",
+      "rule": "Before creating or upgrading an execution agent, Fetch and Thinking must check global and project professional providers across agents, skills, MCP, commands, runtime tools, hooks, plugins, memory/graph, dependency providers, and prompt/rule workflows; a workerTaskPacket is only a run-scoped work order for the selected provider."
+    },
+    {
       "id": "creation-after-gap-proof",
       "capabilityFamily": "skill-agent-tool-creation",
       "rule": "skill-creator or create-agent routes require capability discovery, gap proof, review, and Warden approval before durable writeback."
@@ -162,6 +167,11 @@
       "id": "worker-task-not-identity",
       "capabilityFamily": "governance-orchestration",
       "rule": "One-run workerTask details must not be written into long-term agent or skill identity."
+    },
+    {
+      "id": "no-temporary-small-agent",
+      "capabilityFamily": "skill-agent-tool-creation",
+      "rule": "Do not create a temporary small agent for a single run, shard, file set, or role instance; use workerTaskPackets with an existing professional owner/loadout unless a reviewed recurring owner gap proves create_agent."
     },
     {
       "id": "verified-claim-evidence",

@@ -176,6 +176,22 @@ describe("installPluginBundlesForNonClaudeRuntimes (dry-run e2e)", () => {
     assert.doesNotMatch(plain, /git clone https:\/\/github\.com\/affaan-m\/ECC\.git/);
   });
 
+  test("unknown --skills filter skips optional skill suite without installing generic fallback", () => {
+    const { status, out } = runFullDryRun([
+      "--skills",
+      "does-not-exist",
+      "--targets",
+      "claude,codex",
+    ]);
+    assert.equal(status, 0);
+    const plain = stripAnsi(out);
+    assert.match(plain, /Unknown skill id|No skill repositories matched/i);
+    assert.doesNotMatch(plain, /skill-creator/);
+    assert.doesNotMatch(plain, /git clone https:\/\/github\.com\//);
+    assert.doesNotMatch(plain, /sparse install https:\/\/github\.com\//);
+    assert.match(plain, /ensure .*\.codex.*config\.toml preserves Codex App Browser\/Chrome\/Computer Use native controls/);
+  });
+
   test("Codex runtime uses native plugin flow for superpowers", () => {
     const { status, out } = runDryRun();
     assert.equal(status, 0);

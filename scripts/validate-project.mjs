@@ -664,6 +664,10 @@ async function validateWorkflowContract() {
     "crossCheckStrategy",
     "originalSynthesisRules",
     "decisionImpactCriteria",
+    "keyInformationTargets",
+    "iterationPlan",
+    "stopCondition",
+    "decisionUpdateRule",
   ]) {
     assert(
       researchQualityGate.requiredPlanFields?.includes(field),
@@ -691,6 +695,58 @@ async function validateWorkflowContract() {
       ),
     "workflow-contract.json deepResearchPlanQualityGate must forbid copied prompt text and cosmetic disguise.",
   );
+  const contentEvidenceRequired =
+    contract.protocols?.contentEvidencePacket?.requiredFields ?? [];
+  for (const field of ["iterationLog", "claimEvidenceCards"]) {
+    assert(
+      contentEvidenceRequired.includes(field),
+      `workflow-contract.json contentEvidencePacket must require ${field}.`,
+    );
+    assert(
+      contract.protocols?.contentEvidencePacket?.deepResearchRequiredFields?.includes(field),
+      `workflow-contract.json deepResearchRequiredFields must require ${field}.`,
+    );
+  }
+  const iterationGate =
+    contract.protocols?.contentEvidencePacket?.iterationLogQualityGate ?? {};
+  assert(
+    iterationGate.minimumIterationLogEntries >= 1,
+    "workflow-contract.json iterationLogQualityGate must require iterative evidence logs.",
+  );
+  for (const field of [
+    "iteration",
+    "trigger",
+    "queryOrAction",
+    "observation",
+    "gapClosed",
+    "nextStepDecision",
+    "stopCheck",
+  ]) {
+    assert(
+      iterationGate.requiredFields?.includes(field),
+      `workflow-contract.json iterationLogQualityGate must require ${field}.`,
+    );
+  }
+  const claimCardGate =
+    contract.protocols?.contentEvidencePacket?.claimEvidenceCardQualityGate ?? {};
+  assert(
+    claimCardGate.minimumClaimEvidenceCards >= 1,
+    "workflow-contract.json claimEvidenceCardQualityGate must require claim evidence cards.",
+  );
+  for (const field of [
+    "claim",
+    "sourceRefs",
+    "evidenceAnchor",
+    "confidence",
+    "counterevidence",
+    "decisionImpact",
+    "falsificationStatus",
+  ]) {
+    assert(
+      claimCardGate.requiredFields?.includes(field),
+      `workflow-contract.json claimEvidenceCardQualityGate must require ${field}.`,
+    );
+  }
 
   const optionFrame = contract.protocols?.preDecisionOptionFrame ?? {};
   for (const field of [

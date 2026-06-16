@@ -16,6 +16,7 @@
   "requiredEvidenceKeys": [
     "critical.intent_locked",
     "fetch.providers_checked",
+    "fetch.global_professional_providers_checked",
     "thinking.decision_rule_applied",
     "thinking.rejected_alternatives_recorded",
     "execution.branch_owner_bound",
@@ -47,11 +48,20 @@
       "deliverable": "GeneratedAgentSpec plus durable project-agent CandidateWriteback",
       "verifier": "verify",
       "candidateType": "agent",
-      "forbiddenBehaviors": ["worker_task_only", "create_script", "bind_repo_path_to_identity", "temporary_subagent_as_agent_definition"],
+      "forbiddenBehaviors": [
+        "worker_task_only",
+        "create_script",
+        "bind_repo_path_to_identity",
+        "temporary_subagent_as_agent_definition",
+        "temporary_small_agent_for_one_run_task",
+        "skip_global_professional_provider_search"
+      ],
       "acceptance": [
         "GeneratedAgentSpec complete",
         "10/10 scorecard",
         "identity pollution 0",
+        "global professional providers checked",
+        "no existing professional provider can own the recurring responsibility class",
         "projectRetention present",
         "formal tool projection targets present"
       ]
@@ -90,7 +100,13 @@
       "deliverable": "workerTaskPacket",
       "verifier": "verify",
       "candidateType": null,
-      "forbiddenBehaviors": ["create_skill", "create_agent", "candidate_writeback"],
+      "forbiddenBehaviors": [
+        "create_skill",
+        "create_agent",
+        "candidate_writeback",
+        "temporary_small_agent_creation",
+        "worker_task_as_agent_identity"
+      ],
       "acceptance": ["run scoped only", "no candidate writeback", "long-term identity pollution 0"]
     },
     "blocked_or_needs_approval": {

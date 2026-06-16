@@ -8,6 +8,163 @@
 
 ## [Unreleased]
 
+## [2.8.40] - 2026-06-16
+
+### 变更
+
+- **Prompt 入口治理激活** - Claude Code 和 Codex 的项目级 prompt 入口现在会运行 meta-theory spine hook；自然语言 durable work 和 `critical/fetch/thinking/review` 说法可以在执行前触发治理，不再只依赖显式 Skill 激活。
+- **Claude 全局项目就绪检测** - Claude Code 全局 hooks 现在会安装 prompt-entry bootstrap hook package，并带 package-root 证据；旧项目或未 bootstrap 项目会先收到精简的项目就绪原因，再决定是否应用项目文件。
+- **项目 Bootstrap 安全边界** - Project bootstrap 仍然坚持 dry-run first 和确认门；stale 或 equivalent 项目只显示 `status`、active targets、reason 和 native choice 要求，不会静默写入。
+- **Spine 死锁解除** - 即使 Fetch 正在等待 `fetchRecord`，spine-state 写入也会放行，避免 prompt-entry 实机测试后维护者无法写入 Fetch 证据或关闭运行态。
+- **全局能力证据刷新** - 安装新的 hook package 后刷新全局能力发现；库存现在能看到 Meta_Kim 全局 prompt-entry hook，以及 agents、skills、commands、MCP servers/tools、plugins 和 runtime hooks。
+
+### 验证
+
+- `node --test tests/setup/graphify-wiring-contract.test.mjs tests/meta-theory/11-eight-stage-spine.test.mjs tests/setup/sync-runtimes-manifest.test.mjs tests/setup/sync-global-hooks-policy.test.mjs tests/meta-theory/47-meta-theory-entry-classifier.test.mjs tests/governance/capability-routing.test.mjs`
+- `node --check canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs`
+- `node --check canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs`
+- `npm run meta:sync`
+- `npm run meta:sync:global -- --with-global-hooks`
+- `npm run discover:global`
+- 在 `D:/KimProject/游戏策划案` 中执行 Claude Code 全局 `UserPromptSubmit` 实机 smoke
+- 在 `D:/KimProject/Meta_Kim` 中执行 Codex 项目 `UserPromptSubmit` 实机 smoke
+
+## [2.8.39] - 2026-06-16
+
+### 变更
+
+- **发牌准确性标准** - 将 `cardPlanPacket` 升级到 v0.2；每张牌都必须记录 deal/suppress/defer/skip/interrupt/escalate 决策，并带 80 分标准、量化信号、证据引用和反证检查。
+- **用户可见发牌原因** - 在 run-start 和报告里新增精简说明：为什么触发发牌、多少张牌进入节奏控制、最低分是否通过。
+- **契约化发牌证明** - 将 `dealStandard` 设为 `cardPlanPacket` 必填字段，对齐生成的 card shell/source/silence/control decision，并刷新 validator fixtures。
+- **Deep Research 风格发牌审查** - 每张牌的判断都绑定决策影响和反事实检查；不需要的牌会带证据 suppress，不再只是模糊 defer。
+- **全局发现就绪** - 已把更新后的 meta-theory skill 同步到项目和全局 runtime home，并刷新 Claude Code、Codex、OpenClaw、Cursor 的全局能力库存。
+
+### 验证
+
+- `node --test tests/meta-theory/14-card-deck-complete.test.mjs tests/meta-theory/34-run-deliverables.test.mjs tests/meta-theory/12-ten-step-workflow.test.mjs tests/meta-theory/07-contract-compliance.test.mjs`
+- `node scripts/run-meta-theory-governed-execution.mjs --task "帮我做个小红书营销自动发布器" --run-id card-proof --emit-conversation-notice`
+- `npm run meta:check`
+- `npm run meta:test:meta-theory`
+- `npm run discover:global`
+- `npm run meta:sync:global`
+- `npm run meta:check:global`
+- `npm run meta:release:smoke`
+
+## [2.8.38] - 2026-06-16
+
+### 变更
+
+- **11 阶段触发标准** - 将 `businessPhasePlanPacket` 升级到 v0.2；每个阶段都必须记录 trigger/skip/block/wait 决策、评分、证据引用、量化信号和反证检查，不再因为列出 11 个阶段名就通过。
+- **业务流覆盖真实性** - 用契约对齐的 `complete` / `incomplete` 判断和 `coverageDetail` 替换旧的 phase-count-only 字符串，避免把“已记录”和“准确触发”混在一起。
+- **精简开场原因** - 新增 run-start 用户可读说明，解释为什么触发 8 阶段 spine 和 11 阶段业务流；说明保持短句，并绑定证据，不倾倒内部 packet。
+- **Deep Research 风格阶段证据** - 阶段判断现在绑定关键信号、反事实检查和决策证据；例如 Revision 的准确跳过、Feedback 的外部等待会被明确表示。
+- **报告可见性** - 用户可读 meta-theory 报告和 CLI conversation notice 现在会显示触发状态、触发评分和开场原因。
+
+### 验证
+
+- `node --test tests/meta-theory/34-run-deliverables.test.mjs`
+- `node --test tests/meta-theory/12-ten-step-workflow.test.mjs tests/meta-theory/09-run-artifact-validator.test.mjs`
+- `npm run meta:check`
+- `npm run meta:test:meta-theory`
+- `npm run discover:global`
+- `npm run meta:check:global`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
+## [2.8.37] - 2026-06-16
+
+### 变更
+
+- **深度 Review 门禁** - Prompt-first live acceptance 现在要求 Review 证明已检查证据质量、反证、决策影响、可证伪性和上游阶段链路，不再只靠 packet 存在就通过。
+- **Meta-Review 深度审计** - 新增机械化深度审计：拒绝浅层 packet-only Review，检查对抗覆盖和审查盲区，并把 public-ready 证据与 live/runtime 证据分开。
+- **Evolution 策略证据** - Evolution 的 `none-with-reason` 现在必须证明已判断可复用模式、写回目标、scar 需求和下次复用 key。
+- **Strict Live Acceptance 回归** - 新增回归覆盖，确保缺失或浅层 Review / Meta-Review / Evolution packet 会失败，而不是被 fallback 数据补成通过。
+
+### 验证
+
+- `node --test tests/governance/prompt-first-live-acceptance.test.mjs`
+- `node --test tests/governance/decision-cross-validation.test.mjs tests/governance/prompt-first-live-acceptance.test.mjs`
+- `npm run meta:check`
+- `npm run meta:test:meta-theory`
+- `npm run meta:sync`
+- `npm run discover:global`
+- `npm run meta:check:global`
+- `npm run meta:prd:prompt-first-live:validate`
+- `git diff --check`
+
+## [2.8.36] - 2026-06-16
+
+### 变更
+
+- **专业 Provider 优先路由** - 治理路线现在必须先查已有的全局/项目专业 provider，再考虑创建或升级 execution agent；覆盖 agents、skills、commands、MCP providers/tools、runtime tools、hooks、plugins、memory/graph providers 和 dependency providers。
+- **WorkerTask 身份边界** - 明确并验证 `workerTaskPacket` 只是绑定到已选 owner/loadout 的单次运行工作单，不是临时小 agent、subagent definition 或长期 provider 身份。
+- **全局能力库存自动刷新** - 安装/更新和全局依赖安装/更新流程会在 runtime home 变化后自动刷新本地 global capability inventory，同时仍然不把机器私有库存提交到 GitHub 源码。
+- **能力缺口证据** - 新增 `fetch.global_professional_providers_checked` 证据和回归覆盖，要求 `create_agent` 决策先证明已有专业 provider 已经查过且不足。
+- **Setup 回归覆盖** - 新增自动刷新全局库存的发布测试，并修正 project deploy 保护式 JSON merge 测试，使其匹配当前“先规划、再写入”的实现结构。
+
+### 验证
+
+- `npm run meta:release:smoke`
+- `npm run meta:test:setup`
+- `npm run meta:validate`
+- `npm run discover:global`
+- `npm run meta:gap:real-input-replay`
+- `npm run meta:prd:smooth-capability:validate`
+- `npm run meta:runtime:validate`
+- `npm run meta:graphify:rebuild`
+- `git diff --check`
+
+## [2.8.35] - 2026-06-16
+
+### 变更
+
+- **决策级 Deep Research** - 将 Fetch 证据从“收集来源”升级为“锁定关键信息目标、记录多轮 query/read/update、声明停止条件、写入决策更新规则”，再进入 Thinking。
+- **Claim Evidence Cards** - 新增 `claimEvidenceCards` 和更严格的 run artifact 校验；会改变路线的 claim 必须绑定可解析 evidence refs、反证记录、置信度、falsification 状态和决策影响。
+- **研究执行证据** - 扩展 live research execution packet，记录 query 迭代次数、证据 gap 是否关闭、confidence 前后变化和反证尝试，避免 blocked evidence 被带入 Thinking。
+- **Canonical 治理对齐** - 更新 Scout、Conductor、Prism 和 meta-theory dispatcher，让 deep research 质量由角色责任、生成 packet、validator、fixtures 和回归测试共同约束，而不是只靠提示词描述。
+
+### 验证
+
+- `node scripts/run-node-tests.mjs "tests/meta-theory/02-clarity-gate.test.mjs" "tests/meta-theory/37-research-preparation-layer.test.mjs" "tests/meta-theory/44-research-execution-and-innovation.test.mjs" "tests/meta-theory/09-run-artifact-validator.test.mjs"`
+- `npm run meta:check`
+- `npm run meta:release:smoke`
+- `node scripts/run-node-tests.mjs "tests/meta-theory/09-run-artifact-validator.test.mjs"`
+- `git diff --check`
+
+## [2.8.34] - 2026-06-16
+
+### 变更
+
+- **安装范围边界** - 恢复并明确默认安装/更新模型：全局通用能力 + 当前项目投影，并修正为按目标平台选择落地；默认回车只投影 Claude Code + Codex，Cursor / OpenClaw 只有作为“正式投影兼容目标”被显式选择时才生成项目文件。
+- **开源 runtime 投影边界** - 新增发布验证器，确保 `.codex/`、`.agents/`、`.claude/`、`.cursor/`、`openclaw/` 等生成的 runtime projection 不进入 GitHub source 或 package files，并明确 Codex adapter / business-role TOML 只是本地宿主投影，不是治理 agent 源码。
+- **平台兼容分层** - 安装契约和验证输出现在会区分正式投影、依赖项目目标和候选 probe；公开文档不再重复上游依赖项目的安装矩阵，也不把它写成 Meta_Kim 支持承诺。
+- **公开平台口径** - 更新 README 徽章、平台支持表和跨平台映射说明，让默认正式投影、显式正式兼容投影、候选兼容 probe 分开可见；同步刷新 Qoder 官方文档链接，并把 Cline 官方 Skills primitive 纳入 catalog。
+- **项目治理体验** - 更新 PRD、setup 与 README 文案：全局 skill 只是可复用的发现入口，其他目录必须先 dry-run 项目 bootstrap 并确认后才允许写入项目文件；`AGENTS.md` 只按平台特性作为上下文资产描述，不再被写成 Codex/Cursor/OpenClaw 的统一入口。
+- **安装范围验证** - 新增 `npm run meta:install-scope:verify`，用临时全局 home 和临时项目 bootstrap 实测各平台项目投影边界，并输出全局层 / 项目层分类结果。
+
+## [2.8.33] - 2026-06-15
+
+### 新增
+
+- **全局优先项目懒初始化** - 新增 `meta-kim project bootstrap` 和 `npm run meta:project:bootstrap`，让全局安装的 Meta_Kim 可以先 dry-run 再 apply 项目级 Claude Code / Codex 投影，用户不需要手动维护全局和项目两套状态。
+- **首次触发 Bootstrap 探针** - 扩展 meta-theory activation hook：首次触发 meta-theory 时会运行项目 bootstrap dry-run probe，并保存 source-chain 证据，但不会静默写入项目文件。
+- **懒初始化验收测试** - 新增空项目、已有用户配置、旧 manifest、只读失败、managed block 替换、保护式 JSON merge、备份 manifest、`.codex/config.toml` 永不触碰等场景覆盖。
+
+### 变更
+
+- **项目级来源链证据** - 项目 bootstrap plan 现在会在任何写入前暴露 installed package root、canonical roots、`config/sync.json`、生成的 runtime mirrors、目标项目、文件动作、merge policy 和 skipped files。
+- **运行时原生选择面** - 更新 Claude Code 和 Codex 的 choice-surface 合同，保留结构化决策面板语义，并使用当前 host schema 的最大有意义选项数，不再使用 Meta_Kim 自己的硬编码上限。
+- **能力路由** - 能力发现改为 canonical/index-first 路由，并防止 Codex 和 Claude Code 把对方 runtime 的 project agent adapter 误当作可调用执行 owner。
+
+### 验证
+
+- `npm run meta:check`
+- `npm run meta:test:setup`
+- `npm run meta:test:governance`
+- `npm run meta:runtime:safety:validate`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
 ## [2.8.32] - 2026-06-15
 
 ### 变更

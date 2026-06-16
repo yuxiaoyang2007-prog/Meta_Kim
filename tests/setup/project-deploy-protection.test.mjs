@@ -65,6 +65,7 @@ describe("project deploy protection", () => {
   test("project deploy merges protected JSON configs instead of blind copying", () => {
     const deployFileBody = functionBody("copyProjectDeployFile");
     const mergeBody = functionBody("mergeProtectedProjectDeployFile");
+    const plannedMergeBody = functionBody("plannedProtectedProjectDeployJson");
 
     assert.match(source, /const DEPLOY_PROTECTED_JSON_PATHS = new Set/);
     assert.match(source, /\.claude\/settings\.json/);
@@ -75,9 +76,25 @@ describe("project deploy protection", () => {
     assert.match(source, /openclaw\/openclaw\.template\.json/);
     assert.match(deployFileBody, /DEPLOY_PROTECTED_JSON_PATHS\.has\(rel\)/);
     assert.match(deployFileBody, /mergeProtectedProjectDeployFile/);
-    assert.match(mergeBody, /mergeRepoClaudeSettings\(base, generated, targetDir\)/);
-    assert.match(mergeBody, /mergeMcpConfigPreserveBase\(base, generated\)/);
-    assert.match(mergeBody, /mergeHookConfigPreserveBase\(base, generated\)/);
+    assert.match(mergeBody, /plannedProtectedProjectDeployJson\(srcPath, destPath, relPath, targetDir\)/);
+    assert.match(plannedMergeBody, /mergeRepoClaudeSettings\(base, generated, targetDir\)/);
+    assert.match(plannedMergeBody, /mergeMcpConfigPreserveBase\(base, generated\)/);
+    assert.match(plannedMergeBody, /mergeHookConfigPreserveBase\(base, generated\)/);
+  });
+
+  test("project deploy protects existing AGENTS.md and CLAUDE.md with managed text blocks", () => {
+    const deployFileBody = functionBody("copyProjectDeployFile");
+    const textMergeBody = functionBody("mergeManagedTextBlockPreserveBase");
+    const markerBody = functionBody("managedTextBlockMarkers");
+
+    assert.match(source, /const DEPLOY_PROTECTED_TEXT_PATHS = new Set/);
+    assert.match(source, /"AGENTS\.md"/);
+    assert.match(source, /"CLAUDE\.md"/);
+    assert.match(deployFileBody, /DEPLOY_PROTECTED_TEXT_PATHS\.has\(rel\)/);
+    assert.match(deployFileBody, /mergeProtectedProjectDeployTextFile/);
+    assert.match(markerBody, /BEGIN \$\{id\}/);
+    assert.match(textMergeBody, /managedTextBlockMarkers\(relPath\)/);
+    assert.match(textMergeBody, /replace\(blockRe, block\)/);
   });
 
   test("recursive project deploy computes relative paths from the repo root", () => {

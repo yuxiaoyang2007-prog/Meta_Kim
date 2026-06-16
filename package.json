@@ -1,7 +1,7 @@
 {
   "name": "meta-kim",
-  "version": "2.8.32",
-  "description": "Governance layer for AI coding: meta agents, workflow contract, meta-theory; canonical in canonical/, with generated Claude/Codex/OpenClaw/Cursor projections.",
+  "version": "2.8.40",
+  "description": "Governance layer for AI coding: canonical meta agents and workflow contracts with formal Claude/Codex/OpenClaw/Cursor projections plus a source-backed candidate compatibility catalog.",
   "private": true,
   "type": "module",
   "scripts": {
@@ -53,12 +53,14 @@
     "meta:graphify:rebuild": "node scripts/graphify-cli.mjs rebuild",
     "meta:validate": "node scripts/validate-project.mjs",
     "meta:check:sync-coverage": "node scripts/sync-coverage-check.mjs",
-    "meta:check": "npm run meta:check:runtimes && npm run meta:check:sync-coverage && npm run meta:validate",
+    "meta:check": "npm run meta:check:runtimes && npm run meta:check:sync-coverage && npm run meta:open-source-boundary:validate && npm run meta:validate",
     "meta:verify:all": "npm run discover:global && npm run meta:check && npm run meta:verify:governance && npm run meta:graphify:check && npm run meta:check:global:release && node scripts/eval-meta-agents.mjs --require-all-runtimes && npm run meta:test:setup && npm run meta:test:meta-theory",
     "meta:verify:all:live": "node scripts/eval-meta-agents.mjs --require-all-runtimes --live",
     "meta:setup:install": "node setup.mjs",
     "meta:setup:update": "node setup.mjs --update",
     "meta:setup:check": "node setup.mjs --check",
+    "meta:project:bootstrap": "node setup.mjs --project-bootstrap",
+    "meta:install-scope:verify": "node scripts/verify-install-scope-matrix.mjs",
     "meta:runtime:probe": "node scripts/probe-runtime-capabilities.mjs",
     "meta:runtime:check": "node scripts/probe-runtime-capabilities.mjs --check",
     "meta:os:probe": "node scripts/probe-os-compatibility.mjs",
@@ -130,10 +132,11 @@
     "meta:public-assets:validate": "node scripts/validate-public-doc-assets.mjs",
     "meta:foundational:validate": "node scripts/validate-foundational-capabilities.mjs",
     "meta:runtime:safety:validate": "node scripts/validate-runtime-safety-contract.mjs",
+    "meta:open-source-boundary:validate": "node scripts/validate-open-source-boundary.mjs",
     "meta:deps:compat": "node scripts/validate-dependency-compatibility.mjs",
     "meta:hook:validate": "node scripts/validate-hook-progression.mjs",
     "meta:test:governance": "node scripts/run-node-tests.mjs \"tests/governance/*.test.mjs\"",
-    "meta:verify:governance": "npm run meta:governance:validate && npm run meta:runtime:validate && npm run meta:os:check && npm run meta:deps:check && npm run meta:deps:compat && npm run meta:providers:validate && npm run meta:route:validate && npm run meta:intent:validate && npm run meta:prompt:validate && npm run meta:prd:prompt-first-flow:validate && npm run meta:prd:prompt-first-live:validate && npm run meta:prd:default-execution:validate && npm run meta:prd:product-experience:validate && npm run meta:prd:asset-sedimentation:validate && npm run meta:prd:research-native:validate && npm run meta:prd:prompt-architecture:validate && npm run meta:prd:smooth-capability:validate && npm run meta:prd:runtime-priority:validate && npm run meta:prd:source-map:validate && npm run meta:prd:all-dossiers:validate && npm run meta:public-assets:validate && npm run meta:foundational:validate && npm run meta:hook:validate && npm run meta:runtime:safety:validate && npm run meta:test:integration && npm run meta:test:governance"
+    "meta:verify:governance": "npm run meta:governance:validate && npm run meta:runtime:validate && npm run meta:os:check && npm run meta:deps:check && npm run meta:deps:compat && npm run meta:providers:validate && npm run meta:route:validate && npm run meta:intent:validate && npm run meta:prompt:validate && npm run meta:prd:prompt-first-flow:validate && npm run meta:prd:prompt-first-live:validate && npm run meta:prd:default-execution:validate && npm run meta:prd:product-experience:validate && npm run meta:prd:asset-sedimentation:validate && npm run meta:prd:research-native:validate && npm run meta:prd:prompt-architecture:validate && npm run meta:prd:smooth-capability:validate && npm run meta:prd:runtime-priority:validate && npm run meta:prd:source-map:validate && npm run meta:prd:all-dossiers:validate && npm run meta:public-assets:validate && npm run meta:foundational:validate && npm run meta:hook:validate && npm run meta:runtime:safety:validate && npm run meta:open-source-boundary:validate && npm run meta:test:integration && npm run meta:test:governance"
   },
   "keywords": [
     "claude-code",

@@ -995,6 +995,7 @@ describe("workflow-contract.json — schema compliance", async () => {
       "dealerMode",
       "cards",
       "deliveryShells",
+      "dealStandard",
       "silenceDecision",
       "controlDecisions",
       "defaultShellId",

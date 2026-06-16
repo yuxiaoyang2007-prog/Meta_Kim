@@ -1059,8 +1059,12 @@ function validateContentEvidencePacket(contract, artifact) {
   );
   ensureObject(packet.deepResearchPlan, "contentEvidencePacket.deepResearchPlan");
   for (const field of [
+    "keyInformationTargets",
     "questions",
     "sourceCategoriesPlanned",
+    "iterationPlan",
+    "stopCondition",
+    "decisionUpdateRule",
     "decisionImpactCriteria",
   ]) {
     ensureStringArray(
@@ -1080,6 +1084,8 @@ function validateContentEvidencePacket(contract, artifact) {
     "crossReferenceMatrix",
     "assumptionLedger",
     "decisionImpactMap",
+    "iterationLog",
+    "claimEvidenceCards",
   ]) {
     ensureArray(packet[field], `contentEvidencePacket.${field}`);
     ensure(
@@ -1132,6 +1138,99 @@ function validateContentEvidencePacket(contract, artifact) {
       item.stageAffected,
       allowedImpactStages,
       `contentEvidencePacket.decisionImpactMap[${index}].stageAffected`,
+    );
+  }
+  const iterationPolicy = policy.iterationLogQualityGate ?? {};
+  ensure(
+    packet.iterationLog.length >= (iterationPolicy.minimumIterationLogEntries ?? 1),
+    "contentEvidencePacket.iterationLog must record at least one retrieval or reasoning iteration.",
+  );
+  for (const [index, item] of packet.iterationLog.entries()) {
+    const context = `contentEvidencePacket.iterationLog[${index}]`;
+    ensureObject(item, context);
+    ensureFields(
+      item,
+      iterationPolicy.requiredFields ?? [
+        "iteration",
+        "trigger",
+        "queryOrAction",
+        "observation",
+        "gapClosed",
+        "nextStepDecision",
+        "stopCheck",
+      ],
+      context,
+    );
+    ensure(
+      Number.isInteger(item.iteration) && item.iteration >= 1,
+      `${context}.iteration must be a positive integer.`,
+    );
+    for (const field of ["trigger", "queryOrAction", "observation", "nextStepDecision", "stopCheck"]) {
+      ensureString(item[field], `${context}.${field}`);
+    }
+    ensure(
+      typeof item.gapClosed === "boolean" || typeof item.gapClosed === "string",
+      `${context}.gapClosed must state whether the information gap was closed.`,
+    );
+    ensure(
+      !/none|n\/a|no impact|unchanged/i.test(item.nextStepDecision),
+      `${context}.nextStepDecision must explain whether to continue, stop, or update the route.`,
+    );
+  }
+  const claimCardPolicy = policy.claimEvidenceCardQualityGate ?? {};
+  ensure(
+    packet.claimEvidenceCards.length >= (claimCardPolicy.minimumClaimEvidenceCards ?? 1),
+    "contentEvidencePacket.claimEvidenceCards must include at least one claim evidence card.",
+  );
+  for (const [index, item] of packet.claimEvidenceCards.entries()) {
+    const context = `contentEvidencePacket.claimEvidenceCards[${index}]`;
+    ensureObject(item, context);
+    ensureFields(
+      item,
+      claimCardPolicy.requiredFields ?? [
+        "claim",
+        "sourceRefs",
+        "evidenceAnchor",
+        "confidence",
+        "counterevidence",
+        "decisionImpact",
+        "falsificationStatus",
+      ],
+      context,
+    );
+    for (const field of ["claim", "evidenceAnchor", "decisionImpact"]) {
+      ensureString(item[field], `${context}.${field}`);
+    }
+    validateEvidenceRefArray(artifact, item.sourceRefs, `${context}.sourceRefs`);
+    if (Array.isArray(item.counterevidence)) {
+      ensure(
+        item.counterevidence.length >= 1,
+        `${context}.counterevidence must record what was checked or why none was found.`,
+      );
+      for (const [counterIndex, counter] of item.counterevidence.entries()) {
+        ensureString(counter, `${context}.counterevidence[${counterIndex}]`);
+      }
+    } else {
+      ensureString(item.counterevidence, `${context}.counterevidence`);
+    }
+    ensureEnum(
+      item.confidence,
+      claimCardPolicy.confidenceEnum ?? ["low", "moderate", "high"],
+      `${context}.confidence`,
+    );
+    ensureEnum(
+      item.falsificationStatus,
+      claimCardPolicy.falsificationStatusEnum ?? [
+        "tested_survived",
+        "tested_refuted",
+        "unverified",
+        "blocked",
+      ],
+      `${context}.falsificationStatus`,
+    );
+    ensure(
+      !/none|n\/a|no impact|unchanged/i.test(item.decisionImpact),
+      `${context}.decisionImpact must state what the card changes for the decision.`,
     );
   }
   ensureArray(packet.contradictionLog, "contentEvidencePacket.contradictionLog");

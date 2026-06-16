@@ -91,16 +91,50 @@ function validateContract(contract, coreLoop, pkg) {
     "P-067 runtime provider type set drifted",
   );
   assert.equal(contract.expansionPolicy.noExpansionNeededAllowed, true);
+  assert.equal(
+    contract.globalProfessionalProviderFirst?.workerTaskBoundary,
+    "worker_task is a run-scoped dispatch packet for a selected owner/loadout; it is not a temporary agent identity, subagent definition, or durable provider.",
+    "P-067 must preserve workerTask as work order, not temporary agent",
+  );
+  for (const family of [
+    "execution_agent",
+    "skill",
+    "command_script",
+    "mcp_provider",
+    "runtime_tool",
+    "ordinary_tool",
+    "plugin_connector",
+    "dependency_provider",
+    "memory_graph",
+    "hook_runtime_adapter",
+    "prompt_rule_workflow",
+  ]) {
+    assert.ok(
+      contract.globalProfessionalProviderFirst?.providerFamilies?.includes(family),
+      `globalProfessionalProviderFirst missing provider family ${family}`,
+    );
+  }
   for (const forbidden of [
     "skill_only_discovery",
     "mcp_or_tool_swallowed_by_skill_or_script",
     "configured_provider_relabelled_as_live_invocation",
+    "workerTaskPacket_relabelled_as_execution_agent",
+    "temporary_small_agent_created_for_one_run_task",
+    "global_professional_provider_skipped_before_create_agent",
     "noExpansionNeeded_rejected_when_route_safe",
   ]) {
     assert.ok(contract.forbiddenBehaviors.includes(forbidden), `missing forbidden behavior ${forbidden}`);
   }
   assert.equal(contract.acceptanceCriteria.skillOnlyTarget, false);
   assert.equal(contract.acceptanceCriteria.overclaimTarget, 0);
+  assert.ok(
+    /global\/project professional providers/i.test(contract.acceptanceCriteria.professionalProviderFirst ?? ""),
+    "P-067 must require global/project professional provider search before agent creation",
+  );
+  assert.ok(
+    /must not be counted as execution_agent providers/i.test(contract.acceptanceCriteria.workerTaskIdentityBoundary ?? ""),
+    "P-067 must preserve workerTask identity boundary",
+  );
 
   for (const source of REQUIRED_CORE_SOURCES) {
     assert.ok(
@@ -156,12 +190,24 @@ function validateDefaultArtifact(report) {
   }
   assert.doesNotMatch(
     serializedDiscovery,
-    /configured_provider_relabelled_as_live_invocation|workerTaskPacket_relabelled_as_workerResult/,
+    /configured_provider_relabelled_as_live_invocation|workerTaskPacket_relabelled_as_workerResult|workerTaskPacket_relabelled_as_execution_agent|temporary_small_agent_created_for_one_run_task|global_professional_provider_skipped_before_create_agent/,
     "capability discovery must not contain forbidden overclaim markers",
   );
 
   const workerTasks = report.coreLoop.thinkingPacket.workerTaskPackets;
   assert.ok(Array.isArray(workerTasks) && workerTasks.length > 0, "workerTaskPackets must stay separate");
+  for (const [index, task] of workerTasks.entries()) {
+    assert.notEqual(
+      task.executionMode,
+      "temporary_agent",
+      `workerTaskPackets[${index}] must not create a temporary small agent`,
+    );
+    assert.doesNotMatch(
+      JSON.stringify(task),
+      /temporary small agent|temporary agent identity|workerTask as agent/i,
+      `workerTaskPackets[${index}] must not describe workerTask as an agent identity`,
+    );
+  }
   assert.equal(
     report.coreLoop.reviewPacket.protocolCompliance.capabilityDiscoveryChecked,
     true,

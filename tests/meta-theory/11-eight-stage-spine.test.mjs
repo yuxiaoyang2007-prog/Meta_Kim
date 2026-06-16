@@ -1894,6 +1894,41 @@ describe("Part F2: choice surface runtime gate", async () => {
     assert.match(businessWrite.stdout, /permissionDecision/);
   });
 
+  test("Fetch stage allows Bash spine-state writes even before fetchRecord exists", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      currentStage: "fetch",
+      dispatchChain: {
+        fetch: ["meta-artisan"],
+      },
+    };
+
+    const spineWrite = runEnforceHook(state, {
+      tool_name: "Bash",
+      tool_input: {
+        command:
+          "$p='.meta-kim/state/test/spine/spine-state.json'; " +
+          "$j=Get-Content $p -Raw | ConvertFrom-Json; " +
+          "$j | Add-Member -NotePropertyName fetchRecord -NotePropertyValue ([pscustomobject]@{ capabilitySearchPerformed=$true }) -Force; " +
+          "$j | ConvertTo-Json -Depth 20 | Set-Content $p -Encoding UTF8",
+      },
+    });
+    assert.equal(spineWrite.status, 0);
+    assert.doesNotMatch(spineWrite.stdout, /permissionDecision/);
+
+    const businessWrite = runEnforceHook(state, {
+      tool_name: "Bash",
+      tool_input: {
+        command: "Set-Content src/main.go 'package main'",
+      },
+    });
+    assert.equal(businessWrite.status, 0);
+    assert.match(businessWrite.stdout, /permissionDecision/);
+  });
+
   test("simpleMode residue in spine state cannot skip dispatch governance", () => {
     const state = {
       ...createInitialState({

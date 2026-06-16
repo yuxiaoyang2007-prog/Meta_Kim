@@ -77,6 +77,19 @@ function hasAll(haystack, needles, label) {
   }
 }
 
+function sameMembers(left, right) {
+  return (
+    JSON.stringify([...(left ?? [])].sort()) ===
+    JSON.stringify([...(right ?? [])].sort())
+  );
+}
+
+function productIdsByTier(catalog, tier) {
+  return (catalog.products ?? [])
+    .filter((product) => product.tier === tier)
+    .map((product) => product.id);
+}
+
 const contract = await readJson("config/governance/runtime-safety-hardening-contract.json");
 const pkg = await readJson("package.json");
 const catalog = await readJson("config/runtime-compatibility-catalog.json");
@@ -118,6 +131,141 @@ hasAll(
 assert(
   contract.hostConfigMerge?.mergeMode === "additive_preserve_user_state",
   "host config merge mode must preserve user state",
+);
+
+assert(
+  contract.installExperienceModel?.goal ===
+    "global_common_capabilities_plus_project_projection_with_directory_authorized_governance",
+  "install experience goal must bind global capabilities, project projection, and directory authorization",
+);
+hasAll(
+  contract.installExperienceModel?.principles ?? [],
+  [
+    "global common capabilities are reusable across projects",
+    "project-level complete projections are preserved and are not replaced by global skills",
+    "governance applies only to explicitly enabled directories",
+    "existing user configuration always wins over generated defaults",
+  ],
+  "install experience principles",
+);
+const projectProjectionLayer =
+  contract.installExperienceModel?.layers?.projectCompleteProjectionLayer ?? {};
+assert(
+  JSON.stringify(projectProjectionLayer.defaultActiveTargets) ===
+    JSON.stringify(["claude", "codex"]),
+  "project projection default active targets must be Claude Code + Codex",
+);
+hasAll(
+  projectProjectionLayer.defaultProjectionSet ?? [],
+  [
+    "CLAUDE.md",
+    "AGENTS.md",
+    ".claude/",
+    ".codex/",
+    ".agents/skills/",
+    ".mcp.json",
+    ".meta-kim/state",
+    ".meta-kim/backups",
+  ],
+  "project default projection layer",
+);
+const conditionalProjectionSets =
+  projectProjectionLayer.targetConditionalProjectionSets ?? {};
+hasAll(
+  conditionalProjectionSets.claude ?? [],
+  ["CLAUDE.md", ".claude/", ".mcp.json", ".meta-kim/state", ".meta-kim/backups"],
+  "Claude Code target projection layer",
+);
+hasAll(
+  conditionalProjectionSets.codex ?? [],
+  ["AGENTS.md", ".codex/", ".agents/skills/", ".meta-kim/state", ".meta-kim/backups"],
+  "Codex target projection layer",
+);
+hasAll(
+  conditionalProjectionSets.cursor ?? [],
+  ["AGENTS.md", ".cursor/", ".meta-kim/state", ".meta-kim/backups"],
+  "Cursor target projection layer",
+);
+hasAll(
+  conditionalProjectionSets.openclaw ?? [],
+  ["AGENTS.md", "openclaw/", ".meta-kim/state", ".meta-kim/backups"],
+  "OpenClaw target projection layer",
+);
+hasAll(
+  projectProjectionLayer.selectionInvariant ?? "",
+  ["activeTargets", "claude,codex", "--targets", ".meta-kim/local.overrides.json", "only when explicitly selected"],
+  "project projection selection invariant",
+);
+const platformSupportTiers = contract.installExperienceModel?.platformSupportTiers ?? {};
+assert(
+  platformSupportTiers.sourceOfTruth === "config/runtime-compatibility-catalog.json",
+  "platform support tiers must reference the runtime compatibility catalog",
+);
+assert(
+  sameMembers(
+    platformSupportTiers.formalProjectionTargets,
+    productIdsByTier(catalog, "runtime_projection"),
+  ),
+  "formal projection targets must match runtime_projection catalog products",
+);
+assert(
+  sameMembers(platformSupportTiers.defaultFormalProjectionTargets, ["claude", "codex"]),
+  "default formal projection targets must be Claude Code + Codex",
+);
+assert(
+  sameMembers(platformSupportTiers.explicitFormalCompatibilityProjectionTargets, [
+    "openclaw",
+    "cursor",
+  ]),
+  "explicit formal compatibility projection targets must be OpenClaw + Cursor",
+);
+assert(
+  sameMembers(
+    platformSupportTiers.dependencyInstallTargets,
+    productIdsByTier(catalog, "dependency_install_target"),
+  ),
+  "dependency install targets must match dependency_install_target catalog products",
+);
+assert(
+  sameMembers(
+    platformSupportTiers.candidateProbeTargets,
+    productIdsByTier(catalog, "candidate_probe"),
+  ),
+  "candidate probe targets must match candidate_probe catalog products",
+);
+hasAll(
+  platformSupportTiers.boundary ?? "",
+  ["OpenClaw", "Cursor", "not the whole platform compatibility universe"],
+  "platform support tier boundary",
+);
+hasAll(
+  platformSupportTiers.promotionInvariant ?? "",
+  ["runtime profile", "projection layout", "generated target paths", "sync tests", "install policy"],
+  "platform promotion invariant",
+);
+assert(
+  contract.installExperienceModel?.installOptions?.find((option) => option.id === "both")
+    ?.defaultOnEnter === true,
+  "recommended install option must be the Enter default",
+);
+assert(
+  contract.installExperienceModel?.installOptions?.find(
+    (option) => option.id === "advanced_global_controls",
+  )?.defaultOnEnter === false,
+  "advanced global controls must default off",
+);
+hasAll(
+  contract.installExperienceModel?.noSkillSemantics?.mustNotSkip ?? [],
+  [
+    "project projection when project scope is selected",
+    "global meta-theory core sync when global scope is selected",
+  ],
+  "no-skill semantics",
+);
+hasAll(
+  contract.installExperienceModel?.dryRunDisclosure?.mustShow ?? [],
+  ["globalWrites", "projectWrites", "mergePolicy", "backupBeforeApply", "rollbackPlan"],
+  "dry-run disclosure",
 );
 hasAll(
   contract.hostConfigMerge?.codexNativeControls?.requiredFeatures ?? [],
@@ -336,6 +484,67 @@ for (const [messageKey, statusClass] of Object.entries(INSTALL_STATUS_MESSAGE_CL
     `install message ${messageKey} maps to unknown status class ${statusClass}`,
   );
 }
+
+hasAll(
+  contract.lazyProjectBootstrap?.entrypoints ?? [],
+  [
+    "meta-kim project bootstrap --dry-run --project-dir <dir>",
+    "meta-kim project bootstrap --apply --project-dir <dir>",
+  ],
+  "lazy project bootstrap entrypoints",
+);
+hasAll(
+  Object.keys(contract.lazyProjectBootstrap?.sourceChain ?? {}),
+  [
+    "globalEntrypoint",
+    "packageRoot",
+    "canonicalRoots",
+    "syncManifest",
+    "runtimeMirrorSource",
+    "projectTarget",
+  ],
+  "lazy project bootstrap source chain",
+);
+hasAll(
+  contract.lazyProjectBootstrap?.projectFilePolicies?.merge ?? [],
+  [".claude/settings.json", ".codex/hooks.json", ".cursor/hooks.json", ".mcp.json"],
+  "lazy project bootstrap protected merge files",
+);
+hasAll(
+  contract.lazyProjectBootstrap?.projectFilePolicies?.managedTextBlock ?? [],
+  ["AGENTS.md", "CLAUDE.md"],
+  "lazy project bootstrap managed text block files",
+);
+hasAll(
+  contract.lazyProjectBootstrap?.projectFilePolicies?.neverTouch ?? [],
+  [".codex/config.toml", "credentials", "project trust state"],
+  "lazy project bootstrap never-touch files",
+);
+assert(
+  contract.lazyProjectBootstrap?.rollback?.requiredBeforeApply === true,
+  "lazy project bootstrap must require backup before apply",
+);
+hasAll(
+  contract.lazyProjectBootstrap?.scenarioAcceptance ?? [],
+  [
+    "empty project dry-run exposes sourceChain and writes nothing",
+    "current project dry-run after apply reports ready, requires no confirmation, and lists no project writes",
+    "existing user AGENTS.md or CLAUDE.md keeps user text and adds a managed block",
+    ".codex/config.toml remains global-owned and is never copied into project bootstrap",
+    "stale project manifest reports stale before update",
+  ],
+  "lazy project bootstrap scenario acceptance",
+);
+hasAll(
+  contract.lazyProjectBootstrap?.forbiddenOutcomes ?? [],
+  [
+    "silent project writes before dry-run and user confirmation",
+    "project-level source described without packageRoot/canonical/syncManifest/runtimeMirror chain",
+    "AGENTS.md or CLAUDE.md blind overwrite when the target already has user content",
+    "copying .codex/config.toml as project bootstrap source",
+  ],
+  "lazy project bootstrap forbidden outcomes",
+);
 
 for (const doc of [checklist, pullRequestTemplate]) {
   hasAll(

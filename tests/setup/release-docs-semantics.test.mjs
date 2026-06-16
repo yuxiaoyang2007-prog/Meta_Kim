@@ -1,5 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +14,43 @@ describe("release documentation semantics", () => {
     "README.ja-JP.md",
     "README.ko-KR.md",
   ];
+
+  const currentChangelogSection = (raw) => {
+    const nextReleaseIndex = raw.search(/\n## \[[^\]]+\] - \d{4}-\d{2}-\d{2}/);
+    return nextReleaseIndex === -1 ? raw : raw.slice(0, nextReleaseIndex);
+  };
+
+  test("generated runtime projections stay outside GitHub source and package files", () => {
+    const output = execFileSync(
+      process.execPath,
+      ["scripts/validate-open-source-boundary.mjs"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert.match(output, /open-source boundary valid/);
+
+    const packageJson = JSON.parse(
+      readFileSync(path.join(root, "package.json"), "utf8"),
+    );
+    const forbiddenSources = [
+      ".claude/",
+      ".codex/",
+      ".agents/",
+      ".cursor/",
+      "openclaw/",
+      "codex/",
+      ".mcp.json",
+    ];
+
+    for (const forbiddenSource of forbiddenSources) {
+      assert.ok(
+        !packageJson.files.some(
+          (entry) =>
+            entry === forbiddenSource || entry.startsWith(forbiddenSource),
+        ),
+        `package.json files must not include ${forbiddenSource}`,
+      );
+    }
+  });
 
   test("clone users are told to pull source updates before running setup --update", () => {
     for (const file of readmeFiles) {
@@ -40,6 +78,107 @@ describe("release documentation semantics", () => {
     assert.match(raw, /`\.cursor\/skills\/meta-theory\/`|"\.cursor\/skills"/);
     assert.match(raw, /`\.agents\/skills\/meta-theory\/SKILL\.md`/);
     assert.doesNotMatch(raw, /docs\/runtime-coverage-audit\.md/);
+  });
+
+  test("public current docs do not repeat dependency project install target matrices as Meta_Kim support claims", () => {
+    const forbiddenDependencyMatrixPatterns = [
+      /Native dependency install targets/,
+      /原生依赖安装目标/,
+      /ネイティブ依存インストール対象/,
+      /네이티브 의존성 설치 대상/,
+      /opencode,\s*Qwen,\s*Zed,\s*Gemini,\s*CodeBuddy,\s*Antigravity,\s*JoyCode/,
+      /opencode、Qwen、Zed、Gemini、CodeBuddy、Antigravity、JoyCode/,
+      /ECC additionally supports native install targets/,
+      /ECC 另外原生支持/,
+      /ECC はさらに .*native install target/,
+      /ECC는 추가로 .*native install target/,
+    ];
+
+    for (const file of readmeFiles) {
+      const raw = readFileSync(path.join(root, file), "utf8");
+
+      for (const pattern of forbiddenDependencyMatrixPatterns) {
+        assert.doesNotMatch(raw, pattern, `${file} repeats dependency target matrix`);
+      }
+    }
+
+    for (const file of ["CHANGELOG.md", "CHANGELOG.zh-CN.md"]) {
+      const raw = currentChangelogSection(
+        readFileSync(path.join(root, file), "utf8"),
+      );
+
+      for (const pattern of forbiddenDependencyMatrixPatterns) {
+        assert.doesNotMatch(raw, pattern, `${file} Unreleased repeats dependency target matrix`);
+      }
+    }
+
+    assert.match(
+      readFileSync(path.join(root, "README.md"), "utf8"),
+      /Dependency-project install targets are handled by those upstream projects/,
+    );
+    assert.match(
+      readFileSync(path.join(root, "README.zh-CN.md"), "utf8"),
+      /依赖项目自己的安装目标由上游项目维护/,
+    );
+    assert.match(
+      readFileSync(path.join(root, "README.ja-JP.md"), "utf8"),
+      /依存プロジェクト側の install target は upstream project で管理される/,
+    );
+    assert.match(
+      readFileSync(path.join(root, "README.ko-KR.md"), "utf8"),
+      /의존 프로젝트의 install target은 upstream project에서 관리/,
+    );
+  });
+
+  test("public current docs expose formal projections and candidate compatibility probes without overpromoting them", () => {
+    const candidateNames = [
+      "Qoder",
+      "Trae",
+      "Kiro",
+      "Cline",
+      "Roo",
+      "Continue",
+    ];
+    const overbroadMappingPatterns = [
+      /any project that supports agents and agent-to-agent communication/,
+      /任何支持 agent 且支持 agent-to-agent 通信/,
+      /任意のプロジェクトに映射できます/,
+      /모든 프로젝트에 매핑할 수 있습니다/,
+    ];
+    const staleFullSupportRows = [
+      /\*\*OpenClaw\*\*\s*\|\s*完全対応/,
+      /\*\*Cursor\*\*\s*\|\s*完全対応/,
+      /\*\*OpenClaw\*\*\s*\|\s*완전 지원/,
+      /\*\*Cursor\*\*\s*\|\s*완전 지원/,
+    ];
+
+    for (const file of readmeFiles) {
+      const raw = readFileSync(path.join(root, file), "utf8");
+
+      assert.match(raw, /alt="Formal projections"/, file);
+      assert.match(raw, /alt="Candidate compatibility probes"/, file);
+      assert.match(raw, /Claude%20Code%20%7C%20Codex%20%7C%20OpenClaw%20%7C%20Cursor/, file);
+      assert.match(raw, /Qoder%20%7C%20Trae%20%7C%20Kiro%20%7C%20Cascade%20%7C%20Cline%20%7C%20Roo%20%7C%20Continue/, file);
+      assert.doesNotMatch(raw, /alt="Runtime"/, file);
+      assert.doesNotMatch(raw, /runtime-Claude%20Code%20%7C%20Codex%20%7C%20OpenClaw%20%7C%20Cursor/, file);
+
+      for (const candidateName of candidateNames) {
+        assert.match(raw, new RegExp(candidateName), `${file} missing ${candidateName}`);
+      }
+      for (const pattern of overbroadMappingPatterns) {
+        assert.doesNotMatch(raw, pattern, `${file} has overbroad mapping claim`);
+      }
+      for (const pattern of staleFullSupportRows) {
+        assert.doesNotMatch(raw, pattern, `${file} overpromotes compatibility projection`);
+      }
+    }
+
+    assert.match(readFileSync(path.join(root, "README.md"), "utf8"), /Default formal projections/);
+    assert.match(readFileSync(path.join(root, "README.md"), "utf8"), /Explicit formal compatibility projections/);
+    assert.match(readFileSync(path.join(root, "README.md"), "utf8"), /Candidate compatibility probes/);
+    assert.match(readFileSync(path.join(root, "README.zh-CN.md"), "utf8"), /默认正式投影/);
+    assert.match(readFileSync(path.join(root, "README.zh-CN.md"), "utf8"), /显式正式兼容投影/);
+    assert.match(readFileSync(path.join(root, "README.zh-CN.md"), "utf8"), /候选兼容 probe/);
   });
 
   test("change readiness checklist covers P1 and P2 release review lanes", () => {

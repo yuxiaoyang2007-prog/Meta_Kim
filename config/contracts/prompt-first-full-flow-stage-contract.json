@@ -150,12 +150,14 @@
         "reviewPacket.ownerCoverage",
         "reviewPacket.protocolCompliance",
         "reviewPacket.qualityGate",
-        "reviewPacket.findings"
+        "reviewPacket.findings",
+        "reviewPacket.cleanVerdictReason",
+        "reviewPacket.depthStrategy"
       ],
-      "passCondition": "Review checks Critical, Fetch, Thinking, and Execution evidence before output polish.",
-      "failConditions": ["upstream stage incomplete", "owner/loadout unsupported", "execution evidence missing", "quality gate unresolved"],
+      "passCondition": "Review checks Critical, Fetch, Thinking, and Execution evidence before output polish, and proves evidence quality, counterevidence, decision impact, and falsification were considered.",
+      "failConditions": ["upstream stage incomplete", "owner/loadout unsupported", "execution evidence missing", "quality gate unresolved", "shallow review without evidence-quality strategy", "no counterevidence or falsification check"],
       "returnToStage": "Review",
-      "evidenceRequirements": ["review packet", "finding severity", "upstream quality decision"]
+      "evidenceRequirements": ["review packet", "finding severity", "upstream quality decision", "evidence quality check", "counterevidence check", "decision impact check", "falsification check"]
     },
     {
       "stageId": "meta_review",
@@ -166,12 +168,13 @@
         "metaReviewPacket.reviewStandard",
         "metaReviewPacket.biasCheck",
         "metaReviewPacket.publicReadyGateCheck",
-        "metaReviewPacket.overclaimCheck"
+        "metaReviewPacket.overclaimCheck",
+        "metaReviewPacket.reviewDepthAudit"
       ],
-      "passCondition": "Meta-Review confirms the review standard and blocks overclaims before Verification.",
-      "failConditions": ["review standard too low", "runtime claim overstates evidence", "public-ready evidence missing"],
+      "passCondition": "Meta-Review confirms the review standard, rejects shallow packet-only review, checks adversarial coverage and blind spots, and blocks overclaims before Verification.",
+      "failConditions": ["review standard too low", "runtime claim overstates evidence", "public-ready evidence missing", "shallow packet pass accepted", "adversarial or blind-spot check missing"],
       "returnToStage": "Review",
-      "evidenceRequirements": ["review standard", "overclaim check", "public-ready gate check"]
+      "evidenceRequirements": ["review standard", "overclaim check", "public-ready gate check", "shallow-pass rejection", "adversarial coverage check", "review blind-spot check"]
     },
     {
       "stageId": "verification",
@@ -199,12 +202,13 @@
         "evolutionWritebackDecision",
         "evolutionWritebackPacket.writebacks",
         "evolutionWritebackPacket.noneWithReason",
+        "evolutionWritebackPacket.strategy",
         "scarPacket"
       ],
-      "passCondition": "The run records writeback, candidate-writeback, or none-with-reason, and reusable failures get a scar/prevention rule.",
-      "failConditions": ["writeback decision missing", "writeback without Warden approval", "reusable failure has no scar"],
+      "passCondition": "The run records writeback, candidate-writeback, or none-with-reason, and proves reusable-pattern, writeback-target, scar-need, and next-run reuse-key assessment.",
+      "failConditions": ["writeback decision missing", "writeback without Warden approval", "reusable failure has no scar", "none-with-reason without reusable-pattern assessment", "missing next-run reuse key"],
       "returnToStage": "Evolution",
-      "evidenceRequirements": ["writeback decision", "none-with-reason or approved writeback", "scar packet when needed"]
+      "evidenceRequirements": ["writeback decision", "none-with-reason or approved writeback", "scar packet when needed", "reusable pattern assessment", "writeback target assessment", "next-run reuse key"]
     }
   ],
   "acceptanceMetrics": {

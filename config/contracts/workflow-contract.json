@@ -96,6 +96,26 @@
         "allowedDecisions": ["writeback", "none"]
       }
     },
+    "startReasonPolicy": {
+      "schemaVersion": "governance-start-reason-v0.1",
+      "required": true,
+      "placement": "run_start",
+      "audience": "user",
+      "maxLineCharacters": 120,
+      "covers": [
+        "8_stage_spine",
+        "11_phase_business_workflow",
+        "card_dealing"
+      ],
+      "requiredFields": [
+        "summary",
+        "spineReason",
+        "workflowReason",
+        "cardReason",
+        "evidenceRefs"
+      ],
+      "rule": "When the 8-stage spine or 11-phase business workflow triggers, show a concise human-readable reason at the start. It must explain why governance is used without dumping packets or long internal reasoning."
+    },
     "phases": [
       "direction",
       "planning",
@@ -109,6 +129,44 @@
       "evolve",
       "mirror"
     ],
+    "phaseTriggerStandard": {
+      "schemaVersion": "business-phase-trigger-standard-v0.1",
+      "passThreshold": 80,
+      "decisionEnum": [
+        "trigger",
+        "skip",
+        "block",
+        "wait"
+      ],
+      "activationStateEnum": [
+        "triggered",
+        "accurate_skip",
+        "blocked_with_evidence",
+        "pending_external_input",
+        "weak_trigger",
+        "unsupported_skip",
+        "blocked_without_enough_evidence",
+        "pending_without_enough_evidence"
+      ],
+      "requiredFields": [
+        "decision",
+        "activationState",
+        "triggerScore",
+        "passThreshold",
+        "activationRule",
+        "quantitativeSignals",
+        "evidenceRefs",
+        "falsificationChecks"
+      ],
+      "signalRequiredFields": [
+        "signal",
+        "observed",
+        "expected",
+        "pass"
+      ],
+      "rule": "Every business phase must prove why it triggered, skipped, blocked, or waits. phaseCount=11 is never enough evidence by itself.",
+      "deepResearchBinding": "Use key signals, evidence refs, falsification checks, and decision impact in the same spirit as deep-research claim evidence."
+    },
     "markerPhases": [
       "meta_review",
       "verify",
@@ -697,6 +755,42 @@
         "public_display_blocked",
         "no_clear_intervention_gain"
       ],
+      "dealAccuracyStandard": {
+        "schemaVersion": "card-deal-standard-v0.1",
+        "passThreshold": 80,
+        "decisionStateEnum": [
+          "accurate_deal",
+          "accurate_interrupt",
+          "accurate_suppress",
+          "accurate_defer",
+          "accurate_skip",
+          "accurate_escalate",
+          "weak_deal",
+          "weak_interrupt",
+          "unsupported_suppress",
+          "unsupported_defer",
+          "unsupported_skip",
+          "weak_escalate"
+        ],
+        "requiredFields": [
+          "decisionState",
+          "accuracyScore",
+          "passThreshold",
+          "expectedDecision",
+          "activationRule",
+          "quantitativeSignals",
+          "evidenceRefs",
+          "falsificationChecks"
+        ],
+        "signalRequiredFields": [
+          "signal",
+          "observed",
+          "expected",
+          "pass"
+        ],
+        "rule": "Every card must prove why it was dealt, suppressed, deferred, skipped, interrupted, or escalated. Deck presence or hardcoded order is not enough evidence.",
+        "deepResearchBinding": "Use key signals, evidence refs, falsification checks, and decision impact like deep-research claim evidence cards."
+      },
       "defaultNoCardPolicy": "prefer_silence_without_clear_intervention_gain"
     },
     "userLanguagePolicy": {
@@ -712,7 +806,7 @@
         "fallbackSurfaces": [],
         "unavailableAction": "block_before_execution",
         "triggerDescription": "Use AskUserQuestion for blocking Critical clarification when Fetch cannot proceed or subjective quality wording is too ambiguous to choose evidence, then use it once for Execution confirmation after contentEvidencePacket and preDecisionOptionFrame are complete. PreToolUse hooks must whitelist AskUserQuestion to avoid stripping return data (issue #12031). Claude Code non-interactive integrations may defer AskUserQuestion to the caller; that deferred tool call is acceptable trigger evidence when recorded. Chat decision cards are not accepted as completion evidence for this primary runtime.",
-        "implementation": "Invoke AskUserQuestion with a questions array when available. If unavailable, rejected, stripped, or returning empty, record nativeChoiceSurfaceBlocked and stop before Execution. A non-interactive deferred AskUserQuestion must be handed to the host UI and resumed with an answer before the run continues. A cardPlanPacket, run report, hook notice, or chat card is not native popup evidence."
+        "implementation": "Invoke AskUserQuestion with a structured questions array when available. Preserve the native decision panel semantics: AI understanding, AI additions, Capability route, Candidate paths, recommended default, expected result, advantages, disadvantages or risk, and verification impact. If unavailable, rejected, stripped, or returning empty, record nativeChoiceSurfaceBlocked and stop before Execution. A non-interactive deferred AskUserQuestion must be handed to the host UI and resumed with an answer before the run continues. A cardPlanPacket, run report, hook notice, or chat card is not native popup evidence."
       },
       "codex": {
         "primarySurface": "request_user_input",
@@ -720,8 +814,8 @@
         "unavailableAction": "block_before_execution",
         "featureFlag": "default_mode_request_user_input",
         "recommendedConfig": "[features].default_mode_request_user_input = true",
-        "triggerDescription": "Use Codex request_user_input only when it is listed in the active tool set and the payload has 1-3 valid choice questions. The official default_mode_request_user_input feature flag enables this tool in Default mode when the host supports it. If the host does not expose the tool, returns API 400, returns empty, or rejects the payload, block before Execution with nativeChoiceSurfaceBlocked. Codex exec, repository hook adapters, run artifacts, conversation notices, markdown cards, and chat cards must not claim a popup or complete a required Codex decision.",
-        "implementation": "Invoke request_user_input when available and valid. If it cannot run, record nativeChoiceSurfaceBlocked and return to Critical or Thinking; do not continue with conversation_fallback. A cardPlanPacket or CLI conversationNotice is artifact-only and does not complete the native choice trigger."
+        "triggerDescription": "Use Codex request_user_input only when it is listed in the active tool set and the payload fits the active host schema. The official default_mode_request_user_input feature flag enables this tool in Default mode when the host supports it. Use the active schema's maximum meaningful option count; do not add a Meta_Kim lower cap. If the host does not expose the tool, returns API 400, returns empty, or rejects the payload, block before Execution with nativeChoiceSurfaceBlocked. Codex exec, repository hook adapters, run artifacts, conversation notices, markdown cards, and chat cards must not claim a popup or complete a required Codex decision.",
+        "implementation": "Invoke request_user_input when available and valid. Preserve the native decision panel semantics inside the compact payload: AI understanding, AI additions, Capability route, Candidate paths, recommended default, expected result, advantages, disadvantages or risk, and verification impact. If a semantic frame has more options than the active Codex host accepts, render the strongest host-maximum set and record omitted alternatives instead of retrying an oversized payload unchanged. If the native tool cannot run, record nativeChoiceSurfaceBlocked and return to Critical or Thinking; do not continue with conversation_fallback. A cardPlanPacket or CLI conversationNotice is artifact-only and does not complete the native choice trigger."
       },
       "openclaw": {
         "primarySurface": "workspace_agent",
@@ -792,6 +886,52 @@
         ],
         "description": "Every visible option must specify: what changes, what problem it solves, expected result, advantages, and disadvantages. Visible questions must change an execution branch; do not add filler questions or options."
       },
+      "nativeStructuredPanelContract": {
+        "requiredForPrimaryRuntimes": ["codex", "claude_code"],
+        "hostOwnsVisualSkin": true,
+        "metaKimOwnsPayloadStructure": true,
+        "requiredPanelSections": [
+          "AI understanding",
+          "AI additions",
+          "Capability route",
+          "Candidate paths"
+        ],
+        "requiredOptionSemantics": [
+          "recommended default",
+          "expected result",
+          "advantages",
+          "disadvantages or risk",
+          "verification impact"
+        ],
+        "runtimeNativeOptionPolicy": {
+          "optionsMin": 2,
+          "strategy": "use_active_host_schema_maximum_meaningful_options",
+          "noMetaKimLowerCap": true,
+          "overActiveHostMaximumBehavior": "show_host_maximum_best_options_and_record_omitted_alternatives",
+          "currentObservedHostMaximums": {
+            "codex": {
+              "source": "active request_user_input tool schema",
+              "questionsMax": 3,
+              "optionsMax": 3,
+              "notProductCap": true
+            },
+            "claude_code": {
+              "source": "active AskUserQuestion host schema",
+              "optionsMax": 4,
+              "notProductCap": true
+            }
+          }
+        },
+        "forbidden": [
+          "plain_yes_no_prompt_for_branching_decision",
+          "meta_kim_lower_option_cap",
+          "fixed_codex_option_cap",
+          "oversized_native_payload_retry_unchanged",
+          "unstyled_question_without_tradeoffs",
+          "chat_card_as_primary_runtime_completion"
+        ],
+        "description": "Primary runtime native choice surfaces must preserve the structured decision-panel content even though Codex and Claude own the visual skin. The assistant must not reduce a Meta_Kim decision to a plain prompt, and Meta_Kim must use the active host schema maximum rather than hardcoding a lower option cap."
+      },
       "batchDecisionMode": {
         "enabled": true,
         "dependencyDetection": "auto",
@@ -802,6 +942,7 @@
       "codexVisibleMultiOptionOutput": {
         "required": true,
         "minimumOptions": 2,
+        "maximumOptionsPolicy": "use_active_request_user_input_schema_maximum_meaningful_options_without_meta_kim_lower_cap",
         "appliesTo": "every_user_visible_codex_meta_theory_confirmation_or_decision_surface",
         "normalPresentation": "native_request_user_input",
         "debugLabel": "Multi-Option Snapshot",
@@ -997,14 +1138,14 @@
       "anonymousExecutionForbidden": true,
       "existingOwnerPreferred": true,
       "existingOwnerDiscoveryRequired": true,
-      "discoveryPrinciple": "provider_first_evidence_owner_last_binding",
+      "discoveryPrinciple": "canonical_index_first_capability_discovery_owner_last_binding",
       "providerEvidenceOrder": [
-        "available_capability_providers_skills_tools_mcp",
-        "runtime_tool_provider_inventory",
         "repo_canonical_capability_index",
         "runtime_mirror_indexes",
         "project_runtime_agent_inventory",
-        "local_global_agent_inventory"
+        "local_global_agent_inventory",
+        "available_capability_providers_skills_tools_mcp",
+        "runtime_tool_provider_inventory"
       ],
       "existingOwnerEvidenceOrder": [
         "repo_canonical_capability_index",
@@ -1653,6 +1794,8 @@
         "contradictionLog",
         "assumptionLedger",
         "decisionImpactMap",
+        "iterationLog",
+        "claimEvidenceCards",
         "researchRequired",
         "researchSkipReason",
         "evidenceLaneValidatedBy",
@@ -1677,7 +1820,11 @@
           "claimAttributionRules",
           "crossCheckStrategy",
           "originalSynthesisRules",
-          "decisionImpactCriteria"
+          "decisionImpactCriteria",
+          "keyInformationTargets",
+          "iterationPlan",
+          "stopCondition",
+          "decisionUpdateRule"
         ],
         "sourceQualityLadder": [
           "primary_official_docs",
@@ -1709,6 +1856,41 @@
           ]
         }
       },
+      "iterationLogQualityGate": {
+        "minimumIterationLogEntries": 1,
+        "requiredFields": [
+          "iteration",
+          "trigger",
+          "queryOrAction",
+          "observation",
+          "gapClosed",
+          "nextStepDecision",
+          "stopCheck"
+        ]
+      },
+      "claimEvidenceCardQualityGate": {
+        "minimumClaimEvidenceCards": 1,
+        "requiredFields": [
+          "claim",
+          "sourceRefs",
+          "evidenceAnchor",
+          "confidence",
+          "counterevidence",
+          "decisionImpact",
+          "falsificationStatus"
+        ],
+        "confidenceEnum": [
+          "low",
+          "moderate",
+          "high"
+        ],
+        "falsificationStatusEnum": [
+          "tested_survived",
+          "tested_refuted",
+          "unverified",
+          "blocked"
+        ]
+      },
       "evidenceScopeEnum": [
         "local_project",
         "external_research",
@@ -1730,7 +1912,9 @@
         "crossReferenceMatrix",
         "contradictionLog",
         "assumptionLedger",
-        "decisionImpactMap"
+        "decisionImpactMap",
+        "iterationLog",
+        "claimEvidenceCards"
       ],
       "decisionImpactMapRequiredFields": [
         "finding",
@@ -1913,6 +2097,7 @@
         "dealerMode",
         "cards",
         "deliveryShells",
+        "dealStandard",
         "silenceDecision",
         "controlDecisions",
         "defaultShellId"

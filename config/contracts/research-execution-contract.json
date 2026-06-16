@@ -15,7 +15,13 @@
     "staleReason",
     "credibility",
     "decisionImpactMap",
-    "thinkingHandoff"
+    "thinkingHandoff",
+    "queryIterationCount",
+    "nextQueryReason",
+    "evidenceGapClosed",
+    "confidenceBefore",
+    "confidenceAfter",
+    "falsificationAttempt"
   ],
   "executionStatusEnum": [
     "fetched_live",
@@ -44,6 +50,24 @@
       "blocked_no_cache"
     ],
     "staleAction": "return_to_fetch_refresh_before_thinking"
+  },
+  "iterationQualityGate": {
+    "minimumQueryIterationCount": 1,
+    "confidenceEnum": [
+      "low",
+      "moderate",
+      "high"
+    ],
+    "falsificationAttemptRequiredFields": [
+      "status",
+      "method",
+      "result"
+    ],
+    "falsificationStatusEnum": [
+      "tested_survived",
+      "tested_refuted",
+      "blocked"
+    ]
   },
   "innovationCandidatePacket": {
     "schemaVersion": "innovation-candidate-packet-v0.1",

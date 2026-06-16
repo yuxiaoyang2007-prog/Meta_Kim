@@ -319,11 +319,16 @@ describe("Clarity Gate unified execution confirmation", async () => {
     const codexPolicyText = `${codexSurface.triggerDescription} ${codexSurface.implementation}`;
     assert.match(codexPolicyText, /request_user_input/i);
     assert.match(codexPolicyText, /default_mode_request_user_input/i);
+    assert.match(codexPolicyText, /active schema's maximum meaningful option count/i);
+    assert.match(codexPolicyText, /do not add a Meta_Kim lower cap/i);
     assert.match(codexPolicyText, /API 400|api_error/i);
     assert.match(codexPolicyText, /block before Execution|blocks before Execution/i);
     assert.match(codexPolicyText, /nativeChoiceSurfaceBlocked/i);
     assert.match(codexPolicyText, /exec|hook adapters/i);
     assert.match(codexPolicyText, /chat cards must not claim a popup|must not claim a popup/i);
+    assert.match(codexPolicyText, /AI understanding/i);
+    assert.match(codexPolicyText, /Candidate paths/i);
+    assert.match(codexPolicyText, /host-maximum set/i);
     assert.doesNotMatch(codexPolicyText, /localized confirmation card/i);
   });
 
@@ -341,8 +346,12 @@ describe("Clarity Gate unified execution confirmation", async () => {
     assert.match(claudePolicyText, /popup|host UI/i);
     assert.match(claudePolicyText, /nativeChoiceSurfaceBlocked/i);
     assert.match(claudePolicyText, /deferred `AskUserQuestion`|deferred AskUserQuestion/i);
-    assert.match(claudePolicyText, /two to four meaningful options/i);
+    assert.match(claudePolicyText, /maximum meaningful option count/i);
+    assert.match(claudePolicyText, /not a Meta_Kim product cap/i);
     assert.match(claudePolicyText, /No filler questions/i);
+    assert.match(claudePolicyText, /AI understanding/i);
+    assert.match(claudePolicyText, /Candidate paths/i);
+    assert.match(claudePolicyText, /host owns the skin|host owns.*skin|host owns/i);
     assert.match(claudePolicyText, /issue #12031/);
     assert.doesNotMatch(claudePolicyText, /fall back to .*localized chat decision card/i);
   });
@@ -356,12 +365,16 @@ describe("Clarity Gate unified execution confirmation", async () => {
     assert.match(skillContent, /block before Execution/i);
     assert.match(skillContent, /Do not show a `Preflight` block/i);
     assert.match(skillContent, /unless the user explicitly asks for debug, audit, protocol, or governance trace output/i);
-    assert.match(skillContent, /at least two viable options/i);
+    assert.match(skillContent, /active runtime-native maximum meaningful option count/i);
     assert.match(skillContent, /explicit output-language choice/i);
     assert.match(skillContent, /latest input/i);
     assert.match(skillContent, /Option A.*placeholders|placeholders.*Option A/s);
     assert.match(skillContent, /resolved user-facing language/i);
     assert.match(skillContent, /instead of hardcoding any single human language/i);
+    assert.match(skillContent, /active `request_user_input` schema/i);
+    assert.match(skillContent, /future or different host exposes more/i);
+    assert.match(skillContent, /structured decision panel/i);
+    assert.match(skillContent, /AI understanding/i);
     assert.doesNotMatch(skillContent, /方案 A/);
     assert.doesNotMatch(skillContent, /当前以聊天确认卡展示，不是弹窗/);
     assert.match(skillContent, /Claude Code native question tool remains unchanged/i);
@@ -391,6 +404,25 @@ describe("Clarity Gate unified execution confirmation", async () => {
     assert.equal(codexPolicy.protocolIdentifiersRemainCanonical, true);
     assert.equal(codexPolicy.fallbackMustDeclareNotPopup, true);
     assert.equal(codexPolicy.claudeNativeChoiceSurfaceUnchanged, true);
+
+    const nativePanel =
+      workflowContractJson.runDiscipline?.userInteractionPolicy
+        ?.nativeStructuredPanelContract;
+    assert.ok(nativePanel, "workflow contract must define native structured panel contract");
+    assert.equal(
+      nativePanel.runtimeNativeOptionPolicy?.strategy,
+      "use_active_host_schema_maximum_meaningful_options",
+    );
+    assert.equal(nativePanel.runtimeNativeOptionPolicy?.noMetaKimLowerCap, true);
+    assert.equal(
+      nativePanel.runtimeNativeOptionPolicy?.currentObservedHostMaximums?.codex
+        ?.notProductCap,
+      true,
+    );
+    assert.ok(nativePanel.forbidden?.includes("meta_kim_lower_option_cap"));
+    assert.ok(!nativePanel.forbidden?.includes("four_option_codex_request_user_input_payload"));
+    assert.ok(nativePanel.requiredPanelSections?.includes("AI understanding"));
+    assert.ok(nativePanel.requiredOptionSemantics?.includes("verification impact"));
   });
 
   test("Cursor choice surface uses stable alwaysApply chat-card fallback", async () => {

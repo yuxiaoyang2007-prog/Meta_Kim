@@ -1,7 +1,7 @@
 {
   "$schema": "./contracts/runtime-compatibility-catalog.schema.json",
   "schemaVersion": 1,
-  "lastReviewedAt": "2026-06-13",
+  "lastReviewedAt": "2026-06-15",
   "decisionBoundary": {
     "noAutoPromotionFromDependencyInstall": true,
     "noAutoPromotionFromGenericSkillPath": true,
@@ -685,7 +685,7 @@
         "isDefaultTarget": false
       },
       "genericCompatibility": {
-        "skillPath": null,
+        "skillPath": ".cline/skills/{skill-name}/SKILL.md; ~/.cline/skills/{skill-name}/SKILL.md; legacy .clinerules/skills and .claude/skills imports are documented by Cline",
         "agentPath": null,
         "hookConfig": null,
         "mcpConfig": "~/.cline/mcp.json or IDE MCP settings; project-level behavior needs probe",
@@ -693,6 +693,7 @@
       },
       "compatibilitySurfaces": [
         "instruction_context",
+        "skill_workflow",
         "mcp_tooling",
         "command_cli",
         "permission_safety"
@@ -707,6 +708,11 @@
       "evidence": [
         {
           "type": "official_docs",
+          "ref": "https://docs.cline.bot/customization/skills",
+          "claim": "Cline documents experimental SKILL.md-based skills with workspace and global storage locations including .cline/skills and ~/.cline/skills."
+        },
+        {
+          "type": "official_docs",
           "ref": "https://docs.cline.bot/customization/cline-rules",
           "claim": "Cline documents workspace and global rules, AGENTS.md compatibility, and conditional rule activation."
         },
@@ -716,8 +722,8 @@
           "claim": "Cline documents MCP server configuration, CLI MCP wizard, autoApprove, and tool approval guidance."
         }
       ],
-      "decision": "Admit Cline as candidate_probe only: rules and MCP are compatible primitives, but skills/agents/hooks projection is not proven for Meta_Kim.",
-      "nextAction": "Probe Cline CLI and extension project config behavior before designing a runtime adapter."
+      "decision": "Admit Cline as candidate_probe only: rules, skills, CLI, and MCP are compatible primitives, but agents/hooks projection is not proven for Meta_Kim.",
+      "nextAction": "Probe Cline skill precedence, CLI and extension project config behavior, and hook/plugin surfaces before designing a runtime adapter."
     },
     {
       "id": "roo-code",
@@ -882,22 +888,22 @@
         },
         {
           "type": "official_docs",
-          "ref": "https://docs.qoder.com/en/cli/Skills.md",
+          "ref": "https://docs.qoder.com/en/cli/Skills",
           "claim": "Qoder skills are folders containing SKILL.md under user or project .qoder/skills."
         },
         {
           "type": "official_docs",
-          "ref": "https://docs.qoder.com/en/cli/subagent.md",
+          "ref": "https://docs.qoder.com/en/cli/subagent",
           "claim": "Qoder subagents use markdown files under user or project .qoder/agents."
         },
         {
           "type": "official_docs",
-          "ref": "https://docs.qoder.com/en/cli/hooks.md",
+          "ref": "https://docs.qoder.com/en/cli/hooks",
           "claim": "Qoder hooks are configured in settings.json and can block via exit code 2 for supported events."
         },
         {
           "type": "official_docs",
-          "ref": "https://docs.qoder.com/en/cli/mcp-servers.md",
+          "ref": "https://docs.qoder.com/en/cli/mcp-servers",
           "claim": "Qoder MCP servers can be configured with qodercli mcp add or .mcp.json/project settings."
         },
         {

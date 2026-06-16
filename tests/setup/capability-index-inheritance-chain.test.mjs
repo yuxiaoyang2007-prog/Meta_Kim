@@ -163,6 +163,47 @@ describe("capability index inheritance chain", () => {
     assert.doesNotMatch(liveScript, /npm run discover:global|npm run meta:check/);
   });
 
+  test("setup and global dependency installs refresh global capability inventory automatically", async () => {
+    const pkg = await readJson("package.json");
+    const setupSource = await fs.readFile(path.join(repoRoot, "setup.mjs"), "utf8");
+    const installSource = await fs.readFile(
+      path.join(repoRoot, "scripts", "install-global-skills-all-runtimes.mjs"),
+      "utf8",
+    );
+
+    assert.match(setupSource, /function refreshGlobalCapabilityInventory\(\)/);
+    assert.match(
+      setupSource,
+      /runNodeScript\("scripts\/discover-global-capabilities\.mjs"\)/,
+      "setup.mjs must run global discovery directly instead of only printing a reminder",
+    );
+    assert.match(
+      setupSource,
+      /await withProgress\(\s*t\.stepLabel\(stepNum, "Refresh global capability inventory"\)/,
+      "install flow must refresh the global capability inventory",
+    );
+    assert.match(
+      setupSource,
+      /refreshGlobalCapabilityInventory\(\);\s*\n\s*\/\/ ── 6\. checkSync/,
+      "update flow must refresh the global capability inventory before final sync checks",
+    );
+
+    assert.match(installSource, /function refreshGlobalCapabilityInventory\(\)/);
+    assert.match(
+      installSource,
+      /discover-global-capabilities\.mjs/,
+      "global skill dependency installer must refresh discovery after mutating runtime homes",
+    );
+    assert.match(
+      pkg.scripts?.["meta:deps:install"] ?? "",
+      /install-global-skills-all-runtimes\.mjs/,
+    );
+    assert.match(
+      pkg.scripts?.["meta:deps:update"] ?? "",
+      /install-global-skills-all-runtimes\.mjs --update/,
+    );
+  });
+
   test("global discovery keeps volatile timestamps stable when canonical capability content is unchanged", () => {
     const existing = {
       generatedAt: "2026-05-23T21:39:16.715Z",

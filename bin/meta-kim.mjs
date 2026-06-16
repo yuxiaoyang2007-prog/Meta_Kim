@@ -12,7 +12,13 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const setup = join(root, "setup.mjs");
-const result = spawnSync(process.execPath, [setup, ...process.argv.slice(2)], {
+const args = process.argv.slice(2);
+const forwarded =
+  args[0] === "project" && args[1] === "bootstrap"
+    ? ["--project-bootstrap", ...args.slice(2)]
+    : args;
+
+const result = spawnSync(process.execPath, [setup, ...forwarded], {
   cwd: root,
   stdio: "inherit",
   env: process.env,
