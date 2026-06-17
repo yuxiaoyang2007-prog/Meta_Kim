@@ -84,7 +84,7 @@ describe("30 — Capability Gap complete product MVP", () => {
       assert.equal(report.graphValidation.branchExecutionCoverage, 6);
       assert.equal(report.graphValidation.databaseAsPlannerCount, 0);
       assert.equal(report.graphValidation.directCanonicalWriteFromGraphNode, 0);
-      assert.equal(report.governedExecutionEvidence.status, "pass");
+      assert.equal(report.governedExecutionEvidence.status, "partial");
       assert.equal(
         report.governedExecutionEvidence.defaultRuntimePath.entry,
         "meta:theory:run"

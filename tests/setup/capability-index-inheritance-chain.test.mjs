@@ -105,9 +105,26 @@ describe("capability index inheritance chain", () => {
     );
   });
 
-  test("sync configuration treats canonical skills as a directory of skills", async () => {
+  test("sync configuration projects only runtime-approved skills", async () => {
     const manifest = await readJson("config/sync.json");
     assert.equal(manifest.canonicalRoots?.skills, "canonical/skills");
+    const syncSource = await fs.readFile(
+      path.join(repoRoot, "scripts", "sync-runtimes.mjs"),
+      "utf8",
+    );
+    const canonicalSkillIds = await listCanonicalSkillIds();
+    assert.ok(
+      canonicalSkillIds.includes("same-set-reusable-flow-for-project-file-inventor"),
+      "internal canonical skills may remain available without becoming project runtime skills",
+    );
+    const allowlistMatch = syncSource.match(/PROJECT_RUNTIME_SKILL_IDS = new Set\(\[(.*?)\]\)/s);
+    assert.ok(allowlistMatch, "sync must declare an explicit project runtime skill allowlist");
+    assert.match(allowlistMatch[1], /"meta-theory"/);
+    assert.doesNotMatch(
+      allowlistMatch[1],
+      /same-set-reusable-flow-for-project-file-inventor/,
+    );
+    assert.match(syncSource, /pruneNonProjectedRuntimeSkills/);
     assert.ok(
       manifest.generatedTargets?.codex?.includes(".agents/skills"),
       "Codex project skill projection must include the official .agents/skills root.",

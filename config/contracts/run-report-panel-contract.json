@@ -106,6 +106,7 @@
         "requiredFamilies",
         "truthAssertions",
         "callableInvocationCoverage",
+        "realInvocationCoverage",
         "rows"
       ],
       "requiredFamilies": [
@@ -130,6 +131,7 @@
         "blocked",
         "not_required"
       ],
+      "allowedStatuses": ["pass", "partial"],
       "fullPassRequiredBy": "npm run meta:prd:product-experience:validate"
     },
     "approvalRequest": {

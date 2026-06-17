@@ -42,10 +42,10 @@ function assertPacketStatus(report) {
   assert.equal(report.coreLoop.dynamicWorkflowRuntimePacket.status, "pass");
   assert.equal(report.coreLoop.peerAgentMeshPacket.status, "pass");
   assert.equal(report.coreLoop.agentTeamsPlaybookPacket.status, "pass");
-  assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "pass");
-  assert.equal(report.coreLoop.userPerceptionPacket.status, "pass");
-  assert.equal(report.coreLoop.productExperiencePacket.status, "product_experience_pass");
-  assert.equal(report.productExperiencePacket.status, "product_experience_pass");
+  assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "partial");
+  assert.equal(report.coreLoop.userPerceptionPacket.status, "partial");
+  assert.equal(report.coreLoop.productExperiencePacket.status, "partial");
+  assert.equal(report.productExperiencePacket.status, "partial");
 }
 
 function assertLangGraphStyle(report) {
@@ -120,7 +120,7 @@ function assertUserPerception(report) {
 
 function assertVisibleMetaTheorySurface(report) {
   const packet = report.coreLoop.visibleMetaTheorySurfacePacket;
-  assert.equal(packet.status, "pass");
+  assert.equal(packet.status, "partial");
   assert.ok(packet.requiredVisibleTopics.includes("orchestration"));
   assert.ok(packet.requiredVisibleTopics.includes("dynamic_workflow"));
   assert.ok(packet.requiredVisibleTopics.includes("capability_inventory_not_skill_only"));
@@ -132,7 +132,7 @@ function assertVisibleMetaTheorySurface(report) {
   assert.ok(packet.capabilityInventory.nonSkillCapabilityTypeCount > 0);
   assert.equal(packet.dynamicWorkflow.status, "pass");
   assert.ok(packet.dynamicWorkflow.visibleRows.length > 0);
-  assert.equal(packet.capabilityInvocationTruth.status, "pass");
+  assert.equal(packet.capabilityInvocationTruth.status, "partial");
   assert.ok(packet.capabilityInvocationTruth.visibleRows.length >= REQUIRED_INVOCATION_FAMILIES.length);
   assert.equal(packet.agentTeamsPlaybook.status, "pass");
   assert.equal(packet.agentTeamsPlaybook.selected, true);
@@ -143,12 +143,12 @@ function assertVisibleMetaTheorySurface(report) {
   assert.ok(packet.langGraph.nodeCount >= 8);
   assert.ok(packet.langGraph.edgeCount >= 7);
   assert.ok(packet.langGraph.checkpointCount >= 8);
-  assert.equal(report.runReportPanelContract.visibleMetaTheorySurface.status, "pass");
+  assert.equal(report.runReportPanelContract.visibleMetaTheorySurface.status, "partial");
 }
 
 function assertCapabilityInvocationTruth(report) {
   const packet = report.coreLoop.capabilityInvocationTruthPacket;
-  assert.equal(packet.status, "pass");
+  assert.equal(packet.status, "partial");
   for (const state of [
     "invoked",
     "applied",
@@ -176,6 +176,12 @@ function assertCapabilityInvocationTruth(report) {
   assert.equal(byFamily.get("command_script").state, "invoked");
   assert.equal(byFamily.get("runtime_tool").state, "invoked");
   assert.equal(byFamily.get("agent_teams_playbook").state, "selected_not_invoked");
+  assert.equal(packet.realInvocationCoverage.status, "partial");
+  assert.deepEqual(packet.realInvocationCoverage.missingFamilies.sort(), [
+    "agent_subagent",
+    "agent_teams_playbook",
+    "skill",
+  ]);
   assert.deepEqual(packet.callableInvocationCoverage.missingFamilies, []);
   assert.ok(packet.callableInvocationCoverage.invokedFamilies.includes("mcp"));
   assert.ok(packet.callableInvocationCoverage.invokedFamilies.includes("command_script"));
@@ -202,7 +208,7 @@ function assertCapabilityInvocationTruth(report) {
       .get("agent_teams_playbook")
       .mustNotClaimAs.includes("live_agent_team_created"),
   );
-  assert.equal(report.runReportPanelContract.capabilityInvocationTruth.status, "pass");
+  assert.equal(report.runReportPanelContract.capabilityInvocationTruth.status, "partial");
 }
 
 function assertInvocationProbes(report) {
@@ -269,12 +275,21 @@ function assertProductExperience(report) {
     packet.goals.map((goal) => goal.id),
     REQUIRED_GOAL_IDS,
   );
-  assert.ok(packet.goals.every((goal) => goal.status === "pass"));
+  const goalById = new Map(packet.goals.map((goal) => [goal.id, goal]));
+  assert.equal(goalById.get("P-102").status, "pass");
+  assert.equal(goalById.get("P-103").status, "partial");
+  assert.equal(goalById.get("P-104").status, "partial");
   assert.deepEqual(
     packet.supportGates.map((gate) => gate.id),
     REQUIRED_SUPPORT_GATE_IDS,
   );
-  assert.ok(packet.supportGates.every((gate) => gate.status === "pass"));
+  const supportGateById = new Map(packet.supportGates.map((gate) => [gate.id, gate]));
+  assert.equal(supportGateById.get("P-105").status, "pass");
+  assert.equal(supportGateById.get("P-106").status, "pass");
+  assert.equal(supportGateById.get("P-107").status, "pass");
+  assert.equal(supportGateById.get("P-108").status, "pass");
+  assert.equal(supportGateById.get("P-109").status, "partial");
+  assert.equal(supportGateById.get("P-110").status, "pass");
   assert.equal(packet.noOverclaimGate.status, "pass");
   assert.equal(packet.noOverclaimGate.acceptedEvidenceTier, "product_experience_pass");
   assert.ok(packet.noOverclaimGate.forbiddenAsProductPass.includes("chat_card_as_native_popup"));
@@ -309,7 +324,7 @@ function assertProductExperience(report) {
     ),
   );
   assert.equal(packet.generalizationGate.status, "pass");
-  assert.equal(packet.capabilityInvocationTruthGate.status, "pass");
+  assert.equal(packet.capabilityInvocationTruthGate.status, "partial");
   assert.equal(packet.agentTeamsPlaybookGate.status, "pass");
   assert.ok(
     packet.capabilityInvocationTruthGate.forbiddenRelabels.includes(
@@ -322,7 +337,7 @@ function assertProductExperience(report) {
     "fixture non-hardcoding gate must include the desktop sticky-notes fixture class",
   );
   assert.match(packet.nativeRuntimeBoundary, /does not claim Claude Code\/Codex native live UI/);
-  assert.match(report.runReportPanelContract.productExperience.status, /product_experience_pass/);
+  assert.match(report.runReportPanelContract.productExperience.status, /partial/);
   assert.equal(report.runReportPanelContract.productExperience.supportGates.length, 6);
   assert.equal(report.runReportPanelContract.productExperience.agentTeamsPlaybookGate.status, "pass");
 }
@@ -351,7 +366,7 @@ async function main() {
       emitConversationNotice: true,
       invokeCapabilityProbes: true,
     });
-    assert.equal(report.status, "pass");
+    assert.equal(report.status, "partial");
     assertPacketStatus(report);
     assertLangGraphStyle(report);
     assertDynamicWorkflow(report);
@@ -367,7 +382,8 @@ async function main() {
     process.stdout.write(
       `${JSON.stringify(
         {
-          status: "pass",
+          status: report.status,
+          validationStatus: "pass",
           evidenceTier: report.coreLoop.productExperiencePacket.evidenceTier,
           goals: report.coreLoop.productExperiencePacket.goals.map((goal) => ({
             id: goal.id,
@@ -415,6 +431,7 @@ async function main() {
         2,
       )}\n`,
     );
+    if (report.status !== "pass") process.exitCode = 1;
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

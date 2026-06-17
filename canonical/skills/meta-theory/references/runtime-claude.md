@@ -27,6 +27,8 @@ Subjective quality or non-measurable adjective requests such as "good", "bad", "
 
 In Claude Code, governed Execution is real only when the main thread invokes actual providers selected during Thinking. The main thread scopes, dispatches, reviews, and synthesizes; it must not directly edit, write, or run implementation commands as the worker for non-trivial executable work.
 
+Claude Code fan-out uses Claude Code's native dispatch capacity, the task DAG, collision boundaries, workspace isolation, permission model, and context budget. Meta_Kim must not impose a fixed maximum number of Claude Code subagents. If the host can safely run more independent Task/Agent lanes, use that host capacity; if the host or task cannot, record the concrete capacity or safety reason.
+
 Before the first mutation, Thinking must produce a dispatch plan that binds each execution lane to:
 
 - `ownerAgent`: the selected agent or provider owner
@@ -42,12 +44,23 @@ Execution must then call the selected provider surface:
 - Use prompt/rule providers only when Fetch found them and Thinking bound them to the lane.
 - Use MCP tools only when the MCP inventory proves the tool is available and safe for the lane.
 
+Record selected executable families in `runtimeInvocationPlanPacket`. `hostInvocationRequestPacket` is the Claude Code adapter handoff: for each missing selected family it states the Agent/Task, Skill, slash command, MCP, or runtime-tool action the host must perform and the exact trusted evidence fields to return. The Node runner must not treat the request as proof; only the active Claude Code host or a trusted host adapter can execute the provider surface and then pass `hostInvocationEvidenceTrusted=true` with fresh evidence. `capabilityInvocationTruthPacket.realInvocationCoverage.status` is `pass` only when the selected Claude Code provider surfaces have fresh call evidence, such as Task/Agent invocation output, applied skill evidence, MCP tool result, slash command/script output, or runtime-tool result. `selected_not_invoked` is honest evidence but never a product-experience pass.
+
 For create-agent or iterate-agent routes, execution must separate two artifacts:
 
 - durable project agent: `.claude/agents/<agent>.md` plus matching formal tool projection metadata from `config/sync.json` and `config/runtime-compatibility-catalog.json`
 - temporary worker dispatch: `Agent` prompts tied to `workerTaskPackets`
 
 Do not accept a temporary Agent prompt, runtime thread name, or current work order as the agent definition. Durable agent identity must stay abstract: reusable responsibility class, non-capabilities, abstract loadout slots, inputs, outputs, handoff, memory policy, gap policy, and verification policy.
+
+Durable Claude Code agent completion is a four-step lifecycle, not a file write:
+
+1. Generate a reviewed project-agent definition candidate.
+2. Apply Warden-approved writeback to `.claude/agents/<agent>.md` or the configured projection target.
+3. Reload or restart Claude Code so it discovers the agent definition, then attach `durable_agent` evidence with `evidenceKind=host_discovery_reload`.
+4. Invoke that durable agent through Claude Code Agent/Task and attach `durable_agent` evidence with `evidenceKind=durable_agent_live_invocation`.
+
+Until steps 3 and 4 are attached, `durableAgentLifecyclePacket.status` remains partial even if the file exists.
 
 If no real provider is callable, do not self-execute to "keep moving". Return to Thinking with `capabilityGapPacket`, or enter degraded mode with explicit `degradationReason`, `humanAcceptanceRequired`, and `surfaceState=internal-ready`.
 

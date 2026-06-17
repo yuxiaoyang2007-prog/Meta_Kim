@@ -37,6 +37,7 @@ const jsonMode = process.argv.includes("--json");
 const reverseMode = process.argv.includes("--reverse");
 const dryRun = process.argv.includes("--dry-run");
 const forceWrite = process.argv.includes("--force");
+const PROJECT_RUNTIME_SKILL_IDS = new Set(["meta-theory"]);
 
 // Captures "will be written" entries whenever writeGeneratedFile runs under
 // --check. Populated even when not in --json mode so callers get deterministic
@@ -1937,7 +1938,16 @@ async function syncRuntimeSkills(
   canonicalSkills,
   changedFiles,
 ) {
-  for (const skill of canonicalSkills) {
+  const runtimeSkills = canonicalSkills.filter((skill) =>
+    PROJECT_RUNTIME_SKILL_IDS.has(skill.id),
+  );
+  await pruneNonProjectedRuntimeSkills(
+    runtimeSkillsDir,
+    displaySkillsDir,
+    canonicalSkills,
+    changedFiles,
+  );
+  for (const skill of runtimeSkills) {
     for (const file of skill.files) {
       const targetPath = path.join(
         runtimeSkillsDir,
@@ -1959,6 +1969,36 @@ async function syncRuntimeSkills(
         changedFiles.push(
           `${displaySkillsDir}/${skill.id}/${file.relativePath}`,
         );
+      }
+    }
+  }
+}
+
+function isRepoLocalPath(filePath) {
+  const rel = path.relative(repoRoot, filePath);
+  return rel && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+async function pruneNonProjectedRuntimeSkills(
+  runtimeSkillsDir,
+  displaySkillsDir,
+  canonicalSkills,
+  changedFiles,
+) {
+  if (!isRepoLocalPath(runtimeSkillsDir)) return;
+  for (const skill of canonicalSkills) {
+    if (PROJECT_RUNTIME_SKILL_IDS.has(skill.id)) continue;
+    const targetPath = path.join(runtimeSkillsDir, skill.id);
+    try {
+      const stat = await fs.stat(targetPath);
+      if (!stat.isDirectory()) continue;
+      if (!checkOnly) {
+        await fs.rm(targetPath, { recursive: true, force: true });
+      }
+      changedFiles.push(`${displaySkillsDir}/${skill.id}`);
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        throw error;
       }
     }
   }

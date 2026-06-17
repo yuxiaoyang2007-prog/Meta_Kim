@@ -3135,6 +3135,26 @@ function shouldSkipProjectDeployPath(relPath) {
   );
 }
 
+function isMetaKimNamespacedProjectPath(relPath) {
+  const rel = normalizeDeployRelPath(relPath);
+  return (
+    rel === POST_COPY_BOOTSTRAP_FILENAME ||
+    rel.startsWith(".claude/agents/meta-") ||
+    rel.startsWith(".codex/agents/meta-") ||
+    rel.startsWith(".cursor/agents/meta-") ||
+    rel.startsWith("openclaw/workspaces/meta-") ||
+    rel.startsWith(".claude/skills/meta-theory/") ||
+    rel.startsWith(".agents/skills/meta-theory/") ||
+    rel.startsWith(".cursor/skills/meta-theory/") ||
+    rel.startsWith("openclaw/skills/meta-theory/") ||
+    rel.startsWith(".claude/capability-index/meta-kim-") ||
+    rel.startsWith(".codex/capability-index/meta-kim-") ||
+    rel.startsWith(".cursor/capability-index/meta-kim-") ||
+    rel.startsWith("openclaw/capability-index/meta-kim-") ||
+    rel === ".codex/commands/meta-theory.md"
+  );
+}
+
 function isPlainObject(value) {
   return (
     value !== null &&
@@ -3502,7 +3522,7 @@ function collectDeployFilePlansFromRoot(srcRoot, destRoot, context = {}) {
   if (!statSync(srcRoot).isDirectory()) {
     const relPath = normalizeDeployRelPath(relative(sourceRoot, srcRoot));
     const destPath = join(targetDir, relPath);
-    plans.push(projectDeployFilePlan(srcRoot, destPath, relPath, targetDir));
+    plans.push(projectDeployFilePlan(srcRoot, destPath, relPath, targetDir, context));
     return plans;
   }
   for (const entry of readdirSync(srcRoot, { withFileTypes: true })) {
@@ -3514,16 +3534,17 @@ function collectDeployFilePlansFromRoot(srcRoot, destRoot, context = {}) {
         ...collectDeployFilePlansFromRoot(srcPath, destPath, {
           sourceRoot,
           targetDir,
+          managedRelPaths: context.managedRelPaths,
         }),
       );
     } else {
-      plans.push(projectDeployFilePlan(srcPath, destPath, relPath, targetDir));
+      plans.push(projectDeployFilePlan(srcPath, destPath, relPath, targetDir, context));
     }
   }
   return plans;
 }
 
-function projectDeployFilePlan(srcPath, destPath, relPath, targetDir) {
+function projectDeployFilePlan(srcPath, destPath, relPath, targetDir, context = {}) {
   const rel = normalizeDeployRelPath(relPath);
   const skipped = shouldSkipProjectDeployPath(rel);
   const protectedJson = DEPLOY_PROTECTED_JSON_PATHS.has(rel);
@@ -3535,24 +3556,51 @@ function projectDeployFilePlan(srcPath, destPath, relPath, targetDir) {
     protectedText,
     targetDir,
   });
+  const managedByManifest = context.managedRelPaths?.has(rel) === true;
+  const metaKimOwnedPath = isMetaKimNamespacedProjectPath(rel);
+  const unknownExistingConflict =
+    exists &&
+    contentStatus !== "same" &&
+    !skipped &&
+    !protectedJson &&
+    !protectedText &&
+    !managedByManifest &&
+    !metaKimOwnedPath;
   const mergePolicy = skipped
     ? "never_touch"
     : protectedJson
       ? "additive_preserve_user_state_json"
       : protectedText && exists
         ? "managed_block_preserve_user_text"
+        : unknownExistingConflict
+          ? "user_owned_existing_file_conflict"
         : exists
-          ? "generated_projection_replace"
+          ? managedByManifest
+            ? "manifest_managed_projection_replace"
+            : "meta_kim_namespaced_projection_replace"
           : "generated_projection_create";
   return {
     relPath: rel,
     source: normalizeDeployRelPath(relative(PROJECT_DIR, srcPath)),
     exists,
     contentStatus,
+    ownership: skipped
+      ? "local_state"
+      : protectedJson || protectedText
+        ? "shared_config_merge"
+        : managedByManifest
+          ? "manifest_managed"
+          : metaKimOwnedPath
+            ? "meta_kim_owned"
+            : exists
+              ? "unknown_existing"
+              : "new_file",
     action: skipped
       ? "skip"
       : exists && (protectedJson || protectedText)
         ? "merge"
+        : unknownExistingConflict
+          ? "conflict"
         : exists
           ? "replace"
           : "create",
@@ -3561,6 +3609,8 @@ function projectDeployFilePlan(srcPath, destPath, relPath, targetDir) {
         ? "unchanged"
         : exists && (protectedJson || protectedText)
           ? "merge"
+          : unknownExistingConflict
+            ? "conflict"
           : exists
             ? "replace"
             : "create",
@@ -3579,9 +3629,16 @@ function projectGeneratedFilePlan(relPath, content, targetDir, source) {
     source,
     exists,
     contentStatus,
+    ownership: isMetaKimNamespacedProjectPath(rel)
+      ? "meta_kim_owned"
+      : exists
+        ? "unknown_existing"
+        : "new_file",
     action: exists ? "replace" : "create",
     effectiveAction: contentStatus === "same" ? "unchanged" : exists ? "replace" : "create",
-    mergePolicy: exists ? "generated_projection_replace" : "generated_projection_create",
+    mergePolicy: exists
+      ? "meta_kim_namespaced_projection_replace"
+      : "generated_projection_create",
   };
 }
 
@@ -3609,6 +3666,7 @@ function projectDeployFileContentStatus(
 function collectProjectDeployPlan(activeTargets, targetDir) {
   const plans = [];
   const seen = new Set();
+  const managedRelPaths = previousProjectManagedRelPaths(targetDir);
   for (const platformId of activeTargets) {
     for (const root of projectDeployRootsForPlatform(platformId)) {
       const src = join(PROJECT_DIR, root.srcRel);
@@ -3616,6 +3674,7 @@ function collectProjectDeployPlan(activeTargets, targetDir) {
       for (const plan of collectDeployFilePlansFromRoot(src, dest, {
         sourceRoot: PROJECT_DIR,
         targetDir,
+        managedRelPaths,
       })) {
         if (seen.has(plan.relPath)) continue;
         seen.add(plan.relPath);
@@ -3679,6 +3738,16 @@ function readProjectBootstrapManifest(targetDir) {
   }
 }
 
+function previousProjectManagedRelPaths(targetDir) {
+  const manifest = readProjectBootstrapManifest(targetDir);
+  const managedFiles = Array.isArray(manifest?.managedFiles) ? manifest.managedFiles : [];
+  return new Set(
+    managedFiles
+      .map((file) => normalizeDeployRelPath(file?.relPath ?? ""))
+      .filter(Boolean),
+  );
+}
+
 function projectBootstrapStatus(targetDir, activeTargets, filePlans) {
   const existingManifest = readProjectBootstrapManifest(targetDir);
   const version = readPackageVersion();
@@ -3688,19 +3757,26 @@ function projectBootstrapStatus(targetDir, activeTargets, filePlans) {
   const createCount = pending.filter((plan) => plan.effectiveAction === "create").length;
   const mergeCount = pending.filter((plan) => plan.effectiveAction === "merge").length;
   const replaceCount = pending.filter((plan) => plan.effectiveAction === "replace").length;
+  const conflictCount = pending.filter((plan) => plan.effectiveAction === "conflict").length;
   const targetChanged =
     Boolean(existingManifest) &&
     JSON.stringify(existingManifest.activeTargets ?? []) !== JSON.stringify(activeTargets);
-  const stale =
+  const versionChanged =
     Boolean(existingManifest) &&
-    ((existingManifest.metaKimVersion && existingManifest.metaKimVersion !== version) ||
-      targetChanged);
-  const status = stale
+    Boolean(existingManifest.metaKimVersion) &&
+    existingManifest.metaKimVersion !== version;
+  const status = conflictCount > 0
+    ? "conflict"
+    : versionChanged
     ? "stale"
-    : missingCount > 0
+    : targetChanged
+      ? "target_scope_changed"
+    : !existingManifest && missingCount > 0
       ? "missing"
-      : replaceCount > 0 || mergeCount > 0 || createCount > 0
-        ? "ready_with_existing_config"
+      : existingManifest && (replaceCount > 0 || mergeCount > 0 || createCount > 0 || missingCount > 0)
+        ? "repair_required"
+        : replaceCount > 0 || mergeCount > 0 || createCount > 0
+          ? "ready_with_existing_config"
         : existingManifest
           ? "ready"
           : "ready_with_existing_config";
@@ -3710,11 +3786,17 @@ function projectBootstrapStatus(targetDir, activeTargets, filePlans) {
     confirmationReason:
       status === "ready"
         ? "Project bootstrap manifest and generated files are current; no project write is needed."
-        : status === "stale"
-          ? "Existing project bootstrap manifest differs by Meta_Kim version or active target set."
+        : status === "conflict"
+          ? "Existing project files overlap Meta_Kim generated paths but are not known to be Meta_Kim-owned; resolve conflicts before apply."
+          : status === "stale"
+          ? "Existing project bootstrap manifest uses a different Meta_Kim version."
+          : status === "target_scope_changed"
+            ? "Selected runtime targets differ from the previous project bootstrap manifest."
           : status === "missing"
             ? "Project-level runtime projection is missing one or more required files."
-            : "Project has existing or equivalent config but still needs a confirmed bootstrap/update to record state or apply pending changes.",
+            : status === "repair_required"
+              ? "Project bootstrap version is current, but managed files need repair, merge, or recreation."
+              : "Project has existing or equivalent config but still needs a confirmed bootstrap to record state or apply pending changes.",
     metaKimVersion: version,
     targetDir,
     activeTargets,
@@ -3723,6 +3805,7 @@ function projectBootstrapStatus(targetDir, activeTargets, filePlans) {
       create: createCount,
       merge: mergeCount,
       replace: replaceCount,
+      conflict: conflictCount,
       skip: filePlans.filter((plan) => plan.action === "skip").length,
       missing: missingCount,
       unchanged: actionable.length - pending.length,
@@ -3743,19 +3826,36 @@ function projectBootstrapWritePreview(targetDir, filePlans, state) {
   const pending = filePlans.filter(
     (plan) => plan.action !== "skip" && plan.effectiveAction !== "unchanged",
   );
-  const existing = pending.filter((plan) => existsSync(join(targetDir, plan.relPath)));
+  const conflicts = pending.filter((plan) => plan.effectiveAction === "conflict");
+  const writablePending = pending.filter((plan) => plan.effectiveAction !== "conflict");
+  const existing = writablePending.filter((plan) => existsSync(join(targetDir, plan.relPath)));
   const projectWrites = filePlans
-    .filter((plan) => plan.action !== "skip" && plan.effectiveAction !== "unchanged")
+    .filter(
+      (plan) =>
+        plan.action !== "skip" &&
+        plan.effectiveAction !== "unchanged" &&
+        plan.effectiveAction !== "conflict",
+    )
     .map((plan) => ({
       relPath: plan.relPath,
       action: plan.effectiveAction,
       plannedAction: plan.action,
       mergePolicy: plan.mergePolicy,
+      ownership: plan.ownership,
       backupBeforeApply: plan.exists,
     }));
   return {
     globalWrites: [],
     projectWrites,
+    projectConflicts: conflicts.map((plan) => ({
+      relPath: plan.relPath,
+      action: plan.effectiveAction,
+      plannedAction: plan.action,
+      mergePolicy: plan.mergePolicy,
+      ownership: plan.ownership,
+      safeNextAction:
+        "Inspect the existing file, rename it, remove it, or mark it as managed only after user confirmation.",
+    })),
     manifestWrite: {
       requiredBeforeReady: state.status !== "ready",
       reason: state.confirmationReason,
@@ -3766,7 +3866,7 @@ function projectBootstrapWritePreview(targetDir, filePlans, state) {
       reason: state.confirmationReason,
     },
     backup: {
-      requiredBeforeApply: state.status !== "ready",
+      requiredBeforeApply: state.status !== "ready" && existing.length > 0,
       backupRootPattern: ".meta-kim/backups/project-bootstrap/<timestamp>",
       fileCount: existing.length,
       entries: existing.map((plan) => ({
@@ -3807,8 +3907,10 @@ function buildProjectBootstrapChoiceSurface(state, writePreview) {
   }
 
   const pendingCount = writePreview.projectWrites.length;
+  const conflictCount = writePreview.projectConflicts?.length ?? 0;
   const targetText = state.activeTargets.join(", ");
   const reason = state.confirmationReason;
+  const hasConflicts = state.status === "conflict";
   return {
     required: true,
     trigger: "runtime_native_choice_required_before_apply",
@@ -3819,17 +3921,23 @@ function buildProjectBootstrapChoiceSurface(state, writePreview) {
       `AI understanding: this directory is not ready for Meta_Kim project governance for ${targetText}.`,
       `AI additions: dry-run found ${state.status}; ${reason}`,
       "Capability route: use the installed Meta_Kim package source chain, then apply only the selected project projection.",
-      `Candidate paths: apply now, inspect only, or skip this project for now. Pending project writes: ${pendingCount}; global writes: ${writePreview.globalWrites.length}.`,
+      `Candidate paths: ${
+        hasConflicts
+          ? "inspect and resolve conflicts, skip this project for now, or apply only after conflicts are resolved"
+          : "apply now, inspect only, or skip this project for now"
+      }. Pending project writes: ${pendingCount}; conflicts: ${conflictCount}; global writes: ${writePreview.globalWrites.length}.`,
     ].join("\n"),
-    recommendedOptionId: "apply_project_bootstrap",
+    recommendedOptionId: hasConflicts ? "inspect_dry_run_only" : "apply_project_bootstrap",
     options: [
       {
         id: "apply_project_bootstrap",
-        label: "Apply project bootstrap (Recommended)",
+        label: hasConflicts ? "Apply after resolving conflicts" : "Apply project bootstrap (Recommended)",
         expectedResult:
           "Create or update the selected project-level Claude Code/Codex runtime files, then write the project bootstrap manifest.",
         advantage: "The next meta-theory trigger can proceed without asking again when files remain current.",
-        risk: "Touches project files listed in writePreview.projectWrites after backup/merge policy.",
+        risk: hasConflicts
+          ? "Blocked until writePreview.projectConflicts is empty; Meta_Kim will not overwrite unknown user-owned files."
+          : "Touches project files listed in writePreview.projectWrites after backup/merge policy.",
         verificationImpact:
           "After apply, a second dry-run must report status=ready, requiresConfirmation=false, pending=0, and projectWrites=0.",
       },
@@ -3875,11 +3983,21 @@ function buildProjectBootstrapPlan(activeTargets, targetDir) {
   };
 }
 
+function assertNoProjectBootstrapConflicts(plan) {
+  const conflicts = plan.writePreview?.projectConflicts ?? [];
+  if (conflicts.length === 0) return;
+  const rels = conflicts.map((entry) => entry.relPath).join(", ");
+  throw new Error(
+    `Project bootstrap blocked by ${conflicts.length} user-owned file conflict(s): ${rels}`,
+  );
+}
+
 function createProjectBootstrapBackup(targetDir, filePlans) {
   const existing = filePlans.filter(
     (plan) =>
       plan.action !== "skip" &&
       plan.effectiveAction !== "unchanged" &&
+      plan.effectiveAction !== "conflict" &&
       existsSync(join(targetDir, plan.relPath)),
   );
   if (existing.length === 0) {
@@ -3926,7 +4044,9 @@ function writeProjectBootstrapManifest(targetDir, plan, backup) {
     stateBeforeApply: plan.state,
     protectedMergeDecisions: plan.decisions,
     backup,
-    managedFiles: plan.files.filter((file) => file.action !== "skip"),
+    managedFiles: plan.files.filter(
+      (file) => file.action !== "skip" && file.effectiveAction !== "conflict",
+    ),
     skippedFiles: plan.files.filter((file) => file.action === "skip"),
   };
   mkdirSync(dirname(manifestPath), { recursive: true });
@@ -3936,6 +4056,7 @@ function writeProjectBootstrapManifest(targetDir, plan, backup) {
 
 async function applyProjectBootstrapToDir(activeTargets, targetDir) {
   const plan = buildProjectBootstrapPlan(activeTargets, targetDir);
+  assertNoProjectBootstrapConflicts(plan);
   if (plan.state.status === "ready") {
     return {
       ...plan,
@@ -4608,6 +4729,7 @@ async function runQuickDeploy() {
 
   // Copy platform files to target directory
   await withProgress(t.npxQuickCopyFiles, async () => {
+    assertNoProjectBootstrapConflicts(buildProjectBootstrapPlan([platformId], targetDir));
     const count = deployPlatformFiles(platformId, targetDir);
     quickDeployDir = targetDir;
     quickDeployDirs = uniqueProjectDeployDirs([targetDir]);

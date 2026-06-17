@@ -4,11 +4,36 @@
 
 这是 Meta_Kim 面向读者的更新说明。
 
-更新说明只解释“改了什么、为什么重要”。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
+更新说明先解释本次解决的用户痛点或风险，再说明为了解决它改了什么、为什么重要。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
 ## [Unreleased]
 
+## [2.8.41] - 2026-06-16
+
+### 解决的问题
+
+本次解决的是“Meta_Kim 选中了能力”与“宿主真的调用了能力”之间看不见的断层。现在用户能看到 Claude Code 或 Codex 还需要执行什么动作、什么证据才算数，以及长期 Agent 为什么必须等宿主 reload 并真实调用后才算完成。
+
+### 变更
+
+- **宿主调用请求契约** - 新增 `hostInvocationRequestPacket`；当 Agent、Skill、MCP、command/script、runtime tool、`agent-teams-playbook` 被选中但还没有 live 调用证据时，会明确列出 Claude Code 或 Codex 宿主下一步必须执行的动作，不再把缺失调用藏在 partial 报告里。
+- **可信证据边界** - 收紧 governed execution：host request、CLI/env claim、markdown report、app 可见 badge 都不能当执行证明；只有 trusted host adapter 返回带 state、provider/surface、evidence kind、evidence ref 的新鲜证据才能计入通过。
+- **长期 Agent 生命周期证明** - 新增 `durableAgentLifecyclePacket`；长期智能体必须经过 definition candidate、Warden approval/writeback、host reload/discovery、live invocation proof 四关，才能宣称完成。
+- **Runtime Adapter 指南** - 更新 Claude Code 和 Codex runtime reference，区分 runner handoff、真实宿主 provider 调用、长期项目 agent 发现机制，为后续 adapter 实现留出清晰接口。
+- **产品证据贯通** - 扩展 run report、product delivery bundle、validators 和 support gates，使宿主调用请求和长期 agent 生命周期状态进入产品验收证据链。
+
+### 验证
+
+- `node --test tests/governance/core-loop-contract.test.mjs tests/meta-theory/32-meta-theory-four-product-targets.test.mjs tests/meta-theory/34-run-deliverables.test.mjs tests/meta-theory/43-product-delivery-bundle.test.mjs`
+- `npm run meta:test:meta-theory`
+- `npm run meta:check`
+- `git diff --check`
+
 ## [2.8.40] - 2026-06-16
+
+### 解决的问题
+
+本次解决的是全局 Meta_Kim 已更新，但打开的项目仍发现不了新治理入口的问题。Prompt 入口现在会说明为什么启动治理，并在写入任何项目文件前先探测项目就绪状态。
 
 ### 变更
 
@@ -31,6 +56,10 @@
 
 ## [2.8.39] - 2026-06-16
 
+### 解决的问题
+
+本次解决的是“发牌写在契约里，但用户看不到也证明不了它触发”的问题。发牌决策现在有评分、证据、反事实检查和精简的用户可见理由。
+
 ### 变更
 
 - **发牌准确性标准** - 将 `cardPlanPacket` 升级到 v0.2；每张牌都必须记录 deal/suppress/defer/skip/interrupt/escalate 决策，并带 80 分标准、量化信号、证据引用和反证检查。
@@ -51,6 +80,10 @@
 - `npm run meta:release:smoke`
 
 ## [2.8.38] - 2026-06-16
+
+### 解决的问题
+
+本次解决的是 11 阶段业务流因为列出阶段名就看似完成的问题。每个阶段现在都要有证据、评分，以及 trigger/skip/block/wait 的明确判断。
 
 ### 变更
 
@@ -73,6 +106,10 @@
 
 ## [2.8.37] - 2026-06-16
 
+### 解决的问题
+
+本次解决的是 Review、Meta-Review、Evolution 浅层通过的问题。运行现在必须证明证据质量、盲区检查、可复用学习判断和 public-ready 边界，而不是只靠 packet 存在就通过。
+
 ### 变更
 
 - **深度 Review 门禁** - Prompt-first live acceptance 现在要求 Review 证明已检查证据质量、反证、决策影响、可证伪性和上游阶段链路，不再只靠 packet 存在就通过。
@@ -93,6 +130,10 @@
 - `git diff --check`
 
 ## [2.8.36] - 2026-06-16
+
+### 解决的问题
+
+本次解决的是还没查已有专业能力就新建或路由到执行 Agent 的问题。Meta_Kim 现在先查全局和项目 provider，把 worker task 限定为单次工作单，并在安装或更新后刷新本地能力库存。
 
 ### 变更
 
@@ -116,6 +157,10 @@
 
 ## [2.8.35] - 2026-06-16
 
+### 解决的问题
+
+本次解决的是 deep research 只收集来源、没有真正改善决策的问题。Fetch 现在会锁定关键信息、迭代查询和阅读、记录停止条件，并阻止弱证据或未验证声明进入 Thinking。
+
 ### 变更
 
 - **决策级 Deep Research** - 将 Fetch 证据从“收集来源”升级为“锁定关键信息目标、记录多轮 query/read/update、声明停止条件、写入决策更新规则”，再进入 Thinking。
@@ -133,6 +178,10 @@
 
 ## [2.8.34] - 2026-06-16
 
+### 解决的问题
+
+本次解决的是安装/更新时混淆全局通用能力、项目投影和开源包内容的问题。默认目标、平台分层和包边界现在会明确说明什么被安装、什么只是本地生成、什么只是兼容候选 probe。
+
 ### 变更
 
 - **安装范围边界** - 恢复并明确默认安装/更新模型：全局通用能力 + 当前项目投影，并修正为按目标平台选择落地；默认回车只投影 Claude Code + Codex，Cursor / OpenClaw 只有作为“正式投影兼容目标”被显式选择时才生成项目文件。
@@ -143,6 +192,10 @@
 - **安装范围验证** - 新增 `npm run meta:install-scope:verify`，用临时全局 home 和临时项目 bootstrap 实测各平台项目投影边界，并输出全局层 / 项目层分类结果。
 
 ## [2.8.33] - 2026-06-15
+
+### 解决的问题
+
+本次解决的是用户需要手动维护全局 Meta_Kim 和每个项目运行时投影的问题。项目 bootstrap 现在先 dry-run、展示来源链、保留用户文件，并且只在确认后写入项目。
 
 ### 新增
 
@@ -167,6 +220,10 @@
 
 ## [2.8.32] - 2026-06-15
 
+### 解决的问题
+
+本次解决的是 Codex 治理工作静默退回主线程单干的问题。复杂工作在安全时会进入 fan-out；宿主派发不可用、provider 被选中但没调用，都会作为 partial 证据展示。
+
 ### 变更
 
 - **Codex Meta-Theory 并行编排** - 显式 `/meta-theory` 和复杂治理任务在存在多条安全 worker lane 时，会进入 fan-out eligible 路线，避免 Codex 静默退回主线程单干。
@@ -179,6 +236,10 @@
 - `git diff --check`
 
 ## [2.8.31] - 2026-06-14
+
+### 解决的问题
+
+本次解决的是动态工作流规划和真实并行执行之间缺少桥的问题。Meta_Kim 只在存在多条安全可执行 lane 时选择 agent-teams playbook，并区分 provider 选择、subagent 调用、MCP、skill、command、hook 和本地 worker。
 
 ### 新增
 
@@ -204,6 +265,10 @@
 
 ## [2.8.30] - 2026-06-13
 
+### 解决的问题
+
+本次解决的是运行时支持口径过宽、研究结论太容易被接受的问题。发布说明把主安装默认项与兼容 probe 分开，并把 deep research 变成带来源质量和综合规则的 Fetch 合同。
+
 ### 变更
 
 - **主链安装默认项** - 将安装/更新时直接回车的默认目标改为 Claude Code + Codex，同时保留 OpenClaw、Cursor 的显式 all-runtime 或 `--targets` 选择路径。
@@ -219,6 +284,10 @@
 - `node setup.mjs --update --lang zh --targets claude,codex --project-dir <dir>...`
 
 ## [2.8.29] - 2026-06-13
+
+### 解决的问题
+
+本次解决的是关键分支决策被聊天文字或 artifact fallback 冒充完成的问题。Codex 和 Claude Code 的必需决策必须走原生选择面，同时治理运行能展示用户可读进度。
 
 ### 新增
 
@@ -240,6 +309,10 @@
 - `git diff --check`
 
 ## [2.8.28] - 2026-06-13
+
+### 解决的问题
+
+本次解决的是默认治理执行看似完成、但证据层级混在一起的问题。产品 validator 现在检查核心目标、默认执行证据、research-to-native 采纳、运行时优先级和能力发现，同时避免把结构证据说成 live proof。
 
 ### 新增
 
@@ -266,6 +339,10 @@
 
 ## [2.8.27] - 2026-06-13
 
+### 解决的问题
+
+本次解决的是规划能列很多 lane，却证明不了 owner、依赖和验证是否就绪的问题。编排合同现在要求可用看板、明确依赖策略和可审查交接，之后才能执行。
+
 ### 新增
 
 - **Prompt-first 实机验收** - 新增和 PRD 绑定的 live acceptance contract 与 runner，要求同一套框架型 prompt 在 Claude Code 和 Codex 上都跑通，才能声明 prompt-first 全流程完成。
@@ -287,6 +364,10 @@
 
 ## [2.8.26] - 2026-06-12
 
+### 解决的问题
+
+本次解决的是 local/private PRD 状态、公开文档和实现证据漂移的问题。剩余产品工作现在用更清晰的 dossier、validator 和公开安全的状态语言跟踪。
+
 ### 修复
 
 - **Meta-Theory 深度 Fetch 入口** - 项目/仓库/代码库理解、商业化发展和策略类问题现在会进入治理化 Fetch 路径，不再落到浅层 fast path 回答。
@@ -304,6 +385,10 @@
 
 ## [2.8.25] - 2026-06-12
 
+### 解决的问题
+
+本次解决的是产品目标到底完成、部分完成还是阻塞反复混淆的问题。产品体验清单现在把完成声明绑定到具体证据，而不是宽泛状态词。
+
 ### 修复
 
 - **Claude Code 全局 Hook 清理** - 全局 Meta_Kim 同步现在会校验 Claude Code `settings.json` 里的 hook 命令，不再只检查 `~/.claude/hooks/meta-kim/` 包目录。这样可以抓到指向已删除脚本的旧全局 Meta_Kim hook 注册，避免 Claude Code 在 Stop 阶段反复报 `MODULE_NOT_FOUND`。
@@ -318,6 +403,10 @@
 - `git diff --check`
 
 ## [2.8.24] - 2026-06-12
+
+### 解决的问题
+
+本次解决的是 host config、hook 协议、删除残留和证据表达经常在发布前漏检的问题。Checklist 和 PR 模板现在要求写清 source of truth、host-state 影响、清扫范围和证据预算。
 
 ### 变更
 
@@ -343,6 +432,10 @@
 
 ## [2.8.23] - 2026-06-12
 
+### 解决的问题
+
+本次解决的是发布前容易沿用过期图谱或包边界假设的问题。发布路径现在把 Graphify 和开源包边界作为显式检查项。
+
 ### 变更
 
 - **Run-scoped Worker 实机执行** - `meta:theory:run` 现在会通过本地 run-scoped worker executor 执行 bounded worker task packets，不再停在结构化调度就绪。主线程仍然只负责 scope、dispatch、review 和 synthesize；不会额外派外部 Agent。
@@ -353,6 +446,10 @@
 
 ## [2.8.22] - 2026-06-12
 
+### 解决的问题
+
+本次解决的是生成的 runtime projection 可能偏离 canonical Meta_Kim 行为的问题。同步覆盖和 runtime 检查现在能在发布前更容易抓到投影差距。
+
 ### 变更
 
 - **核心治理线路发布证据收口** - 补齐 PDR 发布清单和最终发布证据，让最终 tag 内包含 commit、tag、push 和 GitHub Release 证明。
@@ -362,6 +459,10 @@
 - 复用 `2.8.21` 的核心治理线路实现证据，并为最终 `2.8.22` patch 发布重新运行本地发布检查。
 
 ## [2.8.21] - 2026-06-12
+
+### 解决的问题
+
+本次解决的是能力缺口判断从“需要能力”直接跳到“创建 Agent”的问题。现在 capability gap 会先比较 skill、script、MCP provider、runtime tool 和已有 Agent，再允许持久创建。
 
 ### 变更
 
@@ -386,6 +487,10 @@
 
 ## [2.8.20] - 2026-06-11
 
+### 解决的问题
+
+本次解决的是 Meta_Kim 可以报告治理进度，却证明不了用户可见交付链闭合的问题。Run report 和 product bundle 现在带更清楚的完成、警告和剩余动作证据。
+
 ### 变更
 
 - **项目 Hook 归属合理化** - 项目级运行时导出现在只保留和 Meta_Kim 项目行为强相关的 hook，例如图谱上下文、能力优先调度和 meta-theory 激活。提示词优化、记忆生命周期、planning 辅助、通用危险命令拦截这类个人通用 hook，统一留在全局运行时目录，不再重复投影到每个项目。
@@ -405,6 +510,10 @@
 - `git diff --check`
 
 ## [2.8.19] - 2026-06-11
+
+### 解决的问题
+
+本次解决的是 GitHub 完成、运行时兼容和本地验证被混成一个 done 结论的问题。完成证据和兼容证据现在分开，每个 blocker 都有 owner 和下一步。
 
 ### 变更
 
@@ -426,6 +535,10 @@
 - `git diff --check`
 
 ## [2.8.18] - 2026-06-11
+
+### 解决的问题
+
+本次解决的是 live/runtime evidence 中 timeout、skipped、partial 结果容易被误当 release-grade 成功的问题。Runtime probe 现在更严格分类证据，并保留恢复路径。
 
 ### 修复
 
@@ -451,6 +564,10 @@
 - 已安装用户路径 hook 合并 smoke：重新安装 `planning-with-files` 后，Codex 同时保留 `user_prompt_submit.py` 和 `hookprompt-adapter.mjs`；Cursor 的 `beforeSubmitPrompt` 仍保留 `hookprompt-adapter.mjs`。
 
 ## [2.8.17] - 2026-06-11
+
+### 解决的问题
+
+本次解决的是生成报告和产品表面太散，导致治理运行难以检查的问题。报告现在围绕决策、审查和后续行动需要的证据收束。
 
 ### 修复
 
@@ -478,6 +595,10 @@
 
 ## [2.8.16] - 2026-06-10
 
+### 解决的问题
+
+本次解决的是复制出来的项目文件存在，但目标项目并没有真正初始化的问题。Post-copy 流程现在在最终项目根目录初始化 Graphify，并避免把临时导出目录当成真实项目。
+
 ### 修复
 
 - **复制后自动初始化 Graphify** - 复制到任意项目根目录的 Meta_Kim 项目级文件夹，不再要求用户记住并手动运行 `node meta-kim-post-copy.mjs`。首次触发 `meta-theory` 时，Meta_Kim 会从最终项目根目录自动启动 post-copy bootstrap。
@@ -499,6 +620,10 @@
 
 ## [2.8.15] - 2026-06-10
 
+### 解决的问题
+
+本次解决的是用户把生成文件移动到真实项目后，copy-ready 设置失效的问题。Bootstrap 脚本现在从复制后的目标目录运行，并把 Graphify 设置绑定到最终项目目录。
+
 ### 修复
 
 - **可复制目录的 Graphify 初始化** - quick setup 或 install/update 导出的项目级文件夹现在会包含 `meta-kim-post-copy.mjs`。当你先把生成目录放在桌面等临时位置，再把其中全部内容复制到任意项目根目录后，在最终项目里运行 `node meta-kim-post-copy.mjs` 即可为该项目初始化 Graphify。
@@ -516,6 +641,10 @@
 - `git diff --check`
 
 ## [2.8.14] - 2026-06-10
+
+### 解决的问题
+
+本次解决的是安装/更新输出像失败或英文内部日志，而不是可执行用户状态的问题。提示现在本地化，预期的宿主插件手动步骤会诚实标记，HookPrompt 输出也不会破坏 Markdown 渲染。
 
 ### 修复
 
@@ -542,6 +671,10 @@
 
 ## [2.8.13] - 2026-06-10
 
+### 解决的问题
+
+本次解决的是 ECC 安装覆盖 Codex App 用户配置、导致原生控制能力断开的风险。Meta_Kim 现在以用户配置为基底，只 add-only 合入 ECC，并恢复 Browser、Chrome、Computer Use 插件设置。
+
 ### 修复
 
 - **Codex App 原生控制保护** - Meta_Kim 现在会在运行 ECC Codex home installer 前保护用户已有的 `~/.codex/config.toml`。这次问题是因为发现 ECC 的 Codex 安装路径会把它自己的 reference `config.toml` 覆盖到用户的 Codex App 配置上，进而导致 Codex 的 Computer Use 和 Chrome 插件连接失效。
@@ -558,6 +691,10 @@
 - `git diff --check`
 
 ## [2.8.12] - 2026-06-10
+
+### 解决的问题
+
+本次解决的是 HookPrompt 在 Codex 看起来运行了，但优化提示词没有稳定进入模型上下文的问题。Codex 现在使用模型可见的 `additionalContext` 包，UI 提示继续独立。
 
 ### 修复
 
@@ -579,6 +716,10 @@
 
 ## [2.8.11] - 2026-06-09
 
+### 解决的问题
+
+本次解决的是全局 hook 过重或过度绑定特定 runtime 的问题。Meta_Kim 现在区分安全的全局可复用 hook 和更强的项目级治理 hook，并按 runtime 验证 HookPrompt provider 映射。
+
 ### 变更
 
 - **全局和项目级 Hook 策略** - Meta_Kim 现在明确区分项目级治理 hook 和全局可复用 hook。派工强校验、Graphify 上下文、meta-theory spine 这类强治理能力默认留在项目级；全局安装只放记忆保存、HookPrompt、OpenClaw memory bridge 这类安全可复用入口。
@@ -596,6 +737,10 @@
 - `node --test tests/governance/provider-capabilities.test.mjs`
 
 ## [2.8.10] - 2026-06-09
+
+### 解决的问题
+
+本次解决的是自然语言持久任务被迫套固定清单，或要求用户懂协议词的问题。Meta_Kim 现在按任务生成必要 lane，检查本地基线证据，并显示人能看懂的进度。
 
 ### 新增
 
@@ -623,6 +768,10 @@
 
 ## [2.8.8] - 2026-06-09
 
+### 解决的问题
+
+本次解决的是报告和平台声明技术上没错、但用户难以理解的问题。工具支持等级、持久 Agent 边界和 runtime 目标来源现在用更朴素的方式表达。
+
 ### 变更
 
 - **工具端报告文案** - 公开报告保留协议标签，但配上人能看懂的说明。
@@ -643,6 +792,10 @@
 
 ## [2.8.7] - 2026-06-09
 
+### 解决的问题
+
+本次解决的是能力发现太窄、太依赖工具名的问题。Fetch 现在会在 Thinking 选择 owner/loadout 前记录各支持投影的项目和全局库存。
+
 ### 变更
 
 - **跨工具端 Fetch 发现** - Claude Code、Codex、Cursor、OpenClaw 在 Thinking 前都要记录项目和全局能力库存证据。
@@ -659,6 +812,10 @@
 - `git diff --check`
 
 ## [2.8.6] - 2026-06-05
+
+### 解决的问题
+
+本次解决的是 capability gap 只像松散脚本任务，而不像完整产品流程的问题。缺口现在有决策合同、回放证据、用户可见交付物、runtime 证据加固和报告卫生。
 
 ### 新增
 
@@ -686,6 +843,10 @@
 
 ## [2.8.5] - 2026-06-03
 
+### 解决的问题
+
+本次解决的是小文案改动发布检查太重、runtime/security 工作检查又太弱的问题。发布模式现在区分快速常规检查和更严格的 release-grade evidence。
+
 ### 新增
 
 - **发布模式** - 低风险 prompt、文档、治理文案改动走快速发布路径；安装、runtime、hook、provider、dependency、package、安全和 live evidence 相关工作仍走更严格的 release-grade 路径。
@@ -693,6 +854,10 @@
 - **Live 证据分类** - structural smoke、warning、skipped/needs-auth 和真实 runtime live pass 被明确区分。
 
 ## [2.8.4] - 2026-06-02
+
+### 解决的问题
+
+本次解决的是执行路线可能在没有证明 owner、provider、tool、verification 就绪前就推进的问题。Capability smoke 和 OpenClaw live 分片让真实路线就绪变得可测试。
 
 ### 新增
 
@@ -707,6 +872,10 @@
 
 ## [2.8.3] - 2026-06-02
 
+### 解决的问题
+
+本次解决的是 provider discovery 散落在 tools、hooks、skills、plugins、MCP、memory、graph 表面的问题。Provider registry 给这些表面统一生命周期和验证模型。
+
 ### 新增
 
 - **Capability Provider Contract** - 增加 provider registry 和生命周期模型，用于管理 runtime-native tools、skills、agents、hooks、commands、rules、plugins、MCP servers、dependency projects、memory 和 graph providers。
@@ -719,6 +888,10 @@
 
 ## [2.8.2] - 2026-06-02
 
+### 解决的问题
+
+本次解决的是 runtime 支持声明难比较、也容易夸大的问题。兼容性数据现在把 sync 行为、原生表面声明、package targets 和候选 probe 分开记录。
+
 ### 变更
 
 - **Runtime compatibility catalog** - runtime 支持数据归一到兼容性目录，覆盖 sync 行为、原生能力声明和 package targets。
@@ -726,12 +899,20 @@
 
 ## [2.8.1] - 2026-06-02
 
+### 解决的问题
+
+本次解决的是公开文档没有清楚区分 supported、compatible、candidate runtime 状态的问题。README 和 runtime 文档现在更容易解释和验证这些状态。
+
 ### 变更
 
 - **公开支持口径** - README 和 runtime-facing docs 对齐 supported、compatible、candidate 状态。
 - **投影同步说明** - 项目本地和全局 sync 行为更容易解释和验证。
 
 ## [2.8.0] - 2026-06-01
+
+### 解决的问题
+
+本次解决的是按工具名路由会忽略 provider 就绪、runtime 支持、OS 支持、依赖和验证 owner 的问题。Meta_Kim 转向 provider-first governance，并把发布证据纳入常规流程。
 
 ### 新增
 
@@ -741,12 +922,20 @@
 
 ## [2.7.0] - 2026-06-01
 
+### 解决的问题
+
+本次解决的是治理工作从 Agent 名字开始，而不是从能力需求开始的问题。Capability-first routing、owner/loadout evidence 和 runtime alignment 成为默认执行形态。
+
 ### 新增
 
 - **能力路由治理** - 引入 capability-first execution routing、owner/loadout evidence 和 provider discovery，作为治理工作的默认形态。
 - **工具端对齐** - Claude Code、Codex、OpenClaw、Cursor 围绕 canonical source 对齐，同时保留真实 runtime 限制。
 
 ## [2.6.x] - 2026-05-29 至 2026-05-30
+
+### 解决的问题
+
+这一组版本解决的是治理运行结束后难以审计的问题。报告、status envelope、研究准备、能力库存和全局发现变得更可见、更有来源。
 
 ### 新增
 
@@ -756,12 +945,20 @@
 
 ## [2.5.x] - 2026-05-28
 
+### 解决的问题
+
+这一组版本解决的是决策缺少 runtime、OS、dependency、weapon、trigger、intent 和 choice-surface 共同门禁的问题。决策引擎和架构文档把这些检查显式化。
+
 ### 新增
 
 - **治理决策引擎** - 增加 runtime capability、OS compatibility、dependency capability、weapon routing、trigger-action policy、intent amplification、choice surfaces、dynamic lens selection 和 decision-pattern contracts。
 - **面向用户的架构文档** - 扩展 runtime capability、dependency discovery、owner/weapon routing 和 choice surfaces 说明。
 
 ## [2.4.x] - 2026-05-27 至 2026-05-28
+
+### 解决的问题
+
+这一组版本解决的是研究和接口集成工作在缺少检索或合同证据时就影响路线设计的问题。新增研究能力证据、集成 packet、未知字段处理和运行状态输出。
 
 ### 新增
 
@@ -771,6 +968,10 @@
 
 ## [2.3.x] - 2026-05-26
 
+### 解决的问题
+
+这一组版本解决的是 worker 声称测试、命令成功或静默成功时缺少结构化证明的问题。执行证据和验证 schema 结构被收紧。
+
 ### 新增
 
 - **证据完整性合约** - worker 关于测试和命令成功的声明必须有结构化 execution evidence。
@@ -778,6 +979,10 @@
 - **Validation contract 结构** - validation rules 迁移为更可复用的 schema 和 runner。
 
 ## [2.2.x] - 2026-05-25
+
+### 解决的问题
+
+这一组版本解决的是治理词汇和 Agent 创建规则太松，难以支撑持久执行的问题。Workflow packets、命名策略、dispatch evidence、agent factory 规则和 sub-agent 边界被显式化。
 
 ### 新增
 
@@ -792,12 +997,20 @@
 
 ## [2.1.x] - 2026-05-23 至 2026-05-24
 
+### 解决的问题
+
+这一组版本解决的是模糊任务在用户选择和 public-ready 边界未清楚前就进入编排的问题。Critical、Fetch、Verification、summary closure 和 deliverable-chain gate 变得更明确。
+
 ### 新增
 
 - **选择和确认流程** - Critical 和 Fetch 对模糊需求、候选路径、用户确认有了更清晰的准入门。
 - **Public-ready gates** - 声称完成前，必须满足 verification、summary closure 和 deliverable-chain closure。
 
 ## [2.0.x] - 2026-04-11 至 2026-05-23
+
+### 解决的问题
+
+这一组版本解决的是需要一套可复用跨工具端治理架构，而不是散落 prompt 和一次性 runtime 文件的问题。Meta_Kim 2.x 建立了核心 spine、投影、记忆、Graphify、setup/update、打包和治理 Agent 基础。
 
 ### 新增
 

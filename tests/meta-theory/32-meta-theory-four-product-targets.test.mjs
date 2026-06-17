@@ -18,6 +18,9 @@ const multiGapTask = [
   "内部知识库需要 MCP provider 边界。",
 ].join("\n");
 
+const productExperienceTask =
+  "帮我做个小红书营销自动发布器，需要动态规划、平台规则研究、内容策略、前端界面、后端 API、数据模型、平台集成、权限风控、测试验收和发布运维，但不要真实发布或使用生产凭证。";
+
 describe("32 — Meta-theory three product goals and support gates", () => {
   test("T-001 runs the default governed orchestration runtime path", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-governed-run-"));
@@ -29,8 +32,8 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         dbPath: path.join(tempDir, "runs.sqlite"),
       });
 
-      assert.equal(report.status, "pass");
-      assert.equal(report.defaultRuntimePath.status, "pass");
+      assert.equal(report.status, "partial");
+      assert.equal(report.defaultRuntimePath.status, "partial");
       assert.equal(report.defaultRuntimePath.entry, "meta:theory:run");
       assert.deepEqual(report.defaultRuntimePath.triggerChain, [
         "meta-theory-skill-adapter",
@@ -82,7 +85,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         report.defaultRuntimePath.agentTeamsPlaybookPacket.acceptance.noArbitraryMetaKimCap,
         true
       );
-      assert.equal(report.defaultRuntimePath.capabilityInvocationTruthPacket.status, "pass");
+      assert.equal(report.defaultRuntimePath.capabilityInvocationTruthPacket.status, "partial");
       const invocationByFamily = new Map(
         report.defaultRuntimePath.capabilityInvocationTruthPacket.rows.map((row) => [
           row.family,
@@ -96,6 +99,31 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.equal(invocationByFamily.get("prompt_rule").state, "applied");
       assert.equal(invocationByFamily.get("agent_teams_playbook").state, "selected_not_invoked");
       assert.equal(report.defaultRuntimePath.capabilityInvocationProbePacket.status, "not_run");
+      assert.equal(
+        report.defaultRuntimePath.capabilityInvocationTruthPacket.realInvocationCoverage.status,
+        "partial"
+      );
+      assert.equal(report.defaultRuntimePath.hostInvocationRequestPacket.status, "partial");
+      assert.ok(
+        report.defaultRuntimePath.hostInvocationRequestPacket.pendingFamilies.includes(
+          "agent_subagent"
+        )
+      );
+      assert.ok(
+        report.defaultRuntimePath.hostInvocationRequestPacket.requests.some(
+          (request) =>
+            request.family === "agent_subagent" &&
+            request.status === "pending_host_invocation" &&
+            request.requiredEvidence.trustedAdapterOnly === true
+        )
+      );
+      assert.equal(report.defaultRuntimePath.durableAgentLifecyclePacket.status, "partial");
+      assert.equal(
+        report.defaultRuntimePath.durableAgentLifecyclePacket.stages.find(
+          (stage) => stage.stage === "live_invocation_proof"
+        ).status,
+        "partial"
+      );
       assert.ok(
         ["selected_not_invoked", "discovered_not_selected", "not_required"].includes(
           invocationByFamily.get("mcp").state
@@ -105,7 +133,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.equal(report.defaultRuntimePath.visibleMetaTheorySurfacePacket.capabilityInventory.notSkillOnly, true);
       assert.equal(
         report.defaultRuntimePath.visibleMetaTheorySurfacePacket.capabilityInvocationTruth.status,
-        "pass"
+        "partial"
       );
       assert.equal(
         report.defaultRuntimePath.visibleMetaTheorySurfacePacket.dynamicWorkflow.status,
@@ -237,6 +265,19 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.equal(candidateOnly.wardenWritebackFlow.candidates[0].writebackDecision, "candidate_only");
       assert.equal(candidateOnly.wardenWritebackFlow.candidates[0].applyStatus, "planned");
       assert.equal(candidateOnly.wardenWritebackFlow.candidates[0].dryRunArtifact.canonicalWrites, 0);
+      assert.equal(candidateOnly.durableAgentLifecyclePacket.status, "partial");
+      assert.equal(
+        candidateOnly.durableAgentLifecyclePacket.stages.find(
+          (stage) => stage.stage === "definition_candidate"
+        ).status,
+        "pass"
+      );
+      assert.equal(
+        candidateOnly.durableAgentLifecyclePacket.stages.find(
+          (stage) => stage.stage === "definition_writeback"
+        ).status,
+        "partial"
+      );
 
       const approvalPacket = {
         schemaVersion: "warden-approval-v0.1",
@@ -268,6 +309,19 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.equal(candidate.dryRunArtifact.canonicalWrites, 1);
       assert.equal(candidate.verificationResult.status, "pass");
       assert.match(candidate.diffSummary, /^Created /);
+      assert.equal(approved.durableAgentLifecyclePacket.status, "partial");
+      assert.equal(
+        approved.durableAgentLifecyclePacket.stages.find(
+          (stage) => stage.stage === "definition_writeback"
+        ).status,
+        "pass"
+      );
+      assert.equal(
+        approved.durableAgentLifecyclePacket.stages.find(
+          (stage) => stage.stage === "host_discovery_reload"
+        ).status,
+        "partial"
+      );
 
       const targetPath = path.join(
         tempDir,
@@ -297,7 +351,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       });
 
       assert.equal(readBack.artifact.runId, "test-run-readable-report");
-      assert.equal(readBack.artifact.runReport.status, "pass");
+      assert.equal(readBack.artifact.runReport.status, "partial");
       assert.equal(readBack.artifact.runReportPanelContract.status, "partial");
       assert.equal(
         readBack.artifact.runReportPanelContract.capabilityInvocationTruth.callableInvocationCoverage
@@ -359,10 +413,11 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       ["scripts/validate-product-experience-core-goals.mjs"],
       { encoding: "utf8", timeout: 120_000 }
     );
-    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(result.status, 1, result.stderr || result.stdout);
     const output = JSON.parse(result.stdout);
-    assert.equal(output.status, "pass");
-    assert.equal(output.evidenceTier, "product_experience_pass");
+    assert.equal(output.status, "partial");
+    assert.equal(output.validationStatus, "pass");
+    assert.equal(output.evidenceTier, "partial");
     assert.deepEqual(output.goals.map((goal) => goal.id), ["P-102", "P-103", "P-104"]);
     assert.deepEqual(output.supportGates.map((gate) => gate.id), ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"]);
     assert.equal(output.nativeChoiceSurface, "not_claimed_by_structural_runner");
@@ -376,15 +431,144 @@ describe("32 — Meta-theory three product goals and support gates", () => {
     assert.equal(output.dynamicWorkflow.tools, true);
     assert.equal(output.dynamicWorkflow.hooks, true);
     assert.ok(output.peers > 0);
-    assert.equal(output.capabilityInvocationTruth.status, "pass");
+    assert.equal(output.capabilityInvocationTruth.status, "partial");
     assert.equal(output.capabilityInvocationTruth.states.invoked >= 1, true);
     assert.equal(output.capabilityInvocationTruth.appVisibleSubagentState, "not_required");
     assert.equal(output.capabilityInvocationTruth.callableInvocationCoverage.status, "pass");
     assert.equal(output.capabilityInvocationTruth.agentTeamsPlaybookState, "selected_not_invoked");
     assert.equal(output.agentTeamsPlaybook.status, "pass");
     assert.equal(output.agentTeamsPlaybook.selected, true);
-    assert.equal(output.visibleMetaTheorySurface, "pass");
+    assert.equal(output.visibleMetaTheorySurface, "partial");
     assert.ok(output.userPerceptionCues >= 6);
+  });
+
+  test("T-006 host invocation evidence can promote selected executable families to product pass", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-host-evidence-pass-"));
+    try {
+      const report = await runMetaTheoryGovernedExecution({
+        task: productExperienceTask,
+        runId: "test-run-host-evidence-pass",
+        stateDir: tempDir,
+        dbPath: path.join(tempDir, "runs.sqlite"),
+        invokeCapabilityProbes: true,
+        hostInvocationEvidenceTrusted: true,
+        hostInvocationEvidence: [
+          {
+            family: "agent_subagent",
+            state: "invoked",
+            providerId: "codex-reviewer",
+            hostSurface: "spawn_agent",
+            evidenceKind: "spawn_agent_result",
+            evidenceRef: "agent:codex-reviewer:completed",
+          },
+          {
+            family: "skill",
+            state: "applied",
+            providerId: "meta-theory",
+            hostSurface: "skill",
+            evidenceKind: "skill_application",
+            evidenceRef: "skill:meta-theory:SKILL.md-read",
+          },
+          {
+            family: "agent_teams_playbook",
+            state: "invoked",
+            providerId: "agent-teams-playbook",
+            hostSurface: "spawn_agent",
+            evidenceKind: "agent_team_result",
+            evidenceRef: "agent-team:fanout:completed",
+          },
+        ],
+      });
+
+      assert.equal(report.status, "pass");
+      assert.equal(report.coreLoop.runtimeInvocationPlanPacket.status, "pass");
+      assert.equal(report.coreLoop.hostInvocationRequestPacket.status, "pass");
+      assert.ok(
+        report.coreLoop.hostInvocationRequestPacket.requests.every(
+          (request) => request.status === "satisfied"
+        )
+      );
+      assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "pass");
+      assert.equal(
+        report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
+        "pass",
+      );
+      assert.deepEqual(
+        report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingFamilies,
+        [],
+      );
+      assert.equal(report.coreLoop.productExperiencePacket.status, "product_experience_pass");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("T-007 untrusted host invocation claims do not satisfy real invocation coverage", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-host-evidence-reject-"));
+    try {
+      const report = await runMetaTheoryGovernedExecution({
+        task: multiGapTask,
+        runId: "test-run-host-evidence-reject",
+        stateDir: tempDir,
+        dbPath: path.join(tempDir, "runs.sqlite"),
+        invokeCapabilityProbes: true,
+        hostInvocationEvidence: [
+          {
+            family: "agent_subagent",
+            state: "invoked",
+            providerId: "codex-reviewer",
+            hostSurface: "spawn_agent",
+            evidenceKind: "spawn_agent_result",
+            evidenceRef: "agent:codex-reviewer:completed",
+          },
+          {
+            family: "skill",
+            state: "applied",
+            providerId: "meta-theory",
+            hostSurface: "skill",
+            evidenceKind: "skill_application",
+            evidenceRef: "skill:meta-theory:SKILL.md-read",
+          },
+          {
+            family: "agent_teams_playbook",
+            state: "invoked",
+            providerId: "agent-teams-playbook",
+            hostSurface: "spawn_agent",
+            evidenceKind: "agent_team_result",
+            evidenceRef: "agent-team:fanout:completed",
+          },
+        ],
+      });
+
+      assert.equal(report.status, "partial");
+      assert.equal(report.coreLoop.runtimeInvocationPlanPacket.status, "partial");
+      assert.equal(report.coreLoop.hostInvocationRequestPacket.status, "partial");
+      assert.ok(
+        report.coreLoop.hostInvocationRequestPacket.pendingFamilies.includes("agent_subagent")
+      );
+      assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "partial");
+      assert.equal(
+        report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
+        "partial",
+      );
+      assert.ok(
+        report.coreLoop.runtimeInvocationPlanPacket.evidence.every(
+          (item) => item.passEligible === false,
+        ),
+      );
+      assert.ok(
+        report.coreLoop.runtimeInvocationPlanPacket.evidence.every(
+          (item) => item.rejectionReason.includes("requires trusted host evidence"),
+        ),
+      );
+      assert.ok(
+        report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingFamilies.includes(
+          "agent_subagent",
+        ),
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   test("CLI accepts natural language task text and reports the runId", async () => {
@@ -405,9 +589,9 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         ],
         { cwd: process.cwd(), encoding: "utf8" }
       );
-      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.status, 1, result.stderr);
       const summary = JSON.parse(result.stdout);
-      assert.equal(summary.status, "pass");
+      assert.equal(summary.status, "partial");
       assert.equal(summary.runId, "test-run-cli");
       assert.match(summary.report, /test-run-cli\.zh-CN\.md$/);
     } finally {
@@ -429,9 +613,9 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         ],
         { cwd: process.cwd(), encoding: "utf8" }
       );
-      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.status, 1, result.stderr);
       const summary = JSON.parse(result.stdout);
-      assert.equal(summary.status, "pass");
+      assert.equal(summary.status, "partial");
       assert.equal(summary.runId, "test-run-cli-positional");
       assert.match(summary.report, /test-run-cli-positional\.zh-CN\.md$/);
     } finally {

@@ -256,20 +256,21 @@ describe("graphify idempotent wiring (contract)", () => {
     assert.match(src, /stdio: "ignore"/);
     assert.match(src, /META_KIM_POST_COPY_AUTO === "off"/);
     assert.match(src, /catch \{\s*\/\/ Post-copy auto-init is opportunistic/s);
-    assert.match(src, /"--project-bootstrap", "--dry-run", "--project-dir", cwd, "--json"/);
-    assert.match(src, /"project", "bootstrap", "--dry-run", "--project-dir", cwd, "--json"/);
-    assert.match(src, /runProjectBootstrapProbe/);
-    assert.match(src, /projectBootstrapNeedsConfirmation/);
-    assert.match(src, /additionalContext/);
     assert.match(src, /critical_fetch_thinking_review_requested/);
     assert.match(src, /natural_language_durable_work/);
     assert.match(claudeSettings, /"UserPromptSubmit"/);
     assert.match(claudeSettings, /activate-meta-theory-spine\.mjs/);
-    assert.doesNotMatch(src, /project-bootstrap-probe\.json/);
+    assert.doesNotMatch(src, /projectBootstrapProbe/);
+    assert.doesNotMatch(src, /project-bootstrap-daily-probe\.json/);
+    assert.doesNotMatch(src, /packageUpdateReminderFlag/);
+    assert.doesNotMatch(src, /META_KIM_UPDATE_REMINDER_DAYS/);
+    assert.doesNotMatch(src, /additionalContext/);
+    assert.doesNotMatch(src, /decision: "block"/);
+    assert.doesNotMatch(src, /suppressOriginalPrompt: false/);
     assert.doesNotMatch(src, /"--apply"/);
   });
 
-  test("meta-theory activation hook does not write project state before bootstrap confirmation", () => {
+  test("meta-theory activation hook starts spine without project bootstrap automation", () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-activation-no-write-"));
     try {
       const hookPath = path.join(
@@ -292,46 +293,15 @@ describe("graphify idempotent wiring (contract)", () => {
       });
 
       assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.equal(existsSync(path.join(tempDir, ".meta-kim")), false);
-      const output = JSON.parse(result.stdout);
-      assert.match(
-        output.hookSpecificOutput.additionalContext,
-        /project bootstrap dry-run found this directory is not ready/,
+      assert.equal(
+        existsSync(path.join(tempDir, ".meta-kim", "state", "default", "spine", "spine-state.json")),
+        true,
       );
-      assert.match(output.hookSpecificOutput.additionalContext, /request_user_input/);
-    } finally {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
-  });
-
-  test("Claude UserPromptSubmit durable work triggers project bootstrap dry-run without writing state", () => {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-user-prompt-bootstrap-"));
-    try {
-      const hookPath = path.join(
-        root,
-        "canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs",
+      assert.equal(
+        existsSync(path.join(tempDir, ".meta-kim", "state", "default", "project-bootstrap.json")),
+        false,
       );
-      const result = spawnSync(process.execPath, [hookPath, "--package-root", root], {
-        cwd: tempDir,
-        input: JSON.stringify({
-          hook_event_name: "UserPromptSubmit",
-          prompt:
-            "critical and fetch thinking and review 帮我修复项目入口，完成后实机测试、提交、推送、发布新版本",
-        }),
-        encoding: "utf8",
-        timeout: 120_000,
-        windowsHide: true,
-      });
-
-      assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.equal(existsSync(path.join(tempDir, ".meta-kim")), false);
-      const output = JSON.parse(result.stdout);
-      assert.match(
-        output.hookSpecificOutput.additionalContext,
-        /project bootstrap dry-run found this directory is not ready/,
-      );
-      assert.match(output.hookSpecificOutput.additionalContext, /status=missing/);
-      assert.match(output.hookSpecificOutput.additionalContext, /request_user_input/);
+      assert.equal(result.stdout.trim(), "");
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
@@ -339,6 +309,7 @@ describe("graphify idempotent wiring (contract)", () => {
 
   test("bootstrap probe off still allows prompt-entry spine activation", () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-probe-off-spine-"));
+    const globalStateDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-probe-off-state-"));
     try {
       const hookPath = path.join(
         root,
@@ -357,6 +328,7 @@ describe("graphify idempotent wiring (contract)", () => {
         env: {
           ...process.env,
           META_KIM_PROJECT_BOOTSTRAP_PROBE: "off",
+          META_KIM_GLOBAL_STATE_DIR: globalStateDir,
         },
       });
 
@@ -365,6 +337,7 @@ describe("graphify idempotent wiring (contract)", () => {
       assert.equal(existsSync(path.join(tempDir, ".meta-kim", "state", "default", "spine", "spine-state.json")), true);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
+      rmSync(globalStateDir, { recursive: true, force: true });
     }
   });
 

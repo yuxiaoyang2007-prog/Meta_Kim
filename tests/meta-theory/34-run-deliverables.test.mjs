@@ -549,9 +549,9 @@ describe("34 — Meta-theory run deliverables", () => {
           .workerTasks.length,
         runArtifact.runReportPanelContract.ownerHandoff.length
       );
-      assert.equal(runArtifact.visibleMetaTheorySurfacePacket.status, "pass");
+      assert.equal(runArtifact.visibleMetaTheorySurfacePacket.status, "partial");
       assert.equal(runArtifact.visibleMetaTheorySurfacePacket.capabilityInventory.notSkillOnly, true);
-      assert.equal(runArtifact.capabilityInvocationTruthPacket.status, "pass");
+      assert.equal(runArtifact.capabilityInvocationTruthPacket.status, "partial");
       const invocationByFamily = new Map(
         runArtifact.capabilityInvocationTruthPacket.rows.map((row) => [row.family, row])
       );
@@ -563,6 +563,7 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(invocationByFamily.get("agent_teams_playbook").state, "selected_not_invoked");
       assert.equal(invocationByFamily.get("mcp").state, "selected_not_invoked");
       assert.equal(runArtifact.capabilityInvocationProbePacket.status, "not_run");
+      assert.equal(runArtifact.capabilityInvocationTruthPacket.realInvocationCoverage.status, "partial");
       assert.equal(runArtifact.agentTeamsPlaybookPacket.status, "pass");
       assert.equal(runArtifact.agentTeamsPlaybookPacket.selected, true);
       assert.equal(runArtifact.agentTeamsPlaybookPacket.fanoutSafetyPacket.safeForParallelFanout, true);
@@ -571,7 +572,7 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(runArtifact.agentTeamsPlaybookPacket.acceptance.dagAndCollisionSafe, true);
       assert.equal(runArtifact.agentTeamsPlaybookPacket.acceptance.waveSizeWithinRuntimeCapacity, true);
       assert.equal(runArtifact.agentTeamsPlaybookPacket.acceptance.noArbitraryMetaKimCap, true);
-      assert.equal(runArtifact.visibleMetaTheorySurfacePacket.capabilityInvocationTruth.status, "pass");
+      assert.equal(runArtifact.visibleMetaTheorySurfacePacket.capabilityInvocationTruth.status, "partial");
       assert.equal(runArtifact.visibleMetaTheorySurfacePacket.dynamicWorkflow.status, "pass");
       assert.equal(runArtifact.visibleMetaTheorySurfacePacket.agentTeamsPlaybook.status, "pass");
       assert.equal(runArtifact.visibleMetaTheorySurfacePacket.peerAgentMesh.status, "pass");
@@ -636,7 +637,7 @@ describe("34 — Meta-theory run deliverables", () => {
         ],
         { cwd: process.cwd(), encoding: "utf8" }
       );
-      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.status, 1, result.stderr);
       assert.match(result.stdout, /^Meta_Kim 对话提示:/u);
       assert.match(result.stdout, /开始原因: 进入 Meta-Theory/u);
       assert.match(result.stdout, /8 阶段: 触发 8 阶段/u);

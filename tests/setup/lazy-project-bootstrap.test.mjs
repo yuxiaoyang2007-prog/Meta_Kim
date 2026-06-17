@@ -90,7 +90,7 @@ test("lazy project bootstrap dry-run exposes source chain and writes nothing", (
     assert.ok(plan.sourceChain.generatedTargets.codex.includes(".agents/skills"));
     assert.deepEqual(plan.writePreview.globalWrites, []);
     assert.ok(plan.writePreview.projectWrites.some((file) => file.relPath === "AGENTS.md"));
-    assert.equal(plan.writePreview.backup.requiredBeforeApply, true);
+    assert.equal(plan.writePreview.backup.requiredBeforeApply, false);
     assert.equal(plan.writePreview.backup.backupRootPattern, ".meta-kim/backups/project-bootstrap/<timestamp>");
     assert.equal(plan.writePreview.rollbackPlan.availableAfterApply, true);
     assert.equal(
@@ -121,6 +121,13 @@ test("lazy project bootstrap dry-run exposes source chain and writes nothing", (
     }
 
     const byRel = new Map(plan.files.map((file) => [file.relPath, file]));
+    assert.equal(
+      plan.files.some((file) =>
+        file.relPath.includes("same-set-reusable-flow-for-project-file-inventor"),
+      ),
+      false,
+      "project bootstrap must not project internal canonical skills into runtime skill mirrors",
+    );
     assert.equal(byRel.get("AGENTS.md")?.mergePolicy, "generated_projection_create");
     assert.equal(
       byRel.get(".agents/skills/meta-theory/SKILL.md")?.mergePolicy,
@@ -152,6 +159,11 @@ test("lazy project bootstrap dry-run previews backup and rollback without writin
   try {
     writeFileSync(path.join(projectDir, "AGENTS.md"), "# User Project\n\nKeep this local note.\n");
     mkdirSync(path.join(projectDir, ".codex"), { recursive: true });
+    mkdirSync(path.join(projectDir, ".codex", "hooks"), { recursive: true });
+    writeFileSync(
+      path.join(projectDir, ".codex", "hooks", "user-custom-hook.mjs"),
+      "console.log('custom hook');\n",
+    );
     writeFileSync(
       path.join(projectDir, ".codex", "hooks.json"),
       JSON.stringify(
@@ -230,6 +242,11 @@ test("lazy project bootstrap apply preserves user text/config, skips Codex proje
       ) + "\n",
     );
     mkdirSync(path.join(projectDir, ".codex"), { recursive: true });
+    mkdirSync(path.join(projectDir, ".codex", "hooks"), { recursive: true });
+    writeFileSync(
+      path.join(projectDir, ".codex", "hooks", "user-custom-hook.mjs"),
+      "console.log('custom hook');\n",
+    );
     writeFileSync(
       path.join(projectDir, ".codex", "hooks.json"),
       JSON.stringify(
@@ -260,6 +277,10 @@ test("lazy project bootstrap apply preserves user text/config, skips Codex proje
     const codexHooks = readJson(path.join(projectDir, ".codex", "hooks.json"));
     assert.match(JSON.stringify(codexHooks), /node user-hook\.mjs/);
     assert.match(JSON.stringify(codexHooks), /hookprompt-adapter|meta-kim-memory-save|enforce-agent-dispatch|graphify-context/);
+    assert.equal(
+      readFileSync(path.join(projectDir, ".codex", "hooks", "user-custom-hook.mjs"), "utf8"),
+      "console.log('custom hook');\n",
+    );
 
     const claudeSettings = readJson(path.join(projectDir, ".claude", "settings.json"));
     assert.match(JSON.stringify(claudeSettings), /node user-claude-hook\.mjs/);
@@ -308,6 +329,86 @@ test("lazy project bootstrap apply preserves user text/config, skips Codex proje
     assert.equal(noOpApply.results[0].applied, false);
     assert.equal(noOpApply.results[0].noOp, true);
     assert.equal(noOpApply.results[0].backup.created, false);
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("lazy project bootstrap blocks unknown existing generated-path files instead of overwriting them", () => {
+  const projectDir = tempProject();
+  const userHookPath = path.join(
+    projectDir,
+    ".codex",
+    "hooks",
+    "activate-meta-theory-spine.mjs",
+  );
+  try {
+    mkdirSync(path.dirname(userHookPath), { recursive: true });
+    writeFileSync(userHookPath, "console.log('user hook stays');\n", "utf8");
+
+    const dryRun = runBootstrapForTargets(projectDir, "codex", ["--dry-run"]);
+    const plan = dryRun.results[0];
+    assert.equal(plan.state.status, "conflict");
+    assert.equal(plan.state.counts.conflict, 1);
+    assert.ok(
+      plan.writePreview.projectConflicts.some(
+        (file) => file.relPath === ".codex/hooks/activate-meta-theory-spine.mjs",
+      ),
+    );
+    assert.equal(
+      plan.writePreview.projectWrites.some(
+        (file) => file.relPath === ".codex/hooks/activate-meta-theory-spine.mjs",
+      ),
+      false,
+    );
+    assert.equal(plan.choiceSurface.recommendedOptionId, "inspect_dry_run_only");
+
+    const apply = runSetup([
+      "--project-bootstrap",
+      "--targets",
+      "codex",
+      "--project-dir",
+      projectDir,
+      "--json",
+      "--apply",
+    ]);
+    assert.notEqual(apply.status, 0, "apply must refuse unknown existing conflicts");
+    const summary = JSON.parse(apply.stdout);
+    assert.equal(summary.ok, false);
+    assert.match(summary.results[0].error.message, /user-owned file conflict/);
+    assert.equal(readFileSync(userHookPath, "utf8"), "console.log('user hook stays');\n");
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("lazy project bootstrap updates files previously recorded in the project manifest", () => {
+  const projectDir = tempProject();
+  const managedHookPath = path.join(
+    projectDir,
+    ".codex",
+    "hooks",
+    "activate-meta-theory-spine.mjs",
+  );
+  try {
+    runBootstrapForTargets(projectDir, "codex", ["--apply"]);
+    writeFileSync(managedHookPath, "console.log('old generated hook');\n", "utf8");
+
+    const dryRun = runBootstrapForTargets(projectDir, "codex", ["--dry-run"]);
+    const plan = dryRun.results[0];
+    const hookPlan = plan.files.find(
+      (file) => file.relPath === ".codex/hooks/activate-meta-theory-spine.mjs",
+    );
+    assert.equal(plan.state.status, "repair_required");
+    assert.equal(hookPlan.ownership, "manifest_managed");
+    assert.equal(hookPlan.effectiveAction, "replace");
+    assert.equal(hookPlan.mergePolicy, "manifest_managed_projection_replace");
+    assert.equal(plan.writePreview.projectConflicts.length, 0);
+
+    runBootstrapForTargets(projectDir, "codex", ["--apply"]);
+    assert.doesNotMatch(readFileSync(managedHookPath, "utf8"), /old generated hook/);
+    const current = runBootstrapForTargets(projectDir, "codex", ["--dry-run"]);
+    assert.equal(current.results[0].state.status, "ready");
   } finally {
     rmSync(projectDir, { recursive: true, force: true });
   }
@@ -554,7 +655,7 @@ test("lazy project bootstrap detects missing post-copy generated script", () => 
 
     const summary = runBootstrap(projectDir, ["--dry-run"]);
     const plan = summary.results[0];
-    assert.equal(plan.state.status, "missing");
+    assert.equal(plan.state.status, "repair_required");
     assert.equal(plan.state.requiresConfirmation, true);
     assert.ok(
       plan.writePreview.projectWrites.some(
@@ -571,14 +672,14 @@ test("lazy project bootstrap detects missing post-copy generated script", () => 
   }
 });
 
-test("lazy project bootstrap detects active target changes as stale updates", () => {
+test("lazy project bootstrap detects active target changes separately from version updates", () => {
   const projectDir = tempProject();
   try {
     runBootstrapForTargets(projectDir, "claude", ["--apply"]);
 
     const summary = runBootstrapForTargets(projectDir, "claude,codex", ["--dry-run"]);
     const plan = summary.results[0];
-    assert.equal(plan.state.status, "stale");
+    assert.equal(plan.state.status, "target_scope_changed");
     assert.equal(plan.state.requiresConfirmation, true);
     assert.deepEqual(plan.state.previousManifest.activeTargets, ["claude"]);
     assert.equal(plan.state.previousManifest.targetChanged, true);
@@ -609,7 +710,7 @@ test("lazy project bootstrap detects generated file drift even with current mani
 
     const summary = runBootstrap(projectDir, ["--dry-run"]);
     const plan = summary.results[0];
-    assert.equal(plan.state.status, "ready_with_existing_config");
+    assert.equal(plan.state.status, "repair_required");
     assert.equal(plan.state.requiresConfirmation, true);
     assert.ok(
       plan.writePreview.projectWrites.some(

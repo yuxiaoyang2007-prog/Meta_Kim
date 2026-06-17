@@ -19,10 +19,11 @@ function runProductBundle() {
     encoding: "utf8",
     timeout: 90_000,
   });
-  assert.equal(result.status, 0, result.stderr || result.stdout);
   const jsonStart = result.stdout.indexOf("{");
   assert.notEqual(jsonStart, -1, result.stdout);
-  return JSON.parse(result.stdout.slice(jsonStart));
+  const summary = JSON.parse(result.stdout.slice(jsonStart));
+  assert.equal(result.status, summary.status === "pass" ? 0 : 1, result.stderr || result.stdout);
+  return summary;
 }
 
 describe("43 — Product delivery bundle and reviewer calibration", () => {
@@ -49,7 +50,9 @@ describe("43 — Product delivery bundle and reviewer calibration", () => {
     assert.equal(contract.privacyRules.forbidLocalAbsolutePaths, true);
 
     const summary = runProductBundle();
-    assert.equal(summary.ok, true);
+    assert.equal(summary.ok, false);
+    assert.equal(summary.status, "partial");
+    assert.equal(summary.governedRunStatus, "partial");
     assert.equal(summary.requiredSectionsCovered, 5);
     assert.ok(summary.fileCount >= 12);
     assert.equal(summary.scoringSampleCount, 8);
@@ -63,7 +66,8 @@ describe("43 — Product delivery bundle and reviewer calibration", () => {
 
     const report = JSON.parse(readFileSync(reportPath, "utf8"));
     assert.equal(report.schemaVersion, "product-delivery-bundle-v0.1");
-    assert.equal(report.status, "pass");
+    assert.equal(report.status, "partial");
+    assert.equal(report.summary.governedRunStatus, "partial");
     assert.equal(report.summary.requiredFilesCovered, contract.requiredFiles.length);
     assert.equal(report.privacyCheck.status, "pass");
     assert.equal(hasLocalAbsolutePath(report), false);

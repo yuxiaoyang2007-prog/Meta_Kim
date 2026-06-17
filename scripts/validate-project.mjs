@@ -1494,7 +1494,7 @@ async function validateSyncConfiguration() {
     profiles.claude.projection.outputPaths.skillsDir === ".claude/skills" &&
       profiles.openclaw.projection.outputPaths.skillsDir === "openclaw/skills" &&
       profiles.cursor.projection.outputPaths.skillsDir === ".cursor/skills",
-    "Runtime profiles must declare skillsDir for full canonical/skills projection.",
+    "Runtime profiles must declare skillsDir for project runtime skill mirrors.",
   );
   assert(
     profiles.codex.projection.outputPaths.hooksDir === ".codex/hooks" &&

@@ -4,11 +4,36 @@
 
 This file is the reader-facing release history for Meta_Kim.
 
-The changelog explains what changed and why it matters. It intentionally avoids long internal task ledgers, low-signal backlog ids, and implementation trivia. When exact evidence is needed, use the repository history, tests, generated reports, and PRD artifacts.
+The changelog explains the user-facing problem or risk each release solved, what changed to solve it, and why the change matters. It intentionally avoids long internal task ledgers, low-signal backlog ids, and implementation trivia. When exact evidence is needed, use the repository history, tests, generated reports, and PRD artifacts.
 
 ## [Unreleased]
 
+## [2.8.41] - 2026-06-16
+
+### Solved Problem
+
+This release addresses the gap between "Meta_Kim selected a capability" and "the host actually invoked it." Users can now see which Claude Code or Codex action is still required, which evidence counts, and why long-lived agents are not complete until the host reloads and invokes them.
+
+### Changed
+
+- **Host Invocation Request Contract** - Added `hostInvocationRequestPacket` so selected Agent, Skill, MCP, command/script, runtime-tool, and `agent-teams-playbook` families expose the exact Claude Code or Codex host action still required instead of hiding missing live calls behind partial reports.
+- **Trusted Evidence Boundary** - Tightened governed execution so host requests, CLI/env claims, markdown reports, and app-visible badges remain non-proof until a trusted host adapter returns fresh evidence with accepted state, provider/surface, evidence kind, and evidence ref.
+- **Durable Agent Lifecycle Proof** - Added `durableAgentLifecyclePacket` so long-lived agents must pass definition candidate, Warden approval/writeback, host reload/discovery, and live invocation proof before completion is claimed.
+- **Runtime Adapter Guidance** - Updated Claude Code and Codex references to distinguish runner handoff, real host provider calls, and durable project agent discovery for future adapter implementations.
+- **Product Evidence Propagation** - Extended run reports, product delivery bundles, validators, and support gates to carry host invocation requests and durable-agent lifecycle status.
+
+### Verification
+
+- `node --test tests/governance/core-loop-contract.test.mjs tests/meta-theory/32-meta-theory-four-product-targets.test.mjs tests/meta-theory/34-run-deliverables.test.mjs tests/meta-theory/43-product-delivery-bundle.test.mjs`
+- `npm run meta:test:meta-theory`
+- `npm run meta:check`
+- `git diff --check`
+
 ## [2.8.40] - 2026-06-16
+
+### Solved Problem
+
+This release addresses the stale-project problem where global Meta_Kim could be updated, but an opened project still failed to discover the new governance entry path. Prompt-entry activation now explains why governance starts and probes project readiness before writing anything.
 
 ### Changed
 
@@ -31,6 +56,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.39] - 2026-06-16
 
+### Solved Problem
+
+This release addresses the problem that card dealing existed in the contract but was not visibly or measurably triggered for users. Card decisions now have scores, evidence, counterfactual checks, and concise user-facing reasons.
+
 ### Changed
 
 - **Card Dealing Accuracy Standard** - Upgraded `cardPlanPacket` to v0.2 so every card records a deal/suppress/defer/skip/interrupt/escalate decision with an 80-point standard, quantitative signals, evidence refs, and falsification checks.
@@ -51,6 +80,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - `npm run meta:release:smoke`
 
 ## [2.8.38] - 2026-06-16
+
+### Solved Problem
+
+This release addresses the problem that the 11-phase business workflow could look complete just because all phase names appeared. Each phase now needs evidence, a score, and a trigger/skip/block/wait decision before coverage can pass.
 
 ### Changed
 
@@ -73,6 +106,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.37] - 2026-06-16
 
+### Solved Problem
+
+This release addresses shallow Review, Meta-Review, and Evolution passes. Runs must now prove evidence quality, blind-spot checks, reusable-learning decisions, and public-ready boundaries instead of passing because packets merely exist.
+
 ### Changed
 
 - **Deep Review Gates** - Upgraded prompt-first live acceptance so Review must prove evidence quality, counterevidence, decision impact, falsification checks, and upstream stage trace instead of passing on packet presence alone.
@@ -93,6 +130,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - `git diff --check`
 
 ## [2.8.36] - 2026-06-16
+
+### Solved Problem
+
+This release addresses the tendency to create or route to new execution agents before checking existing professional capabilities. Meta_Kim now searches global and project providers first, treats worker tasks as run-scoped work orders, and refreshes local capability inventory after installs or updates.
 
 ### Changed
 
@@ -116,6 +157,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.35] - 2026-06-16
 
+### Solved Problem
+
+This release addresses deep research that collected sources without turning them into better decisions. Fetch now targets key information, iterates queries and reads, records stop conditions, and blocks weak or unverified claims from shaping Thinking.
+
 ### Changed
 
 - **Decision-Grade Deep Research** - Upgraded Fetch evidence from source collection to key-information targeting, iterative query/read/update logs, explicit stop conditions, and decision-update rules before Thinking.
@@ -133,6 +178,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.34] - 2026-06-16
 
+### Solved Problem
+
+This release addresses install/update confusion between global reusable capabilities, project projections, and open-source package contents. Defaults, platform tiers, and package boundaries now make clear what is installed, what is generated locally, and what is only a compatibility probe.
+
 ### Changed
 
 - **Install Scope Boundary** - Restored the default install/update model to "global reusable capabilities + current project projection", now explicitly target-selected: the Enter default projects Claude Code + Codex, while Cursor and OpenClaw project files appear only when those formal projection compatibility targets are selected.
@@ -143,6 +192,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - **Install Scope Verification** - Added `npm run meta:install-scope:verify` to exercise temp global homes and temp project bootstraps, then report global-layer and project-layer surfaces by platform.
 
 ## [2.8.33] - 2026-06-15
+
+### Solved Problem
+
+This release addresses the burden of manually keeping global Meta_Kim and each project-level runtime projection in sync. Project bootstrap now dry-runs, shows the source chain, preserves user files, and only applies project writes after confirmation.
 
 ### Added
 
@@ -167,6 +220,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.32] - 2026-06-15
 
+### Solved Problem
+
+This release addresses Codex governed work silently collapsing into a single main-thread executor. Complex work now becomes fan-out eligible when safe, while unavailable host dispatch and selected-but-not-invoked providers stay visible as partial evidence.
+
 ### Changed
 
 - **Codex Meta-Theory Fan-Out** - Made explicit `/meta-theory` and complex governed work fan-out eligible when there are multiple safe worker lanes, so Codex should plan real parallel work instead of silently falling back to one main-thread executor.
@@ -179,6 +236,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - `git diff --check`
 
 ## [2.8.31] - 2026-06-14
+
+### Solved Problem
+
+This release addresses the missing bridge between dynamic workflow planning and real parallel execution. Meta_Kim now selects the agent-teams playbook only when multiple safe executable lanes exist and keeps provider selection, subagent calls, MCP calls, skills, commands, hooks, and local workers distinct.
 
 ### Added
 
@@ -204,6 +265,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.30] - 2026-06-13
 
+### Solved Problem
+
+This release addresses overbroad runtime support claims and research that was too easy to accept at face value. The release separates primary install defaults from compatibility probes, and turns deep research into a Fetch contract with source-quality and synthesis rules.
+
 ### Changed
 
 - **Primary Install Defaults** - Changed direct-Enter install/update defaults to Claude Code + Codex while keeping OpenClaw and Cursor available through explicit all-runtime or `--targets` selection.
@@ -219,6 +284,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - `node setup.mjs --update --lang zh --targets claude,codex --project-dir <dir>...`
 
 ## [2.8.29] - 2026-06-13
+
+### Solved Problem
+
+This release addresses branch-changing decisions being faked by chat text or artifact fallbacks. Codex and Claude Code must use their native choice surfaces for required decisions, and governed runs expose progress without leaking packet jargon.
 
 ### Added
 
@@ -240,6 +309,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - `git diff --check`
 
 ## [2.8.28] - 2026-06-13
+
+### Solved Problem
+
+This release addresses the risk that default governed execution looked complete while evidence layers were mixed together. Product validators now check core goals, default execution evidence, research-to-native adoption, runtime priority, and capability discovery without overclaiming live proof.
 
 ### Added
 
@@ -266,6 +339,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.27] - 2026-06-13
 
+### Solved Problem
+
+This release addresses planning that could name many lanes without proving which owners, dependencies, and verifications were actually ready. The orchestration contract now requires a usable board, explicit dependency policy, and reviewable handoff before execution.
+
 ### Added
 
 - **Prompt-First Live Acceptance** - Added a PRD-linked live acceptance contract and runner that proves the same framework prompt through Claude Code and Codex before the prompt-first flow can be called complete.
@@ -287,6 +364,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.26] - 2026-06-12
 
+### Solved Problem
+
+This release addresses drift between local/private PRD status, public-facing docs, and current implementation evidence. Remaining product work is now tracked through clearer dossiers, validators, and public-safe status language.
+
 ### Fixed
 
 - **Meta-Theory Deep Fetch Entry** - Project/repo/codebase understanding and commercialization strategy prompts now enter the governed Fetch path instead of falling through to shallow fast-path answers.
@@ -304,6 +385,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.25] - 2026-06-12
 
+### Solved Problem
+
+This release addresses repeated confusion over which product goals were complete, partial, or blocked. The product-experience checklist now ties completion claims to concrete evidence instead of broad status language.
+
 ### Fixed
 
 - **Claude Code Global Hook Cleanup** - Global Meta_Kim sync now validates the Claude Code `settings.json` hook commands, not only the `~/.claude/hooks/meta-kim/` package directory. This catches stale global Meta_Kim hook registrations that point at removed scripts and cause Claude Code `MODULE_NOT_FOUND` Stop hook errors.
@@ -318,6 +403,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - `git diff --check`
 
 ## [2.8.24] - 2026-06-12
+
+### Solved Problem
+
+This release addresses release-readiness misses in host config, hook protocol, deletion residue, and evidence reporting. The checklist and PR template now force maintainers to state source of truth, host-state impact, cleanup scope, and evidence budget before merge.
 
 ### Changed
 
@@ -343,6 +432,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.23] - 2026-06-12
 
+### Solved Problem
+
+This release addresses stale graph and package-boundary assumptions before release. The release path now keeps Graphify and open-source package boundaries visible as explicit checks.
+
 ### Changed
 
 - **Run-Scoped Worker Execution** - `meta:theory:run` now executes bounded worker task packets through a local run-scoped worker executor instead of stopping at structural dispatch readiness. The main thread still scopes, delegates, reviews, and synthesizes; no extra external agent is spawned.
@@ -353,6 +446,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.22] - 2026-06-12
 
+### Solved Problem
+
+This release addresses runtime projection drift that could make generated files diverge from canonical Meta_Kim behavior. Sync coverage and runtime checks now make projection gaps easier to catch before release.
+
 ### Changed
 
 - **Core Loop Release Evidence Closure** - Completed the PDR release checklist and final release evidence for the governed execution repair so the shipped tag includes commit, tag, push, and GitHub Release proof.
@@ -362,6 +459,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - Reused the `2.8.21` core-loop implementation evidence and reran the local release checks for the final `2.8.22` patch release.
 
 ## [2.8.21] - 2026-06-12
+
+### Solved Problem
+
+This release addresses weak capability-gap decisions that jumped from "we need something" to "create an agent." Capability gaps now compare skills, scripts, MCP providers, runtime tools, and existing agents before durable creation is allowed.
 
 ### Changed
 
@@ -386,6 +487,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.20] - 2026-06-11
 
+### Solved Problem
+
+This release addresses the risk that Meta_Kim could report governance progress without proving the user-facing deliverable chain was closed. Run reports and product bundles now carry clearer completion, warning, and remaining-action evidence.
+
 ### Changed
 
 - **Project Hook Ownership Rationalization** - Project runtime exports now keep project-specific hooks focused on Meta_Kim behavior, such as graph context, capability-first dispatch, and meta-theory activation. Global personal or reusable hooks, including prompt optimization, memory lifecycle helpers, planning helpers, and generic dangerous-command guards, are kept in the global runtime homes instead of being duplicated into every project.
@@ -405,6 +510,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - `git diff --check`
 
 ## [2.8.19] - 2026-06-11
+
+### Solved Problem
+
+This release addresses unclear release closure when GitHub completion, runtime compatibility, and local verification were mixed into one "done" claim. Completion and compatibility evidence now stay separated so each blocker has an owner and next action.
 
 ### Changed
 
@@ -426,6 +535,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - `git diff --check`
 
 ## [2.8.18] - 2026-06-11
+
+### Solved Problem
+
+This release addresses brittle live/runtime evidence where timeout, skipped, and partial results could be confused with release-grade success. Runtime probes now classify evidence more strictly and preserve recovery paths.
 
 ### Fixed
 
@@ -451,6 +564,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - Installed-user hook merge smoke: after reinstalling `planning-with-files`, Codex keeps both `user_prompt_submit.py` and `hookprompt-adapter.mjs`; Cursor keeps `beforeSubmitPrompt` with `hookprompt-adapter.mjs`.
 
 ## [2.8.17] - 2026-06-11
+
+### Solved Problem
+
+This release addresses generated report and product-surface clutter that made governed runs harder to inspect. Reports were consolidated around the evidence users need for decisions, review, and follow-up.
 
 ### Fixed
 
@@ -478,6 +595,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.16] - 2026-06-10
 
+### Solved Problem
+
+This release addresses copied-project installs where generated files existed but the target project was not actually initialized. The post-copy flow now initializes Graphify in the final project root and avoids treating temporary export folders as real projects.
+
 ### Fixed
 
 - **Automatic Post-Copy Graphify Initialization** - Copied project-level Meta_Kim folders no longer require users to remember `node meta-kim-post-copy.mjs`. On the first `meta-theory` activation, Meta_Kim now starts the post-copy bootstrap automatically from the final project root.
@@ -499,6 +620,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.15] - 2026-06-10
 
+### Solved Problem
+
+This release addresses copy-ready project setup failing after users move generated files into a real project. The bootstrap script now runs from the copied destination and keeps Graphify setup tied to the final project directory.
+
 ### Fixed
 
 - **Copy-Ready Graphify Initialization** - Project-level folders generated by quick setup or install/update export now include `meta-kim-post-copy.mjs`. After copying the generated folder contents from a staging location, such as Desktop, into any project root, run `node meta-kim-post-copy.mjs` there to initialize Graphify for the final project.
@@ -516,6 +641,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - `git diff --check`
 
 ## [2.8.14] - 2026-06-10
+
+### Solved Problem
+
+This release addresses install/update output that looked like failures or English-only internals instead of actionable user status. Notices are localized, expected manual host-plugin steps are labeled honestly, and HookPrompt output no longer breaks Markdown rendering.
 
 ### Fixed
 
@@ -542,6 +671,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.13] - 2026-06-10
 
+### Solved Problem
+
+This release addresses ECC installs overwriting Codex App user configuration and breaking native controls. Meta_Kim now preserves the user config as the base, merges ECC additions add-only, and restores Browser, Chrome, and Computer Use plugin settings.
+
 ### Fixed
 
 - **Codex App Native Controls Protection** - Meta_Kim now protects a user's existing `~/.codex/config.toml` before running the ECC Codex home installer. The issue was discovered because ECC's Codex install path can copy its reference `config.toml` over the user's Codex App configuration, which can break the Codex Computer Use and Chrome plugin links.
@@ -558,6 +691,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - `git diff --check`
 
 ## [2.8.12] - 2026-06-10
+
+### Solved Problem
+
+This release addresses HookPrompt appearing to run in Codex while the optimized prompt did not reliably reach model context. Codex now uses the model-visible `additionalContext` envelope, while UI notices remain separate.
 
 ### Fixed
 
@@ -579,6 +716,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.11] - 2026-06-09
 
+### Solved Problem
+
+This release addresses global hooks becoming too heavy or too runtime-specific. Meta_Kim now separates safe global reusable hooks from stronger project-scoped governance hooks and validates HookPrompt provider mapping by runtime.
+
 ### Changed
 
 - **Global and Project Hook Strategy** - Meta_Kim now separates project-level governance hooks from global reusable hooks. Strong governance hooks such as dispatch enforcement, Graphify context, and meta-theory spine stay project-scoped by default, while global installs focus on safe reusable entry points such as memory save, HookPrompt, and the OpenClaw memory bridge.
@@ -596,6 +737,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - `node --test tests/governance/provider-capabilities.test.mjs`
 
 ## [2.8.10] - 2026-06-09
+
+### Solved Problem
+
+This release addresses natural-language durable work being forced through fixed checklists or requiring users to know protocol words. Meta_Kim now derives task-specific lanes, checks local baseline evidence, and shows human-readable progress.
 
 ### Added
 
@@ -623,6 +768,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.8] - 2026-06-09
 
+### Solved Problem
+
+This release addresses reports and platform claims that were technically correct but hard for users to interpret. Tool support levels, durable-agent boundaries, and runtime target sources are now described in plainer terms.
+
 ### Changed
 
 - **Tool-facing report language** - Public meta-theory reports kept the protocol labels but paired them with plain-language explanations.
@@ -643,6 +792,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.7] - 2026-06-09
 
+### Solved Problem
+
+This release addresses capability discovery that was too narrow and too tool-name driven. Fetch now records project/global inventories across supported projections before Thinking chooses owners or loadouts.
+
 ### Changed
 
 - **Cross-tool Fetch discovery** - Fetch now records explicit project and global capability inventory evidence before Thinking across Claude Code, Codex, Cursor, and OpenClaw.
@@ -659,6 +812,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - `git diff --check`
 
 ## [2.8.6] - 2026-06-05
+
+### Solved Problem
+
+This release addresses capability-gap handling as a loose script task instead of a complete product workflow. Gaps now have decision contracts, replay evidence, user-facing deliverables, runtime evidence hardening, and report hygiene.
 
 ### Added
 
@@ -686,6 +843,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.5] - 2026-06-03
 
+### Solved Problem
+
+This release addresses release checks being either too slow for small wording changes or too weak for runtime/security work. Release modes now distinguish fast routine checks from stricter release-grade evidence.
+
 ### Added
 
 - **Release modes** - Low-risk prompt, documentation, and governance wording changes now use a fast release path. Install, runtime, hook, provider, dependency, package, security, and live-evidence work still require the stricter release-grade path.
@@ -693,6 +854,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - **Live evidence classification** - Structural smoke, warnings, skipped/needs-auth states, and true runtime live passes are now separated.
 
 ## [2.8.4] - 2026-06-02
+
+### Solved Problem
+
+This release addresses execution routes that could proceed without proving owner, provider, tool, and verification readiness. Capability smoke and OpenClaw live sharding now make real route readiness testable.
 
 ### Added
 
@@ -707,6 +872,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.3] - 2026-06-02
 
+### Solved Problem
+
+This release addresses provider discovery being scattered across tools, hooks, skills, plugins, MCP, memory, and graph surfaces. The provider registry gives those surfaces a shared lifecycle and validation model.
+
 ### Added
 
 - **Capability Provider Contract** - Added a provider registry and lifecycle model for runtime-native tools, skills, agents, hooks, commands, rules, plugins, MCP servers, dependency projects, memory, and graph providers.
@@ -719,6 +888,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.2] - 2026-06-02
 
+### Solved Problem
+
+This release addresses runtime support claims that were hard to compare or too easy to overstate. Compatibility data now records sync behavior, native-surface claims, package targets, and candidate probes separately.
+
 ### Changed
 
 - **Runtime compatibility catalog** - Runtime support data was normalized into a catalog with sync behavior, native surface claims, and package targets.
@@ -726,12 +899,20 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.8.1] - 2026-06-02
 
+### Solved Problem
+
+This release addresses public docs that did not clearly separate supported, compatible, and candidate runtime states. README and runtime-facing docs now make those states easier to explain and verify.
+
 ### Changed
 
 - **Public runtime support wording** - README and runtime-facing docs were aligned so supported, compatible, and candidate states are easier to distinguish.
 - **Projection sync clarity** - Project-local and global sync behavior became easier to explain and verify.
 
 ## [2.8.0] - 2026-06-01
+
+### Solved Problem
+
+This release addresses tool-name routing that could ignore provider readiness, runtime support, OS support, dependencies, and verification ownership. Meta_Kim shifted toward provider-first governance with release evidence built into the normal flow.
 
 ### Added
 
@@ -741,12 +922,20 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.7.0] - 2026-06-01
 
+### Solved Problem
+
+This release addresses governed work starting from agent names instead of capability needs. Capability-first routing, owner/loadout evidence, and runtime alignment became the default shape for execution.
+
 ### Added
 
 - **Capability route governance** - Introduced capability-first execution routing, owner/loadout evidence, and provider discovery as the default shape for governed work.
 - **Runtime alignment** - Claude Code, Codex, OpenClaw, and Cursor projections were aligned around canonical source data while preserving honest runtime limitations.
 
 ## [2.6.x] - 2026-05-29 to 2026-05-30
+
+### Solved Problem
+
+This release band addresses governance outputs that were difficult to audit after the run. Reports, status envelopes, research preparation, capability inventory, and global discovery became more visible and source-backed.
 
 ### Added
 
@@ -756,12 +945,20 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.5.x] - 2026-05-28
 
+### Solved Problem
+
+This release band addresses decisions that lacked shared gates for runtime, OS, dependency, weapon, trigger, intent, and choice-surface evidence. The decision engine and architecture docs made those checks explicit.
+
 ### Added
 
 - **Governance decision engine** - Added runtime capability, OS compatibility, dependency capability, weapon routing, trigger-action policy, intent amplification, choice surfaces, dynamic lens selection, and decision-pattern contracts.
 - **User-facing architecture docs** - Expanded documentation around runtime capability, dependency discovery, owner/weapon routing, and choice surfaces.
 
 ## [2.4.x] - 2026-05-27 to 2026-05-28
+
+### Solved Problem
+
+This release band addresses research and integration work influencing route design without enough retrieval or contract evidence. Research capability evidence, integration packets, unknown-field handling, and run-status output were added.
 
 ### Added
 
@@ -771,6 +968,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.3.x] - 2026-05-26
 
+### Solved Problem
+
+This release band addresses workers claiming tests, command success, or silent success without structured proof. Execution evidence and validation schema structure were tightened.
+
 ### Added
 
 - **Evidence integrity contracts** - Worker claims about tests and command success now need structured execution evidence.
@@ -778,6 +979,10 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 - **Validation contract structure** - Validation rules were moved toward reusable schemas and runners.
 
 ## [2.2.x] - 2026-05-25
+
+### Solved Problem
+
+This release band addresses governance vocabulary and agent creation being too loose for durable execution. Workflow packets, naming policy, dispatch evidence, agent factory rules, and sub-agent boundaries were made explicit.
 
 ### Added
 
@@ -792,12 +997,20 @@ The changelog explains what changed and why it matters. It intentionally avoids 
 
 ## [2.1.x] - 2026-05-23 to 2026-05-24
 
+### Solved Problem
+
+This release band addresses ambiguous work entering orchestration before the user choice and public-ready boundary were clear. Critical, Fetch, verification, summary closure, and deliverable-chain gates became more explicit.
+
 ### Added
 
 - **Choice and confirmation flow** - Critical and Fetch gained clearer gates for ambiguity, candidate paths, and user confirmation before detailed orchestration.
 - **Public-ready gates** - Verification, summary closure, and deliverable-chain closure became explicit requirements before claiming completion.
 
 ## [2.0.x] - 2026-04-11 to 2026-05-23
+
+### Solved Problem
+
+This release band addresses the need for a reusable cross-runtime governance architecture rather than scattered prompts and one-off runtime files. Meta_Kim 2.x established the core spine, projections, memory, Graphify, setup/update, packaging, and governance-agent foundation.
 
 ### Added
 

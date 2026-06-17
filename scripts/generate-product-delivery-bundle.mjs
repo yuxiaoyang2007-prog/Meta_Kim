@@ -42,16 +42,43 @@ function parseJsonFromStdout(stdout) {
   return JSON.parse(stdout.slice(jsonStart));
 }
 
+function tryParseJsonFromStdout(stdout) {
+  try {
+    return parseJsonFromStdout(stdout);
+  } catch {
+    return null;
+  }
+}
+
 function runNodeScript(args) {
-  const result = spawnSync(process.execPath, args, {
+  const commandArgs = [...args];
+  if (commandArgs[0] === "scripts/run-meta-theory-governed-execution.mjs") {
+    commandArgs.push(
+      "--run-id",
+      `product-delivery-bundle-${process.pid}`,
+      "--state-dir",
+      OUTPUT_DIR,
+      "--db",
+      path.join(OUTPUT_DIR, `governed-${process.pid}.sqlite`),
+    );
+  }
+  const allowPartialNonzero =
+    commandArgs[0] === "scripts/run-meta-theory-governed-execution.mjs";
+  const result = spawnSync(process.execPath, commandArgs, {
     cwd: REPO_ROOT,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
-  if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout || `Command failed: node ${args.join(" ")}`);
+  const parsed = result.stdout ? tryParseJsonFromStdout(result.stdout) : null;
+  if (result.status !== 0 && allowPartialNonzero && parsed?.status === "partial") {
+    return parsed;
   }
-  return parseJsonFromStdout(result.stdout);
+  if (result.status !== 0) {
+    throw new Error(
+      result.stderr || result.stdout || `Command failed: node ${commandArgs.join(" ")}`,
+    );
+  }
+  return parsed ?? parseJsonFromStdout(result.stdout);
 }
 
 function hasLocalAbsolutePath(value) {
@@ -136,7 +163,7 @@ async function main() {
   const contract = JSON.parse(await fs.readFile(CONTRACT_PATH, "utf8"));
   const scenario = JSON.parse(await fs.readFile(SCENARIO_PATH, "utf8"));
 
-  runNodeScript(componentCommands.governedRun);
+  const governedRun = runNodeScript(componentCommands.governedRun);
   const deliverables = runNodeScript(componentCommands.deliverables);
   const githubGap = runNodeScript(componentCommands.githubGap);
   const runtimeMatrix = runNodeScript(componentCommands.runtimeMatrix);
@@ -252,8 +279,9 @@ async function main() {
     ).length,
     requiredFilesCovered: contract.requiredFiles.filter((file) => files[file]).length,
     reviewUseCount: Object.values(files).filter((file) => file.reviewUse).length,
+    governedRunStatus: governedRun.status,
   };
-  const status =
+  const basePass =
     contract.schemaVersion === "product-delivery-bundle-contract-v0.1" &&
     summary.requiredSectionsCovered === contract.requiredSections.length &&
     summary.requiredFilesCovered === contract.requiredFiles.length &&
@@ -261,9 +289,8 @@ async function main() {
     reviewerCalibration.positiveExampleCount >= 2 &&
     reviewerCalibration.negativeExampleCount >= 5 &&
     reviewerCalibration.missingPitfalls.length === 0 &&
-    privacyLeaks.length === 0
-      ? "pass"
-      : "fail";
+    privacyLeaks.length === 0;
+  const status = basePass ? (governedRun.status === "pass" ? "pass" : "partial") : "fail";
 
   const report = {
     schemaVersion: "product-delivery-bundle-v0.1",
@@ -288,10 +315,12 @@ async function main() {
     `${JSON.stringify(
       {
         ok: report.status === "pass",
+        status: report.status,
         report: relativeToRepo(jsonPath),
         markdown: relativeToRepo(mdPath),
         fileCount: report.summary.fileCount,
         requiredSectionsCovered: report.summary.requiredSectionsCovered,
+        governedRunStatus: report.summary.governedRunStatus,
         scoringSampleCount: report.reviewerCalibration.sampleCount,
         missingPitfalls: report.reviewerCalibration.missingPitfalls,
         privacyStatus: report.privacyCheck.status,

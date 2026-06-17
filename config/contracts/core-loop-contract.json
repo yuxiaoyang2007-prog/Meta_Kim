@@ -307,8 +307,11 @@
       "dynamicWorkflowRuntimePacket",
       "peerAgentMeshPacket",
       "agentTeamsPlaybookPacket",
+      "runtimeInvocationPlanPacket",
+      "hostInvocationRequestPacket",
       "capabilityInvocationProbePacket",
       "capabilityInvocationTruthPacket",
+      "durableAgentLifecyclePacket",
       "visibleMetaTheorySurfacePacket",
       "userPerceptionPacket",
       "productExperiencePacket"
@@ -343,6 +346,9 @@
       "hook match or file is not relabeled as triggered hook",
       "command selection is not relabeled as command execution without fresh command output",
       "run-scoped worker execution is not relabeled as live subagent invocation",
+      "realInvocationCoverage.status must be pass for product-experience pass when selected executable families include agent/subagent, skill, MCP, command/script, runtime-tool, or agent-teams-playbook",
+      "hostInvocationRequestPacket must list every selected executable family that still needs a Claude Code/Codex host adapter call and the exact trusted evidence required",
+      "selected_not_invoked is never execution pass for a selected executable family",
       "product-experience pass requires capabilityInvocationProbePacket fresh local probes for callable MCP, command/script, and runtime-tool families when they are selected"
     ],
     "userPerceptionRequirements": [
@@ -405,12 +411,14 @@
         "selected, discovered, configured, or matched capabilities cannot be displayed as invoked without attached invocation evidence",
         "run-scoped worker execution and app-visible host subagent UI evidence cannot be displayed as live runner Agent/spawn_agent invocation",
         "MCP config/binding and hook file/match cannot be displayed as MCP call or hook trigger",
-        "callableInvocationCoverage.status must be pass for product-experience pass, with fresh probes for selected MCP, command/script, and runtime-tool families"
+        "callableInvocationCoverage.status must be pass for product-experience pass, with fresh probes for selected MCP, command/script, and runtime-tool families",
+        "realInvocationCoverage.status must be pass for product-experience pass when any selected executable family needs host, skill, MCP, command, runtime-tool, or agent-team evidence",
+        "hostInvocationRequestPacket.status must expose pending_host_invocation instead of hiding missing host calls inside reports"
       ],
       "P-110": [
         "agentTeamsPlaybookPacket is not_required for fewer than 2 executable worker lanes",
         "2+ executable worker lanes must discover and select agent-teams-playbook as the fan-out orchestration adapter",
-        "fan-out waves use the current runtime agent capacity such as Codex [agents].max_threads, not an arbitrary Meta_Kim hard cap, prove DAG/collision/workspace/external-write safety, and preserve workerTaskPackets",
+        "fan-out waves use the current host/runtime capacity such as Codex [agents].max_threads or Claude Code's native dispatch capacity, not an arbitrary Meta_Kim hard cap, prove DAG/collision/workspace/external-write safety, and preserve workerTaskPackets",
         "the Node runner must not claim a live Skill, Agent Team, or Codex spawn_agent call without host tool-call evidence"
       ]
     }
