@@ -293,7 +293,7 @@ describe("sync-runtimes / Codex project hooks", () => {
     assert.doesNotMatch(command, /\[ -f|\|\| true|2>\/dev\/null/);
   });
 
-  test("repo Claude settings replace retired inline graphify shell hook with Node hook", () => {
+  test("repo Claude settings remove retired inline and managed project hooks", () => {
     const retiredInlineHook =
       'CMD=$(python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get(\'tool_input\',d).get(\'command\',\'\'))" 2>/dev/null || true); case "$CMD" in *rg\\ *) [ -f graphify-out/graph.json ] && echo "{}" || true ;; esac';
     const canonical = {
@@ -334,17 +334,17 @@ describe("sync-runtimes / Codex project hooks", () => {
       canonical,
       REPO
     );
-    const commands = merged.hooks.PreToolUse.flatMap((block) =>
-      block.hooks.map((hook) => hook.command)
-    );
+    const commands = Object.values(merged.hooks ?? {})
+      .flatMap((blocks) => blocks.flatMap((block) => block.hooks ?? []))
+      .map((hook) => hook.command);
 
-    assert.ok(commands.includes("node .claude/hooks/graphify-context.mjs"));
-    assert.ok(commands.includes("node .claude/hooks/enforce-agent-dispatch.mjs"));
+    assert.equal(commands.some((command) => command.includes("graphify-context.mjs")), false);
+    assert.equal(commands.some((command) => command.includes("enforce-agent-dispatch.mjs")), false);
     assert.equal(commands.some((command) => command.includes("CMD=$(python3")), false);
   });
 
   test("project Codex hooks leave global-only packages out", () => {
-    const config = buildCodexProjectHooksJson();
+    const config = buildCodexProjectHooksJson({ packageRoot: "D:/Meta_Kim" });
 
     assert.equal(config.hooks.SessionStart, undefined);
     assert.ok(
@@ -355,9 +355,30 @@ describe("sync-runtimes / Codex project hooks", () => {
     );
     assert.equal(config.hooks.Stop, undefined);
     const allCommands = JSON.stringify(config);
+    assert.match(allCommands, /--package-root/);
+    assert.match(allCommands, /D:\/Meta_Kim/);
     assert.doesNotMatch(allCommands, /meta-kim-memory-save\.mjs/);
     assert.doesNotMatch(allCommands, /hookprompt-adapter\.mjs/);
     assert.doesNotMatch(allCommands, /planning-with-files-adapter\.mjs/);
+  });
+
+  test("project sync keeps Codex and Cursor hook mirrors active in repo-local projections", async () => {
+    const source = await readFsFile("scripts/sync-runtimes.mjs", "utf8");
+
+    assert.doesNotMatch(source, /codexHooksInRepoRoot/);
+    assert.doesNotMatch(source, /cursorHooksInRepoRoot/);
+    assert.match(source, /CODEX_ACTIVE_PROJECT_HOOK_FILES/);
+    assert.match(source, /CURSOR_ACTIVE_PROJECT_HOOK_FILES/);
+    assert.match(
+      source,
+      /keep: CODEX_ACTIVE_PROJECT_HOOK_FILES[\s\S]*writeGeneratedJson\(\s*dirs\.codexHooksFile/,
+    );
+    assert.match(
+      source,
+      /keep: CURSOR_ACTIVE_PROJECT_HOOK_FILES[\s\S]*writeGeneratedJson\(\s*dirs\.cursorHooksFile/,
+    );
+    assert.match(source, /buildCodexProjectHooksJson\(\{[\s\S]*packageRoot: repoRoot/);
+    assert.match(source, /buildCursorProjectHooksJson\(\{[\s\S]*packageRoot: repoRoot/);
   });
 
   test("wires meta-theory Skill activation to the spine hook", () => {
@@ -379,10 +400,11 @@ describe("sync-runtimes / Codex project hooks", () => {
   });
 
   test("Cursor prompt hooks can bootstrap explicit meta-theory prompts", () => {
-    const config = buildCursorProjectHooksJson();
+    const config = buildCursorProjectHooksJson({ packageRoot: "D:/Meta_Kim" });
     const beforeSubmit = config.hooks.beforeSubmitPrompt;
 
     assert.match(beforeSubmit[0].command, /activate-meta-theory-spine\.mjs/);
+    assert.match(beforeSubmit[0].command, /--package-root/);
     assert.equal(beforeSubmit[0].timeout, 5);
     assert.doesNotMatch(JSON.stringify(config), /meta-kim-memory-save\.mjs/);
     assert.doesNotMatch(JSON.stringify(config), /hookprompt-adapter\.mjs/);
@@ -527,6 +549,15 @@ Body content.
 
 Pass condition: searchLog exists.
 `;
+
+    for (const target of ["claude", "codex", "cursor", "openclaw"]) {
+      assert.equal(applyRuntimePaths(source, target), source);
+    }
+  });
+
+  test("keeps cross-runtime native path matrix literal in runtime skill mirrors", () => {
+    const source =
+      "- 项目内迭代或创新需要专用能力时，必须创建在对应 runtime 的原生项目目录，不要再包一层 `.meta_kim` 或 `.meta-kim` capability 目录：Claude Code 用 `.claude/agents/`、`.claude/skills/<skill>/`、`.claude/commands/`、`.claude/hooks/`；Codex 用 `.codex/agents/`、`.agents/skills/<skill>/`、`.codex/commands/`、`.codex/hooks.json` + `.codex/hooks/`；Cursor 用 `.cursor/agents/`、`.cursor/skills/<skill>/`、`.cursor/rules/`、`.cursor/hooks.json` + `.cursor/hooks/`；OpenClaw 用 `openclaw/workspaces/<agent>/`、`openclaw/skills/<skill>/`、`openclaw/openclaw.template.json`。\n";
 
     for (const target of ["claude", "codex", "cursor", "openclaw"]) {
       assert.equal(applyRuntimePaths(source, target), source);

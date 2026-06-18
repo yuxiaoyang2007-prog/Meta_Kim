@@ -71,27 +71,38 @@ describe("setup update default flow", () => {
     );
   });
 
-  test("install scope direct-enter default is global capability plus current project projection", () => {
+  test("install scope direct-enter default is global reusable capabilities", () => {
     const askScopeStart = source.indexOf("async function askInstallScope()");
     const askScopeEnd = source.indexOf("// ── Directory structure explanation", askScopeStart);
     const askScopeSource = source.slice(askScopeStart, askScopeEnd);
 
     assert.match(
       askScopeSource,
-      /if \(silentMode \|\| !promptInstallScope\) return "both";/,
-      "non-interactive scope default must be the recommended global+project path",
+      /if \(silentMode\) return "global";/,
+      "non-interactive scope default must be the recommended global capability path",
+    );
+    assert.doesNotMatch(
+      askScopeSource,
+      /promptInstallScope/,
+      "interactive install/update must always show the global vs project choice",
     );
     assert.ok(
-      askScopeSource.indexOf('id: "both"') < askScopeSource.indexOf('id: "project"'),
-      "interactive direct-Enter must choose the recommended both scope before project-only",
+      askScopeSource.indexOf('id: "global"') < askScopeSource.indexOf('id: "project"'),
+      "interactive direct-Enter must choose global scope before project-only",
     );
-    assert.ok(
-      askScopeSource.indexOf('id: "both"') < askScopeSource.indexOf('id: "global"'),
-      "interactive direct-Enter must choose the recommended both scope before global-only",
+    assert.doesNotMatch(
+      askScopeSource,
+      /id: "both"|installScopeBoth/,
+      "install scope must be a two-way choice: global or project directories",
+    );
+    assert.doesNotMatch(
+      source,
+      /cleanupLegacySkills\("both"\)/,
+      "legacy two-scope install mode must not survive in project deploy helpers",
     );
   });
 
-  test("install copy preserves project projection as the default governance boundary", () => {
+  test("install copy keeps reusable capabilities global by default", () => {
     assert.doesNotMatch(
       source,
       /Existing projects can use Meta_Kim without setup|现有项目无需安装即可使用|既存プロジェクトもセットアップ不要|기존 프로젝트도 설치 없이/,
@@ -99,23 +110,34 @@ describe("setup update default flow", () => {
     );
     assert.match(
       source,
-      /Global \+ project \(recommended\)/,
-      "English setup copy must name the recommended default as global plus project",
+      /Global capabilities \(recommended\)/,
+      "English setup copy must name global capabilities as the recommended default",
     );
     assert.match(
       source,
-      /全局 \+ 项目（推荐）/,
-      "Chinese setup copy must name the recommended default as global plus project",
+      /全局通用能力（推荐）/,
+      "Chinese setup copy must name global capabilities as the recommended default",
     );
     assert.match(
       readmeEn,
-      /global reusable capabilities \+ the current project's target-selected projection/,
-      "README must describe the default install as global capabilities plus target-selected project projection",
+      /default Enter path is \*\*global reusable capabilities\*\*/,
+      "README must describe the default install as global capabilities",
     );
     assert.match(
       readmeZh,
-      /全局通用能力 \+ 当前项目按目标平台选择的完整投影/,
-      "Chinese README must describe the default install as global capabilities plus target-selected project projection",
+      /默认直接回车的路径是：\*\*全局通用能力\*\*/,
+      "Chinese README must describe the default install as global capabilities",
+    );
+    assert.deepEqual(syncManifest.projectMaterializationPolicy.globalByDefault, [
+      "agents",
+      "commands",
+      "mcp",
+      "hooks",
+      "skills",
+    ]);
+    assert.equal(
+      syncManifest.projectMaterializationPolicy.projectRuntimeAssetCopyPolicy,
+      "copy_to_project_when_explicit_project_update_or_project_dedicated_extension",
     );
     assert.doesNotMatch(
       `${readmeEn}\n${readmeZh}`,
@@ -167,15 +189,48 @@ describe("setup update default flow", () => {
     );
   });
 
-  test("install and update project deploy exports run only for project-enabled scopes", () => {
+  test("install and update separate global cleanup from project directory updates", () => {
     assert.match(
       source,
       /const deployDirs = needProject \? await askDeployDirectory\(\) : \[\];/,
       "global-only install/update must not ask for or write project deploy directories",
     );
+    assert.match(
+      source,
+      /const cleanupDirs = needGlobal \? await askProjectCleanupDirectory\(\) : \[\];/,
+      "global install/update may ask for cleanup-only redundant project asset removal",
+    );
+    assert.match(source, /cleanupProjectRedundancyDirs\(activeTargets, cleanupDirs\)/);
     assert.match(source, /if \(deployDirs\.length > 0\) \{\s*await copyToDeployDirs\(activeTargets, deployDirs\);/);
     assert.match(source, /copyToDeployDirs\(activeTargets, targetDirs\)/);
     assert.match(source, /projectDeployProtectionNote/);
+    assert.match(source, /projectCleanupProtectionNote/);
+    assert.match(
+      source,
+      /askProjectRedundantCleanup:\s*"[^"]*\\n[^"]*\\n[^"]*"/,
+      "project cleanup prompt must be line-broken instead of one long terminal line",
+    );
+    const cleanupFunctionStart = source.indexOf(
+      "async function askProjectCleanupDirectory()",
+    );
+    const cleanupFunctionEnd = source.indexOf(
+      "function printProjectDeploySummary",
+      cleanupFunctionStart,
+    );
+    const cleanupFunctionSource = source.slice(
+      cleanupFunctionStart,
+      cleanupFunctionEnd,
+    );
+    assert.ok(
+      cleanupFunctionSource.indexOf("printProjectDeployDirList(") <
+        cleanupFunctionSource.indexOf("askYesNo(t.askProjectRedundantCleanup"),
+      "global cleanup must show saved project directories before asking y/N",
+    );
+    assert.match(
+      source,
+      /const wantCleanup = await askYesNo\(t\.askProjectRedundantCleanup, true\);[\s\S]*?if \(savedDirs\.length === 0\) \{[\s\S]*?const dirs = await collectProjectDeployDirs\(false\);/,
+      "answering yes to global cleanup must force directory entry when no saved directories exist",
+    );
   });
 
   test("external project deploy reuses protected project bootstrap apply", () => {
@@ -184,31 +239,95 @@ describe("setup update default flow", () => {
       source,
       /const bootstrapResult = await applyProjectBootstrapToDir\(activeTargets, targetDir\);/,
     );
-    assert.match(source, /writeProjectBootstrapManifest\(targetDir, plan, backup\)/);
+    assert.match(source, /writeProjectBootstrapManifest\(targetDir, plan, backup, cleanup\)/);
     assert.match(source, /createProjectBootstrapBackup\(targetDir, plan\.files\)/);
   });
 
-  test("install and update keep advanced global hooks behind explicit second confirmation", () => {
-    assert.match(source, /function metaTheoryGlobalSyncArgs\(targets,\s*options = \{\}\)/);
-    assert.match(source, /options\.includeGlobalHooks/);
-    assert.match(source, /askAdvancedGlobalControls\(activeTargets\)/);
-    assert.match(source, /askYesNo\(t\.askAdvancedGlobalControls, false\)/);
+  test("project install restores hooks while global cleanup removes project hook residue", () => {
+    const applyStart = source.indexOf("async function applyProjectBootstrapToDir");
+    const applyEnd = source.indexOf("function classifyProjectBootstrapError", applyStart);
+    const applySource = source.slice(applyStart, applyEnd);
+    assert.doesNotMatch(
+      applySource,
+      /migrateProjectMetaKimHooksForBootstrap/,
+      "project install/apply must not run project hook cleanup first",
+    );
+
+    const deployStart = source.indexOf("function deployPlatformFiles");
+    const deployEnd = source.indexOf("function buildPostCopyBootstrapScript", deployStart);
+    const deploySource = source.slice(deployStart, deployEnd);
+    assert.match(deploySource, /writeProjectGeneratedHooks\(platformId, targetDir\)/);
+
+    const planStart = source.indexOf("function collectProjectDeployPlan");
+    const planEnd = source.indexOf("function readPackageVersion", planStart);
+    const planSource = source.slice(planStart, planEnd);
+    assert.match(planSource, /projectHookGeneratedPlans\(platformId, targetDir\)/);
+
+    const protectedJsonStart = source.indexOf("function plannedProtectedProjectDeployJson");
+    const protectedJsonEnd = source.indexOf("function plannedProtectedProjectDeployText", protectedJsonStart);
+    const protectedJsonSource = source.slice(protectedJsonStart, protectedJsonEnd);
+    assert.doesNotMatch(
+      protectedJsonSource,
+      /stripProjectMetaKimHooksFromHookConfig/,
+      "project install must merge hook config instead of stripping Meta_Kim hooks",
+    );
+
+    const cleanupStart = source.indexOf("async function cleanupProjectRedundancyDirs");
+    const cleanupEnd = source.indexOf("async function copyToDeployDirs", cleanupStart);
+    const cleanupSource = source.slice(cleanupStart, cleanupEnd);
+    assert.match(cleanupSource, /migrateProjectMetaKimHooksForBootstrap\(activeTargets, targetDir\)/);
+    assert.match(cleanupSource, /cleanupProjectHookConfigs\(activeTargets, targetDir\)/);
+
+    const cleanupConfigStart = source.indexOf("function cleanupProjectHookConfigs");
+    const cleanupConfigEnd = source.indexOf("async function cleanupProjectRedundancyDirs", cleanupConfigStart);
+    const cleanupConfigSource = source.slice(cleanupConfigStart, cleanupConfigEnd);
+    assert.match(cleanupConfigSource, /stripProjectMetaKimHooksFromHookConfig\(current\)/);
+
+    const bootstrapApplyStart = source.indexOf("async function applyProjectBootstrapToDir");
+    const bootstrapApplyEnd = source.indexOf("function classifyProjectBootstrapError", bootstrapApplyStart);
+    const bootstrapApplySource = source.slice(bootstrapApplyStart, bootstrapApplyEnd);
     assert.match(
-      source,
-      /metaTheoryGlobalSyncArgs\(activeTargets,\s*\{\s*includeGlobalHooks: includeAdvancedGlobalControls,\s*\}\)/,
-      "install/update global meta-theory sync must pass hooks only after second confirmation",
+      bootstrapApplySource,
+      /reportProjectAssetCleanup\(cleanup, \{ reason: "project_retarget" \}\)/,
+      "project install retarget cleanup must use project-specific wording",
+    );
+    assert.match(
+      cleanupSource,
+      /reportProjectAssetCleanup\(cleanup, \{ reason: "global_redundancy" \}\)/,
+      "global cleanup must keep global redundancy wording",
     );
   });
 
-  test("project-only update does not ask for global skill or meta-theory writes", () => {
-    assert.match(
+  test("install and update do not ask a second Claude-only global governance question", () => {
+    assert.match(source, /function metaTheoryGlobalSyncArgs\(targets\)/);
+    assert.match(source, /\["claude", "codex"\]\.includes\(target\)/);
+    assert.match(source, /syncArgs\.push\("--with-global-hooks"\)/);
+    assert.doesNotMatch(source, /askAdvancedGlobalControls\(activeTargets\)/);
+    assert.doesNotMatch(source, /askYesNo\(t\.askAdvancedGlobalControls/);
+    assert.doesNotMatch(source, /announceGlobalRuntimeHooksPlan\(activeTargets\)/);
+    assert.doesNotMatch(
       source,
-      /const wantGlobalSkills = needGlobal\s*\?\s*await askYesNo\(t\.askGlobalSkillsUpdate, true\)\s*:\s*false;/,
+      /下面只确认 Claude Code|是否在 Claude Code 启用同一套 Meta_Kim 全局治理规则/,
+      "global sync must not show a redundant Claude Code-only confirmation",
     );
     assert.match(
       source,
-      /const wantMetaTheory = needGlobal\s*\?\s*await askYesNo\(t\.askMetaTheoryUpdate, true\)\s*:\s*false;/,
+      /把 Meta_Kim 全局治理层同步到已选平台，供各项目复用？包含 agents、skills、MCP、Commands、hooks 等；实际支持项会自动检查后同步。（推荐）/,
+      "global sync prompt must name the Meta_Kim governance layer and capability families",
     );
+    assert.match(source, /metaTheoryGlobalSyncArgs\(activeTargets\)/);
+    assert.match(source, /syncNonClaudeGlobalRuntimeHooks\(activeTargets\)/);
+    assert.match(source, /\["codex", "cursor", "openclaw"\]\.includes\(target\)/);
+  });
+
+  test("global update runs global skill and governance updates without extra yes/no prompts", () => {
+    assert.doesNotMatch(source, /wantGlobalSkills/);
+    assert.doesNotMatch(source, /wantMetaTheory/);
+    assert.doesNotMatch(source, /askYesNo\(t\.askGlobalSkillsUpdate/);
+    assert.doesNotMatch(source, /askYesNo\(t\.askMetaTheoryUpdate/);
+    assert.match(source, /if \(needGlobal\) \{\s*const updateSkillIds = await resolveSelectedSkillDependencyIds\(\);/);
+    assert.match(source, /if \(needGlobal\) \{\s*const updateSyncResult = runNodeScript/);
+    assert.doesNotMatch(source, /updateSyncProjectSkipped/);
   });
 
   test("global-only install/update does not run project Graphify wiring", () => {

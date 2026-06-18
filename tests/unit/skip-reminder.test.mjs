@@ -1,11 +1,10 @@
 /**
  * Unit tests for skip-reminder module
- * Tests PRIN-ST compliance: i18n support, constants, keyword detection precision
+ * Tests PRIN-ST compliance: constants, keyword detection precision, skip reasons
  */
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync, existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -14,16 +13,6 @@ process.env.META_KIM_LANG = "en";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..", "..");
-
-// Backup and restore i18n file
-const i18nPath = join(
-  repoRoot,
-  "canonical",
-  "runtime-assets",
-  "shared",
-  "hooks",
-  "hook-i18n.mjs"
-);
 
 // Create a simple test that verifies the structure without complex mocking
 describe("skip-reminder module structure", () => {
@@ -128,8 +117,8 @@ describe("hasSimpleKeyword function with word boundaries", () => {
   });
 });
 
-describe("formatSkipReason function (i18n)", () => {
-  test("should format reasons with i18n", async () => {
+describe("formatSkipReason function", () => {
+  test("should format reasons without a separate i18n dependency", async () => {
     const { formatSkipReason } = await import("../../canonical/runtime-assets/shared/hooks/skip-reminder.mjs");
     assert.ok(formatSkipReason("env_var"));
     assert.ok(formatSkipReason("keyword"));
@@ -137,8 +126,8 @@ describe("formatSkipReason function (i18n)", () => {
   });
 });
 
-describe("getHookImpact function (i18n)", () => {
-  test("should return localized impacts", async () => {
+describe("getHookImpact function", () => {
+  test("should return impact descriptions", async () => {
     const { getHookImpact } = await import("../../canonical/runtime-assets/shared/hooks/skip-reminder.mjs");
     assert.ok(getHookImpact("enforce-agent-dispatch"));
     assert.ok(getHookImpact("post-format"));
@@ -153,19 +142,5 @@ describe("createSkipRecord function", () => {
     assert.strictEqual(record.hook, "test-hook");
     assert.strictEqual(record.reason, "test reason");
     assert.ok(record.timestamp);
-  });
-});
-
-describe("i18n module exists", () => {
-  test("should have hook-i18n.mjs file", () => {
-    assert.ok(existsSync(i18nPath));
-  });
-
-  test("should export required i18n strings", () => {
-    const content = readFileSync(i18nPath, "utf8");
-    assert.ok(content.includes("hookSkipTitle"));
-    assert.ok(content.includes("skipReasonEnvVar"));
-    assert.ok(content.includes("impactEnforceAgentDispatch"));
-    assert.ok(content.includes("restoreInstructions"));
   });
 });

@@ -1,6 +1,6 @@
 {
   "name": "meta-kim",
-  "version": "2.8.41",
+  "version": "2.8.42",
   "description": "Governance layer for AI coding: canonical meta agents and workflow contracts with formal Claude/Codex/OpenClaw/Cursor projections plus a source-backed candidate compatibility catalog.",
   "private": true,
   "type": "module",
@@ -61,6 +61,7 @@
     "meta:setup:check": "node setup.mjs --check",
     "meta:project:bootstrap": "node setup.mjs --project-bootstrap",
     "meta:install-scope:verify": "node scripts/verify-install-scope-matrix.mjs",
+    "meta:project-cache:verify": "node scripts/verify-project-cache-generation.mjs",
     "meta:runtime:probe": "node scripts/probe-runtime-capabilities.mjs",
     "meta:runtime:check": "node scripts/probe-runtime-capabilities.mjs --check",
     "meta:os:probe": "node scripts/probe-os-compatibility.mjs",
@@ -115,6 +116,7 @@
     "meta:prd:prompt-first-live:run": "node scripts/run-prompt-first-full-flow-live-acceptance.mjs --live",
     "meta:prd:default-execution:validate": "node scripts/validate-default-governed-execution-evidence.mjs",
     "meta:prd:product-experience:validate": "node scripts/validate-product-experience-core-goals.mjs",
+    "meta:prd:stage-runtime-control:validate": "node scripts/validate-stage-runtime-control.mjs",
     "meta:prd:asset-sedimentation:validate": "node scripts/validate-capability-asset-sedimentation.mjs",
     "meta:prd:research-native:validate": "node scripts/validate-research-to-native-productization.mjs",
     "meta:prd:prompt-architecture:validate": "node scripts/validate-framework-prompt-architecture.mjs",
@@ -136,7 +138,7 @@
     "meta:deps:compat": "node scripts/validate-dependency-compatibility.mjs",
     "meta:hook:validate": "node scripts/validate-hook-progression.mjs",
     "meta:test:governance": "node scripts/run-node-tests.mjs \"tests/governance/*.test.mjs\"",
-    "meta:verify:governance": "npm run meta:governance:validate && npm run meta:runtime:validate && npm run meta:os:check && npm run meta:deps:check && npm run meta:deps:compat && npm run meta:providers:validate && npm run meta:route:validate && npm run meta:intent:validate && npm run meta:prompt:validate && npm run meta:prd:prompt-first-flow:validate && npm run meta:prd:prompt-first-live:validate && npm run meta:prd:default-execution:validate && npm run meta:prd:product-experience:validate && npm run meta:prd:asset-sedimentation:validate && npm run meta:prd:research-native:validate && npm run meta:prd:prompt-architecture:validate && npm run meta:prd:smooth-capability:validate && npm run meta:prd:runtime-priority:validate && npm run meta:prd:source-map:validate && npm run meta:prd:all-dossiers:validate && npm run meta:public-assets:validate && npm run meta:foundational:validate && npm run meta:hook:validate && npm run meta:runtime:safety:validate && npm run meta:open-source-boundary:validate && npm run meta:test:integration && npm run meta:test:governance"
+    "meta:verify:governance": "npm run meta:governance:validate && npm run meta:runtime:validate && npm run meta:os:check && npm run meta:deps:check && npm run meta:deps:compat && npm run meta:providers:validate && npm run meta:route:validate && npm run meta:intent:validate && npm run meta:prompt:validate && npm run meta:prd:prompt-first-flow:validate && npm run meta:prd:prompt-first-live:validate && npm run meta:prd:default-execution:validate && npm run meta:prd:product-experience:validate && npm run meta:prd:stage-runtime-control:validate && npm run meta:prd:asset-sedimentation:validate && npm run meta:prd:research-native:validate && npm run meta:prd:prompt-architecture:validate && npm run meta:prd:smooth-capability:validate && npm run meta:prd:runtime-priority:validate && npm run meta:prd:source-map:validate && npm run meta:prd:all-dossiers:validate && npm run meta:public-assets:validate && npm run meta:foundational:validate && npm run meta:hook:validate && npm run meta:runtime:safety:validate && npm run meta:open-source-boundary:validate && npm run meta:test:integration && npm run meta:test:governance"
   },
   "keywords": [
     "claude-code",
@@ -151,7 +153,6 @@
     "bin/",
     "config/",
     "docs/images/",
-    "examples/",
     "llms.txt",
     "setup.mjs",
     "install-deps.sh",

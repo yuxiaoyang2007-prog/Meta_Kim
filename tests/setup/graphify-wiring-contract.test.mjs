@@ -147,7 +147,7 @@ describe("graphify idempotent wiring (contract)", () => {
     );
   });
 
-  test("setup deploy export writes a copy-ready graphify bootstrap", () => {
+  test("setup deploy export uses global post-copy initializer", () => {
     const src = readFileSync(path.join(root, "setup.mjs"), "utf8");
     const start = src.indexOf("async function copyToDeployDir(");
     const end = src.indexOf("async function runQuickDeploy()", start);
@@ -160,17 +160,15 @@ describe("graphify idempotent wiring (contract)", () => {
     assert.notEqual(applyEnd, -1);
     const applyBody = src.slice(applyStart, applyEnd);
 
-    assert.match(src, /const POST_COPY_BOOTSTRAP_FILENAME = "meta-kim-post-copy\.mjs"/);
     assert.match(body, /applyProjectBootstrapToDir\(activeTargets, targetDir\)/);
-    assert.match(applyBody, /writePostCopyBootstrap\(targetDir, activeTargets\)/);
-    assert.match(applyBody, /writeProjectBootstrapManifest\(targetDir, plan, backup\)/);
+    assert.doesNotMatch(applyBody, /writePostCopyBootstrap\(targetDir, activeTargets\)/);
+    assert.match(applyBody, /writeProjectBootstrapManifest\(targetDir, plan, backup, cleanup\)/);
     assert.match(body, /printPostCopyBootstrapHint\(\)/);
     assert.doesNotMatch(body, /installGraphify/);
     assert.doesNotMatch(body, /installPythonTools\(activeTargets, false, targetDir\)/);
     assert.ok(
-      applyBody.indexOf("deployPlatformFiles(platformId, targetDir)") <
-        applyBody.indexOf("writePostCopyBootstrap(targetDir, activeTargets)"),
-      "the project bootstrap apply path must write post-copy bootstrap after runtime files are copied",
+        applyBody.includes("deployPlatformFiles(platformId, targetDir)"),
+      "the project bootstrap apply path must still copy runtime entry/config files",
     );
   });
 
@@ -192,7 +190,7 @@ describe("graphify idempotent wiring (contract)", () => {
     }
   });
 
-  test("quick deploy writes a portable post-copy bootstrap after copying platform files", () => {
+  test("quick deploy does not copy post-copy executable into the project", () => {
     const src = readFileSync(path.join(root, "setup.mjs"), "utf8");
     const start = src.indexOf("async function runQuickDeploy()");
     const end = src.indexOf("// ── Install scope selection", start);
@@ -200,35 +198,26 @@ describe("graphify idempotent wiring (contract)", () => {
     assert.notEqual(end, -1);
     const body = src.slice(start, end);
 
-    assert.match(body, /writePostCopyBootstrap\(targetDir, \[platformId\]\)/);
-    assert.match(body, /printPostCopyBootstrapHint\(\)/);
+    assert.doesNotMatch(body, /writePostCopyBootstrap\(targetDir, \[platformId\]\)/);
     assert.doesNotMatch(body, /installPythonTools\([\s\S]*?targetDir/);
     assert.ok(
-      body.indexOf("deployPlatformFiles(platformId, targetDir)") <
-        body.indexOf("writePostCopyBootstrap(targetDir, [platformId])"),
-      "quick deploy must create the bootstrap after target runtime files are copied",
+      body.includes("deployPlatformFiles(platformId, targetDir)"),
+      "quick deploy must still copy target runtime entry/config files",
     );
   });
 
-  test("post-copy bootstrap initializes graphify from the copied project root", () => {
-    const src = readFileSync(path.join(root, "setup.mjs"), "utf8");
-    const start = src.indexOf("function buildPostCopyBootstrapScript(");
-    const end = src.indexOf("function writePostCopyBootstrap(", start);
-    assert.notEqual(start, -1);
-    assert.notEqual(end, -1);
-    const body = src.slice(start, end);
+  test("global post-copy initializer writes graphify outputs in the current project root", () => {
+    const body = readFileSync(
+      path.join(root, "scripts", "project-post-copy-init.mjs"),
+      "utf8",
+    );
 
-    assert.match(body, /fileURLToPath\(import\.meta\.url\)/);
-    assert.match(body, /const scriptPath = fileURLToPath\(import\.meta\.url\)/);
-    assert.match(body, /const rootDir = dirname\(scriptPath\)/);
+    assert.match(body, /const rootDir = process\.cwd\(\)/);
     assert.match(body, /\["-m", "pip", "show", "graphifyy"\]/);
     assert.match(body, /\["-m", "pip", "install", "graphifyy"\]/);
     assert.match(body, /\["-m", "graphify", "hook", "install"\]/);
     assert.match(body, /\["-m", "graphify", platform, "install"\]/);
     assert.match(body, /\["-m", "graphify", "update", "\."\]/);
-    assert.match(body, /homebrewPythonCandidates/);
-    assert.match(body, /\/opt\/homebrew/);
-    assert.match(body, /\/home\/linuxbrew\/\.linuxbrew/);
     assert.match(body, /process\.argv\.includes\("--auto"\)/);
     assert.match(body, /process\.argv\.includes\("--auto-worker"\)/);
     assert.match(body, /post-copy-init\.json/);
@@ -236,8 +225,6 @@ describe("graphify idempotent wiring (contract)", () => {
     assert.match(body, /detached: true/);
     assert.match(body, /failedRetryMs/);
     assert.doesNotMatch(body, /PROJECT_DIR/);
-    assert.doesNotMatch(body, /D:[\\/]/);
-    assert.doesNotMatch(body, /Meta_Kim[\\/]/);
   });
 
   test("meta-theory activation hook starts post-copy auto-init without blocking startup", () => {
@@ -250,7 +237,8 @@ describe("graphify idempotent wiring (contract)", () => {
       "utf8",
     );
 
-    assert.match(src, /meta-kim-post-copy\.mjs/);
+    assert.match(src, /project-post-copy-init\.mjs/);
+    assert.match(src, /--package-root/);
     assert.match(src, /spawnSync\(process\.execPath, \[scriptPath, "--auto"\]/);
     assert.match(src, /timeout: 4000/);
     assert.match(src, /stdio: "ignore"/);
@@ -268,6 +256,49 @@ describe("graphify idempotent wiring (contract)", () => {
     assert.doesNotMatch(src, /decision: "block"/);
     assert.doesNotMatch(src, /suppressOriginalPrompt: false/);
     assert.doesNotMatch(src, /"--apply"/);
+  });
+
+  test("meta-theory activation hook launches global post-copy initializer for current project", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-post-copy-auto-"));
+    const packageRoot = mkdtempSync(path.join(os.tmpdir(), "meta-kim-package-root-"));
+    try {
+      const globalScript = path.join(packageRoot, "scripts", "project-post-copy-init.mjs");
+      mkdirSync(path.dirname(globalScript), { recursive: true });
+      writeFileSync(
+        globalScript,
+        [
+          'import { mkdirSync, writeFileSync } from "node:fs";',
+          'import { join } from "node:path";',
+          'const stateDir = join(process.cwd(), ".meta-kim", "state", "default");',
+          'mkdirSync(stateDir, { recursive: true });',
+          'writeFileSync(join(stateDir, "post-copy-init.json"), JSON.stringify({ status: "stubbed" }) + "\\n");',
+        ].join("\n"),
+        "utf8",
+      );
+      const hookPath = path.join(
+        root,
+        "canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs",
+      );
+      const result = spawnSync(process.execPath, [hookPath, "--package-root", packageRoot], {
+        cwd: tempDir,
+        input: JSON.stringify({
+          hook_event_name: "UserPromptSubmit",
+          prompt: "critical and fetch thinking and review 初始化这个项目",
+        }),
+        encoding: "utf8",
+        timeout: 120_000,
+        windowsHide: true,
+      });
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(
+        existsSync(path.join(tempDir, ".meta-kim", "state", "default", "post-copy-init.json")),
+        true,
+      );
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(packageRoot, { recursive: true, force: true });
+    }
   });
 
   test("meta-theory activation hook starts spine without project bootstrap automation", () => {
@@ -289,6 +320,7 @@ describe("graphify idempotent wiring (contract)", () => {
         env: {
           ...process.env,
           META_KIM_PACKAGE_ROOT: root,
+          META_KIM_POST_COPY_AUTO: "off",
         },
       });
 
@@ -329,6 +361,7 @@ describe("graphify idempotent wiring (contract)", () => {
           ...process.env,
           META_KIM_PROJECT_BOOTSTRAP_PROBE: "off",
           META_KIM_GLOBAL_STATE_DIR: globalStateDir,
+          META_KIM_POST_COPY_AUTO: "off",
         },
       });
 
@@ -361,6 +394,10 @@ describe("graphify idempotent wiring (contract)", () => {
         encoding: "utf8",
         timeout: 120_000,
         windowsHide: true,
+        env: {
+          ...process.env,
+          META_KIM_POST_COPY_AUTO: "off",
+        },
       });
 
       assert.equal(result.status, 0, result.stderr || result.stdout);

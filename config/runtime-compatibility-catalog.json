@@ -141,12 +141,12 @@
         {
           "type": "local_file",
           "ref": "config/sync.json",
-          "claim": "OpenClaw is a supported compatibility sync target; it is not selected by the primary default."
+          "claim": "OpenClaw is a supported formal sync target; it is not selected by the primary default."
         },
         {
           "type": "local_file",
           "ref": "AGENTS.md",
-          "claim": "OpenClaw is a compatible formal projection; stricter tool-denial behavior must be backed by OpenClaw-side strict tests, and can merge only after the evidence passes review."
+          "claim": "OpenClaw is a formal projection; stricter tool-denial behavior must be backed by OpenClaw-side strict tests, and can merge only after the evidence passes review."
         },
         {
           "type": "official_docs",
@@ -159,7 +159,7 @@
           "claim": "OpenClaw internal hooks cover command/lifecycle automation; blocking/canceling policy belongs to typed plugin hooks."
         }
       ],
-      "decision": "Keep as a compatible formal Meta_Kim projection with OpenClaw-native workspace, skill, config, and hook surfaces.",
+      "decision": "Keep as a formal Meta_Kim projection with OpenClaw-native workspace, skill, config, and hook surfaces.",
       "nextAction": "Community PRs that improve OpenClaw behavior are welcome; contributors must include strict OpenClaw self-test evidence, especially for typed plugin tool-denial behavior, and changes can merge only after the evidence passes review."
     },
     {
@@ -190,7 +190,7 @@
         {
           "type": "local_file",
           "ref": "config/sync.json",
-          "claim": "Cursor is a supported compatibility sync target; it is not selected by the primary default."
+          "claim": "Cursor is a supported formal sync target; it is not selected by the primary default."
         },
         {
           "type": "local_file",

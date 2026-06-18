@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -92,6 +92,206 @@ describe("sync-global-meta-theory hook policy", () => {
     });
   });
 
+  test("--with-global-hooks backs up and removes legacy root Meta_Kim hook files", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      const rootHookDir = path.join(root, "claude", "hooks");
+      await mkdir(rootHookDir, { recursive: true });
+      await writeFile(
+        path.join(rootHookDir, "post-format.mjs"),
+        "// locally modified legacy Meta_Kim hook\n",
+        "utf8",
+      );
+
+      await runScript(["--targets", "claude", "--with-global-hooks"], env);
+
+      await assert.rejects(() => readFile(path.join(rootHookDir, "post-format.mjs")));
+      const backupRoot = path.join(rootHookDir, ".meta-kim-legacy-backup");
+      const backupDirs = await readdir(backupRoot);
+      assert.ok(backupDirs.length > 0);
+      await readFile(
+        path.join(backupRoot, backupDirs[0], "post-format.mjs"),
+        "utf8",
+      );
+    });
+  });
+
+  test("target filtering does not touch Claude home when only Codex is selected", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      const claudeHome = path.join(root, "claude");
+      await mkdir(path.join(claudeHome, "hooks"), { recursive: true });
+      const sentinelPath = path.join(claudeHome, "settings.json");
+      const sentinel = `${JSON.stringify(
+        { hooks: { UserPromptSubmit: [{ hooks: [{ command: "node user-only.js" }] }] } },
+        null,
+        2,
+      )}\n`;
+      await writeFile(sentinelPath, sentinel, "utf8");
+
+      await runScript(["--targets", "codex", "--with-global-hooks"], env);
+
+      assert.equal(await readFile(sentinelPath, "utf8"), sentinel);
+      await assert.rejects(() =>
+        readFile(path.join(claudeHome, "hooks", "meta-kim", "activate-meta-theory-spine.mjs")),
+      );
+      await readFile(path.join(root, "codex", "skills", "meta-theory", "SKILL.md"), "utf8");
+      const codexHookDir = path.join(root, "codex", "hooks", "meta-kim");
+      for (const fileName of [
+        "activate-meta-theory-spine.mjs",
+        "bash-readonly-whitelist.mjs",
+        "enforce-agent-dispatch.mjs",
+      ]) {
+        await readFile(path.join(codexHookDir, fileName), "utf8");
+      }
+      const hooksJson = JSON.parse(
+        await readFile(path.join(root, "codex", "hooks.json"), "utf8"),
+      );
+      const promptHooks = hooksJson.hooks?.UserPromptSubmit?.flatMap(
+        (block) => block.hooks ?? [],
+      ) ?? [];
+      assert.ok(
+        promptHooks.some(
+          (hook) =>
+            hook.command.includes("activate-meta-theory-spine.mjs") &&
+            hook.command.includes("--package-root") &&
+            hook.command.includes(REPO_ROOT),
+        ),
+        "global Codex hooks.json must register prompt-entry project bootstrap hook with package-root evidence",
+      );
+    });
+  });
+
+  test("Codex global skill sync/check uses the Codex skill projection", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      await runScript(["--targets", "codex"], env);
+
+      const skillPath = path.join(
+        root,
+        "codex",
+        "skills",
+        "meta-theory",
+        "SKILL.md",
+      );
+      const skill = await readFile(skillPath, "utf8");
+      const frontmatter = skill.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "";
+
+      assert.match(frontmatter, /^name: meta-theory$/m);
+      assert.match(frontmatter, /^description: /m);
+      assert.doesNotMatch(frontmatter, /^trigger:/m);
+      assert.match(skill, /\.agents\/skills\/<skill>\//);
+      assert.match(skill, /Claude Code 用 `\.claude\/agents\/`/);
+      assert.match(skill, /`\.claude\/hooks\/`/);
+      assert.doesNotMatch(skill, /Claude Code 用[\s\S]{0,120}`\.codex\/hooks\/`/);
+
+      const check = await runScript(["--check", "--targets", "codex"], env);
+      assert.match(check.stdout, /Codex global skill/);
+      assert.match(check.stdout, /Codex global hooks skipped/);
+
+      await runScript(["--targets", "codex", "--with-global-hooks"], env);
+      const hookCheck = await runScript(
+        ["--check", "--targets", "codex", "--with-global-hooks"],
+        env,
+      );
+      assert.match(hookCheck.stdout, /Codex global hooks \(meta-kim\)/);
+      assert.match(hookCheck.stdout, /Codex global hooks\.json/);
+
+      const hooksJson = JSON.parse(
+        await readFile(path.join(root, "codex", "hooks.json"), "utf8"),
+      );
+      assert.ok(
+        JSON.stringify(hooksJson).includes("activate-meta-theory-spine.mjs"),
+      );
+      assert.ok(JSON.stringify(hooksJson).includes("--package-root"));
+    });
+  });
+
+  test("Codex global hooks merge preserves user hooks and repairs stale Meta_Kim entries", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      const codexHome = path.join(root, "codex");
+      await mkdir(codexHome, { recursive: true });
+      const hooksPath = path.join(codexHome, "hooks.json");
+      await writeFile(
+        hooksPath,
+        `${JSON.stringify(
+          {
+            hooks: {
+              UserPromptSubmit: [
+                {
+                  hooks: [
+                    { type: "command", command: "node user-only.js" },
+                    {
+                      type: "command",
+                      command: `node "${path.join(codexHome, "hooks", "meta-kim", "old-spine.mjs")}"`,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+
+      await runScript(["--targets", "codex", "--with-global-hooks"], env);
+
+      const merged = JSON.parse(await readFile(hooksPath, "utf8"));
+      const rendered = JSON.stringify(merged);
+      assert.match(rendered, /node user-only\.js/);
+      assert.doesNotMatch(rendered, /old-spine\.mjs/);
+      assert.match(rendered, /activate-meta-theory-spine\.mjs/);
+      assert.match(rendered, /--package-root/);
+
+      await assert.rejects(
+        async () => {
+          const broken = JSON.parse(await readFile(hooksPath, "utf8"));
+          broken.hooks.UserPromptSubmit[0].hooks.push({
+            type: "command",
+            command: `node "${path.join(codexHome, "hooks", "meta-kim", "missing-retired-hook.mjs")}"`,
+          });
+          await writeFile(hooksPath, `${JSON.stringify(broken, null, 2)}\n`, "utf8");
+          await runScript(
+            ["--check", "--targets", "codex", "--with-global-hooks"],
+            env,
+          );
+        },
+        (error) => {
+          assert.match(error.stdout, /Codex global hooks\.json/);
+          assert.match(error.stdout, /Missing registered Meta_Kim Codex hook scripts: 1/);
+          return true;
+        },
+      );
+    });
+  });
+
+  test("target filtering does not touch Codex home when only Claude is selected", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      const codexHome = path.join(root, "codex");
+      await mkdir(codexHome, { recursive: true });
+      const sentinelPath = path.join(codexHome, "hooks.json");
+      const sentinel = `${JSON.stringify(
+        { hooks: { UserPromptSubmit: [{ hooks: [{ command: "node user-only.js" }] }] } },
+        null,
+        2,
+      )}\n`;
+      await writeFile(sentinelPath, sentinel, "utf8");
+
+      await runScript(["--targets", "claude", "--with-global-hooks"], env);
+
+      assert.equal(await readFile(sentinelPath, "utf8"), sentinel);
+      await assert.rejects(() =>
+        readFile(path.join(codexHome, "skills", "meta-theory", "SKILL.md")),
+      );
+      await assert.rejects(() =>
+        readFile(path.join(codexHome, "hooks", "meta-kim", "activate-meta-theory-spine.mjs")),
+      );
+      await readFile(
+        path.join(root, "claude", "hooks", "meta-kim", "activate-meta-theory-spine.mjs"),
+        "utf8",
+      );
+    });
+  });
+
   test("--with-global-hooks check rejects stale settings entries for missing Meta_Kim hook files", async () => {
     await withTempRuntimeHomes(async ({ env, root }) => {
       await runScript(["--targets", "claude", "--with-global-hooks"], env);
@@ -104,7 +304,7 @@ describe("sync-global-meta-theory hook policy", () => {
           hooks: [
             {
               type: "command",
-              command: `node "${path.join(root, "claude", "hooks", "meta-kim", "stop-compaction.mjs")}"`,
+              command: `node "${path.join(root, "claude", "hooks", "meta-kim", "missing-retired-hook.mjs")}"`,
             },
           ],
         },

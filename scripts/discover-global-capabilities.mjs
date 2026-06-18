@@ -179,6 +179,37 @@ const PLATFORMS = {
   },
 };
 
+const TARGET_ALIASES = {
+  claude: "claudeCode",
+  claudeCode: "claudeCode",
+  "claude-code": "claudeCode",
+  codex: "codex",
+  openclaw: "openclaw",
+  cursor: "cursor",
+};
+
+function argValue(args, name) {
+  const eq = args.find((arg) => arg.startsWith(`${name}=`));
+  if (eq) return eq.slice(name.length + 1);
+  const index = args.indexOf(name);
+  if (index >= 0 && args[index + 1]) return args[index + 1];
+  return null;
+}
+
+function normalizePlatformTargets(rawValue) {
+  if (!rawValue) return [];
+  return [
+    ...new Set(
+      String(rawValue)
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => TARGET_ALIASES[part] ?? TARGET_ALIASES[part.toLowerCase()] ?? part)
+        .filter((part) => Object.prototype.hasOwnProperty.call(PLATFORMS, part)),
+    ),
+  ];
+}
+
 // ========== 通用扫描函数 ==========
 
 async function* walkDir(dir, maxDepth = 10) {
@@ -496,6 +527,9 @@ async function scanHookFiles(dir) {
     ) {
       const stat = await fs.stat(filePath);
       const relPath = path.relative(dir, filePath);
+      if (relPath.replace(/\\/g, "/").startsWith(".meta-kim-legacy-backup/")) {
+        continue;
+      }
       const id = relPath.replace(/\\/g, "/");
       results.push({
         id,
@@ -1349,8 +1383,265 @@ async function buildGlobalCapabilityInventory(scannedResults, profile) {
 
 // ========== 输出格式 ==========
 
-function formatTableOutput(index) {
-  let output = "\n📊 Global Capability Summary\n\n";
+const META_KIM_HOOK_FILE_NAMES = new Set([
+  "activate-meta-theory-spine.mjs",
+  "bash-readonly-whitelist.mjs",
+  "block-dangerous-bash.mjs",
+  "codex_hook_adapter.py",
+  "codex_hook_runner.mjs",
+  "enforce-agent-dispatch.mjs",
+  "graphify-context.mjs",
+  "hookprompt-adapter.mjs",
+  "meta-kim-memory-save.mjs",
+  "planning-with-files-adapter.mjs",
+  "post-console-log-warn.mjs",
+  "post-format.mjs",
+  "post-typecheck.mjs",
+  "post_tool_use.py",
+  "post-tool-use.ps1",
+  "post-tool-use.sh",
+  "pre_tool_use.py",
+  "pre-tool-use.ps1",
+  "pre-tool-use.sh",
+  "pre-compact.sh",
+  "session_start.py",
+  "session-start.sh",
+  "skip-reminder.mjs",
+  "spine-state.mjs",
+  "stop.py",
+  "stop.sh",
+  "stop-compaction.mjs",
+  "stop-completion-guard.mjs",
+  "stop-console-log-audit.mjs",
+  "stop-spine-cleanup.mjs",
+  "subagent-context.mjs",
+  "utils.mjs",
+]);
+
+const SUMMARY_TYPE_ORDER = [
+  "agents",
+  "skills",
+  "hooks",
+  "mcpServers",
+  "mcpTools",
+  "plugins",
+  "commands",
+  "rules",
+  "prompts",
+];
+
+function formatCountLine(label, count) {
+  return `${label}: ${count}`;
+}
+
+function capabilityTypesForOutput(index, filterType) {
+  if (filterType) {
+    return Object.prototype.hasOwnProperty.call(
+      index.byCapabilityType ?? {},
+      filterType,
+    )
+      ? [filterType]
+      : [];
+  }
+  return SUMMARY_TYPE_ORDER.filter((type) =>
+    Object.prototype.hasOwnProperty.call(index.byCapabilityType ?? {}, type),
+  );
+}
+
+function hookFileName(cap) {
+  const rel = String(cap.relativePath || cap.id || "").replace(/\\/g, "/");
+  return rel.split("/").pop() || rel;
+}
+
+function classifyHookCapability(cap) {
+  const rel = String(cap.relativePath || cap.id || "").replace(/\\/g, "/");
+  const fileName = hookFileName(cap);
+  const providerKind = cap.metadata?.providerKind;
+
+  if (
+    providerKind === "hook-config" ||
+    providerKind === "runtime-config" ||
+    providerKind === "runtime-settings"
+  ) {
+    return "runtime config";
+  }
+
+  if (rel.startsWith("meta-kim/")) {
+    return "Meta_Kim namespaced";
+  }
+
+  if (META_KIM_HOOK_FILE_NAMES.has(fileName)) {
+    return "Meta_Kim legacy root";
+  }
+
+  if (/-[a-f0-9]{10,}\.(?:js|mjs|py|sh|ps1)$/i.test(fileName)) {
+    return "generated/hash variant";
+  }
+
+  if (rel.startsWith("optional/")) {
+    return "optional hook pack";
+  }
+
+  return "third-party/user";
+}
+
+function countBy(items, classifier) {
+  const counts = new Map();
+  for (const item of items) {
+    const key = classifier(item);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((left, right) => {
+    if (right[1] !== left[1]) return right[1] - left[1];
+    return left[0].localeCompare(right[0]);
+  });
+}
+
+function skillFamily(cap) {
+  const id = String(cap.id || "").replace(/\\/g, "/");
+  if (!id) return "unknown";
+  const first = id.split("/")[0];
+  if (first === "gstack" || first === "cli-anything") return first;
+  if (id.startsWith("openai-")) return "openai";
+  if (id.startsWith("superpowers")) return "superpowers";
+  if (id.startsWith("data-analytics")) return "data-analytics";
+  if (id.startsWith("creative-production")) return "creative-production";
+  if (id.startsWith("vercel")) return "vercel";
+  return first;
+}
+
+const OUTPUT_I18N = {
+  en: {
+    title: "Global Capability Summary",
+    byPlatform: "By platform",
+    hooksByCategory: "Hooks by category",
+    skillsByFamily: "Skills by family",
+    detailsHidden:
+      "Details hidden by default. Use --verbose or --details to print every capability id.",
+    noMatchingCapabilities: "no matching capabilities",
+    noMatchingCapabilityType: "No matching capability type",
+    warnings: "warnings",
+    more: "more",
+    none: "none",
+    scanning: "Scanning global capabilities across platforms...",
+    scanningPlatform: (name) => `  Scanning ${name}...`,
+    errors: "errors",
+    detailedInventory: "Detailed Inventory",
+    governanceRules: "Governance Rules",
+    canonicalIndexWritten: (target) => `Canonical index written to ${target}`,
+    localInventoryWritten: (target) => `Local inventory written to ${target}`,
+    canonicalIndexMirrored: (count) =>
+      `Repo canonical index refreshed in ${count} runtime mirror directories (not the scan target list):`,
+    searchIndexWritten: (count) =>
+      `Search index written to capability-search-index.tsv (${count} entries)`,
+  },
+  zh: {
+    title: "Meta_Kim 全局能力摘要",
+    byPlatform: "按平台统计",
+    hooksByCategory: "Hooks 分类统计",
+    skillsByFamily: "Skills 家族统计",
+    detailsHidden:
+      "默认只显示分类统计；使用 --verbose 或 --details 查看每个能力 id。",
+    noMatchingCapabilities: "没有匹配的能力",
+    noMatchingCapabilityType: "没有匹配的能力类型",
+    warnings: "警告",
+    more: "项未显示",
+    none: "无",
+    scanning: "正在扫描全局能力...",
+    scanningPlatform: (name) => `  正在扫描 ${name}...`,
+    errors: "错误",
+    detailedInventory: "详细清单",
+    governanceRules: "治理规则",
+    canonicalIndexWritten: (target) => `canonical 能力索引已写入 ${target}`,
+    localInventoryWritten: (target) => `本机全局能力清单已写入 ${target}`,
+    canonicalIndexMirrored: (count) =>
+      `仓库内 canonical 能力索引已刷新到 ${count} 个 runtime 镜像目录（这不是本次扫描范围）：`,
+    searchIndexWritten: (count) =>
+      `搜索索引已写入 capability-search-index.tsv（${count} 条）`,
+  },
+};
+
+function normalizeOutputLang(lang = "en") {
+  const raw = String(lang || "en").toLowerCase();
+  if (raw.startsWith("zh")) return "zh";
+  return "en";
+}
+
+function outputText(lang) {
+  return OUTPUT_I18N[normalizeOutputLang(lang)] ?? OUTPUT_I18N.en;
+}
+
+function formatCounts(counts, maxItems = 8, labels = OUTPUT_I18N.en) {
+  if (counts.length === 0) return labels.none;
+  const shown = counts
+    .slice(0, maxItems)
+    .map(([label, count]) => `${label} ${count}`)
+    .join(", ");
+  const hidden = counts.length - maxItems;
+  return hidden > 0 ? `${shown}, +${hidden} ${labels.more}` : shown;
+}
+
+function flattenCapabilitiesByType(index, type) {
+  return Object.values(index.byCapabilityType?.[type] ?? {});
+}
+
+function formatDefaultSummary(index, { filterType, lang } = {}) {
+  const labels = outputText(lang);
+  let output = `\n📊 ${labels.title}\n\n`;
+
+  const summaryTypes = capabilityTypesForOutput(index, filterType);
+  const totalLine = summaryTypes
+    .map((type) =>
+      formatCountLine(type, Object.keys(index.byCapabilityType?.[type] ?? {}).length),
+    )
+    .join(" | ");
+  output += `${totalLine || labels.noMatchingCapabilityType}\n\n`;
+
+  output += `🔹 ${labels.byPlatform}\n`;
+  for (const [, data] of Object.entries(index.byPlatform ?? {})) {
+    const counts = summaryTypes
+      .map((type) => [type, data.capabilities?.[type]?.length ?? 0])
+      .filter(([, count]) => count > 0)
+      .map(([type, count]) => `${type} ${count}`)
+      .join(", ");
+    output += `  ${data.platform}: ${counts || labels.noMatchingCapabilities}`;
+    if (data.errors?.length > 0) {
+      output += `; ${labels.warnings} ${data.errors.length}`;
+    }
+    output += "\n";
+  }
+
+  if (!filterType || filterType === "hooks") {
+    const hooks = flattenCapabilitiesByType(index, "hooks");
+    output += `\n🧩 ${labels.hooksByCategory}\n`;
+    for (const [, data] of Object.entries(index.byPlatform ?? {})) {
+      const platformHooks = hooks.filter(
+        (cap) => cap.platformId === data.platformId,
+      );
+      if (platformHooks.length === 0) continue;
+      output += `  ${data.platform}: ${formatCounts(countBy(platformHooks, classifyHookCapability), 8, labels)}\n`;
+    }
+  }
+
+  if (!filterType || filterType === "skills") {
+    const skills = flattenCapabilitiesByType(index, "skills");
+    output += `\n🧠 ${labels.skillsByFamily}\n`;
+    for (const [, data] of Object.entries(index.byPlatform ?? {})) {
+      const platformSkills = skills.filter(
+        (cap) => cap.platformId === data.platformId,
+      );
+      if (platformSkills.length === 0) continue;
+      output += `  ${data.platform}: ${formatCounts(countBy(platformSkills, skillFamily), 8, labels)}\n`;
+    }
+  }
+
+  output += `\n${labels.detailsHidden}\n`;
+  return output;
+}
+
+function formatDetailedInventory(index, { filterType, lang } = {}) {
+  const labels = outputText(lang);
+  let output = `\n📊 ${labels.title}\n\n`;
 
   for (const [platformId, data] of Object.entries(index.byPlatform)) {
     output += `🔹 ${data.platform} (${data.baseDir})\n`;
@@ -1360,13 +1651,14 @@ function formatTableOutput(index) {
       }
     }
     if (data.errors.length > 0) {
-      output += `   ⚠️  Errors: ${data.errors.length}\n`;
+      output += `   ⚠️  ${labels.errors}: ${data.errors.length}\n`;
     }
   }
 
-  output += "\n📋 Detailed Inventory\n\n";
+  output += `\n📋 ${labels.detailedInventory}\n\n`;
 
-  for (const [type, items] of Object.entries(index.byCapabilityType)) {
+  for (const type of capabilityTypesForOutput(index, filterType)) {
+    const items = index.byCapabilityType[type] ?? {};
     const keys = Object.keys(items);
     if (keys.length === 0) continue;
 
@@ -1404,7 +1696,7 @@ function formatTableOutput(index) {
 
   // Add governance rules summary
   if (index.governanceRules) {
-    output += "\n🛡️ Governance Rules\n\n";
+    output += `\n🛡️ ${labels.governanceRules}\n\n`;
     output += `  ${index.governanceRules.metaAgentDispatchRule}\n`;
     output += `  ${index.governanceRules.fallbackBehavior}\n`;
   }
@@ -1412,30 +1704,46 @@ function formatTableOutput(index) {
   return output;
 }
 
+export function formatTableOutput(index, options = {}) {
+  return options.verbose
+    ? formatDetailedInventory(index, options)
+    : formatDefaultSummary(index, options);
+}
+
 // ========== 主函数 ==========
 
 async function main() {
   const args = process.argv.slice(2);
   const outputFormat = args.includes("--json") ? "json" : "table";
-  const filterPlatform = args
-    .find((a) => a.startsWith("--platform="))
-    ?.split("=")[1];
-  const filterType = args.find((a) => a.startsWith("--type="))?.split("=")[1];
+  const verboseOutput =
+    args.includes("--verbose") || args.includes("--details");
+  const langArg = argValue(args, "--lang");
+  const outputLang = normalizeOutputLang(
+    langArg || process.env.META_KIM_LANG || process.env.LANG || "en",
+  );
+  const labels = outputText(outputLang);
+  const filterTargets = normalizePlatformTargets(
+    argValue(args, "--targets") || argValue(args, "--platform"),
+  );
+  const filterType = argValue(args, "--type");
 
-  const platformsToScan = filterPlatform
-    ? { [filterPlatform]: PLATFORMS[filterPlatform] }
-    : PLATFORMS;
+  const platformsToScan =
+    filterTargets.length > 0
+      ? Object.fromEntries(
+          filterTargets.map((target) => [target, PLATFORMS[target]]),
+        )
+      : PLATFORMS;
 
-  console.error("🔍 Scanning global capabilities across platforms...\n");
+  console.error(`🔍 ${labels.scanning}\n`);
 
   const scannedResults = [];
   for (const [platformId, platform] of Object.entries(platformsToScan)) {
-    console.error(`  Scanning ${platform.name}...`);
+    console.error(labels.scanningPlatform(platform.name));
     const result = await scanPlatform(platformId, platform);
     scannedResults.push(result);
 
     if (result.errors.length > 0) {
-      console.error(`    ⚠️  ${result.errors.length} errors`);
+      console.error(`    ⚠️  ${result.errors.length} ${labels.errors}`);
     }
   }
 
@@ -1453,7 +1761,13 @@ async function main() {
   if (outputFormat === "json") {
     console.log(JSON.stringify(globalInventory, null, 2));
   } else {
-    console.log(formatTableOutput(globalInventory));
+    console.log(
+      formatTableOutput(globalInventory, {
+        verbose: verboseOutput,
+        filterType,
+        lang: outputLang,
+      }),
+    );
   }
 
   // Write the repo-neutral canonical index, then mirror only that index into
@@ -1491,15 +1805,11 @@ async function main() {
     `${JSON.stringify(globalInventory, null, 2)}\n`,
   );
 
+  console.error(`\n✅ ${labels.canonicalIndexWritten(CANONICAL_CAPABILITY_INDEX)}`);
   console.error(
-    `\n✅ Canonical index written to ${CANONICAL_CAPABILITY_INDEX}`,
+    `✅ ${labels.localInventoryWritten(path.relative(repoRoot, localInventoryPath).replace(/\\/g, "/"))}`,
   );
-  console.error(
-    `✅ Local inventory written to ${path.relative(repoRoot, localInventoryPath).replace(/\\/g, "/")}`,
-  );
-  console.error(
-    `✅ Canonical index mirrored to ${platformIndexDirs.length} platforms:`,
-  );
+  console.error(`✅ ${labels.canonicalIndexMirrored(platformIndexDirs.length)}`);
   for (const dir of platformIndexDirs) {
     const rel = path.relative(repoRoot, dir).replace(/\\/g, "/");
     console.error(`   ${rel}/`);
@@ -1527,9 +1837,7 @@ async function main() {
     "capability-search-index.tsv",
   );
   await fs.writeFile(searchIndexPath, searchLines.join("\n") + "\n", "utf8");
-  console.error(
-    `✅ Search index written to capability-search-index.tsv (${searchLines.length} entries)`,
-  );
+  console.error(`✅ ${labels.searchIndexWritten(searchLines.length)}`);
 }
 
 if (

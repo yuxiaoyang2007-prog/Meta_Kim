@@ -91,7 +91,6 @@ import {
   __internals as bashReadonlyInternals,
 } from "./bash-readonly-whitelist.mjs";
 import {
-  advanceStage,
   readSpineState,
   checkCapabilityNodeBindings,
   checkPreExecutionReadiness,
@@ -101,11 +100,12 @@ import {
   writeSpineState,
   checkStageRequirements,
   checkChoiceSurfaceGate,
+  isHookObservedState,
   STAGE_META_AGENT_MAP,
   extractMetaAgentName,
   recordSkippedHook,
   getGovernanceFlow,
-} from "./spine-state.mjs";
+} from "../../shared/hooks/spine-state.mjs";
 import {
   getSkipRule,
   hasSimpleKeyword,
@@ -113,7 +113,7 @@ import {
   formatSkipReason,
   getHookImpact,
   SKIP_DECISION,
-} from "./skip-reminder.mjs";
+} from "../../shared/hooks/skip-reminder.mjs";
 
 const cwd = process.cwd();
 const payload = await readJsonFromStdin();
@@ -352,6 +352,93 @@ function deny(reason) {
 
 function exitAfterDeny(reason) {
   process.exit(deny(reason));
+}
+
+function resolvedHookLanguage(state) {
+  const candidates = [
+    state?.stageRuntimeControl?.userLanguage,
+    state?.latestUserInputLanguage,
+    state?.outputLanguage,
+    process.env.META_KIM_OUTPUT_LANGUAGE,
+    process.env.LANG,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return "en";
+}
+
+function isZh(state) {
+  return /^zh/i.test(resolvedHookLanguage(state));
+}
+
+function observedModeNotice(state) {
+  if (isZh(state)) {
+    return (
+      "[Meta_Kim] 提醒：当前是自动触发的观察态。Hook 不会把自己当阶段驱动器反复拦截普通本地修改；" +
+      "发布、公示或严格验收仍需要 managed runner 写入 Fetch、Thinking、fileChangeFactCard 和 executionLease。"
+    );
+  }
+  return (
+    "[Meta_Kim] Notice: auto-triggered observed mode is active. The hook will not act as the " +
+    "stage driver or repeatedly hard-block ordinary local edits; release/public-ready claims " +
+    "still require the managed runner to record Fetch, Thinking, fileChangeFactCard, and executionLease."
+  );
+}
+
+function observedModeHighRiskReason(state, command = "") {
+  if (isZh(state)) {
+    return (
+      "当前是自动触发的观察态，但该操作像高风险或外部副作用命令。先进入 managed stage driver，" +
+      "写入 owner/loadout、fileChangeFactCard、permission/rollback 和 executionLease 后再执行。" +
+      (command ? ` Command: ${command}` : "")
+    );
+  }
+  return (
+    "Auto-triggered observed mode cannot approve high-risk or external side-effect commands. " +
+    "Enter a managed stage driver first, then record owner/loadout, fileChangeFactCard, " +
+    "permission/rollback, and executionLease before retrying." +
+    (command ? ` Command: ${command}` : "")
+  );
+}
+
+function isHighRiskObservedBash(command) {
+  const normalized = String(command || "").trim();
+  if (!normalized) return false;
+  const lower = normalized.toLowerCase();
+  const highRiskPattern =
+    /\b(?:npm\s+(?:install|i|publish)|pnpm\s+(?:install|i|add)|yarn\s+(?:install|add)|cargo\s+(?:install|publish|run)|pip\s+(?:install|uninstall)|git\s+(?:push|pull|fetch|reset|checkout|restore|clean|rebase|merge|commit|add|rm|mv)|gh\s+(?:release|pr\s+merge)|curl\b|wget\b|invoke-webrequest\b|invoke-restmethod\b|iwr\b|irm\b|remove-item\b|rm\s+-|del\b|rmdir\b|setx\b|set-item\s+env)\b/i;
+  if (highRiskPattern.test(lower)) return true;
+  const classification = classifyBashCommand(normalized);
+  if (classification.readOnly) return false;
+  if (!/^dangerous pattern:/i.test(classification.reason || "")) return false;
+  return /install|publish|push|merge|rebase|reset|delete|remove|credential|token|secret|http|curl|wget|invoke-webrequest|invoke-restmethod/i.test(
+    classification.reason,
+  );
+}
+
+function isHighRiskObservedExecution(toolName, toolInput) {
+  if (toolName !== "Bash") return false;
+  return isHighRiskObservedBash(toolInput?.command || "");
+}
+
+async function allowObservedModeExecution(state) {
+  const control = state?.stageRuntimeControl || {};
+  if (!control.observedNoticeEmittedAt) {
+    process.stderr.write(`${observedModeNotice(state)}\n`);
+    const nextState = {
+      ...state,
+      stageRuntimeControl: {
+        ...control,
+        observedNoticeEmittedAt: new Date().toISOString(),
+        observedNoticePolicy: "emit_once_per_active_state",
+      },
+    };
+    await writeSpineState(cwd, nextState);
+  }
+  process.exit(0);
 }
 
 function isAgentDispatchTool(name) {
@@ -749,6 +836,21 @@ if (isAgentDispatchTool(toolName)) {
       .join(" "),
   );
 
+  if (isHookObservedState(state)) {
+    const updated = recordDispatch(state, agentDesc, metaName, toolInput);
+    const control = updated?.stageRuntimeControl || {};
+    if (!control.observedNoticeEmittedAt) {
+      process.stderr.write(`${observedModeNotice(updated)}\n`);
+      updated.stageRuntimeControl = {
+        ...control,
+        observedNoticeEmittedAt: new Date().toISOString(),
+        observedNoticePolicy: "emit_once_per_active_state",
+      };
+    }
+    await writeSpineState(cwd, updated);
+    process.exit(0);
+  }
+
   if (
     !state.queryBypass &&
     ["critical", "fetch", "thinking"].includes(state.currentStage) &&
@@ -913,10 +1015,6 @@ if (toolName === "AskUserQuestion") {
 
 // Read-only tools: always allow
 if (isReadOnlyTool(toolName)) {
-  if (shouldAdvanceCriticalToFetch(state, toolName, toolInput)) {
-    state = advanceStage(state, "fetch");
-    await writeSpineState(cwd, state);
-  }
   process.exit(0);
 }
 
@@ -954,11 +1052,16 @@ if (isExecutionTool(toolName)) {
   }
 
   if (isPlanningFile()) {
-    if (state.active && state.currentStage === "critical") {
-      const advanced = advanceStage(state, "fetch");
-      await writeSpineState(cwd, advanced);
-    }
     process.exit(0);
+  }
+
+  if (isHookObservedState(state)) {
+    if (isHighRiskObservedExecution(toolName, toolInput)) {
+      exitAfterDeny(
+        observedModeHighRiskReason(state, String(toolInput?.command || "")),
+      );
+    }
+    await allowObservedModeExecution(state);
   }
 
   const choiceSurfaceGate = checkChoiceSurfaceGate(state);
@@ -997,10 +1100,6 @@ if (isExecutionTool(toolName)) {
     ];
     const allowedByStage = matchesStageReadOnlyCommand(cmd, stageWhitelist);
     if (allowedByStage || isReadOnlyBash(cmd)) {
-      if (shouldAdvanceCriticalToFetch(state, toolName, toolInput)) {
-        state = advanceStage(state, "fetch");
-        await writeSpineState(cwd, state);
-      }
       process.exit(0);
     }
   }

@@ -15,7 +15,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline";
-import { resolveProfileStateDir, sanitizeStateProfile } from "./spine-state.mjs";
+import { resolveProfileStateDir, sanitizeStateProfile } from "../../shared/hooks/spine-state.mjs";
 
 // ── Read stdin ONCE at top level before anything else ────────────────────────
 const STDIN_CHUNKS = [];

@@ -35,7 +35,6 @@ export const OPENCLAW_WORKSPACE_MD = [
 ];
 
 export const SHARED_HOOK_FILES = [
-  "hook-i18n.mjs",
   "skip-reminder.mjs",
   "activate-meta-theory-spine.mjs",
   "bash-readonly-whitelist.mjs",

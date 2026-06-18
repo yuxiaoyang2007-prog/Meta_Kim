@@ -64,8 +64,8 @@
         "openclaw": "Use workspace boot and agent instructions; no direct Claude hook execution.",
         "cursor": "Use Cursor beforeSubmitPrompt through the Meta_Kim adapter; do not reuse Claude hook output directly."
       },
-      "hookSubdirs": {
-        "claude": [".claude/hooks"]
+      "globalHookSubdirs": {
+        "claude": ["~/.claude/hooks/meta-kim"]
       },
       "hookExtraFiles": {
         "claude": [
@@ -140,13 +140,13 @@
       "installMethod": "subdirExtraction",
       "subdir": "skills/planning-with-files",
       "pluginHookCompat": true,
-      "hookSubdirs": {
-        "codex": [".codex/hooks"],
-        "cursor": [".cursor/hooks"]
+      "globalHookSubdirs": {
+        "codex": ["~/.codex/hooks/meta-kim"],
+        "cursor": ["~/.cursor/hooks/meta-kim"]
       },
-      "hookConfigFiles": {
-        "codex": ".codex/hooks.json",
-        "cursor": ".cursor/hooks.json"
+      "globalHookConfigFiles": {
+        "codex": "~/.codex/hooks.json",
+        "cursor": "~/.cursor/hooks.json"
       },
       "targets": [
         "claude",

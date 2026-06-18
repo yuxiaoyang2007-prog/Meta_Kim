@@ -23,8 +23,20 @@ export function isGlobalMetaKimManagedHookCommand(command) {
   if (typeof command !== "string") {
     return false;
   }
-  const n = normalizeHookCommand(command);
-  return n.includes("hooks/meta-kim/") || n.includes("hooks\\meta-kim\\");
+  const norm = normalizeHookCommand(command).replace(/\\/g, "/");
+  if (norm.includes("hooks/meta-kim/")) {
+    return true;
+  }
+  const managedFiles = [
+    ...REPO_META_KIM_HOOK_FILES,
+    ...RETIRED_META_KIM_HOOK_FILES,
+  ];
+  return managedFiles.some(
+    (file) =>
+      norm.includes(`/hooks/${file}`) ||
+      norm.includes(`.claude/hooks/${file}`) ||
+      norm.includes(`/hooks/${file} `),
+  );
 }
 
 const RETIRED_META_KIM_HOOK_FILES = new Set(["pre-git-push-confirm.mjs"]);
@@ -149,6 +161,19 @@ export function stripRepoMetaKimHookEntriesFromBlocks(blocks) {
     .filter((block) => (block.hooks || []).length > 0);
 }
 
+export function stripRepoMetaKimHooksFromSettings(settings) {
+  const next = { ...settings };
+  const hooks = {};
+  for (const [event, blocks] of Object.entries(next.hooks ?? {})) {
+    const cleaned = stripRepoMetaKimHookEntriesFromBlocks(blocks || []);
+    if (cleaned.length > 0) {
+      hooks[event] = cleaned;
+    }
+  }
+  next.hooks = hooks;
+  return next;
+}
+
 // ── Shared block merge ───────────────────────────────────────────────────
 
 export function mergeHookMatcherBlocks(existing, additions) {
@@ -238,8 +263,10 @@ export function mergePermissionsDenyUnion(canonicalPerm, basePerm) {
 }
 
 /**
- * Merge canonical Claude settings into existing repo-local settings: keep user keys,
- * union permissions.deny, merge Meta_Kim-managed hooks only.
+ * Merge canonical Claude settings into existing repo-local settings: keep user
+ * keys, union permissions.deny, and remove Meta_Kim project hook commands.
+ * Meta_Kim hook execution is installed globally; repo-local settings are only
+ * a protected merge boundary for user config.
  * @param {Record<string, unknown>} base - existing ~/.meta or user file (may be {})
  * @param {Record<string, unknown>} canonical - parsed canonical/runtime-assets/claude/settings.json with repo-relative hook paths.
  */
@@ -263,8 +290,7 @@ export function mergeRepoClaudeSettings(base, canonical, repoRoot = null) {
     base.permissions,
   );
 
-  const canonHooks = canonicalForMerge.hooks;
-  out.hooks = mergeRepoMetaKimHooksIntoSettings(base, canonHooks).hooks;
+  out.hooks = stripRepoMetaKimHooksFromSettings(base).hooks;
 
   return out;
 }

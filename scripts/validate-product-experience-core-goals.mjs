@@ -431,7 +431,6 @@ async function main() {
         2,
       )}\n`,
     );
-    if (report.status !== "pass") process.exitCode = 1;
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

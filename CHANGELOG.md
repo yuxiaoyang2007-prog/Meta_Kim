@@ -8,6 +8,29 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## [Unreleased]
 
+## [2.8.42] - 2026-06-18
+
+### Solved Problem
+
+This release addresses confusion between global reusable installs and project-local generated state. A global `meta-theory` install can now be verified end to end without copying the reusable Codex skill into every project, while project cache and Graphify outputs remain project-local.
+
+### Changed
+
+- **Codex Global Hook Registration** - Global sync now copies Meta_Kim hook scripts to `~/.codex/hooks/meta-kim/` and merges the prompt-entry spine hook into `~/.codex/hooks.json` with package-root evidence, preserving user hooks and replacing only Meta_Kim-managed entries.
+- **Project Cache Verification** - Added `npm run meta:project-cache:verify`, including `--real-global`, to prove global hooks generate `.meta-kim/state/default/post-copy-init.json`, `graphify-out/graph.json`, and `graphify-out/GRAPH_REPORT.md` in the current project without copying `.agents/skills/meta-theory/`.
+- **Install Scope Matrix** - Extended install scope verification so global/default, global all-formal, project default, and project all-formal cases prove their expected files and absence of unexpected writes.
+- **Formal Projection Wording** - Updated README wording so OpenClaw and Cursor are non-default formal projections, not a compatibility layer, while candidate probes remain separate.
+
+### Verification
+
+- `node scripts/sync-global-meta-theory.mjs --check --targets claude,codex,cursor,openclaw --with-global-hooks`
+- `npm run meta:project-cache:verify -- --real-global`
+- `npm run meta:project-cache:verify`
+- `npm run meta:install-scope:verify`
+- `node --test tests/setup/sync-global-hooks-policy.test.mjs tests/setup/install-scope-matrix.test.mjs`
+- `node scripts/validate-runtime-safety-contract.mjs`
+- `git diff --check`
+
 ## [2.8.41] - 2026-06-16
 
 ### Solved Problem

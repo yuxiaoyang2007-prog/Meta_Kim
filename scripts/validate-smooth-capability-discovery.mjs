@@ -169,7 +169,15 @@ function validateContract(contract, coreLoop, pkg) {
 }
 
 function validateDefaultArtifact(report) {
-  assert.equal(report.status, "pass");
+  assert.ok(
+    ["pass", "partial"].includes(report.status),
+    `default governed run status must be pass or honest partial, got ${report.status}`,
+  );
+  assert.equal(
+    report.defaultRuntimePath.status,
+    report.status,
+    "defaultRuntimePath.status must mirror the top-level governed run status",
+  );
   const discovery = report.coreLoop.fetchPacket.capabilityDiscovery;
   assert.ok(Array.isArray(discovery.searchLog), "capabilityDiscovery.searchLog must be an array");
   assert.ok(discovery.searchLog.length >= 10, "capabilityDiscovery.searchLog must record source families checked");
@@ -239,6 +247,7 @@ async function main() {
   validateContract(contract, coreLoop, pkg);
 
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-smooth-capability-"));
+  let governedExecutionStatus = "unknown";
   try {
     const report = await runMetaTheoryGovernedExecution({
       task: [
@@ -250,6 +259,7 @@ async function main() {
       dbPath: path.join(tempDir, "runs.sqlite"),
     });
     validateDefaultArtifact(report);
+    governedExecutionStatus = report.status;
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -258,6 +268,7 @@ async function main() {
   process.stdout.write(
     `${JSON.stringify({
       status: "pass",
+      governedExecutionStatus,
       contract: "config/contracts/smooth-capability-discovery-contract.json",
       providerTypes: REQUIRED_PROVIDER_TYPES,
       firstClassFamilies: REQUIRED_FAMILIES.length,

@@ -174,10 +174,10 @@ describe("release documentation semantics", () => {
     }
 
     assert.match(readFileSync(path.join(root, "README.md"), "utf8"), /Default formal projections/);
-    assert.match(readFileSync(path.join(root, "README.md"), "utf8"), /Explicit formal compatibility projections/);
+    assert.match(readFileSync(path.join(root, "README.md"), "utf8"), /Non-default formal projections/);
     assert.match(readFileSync(path.join(root, "README.md"), "utf8"), /Candidate compatibility probes/);
     assert.match(readFileSync(path.join(root, "README.zh-CN.md"), "utf8"), /默认正式投影/);
-    assert.match(readFileSync(path.join(root, "README.zh-CN.md"), "utf8"), /显式正式兼容投影/);
+    assert.match(readFileSync(path.join(root, "README.zh-CN.md"), "utf8"), /非默认但正式投影/);
     assert.match(readFileSync(path.join(root, "README.zh-CN.md"), "utf8"), /候选兼容 probe/);
   });
 

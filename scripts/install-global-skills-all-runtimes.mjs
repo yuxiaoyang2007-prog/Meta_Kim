@@ -90,7 +90,7 @@ const AMBER_BRIGHT = "\x1b[38;2;200;160;80m";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 
-function refreshGlobalCapabilityInventory() {
+function refreshGlobalCapabilityInventory(activeTargets = []) {
   if (dryRun) {
     console.log(
       `${C.dim}[dry-run] refresh global capability inventory (discover:global)${C.reset}`,
@@ -102,7 +102,11 @@ function refreshGlobalCapabilityInventory() {
   );
   const result = spawnSync(
     process.execPath,
-    [path.join(repoRoot, "scripts", "discover-global-capabilities.mjs")],
+    [
+      path.join(repoRoot, "scripts", "discover-global-capabilities.mjs"),
+      "--targets",
+      activeTargets.join(","),
+    ],
     {
       cwd: repoRoot,
       stdio: "inherit",
@@ -440,7 +444,7 @@ const manifestLoad = loadSkillsManifest();
 let SKILL_REPOS = manifestLoad.skillRepos;
 const skillsArg = parseSkillsArg(cliArgs);
 const skillsFilterActive = skillsArg !== null;
-if (skillsArg !== null && skillsArg.length > 0) {
+if (skillsArg !== null) {
   const { repos, unknownIds } = applySkillsIdFilter(SKILL_REPOS, skillsArg);
   for (const id of unknownIds) {
     console.warn(`${C.yellow}⚠${C.reset} ${t.skillsFilterUnknown(id)}`);
@@ -1769,12 +1773,46 @@ async function readCodexConfigSnapshot(runtimeId, runtimeHome) {
   return { configPath, text };
 }
 
+function isEccCodexAgentsBaseline(text) {
+  if (!text) return false;
+  return (
+    /^# ECC for Codex CLI/m.test(text) &&
+    /This supplements the root `AGENTS\.md` with Codex-specific guidance\./.test(
+      text,
+    ) &&
+    /Everything Claude Code|ECC/.test(text)
+  );
+}
+
+async function readCodexGlobalAgentsSnapshot(runtimeId, runtimeHome) {
+  if (runtimeId !== "codex" || !runtimeHome) return null;
+  const agentsPath = path.join(runtimeHome, "AGENTS.md");
+  const text = (await pathExists(agentsPath))
+    ? await fs.readFile(agentsPath, "utf8")
+    : null;
+  return {
+    agentsPath,
+    text,
+    isEccBaseline: isEccCodexAgentsBaseline(text),
+  };
+}
+
 async function backupCodexConfigBeforeUpstream(snapshot) {
   if (!snapshot?.text) return null;
   const backupPath = `${snapshot.configPath}.meta-kim.pre-ecc.bak`;
   await fs.copyFile(snapshot.configPath, backupPath);
   console.log(
     `${C.yellow}↻${C.reset} ${C.dim}${t.codexConfigBackupBeforeEcc(backupPath)}${C.reset}`,
+  );
+  return backupPath;
+}
+
+async function backupCodexGlobalAgentsBeforeUpstream(snapshot) {
+  if (!snapshot?.text) return null;
+  const backupPath = `${snapshot.agentsPath}.meta-kim.pre-ecc.bak`;
+  await fs.copyFile(snapshot.agentsPath, backupPath);
+  console.log(
+    `${C.yellow}↻${C.reset} ${C.dim}${t.codexGlobalAgentsBackupBeforeEcc(backupPath)}${C.reset}`,
   );
   return backupPath;
 }
@@ -1794,6 +1832,34 @@ async function restoreCodexConfigAfterUpstream(snapshot, runtimeHome) {
     `${C.green}✓${C.reset} ${C.dim}${t.codexConfigRestoredAfterEcc(snapshot.configPath)}${C.reset}`,
   );
   return true;
+}
+
+async function restoreCodexGlobalAgentsAfterUpstream(snapshot) {
+  if (!snapshot) return false;
+  const currentText = (await pathExists(snapshot.agentsPath))
+    ? await fs.readFile(snapshot.agentsPath, "utf8")
+    : null;
+
+  if (snapshot.text && !snapshot.isEccBaseline) {
+    if (currentText === snapshot.text) return false;
+    await fs.writeFile(snapshot.agentsPath, snapshot.text, "utf8");
+    console.log(
+      `${C.green}✓${C.reset} ${C.dim}${t.codexGlobalAgentsRestoredAfterEcc(snapshot.agentsPath)}${C.reset}`,
+    );
+    return true;
+  }
+
+  if (currentText && isEccCodexAgentsBaseline(currentText)) {
+    const backupPath = `${snapshot.agentsPath}.meta-kim.ecc-baseline.bak`;
+    await fs.copyFile(snapshot.agentsPath, backupPath);
+    await fs.rm(snapshot.agentsPath, { force: true });
+    console.log(
+      `${C.green}✓${C.reset} ${C.dim}${t.codexGlobalAgentsQuarantinedAfterEcc(snapshot.agentsPath, backupPath)}${C.reset}`,
+    );
+    return true;
+  }
+
+  return false;
 }
 
 async function installUpstreamCliSpecs(runtimeHomes, activeTargets) {
@@ -1853,6 +1919,13 @@ async function installUpstreamCliSpecs(runtimeHomes, activeTargets) {
               ),
             ),
           );
+          console.log(
+            t.dryRun(
+              t.upstreamCodexGlobalAgentsPreserveDryRun(
+                path.join(runtimeHome, "AGENTS.md"),
+              ),
+            ),
+          );
         }
         continue;
       }
@@ -1864,7 +1937,12 @@ async function installUpstreamCliSpecs(runtimeHomes, activeTargets) {
         runtimeId,
         runtimeHome,
       );
+      const codexGlobalAgentsSnapshot = await readCodexGlobalAgentsSnapshot(
+        runtimeId,
+        runtimeHome,
+      );
       await backupCodexConfigBeforeUpstream(codexConfigSnapshot);
+      await backupCodexGlobalAgentsBeforeUpstream(codexGlobalAgentsSnapshot);
       const result = spawnSync("npx", args, {
         cwd: os.homedir(),
         encoding: "utf8",
@@ -1872,6 +1950,7 @@ async function installUpstreamCliSpecs(runtimeHomes, activeTargets) {
         stdio: "inherit",
       });
       await restoreCodexConfigAfterUpstream(codexConfigSnapshot, runtimeHome);
+      await restoreCodexGlobalAgentsAfterUpstream(codexGlobalAgentsSnapshot);
       if (result.status !== 0) {
         recordInstallFailure({
           skillId: `${spec.id} (${runtimeId})`,
@@ -3409,7 +3488,7 @@ async function main() {
   await installUpstreamCliSpecs(homes, activeTargets);
   await installPluginBundlesForNonClaudeRuntimes(homes, activeTargets);
   await ensureCodexChoiceSurfaceAfterInstall(homes, activeTargets);
-  refreshGlobalCapabilityInventory();
+  refreshGlobalCapabilityInventory(activeTargets);
 
   // Optional: graphify (code knowledge graph)
   if (!pluginsOnly) {

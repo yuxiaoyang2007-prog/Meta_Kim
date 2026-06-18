@@ -89,14 +89,14 @@ assert(
   "planning-with-files must preserve pluginHookCompat hook deployment",
 );
 assert(
-  planningWithFiles.hookSubdirs?.codex?.includes(".codex/hooks") &&
-    planningWithFiles.hookSubdirs?.cursor?.includes(".cursor/hooks"),
-  "planning-with-files must declare Codex and Cursor hook subdirectories",
+  planningWithFiles.globalHookSubdirs?.codex?.includes("~/.codex/hooks/meta-kim") &&
+    planningWithFiles.globalHookSubdirs?.cursor?.includes("~/.cursor/hooks/meta-kim"),
+  "planning-with-files must declare Codex and Cursor global hook subdirectories",
 );
 assert(
-  planningWithFiles.hookConfigFiles?.codex === ".codex/hooks.json" &&
-    planningWithFiles.hookConfigFiles?.cursor === ".cursor/hooks.json",
-  "planning-with-files must declare Codex and Cursor hook config files",
+  planningWithFiles.globalHookConfigFiles?.codex === "~/.codex/hooks.json" &&
+    planningWithFiles.globalHookConfigFiles?.cursor === "~/.cursor/hooks.json",
+  "planning-with-files must declare Codex and Cursor global hook config files",
 );
 
 for (const scriptName of REQUIRED_SCRIPTS) {

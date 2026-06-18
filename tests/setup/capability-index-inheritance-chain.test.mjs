@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import {
+  formatTableOutput,
   preserveGeneratedAtWhenUnchanged,
 } from "../../scripts/discover-global-capabilities.mjs";
 import {
@@ -44,6 +45,134 @@ async function listCanonicalSkillIds() {
 }
 
 describe("capability index inheritance chain", () => {
+  test("global discovery table defaults to category stats instead of dumping every capability", () => {
+    const index = {
+      byPlatform: {
+        codex: {
+          platform: "Codex",
+          platformId: "codex",
+          baseDir: "/home/user/.codex",
+          capabilities: {
+            agents: [],
+            skills: [
+              {
+                id: "gstack/autoplan",
+                platformId: "codex",
+              },
+              {
+                id: "gstack/browse",
+                platformId: "codex",
+              },
+            ],
+            hooks: [
+              {
+                id: "meta-kim/graphify-context.mjs",
+                relativePath: "meta-kim/graphify-context.mjs",
+                platformId: "codex",
+              },
+              {
+                id: "graphify-context.mjs",
+                relativePath: "graphify-context.mjs",
+                platformId: "codex",
+              },
+              {
+                id: "hooks-json",
+                relativePath: "hooks.json",
+                platformId: "codex",
+                metadata: { providerKind: "hook-config" },
+              },
+            ],
+            plugins: [],
+            commands: [],
+            rules: [],
+            prompts: [],
+            mcpServers: [],
+            mcpTools: [],
+          },
+          errors: [],
+        },
+      },
+      byCapabilityType: {
+        agents: {},
+        skills: {
+          "codex:gstack/autoplan": {
+            id: "gstack/autoplan",
+            platformId: "codex",
+          },
+          "codex:gstack/browse": {
+            id: "gstack/browse",
+            platformId: "codex",
+          },
+        },
+        hooks: {
+          "codex:meta-kim/graphify-context.mjs": {
+            id: "meta-kim/graphify-context.mjs",
+            relativePath: "meta-kim/graphify-context.mjs",
+            platformId: "codex",
+          },
+          "codex:graphify-context.mjs": {
+            id: "graphify-context.mjs",
+            relativePath: "graphify-context.mjs",
+            platformId: "codex",
+          },
+          "codex:hooks-json": {
+            id: "hooks-json",
+            relativePath: "hooks.json",
+            platformId: "codex",
+            metadata: { providerKind: "hook-config" },
+          },
+        },
+        plugins: {},
+        commands: {},
+        rules: {},
+        prompts: {},
+        mcpServers: {},
+        mcpTools: {},
+      },
+    };
+
+    const summary = formatTableOutput(index);
+    assert.match(summary, /Hooks by category/);
+    assert.match(summary, /Meta_Kim namespaced 1/);
+    assert.match(summary, /Meta_Kim legacy root 1/);
+    assert.match(summary, /runtime config 1/);
+    assert.match(summary, /Skills by family/);
+    assert.match(summary, /gstack 2/);
+    assert.doesNotMatch(summary, /codex:gstack\/autoplan/);
+    assert.doesNotMatch(summary, /### HOOKS/);
+    assert.doesNotMatch(summary, /codex:hooks-json|codex:graphify-context\.mjs/);
+
+    const details = formatTableOutput(index, { verbose: true });
+    assert.match(details, /codex:gstack\/autoplan/);
+    assert.match(details, /codex:hooks-json/);
+
+    const zhSummary = formatTableOutput(index, { lang: "zh-CN" });
+    assert.match(zhSummary, /按平台统计/);
+    assert.match(zhSummary, /Hooks 分类统计/);
+    assert.match(zhSummary, /Skills 家族统计/);
+    assert.match(zhSummary, /默认只显示分类统计/);
+    assert.doesNotMatch(zhSummary, /By platform|Details hidden by default/);
+  });
+
+  test("global discovery supports selected runtime target filters", async () => {
+    const source = await fs.readFile(
+      path.join(repoRoot, "scripts", "discover-global-capabilities.mjs"),
+      "utf8",
+    );
+
+    assert.match(source, /const TARGET_ALIASES = \{/);
+    assert.match(source, /claude: "claudeCode"/);
+    assert.match(source, /function normalizePlatformTargets\(rawValue\)/);
+    assert.match(source, /argValue\(args, "--targets"\) \|\| argValue\(args, "--platform"\)/);
+    assert.match(source, /filterTargets\.length > 0/);
+    assert.match(source, /\.meta-kim-legacy-backup\//);
+    assert.doesNotMatch(
+      source,
+      /const platformsToScan = filterPlatform/,
+      "global discovery must not use the old single-platform-only filter path",
+    );
+  });
+
   test("repo canonical index and all runtime mirrors are byte-for-byte identical", async () => {
     const canonical = await fs.readFile(canonicalIndexPath, "utf8");
     for (const mirrorPath of mirrorIndexPaths) {
@@ -188,24 +317,34 @@ describe("capability index inheritance chain", () => {
       "utf8",
     );
 
-    assert.match(setupSource, /function refreshGlobalCapabilityInventory\(\)/);
+    assert.match(setupSource, /function refreshGlobalCapabilityInventory\(activeTargets = \[\]\)/);
     assert.match(
       setupSource,
-      /runNodeScript\("scripts\/discover-global-capabilities\.mjs"\)/,
-      "setup.mjs must run global discovery directly instead of only printing a reminder",
+      /runNodeScript\("scripts\/discover-global-capabilities\.mjs", targetArgs, \{\s*META_KIM_LANG: currentLangCode,\s*\}\)/,
+      "setup.mjs must run global discovery directly for the selected runtime targets",
     );
     assert.match(
       setupSource,
-      /await withProgress\(\s*t\.stepLabel\(stepNum, "Refresh global capability inventory"\)/,
+      /"\-\-targets", activeTargets\.join\(","\)/,
+      "setup.mjs must restrict global discovery to the selected runtime targets",
+    );
+    assert.match(
+      setupSource,
+      /await withProgress\(\s*t\.stepLabel\(stepNum, t\.refreshGlobalCapabilityInventory\)/,
       "install flow must refresh the global capability inventory",
     );
     assert.match(
       setupSource,
-      /refreshGlobalCapabilityInventory\(\);\s*\n\s*\/\/ ── 6\. checkSync/,
+      /await refreshGlobalCapabilityInventory\(activeTargets\);\s*\n\s*}\s*\n\s*\/\/ ── 6\. checkSync/,
       "update flow must refresh the global capability inventory before final sync checks",
     );
 
-    assert.match(installSource, /function refreshGlobalCapabilityInventory\(\)/);
+    assert.match(installSource, /function refreshGlobalCapabilityInventory\(activeTargets = \[\]\)/);
+    assert.match(
+      installSource,
+      /"--targets",\s*activeTargets\.join\(","\)/,
+      "global skill dependency installer must restrict discovery to the selected runtime targets",
+    );
     assert.match(
       installSource,
       /discover-global-capabilities\.mjs/,

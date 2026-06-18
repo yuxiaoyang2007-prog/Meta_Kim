@@ -2,7 +2,7 @@ import process from "node:process";
 import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { readJsonFromStdin } from "./utils.mjs";
-import { readSpineState } from "./spine-state.mjs";
+import { readSpineState } from "../../shared/hooks/spine-state.mjs";
 
 // Stop hook: deactivate spine state on session end.
 // Reads spine state, marks inactive, or deletes if evolution completed.

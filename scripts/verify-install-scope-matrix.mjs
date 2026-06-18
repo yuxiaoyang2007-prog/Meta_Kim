@@ -26,8 +26,8 @@ const projectCases = [
   {
     id: "project-codex",
     targets: ["codex"],
-    present: ["AGENTS.md", ".codex/hooks.json", ".agents/skills/meta-theory/SKILL.md"],
-    absent: ["CLAUDE.md", ".claude", ".cursor", "openclaw"],
+    present: ["AGENTS.md", ".codex/hooks.json"],
+    absent: ["CLAUDE.md", ".claude", ".agents", ".cursor", "openclaw"],
   },
   {
     id: "project-cursor",
@@ -60,10 +60,9 @@ const projectCases = [
       "AGENTS.md",
       ".claude/settings.json",
       ".codex/hooks.json",
-      ".agents/skills/meta-theory/SKILL.md",
       ".mcp.json",
     ],
-    absent: [".cursor", "openclaw"],
+    absent: [".agents", ".cursor", "openclaw"],
   },
   {
     id: "project-all-explicit",
@@ -73,14 +72,13 @@ const projectCases = [
       "AGENTS.md",
       ".claude/settings.json",
       ".codex/hooks.json",
-      ".agents/skills/meta-theory/SKILL.md",
       ".mcp.json",
       ".cursor/hooks.json",
       ".cursor/mcp.json",
       "openclaw/openclaw.template.json",
       "openclaw/skills/meta-theory/SKILL.md",
     ],
-    absent: [],
+    absent: [".agents"],
   },
 ];
 
@@ -227,8 +225,8 @@ function countFiles(root) {
   return count;
 }
 
-function inspectGlobalSync(baseDir) {
-  const userHome = path.join(baseDir, "user-home");
+function inspectGlobalSync(baseDir, { id, targets, withGlobalHooks = false }) {
+  const userHome = path.join(baseDir, id, "user-home");
   const homes = {
     claude: path.join(userHome, ".claude"),
     codex: path.join(userHome, ".codex"),
@@ -243,28 +241,69 @@ function inspectGlobalSync(baseDir) {
     META_KIM_CURSOR_HOME: homes.cursor,
     META_KIM_OPENCLAW_HOME: homes.openclaw,
   };
-  const result = runNode(
-    ["scripts/sync-global-meta-theory.mjs", "--targets", "claude,codex"],
-    { env },
-  );
+  const args = [
+    "scripts/sync-global-meta-theory.mjs",
+    "--targets",
+    targets.join(","),
+  ];
+  if (withGlobalHooks) args.push("--with-global-hooks");
+  const result = runNode(args, { env });
   const manifestPath = path.join(userHome, ".meta-kim", "install-manifest.json");
   const manifest = existsSync(manifestPath) ? readJson(manifestPath) : null;
-  const checks = {
-    claudeSkill: existsRel(homes.claude, "skills/meta-theory/SKILL.md"),
-    claudeCommand: existsRel(homes.claude, "commands/meta-theory.md"),
-    codexSkill: existsRel(homes.codex, "skills/meta-theory/SKILL.md"),
-    codexCommand: existsRel(homes.codex, "commands/meta-theory.md"),
-    codexConfig: existsRel(homes.codex, "config.toml"),
-    cursorHomeUntouched: listTopLevel(homes.cursor).length === 0,
-    openclawHomeUntouched: listTopLevel(homes.openclaw).length === 0,
-  };
+  const requiredChecks = {};
+  if (targets.includes("claude")) {
+    requiredChecks.claudeSkill = existsRel(homes.claude, "skills/meta-theory/SKILL.md");
+    requiredChecks.claudeCommand = existsRel(homes.claude, "commands/meta-theory.md");
+    if (withGlobalHooks) {
+      requiredChecks.claudeGlobalHooks = existsRel(
+        homes.claude,
+        "hooks/meta-kim/activate-meta-theory-spine.mjs",
+      );
+    }
+  }
+  if (targets.includes("codex")) {
+    requiredChecks.codexSkill = existsRel(homes.codex, "skills/meta-theory/SKILL.md");
+    requiredChecks.codexCommand = existsRel(homes.codex, "commands/meta-theory.md");
+    requiredChecks.codexConfig = existsRel(homes.codex, "config.toml");
+    if (withGlobalHooks) {
+      requiredChecks.codexGlobalHooks = existsRel(
+        homes.codex,
+        "hooks/meta-kim/activate-meta-theory-spine.mjs",
+      );
+      const codexHooksJsonPath = path.join(homes.codex, "hooks.json");
+      const codexHooksJson = existsSync(codexHooksJsonPath)
+        ? readFileSync(codexHooksJsonPath, "utf8")
+        : "";
+      requiredChecks.codexGlobalHooksJson =
+        codexHooksJson.includes("activate-meta-theory-spine.mjs") &&
+        codexHooksJson.includes("--package-root") &&
+        codexHooksJson.includes(repoRoot.replace(/\\/g, "\\\\"));
+    }
+  }
+  if (targets.includes("cursor")) {
+    requiredChecks.cursorSkill = existsRel(homes.cursor, "skills/meta-theory/SKILL.md");
+  }
+  if (targets.includes("openclaw")) {
+    requiredChecks.openclawSkill = existsRel(homes.openclaw, "skills/meta-theory/SKILL.md");
+  }
+  const untouchedChecks = {};
+  if (!targets.includes("cursor")) {
+    untouchedChecks.cursorHomeUntouched = listTopLevel(homes.cursor).length === 0;
+  }
+  if (!targets.includes("openclaw")) {
+    untouchedChecks.openclawHomeUntouched =
+      listTopLevel(homes.openclaw).length === 0;
+  }
+  const checks = { ...requiredChecks, ...untouchedChecks };
   const ok = result.status === 0 && Object.values(checks).every(Boolean);
   return {
-    id: "global-default-claude-codex",
+    id,
     layer: "global",
-    targets: ["claude", "codex"],
+    targets,
     status: ok ? "pass" : "fail",
     checks,
+    requiredChecks,
+    untouchedChecks,
     manifestEntries: manifest?.entries?.length ?? 0,
     manifestPath: existsSync(manifestPath) ? manifestPath : null,
     homeFileCounts: {
@@ -285,12 +324,12 @@ function classification() {
       platformSupportTiers: {
         sourceOfTruth: "config/runtime-compatibility-catalog.json",
         formalProjectionTargets: productIdsByTier("runtime_projection"),
-        defaultFormalProjectionTargets: ["claude", "codex"],
-        explicitFormalCompatibilityProjectionTargets: ["openclaw", "cursor"],
+        defaultSelectedTargets: ["claude", "codex"],
+        nonDefaultFormalProjectionTargets: ["openclaw", "cursor"],
         dependencyInstallTargets: productIdsByTier("dependency_install_target"),
         candidateProbeTargets: productIdsByTier("candidate_probe"),
         boundary:
-          "OpenClaw and Cursor are explicit formal project-projection compatibility targets, not the whole platform compatibility universe.",
+          "Claude Code, Codex, OpenClaw, and Cursor are formal Meta_Kim projection targets; dependency_install_target and candidate_probe products are not project projections.",
       },
       selectedByDefault: [
         {
@@ -307,7 +346,7 @@ function classification() {
           ],
         },
       ],
-      explicitCompatibilityTargets: [
+      nonDefaultFormalTargets: [
         "~/.cursor/skills/meta-theory/",
         "~/.openclaw/skills/meta-theory/",
       ],
@@ -317,7 +356,7 @@ function classification() {
       defaultTargets: ["claude", "codex"],
       targetSurfaces: {
         claude: ["CLAUDE.md", ".claude/", ".mcp.json"],
-        codex: ["AGENTS.md", ".codex/", ".agents/skills/"],
+        codex: ["AGENTS.md", ".codex/"],
         cursor: ["AGENTS.md context", ".cursor/agents/", ".cursor/rules/", ".cursor/skills/", ".cursor/hooks.json", ".cursor/mcp.json"],
         openclaw: ["AGENTS.md team/context material", "openclaw/workspaces/", "openclaw/skills/", "openclaw/hooks/", "openclaw/openclaw.template.json"],
       },
@@ -330,7 +369,18 @@ const tempRoot = mkdtempSync(path.join(os.tmpdir(), "meta-kim-install-scope-"));
 let summary;
 try {
   const projectResults = projectCases.map((entry) => inspectProjectCase(tempRoot, entry));
-  const globalResults = [inspectGlobalSync(tempRoot)];
+  const globalResults = [
+    inspectGlobalSync(tempRoot, {
+      id: "global-default-claude-codex",
+      targets: ["claude", "codex"],
+      withGlobalHooks: true,
+    }),
+    inspectGlobalSync(tempRoot, {
+      id: "global-all-formal-targets",
+      targets: ["claude", "codex", "cursor", "openclaw"],
+      withGlobalHooks: true,
+    }),
+  ];
   const results = [...projectResults, ...globalResults];
   summary = {
     schemaVersion: "meta-kim-install-scope-verification-v0.1",

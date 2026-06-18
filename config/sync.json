@@ -23,20 +23,42 @@
     "contracts": "config/contracts",
     "capabilityIndex": "config/capability-index"
   },
+  "projectMaterializationPolicy": {
+    "defaultAssetMode": "global_reusable_by_default",
+    "globalByDefault": [
+      "agents",
+      "commands",
+      "mcp",
+      "hooks",
+      "skills"
+    ],
+    "projectMaterializationTrigger": "project_specific_customization_or_iteration_innovation",
+    "projectRuntimeAssetCopyPolicy": "copy_to_project_when_explicit_project_update_or_project_dedicated_extension",
+    "projectAllowedBase": [
+      "runtime_entry_context",
+      "merged_project_config",
+      "project_cache_state",
+      "project_evolution_records",
+      "project_specific_capability_overrides"
+    ],
+    "projectStatePaths": [
+      ".meta-kim/state",
+      ".meta-kim/cache",
+      ".meta-kim/backups",
+      ".meta-kim/local.overrides.json"
+    ]
+  },
   "generatedTargets": {
     "claude": [
       ".claude/agents",
       ".claude/skills",
-      ".claude/hooks",
       ".claude/settings.json",
       ".mcp.json",
       ".claude/capability-index"
     ],
     "codex": [
       ".codex/agents",
-      ".agents/skills",
       ".codex/capability-index",
-      ".codex/hooks",
       ".codex/hooks.json",
       ".codex/commands",
       ".codex/config.toml",
@@ -45,14 +67,12 @@
     "openclaw": [
       "openclaw/workspaces",
       "openclaw/skills",
-      "openclaw/hooks",
       "openclaw/capability-index",
       "openclaw/openclaw.template.json"
     ],
     "cursor": [
       ".cursor/agents",
       ".cursor/skills",
-      ".cursor/hooks",
       ".cursor/hooks.json",
       ".cursor/capability-index",
       ".cursor/mcp.json",

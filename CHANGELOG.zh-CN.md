@@ -8,6 +8,29 @@
 
 ## [Unreleased]
 
+## [2.8.42] - 2026-06-18
+
+### 解决的问题
+
+本次发布解决的是全局可复用安装和项目本地生成状态被混在一起的问题。现在可以端到端验证全局 `meta-theory` 安装，而不把通用 Codex skill 复制进每个项目；项目缓存和 Graphify 输出仍然只落在当前项目。
+
+### 变更
+
+- **Codex 全局 Hook 注册** - 全局同步现在会把 Meta_Kim hook 脚本复制到 `~/.codex/hooks/meta-kim/`，并把 prompt-entry spine hook 合并进 `~/.codex/hooks.json`，带 package-root 证据；用户自己的 hook 会保留，只替换 Meta_Kim 管理项。
+- **项目缓存验证** - 新增 `npm run meta:project-cache:verify`，并支持 `--real-global`，用于证明全局 hook 会在当前项目生成 `.meta-kim/state/default/post-copy-init.json`、`graphify-out/graph.json`、`graphify-out/GRAPH_REPORT.md`，且不会复制 `.agents/skills/meta-theory/`。
+- **安装范围矩阵** - 扩展安装范围验证，覆盖全局默认、全局全正式目标、项目默认、项目全正式目标，并证明预期文件存在、非预期写入不存在。
+- **正式投影口径** - README 现在把 OpenClaw 和 Cursor 说明为非默认但正式投影，不再放进兼容层；候选 probe 仍然保持分层。
+
+### 验证
+
+- `node scripts/sync-global-meta-theory.mjs --check --targets claude,codex,cursor,openclaw --with-global-hooks`
+- `npm run meta:project-cache:verify -- --real-global`
+- `npm run meta:project-cache:verify`
+- `npm run meta:install-scope:verify`
+- `node --test tests/setup/sync-global-hooks-policy.test.mjs tests/setup/install-scope-matrix.test.mjs`
+- `node scripts/validate-runtime-safety-contract.mjs`
+- `git diff --check`
+
 ## [2.8.41] - 2026-06-16
 
 ### 解决的问题

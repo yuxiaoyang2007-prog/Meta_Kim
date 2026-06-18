@@ -99,7 +99,64 @@ describe("Claude settings hook command rendering", () => {
     );
   });
 
-  test("repo settings merge keeps project hook commands relative", () => {
+  test("global settings merge replaces legacy root Meta_Kim hook commands", () => {
+    const base = {
+      hooks: {
+        UserPromptSubmit: [
+          {
+            hooks: [
+              {
+                type: "command",
+                command:
+                  'node ".claude/hooks/activate-meta-theory-spine.mjs"',
+              },
+            ],
+          },
+        ],
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              {
+                type: "command",
+                command:
+                  'node "C:/Users/Example/.claude/hooks/block-dangerous-bash.mjs"',
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const template = buildMetaKimHooksTemplate(
+      "C:\\Users\\Example\\.claude\\hooks\\meta-kim",
+    );
+
+    const merged = mergeGlobalMetaKimHooksIntoSettings(base, template);
+    const commands = Object.values(merged.hooks)
+      .flatMap((blocks) => blocks.flatMap((block) => block.hooks ?? []))
+      .map((hook) => hook.command);
+
+    assert.equal(
+      commands.some((entry) => entry.includes(".claude/hooks/activate-meta-theory-spine.mjs")),
+      false,
+    );
+    assert.equal(
+      commands.some((entry) => entry.includes(".claude/hooks/block-dangerous-bash.mjs")),
+      false,
+    );
+    assert.ok(
+      commands.includes(
+        'node "C:/Users/Example/.claude/hooks/meta-kim/activate-meta-theory-spine.mjs"',
+      ),
+    );
+    assert.ok(
+      commands.includes(
+        'node "C:/Users/Example/.claude/hooks/meta-kim/block-dangerous-bash.mjs"',
+      ),
+    );
+  });
+
+  test("repo settings merge does not re-add project hook commands", () => {
     const canonical = {
       hooks: {
         PreToolUse: [
@@ -117,16 +174,11 @@ describe("Claude settings hook command rendering", () => {
     };
 
     const merged = mergeRepoClaudeSettings({}, canonical, "/Users/delphi/work/Finance");
-    const command = merged.hooks.PreToolUse[0].hooks[0].command;
 
-    assert.equal(
-      command,
-      "node .claude/hooks/graphify-context.mjs",
-    );
-    assert.doesNotMatch(command, /\/Users\/delphi\/work\/Finance/);
+    assert.deepEqual(merged.hooks, {});
   });
 
-  test("repo settings merge replaces legacy Meta_Kim hook entries with relative commands", () => {
+  test("repo settings merge removes legacy Meta_Kim hook entries", () => {
     const base = {
       hooks: {
         PreToolUse: [
@@ -186,13 +238,10 @@ describe("Claude settings hook command rendering", () => {
       .flatMap((blocks) => blocks.flatMap((block) => block.hooks ?? []))
       .map((hook) => hook.command);
 
-    assert.deepEqual(commands, [
-      "node .claude/hooks/enforce-agent-dispatch.mjs",
-      "node .claude/hooks/stop-spine-cleanup.mjs",
-    ]);
+    assert.deepEqual(commands, []);
   });
 
-  test("repo settings merge removes old managed events no longer in canonical settings", () => {
+  test("repo settings merge keeps user hooks while removing managed hooks", () => {
     const merged = mergeRepoClaudeSettings(
       {
         hooks: {
@@ -203,6 +252,10 @@ describe("Claude settings hook command rendering", () => {
                 {
                   type: "command",
                   command: "node .claude/hooks/meta-kim-memory-save.mjs --event session-start",
+                },
+                {
+                  type: "command",
+                  command: "node .claude/hooks/user-session-start.mjs",
                 },
               ],
             },
@@ -227,7 +280,8 @@ describe("Claude settings hook command rendering", () => {
       "/Users/delphi/work/Finance",
     );
 
-    assert.equal(merged.hooks.SessionStart, undefined);
-    assert.match(JSON.stringify(merged.hooks), /graphify-context\.mjs/);
+    assert.match(JSON.stringify(merged.hooks), /user-session-start\.mjs/);
+    assert.doesNotMatch(JSON.stringify(merged.hooks), /meta-kim-memory-save\.mjs/);
+    assert.doesNotMatch(JSON.stringify(merged.hooks), /graphify-context\.mjs/);
   });
 });

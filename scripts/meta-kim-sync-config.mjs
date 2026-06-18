@@ -214,7 +214,7 @@ export function parseTargetsArg(argv = process.argv.slice(2)) {
 
 /**
  * Parse `--skills=id1,id2` / `--skills id1,id2` / `META_KIM_SKILL_IDS`.
- * Returns null if unset (caller should treat as “all manifest skills”),
+ * Returns null if unset (caller should treat as "all manifest skills"),
  * or a list (possibly empty) when explicitly constrained.
  */
 export function parseSkillsArg(argv = process.argv.slice(2)) {
@@ -227,29 +227,32 @@ export function parseSkillsArg(argv = process.argv.slice(2)) {
   }
 
   const joined = [];
+  let explicitCliFilter = false;
   for (let index = 0; index < argv.length; index += 1) {
     const current = argv[index];
-    if (current === "--skills" && argv[index + 1] !== undefined) {
-      joined.push(argv[index + 1]);
-      index += 1;
+    if (current === "--skills") {
+      explicitCliFilter = true;
+      if (argv[index + 1] !== undefined) {
+        joined.push(argv[index + 1]);
+        index += 1;
+      }
       continue;
     }
     if (current.startsWith("--skills=")) {
+      explicitCliFilter = true;
       joined.push(current.slice("--skills=".length));
     }
   }
 
-  const result = joined
+  if (!explicitCliFilter) {
+    return null;
+  }
+
+  return joined
     .join(",")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-
-  if (result.length === 0) {
-    return null;
-  }
-
-  return result;
 }
 
 export function normalizeTargets(rawTargets) {
@@ -472,7 +475,7 @@ const runtimeProjectionLayouts = {
       agentsDir: ["agents"],
       skillsDir: ["skills"],
       skillRoot: ["skills", "meta-theory"],
-      hooksDir: ["hooks"],
+      hooksDir: ["hooks", "meta-kim"],
       hooksFile: ["hooks.json"],
       commandsDir: ["commands"],
       configFile: ["config.toml"],
@@ -515,7 +518,7 @@ const runtimeProjectionLayouts = {
       agentsDir: ["agents"],
       skillsDir: ["skills"],
       skillRoot: ["skills", "meta-theory"],
-      hooksDir: ["hooks"],
+      hooksDir: ["hooks", "meta-kim"],
       hooksFile: ["hooks.json"],
       mcpFile: ["mcp.json"],
       capabilityIndexDir: ["capability-index"],

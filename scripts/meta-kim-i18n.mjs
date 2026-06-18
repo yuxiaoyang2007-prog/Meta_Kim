@@ -43,6 +43,8 @@ export const INSTALL_STATUS_MESSAGE_CLASSES = Object.freeze({
   allUpToDate: "success",
   pluginUpdated: "success",
   codexConfigRestoredAfterEcc: "success",
+  codexGlobalAgentsRestoredAfterEcc: "success",
+  codexGlobalAgentsQuarantinedAfterEcc: "success",
   codexChoiceSurfacePreserved: "success",
   codexChoiceSurfaceRestored: "success",
   okRemovedObsolete: "success",
@@ -251,6 +253,8 @@ const STRINGS = {
       `${id}: project-local installer skipped during global update; run from each ${runtimeId} project root: ${commandText}`,
     upstreamCodexConfigPreserveDryRun: (configPath) =>
       `preserve existing ${configPath} before ECC upstream installer and restore it with add-only ECC merge`,
+    upstreamCodexGlobalAgentsPreserveDryRun: (agentsPath) =>
+      `protect ${agentsPath} from ECC upstream installer: restore user-authored content or quarantine the ECC baseline if it appears globally`,
     upstreamInstallerFailureReason: (commandText) =>
       `Run ${commandText} directly to see the upstream installer output.`,
     codexNativeControlsDryRun: (configPath, requestUserInputFeature) =>
@@ -259,6 +263,12 @@ const STRINGS = {
       `Backed up Codex config before ECC upstream installer: ${backupPath}`,
     codexConfigRestoredAfterEcc: (configPath) =>
       `Restored user Codex config after ECC upstream installer with add-only ECC merge: ${configPath}`,
+    codexGlobalAgentsBackupBeforeEcc: (backupPath) =>
+      `Backed up Codex global AGENTS.md before ECC upstream installer: ${backupPath}`,
+    codexGlobalAgentsRestoredAfterEcc: (agentsPath) =>
+      `Restored user Codex global AGENTS.md after ECC upstream installer: ${agentsPath}`,
+    codexGlobalAgentsQuarantinedAfterEcc: (agentsPath, backupPath) =>
+      `Quarantined ECC baseline from Codex global AGENTS.md: ${agentsPath}; backup: ${backupPath}`,
     codexChoiceSurfacePreserved: (configPath) =>
       `Codex choice surface and App native controls preserved: ${configPath}`,
     codexConfigBackupBeforeChoiceSurface: (backupPath) =>
@@ -501,6 +511,8 @@ const STRINGS = {
       `${id}：全局更新不会写入项目本地安装；请在每个 ${runtimeId} 项目根目录运行：${commandText}`,
     upstreamCodexConfigPreserveDryRun: (configPath) =>
       `保留现有 ${configPath}；ECC 上游安装后用只追加合并恢复`,
+    upstreamCodexGlobalAgentsPreserveDryRun: (agentsPath) =>
+      `保护 ${agentsPath} 不被 ECC 上游安装器覆盖：用户原文会恢复；全局 ECC 基线会备份并隔离`,
     upstreamInstallerFailureReason: (commandText) =>
       `请直接运行 ${commandText} 查看上游安装器输出。`,
     codexNativeControlsDryRun: (configPath, requestUserInputFeature) =>
@@ -509,6 +521,12 @@ const STRINGS = {
       `ECC 上游安装前已备份 Codex 配置：${backupPath}`,
     codexConfigRestoredAfterEcc: (configPath) =>
       `已在 ECC 上游安装后用只追加合并恢复用户 Codex 配置：${configPath}`,
+    codexGlobalAgentsBackupBeforeEcc: (backupPath) =>
+      `ECC 上游安装前已备份 Codex 全局 AGENTS.md：${backupPath}`,
+    codexGlobalAgentsRestoredAfterEcc: (agentsPath) =>
+      `已在 ECC 上游安装后恢复用户 Codex 全局 AGENTS.md：${agentsPath}`,
+    codexGlobalAgentsQuarantinedAfterEcc: (agentsPath, backupPath) =>
+      `已隔离 Codex 全局 AGENTS.md 中的 ECC 基线：${agentsPath}；备份：${backupPath}`,
     codexChoiceSurfacePreserved: (configPath) =>
       `Codex 选择界面和 App 原生控制已保留：${configPath}`,
     codexConfigBackupBeforeChoiceSurface: (backupPath) =>
@@ -745,6 +763,8 @@ const STRINGS = {
       `${id}: グローバル更新ではプロジェクトローカルインストールを変更しません。各 ${runtimeId} プロジェクトルートで実行してください: ${commandText}`,
     upstreamCodexConfigPreserveDryRun: (configPath) =>
       `既存の ${configPath} を保持し、ECC 上流インストール後に追加のみのマージで復元します`,
+    upstreamCodexGlobalAgentsPreserveDryRun: (agentsPath) =>
+      `${agentsPath} を ECC 上流インストーラーから保護します。ユーザー内容は復元し、グローバル ECC ベースラインはバックアップして隔離します`,
     upstreamInstallerFailureReason: (commandText) =>
       `上流インストーラー出力を確認するには ${commandText} を直接実行してください。`,
     codexNativeControlsDryRun: (configPath, requestUserInputFeature) =>
@@ -753,6 +773,12 @@ const STRINGS = {
       `ECC 上流インストール前に Codex 設定をバックアップしました: ${backupPath}`,
     codexConfigRestoredAfterEcc: (configPath) =>
       `ECC 上流インストール後、追加のみのマージでユーザー Codex 設定を復元しました: ${configPath}`,
+    codexGlobalAgentsBackupBeforeEcc: (backupPath) =>
+      `ECC 上流インストール前に Codex グローバル AGENTS.md をバックアップしました: ${backupPath}`,
+    codexGlobalAgentsRestoredAfterEcc: (agentsPath) =>
+      `ECC 上流インストール後にユーザーの Codex グローバル AGENTS.md を復元しました: ${agentsPath}`,
+    codexGlobalAgentsQuarantinedAfterEcc: (agentsPath, backupPath) =>
+      `Codex グローバル AGENTS.md の ECC ベースラインを隔離しました: ${agentsPath}; バックアップ: ${backupPath}`,
     codexChoiceSurfacePreserved: (configPath) =>
       `Codex choice surface と App ネイティブ制御を保持しました: ${configPath}`,
     codexConfigBackupBeforeChoiceSurface: (backupPath) =>
@@ -997,6 +1023,8 @@ const STRINGS = {
       `${id}: 전역 업데이트에서는 프로젝트 로컬 설치를 변경하지 않습니다. 각 ${runtimeId} 프로젝트 루트에서 실행하세요: ${commandText}`,
     upstreamCodexConfigPreserveDryRun: (configPath) =>
       `기존 ${configPath}를 보존하고 ECC 업스트림 설치 후 추가 전용 병합으로 복원합니다`,
+    upstreamCodexGlobalAgentsPreserveDryRun: (agentsPath) =>
+      `${agentsPath}를 ECC 업스트림 설치기로부터 보호합니다. 사용자 내용은 복원하고 전역 ECC baseline은 백업 후 격리합니다`,
     upstreamInstallerFailureReason: (commandText) =>
       `업스트림 설치기 출력을 보려면 ${commandText}를 직접 실행하세요.`,
     codexNativeControlsDryRun: (configPath, requestUserInputFeature) =>
@@ -1005,6 +1033,12 @@ const STRINGS = {
       `ECC 업스트림 설치 전에 Codex 설정을 백업했습니다: ${backupPath}`,
     codexConfigRestoredAfterEcc: (configPath) =>
       `ECC 업스트림 설치 후 사용자 Codex 설정을 추가 전용 병합으로 복원했습니다: ${configPath}`,
+    codexGlobalAgentsBackupBeforeEcc: (backupPath) =>
+      `ECC 업스트림 설치 전에 Codex 전역 AGENTS.md를 백업했습니다: ${backupPath}`,
+    codexGlobalAgentsRestoredAfterEcc: (agentsPath) =>
+      `ECC 업스트림 설치 후 사용자 Codex 전역 AGENTS.md를 복원했습니다: ${agentsPath}`,
+    codexGlobalAgentsQuarantinedAfterEcc: (agentsPath, backupPath) =>
+      `Codex 전역 AGENTS.md의 ECC baseline을 격리했습니다: ${agentsPath}; 백업: ${backupPath}`,
     codexChoiceSurfacePreserved: (configPath) =>
       `Codex choice surface 및 App 네이티브 제어를 보존했습니다: ${configPath}`,
     codexConfigBackupBeforeChoiceSurface: (backupPath) =>

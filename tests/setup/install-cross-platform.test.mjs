@@ -84,9 +84,9 @@ describe("install platform config", () => {
   });
 
   test("planning-with-files is a project workflow hook, not a Meta_Kim governance hook", () => {
-    assert.deepEqual(planningWithFilesSkill.hookSubdirs, {
-      codex: [".codex/hooks"],
-      cursor: [".cursor/hooks"],
+    assert.deepEqual(planningWithFilesSkill.globalHookSubdirs, {
+      codex: ["~/.codex/hooks/meta-kim"],
+      cursor: ["~/.cursor/hooks/meta-kim"],
     });
     assert.equal(planningWithFilesSkill.platformSupport, undefined);
   });

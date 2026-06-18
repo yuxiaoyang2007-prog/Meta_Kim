@@ -93,9 +93,11 @@ node setup.mjs
 
 ### Install scope
 
-The default Enter path is **global reusable capabilities + the current project's target-selected projection**. By default, the selected targets are Claude Code + Codex, so setup installs shared skills for those tools and generates/updates only their project-level surfaces: Claude Code uses `CLAUDE.md`, `.claude/`, and `.mcp.json`; Codex uses `AGENTS.md`, `.codex/`, and `.agents/skills/`. Cursor and OpenClaw project files are generated only when those formal projection compatibility targets are explicitly selected. Dependency-owned install targets stay with their upstream projects; Meta_Kim only records them internally to prevent accidental promotion into project projections. Every applied project bootstrap records `.meta-kim/` state and backup files.
+The default Enter path is **global reusable capabilities**. Agents, commands, MCP, hooks, and skills are installed into each selected runtime's official global/home locations when that runtime supports them. Projects reuse those capabilities directly; project-local agents, commands, MCP, hooks, or skills are created only when Fetch/Thinking proves project-specific customization, iteration, or a dedicated override is needed.
 
-Global-only is an explicit scope. It installs reusable skills and meta-theory entrypoints, but it does not make every project governed by Meta_Kim. In another directory, Meta_Kim must first show a dry-run project bootstrap plan and receive confirmation before writing project files. Existing user config is preserved through managed blocks, add-only writes, protected JSON merge, backups, and manifests.
+If you explicitly choose **Project directory updates**, setup asks which project directories to update and writes the target-selected project runtime projection there, including project hooks/config where that runtime supports them. This path does not install global reusable capabilities and does not run project cleanup.
+
+Project files are still allowed, but they are not the default reusable capability store. Confirmed project bootstrap writes only project context/config/state plus proven project-specific overrides, preserving existing user config through managed blocks, add-only writes, protected JSON merge, backups, and manifests. Every applied project bootstrap records `.meta-kim/` state and backup files.
 
 If you plan to maintain the repository, edit the canonical sources first: `canonical/agents/`, `canonical/skills/meta-theory/`, `config/contracts/`, and `config/capability-index/`. Then run (requires Node.js >= 22.13.0):
 
@@ -118,10 +120,10 @@ After the default install (`node setup.mjs` or `npx`) or a confirmed project boo
 | Where you are | What works automatically | Human entry path |
 |---|---|---|
 | Meta_Kim repo with Claude Code | Full governance via CLAUDE.md (8-stage spine, gates, dispatch rules) | Say the task naturally; durable work is classified into the governed route |
-| Any other project with Claude Code | Global skills can be discovered; project governance starts only after the local project projection is confirmed/applied | Say the task naturally; explicit `/meta-theory` remains a maintainer shortcut |
-| Codex | `AGENTS.md` project context plus generated local `.codex/agents/*.toml`, `.codex/hooks.json`, `.codex/commands/`, and `.agents/skills/` | Say the task naturally; Codex classifies durable work, subjective ambiguity, and pure queries differently |
-| OpenClaw | `openclaw/` workspaces, shared skills, template config, and internal lifecycle hooks; `AGENTS.md` is team/context material, not the runtime front door | Requires OpenClaw config/auth; contributors must complete strict OpenClaw self-testing and provide evidence; changes can merge only after that evidence passes review |
-| Cursor | `AGENTS.md` can contribute repository context, but Cursor-specific behavior lives in `.cursor/agents/`, `.cursor/rules/`, `.cursor/skills/`, hooks, and MCP mirrors | Contributors must complete strict Cursor self-testing and provide evidence; changes can merge only after that evidence passes review |
+| Any other project with Claude Code | Global skills/hooks can be discovered; project-local files are written only after confirmed customization/bootstrap | Say the task naturally; explicit `/meta-theory` remains a maintainer shortcut |
+| Codex | Global skills/hooks plus project `AGENTS.md` context when present; local `.codex/agents`, `.codex/commands`, or `.agents/skills` are project-specific overrides | Say the task naturally; Codex classifies durable work, subjective ambiguity, and pure queries differently |
+| OpenClaw | Global/shared skills plus OpenClaw config/auth; project `openclaw/` material is for project-specific workspace/context overrides | Requires OpenClaw config/auth; contributors must complete strict OpenClaw self-testing and provide evidence; changes can merge only after that evidence passes review |
+| Cursor | Global skills plus project rules/context when present; local `.cursor/agents`, `.cursor/rules`, `.cursor/skills`, hooks, and MCP are project-specific overrides | Contributors must complete strict Cursor self-testing and provide evidence; changes can merge only after that evidence passes review |
 
 ### Platform Support Tiers
 
@@ -130,7 +132,7 @@ Meta_Kim now tracks platform support in tiers instead of treating every compatib
 | Tier | Products | What it means |
 |---|---|---|
 | Default formal projections | Claude Code, Codex | Canonical governance is projected by default, checked by `npm run meta:sync` / `npm run meta:check`, and used for the primary prompt-first flow. |
-| Explicit formal compatibility projections | OpenClaw, Cursor | Tool-specific project files are generated only when these targets are selected; runtime changes need tool-side self-test evidence before they are treated as complete. |
+| Non-default formal projections | OpenClaw, Cursor | Tool-specific project files are generated only when these targets are selected; runtime changes need tool-side self-test evidence before they are treated as complete. |
 | Candidate compatibility probes | Qoder CLI, Trae, Kiro, Windsurf / Devin Desktop Cascade, Cline, Roo Code, Continue | Official docs expose compatible primitives such as rules, skills, agents/modes, hooks, MCP, commands, memory, or permission controls. Meta_Kim records them as candidate probes, not formal supported runtimes yet. |
 
 Source of truth: `config/runtime-compatibility-catalog.json`.
@@ -552,8 +554,8 @@ Meta_Kim currently owns four formal projection targets:
 | --- | --- | --- |
 | **Claude Code** | Fully supported | `.claude/agents/*.md` + `SKILL.md` + hooks + MCP |
 | **Codex** | Fully supported | generated local `.codex/agents/*.toml` + `.agents/skills/` + commands + hooks |
-| **OpenClaw** | Compatible formal projection | `openclaw/` workspaces + skills + internal hooks; stricter tool-denial changes need contributor-owned OpenClaw self-test evidence, and can merge only after that evidence passes review |
-| **Cursor** | Compatible formal projection | `.cursor/agents/*.md` + `.cursor/rules/*.mdc` + skills + hooks + MCP; Cursor changes need contributor-owned Cursor self-test evidence, and can merge only after that evidence passes review |
+| **OpenClaw** | Formal projection | `openclaw/` workspaces + skills + internal hooks; stricter tool-denial changes need contributor-owned OpenClaw self-test evidence, and can merge only after that evidence passes review |
+| **Cursor** | Formal projection | `.cursor/agents/*.md` + `.cursor/rules/*.mdc` + skills + hooks + MCP; Cursor changes need contributor-owned Cursor self-test evidence, and can merge only after that evidence passes review |
 
 Meta_Kim also tracks candidate compatibility probes for Qoder CLI, Trae, Kiro, Windsurf / Devin Desktop Cascade, Cline, Roo Code, and Continue. These products expose compatible primitives in their official docs, but setup does not generate project projections for them until a runtime profile, projection layout, generated paths, sync tests, install policy, and live or official probe evidence are added.
 
@@ -582,7 +584,7 @@ flowchart TB
 
 You can keep adding platform mappings over time, but the upgrade path is gated: a candidate becomes a formal projection only after Meta_Kim owns the adapter shape and can verify it.
 
-The four tool targets are first-class Meta_Kim projections, but their native surfaces differ. Claude Code and Codex are both fully supported. OpenClaw and Cursor are compatible formal projections; PRs that improve either target must include strict contributor-owned self-test evidence from that tool, and can merge only after that evidence passes review.
+The four tool targets are first-class Meta_Kim projections, but their native surfaces differ. Claude Code and Codex are the default selected primary path; OpenClaw and Cursor are also formal projections, just non-default selected targets. PRs that improve OpenClaw or Cursor native behavior must include strict contributor-owned self-test evidence from that tool, and can merge only after that evidence passes review.
 
 | Capability surface | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
@@ -590,9 +592,9 @@ The four tool targets are first-class Meta_Kim projections, but their native sur
 | **Skills / references** | Native skills, references, and a mature global ecosystem | `.agents/skills/` is the project skill root | Workspace skills and installable skills | Project skill/reference mirrors |
 | **Hooks / automation** | Project hooks + settings.json + plugin ecosystem | Trusted `.codex/hooks.json` project/user hooks | Internal lifecycle hooks; typed plugin hooks needed for blocking/canceling policy | `.cursor/hooks.json` lowerCamel lifecycle hooks with `preToolUse` / `failClosed` |
 | **MCP / configuration** | Full native MCP and config surface | Can connect via runtime adapters and MCP | Clear workspace config | Project MCP and configuration mirrors |
-| **Governance loop support** | Fully supported through Claude-native surfaces | Fully supported through Codex-native surfaces | Compatible through OpenClaw-native surfaces; typed plugin tool-denial changes need strict tests | Compatible through Cursor-native surfaces; project decision cards and official hook gates preserve compatibility semantics |
+| **Governance loop support** | Fully supported through Claude-native surfaces | Fully supported through Codex-native surfaces | Formal projection through OpenClaw-native surfaces; typed plugin tool-denial changes need strict tests | Formal projection through Cursor-native surfaces; project decision cards and official hook gates preserve native semantics |
 
-The point is compatibility discipline, not a ranking: each formal tool target keeps its own agent, skill, hook, MCP, choice, and config surface instead of pretending one host's format is universal.
+The point is format discipline, not a ranking: each formal tool target keeps its own agent, skill, hook, MCP, choice, and config surface instead of pretending one host's format is universal.
 
 Choice surfaces are tool-specific. Claude Code should use `AskUserQuestion`; Codex should use `request_user_input` when `~/.codex/config.toml` has `[features].default_mode_request_user_input = true`; Cursor uses an `alwaysApply` project rule to trigger a chat decision card plus official `preToolUse` / `failClosed` hooks for tool gating; OpenClaw uses workspace/chat cards unless a typed plugin approval hook is explicitly installed and strictly tested.
 
@@ -652,13 +654,13 @@ When you're halfway through a conversation and your token budget runs out, the c
 
 ### What works globally vs. in-repo only
 
-Meta_Kim separates reusable global capability from directory-authorized governance. After global installation (`node setup.mjs`), global skills can be discovered from any project, but project governance applies only in directories where the project-level projection has been confirmed/applied. This table separates reusable capability from checks that require the Meta_Kim source repo:
+Meta_Kim separates reusable global capability from directory-authorized governance. After global installation (`node setup.mjs`), global skills, hooks, agents, commands, and MCP entries can be discovered from any project when the runtime supports them, but project-governed behavior applies only where this directory has confirmed context/config/state or project-specific overrides. This table separates reusable capability from checks that require the Meta_Kim source repo:
 
 | Enforcement layer | Global install | Needs Meta_Kim repo |
 | --- | --- | --- |
-| **Prompt layer** (agents + skills enforce gates/protocols) | Reusable skill entrypoints are available; governed project behavior requires the local projection | — |
+| **Prompt layer** (agents + skills enforce gates/protocols) | Reusable entrypoints are global; project-specific behavior requires confirmed local context/config/state or overrides | — |
 | **Hook layer** (session-end gate checks, memory save to MCP Memory Service, dangerous command blocking) | Active only where hooks/settings are explicitly configured; advanced global controls are opt-in | — |
-| **Config layer** (contract definitions are referenced in skill prompts) | AI can read installed rules; project files are written only after project bootstrap confirmation | — |
+| **Config layer** (contract definitions are referenced in skill prompts) | AI can read installed rules; project files are written only after bootstrap confirms local context/state or project-specific overrides | — |
 | **Code validation** (`npm run meta:validate:run` hard-checks packet chains) | — | Required — script lives in `scripts/validate-run-artifact.mjs` |
 
 The first three layers are the primary defense once a directory is enabled. Code validation is a final safety net that requires running from the Meta_Kim repo (or pointing to its scripts).
@@ -823,6 +825,8 @@ Interactive update flow:
 | `npm run meta:sync` | Sync from canonical sources to all four runtimes |
 | `npm run meta:check:runtimes` | Check whether the four runtimes are in sync |
 | `npm run meta:validate` | Validate repository integrity |
+| `npm run meta:install-scope:verify` | Verify global/project install boundaries |
+| `npm run meta:project-cache:verify` | Verify global hooks generate project-local cache files |
 | `npm run meta:verify:all` | Full validation, including runtime smoke checks |
 | `npm run meta:doctor:governance` | Governance health check |
 

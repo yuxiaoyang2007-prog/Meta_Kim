@@ -79,25 +79,34 @@ When fan-out eligible, Thinking must produce `workerTaskPackets` before Executio
 
 ## Global-First Project Bootstrap
 
-When this skill is reached from a global installation and the current project is missing or stale for Meta_Kim project-level projections, do not make the human maintain global and project state manually. Run the project bootstrap probe first, then ask through the runtime-native choice surface before writing.
+Reusable capability assets are global by default. Agents, Commands, MCP providers/config, hooks, skills, prompts/rules, and reusable runtime tools must be discovered from the global runtime homes first and reused directly when their contract fits. A project directory is not a second copy of the universal Meta_Kim runtime; it is a place for project context, merged local config, cache/state, evidence, and project-specific capability overrides.
 
-Source chain for project-level files:
+Project-local capability files are allowed only when Fetch and Thinking prove a project-specific customization, iteration innovation, or dedicated override that cannot be represented by global reuse plus project state. The proof must be recorded before writing any project-local agent, Command, MCP, hook, skill, prompt/rule, or runtime adapter file.
+
+Default source chain:
 
 ```text
 installed Meta_Kim package root
 -> canonical/ and config/sync.json
--> generated runtime mirrors inside the installed package
--> setup.mjs --project-bootstrap dry-run/apply
--> current project .meta-kim/state/default/project-bootstrap.json
+-> global runtime homes and capability inventories
+-> project .meta-kim/state/cache/overrides evidence
+-> project-local capability files only after projectCustomizationPacket approval
 ```
 
 Required behavior:
 
-- Before project writes, run a dry-run probe such as `meta-kim project bootstrap --dry-run --project-dir <current-project> --json` or `node setup.mjs --project-bootstrap --dry-run --project-dir <current-project> --json` from the installed Meta_Kim package root.
-- The dry-run output must expose `sourceChain`, target state, active targets, file actions, merge policies, skipped files, and stale manifest status. If `sourceChain` is missing, return to Fetch; do not design or apply from memory.
-- If the target needs initialization or update, ask the user through Claude Code `AskUserQuestion` or Codex `request_user_input` before `--apply`. Compatibility runtimes may show a localized decision card, but that is not Claude/Codex native proof.
+- Before creating project-local capability files, run capability discovery across global runtime homes, project inventories, package scripts, MCP/tool catalogs, and existing local config. Reusable global assets win over copying files into the project.
+- Project bootstrap may write project context/config/state: managed `AGENTS.md` / `CLAUDE.md` blocks, additive MCP/settings merges, `graphify-out/`, and `.meta-kim/state|cache|backups|local.overrides.json`. These are not evidence that reusable capability assets should be copied into the project.
+- A project-local capability write requires `projectCustomizationPacket` with `capabilityType`, `globalCandidateChecked`, `projectNeed`, `customizationReason`, `targetPath`, `mergePolicy`, `owner`, `verification`, and `rollback`. If any field is missing, return to Fetch or Thinking.
+- Project-local capability files must use one of these policies: `copy_to_project_for_modification`, `create_project_local_capability`, or `already_project_local`. Directly reused global capabilities use `use_global_directly` and must not be copied.
+- 项目内迭代或创新需要专用能力时，必须创建在对应 runtime 的原生项目目录，不要再包一层 `.meta_kim` 或 `.meta-kim` capability 目录：Claude Code 用 `.claude/agents/`、`.claude/skills/<skill>/`、`.claude/commands/`、`.claude/hooks/`；Codex 用 `.codex/agents/`、`.agents/skills/<skill>/`、`.codex/commands/`、`.codex/hooks.json` + `.codex/hooks/`；Cursor 用 `.cursor/agents/`、`.cursor/skills/<skill>/`、`.cursor/rules/`、`.cursor/hooks.json` + `.cursor/hooks/`；OpenClaw 用 `openclaw/workspaces/<agent>/`、`openclaw/skills/<skill>/`、`openclaw/openclaw.template.json`。
+- MCP、settings、hooks JSON、OpenClaw template, and other runtime config files are always merge targets. Add missing project-specific entries, preserve user entries and credentials, and never overwrite the whole file to "make it clean".
+- Project-local capability assets created by Meta_Kim must leave ownership evidence: either a manifest entry in `.meta-kim/state/default/project-bootstrap.json`, a managed block, or a small `PROJECT_CUSTOMIZATION.md` next to the asset that names the `projectCustomizationPacket`, owner, verification command, and rollback path.
+- During update/bootstrap cleanup, remove stale project-local capability assets only when previous Meta_Kim manifest evidence proves ownership and the current plan no longer manages that path. Unknown project files, user-created files, credentials, and merge config files are preserved; empty runtime capability folders may be pruned after their last Meta_Kim-managed file is removed.
+- Hooks are last-resort fuses, not the normal design path. If a spine gate, ECC/fact gate, or runtime hook blocks repeatedly, return to Thinking and select the required abstract check/output contract before execution; do not rely on hook denial loops as the way to discover the right output.
+- If the target needs initialization, update, or a project-specific override, ask the user through Claude Code `AskUserQuestion` or Codex `request_user_input` before writing. Compatibility runtimes may show a localized decision card, but that is not Claude/Codex native proof.
 - Apply only after confirmation or an explicit trusted-auto policy. The apply path must create a backup under `.meta-kim/backups/project-bootstrap/<timestamp>` before overwriting or merging existing files and must write `.meta-kim/state/default/project-bootstrap.json`.
-- Preserve user-owned content: JSON configs use additive preserve-user-state merge; existing `AGENTS.md` and `CLAUDE.md` keep user text and receive or update only a Meta_Kim managed block; `.codex/config.toml`, credentials, project trust state, local runtime state, and workspace state are never copied as project bootstrap files.
+- Preserve user-owned content: JSON configs use additive preserve-user-state merge; existing `AGENTS.md` and `CLAUDE.md` keep user text and receive or update only a Meta_Kim managed block; credentials, project trust state, local runtime state, and workspace state are never copied as project bootstrap files.
 - Stale, readonly, permission-denied, or conflicting managed-block cases are not success. Record the blocker, show the next safe action, and do not claim project bootstrap pass until a fresh probe or apply result proves it.
 
 **When to ask:**
@@ -160,8 +169,8 @@ Global professional provider first: a governed route must prefer already-discove
 Fetch discovery minimum checklist: before Thinking, search at least these locations (even if results are empty):
 - canonical sources and capability indexes: `canonical/agents/`, `canonical/skills/`, `canonical/runtime-assets/`, `config/capability-index/*.json`, and runtime capability-index mirrors
 - Claude Code project and global inventories: `.claude/agents/`, `.claude/skills/`, `.claude/commands/`, `.claude/hooks/`, `.claude/settings.json`, `~/.claude/agents/`, `~/.claude/skills/`, `~/.claude/commands/`, `~/.claude/hooks/`, and `~/.claude/settings.json`
-- Codex project and global inventories: `.codex/agents/`, `.agents/skills/`, `.codex/commands/`, `.codex/hooks/`, `.codex/hooks.json`, `.codex/config.toml`, `~/.codex/agents/`, `~/.codex/skills/`, `~/.codex/commands/`, `~/.codex/hooks/`, `~/.codex/hooks.json`, `~/.codex/config.toml`, and `~/.agents/skills/`
-- Cursor project and global inventories: `.cursor/agents/`, `.cursor/skills/`, `.cursor/rules/`, `.cursor/prompts/`, `.cursor/hooks/`, `.cursor/hooks.json`, `.cursor/mcp.json`, `~/.cursor/agents/`, `~/.cursor/skills/`, `~/.cursor/rules/`, `~/.cursor/prompts/`, `~/.cursor/hooks/`, and `~/.cursor/hooks.json`
+- Codex project and global inventories: `.codex/agents/`, `.agents/skills/`, `.codex/commands/`, `.codex/hooks/`, `.codex/hooks.json`, `.codex/config.toml`, `~/.codex/agents/`, `~/.codex/skills/`, `~/.codex/commands/`, `~/.codex/hooks/meta-kim/`, `~/.codex/hooks.json`, `~/.codex/config.toml`, and `~/.agents/skills/`
+- Cursor project and global inventories: `.cursor/agents/`, `.cursor/skills/`, `.cursor/rules/`, `.cursor/prompts/`, `.cursor/hooks/`, `.cursor/hooks.json`, `.cursor/mcp.json`, `~/.cursor/agents/`, `~/.cursor/skills/`, `~/.cursor/rules/`, `~/.cursor/prompts/`, `~/.cursor/hooks/meta-kim/`, and `~/.cursor/hooks.json`
 - OpenClaw project and global inventories: `openclaw/workspaces/`, `openclaw/skills/`, `openclaw/hooks/`, `openclaw/openclaw.template.json`, `~/.openclaw/openclaw.json`, `~/.openclaw/workspace-*`, `~/.openclaw/skills/`, `~/.openclaw/hooks/`, and `~/.agents/skills/`
 - runtime package and command providers: `package.json` scripts, local scripts, runtime commands, hooks, validators, prompts/rules, setup/status/doctor/sync/install routes
 - `.mcp.json`, runtime MCP config such as `.codex/config.toml` and `.cursor/mcp.json`, MCP server/tool inventory, and connector/plugin inventories

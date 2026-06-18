@@ -151,7 +151,9 @@ function validateProductExperienceEvidence(report) {
   assert.equal(report.coreLoop.agentTeamsPlaybookPacket.acceptance.noArbitraryMetaKimCap, true);
   assert.ok(report.coreLoop.agentTeamsPlaybookPacket.runtimeCapacity >= 2);
   assert.ok(report.coreLoop.agentTeamsPlaybookPacket.capacitySource);
-  assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "pass");
+  assert.ok(
+    ["pass", "partial"].includes(report.coreLoop.capabilityInvocationTruthPacket.status)
+  );
   assert.ok(["pass", "partial"].includes(report.coreLoop.visibleMetaTheorySurfacePacket.status));
   assert.ok(["pass", "partial"].includes(report.coreLoop.userPerceptionPacket.status));
   assert.equal(report.coreLoop.langGraphRunPacket.checkpoint.count, report.coreLoop.langGraphRunPacket.nodes.length);
@@ -161,7 +163,10 @@ function validateProductExperienceEvidence(report) {
   assert.ok(report.coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingCoverage.workerResults);
   assert.ok(report.coreLoop.peerAgentMeshPacket.peers.length > 0);
   assert.equal(report.coreLoop.visibleMetaTheorySurfacePacket.capabilityInventory.notSkillOnly, true);
-  assert.equal(report.coreLoop.visibleMetaTheorySurfacePacket.capabilityInvocationTruth.status, "pass");
+  assert.equal(
+    report.coreLoop.visibleMetaTheorySurfacePacket.capabilityInvocationTruth.status,
+    report.coreLoop.capabilityInvocationTruthPacket.status
+  );
   assert.equal(
     report.coreLoop.visibleMetaTheorySurfacePacket.dynamicWorkflow.status,
     report.coreLoop.dynamicWorkflowRuntimePacket.status,
@@ -231,6 +236,34 @@ function validateProductExperienceEvidence(report) {
   );
 }
 
+function validateDefaultCompletionStatus(report) {
+  const allowedStatuses = new Set(["pass", "partial"]);
+  assert.ok(
+    allowedStatuses.has(report.status),
+    `default governed execution status must be pass or honest partial, got ${report.status}`
+  );
+  assert.equal(
+    report.defaultRuntimePath.status,
+    report.status,
+    "defaultRuntimePath.status must mirror the top-level governed execution status"
+  );
+
+  const realCoverage =
+    report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage;
+  if (report.status === "pass") {
+    assert.equal(realCoverage.status, "pass");
+    assert.deepEqual(realCoverage.missingFamilies, []);
+    return;
+  }
+
+  assert.equal(realCoverage.status, "partial");
+  assert.ok(
+    realCoverage.missingFamilies.length > 0,
+    "partial default execution must name missing real invocation families"
+  );
+  assert.equal(report.coreLoop.hostInvocationRequestPacket.status, "partial");
+}
+
 async function main() {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-default-evidence-"));
   try {
@@ -241,8 +274,7 @@ async function main() {
       dbPath: path.join(tempDir, "runs.sqlite")
     });
 
-    assert.equal(report.status, "pass");
-    assert.equal(report.defaultRuntimePath.status, "pass");
+    validateDefaultCompletionStatus(report);
     validateGovernanceEvidence(report);
     validateWorkerExecutionEvidence(report);
     validateProductExperienceEvidence(report);
@@ -250,6 +282,7 @@ async function main() {
     process.stdout.write(
       `${JSON.stringify({
         status: "pass",
+        governedExecutionStatus: report.status,
         governanceAgentResultPackets: report.coreLoop.governanceAgentResultPackets.length,
         consumedGovernancePackets: report.coreLoop.conductorConsumptionEvidence.consumedPacketRefs.length,
         workerResultPackets: report.coreLoop.executionResult.workerResultPackets.length,

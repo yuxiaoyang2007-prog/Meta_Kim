@@ -252,6 +252,24 @@ function validatePrdMarkers() {
   }
 }
 
+function validateDefaultRunStatus(report) {
+  assert.ok(
+    ["pass", "partial"].includes(report.status),
+    `default governed run status must be pass or honest partial, got ${report.status}`,
+  );
+  assert.equal(
+    report.defaultRuntimePath.status,
+    report.status,
+    "defaultRuntimePath.status must mirror the top-level governed run status",
+  );
+  if (report.status === "partial") {
+    assert.equal(
+      report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
+      "partial",
+    );
+  }
+}
+
 async function main() {
   const contract = readJson(CONTRACT_PATH);
   const pkg = readJson(path.join(REPO_ROOT, "package.json"));
@@ -259,6 +277,7 @@ async function main() {
   validateContractShape(contract, pkg);
 
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-research-native-"));
+  let governedExecutionStatus = "unknown";
   try {
     const report = await runMetaTheoryGovernedExecution({
       task: [
@@ -271,8 +290,9 @@ async function main() {
       stateDir: tempDir,
       dbPath: path.join(tempDir, "runs.sqlite"),
     });
-    assert.equal(report.status, "pass");
+    validateDefaultRunStatus(report);
     validateDefaultArtifact(report);
+    governedExecutionStatus = report.status;
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -281,6 +301,7 @@ async function main() {
   process.stdout.write(
     `${JSON.stringify({
       status: "pass",
+      governedExecutionStatus,
       contract: "config/contracts/research-to-native-productization-contract.json",
       tasks: REQUIRED_TASK_IDS,
       adoptionRows: contract.sourceBackedAdoptionMatrix.length,

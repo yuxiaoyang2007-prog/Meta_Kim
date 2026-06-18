@@ -1,0 +1,191 @@
+#!/usr/bin/env node
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function repoPath(relativePath) {
+  return path.join(repoRoot, relativePath);
+}
+
+function readText(relativePath) {
+  return readFileSync(repoPath(relativePath), "utf8");
+}
+
+function readJson(relativePath) {
+  return JSON.parse(readText(relativePath));
+}
+
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function hasAll(raw, markers, label) {
+  for (const marker of markers) {
+    assert(raw.includes(marker), `${label} missing marker: ${marker}`);
+  }
+}
+
+function assertContract() {
+  const contract = readJson("config/contracts/stage-runtime-control-contract.json");
+  assert(contract.contractId === "stage-runtime-control-contract", "wrong contract id");
+  assert(contract.prdTaskId === "P-115", "P-115 must own the stage runtime control contract");
+  assert(contract.controlPlaneRules?.hookRole === "last_resort_fuse", "hook must stay last-resort fuse");
+  assert(contract.controlPlaneRules?.hookMustNotAdvanceStage === true, "hook must not advance stages");
+  assert(
+    contract.controlPlaneRules?.businessWorkflowMayBlockTools === false,
+    "business workflow phases must not directly block tools",
+  );
+  assert(
+    contract.stageChecks?.actionPolicy?.mustNotRequireCommitPackets === true,
+    "action policy must not require commit packets",
+  );
+  assert(
+    contract.stageChecks?.commitRequirements?.requiresExplicitTransitionIntent === true,
+    "commit requirements must require explicit transition intent",
+  );
+  assert(
+    contract.activationPolicy?.autoPromptActivation?.creates === "hook_observed",
+    "auto prompt activation must create hook_observed state",
+  );
+  assert(
+    contract.activationPolicy?.autoPromptActivation?.hookGateMode === "advisory",
+    "auto prompt activation must use advisory hook gate mode",
+  );
+  assert(
+    contract.activationPolicy?.managedDriverActivation?.driverMode === "managed",
+    "managed driver activation must keep managed driverMode",
+  );
+  assert(
+    contract.factGatePolicy?.singleExecutionLease === true,
+    "fact gate must be part of the single execution lease",
+  );
+  assert(
+    contract.factGatePolicy?.mustNotBecomeIndependentHookLoop === true,
+    "fact gate must not become an independent hook loop",
+  );
+  hasAll(
+    contract.fetchPolicy?.inProgressMustAllow ?? [],
+    ["repo_search", "capability_scan", "spine_state_write"],
+    "fetchPolicy.inProgressMustAllow",
+  );
+  hasAll(contract.fetchPolicy?.commitRequires ?? [], ["fetchRecord"], "fetchPolicy.commitRequires");
+}
+
+function assertPrdAndPackage() {
+  const prdPath = "docs/ai-native-capability-gap-mvp-prd.zh-CN.md";
+  if (existsSync(repoPath(prdPath))) {
+    const prd = readText(prdPath);
+    hasAll(
+      prd,
+      [
+        "v0.70 P-115 阶段运行控制面重建",
+        "stage-runtime-control-contract",
+        "Fetch 进行中不要求 `fetchRecord`",
+        "hook 不得自动 `advanceStage`",
+        "自动触发只进入 `hook_observed` / `advisory`",
+        "ECC / fact gate 归入同一个 execution lease",
+        "11-phase 业务流程不得直接 block tool",
+        "npm run meta:prd:stage-runtime-control:validate",
+      ],
+      "unique PRD P-115",
+    );
+  } else {
+    const contract = readJson("config/contracts/stage-runtime-control-contract.json");
+    assert(
+      contract.sourceOfTruth?.human === prdPath,
+      "contract must keep the private PRD human source pointer when docs are not present",
+    );
+  }
+
+  const pkg = readJson("package.json");
+  assert(
+    pkg.scripts?.["meta:prd:stage-runtime-control:validate"]?.includes(
+      "validate-stage-runtime-control.mjs",
+    ),
+    "package.json missing meta:prd:stage-runtime-control:validate",
+  );
+  assert(
+    pkg.scripts?.["meta:verify:governance"]?.includes(
+      "meta:prd:stage-runtime-control:validate",
+    ),
+    "meta:verify:governance must include P-115 validator",
+  );
+}
+
+function assertRuntimeSources() {
+  for (const sourcePath of [
+    "canonical/runtime-assets/shared/hooks/spine-state.mjs",
+    "canonical/runtime-assets/claude/hooks/spine-state.mjs",
+  ]) {
+    const source = readText(sourcePath);
+    assert(
+      source.includes("requiresFetchRecordOnCommit: true"),
+      `${sourcePath} must use commit-scoped fetchRecord requirement`,
+    );
+    assert(
+      !source.includes("requiresFetchRecord: true"),
+      `${sourcePath} must not require fetchRecord for a stage-in-progress action`,
+    );
+    hasAll(
+      source,
+      ["state.stageTransitionIntent === \"commit\"", "Stage commit requires a fetchRecord"],
+      sourcePath,
+    );
+    hasAll(
+      source,
+      ["stageRuntimeControl", "isHookObservedState", "hookGateMode"],
+      sourcePath,
+    );
+  }
+
+  const hook = readText("canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs");
+  assert(!/^\s*advanceStage,?$/m.test(hook), "hook must not import advanceStage");
+  assert(!/advanceStage\(state,\s*"fetch"\)/.test(hook), "hook must not auto-advance to Fetch");
+  assert(!/advanceStage\(state,\s*'fetch'\)/.test(hook), "hook must not auto-advance to Fetch");
+  hasAll(
+    hook,
+    ["isHookObservedState", "observedModeNotice", "isHighRiskObservedExecution"],
+    "enforce-agent-dispatch.mjs",
+  );
+
+  const activation = readText("canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs");
+  hasAll(
+    activation,
+    ["activationMode: \"hook_observed\"", "hookGateMode: \"advisory\"", "shouldReplaceActiveState"],
+    "activate-meta-theory-spine.mjs",
+  );
+}
+
+function assertRegressionTests() {
+  const tests = readText("tests/meta-theory/11-eight-stage-spine.test.mjs");
+  const deprecatedModeMarker = ["simple", "Mode"].join("");
+  hasAll(
+    tests,
+    [
+      "Fetch in progress does not require fetchRecord until stage commit",
+      "read-only hook allowance does not auto-advance Critical to Fetch",
+      "Fetch stage allows Bash spine-state writes even before fetchRecord exists",
+      `${deprecatedModeMarker} residue in spine state cannot skip dispatch governance`,
+      "auto prompt activation creates observed advisory state instead of managed hard-gate state",
+      "observed hook state allows ordinary local file mutation with one readable notice",
+      "observed hook state still denies high-risk external side-effect commands",
+      "auto prompt activation rotates stale legacy active state for a new prompt",
+    ],
+    "stage runtime regression tests",
+  );
+}
+
+try {
+  assertContract();
+  assertPrdAndPackage();
+  assertRuntimeSources();
+  assertRegressionTests();
+  console.log("stage runtime control valid: P-115 contract, package wiring, sources, and tests aligned");
+} catch (error) {
+  console.error(`stage runtime control invalid: ${error.message}`);
+  process.exitCode = 1;
+}

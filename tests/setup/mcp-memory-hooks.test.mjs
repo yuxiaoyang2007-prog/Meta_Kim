@@ -985,6 +985,28 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.match(source, /installMcpMemoryServiceStep\(false, activeTargets\)/);
   });
 
+  test("MCP Memory Service asks before install, registration, hooks, or autostart", () => {
+    const source = readRepoFile("setup.mjs");
+    const fnStart = source.indexOf("async function installMcpMemoryServiceStep");
+    const fnEnd = source.indexOf("function ensureNetworkxCompatibility", fnStart);
+    const fn = source.slice(fnStart, fnEnd);
+
+    assert.match(fn, /const want = await askYesNo\(t\.askMcpMemoryInstall, true\);/);
+    assert.match(fn, /if \(!want\) \{\s*skip\(`\$\{C\.dim\}\$\{t\.mcpMemorySkipped\}\$\{C\.reset\}`\);\s*return;\s*\}/);
+    assert.ok(
+      fn.indexOf("askYesNo(t.askMcpMemoryInstall") < fn.indexOf("checkMcpMemoryService(python)"),
+      "MCP Memory prompt must run before existing-install detection so installed/update paths remain optional",
+    );
+    assert.ok(
+      fn.indexOf("askYesNo(t.askMcpMemoryInstall") < fn.indexOf("runMcpMemoryHookInstaller(activeTargets)"),
+      "MCP Memory prompt must run before hook registration",
+    );
+    assert.ok(
+      fn.indexOf("askYesNo(t.askMcpMemoryInstall") < fn.indexOf("startMcpMemoryServiceBackground(resolved)"),
+      "MCP Memory prompt must run before background autostart",
+    );
+  });
+
   test("installer uses PATH-resolved node for shell-portable hook commands", () => {
     const source = readRepoFile("scripts", "install-mcp-memory-hooks.mjs");
 

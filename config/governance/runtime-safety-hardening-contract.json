@@ -27,6 +27,7 @@
     ],
     "protectedState": [
       "userOwnedConfig",
+      "userOwnedGlobalInstructionFiles",
       "credentials",
       "customMcpServers",
       "nativeHostControls",
@@ -66,34 +67,62 @@
         "terminal-notifier",
         ".codex/.tmp/bundled-marketplaces/openai-bundled"
       ]
+    },
+    "codexGlobalInstructionFiles": {
+      "protectedFiles": [
+        "~/.codex/AGENTS.md"
+      ],
+      "policy": [
+        "snapshot before ECC upstream installer",
+        "restore user-authored global AGENTS.md after upstream installer",
+        "quarantine exact ECC baseline if it appears in global AGENTS.md",
+        "never copy project AGENTS.md into Codex global home"
+      ]
     }
   },
   "installExperienceModel": {
-    "goal": "global_common_capabilities_plus_project_projection_with_directory_authorized_governance",
+    "goal": "clear_global_or_project_install_paths_with_optional_manifest_proven_project_cleanup",
     "principles": [
-      "global common capabilities are reusable across projects",
-      "project-level complete projections are preserved and are not replaced by global skills",
+      "global common capabilities are reusable across projects and are the default install/update path",
+      "project-level complete projections are preserved when the user explicitly selects project directory updates",
+      "global cleanup is a separate optional step and must not run during project install/update",
       "governance applies only to explicitly enabled directories",
-      "existing user configuration always wins over generated defaults"
+      "existing user configuration always wins over generated defaults",
+      "global versus project scope is resolved before runtime-specific dispatch and applies to every formal projection target"
     ],
     "layers": {
       "globalCommonCapabilityLayer": {
-        "purpose": "Reusable host-level capability library for meta-theory entry, foundational skills, plugins, commands, and dependency skills.",
+        "purpose": "Reusable host-level capability library for meta-theory entry, foundational skills, agents, commands, hooks, MCP config/providers, plugins, and dependency skills where each runtime supports them.",
         "allowedWrites": [
+          "~/.claude/agents/",
+          "~/.claude/commands/",
+          "~/.claude/hooks/",
           "~/.claude/skills/",
+          "~/.claude/settings.json",
+          "~/.codex/agents/",
+          "~/.codex/commands/",
+          "~/.codex/hooks/",
+          "~/.codex/hooks.json",
           "~/.codex/skills/",
+          "~/.cursor/agents/",
+          "~/.cursor/hooks/",
+          "~/.cursor/hooks.json",
+          "~/.cursor/rules/",
           "~/.cursor/skills/",
+          "~/.openclaw/agents/",
+          "~/.openclaw/hooks/",
           "~/.openclaw/skills/",
           "~/.meta-kim/install-manifest.json"
         ],
         "mustNotDo": [
           "enable Meta_Kim governance for every project automatically",
           "write global AGENTS.md or CLAUDE.md",
+          "delete project-level assets unless the user selected cleanup and Meta_Kim manifest evidence proves ownership",
           "treat optional third-party skill suite selection as required for project projection"
         ]
       },
       "projectCompleteProjectionLayer": {
-        "purpose": "Per-enabled-directory runtime surface generated from canonical sources and runtime mirrors.",
+        "purpose": "Per-enabled-directory runtime surface generated from canonical sources and runtime mirrors when the user explicitly chooses project directory updates or a trusted project bootstrap apply.",
         "defaultActiveTargets": [
           "claude",
           "codex"
@@ -103,7 +132,6 @@
           "AGENTS.md",
           ".claude/",
           ".codex/",
-          ".agents/skills/",
           ".mcp.json",
           ".meta-kim/state",
           ".meta-kim/backups"
@@ -119,7 +147,6 @@
           "codex": [
             "AGENTS.md",
             ".codex/",
-            ".agents/skills/",
             ".meta-kim/state",
             ".meta-kim/backups"
           ],
@@ -136,8 +163,8 @@
             ".meta-kim/backups"
           ]
         },
-        "selectionInvariant": "Project bootstrap and install/update project sync must deploy only effective activeTargets. Repo default Enter resolves to claude,codex; explicit --targets or saved .meta-kim/local.overrides.json activeTargets may override the effective activeTargets. Cursor and OpenClaw project files appear only when explicitly selected.",
-        "compatibilityTargetsAvailableWhenExplicitlySelected": [
+        "selectionInvariant": "Project bootstrap and install/update project sync must deploy only effective activeTargets. Repo default Enter for target selection resolves to claude,codex, but all four supported targets are formal Meta_Kim projections. Explicit --targets or saved .meta-kim/local.overrides.json activeTargets may override effective activeTargets. Cursor and OpenClaw project files appear when selected.",
+        "nonDefaultFormalTargetsAvailableWhenSelected": [
           "openclaw",
           "cursor"
         ],
@@ -147,6 +174,12 @@
         "purpose": "Only user-approved directories receive governance projection and project hooks.",
         "firstTriggerRequirement": "dry-run plus native choice surface before apply unless trusted-auto is explicit",
         "unenabledProjectPolicy": "global entry may report capability and dry-run plan, but must not write project files before confirmation"
+      },
+      "projectCleanupLayer": {
+        "purpose": "Optional global-path cleanup that removes redundant Meta_Kim project-level assets after reusable capabilities move to global runtime homes.",
+        "allowedOnlyAfter": "user selected global install/update and confirmed project cleanup",
+        "deletePolicy": "remove only project files or directories proven by project-bootstrap manifest or Meta_Kim hook whitelist; preserve user files, credentials, and merge config",
+        "configPolicy": "strip only Meta_Kim project hook references from merge config; never rewrite unrelated user settings"
       }
     },
     "platformSupportTiers": {
@@ -157,11 +190,11 @@
         "openclaw",
         "cursor"
       ],
-      "defaultFormalProjectionTargets": [
+      "defaultSelectedTargets": [
         "claude",
         "codex"
       ],
-      "explicitFormalCompatibilityProjectionTargets": [
+      "nonDefaultFormalProjectionTargets": [
         "openclaw",
         "cursor"
       ],
@@ -183,33 +216,29 @@
         "roo-code",
         "continue"
       ],
-      "boundary": "OpenClaw and Cursor are the explicit formal project-projection compatibility targets, not the whole platform compatibility universe.",
+      "boundary": "Claude Code, Codex, OpenClaw, and Cursor are the formal Meta_Kim projection targets; dependency_install_target and candidate_probe products are not project projections.",
       "promotionInvariant": "dependency_install_target and candidate_probe products must not be treated as project projections until runtime profile, projection layout, generated target paths, sync tests, install policy, and live or official probe evidence exist."
     },
     "installOptions": [
       {
-        "id": "both",
-        "label": "recommended",
-        "behavior": "install global common capability layer and generate/update the current project projection",
-        "defaultOnEnter": true
+        "id": "global",
+        "label": "global reusable capabilities",
+        "behavior": "install/update reusable agents, commands, MCP, hooks, and skills into selected runtime home/global locations; then optionally ask whether to clean redundant project-level Meta_Kim assets",
+        "defaultOnEnter": true,
+        "runtimeHookPolicy": "sync target-supported global hooks through the runtime's declared global path; do not special-case only one runtime when another selected runtime has a global hook surface"
       },
       {
         "id": "project",
-        "label": "project only",
-        "behavior": "generate/update only the current project projection; do not write user home",
+        "label": "project directory updates",
+        "behavior": "ask for project directories and generate/update project-level runtime projection for the selected targets; do not install global reusable capabilities and do not run project cleanup",
         "defaultOnEnter": false
       },
       {
-        "id": "global",
-        "label": "global only",
-        "behavior": "install global common capabilities only; do not ask for or write project directories",
-        "defaultOnEnter": false
-      },
-      {
-        "id": "advanced_global_controls",
-        "label": "advanced global hooks/rules/settings",
-        "behavior": "write Claude Code global hooks/settings only after a second explicit confirmation",
-        "defaultOnEnter": false
+        "id": "project_cleanup_after_global",
+        "label": "optional project cleanup after global install/update",
+        "behavior": "after global install/update only, ask for project directories and remove manifest-proven redundant Meta_Kim project assets plus stale Meta_Kim project hook config references",
+        "defaultOnEnter": false,
+        "requiresInstallOption": "global"
       }
     ],
     "noSkillSemantics": {
@@ -252,18 +281,32 @@
       "runtimeMirrorSource": "generated runtime projection folders inside the installed package root",
       "projectTarget": "current working project directory selected by --project-dir or host cwd"
     },
+    "postCopyInitializerPolicy": {
+      "executorLocation": "installed package root scripts/project-post-copy-init.mjs",
+      "executionCwd": "target project root",
+      "projectOutputs": [
+        ".meta-kim/state/default/post-copy-init.json",
+        "graphify-out/graph.json",
+        "graphify-out/GRAPH_REPORT.md"
+      ],
+      "forbiddenProjectExecutables": [
+        ".meta-kim/meta-kim-post-copy.mjs",
+        "meta-kim-post-copy.mjs"
+      ],
+      "legacyFallbackOnly": "activation hooks may run a pre-existing project-local meta-kim-post-copy.mjs only when the global package-root initializer is unavailable"
+    },
     "firstTriggerFlow": [
       "run dry-run probe from the global skill or command",
       "present Claude Code AskUserQuestion or Codex request_user_input before apply when the runtime exposes the native choice surface",
-      "fall back only for compatibility runtimes and never call fallback a primary native popup",
+      "fall back only for fallback-card runtimes and never call fallback a primary native popup",
       "run apply only after user confirmation or an explicit trusted-auto policy",
       "write project manifest under .meta-kim/state/default/project-bootstrap.json"
     ],
     "projectFilePolicies": {
       "create": [
-        "missing generated runtime projections",
-        "missing project-level meta-theory skill mirror",
-        "missing project-level capability indexes"
+        "missing selected runtime entry/config/hook projections",
+        "project-specific capability overrides only with projectCustomizationPacket approval",
+        "project-local generated state/cache/result files"
       ],
       "merge": [
         ".claude/settings.json",

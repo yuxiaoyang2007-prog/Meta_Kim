@@ -1,0 +1,104 @@
+{
+  "contractId": "stage-runtime-control-contract",
+  "version": "1.0.0",
+  "prdTaskId": "P-115",
+  "status": "ready",
+  "purpose": "Keep the eight-stage spine mechanically executable by separating stage action policy, stage commit requirements, and side-effect authorization.",
+  "sourceOfTruth": {
+    "human": "docs/ai-native-capability-gap-mvp-prd.zh-CN.md",
+    "machine": [
+      "canonical/runtime-assets/shared/hooks/spine-state.mjs",
+      "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs"
+    ]
+  },
+  "controlPlaneRules": {
+    "stageDriver": "runner_or_stage_runtime_only",
+    "hookRole": "last_resort_fuse",
+    "hookMustNotAdvanceStage": true,
+    "businessWorkflowMayBlockTools": false,
+    "sideEffectsRequireExecutionStage": true
+  },
+  "stageChecks": {
+    "actionPolicy": {
+      "description": "Checks whether the current tool action is allowed while a stage is in progress.",
+      "mustNotRequireCommitPackets": true
+    },
+    "commitRequirements": {
+      "description": "Checks whether a stage can be marked completed and the next stage entered.",
+      "requiresExplicitTransitionIntent": true
+    },
+    "executionLease": {
+      "description": "Checks whether a business mutation side effect is allowed after Thinking has committed owner, loadout, evidence, memory strategy, and review standard.",
+      "requiredForBusinessMutation": true
+    }
+  },
+  "activationPolicy": {
+    "autoPromptActivation": {
+      "creates": "hook_observed",
+      "driverMode": "hook_observed",
+      "hookGateMode": "advisory",
+      "hardGateAllowedBeforeManagedDriver": false,
+      "purpose": "Natural-language triggers create user-visible continuity state only. They must not impersonate a stage driver or force packet archaeology before ordinary local execution."
+    },
+    "managedDriverActivation": {
+      "creates": "managed_stage_runtime",
+      "driverMode": "managed",
+      "hookGateMode": "block",
+      "hardGateAllowedBeforeMutation": true,
+      "purpose": "Only a runner or trusted stage runtime that can write Critical/Fetch/Thinking packets may enable strict pre-execution blocking."
+    },
+    "staleStateRotation": {
+      "legacyStateWithoutControlMayRotate": true,
+      "observedPromptChangeMayRotate": true,
+      "managedStateMustNotRotateAutomatically": true
+    }
+  },
+  "factGatePolicy": {
+    "singleExecutionLease": true,
+    "observedMode": "advisory_not_blocking",
+    "managedMode": "required_before_mutation",
+    "mustNotBecomeIndependentHookLoop": true,
+    "fileChangeFactCardBelongsTo": "Fetch/Thinking execution lease"
+  },
+  "fetchPolicy": {
+    "inProgressMustAllow": [
+      "read_file",
+      "repo_search",
+      "git_status",
+      "config_scan",
+      "capability_scan",
+      "dependency_discovery",
+      "validator_dry_run",
+      "spine_state_write"
+    ],
+    "inProgressMustNotRequire": [
+      "fetchRecord",
+      "businessFlowBlueprintPacket",
+      "workerTaskPackets"
+    ],
+    "commitRequires": [
+      "fetchRecord",
+      "capabilitySearchPerformed"
+    ]
+  },
+  "thinkingPolicy": {
+    "commitRequires": [
+      "owner",
+      "ownerLoadout",
+      "memoryStrategy",
+      "reviewStandard",
+      "workerTaskPacketsOrNoBranchingChoice"
+    ]
+  },
+  "regressionRequirements": [
+    "fetch_in_progress_does_not_require_fetchRecord_until_commit",
+    "read_only_hook_allowance_does_not_auto_advance_stage",
+    "fetch_stage_allows_spine_state_write_before_fetchRecord",
+    "business_mutation_still_denied_without_execution_readiness",
+    "auto_prompt_activation_creates_hook_observed_advisory_state",
+    "observed_state_allows_ordinary_local_mutation",
+    "observed_state_denies_high_risk_external_side_effects",
+    "stale_legacy_active_state_rotates_on_new_prompt"
+  ],
+  "verificationCommand": "npm run meta:prd:stage-runtime-control:validate"
+}

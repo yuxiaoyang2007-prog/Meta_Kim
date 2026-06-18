@@ -1439,6 +1439,7 @@ async function validateSyncConfiguration() {
   const availableTargets = manifest.availableTargets ?? Object.keys(profiles);
   const generatedTargets = manifest.generatedTargets ?? {};
   const canonicalRoots = manifest.canonicalRoots ?? {};
+  const projectPolicy = manifest.projectMaterializationPolicy ?? {};
 
   assert(
     supportedTargets.length >= 1,
@@ -1483,6 +1484,39 @@ async function validateSyncConfiguration() {
     canonicalRoots.capabilityIndex === "config/capability-index",
     "config/sync.json canonicalRoots.capabilityIndex must be config/capability-index.",
   );
+  assert(
+    projectPolicy.defaultAssetMode === "global_reusable_by_default",
+    "config/sync.json projectMaterializationPolicy.defaultAssetMode must keep reusable assets global by default.",
+  );
+  for (const assetType of ["agents", "commands", "mcp", "hooks", "skills"]) {
+    assert(
+      projectPolicy.globalByDefault?.includes(assetType),
+      `config/sync.json projectMaterializationPolicy.globalByDefault must include ${assetType}.`,
+    );
+  }
+  assert(
+    projectPolicy.projectMaterializationTrigger ===
+      "project_specific_customization_or_iteration_innovation",
+    "config/sync.json project materialization must require project-specific customization or iteration innovation.",
+  );
+  assert(
+    projectPolicy.projectRuntimeAssetCopyPolicy ===
+      "copy_to_project_when_explicit_project_update_or_project_dedicated_extension",
+    "config/sync.json must copy reusable runtime assets into projects only after explicit project update selection or when a project-dedicated extension is needed.",
+  );
+  assert(
+    projectPolicy.projectAllowedBase?.includes("runtime_entry_context") &&
+      projectPolicy.projectAllowedBase?.includes("merged_project_config") &&
+      projectPolicy.projectAllowedBase?.includes("project_cache_state") &&
+      projectPolicy.projectAllowedBase?.includes("project_specific_capability_overrides"),
+    "config/sync.json projectMaterializationPolicy.projectAllowedBase must preserve context/config/state and project-specific overrides only.",
+  );
+  assert(
+    projectPolicy.projectStatePaths?.includes(".meta-kim/state") &&
+      projectPolicy.projectStatePaths?.includes(".meta-kim/backups") &&
+      projectPolicy.projectStatePaths?.includes(".meta-kim/local.overrides.json"),
+    "config/sync.json projectMaterializationPolicy.projectStatePaths must keep project state under .meta-kim.",
+  );
 
   assert(
     profiles.codex.projection.outputPaths.skillsDir === ".agents/skills" &&
@@ -1499,7 +1533,7 @@ async function validateSyncConfiguration() {
   assert(
     profiles.codex.projection.outputPaths.hooksDir === ".codex/hooks" &&
       profiles.codex.projection.outputPaths.hooksFile === ".codex/hooks.json",
-    "Codex runtime profile must declare hook output paths.",
+    "Codex runtime profile must declare hook cleanup/config paths.",
   );
   assert(
     profiles.cursor.projection.assetTypes.includes("hooks") &&
@@ -1507,13 +1541,13 @@ async function validateSyncConfiguration() {
       profiles.cursor.projection.outputPaths.hooksDir === ".cursor/hooks" &&
       profiles.cursor.projection.outputPaths.hooksFile === ".cursor/hooks.json" &&
       profiles.cursor.projection.outputPaths.rulesDir === ".cursor/rules",
-    "Cursor runtime profile must declare hook and rule output paths.",
+    "Cursor runtime profile must declare hook cleanup/config and rule output paths.",
   );
   assert(
-    (manifest.generatedTargets?.cursor ?? []).includes(".cursor/hooks") &&
+    !(manifest.generatedTargets?.cursor ?? []).includes(".cursor/hooks") &&
       (manifest.generatedTargets?.cursor ?? []).includes(".cursor/hooks.json") &&
       (manifest.generatedTargets?.cursor ?? []).includes(".cursor/rules"),
-    "config/sync.json must advertise generated Cursor lifecycle hook and rule paths.",
+    "config/sync.json must advertise Cursor hook config/rule paths without project hook dirs.",
   );
 }
 
@@ -1820,8 +1854,8 @@ async function validateSkillsManifest() {
     (skill) => skill.id === "planning-with-files",
   );
   assert(
-    planning?.hookSubdirs?.cursor && planning?.hookConfigFiles?.cursor,
-    "planning-with-files must install Cursor lifecycle hooks.",
+    planning?.globalHookSubdirs?.cursor && planning?.globalHookConfigFiles?.cursor,
+    "planning-with-files must install Cursor lifecycle hooks globally.",
   );
 }
 

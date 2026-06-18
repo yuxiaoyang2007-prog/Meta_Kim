@@ -30,7 +30,7 @@ test("install scope verification proves global/project target boundaries", () =>
   assert.deepEqual(
     sorted(
       summary.classification.globalLayer.platformSupportTiers
-        .explicitFormalCompatibilityProjectionTargets,
+        .nonDefaultFormalProjectionTargets,
     ),
     ["cursor", "openclaw"],
   );
@@ -44,8 +44,20 @@ test("install scope verification proves global/project target boundaries", () =>
   );
   assert.match(
     summary.classification.globalLayer.platformSupportTiers.boundary,
-    /not the whole platform compatibility universe/,
+    /formal Meta_Kim projection targets/,
   );
+
+  const globalById = new Map(summary.globalResults.map((entry) => [entry.id, entry]));
+  assert.equal(globalById.get("global-default-claude-codex").status, "pass");
+  assert.equal(globalById.get("global-default-claude-codex").checks.cursorHomeUntouched, true);
+  assert.equal(globalById.get("global-default-claude-codex").checks.openclawHomeUntouched, true);
+  assert.equal(globalById.get("global-default-claude-codex").checks.codexGlobalHooksJson, true);
+  assert.equal(globalById.get("global-all-formal-targets").status, "pass");
+  assert.equal(globalById.get("global-all-formal-targets").checks.cursorSkill, true);
+  assert.equal(globalById.get("global-all-formal-targets").checks.openclawSkill, true);
+  assert.equal(globalById.get("global-all-formal-targets").checks.codexGlobalHooksJson, true);
+  assert.equal(globalById.get("global-all-formal-targets").checks.cursorHomeUntouched, undefined);
+  assert.equal(globalById.get("global-all-formal-targets").checks.openclawHomeUntouched, undefined);
 
   const byId = new Map(summary.projectResults.map((entry) => [entry.id, entry]));
   assert.equal(byId.get("project-claude").status, "pass");

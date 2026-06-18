@@ -129,6 +129,10 @@ describe("installPluginBundlesForNonClaudeRuntimes (dry-run e2e)", () => {
     );
     assert.match(
       plain,
+      /protect .*\.codex.*AGENTS\.md from ECC upstream installer/,
+    );
+    assert.match(
+      plain,
       /ecc: project-local installer skipped during global update; run from each cursor project root: npx --yes --package ecc-universal@latest ecc install --profile core --target cursor/,
     );
     assert.doesNotMatch(
@@ -192,6 +196,22 @@ describe("installPluginBundlesForNonClaudeRuntimes (dry-run e2e)", () => {
     assert.match(plain, /ensure .*\.codex.*config\.toml preserves Codex App Browser\/Chrome\/Computer Use native controls/);
   });
 
+  test("empty --skills filter means no selected third-party skill repos, not all repos", () => {
+    const { status, out } = runFullDryRun([
+      "--skip-plugins",
+      "--skills",
+      "",
+      "--targets",
+      "claude,codex",
+    ]);
+    assert.equal(status, 0);
+    const plain = stripAnsi(out);
+    assert.match(plain, /No third-party skill repos selected/i);
+    assert.doesNotMatch(plain, /git clone https:\/\/github\.com\//);
+    assert.doesNotMatch(plain, /sparse install https:\/\/github\.com\//);
+    assert.doesNotMatch(plain, /skill-creator/);
+  });
+
   test("Codex runtime uses native plugin flow for superpowers", () => {
     const { status, out } = runDryRun();
     assert.equal(status, 0);
@@ -224,6 +244,7 @@ describe("installPluginBundlesForNonClaudeRuntimes (dry-run e2e)", () => {
     assert.match(plain, /全局更新不会写入项目本地安装/);
     assert.match(plain, /Cursor 原生插件需手动安装/);
     assert.match(plain, /保留现有 .*\.codex.*config\.toml/);
+    assert.match(plain, /保护 .*\.codex.*AGENTS\.md 不被 ECC 上游安装器覆盖/);
     assert.doesNotMatch(plain, /Cursor native plugin manual step/);
     assert.doesNotMatch(plain, /project-local installer skipped during global update/);
   });

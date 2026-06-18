@@ -54,6 +54,7 @@ docs/v*-rfc-*.md
 # ========== Test run output (generated; keep tests/*.test.mjs & fixtures tracked) ==========
 tests/output/
 tests/.cache/
+tests/CC-e2e/
 
 # ========== Planning & Progress (local scratch) ==========
 task_plan.md

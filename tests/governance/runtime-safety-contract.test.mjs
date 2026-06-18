@@ -82,6 +82,20 @@ test("Codex host merge contract matches implementation constants", () => {
     CONTRACT.hostConfigMerge.codexNativeControls.requiredPluginIds,
     CODEX_APP_NATIVE_PLUGIN_IDS,
   );
+  assert.ok(
+    CONTRACT.hostConfigMerge.protectedState.includes(
+      "userOwnedGlobalInstructionFiles",
+    ),
+  );
+  assert.deepEqual(
+    CONTRACT.hostConfigMerge.codexGlobalInstructionFiles.protectedFiles,
+    ["~/.codex/AGENTS.md"],
+  );
+  assert.ok(
+    CONTRACT.hostConfigMerge.codexGlobalInstructionFiles.policy.includes(
+      "quarantine exact ECC baseline if it appears in global AGENTS.md",
+    ),
+  );
   assert.equal(CONTRACT.hostConfigMerge.codexNativeControls.windowsSandbox, "unelevated");
   assert.ok(
     CONTRACT.hostConfigMerge.forbiddenOutcomes.includes("pinStaleBundledMarketplaceSource"),
@@ -100,6 +114,20 @@ test("lazy project bootstrap contract keeps source chain, merge, and rollback ex
   );
   assert.equal(CONTRACT.lazyProjectBootstrap.sourceChain.globalEntrypoint, "bin/meta-kim.mjs");
   assert.equal(CONTRACT.lazyProjectBootstrap.sourceChain.syncManifest, "config/sync.json");
+  assert.equal(
+    CONTRACT.lazyProjectBootstrap.postCopyInitializerPolicy.executorLocation,
+    "installed package root scripts/project-post-copy-init.mjs",
+  );
+  assert.ok(
+    CONTRACT.lazyProjectBootstrap.postCopyInitializerPolicy.projectOutputs.includes(
+      "graphify-out/graph.json",
+    ),
+  );
+  assert.ok(
+    CONTRACT.lazyProjectBootstrap.postCopyInitializerPolicy.forbiddenProjectExecutables.includes(
+      ".meta-kim/meta-kim-post-copy.mjs",
+    ),
+  );
   assert.ok(
     CONTRACT.lazyProjectBootstrap.sourceChain.canonicalRoots.includes("canonical/skills"),
   );
@@ -123,21 +151,22 @@ test("lazy project bootstrap contract keeps source chain, merge, and rollback ex
 test("install experience contract separates global capability, project projection, and directory authorization", () => {
   assert.equal(
     CONTRACT.installExperienceModel.goal,
-    "global_common_capabilities_plus_project_projection_with_directory_authorized_governance",
+    "clear_global_or_project_install_paths_with_optional_manifest_proven_project_cleanup",
   );
   assert.ok(
     CONTRACT.installExperienceModel.principles.includes(
-      "project-level complete projections are preserved and are not replaced by global skills",
+      "project-level complete projections are preserved when the user explicitly selects project directory updates",
     ),
   );
   assert.deepEqual(
     CONTRACT.installExperienceModel.layers.projectCompleteProjectionLayer.defaultActiveTargets,
     ["claude", "codex"],
   );
-  assert.ok(
+  assert.equal(
     CONTRACT.installExperienceModel.layers.projectCompleteProjectionLayer.defaultProjectionSet.includes(
       ".agents/skills/",
     ),
+    false,
   );
   assert.deepEqual(
     CONTRACT.installExperienceModel.layers.projectCompleteProjectionLayer.targetConditionalProjectionSets.claude,
@@ -163,15 +192,35 @@ test("install experience contract separates global capability, project projectio
     /activeTargets/,
   );
   assert.equal(
-    CONTRACT.installExperienceModel.installOptions.find((option) => option.id === "both")
+    CONTRACT.installExperienceModel.installOptions.find((option) => option.id === "global")
       .defaultOnEnter,
     true,
   );
   assert.equal(
     CONTRACT.installExperienceModel.installOptions.find(
-      (option) => option.id === "advanced_global_controls",
+      (option) => option.id === "project",
     ).defaultOnEnter,
     false,
+  );
+  assert.equal(
+    CONTRACT.installExperienceModel.installOptions.find(
+      (option) => option.id === "project_cleanup_after_global",
+    ).requiresInstallOption,
+    "global",
+  );
+  assert.equal(
+    CONTRACT.installExperienceModel.installOptions.some((option) => option.id === "both"),
+    false,
+  );
+  assert.equal(
+    CONTRACT.installExperienceModel.installOptions.some(
+      (option) => option.id === "advanced_global_controls",
+    ),
+    false,
+  );
+  assert.match(
+    CONTRACT.installExperienceModel.layers.projectCleanupLayer.deletePolicy,
+    /manifest/,
   );
   assert.ok(
     CONTRACT.installExperienceModel.noSkillSemantics.mustNotSkip.includes(
@@ -188,8 +237,8 @@ test("install experience contract keeps full platform compatibility tiers explic
 
   assert.equal(tiers.sourceOfTruth, "config/runtime-compatibility-catalog.json");
   assert.deepEqual(tiers.formalProjectionTargets.toSorted(), productIdsByTier("runtime_projection"));
-  assert.deepEqual(tiers.defaultFormalProjectionTargets.toSorted(), ["claude", "codex"]);
-  assert.deepEqual(tiers.explicitFormalCompatibilityProjectionTargets.toSorted(), [
+  assert.deepEqual(tiers.defaultSelectedTargets.toSorted(), ["claude", "codex"]);
+  assert.deepEqual(tiers.nonDefaultFormalProjectionTargets.toSorted(), [
     "cursor",
     "openclaw",
   ]);
@@ -198,7 +247,7 @@ test("install experience contract keeps full platform compatibility tiers explic
     productIdsByTier("dependency_install_target"),
   );
   assert.deepEqual(tiers.candidateProbeTargets.toSorted(), productIdsByTier("candidate_probe"));
-  assert.match(tiers.boundary, /not the whole platform compatibility universe/);
+  assert.match(tiers.boundary, /formal Meta_Kim projection targets/);
   assert.match(tiers.promotionInvariant, /runtime profile/);
   assert.match(tiers.promotionInvariant, /sync tests/);
 });

@@ -122,7 +122,7 @@ export const STAGE_META_AGENT_MAP = {
   fetch: {
     required: [],
     label: "Fetch (capability discovery)",
-    requiresFetchRecord: true,
+    requiresFetchRecordOnCommit: true,
     readOnlyInspectionEnabled: true,
     readOnlyInspectionCommands: DEFAULT_READ_ONLY_INSPECTION_COMMANDS,
     readOnlyVerifierEnabled: true,
@@ -131,7 +131,7 @@ export const STAGE_META_AGENT_MAP = {
   thinking: {
     required: [],
     label: "Thinking (route and loadout selection)",
-    requiresFetchRecord: true,
+    requiresFetchRecordOnCommit: true,
   },
   execution: { required: [], label: "Execution", requiresAgentDispatch: true },
   review: {
@@ -298,13 +298,42 @@ export async function writeSpineState(cwd, state) {
   await writeMetaRunStatus(cwd, state);
 }
 
-export function createInitialState({ taskClassification, triggerReason }) {
+export function createInitialState({
+  taskClassification,
+  triggerReason,
+  activationMode = "managed_stage_runtime",
+  driverMode = "managed",
+  hookGateMode = "block",
+  promptFingerprint = null,
+  latestUserInputLanguage = null,
+  factGatePolicy = null,
+  executionLeasePolicy = null,
+} = {}) {
   const triggeredAt = new Date().toISOString();
+  const stageRuntimeControl = {
+    activationMode,
+    driverMode,
+    hookGateMode,
+    promptFingerprint,
+    userLanguage: latestUserInputLanguage,
+    factGatePolicy:
+      factGatePolicy ||
+      (hookGateMode === "advisory"
+        ? "managed_gate_required_for_public_ready"
+        : "required_before_mutation"),
+    executionLeasePolicy:
+      executionLeasePolicy ||
+      (hookGateMode === "advisory"
+        ? "advisory_until_managed_stage_driver"
+        : "required_for_business_mutation"),
+    createdAt: triggeredAt,
+  };
   return {
     active: true,
     version: 2,
     runId: createRunId(triggeredAt),
     triggeredAt,
+    stageRuntimeControl,
     currentStage: "critical",
     stages: {
       critical: { status: "in_progress", completedAt: null },
@@ -325,6 +354,7 @@ export function createInitialState({ taskClassification, triggerReason }) {
     surfaceState: "silent",
     choiceSurfaceState: "not_allowed",
     queryBypass: false,
+    latestUserInputLanguage,
     executionStarted: false,
     criticalFetchLoopCount: 0,
     criticalFetchLoopMax: 3,
@@ -335,6 +365,18 @@ export function createInitialState({ taskClassification, triggerReason }) {
     // Audit trail for skipped hooks
     skippedHooks: [],
   };
+}
+
+export function isHookObservedState(state) {
+  const control = state?.stageRuntimeControl || {};
+  return (
+    control.activationMode === "hook_observed" ||
+    control.driverMode === "hook_observed" ||
+    control.hookGateMode === "advisory" ||
+    state?.activationMode === "hook_observed" ||
+    state?.driverMode === "hook_observed" ||
+    state?.hookGateMode === "advisory"
+  );
 }
 
 export function createMetaRunStatusEnvelope(state, options = {}) {
@@ -1036,14 +1078,17 @@ export function checkStageRequirements(state) {
     }
   }
 
-  // Verify fetchRecord exists when stage requires it
-  if (req.requiresFetchRecord && !state.fetchRecord) {
+  if (
+    req.requiresFetchRecordOnCommit &&
+    !state.fetchRecord &&
+    state.stageTransitionIntent === "commit"
+  ) {
     return {
       met: false,
       missing: ["fetchRecord in spine state"],
       reason:
-        "Fetch stage must produce a fetchRecord before advancing to Thinking. " +
-        "Complete capability search, write fetchRecord to spine state, then return to Thinking.",
+        "Stage commit requires a fetchRecord before advancing. " +
+        "During Fetch, read/search/capability-scan/state-write actions remain allowed; complete capability search, write fetchRecord to spine state, then commit the stage.",
     };
   }
 
