@@ -192,7 +192,7 @@ function waitForPostCopy(projectDir) {
   };
 }
 
-function inspectProject(projectDir) {
+function inspectProject(projectDir, { projectBootstrap = false } = {}) {
   const projectBootstrapPath = path.join(
     projectDir,
     ".meta-kim",
@@ -203,6 +203,15 @@ function inspectProject(projectDir) {
   const postCopy = waitForPostCopy(projectDir);
   const graphPath = path.join(projectDir, "graphify-out", "graph.json");
   const graphReportPath = path.join(projectDir, "graphify-out", "GRAPH_REPORT.md");
+  const projectCopies = {
+    codexProjectSkill: existsSync(
+      path.join(projectDir, ".agents", "skills", "meta-theory", "SKILL.md"),
+    ),
+    projectPostCopyScript: existsSync(
+      path.join(projectDir, ".meta-kim", "meta-kim-post-copy.mjs"),
+    ),
+    rootPostCopyScript: existsSync(path.join(projectDir, "meta-kim-post-copy.mjs")),
+  };
   return {
     projectDir,
     projectBootstrap: {
@@ -221,14 +230,11 @@ function inspectProject(projectDir) {
       graphPath,
       graphReportPath,
     },
-    forbiddenProjectCopies: {
-      codexProjectSkill: existsSync(
-        path.join(projectDir, ".agents", "skills", "meta-theory", "SKILL.md"),
-      ),
-      projectPostCopyScript: existsSync(
-        path.join(projectDir, ".meta-kim", "meta-kim-post-copy.mjs"),
-      ),
-      rootPostCopyScript: existsSync(path.join(projectDir, "meta-kim-post-copy.mjs")),
+    projectCopies,
+    unexpectedProjectCopies: {
+      codexProjectSkill: !projectBootstrap && projectCopies.codexProjectSkill,
+      projectPostCopyScript: projectCopies.projectPostCopyScript,
+      rootPostCopyScript: projectCopies.rootPostCopyScript,
     },
   };
 }
@@ -238,15 +244,15 @@ function caseOk(caseResult) {
     caseResult.cache.postCopyInit.status === "passed" &&
     caseResult.cache.graphify.graphJson &&
     caseResult.cache.graphify.graphReport;
-  const noForbiddenCopies = Object.values(
-    caseResult.cache.forbiddenProjectCopies,
+  const noUnexpectedCopies = Object.values(
+    caseResult.cache.unexpectedProjectCopies,
   ).every((value) => value === false);
   const bootstrapOk = caseResult.expectProjectBootstrap
     ? caseResult.cache.projectBootstrap.exists
     : !caseResult.cache.projectBootstrap.exists;
   return (
     generatedOk &&
-    noForbiddenCopies &&
+    noUnexpectedCopies &&
     bootstrapOk &&
     caseResult.hook.hooksCommandHasPackageRoot
   );
@@ -262,7 +268,7 @@ function runCase(id, { projectBootstrap }) {
     bootstrapSummary = runProjectBootstrap(projectDir);
   }
   const hook = invokeInstalledCodexHook(projectDir, global.homes.codex, global.env);
-  const cache = inspectProject(projectDir);
+  const cache = inspectProject(projectDir, { projectBootstrap });
   return {
     id,
     expectProjectBootstrap: projectBootstrap,

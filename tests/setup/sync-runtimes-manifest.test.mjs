@@ -369,16 +369,21 @@ describe("sync-runtimes / Codex project hooks", () => {
     assert.doesNotMatch(source, /cursorHooksInRepoRoot/);
     assert.match(source, /CODEX_ACTIVE_PROJECT_HOOK_FILES/);
     assert.match(source, /CURSOR_ACTIVE_PROJECT_HOOK_FILES/);
-    assert.match(
-      source,
-      /keep: CODEX_ACTIVE_PROJECT_HOOK_FILES[\s\S]*writeGeneratedJson\(\s*dirs\.codexHooksFile/,
-    );
-    assert.match(
-      source,
-      /keep: CURSOR_ACTIVE_PROJECT_HOOK_FILES[\s\S]*writeGeneratedJson\(\s*dirs\.cursorHooksFile/,
-    );
+    assert.match(source, /scope === "global"[\s\S]*GLOBAL_META_KIM_HOOK_PACKAGE_FILES[\s\S]*CODEX_ACTIVE_PROJECT_HOOK_FILES/);
+    assert.match(source, /scope === "global"[\s\S]*GLOBAL_META_KIM_HOOK_PACKAGE_FILES[\s\S]*CURSOR_ACTIVE_PROJECT_HOOK_FILES/);
     assert.match(source, /buildCodexProjectHooksJson\(\{[\s\S]*packageRoot: repoRoot/);
     assert.match(source, /buildCursorProjectHooksJson\(\{[\s\S]*packageRoot: repoRoot/);
+
+    const codexProjectConfig = buildCodexProjectHooksJson({ packageRoot: "D:/Meta_Kim" });
+    assert.doesNotMatch(JSON.stringify(codexProjectConfig), /hookprompt-adapter\.mjs|meta-kim-memory-save\.mjs/);
+
+    const codexGlobalConfig = buildCodexProjectHooksJson({
+      hookPromptAdapterPath: "~/.codex/hooks/hookprompt-adapter.mjs",
+      memoryHookPath: "~/.codex/hooks/meta-kim/meta-kim-memory-save.mjs",
+      packageRoot: "D:/Meta_Kim",
+    });
+    assert.match(JSON.stringify(codexGlobalConfig), /hookprompt-adapter\.mjs/);
+    assert.match(JSON.stringify(codexGlobalConfig), /meta-kim-memory-save\.mjs/);
   });
 
   test("wires meta-theory Skill activation to the spine hook", () => {

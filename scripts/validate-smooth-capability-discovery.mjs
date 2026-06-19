@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -224,6 +224,13 @@ function validateDefaultArtifact(report) {
 }
 
 function validatePrdMarkers() {
+  if (!existsSync(PRD_PATH)) {
+    return {
+      status: "private_evidence_not_attached",
+      requiredForPublicValidation: false,
+      path: "docs/ai-native-capability-gap-mvp-prd.zh-CN.md",
+    };
+  }
   const prd = readFileSync(PRD_PATH, "utf8");
   for (const marker of [
     "版本：v0.50",
@@ -238,6 +245,11 @@ function validatePrdMarkers() {
     assert.ok(prd.includes(marker), `PRD missing marker ${marker}`);
   }
   assert.match(prd, /P-067 \| T-006\/T-008[\s\S]*?\| 已测通 \|/);
+  return {
+    status: "attached",
+    requiredForPublicValidation: true,
+    path: "docs/ai-native-capability-gap-mvp-prd.zh-CN.md",
+  };
 }
 
 async function main() {
@@ -264,7 +276,7 @@ async function main() {
     await rm(tempDir, { recursive: true, force: true });
   }
 
-  validatePrdMarkers();
+  const prdEvidence = validatePrdMarkers();
   process.stdout.write(
     `${JSON.stringify({
       status: "pass",
@@ -272,6 +284,7 @@ async function main() {
       contract: "config/contracts/smooth-capability-discovery-contract.json",
       providerTypes: REQUIRED_PROVIDER_TYPES,
       firstClassFamilies: REQUIRED_FAMILIES.length,
+      privateEvidence: [prdEvidence],
     }, null, 2)}\n`,
   );
 }

@@ -258,6 +258,11 @@ describe("Clarity Gate unified execution confirmation", async () => {
     assert.match(policyText, /deepReadTargets/);
     assert.match(policyText, /claimAttributionRules/);
     assert.match(policyText, /originalSynthesisRules/);
+    assert.match(policyText, /decisionQualityFrame/);
+    assert.match(policyText, /minimumDecisionTest/);
+    assert.match(policyText, /competingHypotheses/);
+    assert.match(policyText, /evidenceConfidencePolicy/);
+    assert.match(policyText, /decisionReadinessGate/);
     assert.match(policyText, /copying third-party prompt text/);
     assert.match(policyText, /cosmetic rewrites/);
   });

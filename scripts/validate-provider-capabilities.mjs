@@ -5,6 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { OS_TARGETS, RUNTIMES, repoPath, toPosix } from "./governance-lib.mjs";
+import { buildHookPromptAdapterSource } from "./runtime-hook-mapping.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -399,6 +400,8 @@ async function addHookPromptAdapter(filePath, hooksJson, eventName, runtimeId) {
   const hooksDir = path.join(path.dirname(target), "hooks");
   const adapter = path.join(hooksDir, "hookprompt-adapter.mjs");
   const command = adapterCommand(adapter);
+  await fs.mkdir(hooksDir, { recursive: true });
+  await fs.writeFile(adapter, buildHookPromptAdapterSource(runtimeId), "utf8");
   hooksJson.hooks ??= {};
   hooksJson.hooks[eventName] ??= runtimeId === "codex" ? [{ hooks: [] }] : [];
   if (!Array.isArray(hooksJson.hooks[eventName])) {

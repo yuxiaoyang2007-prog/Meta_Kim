@@ -130,7 +130,21 @@ function buildMarkdown(report, outputPath) {
 }
 
 async function main() {
-  const prd = await fs.readFile(PRD_PATH, "utf8");
+  let prd = "";
+  let prdEvidence = {
+    status: "attached",
+    requiredForPublicValidation: true,
+  };
+  try {
+    prd = await fs.readFile(PRD_PATH, "utf8");
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    prdEvidence = {
+      status: "private_evidence_not_attached",
+      requiredForPublicValidation: false,
+      path: relativeToRepo(PRD_PATH),
+    };
+  }
   const branch = runGit(["branch", "--show-current"]).stdout || "unknown";
   const aheadRaw = runGit(["rev-list", "--count", "origin/main..HEAD"]);
   const commitsRaw = runGit(["log", "--oneline", "--no-decorate", "origin/main..HEAD"]);
@@ -150,7 +164,7 @@ async function main() {
         : hasWorkingTreeDelta
           ? "dirty"
           : "clean_synced";
-  const tasks = parsePrdTasks(prd);
+  const tasks = prd ? parsePrdTasks(prd) : [];
   const primaryReleaseBlockingTasks = tasks.filter(
     (task) => INCOMPLETE_PRIMARY_STATUS_RE.test(task.status) && !COMPATIBILITY_TASK_RE.test(task.id),
   );
@@ -163,9 +177,11 @@ async function main() {
     Number.isFinite(aheadOfOriginMain) && aheadOfOriginMain > 0
       ? true
       : hasWorkingTreeDelta;
+  const privateEvidenceMissing = prdEvidence.status === "private_evidence_not_attached";
   const cannotClaimGithubComplete =
-    gitDeltaBlocksGithubComplete || primaryReleaseBlockingTasks.length > 0;
-  const cannotClaimAllToolCompatibility = compatibilityFollowUp.some((task) => task.id === "P-024");
+    privateEvidenceMissing || gitDeltaBlocksGithubComplete || primaryReleaseBlockingTasks.length > 0;
+  const cannotClaimAllToolCompatibility =
+    privateEvidenceMissing || compatibilityFollowUp.some((task) => task.id === "P-024");
   const report = {
     schemaVersion: "github-gap-report-v0.1",
     generatedAt: new Date().toISOString(),
@@ -183,10 +199,14 @@ async function main() {
     },
     prd: {
       path: relativeToRepo(PRD_PATH),
-      version: parseVersion(prd),
-      currentGithubDelta: extractSection(prd, "当前 GitHub 差距：", "状态口径："),
+      evidenceStatus: prdEvidence.status,
+      privateEvidence: prdEvidence,
+      version: prd ? parseVersion(prd) : "private_evidence_not_attached",
+      currentGithubDelta: prd
+        ? extractSection(prd, "当前 GitHub 差距：", "状态口径：")
+        : "Private product PRD is not attached; public validation keeps the boundary explicit.",
       productSettingsSource: "docs/ai-native-capability-gap-mvp-prd.zh-CN.md",
-      singleSourceOfTruth: /单一产品源/.test(prd),
+      singleSourceOfTruth: prd ? /单一产品源/.test(prd) : null,
     },
     tasks: {
       total: tasks.length,
@@ -203,7 +223,9 @@ async function main() {
       primaryReleaseBlockingTaskIds: primaryReleaseBlockingTasks.map((task) => task.id),
       compatibilityFollowUpTaskIds: compatibilityFollowUp.map((task) => task.id),
       cursorIsPrimaryReleaseBlocker: false,
-      reason: cannotClaimGithubComplete
+      reason: privateEvidenceMissing
+        ? "Private product PRD is not attached; public validation can generate the report but cannot claim GitHub or all-tool completion from private evidence."
+        : cannotClaimGithubComplete
         ? "GitHub completion still depends on clean sync and zero primary release gaps; Cursor compatibility follow-up is tracked separately."
         : "Cursor compatibility is outside primary GitHub completion; all-tool compatibility remains a separate follow-up.",
     },
@@ -225,6 +247,7 @@ async function main() {
         hasWorkingTreeDelta: report.git.hasWorkingTreeDelta,
         cannotClaimGithubComplete: report.releaseBoundary.cannotClaimGithubComplete,
         cannotClaimAllToolCompatibility: report.releaseBoundary.cannotClaimAllToolCompatibility,
+        prdEvidenceStatus: report.prd.evidenceStatus,
       },
       null,
       2,

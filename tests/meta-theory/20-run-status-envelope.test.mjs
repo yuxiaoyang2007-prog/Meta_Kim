@@ -159,6 +159,9 @@ describe("meta-theory run status envelope", () => {
     assert.match(combined, /latest input language/);
     assert.match(combined, /Do not hardcode|hardcode/i);
     assert.match(combined, /must not expose internal protocol fields/i);
+    assert.match(combined, /normal assistant chat|ordinary assistant chat/i);
+    assert.match(combined, /HookPrompt\s*\/\s*`additionalContext`/i);
+    assert.match(combined, /route selected before Execution/i);
     assert.match(combined, /Preflight/);
     assert.match(combined, /conversation_fallback/);
   });

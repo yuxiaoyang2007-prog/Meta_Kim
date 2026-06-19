@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { detectPython310, formatPythonLauncher, runPythonModule } from "./graphify-runtime.mjs";
 
 const rootDir = process.cwd();
 const scriptPath = fileURLToPath(import.meta.url);
@@ -138,38 +139,18 @@ function fail(message, code = 1) {
   process.exit(code);
 }
 
-function pythonCandidates() {
-  if (process.platform === "win32") {
-    return [
-      { command: "py", prefixArgs: ["-3"] },
-      { command: "python", prefixArgs: [] },
-      { command: "python3", prefixArgs: [] },
-    ];
-  }
-  return [
-    { command: "python3", prefixArgs: [] },
-    { command: "python", prefixArgs: [] },
-  ];
-}
-
-function runCandidate(candidate, args, stdio = "inherit") {
-  return spawnSync(candidate.command, [...candidate.prefixArgs, ...args], {
-    cwd: rootDir,
-    encoding: "utf8",
-    stdio,
+function findPython() {
+  return detectPython310(spawnSync, process.platform, {
+    requirePip: true,
+    bootstrapPip: true,
   });
 }
 
-function findPython() {
-  for (const candidate of pythonCandidates()) {
-    const result = runCandidate(
-      candidate,
-      ["-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"],
-      "pipe",
-    );
-    if (result.status === 0) return candidate;
-  }
-  return null;
+function runCandidate(python, args, stdio = "inherit") {
+  return runPythonModule(python, args, spawnSync, {
+    cwd: rootDir,
+    stdio,
+  });
 }
 
 function runPython(python, args, { optional = false } = {}) {
@@ -194,6 +175,7 @@ const python = findPython();
 if (!python) {
   fail("[Meta_Kim] Python 3.10+ with pip is required for graphify. Install Python, then run this script again.");
 }
+console.log(`[Meta_Kim] Using Python for graphify: ${formatPythonLauncher(python)}`);
 
 const pipShow = runCandidate(python, ["-m", "pip", "show", "graphifyy"], "pipe");
 if (pipShow.status !== 0) {

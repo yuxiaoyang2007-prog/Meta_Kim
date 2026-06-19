@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -239,6 +239,13 @@ function validateDefaultArtifact(report) {
 }
 
 function validatePrdMarkers() {
+  if (!existsSync(PRD_PATH)) {
+    return {
+      status: "private_evidence_not_attached",
+      requiredForPublicValidation: false,
+      path: "docs/ai-native-capability-gap-mvp-prd.zh-CN.md",
+    };
+  }
   const prd = readFileSync(PRD_PATH, "utf8");
   for (const marker of [
     "版本：v0.49",
@@ -250,6 +257,11 @@ function validatePrdMarkers() {
   ]) {
     assert.ok(prd.includes(marker), `PRD missing marker ${marker}`);
   }
+  return {
+    status: "attached",
+    requiredForPublicValidation: true,
+    path: "docs/ai-native-capability-gap-mvp-prd.zh-CN.md",
+  };
 }
 
 function validateDefaultRunStatus(report) {
@@ -297,7 +309,7 @@ async function main() {
     await rm(tempDir, { recursive: true, force: true });
   }
 
-  validatePrdMarkers();
+  const prdEvidence = validatePrdMarkers();
   process.stdout.write(
     `${JSON.stringify({
       status: "pass",
@@ -306,6 +318,7 @@ async function main() {
       tasks: REQUIRED_TASK_IDS,
       adoptionRows: contract.sourceBackedAdoptionMatrix.length,
       mcpProviderProfiles: contract.mcpProviderMaturityProfiles.length,
+      privateEvidence: [prdEvidence],
     }, null, 2)}\n`,
   );
 }

@@ -31,7 +31,6 @@ import {
   statSync,
   readFileSync,
   writeFileSync,
-  unlinkSync,
 } from "node:fs";
 import { join, dirname, resolve, isAbsolute, relative } from "node:path";
 import { homedir, platform, tmpdir } from "node:os";
@@ -88,6 +87,8 @@ const args = process.argv.slice(2);
 const updateMode = args.includes("--update") || args.includes("-u");
 const checkOnly = args.includes("--check");
 const projectBootstrapMode = args.includes("--project-bootstrap");
+const projectCleanupMode =
+  args.includes("--cleanup-projects") || args.includes("--project-cleanup");
 const projectBootstrapDryRun = args.includes("--dry-run");
 const projectBootstrapApply = args.includes("--apply");
 const jsonOutputMode = args.includes("--json");
@@ -95,6 +96,7 @@ const silentMode = args.includes("--silent") || !process.stdout.isTTY;
 const useSavedProjectDirsMode =
   args.includes("--all-projects") || args.includes("--update-projects");
 const saveProjectDirsMode = args.includes("--save-project-dirs");
+const includeSelfCleanup = args.includes("--include-self-cleanup");
 
 function writeUtf8BomFileSync(path, content) {
   writeFileSync(
@@ -499,7 +501,7 @@ ${r ? `Raw error: ${r}` : ""}
       `Codex agents: ${n}/${total} .toml files`,
     syncCodexSkills: "Codex .agents/skills/meta-theory/SKILL.md",
     syncCodexSkillsGlobal:
-      "Codex meta-theory skill stays global; project .agents/skills is not required",
+      "Codex project skill mirror: .agents/skills/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw workspaces: ${n}/${META_AGENTS.length} agents — each folder has the 9 required .md files (BOOT, SOUL, …)`,
     syncOpenclawSkill: "OpenClaw shared meta-theory",
@@ -853,6 +855,12 @@ Possible causes:
     projectDeploySelectOnce: "Update a one-time project directory list",
     projectDeploySelectAndRemember:
       "Add or change saved project directories, then update them",
+    projectCleanupUseSaved: (n) =>
+      `Clean redundant Meta_Kim assets from all saved project directories (${n})`,
+    projectCleanupSelectOnce:
+      "Clean redundant Meta_Kim assets from a one-time project directory list",
+    projectCleanupSelectAndRemember:
+      "Add or change saved project directories, then clean redundant Meta_Kim assets",
     projectDeployCliTargets: (n) =>
       `Using ${n} project directory target(s) from CLI`,
     projectDeploySavedTargets: (n) =>
@@ -1094,6 +1102,8 @@ ${r ? `原始错误：${r}` : ""}
     syncCodexAgents: (n, total = META_AGENTS.length) =>
       `Codex 智能体: ${n}/${total} .toml 文件`,
     syncCodexSkills: "Codex .agents/skills/meta-theory/SKILL.md",
+    syncCodexSkillsGlobal:
+      "Codex 项目技能镜像：.agents/skills/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw 工作区：${n}/${META_AGENTS.length} 个智能体，各目录 9 个必备 Markdown 已齐（含 BOOT、SOUL 等；不含子文件夹里的额外文件）`,
     syncOpenclawSkill: "OpenClaw 共享 meta-theory",
@@ -1431,6 +1441,11 @@ ${r ? `原始错误：${r}` : ""}
     projectDeployUseSaved: (n) => `更新全部已保存项目目录（${n} 个）`,
     projectDeploySelectOnce: "仅本次更新指定项目目录",
     projectDeploySelectAndRemember: "添加或修改已保存项目目录，并立即更新",
+    projectCleanupUseSaved: (n) =>
+      `清理全部已保存项目目录中的冗余 Meta_Kim 资产（${n} 个）`,
+    projectCleanupSelectOnce: "仅本次清理指定项目目录",
+    projectCleanupSelectAndRemember:
+      "添加或修改已保存项目目录，并立即清理冗余 Meta_Kim 资产",
     projectDeployCliTargets: (n) => `使用命令行传入的 ${n} 个项目目录`,
     projectDeploySavedTargets: (n) => `已保存 ${n} 个项目目录，后续更新可复用`,
     projectDeployNoSaved: "没有已保存的项目目录，跳过项目级导出。",
@@ -1682,6 +1697,8 @@ ${r ? `生エラー：${r}` : ""}
     syncCodexAgents: (n, total = META_AGENTS.length) =>
       `Codex エージェント: ${n}/${total} .toml ファイル`,
     syncCodexSkills: "Codex .agents/skills/meta-theory/SKILL.md",
+    syncCodexSkillsGlobal:
+      "Codex プロジェクトスキルミラー：.agents/skills/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw ワークスペース: ${n}/${META_AGENTS.length} エージェント — 各フォルダに必須の .md 9 件（BOOT、SOUL など）`,
     syncOpenclawSkill: "OpenClaw 共有 meta-theory",
@@ -2045,6 +2062,12 @@ ${r ? `生エラー：${r}` : ""}
     projectDeploySelectOnce: "今回だけ指定したプロジェクトディレクトリを更新",
     projectDeploySelectAndRemember:
       "保存済みプロジェクトディレクトリを追加・変更し、今すぐ更新",
+    projectCleanupUseSaved: (n) =>
+      `保存済みプロジェクトディレクトリの冗長な Meta_Kim 資産をすべて整理（${n} 件）`,
+    projectCleanupSelectOnce:
+      "今回だけ指定したプロジェクトディレクトリの冗長な Meta_Kim 資産を整理",
+    projectCleanupSelectAndRemember:
+      "保存済みプロジェクトディレクトリを追加・変更し、冗長な Meta_Kim 資産を整理",
     projectDeployCliTargets: (n) =>
       `CLI から渡された ${n} 件のプロジェクトディレクトリを使用`,
     projectDeploySavedTargets: (n) =>
@@ -2296,6 +2319,8 @@ ${r ? `원본 오류：${r}` : ""}
     syncCodexAgents: (n, total = META_AGENTS.length) =>
       `Codex 에이전트: ${n}/${total} .toml 파일`,
     syncCodexSkills: "Codex .agents/skills/meta-theory/SKILL.md",
+    syncCodexSkillsGlobal:
+      "Codex 프로젝트 스킬 미러: .agents/skills/meta-theory/SKILL.md",
     syncOpenclawWorkspaces: (n) =>
       `OpenClaw 워크스페이스: ${n}/${META_AGENTS.length} 에이전트 — 각 폴더에 필수 .md 9개(BOOT, SOUL 등)`,
     syncOpenclawSkill: "OpenClaw 공유 meta-theory",
@@ -2647,6 +2672,12 @@ ${r ? `원본 오류：${r}` : ""}
     projectDeploySelectOnce: "이번에만 지정한 프로젝트 디렉터리 업데이트",
     projectDeploySelectAndRemember:
       "저장된 프로젝트 디렉터리를 추가/변경하고 지금 업데이트",
+    projectCleanupUseSaved: (n) =>
+      `저장된 모든 프로젝트 디렉터리의 중복 Meta_Kim 자산 정리 (${n}개)`,
+    projectCleanupSelectOnce:
+      "이번에만 지정한 프로젝트 디렉터리의 중복 Meta_Kim 자산 정리",
+    projectCleanupSelectAndRemember:
+      "저장된 프로젝트 디렉터리를 추가/변경하고 중복 Meta_Kim 자산 정리",
     projectDeployCliTargets: (n) =>
       `CLI에서 전달된 프로젝트 디렉터리 ${n}개 사용`,
     projectDeploySavedTargets: (n) =>
@@ -3321,6 +3352,26 @@ const PROJECT_LOCAL_CAPABILITY_PREFIXES = [
   "openclaw/workspaces/",
   "openclaw/skills/",
   "openclaw/capability-index/",
+  "openclaw/hooks/",
+];
+
+const PROJECT_SKILL_ROOTS_BY_PLATFORM = {
+  claude: [".claude/skills"],
+  codex: [".agents/skills"],
+  cursor: [".cursor/skills"],
+  openclaw: ["openclaw/skills"],
+};
+
+const PROJECT_META_KIM_CONFIG_RELS_BY_PLATFORM = {
+  claude: [".claude/settings.json", ".mcp.json"],
+  codex: [".codex/hooks.json", ".mcp.json"],
+  cursor: [".cursor/hooks.json", ".cursor/mcp.json"],
+  openclaw: ["openclaw/openclaw.template.json"],
+};
+
+const PROJECT_META_KIM_LOCAL_STATE_RELS = [
+  ".claude/project-task-state.json",
+  ".meta-kim",
 ];
 
 const PROJECT_HOOK_REL_DIRS_BY_PLATFORM = {
@@ -3555,11 +3606,10 @@ function managedTextBlockMarkers(relPath) {
 function mergeManagedTextBlockPreserveBase(base, generated, relPath) {
   const existing = String(base ?? "");
   const nextBlock = String(generated ?? "").trimEnd();
-  if (!existing.trim()) return `${nextBlock}\n`;
-  if (existing.trimEnd() === nextBlock) return `${nextBlock}\n`;
-
   const { begin, end } = managedTextBlockMarkers(relPath);
   const block = `${begin}\n${nextBlock}\n${end}`;
+  if (!existing.trim()) return `${block}\n`;
+  if (existing.trimEnd() === block) return `${block}\n`;
   const escapedBegin = begin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const escapedEnd = end.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const blockRe = new RegExp(`${escapedBegin}[\\s\\S]*?${escapedEnd}`);
@@ -3567,7 +3617,21 @@ function mergeManagedTextBlockPreserveBase(base, generated, relPath) {
   if (blockRe.test(existing)) {
     return `${existing.replace(blockRe, block).trimEnd()}\n`;
   }
+  if (existing.trimEnd() === nextBlock) return `${block}\n`;
   return `${existing.trimEnd()}\n\n${block}\n`;
+}
+
+function stripManagedTextBlock(raw, relPath) {
+  const { begin, end } = managedTextBlockMarkers(relPath);
+  const escapedBegin = begin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedEnd = end.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const blockRe = new RegExp(`${escapedBegin}[\\s\\S]*?${escapedEnd}`, "g");
+  return String(raw ?? "").replace(blockRe, "").trim();
+}
+
+function equivalentText(left, right) {
+  return String(left ?? "").replace(/\r\n/g, "\n").trimEnd() ===
+    String(right ?? "").replace(/\r\n/g, "\n").trimEnd();
 }
 
 function rewriteProjectDirRefs(raw, targetDir) {
@@ -3780,10 +3844,7 @@ function plannedProtectedProjectDeployJson(srcPath, destPath, relPath, targetDir
 function plannedProtectedProjectDeployText(srcPath, destPath, relPath, targetDir) {
   const rel = normalizeDeployRelPath(relPath);
   const generated = rewriteProjectDirRefs(readFileSync(srcPath, "utf8"), targetDir);
-  if (!existsSync(destPath)) {
-    return generated.endsWith("\n") ? generated : `${generated}\n`;
-  }
-  const base = readFileSync(destPath, "utf8");
+  const base = existsSync(destPath) ? readFileSync(destPath, "utf8") : "";
   return mergeManagedTextBlockPreserveBase(base, generated, rel);
 }
 
@@ -3860,7 +3921,7 @@ function projectDeployRootsForPlatform(platformId) {
   }
   if (platformId === "codex" || platformId === "all") {
     add(".codex/agents");
-    add(".codex/skills");
+    add(".agents/skills");
     add(".codex/capability-index");
     add(".codex/commands");
     add(".codex/hooks.json");
@@ -3933,7 +3994,7 @@ function projectDeployFilePlan(srcPath, destPath, relPath, targetDir, context = 
     ? "never_touch"
     : protectedJson
       ? "additive_preserve_user_state_json"
-      : protectedText && exists
+      : protectedText
         ? "managed_block_preserve_user_text"
         : unknownExistingConflict
           ? "user_owned_existing_file_conflict"
@@ -3960,7 +4021,9 @@ function projectDeployFilePlan(srcPath, destPath, relPath, targetDir, context = 
               : "new_file",
     action: skipped
       ? "skip"
-      : exists && (protectedJson || protectedText)
+      : protectedText
+        ? "merge"
+        : exists && protectedJson
         ? "merge"
         : unknownExistingConflict
           ? "conflict"
@@ -3970,7 +4033,9 @@ function projectDeployFilePlan(srcPath, destPath, relPath, targetDir, context = 
     effectiveAction:
       skipped || contentStatus === "same"
         ? "unchanged"
-        : exists && (protectedJson || protectedText)
+        : protectedText
+          ? "merge"
+          : exists && protectedJson
           ? "merge"
           : unknownExistingConflict
             ? "conflict"
@@ -4123,6 +4188,65 @@ function isProjectLocalCapabilityAsset(relPath) {
   return PROJECT_LOCAL_CAPABILITY_PREFIXES.some((prefix) => rel.startsWith(prefix));
 }
 
+function projectInstructionRelPathsForTargets(activeTargets) {
+  const targets = activeTargets.includes("all")
+    ? ["claude", "codex", "cursor", "openclaw"]
+    : activeTargets;
+  const rels = new Set();
+  if (targets.includes("claude")) rels.add("CLAUDE.md");
+  if (
+    targets.includes("codex") ||
+    targets.includes("cursor") ||
+    targets.includes("openclaw")
+  ) {
+    rels.add("AGENTS.md");
+  }
+  return [...rels];
+}
+
+function isRedundantProjectInstructionFile(targetDir, relPath) {
+  const rel = normalizeDeployRelPath(relPath);
+  const targetPath = join(targetDir, rel);
+  const sourcePath = join(PROJECT_DIR, rel);
+  if (!existsSync(targetPath) || !existsSync(sourcePath)) return false;
+  const stats = statSync(targetPath);
+  if (!stats.isFile()) return false;
+  const current = readFileSync(targetPath, "utf8");
+  const generated = rewriteProjectDirRefs(readFileSync(sourcePath, "utf8"), targetDir);
+  const userText = stripManagedTextBlock(current, rel);
+  const metaKimProjectionSignature =
+    (rel === "AGENTS.md" && userText.trimStart().startsWith("# Meta_Kim for Codex")) ||
+    (rel === "CLAUDE.md" &&
+      userText.trimStart().startsWith("# Meta_Kim for Claude Code"));
+  return (
+    equivalentText(current, generated) ||
+    equivalentText(userText, "") ||
+    equivalentText(userText, generated) ||
+    metaKimProjectionSignature
+  );
+}
+
+function removeRedundantProjectInstructionFiles(targetDir, activeTargets) {
+  const removed = [];
+  const skipped = [];
+  const root = resolve(targetDir);
+  for (const relPath of projectInstructionRelPathsForTargets(activeTargets)) {
+    const rel = normalizeDeployRelPath(relPath);
+    const absPath = resolve(targetDir, rel);
+    if (!isPathInsideDir(absPath, root)) {
+      skipped.push({ relPath: rel, reason: "outside_target_dir" });
+      continue;
+    }
+    if (!isRedundantProjectInstructionFile(targetDir, rel)) continue;
+    if (!removeUntrackedProjectPath(targetDir, rel, skipped, { recursive: false })) {
+      continue;
+    }
+    removed.push(rel);
+    pruneEmptyProjectDirs(targetDir, rel);
+  }
+  return { removed, skipped };
+}
+
 function projectAssetCleanupBucket(relPath) {
   const rel = normalizeDeployRelPath(relPath);
   const runtime = rel.startsWith(".claude/")
@@ -4164,6 +4288,34 @@ function summarizeProjectAssetCleanup(removed) {
 function isPathInsideDir(absPath, absDir) {
   const rel = relative(absDir, absPath);
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function isGitTrackedProjectPath(targetDir, relPath) {
+  if (!existsSync(join(targetDir, ".git"))) return false;
+  const rel = normalizeDeployRelPath(relPath);
+  const probe = spawnSync("git", ["-C", targetDir, "ls-files", "--", rel], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (probe.status !== 0) return false;
+  return probe.stdout.trim().length > 0;
+}
+
+function removeUntrackedProjectPath(targetDir, relPath, skipped, options = {}) {
+  const rel = normalizeDeployRelPath(relPath);
+  const root = resolve(targetDir);
+  const absPath = resolve(targetDir, rel);
+  if (!isPathInsideDir(absPath, root)) {
+    skipped.push({ relPath: rel, reason: "outside_target_dir" });
+    return false;
+  }
+  if (!existsSync(absPath)) return false;
+  if (isGitTrackedProjectPath(targetDir, rel)) {
+    skipped.push({ relPath: rel, reason: "git_tracked_preserved" });
+    return false;
+  }
+  rmSync(absPath, { recursive: options.recursive !== false, force: true });
+  return true;
 }
 
 function pruneEmptyProjectDirs(targetDir, relPath) {
@@ -4220,11 +4372,421 @@ function removeStaleManagedProjectAssets(
       skipped.push({ relPath, reason: "not_a_file" });
       continue;
     }
-    unlinkSync(absPath);
+    if (!removeUntrackedProjectPath(targetDir, relPath, skipped, { recursive: false })) {
+      continue;
+    }
     removed.push(relPath);
     pruneEmptyProjectDirs(targetDir, relPath);
   }
 
+  return { removed, skipped };
+}
+
+const LEGACY_PROJECT_CAPABILITY_RELS_BY_PLATFORM = {
+  claude: [
+    ".claude/skills/meta-theory.md",
+    ".claude/skills/references",
+  ],
+  codex: [
+    ".codex/skills/meta-theory.md",
+    ".codex/skills/references",
+    ".codex/skills/meta-theory",
+  ],
+  cursor: [
+    ".cursor/skills/meta-theory.md",
+    ".cursor/skills/references",
+  ],
+  openclaw: [
+    "openclaw/skills/meta-theory.md",
+    "openclaw/skills/references",
+  ],
+};
+
+function mergeProjectCleanupResults(...cleanups) {
+  return {
+    removed: cleanups.flatMap((cleanup) => cleanup?.removed ?? []),
+    skipped: cleanups.flatMap((cleanup) => cleanup?.skipped ?? []),
+  };
+}
+
+function legacyProjectCapabilityRelPaths(activeTargets) {
+  const targets = activeTargets.includes("all")
+    ? Object.keys(LEGACY_PROJECT_CAPABILITY_RELS_BY_PLATFORM)
+    : activeTargets;
+  return [
+    ...new Set(
+      targets.flatMap(
+        (target) => LEGACY_PROJECT_CAPABILITY_RELS_BY_PLATFORM[target] ?? [],
+      ),
+    ),
+  ];
+}
+
+function removeLegacyProjectCapabilityEntrypoints(targetDir, activeTargets) {
+  const removed = [];
+  const skipped = [];
+  const root = resolve(targetDir);
+
+  for (const relPath of legacyProjectCapabilityRelPaths(activeTargets)) {
+    const rel = normalizeDeployRelPath(relPath);
+    const absPath = resolve(targetDir, rel);
+    if (!isPathInsideDir(absPath, root)) {
+      skipped.push({ relPath: rel, reason: "outside_target_dir" });
+      continue;
+    }
+    if (!existsSync(absPath)) continue;
+    if (!removeUntrackedProjectPath(targetDir, rel, skipped)) continue;
+    removed.push(rel);
+    pruneEmptyProjectDirs(targetDir, rel);
+  }
+
+  return { removed, skipped };
+}
+
+const GLOBAL_CLEANUP_PROJECT_CAPABILITY_ROOTS_BY_PLATFORM = {
+  claude: [
+    ".claude/skills/meta-theory",
+  ],
+  codex: [
+    ".agents/skills/meta-theory",
+  ],
+  cursor: [
+    ".cursor/skills/meta-theory",
+  ],
+  openclaw: [
+    "openclaw/skills/meta-theory",
+  ],
+};
+
+function globalCleanupProjectCapabilityRoots(activeTargets) {
+  const targets = activeTargets.includes("all")
+    ? Object.keys(GLOBAL_CLEANUP_PROJECT_CAPABILITY_ROOTS_BY_PLATFORM)
+    : activeTargets;
+  return [
+    ...new Set(
+      targets.flatMap(
+        (target) => GLOBAL_CLEANUP_PROJECT_CAPABILITY_ROOTS_BY_PLATFORM[target] ?? [],
+      ),
+    ),
+  ];
+}
+
+function removeGlobalProjectCapabilityRoots(targetDir, activeTargets) {
+  const removed = [];
+  const skipped = [];
+  const root = resolve(targetDir);
+
+  for (const relPath of globalCleanupProjectCapabilityRoots(activeTargets)) {
+    const rel = normalizeDeployRelPath(relPath);
+    const absPath = resolve(targetDir, rel);
+    if (!isPathInsideDir(absPath, root)) {
+      skipped.push({ relPath: rel, reason: "outside_target_dir" });
+      continue;
+    }
+    if (!existsSync(absPath)) continue;
+    if (!removeUntrackedProjectPath(targetDir, rel, skipped)) continue;
+    removed.push(rel);
+    pruneEmptyProjectDirs(targetDir, rel);
+  }
+
+  return { removed, skipped };
+}
+
+function expandedCleanupTargets(activeTargets) {
+  return activeTargets.includes("all")
+    ? ["claude", "codex", "cursor", "openclaw"]
+    : activeTargets;
+}
+
+function targetValuesForPlatforms(map, activeTargets) {
+  return [
+    ...new Set(
+      expandedCleanupTargets(activeTargets).flatMap((target) => map[target] ?? []),
+    ),
+  ];
+}
+
+function readTextIfFile(filePath) {
+  if (!existsSync(filePath)) return "";
+  const stats = statSync(filePath);
+  if (!stats.isFile()) return "";
+  return readFileSync(filePath, "utf8");
+}
+
+function isMetaKimGeneratedSkillDirectory(dirPath) {
+  const skillPath = join(dirPath, "SKILL.md");
+  const raw = readTextIfFile(skillPath);
+  if (!raw.trim()) return false;
+  const markerRe =
+    /\b(author:\s*Meta_Kim|sourceGapId:\s*gap-|approvalEvidence:\s*warden-approved|Reusable Meta_Kim|Meta_Kim executable governance dispatcher)\b/u;
+  return markerRe.test(raw);
+}
+
+function removeMetaKimGeneratedProjectSkillResidue(targetDir, activeTargets) {
+  const removed = [];
+  const skipped = [];
+  const root = resolve(targetDir);
+  for (const relRoot of targetValuesForPlatforms(PROJECT_SKILL_ROOTS_BY_PLATFORM, activeTargets)) {
+    const absRoot = resolve(targetDir, relRoot);
+    if (!isPathInsideDir(absRoot, root)) {
+      skipped.push({ relPath: normalizeDeployRelPath(relRoot), reason: "outside_target_dir" });
+      continue;
+    }
+    if (!existsSync(absRoot)) continue;
+    for (const entry of readdirSync(absRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const absPath = join(absRoot, entry.name);
+      const relPath = normalizeDeployRelPath(relative(targetDir, absPath));
+      if (!isMetaKimGeneratedSkillDirectory(absPath)) continue;
+      if (!removeUntrackedProjectPath(targetDir, relPath, skipped)) continue;
+      removed.push(relPath);
+      pruneEmptyProjectDirs(targetDir, relPath);
+    }
+  }
+  return { removed, skipped };
+}
+
+function directoryContainsFiles(dirPath) {
+  if (!existsSync(dirPath)) return false;
+  for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
+    const entryPath = join(dirPath, entry.name);
+    if (entry.isFile()) return true;
+    if (entry.isDirectory() && directoryContainsFiles(entryPath)) return true;
+  }
+  return false;
+}
+
+function isMetaKimOpenClawHookDirectory(dirPath) {
+  const hookDoc = readTextIfFile(join(dirPath, "HOOK.md"));
+  return hookDoc.includes("Meta_Kim") || hookDoc.includes("mcp-memory-service");
+}
+
+function removeMetaKimOpenClawDirectoryResidue(targetDir, activeTargets) {
+  const removed = [];
+  const skipped = [];
+  if (!expandedCleanupTargets(activeTargets).includes("openclaw")) {
+    return { removed, skipped };
+  }
+  const root = resolve(targetDir);
+  const hookRoot = resolve(targetDir, "openclaw/hooks");
+  if (isPathInsideDir(hookRoot, root) && existsSync(hookRoot)) {
+    for (const entry of readdirSync(hookRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const absPath = join(hookRoot, entry.name);
+      const relPath = normalizeDeployRelPath(relative(targetDir, absPath));
+      if (!isMetaKimOpenClawHookDirectory(absPath)) continue;
+      if (!removeUntrackedProjectPath(targetDir, relPath, skipped)) continue;
+      removed.push(relPath);
+      pruneEmptyProjectDirs(targetDir, relPath);
+    }
+  } else if (!isPathInsideDir(hookRoot, root)) {
+    skipped.push({ relPath: "openclaw/hooks", reason: "outside_target_dir" });
+  }
+
+  const workspaceRoot = resolve(targetDir, "openclaw/workspaces");
+  if (isPathInsideDir(workspaceRoot, root) && existsSync(workspaceRoot)) {
+    for (const entry of readdirSync(workspaceRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !entry.name.startsWith("meta-")) continue;
+      const absPath = join(workspaceRoot, entry.name);
+      const relPath = normalizeDeployRelPath(relative(targetDir, absPath));
+      if (directoryContainsFiles(absPath)) continue;
+      if (!removeUntrackedProjectPath(targetDir, relPath, skipped)) continue;
+      removed.push(relPath);
+      pruneEmptyProjectDirs(targetDir, relPath);
+    }
+  } else if (!isPathInsideDir(workspaceRoot, root)) {
+    skipped.push({ relPath: "openclaw/workspaces", reason: "outside_target_dir" });
+  }
+
+  return { removed, skipped };
+}
+
+function stripMetaKimMcpServersFromConfig(config = {}) {
+  const next = cloneJson(config && typeof config === "object" ? config : {});
+  if (isPlainObject(next.mcpServers)) {
+    for (const key of ["meta-kim-runtime", "mcp-memory-service"]) {
+      delete next.mcpServers[key];
+    }
+  }
+  if (isPlainObject(next.mcp?.servers)) {
+    for (const key of ["meta-kim-runtime", "mcp-memory-service"]) {
+      delete next.mcp.servers[key];
+    }
+  }
+  return next;
+}
+
+function stripMetaKimOpenClawTemplate(config = {}) {
+  const next = stripMetaKimMcpServersFromConfig(config);
+  if (Array.isArray(next.agents?.list)) {
+    next.agents.list = next.agents.list.filter(
+      (agent) => !String(agent?.id ?? "").startsWith("meta-"),
+    );
+  }
+  if (Array.isArray(next.tools?.agentToAgent?.allow)) {
+    next.tools.agentToAgent.allow = next.tools.agentToAgent.allow.filter(
+      (id) => !String(id ?? "").startsWith("meta-"),
+    );
+  }
+  if (Array.isArray(next.skills?.load?.extraDirs)) {
+    next.skills.load.extraDirs = next.skills.load.extraDirs.filter(
+      (dir) => !String(dir ?? "").replace(/\\/g, "/").includes("/openclaw/skills"),
+    );
+  }
+  return next;
+}
+
+function stripMetaKimProjectConfig(relPath, config = {}) {
+  const rel = normalizeDeployRelPath(relPath);
+  let next = cloneJson(config && typeof config === "object" ? config : {});
+  if (rel.endsWith("hooks.json") || rel === ".claude/settings.json") {
+    next = stripProjectMetaKimHooksFromHookConfig(next);
+  }
+  if (rel.endsWith("mcp.json") || rel === ".mcp.json") {
+    next = stripMetaKimMcpServersFromConfig(next);
+  }
+  if (rel === "openclaw/openclaw.template.json") {
+    next = stripMetaKimOpenClawTemplate(next);
+  }
+  return next;
+}
+
+function generatedProjectConfigForRel(targetDir, relPath) {
+  const rel = normalizeDeployRelPath(relPath);
+  const sourcePath = join(PROJECT_DIR, rel);
+  if (!existsSync(sourcePath)) return null;
+  const raw = rewriteProjectDirRefs(readFileSync(sourcePath, "utf8"), targetDir);
+  return parseJsonText(raw, sourcePath);
+}
+
+function isEmptyProjectConfigShell(config = {}) {
+  if (!isPlainObject(config)) return false;
+  return Object.entries(config).every(([key, value]) => {
+    if (key === "version") return true;
+    if (Array.isArray(value)) return value.length === 0;
+    if (isPlainObject(value)) return Object.keys(value).length === 0;
+    return value === null || value === "" || value === false;
+  });
+}
+
+function isGeneratedOnlyProjectConfig(targetDir, relPath, config, currentFilePlans = []) {
+  const rel = normalizeDeployRelPath(relPath);
+  const previousFiles = previousProjectManagedFileMap(targetDir);
+  const plan = currentFilePlans.find((file) => normalizeDeployRelPath(file.relPath) === rel);
+  const hasMetaKimManagementEvidence =
+    previousFiles.has(rel) ||
+    plan?.ownership === "shared_config_merge" ||
+    plan?.mergePolicy === "additive_preserve_user_state_json";
+  if (!hasMetaKimManagementEvidence) return false;
+  const generated = generatedProjectConfigForRel(targetDir, rel);
+  if (!generated) return false;
+  const strippedGenerated = stripMetaKimProjectConfig(rel, generated);
+  return jsonEquivalent(config, generated) || jsonEquivalent(config, strippedGenerated);
+}
+
+function cleanupRedundantProjectConfigs(targetDir, activeTargets, currentFilePlans = []) {
+  const removed = [];
+  const skipped = [];
+  const root = resolve(targetDir);
+  const relPaths = targetValuesForPlatforms(
+    PROJECT_META_KIM_CONFIG_RELS_BY_PLATFORM,
+    activeTargets,
+  );
+  for (const relPath of relPaths) {
+    const rel = normalizeDeployRelPath(relPath);
+    const absPath = resolve(targetDir, rel);
+    if (!isPathInsideDir(absPath, root)) {
+      skipped.push({ relPath: rel, reason: "outside_target_dir" });
+      continue;
+    }
+    if (!existsSync(absPath)) continue;
+    const current = readJsonObjectIfExists(absPath);
+    if (!current) continue;
+    const stripped = stripMetaKimProjectConfig(rel, current);
+    const shouldDelete =
+      isEmptyProjectConfigShell(stripped) ||
+      isGeneratedOnlyProjectConfig(targetDir, rel, stripped, currentFilePlans);
+    if (shouldDelete) {
+      if (!removeUntrackedProjectPath(targetDir, rel, skipped, { recursive: false })) {
+        continue;
+      }
+      removed.push(rel);
+      pruneEmptyProjectDirs(targetDir, rel);
+      continue;
+    }
+    if (!jsonEquivalent(current, stripped)) {
+      if (isGitTrackedProjectPath(targetDir, rel)) {
+        skipped.push({ relPath: rel, reason: "git_tracked_preserved" });
+        continue;
+      }
+      writeJsonObject(absPath, stripped);
+    }
+  }
+  return { removed, skipped };
+}
+
+function isMetaKimProjectTaskState(filePath) {
+  const raw = readTextIfFile(filePath);
+  return raw.includes("auto-save from Stop hook") && raw.includes("meta_kim");
+}
+
+function removeMetaKimProjectLocalState(targetDir) {
+  const removed = [];
+  const skipped = [];
+  const root = resolve(targetDir);
+  for (const relPath of PROJECT_META_KIM_LOCAL_STATE_RELS) {
+    const rel = normalizeDeployRelPath(relPath);
+    const absPath = resolve(targetDir, rel);
+    if (!isPathInsideDir(absPath, root)) {
+      skipped.push({ relPath: rel, reason: "outside_target_dir" });
+      continue;
+    }
+    if (!existsSync(absPath)) continue;
+    if (rel === ".claude/project-task-state.json" && !isMetaKimProjectTaskState(absPath)) {
+      skipped.push({ relPath: rel, reason: "local_state_not_meta_kim_signed" });
+      continue;
+    }
+    if (!removeUntrackedProjectPath(targetDir, rel, skipped)) continue;
+    removed.push(rel);
+    pruneEmptyProjectDirs(targetDir, rel);
+  }
+  return { removed, skipped };
+}
+
+function pruneEmptyDirsPostOrder(absDir, targetRoot, removed, targetDir) {
+  if (!existsSync(absDir) || !isPathInsideDir(absDir, targetRoot)) return;
+  for (const entry of readdirSync(absDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    pruneEmptyDirsPostOrder(join(absDir, entry.name), targetRoot, removed, targetDir);
+  }
+  if (absDir === targetRoot) return;
+  const entries = readdirSync(absDir);
+  if (entries.length > 0) return;
+  rmSync(absDir, { recursive: true, force: true });
+  removed.push(normalizeDeployRelPath(relative(targetDir, absDir)));
+}
+
+function pruneEmptyProjectRuntimeDirs(targetDir, activeTargets) {
+  const removed = [];
+  const skipped = [];
+  const root = resolve(targetDir);
+  const roots = [
+    ...targetValuesForPlatforms(PROJECT_SKILL_ROOTS_BY_PLATFORM, activeTargets),
+    ".agents",
+    ".claude",
+    ".codex",
+    "openclaw",
+    ".cursor",
+  ];
+  for (const relRoot of [...new Set(roots)]) {
+    const absRoot = resolve(targetDir, relRoot);
+    if (!isPathInsideDir(absRoot, root)) {
+      skipped.push({ relPath: normalizeDeployRelPath(relRoot), reason: "outside_target_dir" });
+      continue;
+    }
+    if (!existsSync(absRoot)) continue;
+    pruneEmptyDirsPostOrder(absRoot, root, removed, targetDir);
+  }
   return { removed, skipped };
 }
 
@@ -4244,10 +4806,12 @@ function stripStaleProjectHookConfigs(targetDir, currentFilePlans) {
     if (currentRelPaths.has(relPath)) continue;
     if (!hookConfigPaths.has(relPath)) continue;
     const configPath = join(targetDir, relPath);
+    if (!existsSync(configPath)) continue;
     const current = readJsonObjectIfExists(configPath);
     if (!current) continue;
     const stripped = stripProjectMetaKimHooksFromHookConfig(current);
     if (jsonEquivalent(current, stripped)) continue;
+    if (isGitTrackedProjectPath(targetDir, relPath)) continue;
     writeJsonObject(configPath, stripped);
     changed.push(relPath);
   }
@@ -4705,8 +5269,13 @@ async function migrateProjectMetaKimHooksForBootstrap(activeTargets, targetDir) 
         kept.push(name);
         continue;
       }
+      const relPath = normalizeDeployRelPath(join(relDir, name));
+      const skipped = [];
+      if (!removeUntrackedProjectPath(targetDir, relPath, skipped, { recursive: false })) {
+        kept.push(name);
+        continue;
+      }
       try {
-        unlinkSync(join(hooksDir, name));
         removed.push(name);
       } catch (error) {
         if (error.code !== "ENOENT") {
@@ -4739,8 +5308,12 @@ async function migrateProjectMetaKimHooksForBootstrap(activeTargets, targetDir) 
 }
 
 async function applyProjectBootstrapToDir(activeTargets, targetDir) {
+  const legacyCleanup = removeLegacyProjectCapabilityEntrypoints(targetDir, activeTargets);
   let plan = buildProjectBootstrapPlan(activeTargets, targetDir);
-  const cleanup = removeStaleManagedProjectAssets(targetDir, plan.files);
+  const cleanup = mergeProjectCleanupResults(
+    legacyCleanup,
+    removeStaleManagedProjectAssets(targetDir, plan.files),
+  );
   const strippedHookConfigs = stripStaleProjectHookConfigs(targetDir, plan.files);
   cleanup.strippedHookConfigs = strippedHookConfigs;
   reportProjectAssetCleanup(cleanup, { reason: "project_retarget" });
@@ -4821,7 +5394,6 @@ function deployPlatformFiles(platformId, targetDir) {
     if (
       targetIsRepo &&
       existsSync(src) &&
-      statSync(src).isDirectory() &&
       resolve(src) === resolve(dest)
     ) {
       return;
@@ -5032,7 +5604,7 @@ async function askProjectCleanupDirectory() {
       skip(t.projectDeployNoSaved);
       return [];
     }
-    info(t.projectDeployUseSaved(savedDirs.length));
+    info(t.projectCleanupUseSaved(savedDirs.length));
     return savedDirs;
   }
 
@@ -5060,9 +5632,9 @@ async function askProjectCleanupDirectory() {
   }
 
   const options = [
-    { id: "saved", label: t.projectDeployUseSaved(savedDirs.length) },
-    { id: "remember", label: t.projectDeploySelectAndRemember },
-    { id: "once", label: t.projectDeploySelectOnce },
+    { id: "saved", label: t.projectCleanupUseSaved(savedDirs.length) },
+    { id: "remember", label: t.projectCleanupSelectAndRemember },
+    { id: "once", label: t.projectCleanupSelectOnce },
   ];
   options.push({ id: "skip", label: t.npxQuickDeployNo });
 
@@ -5137,10 +5709,12 @@ function cleanupProjectHookConfigs(activeTargets, targetDir) {
   const changed = [];
   for (const relPath of relPaths) {
     const configPath = join(targetDir, relPath);
+    if (!existsSync(configPath)) continue;
     const current = readJsonObjectIfExists(configPath);
     if (!current) continue;
     const stripped = stripProjectMetaKimHooksFromHookConfig(current);
     if (jsonEquivalent(current, stripped)) continue;
+    if (isGitTrackedProjectPath(targetDir, relPath)) continue;
     writeJsonObject(configPath, stripped);
     changed.push(relPath);
   }
@@ -5157,7 +5731,9 @@ function cleanupProjectHookConfigs(activeTargets, targetDir) {
 }
 
 async function cleanupProjectRedundancyDirs(activeTargets, targetDirs) {
-  const dirs = uniqueProjectDeployDirs(targetDirs);
+  const dirs = uniqueProjectDeployDirs(targetDirs).filter(
+    (targetDir) => includeSelfCleanup || resolve(targetDir) !== resolve(PROJECT_DIR),
+  );
   if (dirs.length === 0) return [];
 
   heading(t.projectCleanupBatchHeading(dirs.length));
@@ -5170,10 +5746,41 @@ async function cleanupProjectRedundancyDirs(activeTargets, targetDirs) {
     try {
       await migrateProjectMetaKimHooksForBootstrap(activeTargets, targetDir);
       const strippedHookConfigs = cleanupProjectHookConfigs(activeTargets, targetDir);
+      const legacyCleanup = removeLegacyProjectCapabilityEntrypoints(targetDir, activeTargets);
       const plan = buildProjectBootstrapPlan(activeTargets, targetDir);
-      const cleanup = removeStaleManagedProjectAssets(targetDir, plan.files, {
-        removeCurrentManaged: true,
-      });
+      const capabilityRootCleanup = removeGlobalProjectCapabilityRoots(targetDir, activeTargets);
+      const generatedSkillCleanup = removeMetaKimGeneratedProjectSkillResidue(
+        targetDir,
+        activeTargets,
+      );
+      const openClawDirectoryCleanup = removeMetaKimOpenClawDirectoryResidue(
+        targetDir,
+        activeTargets,
+      );
+      const configCleanup = cleanupRedundantProjectConfigs(
+        targetDir,
+        activeTargets,
+        plan.files,
+      );
+      const instructionCleanup = removeRedundantProjectInstructionFiles(
+        targetDir,
+        activeTargets,
+      );
+      const localStateCleanup = removeMetaKimProjectLocalState(targetDir);
+      const emptyDirCleanup = pruneEmptyProjectRuntimeDirs(targetDir, activeTargets);
+      const cleanup = mergeProjectCleanupResults(
+        legacyCleanup,
+        capabilityRootCleanup,
+        generatedSkillCleanup,
+        openClawDirectoryCleanup,
+        configCleanup,
+        instructionCleanup,
+        removeStaleManagedProjectAssets(targetDir, plan.files, {
+          removeCurrentManaged: true,
+        }),
+        localStateCleanup,
+        emptyDirCleanup,
+      );
       reportProjectAssetCleanup(cleanup, { reason: "global_redundancy" });
       results.push({ dir: targetDir, status: "ok", cleanup, strippedHookConfigs });
     } catch (error) {
@@ -5613,7 +6220,19 @@ function checkSync(
       allOk = false;
     }
 
-    ok(t.syncCodexSkillsGlobal ?? "Codex meta-theory skill stays global");
+    const codexSkillPath = join(
+      PROJECT_DIR,
+      ".agents",
+      "skills",
+      "meta-theory",
+      "SKILL.md",
+    );
+    if (existsSync(codexSkillPath)) {
+      ok(t.syncCodexSkillsGlobal ?? t.syncCodexSkills);
+    } else {
+      fail(t.syncMissing(".agents/skills/meta-theory/SKILL.md"));
+      allOk = false;
+    }
   }
 
   // --- OpenClaw ---
@@ -6035,6 +6654,7 @@ const LEGACY_PROJECT_PATHS = [
   join(PROJECT_DIR, ".claude", "skills", "meta-theory.md"),
   join(PROJECT_DIR, ".codex", "skills", "meta-theory.md"),
   join(PROJECT_DIR, ".codex", "skills", "references"),
+  join(PROJECT_DIR, ".codex", "skills", "meta-theory"),
   join(PROJECT_DIR, "openclaw", "skills", "meta-theory.md"),
   join(PROJECT_DIR, "openclaw", "skills", "references"),
   join(PROJECT_DIR, ".cursor", "skills", "meta-theory.md"),
@@ -7651,9 +8271,49 @@ async function runProjectBootstrapCli() {
   return ok;
 }
 
+async function runProjectCleanupCli() {
+  const targetContext = await resolveTargetContext(args);
+  const activeTargets = targetContext.activeTargets;
+  const localOverrides = await loadLocalOverrides();
+  const savedDirs = savedProjectDeployDirsFrom(localOverrides);
+  const targetDirs =
+    cliProjectDeployDirs.length > 0
+      ? cliProjectDeployDirs
+      : savedDirs;
+
+  const results = await cleanupProjectRedundancyDirs(activeTargets, targetDirs);
+  const failed = results.filter((result) => result.status === "failed");
+  const summary = {
+    schemaVersion: "meta-kim-project-cleanup-result-v0.1",
+    mode: "cleanup",
+    ok: failed.length === 0,
+    skippedSelf:
+      !includeSelfCleanup && targetDirs.some((dir) => resolve(dir) === resolve(PROJECT_DIR)),
+    resultCount: results.length,
+    results,
+  };
+
+  if (jsonOutputMode) {
+    console.log(JSON.stringify(summary, null, 2));
+    return summary.ok;
+  }
+
+  console.log(`Meta_Kim project cleanup: ${summary.ok ? "ok" : "failed"}`);
+  console.log(`  targets=${activeTargets.join(",")}`);
+  console.log(`  cleanedProjects=${summary.resultCount}`);
+  if (summary.skippedSelf) {
+    console.log("  skippedSelf=true");
+  }
+  return summary.ok;
+}
+
 async function main() {
   if (projectBootstrapMode) {
     const ok = await runProjectBootstrapCli();
+    process.exit(ok ? 0 : 1);
+  }
+  if (projectCleanupMode) {
+    const ok = await runProjectCleanupCli();
     process.exit(ok ? 0 : 1);
   }
 

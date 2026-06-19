@@ -768,7 +768,7 @@ function copyCrossRuntimeMemoryHook(runtimeHome) {
     return null;
   }
 
-  const hooksDir = join(runtimeHome, "hooks");
+  const hooksDir = crossRuntimeMemoryHookDir(runtimeHome);
   ensureDir(hooksDir);
   const target = join(hooksDir, CROSS_RUNTIME_HOOK_FILE);
   if (
@@ -781,6 +781,27 @@ function copyCrossRuntimeMemoryHook(runtimeHome) {
     ok(`Cross-runtime memory hook copied -> ${target}`);
   }
   return target;
+}
+
+function crossRuntimeMemoryHookDir(runtimeHome) {
+  const globalMetaKimHooksDir = join(runtimeHome, "hooks", "meta-kim");
+  if (existsSync(globalMetaKimHooksDir)) {
+    return globalMetaKimHooksDir;
+  }
+  return join(runtimeHome, "hooks");
+}
+
+function crossRuntimeMemoryHookCandidates(runtimeHome) {
+  return [
+    join(runtimeHome, "hooks", "meta-kim", CROSS_RUNTIME_HOOK_FILE),
+    join(runtimeHome, "hooks", CROSS_RUNTIME_HOOK_FILE),
+  ];
+}
+
+function findInstalledCrossRuntimeMemoryHook(runtimeHome) {
+  return crossRuntimeMemoryHookCandidates(runtimeHome).find((candidate) =>
+    existsSync(candidate),
+  ) ?? null;
 }
 
 function registerCodexMemoryHook(hookPath) {
@@ -1060,10 +1081,12 @@ function check(targets) {
   ]) {
     const targetId = label.toLowerCase();
     if (!targets.includes(targetId)) continue;
-    const hookFile = join(runtimeHome, "hooks", CROSS_RUNTIME_HOOK_FILE);
-    existsSync(hookFile)
+    const hookFile = findInstalledCrossRuntimeMemoryHook(runtimeHome);
+    hookFile
       ? ok(`${label} memory hook installed: ${hookFile}`)
-      : warn(`${label} memory hook missing: ${hookFile}`);
+      : warn(
+          `${label} memory hook missing: ${crossRuntimeMemoryHookCandidates(runtimeHome).join(" or ")}`,
+        );
     const cfg = readJsonFile(join(runtimeHome, hooksFile), null);
     for (const eventName of eventNames) {
       const entries = cfg?.hooks?.[eventName] ?? [];

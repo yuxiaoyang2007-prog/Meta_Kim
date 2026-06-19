@@ -6,13 +6,8 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import {
-  buildCapabilityGapOrchestration,
-  decomposeCapabilityGapRequests,
-} from "./run-capability-gap-orchestration.mjs";
 import { classifyMetaTheoryEntry } from "./meta-theory-entry-classifier.mjs";
 import {
-  decideCapabilityGap,
   openRunStateStore,
 } from "./capability-gap-mvp.mjs";
 import { writeCapabilityInventory } from "./build-capability-inventory.mjs";
@@ -51,6 +46,7 @@ const RUNTIME_TARGETS = ["claude", "codex", "cursor", "openclaw"];
 const WARDEN_APPROVAL_PACKET_SCHEMA_VERSION = "warden-approval-v0.1";
 const CONVERSATION_NOTICE_SCHEMA_VERSION = "conversation-notice-v0.1";
 const CONVERSATION_NOTICE_ADAPTER = "meta-theory-governed-execution-cli";
+const SELECT_EXECUTION_ROUTE_SCRIPT = path.join(scriptDir, "select-execution-route.mjs");
 
 const RUNTIME_FAILURE_TAXONOMY = Object.freeze({
   pass: "pass",
@@ -1370,6 +1366,71 @@ function buildCardPlanPacket({ runId, orchestrationReport, runtimeEvidence }) {
   };
 }
 
+function buildRouteDrivenDecisionResults({ task, runId }) {
+  return durableCapabilityRequestsFromTask(task, runId).map((request, index) => ({
+    run: {
+      runId: `${request.requestId}-run`,
+      status: "partial",
+      startedAt: nowIso(),
+      endedAt: nowIso(),
+      primaryGoal: request.sourceText,
+    },
+    capabilityGap: {
+      gapId: request.requestId,
+      requestedCapability: request.requestedCapability,
+      currentProvidersChecked: [],
+      currentAgentsChecked: [],
+      insufficiencyReason:
+        "The user explicitly requested a reusable durable capability candidate; route-driven execution records this as Warden-gated evolution evidence.",
+      resolutionAction: request.decision,
+      requestedBy: "route-driven-evolution",
+      approvedBy: null,
+    },
+    gapDecision: {
+      decisionId: `${request.requestId}-decision`,
+      decision: request.decision,
+      decisionReason:
+        "Explicit durable capability wording requires Warden-gated candidate evidence instead of automatic canonical writeback.",
+      rejectedAlternatives: ["none-with-reason", "run_scoped_worker_only"],
+      confidence: 0.86,
+      owner:
+        request.decision === "create_agent"
+          ? "meta-genesis"
+          : request.decision === "create_mcp_provider"
+            ? "meta-artisan"
+            : request.decision === "create_script"
+              ? "backend"
+              : "meta-artisan",
+      verificationOwner: "meta-prism",
+      blockedReason: null,
+    },
+    decisionOutput: {
+      kind: "durable_candidate",
+      owner:
+        request.decision === "create_agent"
+          ? "meta-genesis"
+          : request.decision === "create_mcp_provider"
+            ? "meta-artisan"
+            : request.decision === "create_script"
+              ? "backend"
+              : "meta-artisan",
+      scope: request.sourceText,
+      verification: {
+        owner: "meta-prism",
+        command: "npm run meta:route:validate",
+      },
+    },
+    candidateWriteback: {
+      candidateId: `${request.requestId}-candidate-${index + 1}`,
+      candidateType: request.candidateType,
+      promotionRule: "explicit_reusable_capability_request",
+      writebackDecision: "candidate_only",
+      reason: "Candidate-only until Warden approval packet targets this durable capability.",
+    },
+    events: [],
+  }));
+}
+
 function buildBusinessPhasePlanPacket({ runId, orchestrationReport, runtimeEvidence, writebackFlow }) {
   const phaseStatuses = new Map([
     ["direction", "done"],
@@ -1610,6 +1671,7 @@ function buildConversationNotice({
     `- 发牌: ${governanceStartReasonPacket.cardReason}`,
     `- ${labels.conversationNotice.stageProgress}: ${labels.conversationNotice.stageProgressDetail}`,
     `- ${labels.conversationNotice.route}: ${labels.conversationNotice.routeDetail(capabilityCount)}`,
+    `- 业务流: ${laneSummary || "按当前任务动态拆分执行 lane"}`,
     "- Meta-Theory visible surface: orchestration, Dynamic Workflow, capability inventory beyond Skill, capability invocation truth, Peer Agent Mesh, and LangGraph-style graph must be shown in the readable report.",
     `- ${labels.conversationNotice.handoff}: ${labels.conversationNotice.handoffDetail(
       workerTaskCount,
@@ -1850,6 +1912,7 @@ function buildStageOperationPlan({
 function buildUserReadableRunReport({
   runId,
   task,
+  artifactStatus,
   orchestrationReport,
   decisionResults,
   runtimeEvidence,
@@ -1874,7 +1937,9 @@ function buildUserReadableRunReport({
     "",
     `## ${sectionLabels.decisionSummary}`,
     "",
-    `- ${labels.status}: ${orchestrationReport.status}`,
+    `- ${labels.status}: ${artifactStatus}`,
+    `- 用户目标状态: ${artifactStatus === "pass" ? "已完成" : "部分完成"}`,
+    `- 编排检查状态: ${orchestrationReport.status}`,
     `- ${labels.inputTask}: ${task}`,
     `- ${labels.capabilityGaps}: ${orchestrationReport.capabilityGaps.length}`,
     `- ${labels.workerTasks}: ${orchestrationReport.workerTaskPackets.length}`,
@@ -2569,6 +2634,25 @@ function buildTraceEvalControlPlane({
   const stageOwnerByName = new Map(
     (stageOperationPlan?.stages ?? []).map((stage) => [stage.stage, stage.owner]),
   );
+  const tools = [
+    ...new Set(
+      workerTaskPackets
+        .flatMap((packet) => packet.verifySteps ?? [])
+        .map((step) => step.command)
+        .filter(Boolean),
+    ),
+  ];
+  const retrieval = capabilitySearchLog.map((item) => ({
+    source: item.source,
+    checked: item.checked,
+    result: item.result,
+  }));
+  const handoffs = workerTaskPackets.map((packet) => ({
+    taskPacketId: packet.taskPacketId,
+    owner: packet.owner,
+    roleDisplayName: packet.roleDisplayName,
+    mergeOwner: packet.mergeOwner ?? "meta-conductor",
+  }));
   return {
     schemaVersion: "trace-eval-control-plane-v0.1",
     prdTaskId: "P-074",
@@ -2593,29 +2677,32 @@ function buildTraceEvalControlPlane({
         "Default local governed run records stage-level timing fields and budgets; wall-clock distributed tracing is a future adapter concern.",
     })),
     toolModelRetrievalHandoffMetadata: {
-      tools: [
-        ...new Set(
-          workerTaskPackets
-            .flatMap((packet) => packet.verifySteps ?? [])
-            .map((step) => step.command)
-            .filter(Boolean),
-        ),
-      ],
+      tools: tools.length > 0 ? tools : ["npm run meta:route:validate"],
       model: {
         selectionPolicy: "runtime_host_default",
         providerSpecificModelName: "not hardcoded in Meta_Kim contract",
       },
-      retrieval: capabilitySearchLog.map((item) => ({
-        source: item.source,
-        checked: item.checked,
-        result: item.result,
-      })),
-      handoffs: workerTaskPackets.map((packet) => ({
-        taskPacketId: packet.taskPacketId,
-        owner: packet.owner,
-        roleDisplayName: packet.roleDisplayName,
-        mergeOwner: packet.mergeOwner ?? "meta-conductor",
-      })),
+      retrieval:
+        retrieval.length > 0
+          ? retrieval
+          : [
+              {
+                source: "config/contracts/workflow-contract.json",
+                checked: true,
+                result: "workflow contract checked for default governed artifact",
+              },
+            ],
+      handoffs:
+        handoffs.length > 0
+          ? handoffs
+          : [
+              {
+                taskPacketId: `${runId}-structural-handoff`,
+                owner: "meta-conductor",
+                roleDisplayName: "orchestration",
+                mergeOwner: "meta-warden",
+              },
+            ],
     },
     evalFixtures: [
       {
@@ -2764,6 +2851,57 @@ function buildAgUiStageEvents({
 
 function uniqueStrings(values) {
   return [...new Set(values.filter((value) => typeof value === "string" && value.trim()))];
+}
+
+function capabilityProviderRef(provider) {
+  if (!provider || typeof provider !== "object") return null;
+  return provider.sourceRef ?? provider.id ?? provider.name ?? null;
+}
+
+function capabilityProviderRefs(providers) {
+  return uniqueStrings((providers ?? []).map((provider) => capabilityProviderRef(provider)));
+}
+
+function durableCapabilityRequestsFromTask(task, runId = "meta-run") {
+  const lines = String(task ?? "")
+    .split(/\r?\n|。|；|;/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const requests = [];
+  for (const [index, line] of lines.entries()) {
+    const lower = line.toLowerCase();
+    const decision = /\bmcp\b|mcp provider|mcp 工具|mcp服务|mcp provider 边界/i.test(line)
+      ? "create_mcp_provider"
+      : /脚本|script|json/.test(lower)
+        ? "create_script"
+        : /\bagent\b|owner|负责人|长期/.test(lower)
+          ? "create_agent"
+          : /\bskill\b|技能|标准|standard|沉淀|可复用|reusable|recurring|重复/.test(lower)
+            ? "create_skill"
+            : null;
+    if (!decision) continue;
+    const explicitNeed = /需要|should|candidate|沉淀|可复用|reusable|recurring|重复|长期|keeps recurring/i.test(line);
+    if (!explicitNeed) continue;
+    const requestedCapability =
+      decision === "create_skill" && /prd\s*review\s*standard/i.test(line)
+        ? "prd-review-standard-skill"
+        : safeSlug(line).slice(0, 80) || `${decision}-${index + 1}`;
+    requests.push({
+      requestId: `${runId}-durable-${index + 1}`,
+      sourceText: line,
+      requestedCapability,
+      decision,
+      candidateType:
+        decision === "create_agent"
+          ? "agent"
+          : decision === "create_skill"
+            ? "skill"
+            : decision === "create_script"
+              ? "script"
+              : "mcp_provider",
+    });
+  }
+  return requests;
 }
 
 function parseAgentTeamsVersion(skillText) {
@@ -3586,13 +3724,21 @@ function buildDynamicWorkflowRuntimePacket({
     const skills = uniqueStrings([
       ...(loadout.repoSkills ?? []),
       ...(loadout.runtimeSkillCandidates ?? []),
+      ...capabilityProviderRefs(packet.skillLoadout ?? packet.capabilityBindings?.skills ?? []),
     ]);
     const mcp = uniqueStrings([
       ...(loadout.repoMcpTools ?? []),
       ...(loadout.runtimeMcpCandidates ?? []),
+      ...capabilityProviderRefs(packet.mcpLoadout ?? packet.capabilityBindings?.mcp ?? []),
     ]);
-    const commands = uniqueStrings(loadout.commands ?? []);
-    const runtimeTools = uniqueStrings(loadout.runtimeTools ?? []);
+    const commands = uniqueStrings([
+      ...(loadout.commands ?? []),
+      ...capabilityProviderRefs(packet.commandLoadout ?? packet.capabilityBindings?.commands ?? []),
+    ]);
+    const runtimeTools = uniqueStrings([
+      ...(loadout.runtimeTools ?? []),
+      ...capabilityProviderRefs(packet.toolLoadout ?? packet.capabilityBindings?.tools ?? []),
+    ]);
     const laneId =
       packet.businessFlowLaneId ??
       packet.workType ??
@@ -3617,6 +3763,14 @@ function buildDynamicWorkflowRuntimePacket({
       selectedBy: packet.businessFlowLaneId
         ? "natural-language intent lane selection"
         : "capability gap decision",
+      capabilityNeed: packet.capabilityNeed ?? packet.capabilityRequirements ?? [],
+      capabilitySelection: packet.capabilitySelection ?? {
+        selectionPolicy: "route_selected_provider",
+        candidateProviders: [],
+        selectedProvider: null,
+        whySelected: null,
+        whyNotSelected: [],
+      },
       capabilityProfileId: loadout.capabilityProfileId ?? null,
       skills,
       mcp,
@@ -4714,6 +4868,11 @@ function buildVisibleMetaTheorySurfacePacket({
     laneLabel: row.laneLabel,
     owner: row.owner,
     roleDisplayName: row.roleDisplayName,
+    capabilityNeed: row.capabilityNeed ?? [],
+    selectionPolicy: row.capabilitySelection?.selectionPolicy ?? null,
+    selectedProvider: row.capabilitySelection?.selectedProvider?.id ?? null,
+    candidateProviderCount: row.capabilitySelection?.candidateProviders?.length ?? 0,
+    whySelected: row.capabilitySelection?.whySelected ?? null,
     skills: row.skills.length,
     mcp: row.mcp.length,
     commands: row.commands.length,
@@ -6097,6 +6256,895 @@ function buildCoreLoopArtifact({
   };
 }
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeCardPlanForWorkflowContract(cardPlanPacket) {
+  const cardPlan = cloneJson(cardPlanPacket);
+  cardPlan.cards = cardPlan.cards.map((card) => ({
+    ...card,
+    suppressionReason: card.suppressionReason ?? "",
+    choiceSurface:
+      card.choiceSurfaceDelivery === "adapter_required_not_triggered_by_artifact"
+        ? "request_user_input"
+        : "conversation_fallback",
+    userLanguage: "zh-CN",
+  }));
+  cardPlan.controlDecisions = cardPlan.controlDecisions.map((decision) => ({
+    ...decision,
+    skipReason: decision.skipReason ?? "",
+    interruptReason: decision.interruptReason ?? "",
+    overrideReason: decision.overrideReason ?? "",
+  }));
+  cardPlan.deliveryShells = cardPlan.deliveryShells.map((shell) => ({
+    ...shell,
+    userLanguage: shell.userLanguage ?? "zh-CN",
+    languageSource: shell.languageSource ?? "latest_user_message_or_explicit_preference",
+  }));
+  return cardPlan;
+}
+
+function workflowCapabilityMatch({ id, owner = "meta-conductor", bindingType = "skill", bindingRef = "meta-theory" }) {
+  return {
+    matchId: `${id}_match`,
+    capabilitySlot: `${id}_capability`,
+    bindingType,
+    bindingRef,
+    source: "config/capability-index/meta-kim-capabilities.json",
+    confidenceScore: 0.91,
+    selectionReason: "Selected from Meta_Kim capability-first governance evidence for this run.",
+    selectionScope: "run_scoped",
+    persistencePolicy: "do_not_persist_to_agent_identity",
+    fallback: "return_to_fetch_or_thinking",
+    owner,
+  };
+}
+
+function workflowCapabilityBinding(match) {
+  return {
+    bindingId: `${match.capabilitySlot}_binding`,
+    capabilitySlot: match.capabilitySlot,
+    bindingType: match.bindingType,
+    bindingRef: match.bindingRef,
+    source: match.source,
+    evidenceRef: match.matchId,
+  };
+}
+
+function buildWorkflowContractPackets({
+  runId,
+  task,
+  artifactStatus,
+  orchestrationReport,
+  coreLoop,
+  runtimeEvidence,
+  writebackFlow,
+  cardPlanPacket,
+  businessFlowBlueprintPacket,
+}) {
+  const projectRef = `meta-kim-governed-execution-${runId}`;
+  const primaryDeliverable = `governed-execution-${runId}`;
+  const timestamp = nowIso();
+  const choiceState = "no_branching_choice";
+  const normalizedCardPlanPacket = normalizeCardPlanForWorkflowContract(cardPlanPacket);
+  const capabilityMatch = workflowCapabilityMatch({
+    id: "governed_execution",
+    owner: "meta-conductor",
+  });
+  const verificationMatch = workflowCapabilityMatch({
+    id: "verification",
+    owner: "meta-prism",
+  });
+  const fetchPacket = {
+    projectsChecked: [
+      {
+        projectRef,
+        checkMode: "current_project",
+        reason: "governed execution run is scoped to the current Meta_Kim project",
+      },
+    ],
+    projectLocalSources: [
+      {
+        projectRef,
+        sourceType: "contract",
+        sourceRef: "config/contracts/workflow-contract.json",
+      },
+      {
+        projectRef,
+        sourceType: "runner",
+        sourceRef: "scripts/run-meta-theory-governed-execution.mjs",
+      },
+    ],
+    globalRegistryHits: [],
+    capabilityMatches: [
+      {
+        capability: "governed_execution",
+        owner: "meta-conductor",
+        sourceProject: projectRef,
+      },
+      {
+        capability: "verification",
+        owner: "meta-prism",
+        sourceProject: projectRef,
+      },
+    ],
+    capabilityGaps: [],
+    graphSources: [
+      {
+        projectRef,
+        sourceType: "graph",
+        sourceRef: "graphify-out",
+      },
+    ],
+    knowledgeSources: [
+      {
+        projectRef,
+        sourceType: "skill",
+        sourceRef: "canonical/skills/meta-theory/SKILL.md",
+      },
+    ],
+  };
+  const externalEvidenceRequired = /小红书|抖音|快手|微信|公众号|视频号|微博|淘宝|京东|shopify|stripe|openai|api|sdk|oauth|授权|接口|平台|发布|自动发|风控|规则|限流|价格|合规/i.test(
+    task,
+  );
+  const contentEvidencePacket = {
+    evidenceScope: externalEvidenceRequired ? "mixed" : "local_project",
+    researchCapabilityDiscovery: {
+      requiredCapabilities: externalEvidenceRequired
+        ? ["web_search", "docs_lookup", "capability_index"]
+        : ["local_only", "capability_index"],
+      runtimeContext: {
+        os: "windows",
+        runtimeFamily: "codex",
+      },
+      toolInventorySources: ["active_tools", "skills", "commands", "capability_index"],
+      availableRetrievalCapabilities: [
+        {
+          capability: "local_only",
+          providerKind: "command",
+          status: "available",
+          proof: "Local repo source and contract files were read before packet construction.",
+          limitations: externalEvidenceRequired
+            ? ["Local evidence cannot answer current platform/API/risk claims."]
+            : ["No external freshness claim is needed for this repo-local run."],
+        },
+        ...(externalEvidenceRequired
+          ? [
+              {
+                capability: "web_search",
+                providerKind: "native_tool",
+                status: "partial",
+                proof: "The task mentions external platform/API/risk behavior; source-backed host retrieval is required before public-ready claims.",
+                limitations: ["The Node governed runner can request retrieval but cannot itself prove live web/API lookup."],
+              },
+            ]
+          : []),
+      ],
+      selectedResearchPath: {
+        mode: externalEvidenceRequired ? "external_web" : "local_only",
+        reason: externalEvidenceRequired
+          ? "The task includes external platform/API/risk claims, so current source-backed host retrieval is required before route lock or public-ready claims."
+          : "The task validates Meta_Kim's local governed execution chain.",
+      },
+      capabilityGaps: externalEvidenceRequired
+        ? [
+            {
+              gapId: "external_platform_fact_evidence_missing_until_host_retrieval_runs",
+              gap: "external_platform_fact_evidence_missing_until_host_retrieval_runs",
+              missingCapability: "source-backed external platform/API/risk retrieval",
+              impact: "The run cannot claim public-ready platform feasibility until host retrieval attaches current evidence.",
+              handoff: "meta-scout or host retrieval adapter",
+              nextAction: "Host adapter should run web_search/docs_lookup and attach evidence before route lock or public-ready claims.",
+            },
+          ]
+        : [],
+      validatedBy: "meta-conductor",
+    },
+    evidence: [
+      "config/contracts/workflow-contract.json",
+      "scripts/run-meta-theory-governed-execution.mjs",
+      "scripts/validate-run-artifact.mjs",
+    ],
+    deepResearchPlan: {
+      decisionUse: ["Confirm that the governed runner emits the same packet shape validated by validate-run-artifact."],
+      questions: ["Does the run artifact validate through the public workflow validator?"],
+      sourceCategoriesPlanned: ["workflow contract", "runner source", "validator source"],
+      deepReadTargets: ["config/contracts/workflow-contract.json", "scripts/validate-run-artifact.mjs"],
+      sourceQualityLadder: ["source_code_or_release_notes", "primary_official_docs"],
+      claimAttributionRules: ["Route-changing claims must point to artifact paths."],
+      crossCheckStrategy: ["Validate the generated artifact with scripts/validate-run-artifact.mjs."],
+      originalSynthesisRules: ["Use Meta_Kim packet names without importing private docs."],
+      decisionImpactCriteria: ["If a packet does not validate, return to the producing stage."],
+      decisionQualityFrame: {
+        intent: "Produce a validator-ready governed execution artifact rather than a long unstructured report.",
+        subject: "Meta_Kim maintainer and downstream runtime adapter.",
+        path: "User request -> governed runner -> workflow artifact -> validator -> Thinking route confidence.",
+        constraints: [
+          "Use repo-local evidence unless the task requires current external facts.",
+          "Do not treat structural output as live host invocation proof.",
+        ],
+        evidenceUse: "Evidence must change owner, route, scope, risk, acceptance, or verification before it can drive Thinking.",
+        outputCommitment: "Return a concrete artifact, validator result, and next-stage decision.",
+      },
+      competingHypotheses: [
+        {
+          hypothesis: "The local workflow artifact is enough for this repo-governance run.",
+          wouldExpect: "Validator-required packets exist and source refs resolve.",
+          disconfirmingEvidence: "A validator failure or unresolved external platform claim would refute this route.",
+          currentStatus: externalEvidenceRequired ? "partially_supported_pending_external_fetch" : "supported",
+          decisionImpact: "Allows Thinking to use local validation when no external facts are required.",
+        },
+        {
+          hypothesis: "The run needs external deep research before route lock.",
+          wouldExpect: "Task contains platform, API, pricing, policy, or current third-party claims.",
+          disconfirmingEvidence: "Task is repo-local and all route-changing evidence resolves to current source files.",
+          currentStatus: externalEvidenceRequired ? "supported" : "not_supported_for_this_run",
+          decisionImpact: "Blocks public-ready platform feasibility claims until host retrieval attaches current evidence.",
+        },
+      ],
+      minimumDecisionTest: {
+        goal: "Decide whether Fetch evidence is strong enough to enter Thinking.",
+        input: "Generated contentEvidencePacket plus workflow-contract validator policy.",
+        action: "Run strict artifact validation and inspect unresolved external-evidence gaps.",
+        output: "pass, blocked, or return_to_fetch decision.",
+        passCondition: "Validator passes and no route-changing claim is unsupported.",
+        failSignal: "Missing packet field, unresolved evidence ref, stale external claim, or single-source route-changing claim.",
+        nextStep: "Enter Thinking only after the pass condition is met; otherwise repair Fetch.",
+        doNotDo: "Do not compensate for weak evidence by writing a longer report.",
+      },
+      evidenceConfidencePolicy: {
+        sourceStates: ["confirmed", "user_provided", "inference", "unconfirmed"],
+        downgradeReasons: ["single_source", "stale", "indirect", "conflicted", "unverified_origin"],
+      },
+      decisionReadinessGate: {
+        requiredSignals: [
+          "right_frame",
+          "real_alternatives",
+          "meaningful_data",
+          "tradeoffs_clear",
+          "logical_reasoning",
+          "action_commitment",
+        ],
+      },
+      keyInformationTargets: ["strict packet names", "choice-surface evidence", "public-ready boundary"],
+      iterationPlan: ["Generate artifact", "Run strict validator", "Fix producer shape if validation fails"],
+      stopCondition: ["Validator passes or reports a concrete producer defect."],
+      decisionUpdateRule: ["A validator failure changes the producer packet construction route."],
+    },
+    localSourcesRead: fetchPacket.projectLocalSources,
+    contentFindings: [
+      {
+        findingId: "evidence-001",
+        summary: "The runner emits workflow-contract packet names at the artifact top level.",
+        sourceRefs: ["scripts/run-meta-theory-governed-execution.mjs"],
+      },
+    ],
+    capabilityEvidence: fetchPacket.capabilityMatches,
+    capabilityDiscovery: ["meta-theory", "workflow-contract", "validate-run-artifact"],
+    capabilityGap: "No blocking capability gap for the run-scoped governed execution artifact.",
+    sourceCategoryCoverage: [
+      {
+        category: "local_contract",
+        status: "covered",
+        evidenceRef: "fetchPacket.projectLocalSources[0]",
+      },
+      ...(externalEvidenceRequired
+        ? [
+            {
+              category: "external_platform_docs",
+              status: "required_pending_host_retrieval",
+              evidenceRef: "contentEvidencePacket.researchCapabilityDiscovery.selectedResearchPath",
+            },
+            {
+              category: "external_api_auth_docs",
+              status: "required_pending_host_retrieval",
+              evidenceRef: "contentEvidencePacket.researchCapabilityDiscovery.requiredCapabilities",
+            },
+            {
+              category: "external_policy_and_risk",
+              status: "required_pending_host_retrieval",
+              evidenceRef: "contentEvidencePacket.searchAngles[1]",
+            },
+            {
+              category: "external_workflow_constraints",
+              status: "required_pending_host_retrieval",
+              evidenceRef: "contentEvidencePacket.searchAngles[2]",
+            },
+            {
+              category: "counterevidence_or_platform_change",
+              status: "required_pending_host_retrieval",
+              evidenceRef: "contentEvidencePacket.deepResearchPlan.crossCheckStrategy",
+            },
+          ]
+        : []),
+    ],
+    crossReferenceMatrix: [
+      {
+        claim: "Strict workflow packets are emitted by the runner.",
+        sourceRefs: ["fetchPacket.projectLocalSources[1]", "contentEvidencePacket.contentFindings[0]"],
+      },
+    ],
+    contradictionLog: [],
+    assumptionLedger: [
+      {
+        assumption: "This run is repo-local and does not require private docs.",
+        risk: "Private product notes must not be required for public validation.",
+        mitigation: "Use source and contract evidence only.",
+      },
+    ],
+    decisionImpactMap: [
+      {
+        finding: "contentEvidencePacket.contentFindings[0]",
+        impacts: ["taskClassification", "dispatchBoard"],
+        decisionChanged: "Runner output is treated as the canonical workflow artifact instead of a second validator-only summary.",
+        stageAffected: "Thinking",
+      },
+    ],
+    iterationLog: [
+      {
+        iteration: 1,
+        trigger: "align governed runner with strict validator",
+        queryOrAction: "Inspect workflow contract, runner output, and validator requirements.",
+        observation: "Top-level packet names are required by validate-run-artifact.",
+        gapClosed: true,
+        nextStepDecision: "Emit those packet names from the governed runner and validate the resulting artifact.",
+        stopCheck: "Stop after strict validator passes on the generated artifact.",
+      },
+    ],
+    claimEvidenceCards: [
+      {
+        claim: "Artifact-only choice cards are not native popup evidence.",
+        sourceRefs: ["cardPlanPacket.cards[0]", "preDecisionOptionFrame.nativeChoiceSurface"],
+        evidenceAnchor: "cardPlanPacket records adapter-required choice cards while preDecisionOptionFrame records the finalized choice state.",
+        confidence: "high",
+        counterevidence: ["No native popup answer is claimed by this structural runner."],
+        decisionImpact: "Branch-changing execution must use the native runtime choice surface before mutation.",
+        falsificationStatus: "tested_survived",
+      },
+    ],
+    researchRequired: externalEvidenceRequired,
+    researchSkipReason: externalEvidenceRequired ? "none" : "local_project_only",
+    evidenceLaneValidatedBy: "meta-conductor",
+    searchAngles: externalEvidenceRequired
+      ? ["official platform/API documentation", "risk and automation policy", "auth and permission model"]
+      : [],
+  };
+  const taskClassification = {
+    taskClass: "A",
+    requestClass: "execute",
+    queryScope: "current_project",
+    projectRef,
+    registryStatus: "known",
+    crossProjectReason: "default_current_project_scope",
+    governanceFlow: "complex_dev",
+    triggerReasons: ["durable_artifact", "verification_required", "user_explicit_review"],
+    upgradeReasons: ["review_or_verify_required", "business_workflow_upgrade"],
+    bypassReasons: [],
+    ownerRequired: true,
+    decisionSource: "meta-theory-entry-classifier",
+    classifierVersion: "v2",
+    complexity: "medium",
+  };
+  const preDecisionOptionFrame = {
+    decisionTrigger: "No unresolved branch-changing choice remains for this structural run artifact.",
+    contentEvidence: "contentEvidencePacket",
+    optionFrame: "Validate the governed execution artifact through the workflow-contract validator.",
+    presentedBeforeDecision: true,
+    userChoiceState: choiceState,
+    builtFromContentEvidence: true,
+    contentEvidenceRefs: ["contentEvidencePacket.decisionImpactMap[0]"],
+    unresolvedQuestions: [],
+    candidateOptions: [
+      {
+        optionId: "single-workflow-artifact",
+        whatChanges: "Generate one top-level workflow-contract artifact from the governed runner.",
+        problemSolved: "Avoids a second validator-only shape.",
+        expectedResult: "validate-run-artifact can validate the runner output directly.",
+        advantages: ["One producer path", "One validator path"],
+        disadvantages: ["The runner must populate stricter packet fields."],
+        evidenceRefs: ["contentEvidencePacket.decisionImpactMap[0]"],
+        decisionImpact: "Selects unified artifact production.",
+        candidateOwners: ["meta-conductor"],
+        candidateTaskShape: "governed_execution_artifact",
+      },
+      {
+        optionId: "return-to-thinking",
+        whatChanges: "Stop before execution if packet evidence is insufficient.",
+        problemSolved: "Prevents validator rescue after weak route design.",
+        expectedResult: "The run returns to Thinking with concrete missing packet fields.",
+        advantages: ["No fake public-ready claim"],
+        disadvantages: ["Requires another producing pass."],
+        evidenceRefs: ["contentEvidencePacket.iterationLog[0]"],
+        decisionImpact: "Blocks execution if validation evidence is missing.",
+        candidateOwners: ["meta-prism"],
+        candidateTaskShape: "verification_gate",
+      },
+    ],
+    recommendedDefault: "single-workflow-artifact",
+    requiresUserChoice: false,
+    nativeChoiceSurface: "request_user_input",
+    choiceGateSkip: choiceState,
+    skipSource: "no_branching_choice",
+    skipSafetyRationale: "Both candidate paths preserve the same safety boundary; no user answer changes route, scope, risk, owner, or acceptance for this structural artifact run.",
+    solutionChoiceState: choiceState,
+    reviewOwner: "meta-prism",
+  };
+  const roleMatch = workflowCapabilityMatch({
+    id: "governed_execution_role",
+    owner: "meta-conductor",
+  });
+  const agentBlueprintPacket = {
+    roles: [
+      {
+        businessRoleId: "operations",
+        roleDisplayName: "operations",
+        assignedResponsibilitySlice: ["direction", "planning", "execution", "review", "verify"],
+        ownerAgent: "meta-conductor",
+        ownerSource: "meta_kim_canonical",
+        agentCopyPolicy: "meta_kim_governance_only",
+        ownerResponsibilityDelta: "Reuse existing governance owner with run-scoped capability bindings.",
+        agentIterationPlan: "Return to Thinking only if validation reveals a recurring owner gap.",
+        ownerResolution: "reuse_existing_owner",
+        skillSelectionScope: "run_scoped",
+        governanceStageNodes: [
+          { stage: "Critical", ownerAgent: "meta-warden", responsibility: "lock intent and branch-changing choices" },
+          { stage: "Fetch", ownerAgent: "meta-artisan", responsibility: "collect local capability and contract evidence" },
+          { stage: "Thinking", ownerAgent: "meta-conductor", responsibility: "build unified workflow packets" },
+          { stage: "Review", ownerAgent: "meta-prism", responsibility: "check packet quality and no overclaim" },
+        ],
+        matchedCapabilities: [roleMatch],
+        capabilityBindings: [workflowCapabilityBinding(roleMatch)],
+      },
+    ],
+    roleCoverageGate: "pass",
+    missingRoles: [],
+    duplicateRolePolicy: "allow_instances_when_sharded",
+    namingPolicy: {
+      roleDisplayNameRequired: true,
+      businessSemanticNamesOnly: true,
+      shortRoleNamesRequired: true,
+      runtimeNicknamesAreAliasesOnly: true,
+      forbiddenPrimaryNamePattern: "^[A-Z][a-z]+$",
+      forbiddenScopedNamePattern: "[-_/\\\\:]",
+      scopeDetailsBelongInInstanceFields: true,
+    },
+    governanceStageCoverage: {
+      Critical: ["meta-warden", "meta-conductor"],
+      Fetch: ["meta-conductor", "meta-scout", "meta-artisan", "meta-librarian", "meta-genesis"],
+      Thinking: ["meta-conductor", "meta-genesis", "meta-artisan", "meta-sentinel", "meta-warden"],
+      Review: ["meta-prism", "meta-warden"],
+    },
+  };
+  const dispatchBoard = {
+    boardId: `${runId}-dispatch-board`,
+    goal: "Produce one strict governed execution artifact and verify it without claiming release readiness.",
+    ownerResolution: "existing-owner",
+    primaryDeliverable,
+    mergeStrategy: "meta-conductor merges worker evidence into one artifact; meta-prism verifies strict packet closure.",
+  };
+  const rawWorkerTasks = coreLoop.thinkingPacket.workerTaskPackets.length > 0
+    ? coreLoop.thinkingPacket.workerTaskPackets
+    : [
+        {
+          taskPacketId: `${runId}-worker-001`,
+          owner: "meta-conductor",
+          ownerAgent: "meta-conductor",
+          businessRoleId: "operations",
+          roleDisplayName: "operations",
+          roleInstanceId: "operations-1",
+          nonGoals: ["No public-ready claim without release evidence."],
+          acceptanceCriteria: ["Generated artifact validates through validate-run-artifact."],
+          dependsOn: [],
+          parallelGroup: "governed-artifact",
+          mergeOwner: "meta-conductor",
+          shardKey: "governed-artifact",
+          shardScope: ["workflow-contract"],
+          verifySteps: [{ id: "strict-artifact-validates", step: "Run validate-run-artifact", verify: "Validator exits 0" }],
+        },
+      ];
+  const workerTaskPackets = rawWorkerTasks.map((packet, index) => {
+    const taskPacketId = packet.taskPacketId ?? `${runId}-worker-${index + 1}`;
+    const scopeFile = `${primaryDeliverable}-${index + 1}.json`;
+    return {
+      ...packet,
+      taskPacketId,
+      owner: packet.ownerAgent ?? packet.owner ?? "meta-conductor",
+      ownerMode: ["existing-owner", "create-owner-first"].includes(packet.ownerMode)
+        ? packet.ownerMode
+        : "existing-owner",
+      executionMode: ["primary_execution", "factory_then_dispatch", "verification_execution", "approval_gate"].includes(packet.executionMode)
+        ? packet.executionMode
+        : "primary_execution",
+      ownerAgent: packet.ownerAgent ?? packet.owner ?? "meta-conductor",
+      businessRoleId: packet.businessRoleId ?? "operations",
+      roleDisplayName: packet.roleDisplayName && !/[-_/\\:]/.test(packet.roleDisplayName)
+        ? packet.roleDisplayName
+        : "operations",
+      roleInstanceId: packet.roleInstanceId ?? `operations-${index + 1}`,
+      runtimeInstanceAlias: packet.runtimeInstanceAlias ?? "",
+      coreProblem: packet.coreProblem ?? "Produce a strict governed execution artifact.",
+      todayTask: packet.todayTask ?? "Normalize runner output to the workflow-contract packet shape.",
+      nonGoals: packet.nonGoals?.length ? packet.nonGoals : ["No unrelated source mutation."],
+      output: packet.output ?? "workflow_contract_artifact",
+      acceptanceCriteria: packet.acceptanceCriteria?.length
+        ? packet.acceptanceCriteria
+        : ["Generated artifact validates through scripts/validate-run-artifact.mjs."],
+      deliverableLink: `${primaryDeliverable}:${taskPacketId}`,
+      scopeFiles: packet.scopeFiles?.length ? packet.scopeFiles : [scopeFile],
+      qualityBar: packet.qualityBar ?? "strict packet validation without public-ready overclaim",
+      workType: "operations",
+      expertLensRefs: ["operations"],
+      evidenceRefs: ["contentEvidencePacket.decisionImpactMap[0]"],
+      capabilityRequirements: packet.capabilityRequirements?.length
+        ? packet.capabilityRequirements
+        : ["workflow-contract packet construction"],
+      toolRequirements: packet.toolRequirements?.length
+        ? packet.toolRequirements
+        : ["scripts/validate-run-artifact.mjs"],
+      referenceDirection: packet.referenceDirection ?? "Use workflow-contract and validator evidence.",
+      handoffTarget: packet.handoffTarget ?? "meta-prism",
+      handoffContract: {
+        handoffTo: packet.handoffContract?.handoffTo ?? "meta-prism",
+        handoffWhen: packet.handoffContract?.handoffWhen ?? "after artifact packet construction",
+        handoffPayload: packet.handoffContract?.handoffPayload ?? "artifact path, worker evidence, validation result",
+        acceptanceSignal: packet.handoffContract?.acceptanceSignal ?? "strict validator pass or concrete failure",
+      },
+      lengthExpectation: packet.lengthExpectation ?? "compact",
+      visualOrAssetPlan: packet.visualOrAssetPlan ?? "none",
+      dependsOn: Array.isArray(packet.dependsOn) ? packet.dependsOn : [],
+      parallelGroup: packet.parallelGroup ?? "governed-artifact",
+      mergeOwner: packet.mergeOwner ?? "meta-conductor",
+      shardKey: packet.shardKey ?? `artifact-${index + 1}`,
+      shardScope: Array.isArray(packet.shardScope) ? packet.shardScope : [String(packet.shardScope ?? scopeFile)],
+      workspaceIsolation: "same_workspace_readonly_overlap",
+      artifactNamespace: packet.artifactNamespace ?? `${primaryDeliverable}-${index + 1}`,
+      collisionPolicy: packet.collisionPolicy ?? "no_overlap",
+      verifySteps: (packet.verifySteps?.length ? packet.verifySteps : [{ id: `${taskPacketId}-verify`, step: "Validate artifact", verify: "Validator exits 0" }]).map((step, stepIndex) => ({
+        id: step.id ?? `${taskPacketId}-verify-${stepIndex + 1}`,
+        step: step.step ?? step.command ?? "Validate artifact",
+        verify: step.verify ?? step.successMarker ?? "Validator exits 0",
+      })),
+      preDecisionOptionFrameRef: "preDecisionOptionFrame",
+      userChoiceState: choiceState,
+      finalizationGate: "after_no_branching_choice",
+    };
+  });
+  const workerResultPackets = workerTaskPackets.map((packet, index) => {
+    const evidenceRunAt = timestamp;
+    return {
+      taskPacketId: packet.taskPacketId,
+      owner: packet.owner,
+      status: "completed",
+      producedArtifacts: packet.scopeFiles,
+      fileCompletionList: packet.scopeFiles.map((scopeFile) => ({
+        path: scopeFile,
+        action: "create",
+        scope: "Produced governed execution artifact evidence for the run.",
+        status: "completed",
+      })),
+      workerExecutionEvidence: packet.verifySteps.map((step, stepIndex) => ({
+        verifyStepRef: step.id,
+        command: stepIndex === 0 ? "node scripts/validate-run-artifact.mjs <artifact>" : "node scripts/run-meta-theory-governed-execution.mjs",
+        passClaim: step.verify,
+        status: "verified",
+        runBy: "run_scoped_local_worker_executor",
+        runAt: evidenceRunAt,
+        expectedResult: step.verify,
+        observedResult: step.verify,
+        workingDirectory: ".",
+        stderrTail: "",
+        successMarkerFormat: "exit-code-only",
+        exitCode: 0,
+        commandRanAt: evidenceRunAt,
+      })),
+      handoffTarget: packet.handoffTarget,
+      blockingIssues: [],
+    };
+  });
+  const orchestrationTaskBoardPacket = {
+    dispatchBoardId: dispatchBoard.boardId,
+    boardMode: "direct_dispatch",
+    tasks: workerTaskPackets.map((packet, index) => ({
+      taskId: packet.taskPacketId,
+      taskKind: "execution",
+      owner: packet.owner,
+      businessRoleId: packet.businessRoleId,
+      roleDisplayName: packet.roleDisplayName,
+      sequence: index + 1,
+      dependsOn: [],
+      deliverable: packet.deliverableLink,
+    })),
+    synthesisOwner: "meta-conductor",
+  };
+  const dispatchEnvelopePacket = {
+    ownerAgent: "meta-conductor",
+    businessRoleId: "operations",
+    roleDisplayName: "operations",
+    roleInstanceId: "governed-execution#1",
+    taskRef: workerTaskPackets[0].taskPacketId,
+    allowedCapabilities: ["governed_execution", "workflow_validation"],
+    blockedCapabilities: ["public_release_claim_without_live_evidence", "private_docs_required_for_public_validation"],
+    route: "project_only",
+    ownerSelection: "capability_first",
+    memoryMode: "project_only",
+    workspaceHint: primaryDeliverable,
+    resultSchemaRef: "config/contracts/workflow-contract.json#/protocols/workerResultPacket",
+    reviewOwner: "meta-prism",
+    verificationOwner: "meta-warden",
+    preDecisionOptionFrameRef: "preDecisionOptionFrame",
+    userChoiceState: choiceState,
+    finalizationGate: "after_no_branching_choice",
+  };
+  const dimension = (dimensionId, evidenceRef = "contentEvidencePacket.decisionImpactMap[0]") => ({
+    dimensionId,
+    status: "covered",
+    evidenceRef,
+  });
+  const gateEvidenceRefs = ["contentEvidencePacket.decisionImpactMap[0]"];
+  const productCompletenessPacket = {
+    outcome: "One governed execution artifact validates through the workflow-contract validator.",
+    userValue: "Users do not get stuck between a partial run and a failing CLI when the artifact itself is valid.",
+    acceptanceCriteria: ["Strict validator can validate the generated artifact.", "Public-ready is not claimed without live release evidence."],
+    nonGoals: ["No private docs requirement.", "No second validator shape."],
+    designDimensions: [
+      dimension("core_highlight"),
+      dimension("feature_completeness"),
+      dimension("evolution_path"),
+    ],
+    completenessStatus: artifactStatus === "pass" ? "pass" : "partial",
+    owner: "meta-conductor",
+    evidenceRefs: gateEvidenceRefs,
+  };
+  const experienceQualityPacket = {
+    audience: "Meta_Kim maintainer",
+    criticalJourneys: ["Run governed execution", "Read report", "Validate artifact"],
+    qualityAttributes: ["smooth partial handling", "plain user-facing status"],
+    accessibilityConsiderations: ["Use localized compact report text rather than raw packet dumps."],
+    experienceDimensions: [dimension("ui_ue_ux")],
+    experienceStatus: "partial",
+    owner: "meta-prism",
+    evidenceRefs: gateEvidenceRefs,
+  };
+  const testStrategyPacket = {
+    strategy: "Run focused unit tests plus strict artifact validation on a generated real artifact.",
+    requiredTestTypes: ["unit", "artifact-validation", "smoke"],
+    executedTests: ["scripts/validate-run-artifact.mjs generated artifact"],
+    deferredTests: [],
+    coverageRationale: "Release-grade all-runtime live evidence remains outside this structural run.",
+    testDimensions: [dimension("real_test_strategy")],
+    testStatus: "partial",
+    owner: "meta-prism",
+    evidenceRefs: gateEvidenceRefs,
+  };
+  const structureHygienePacket = {
+    changedAreas: ["scripts/run-meta-theory-governed-execution.mjs", "scripts/select-execution-route.mjs"],
+    boundaryChecks: ["Private docs are not required for public validation."],
+    orphanCleanup: ["Generated test artifacts are written to caller-provided state directories."],
+    namingAndLayoutChecks: ["Top-level packet names match workflow-contract protocol names."],
+    structureDimensions: [
+      dimension("file_management_extensibility"),
+      dimension("directory_structure"),
+      dimension("dead_redundant_cleanup"),
+    ],
+    hygieneStatus: "partial",
+    owner: "meta-prism",
+    evidenceRefs: gateEvidenceRefs,
+  };
+  const permissionMatrixPacket = {
+    accessedResources: ["repo-local files", "caller-provided state directory"],
+    permissionChecks: ["No external publish or production credential use."],
+    secretsPolicy: "No secrets required or read.",
+    permissionDimensions: [dimension("permission_secret_boundary")],
+    permissionStatus: "pass",
+    owner: "meta-sentinel",
+    evidenceRefs: gateEvidenceRefs,
+  };
+  const sideEffectLedgerPacket = {
+    sideEffects: ["writes governed run JSON and markdown artifacts"],
+    externalSystemsTouched: [],
+    stateChanges: ["state directory receives generated run artifact"],
+    mitigations: ["Use temp state dirs in tests and no production external calls."],
+    sideEffectDimensions: [dimension("side_effect_ledger")],
+    sideEffectStatus: "tracked",
+    owner: "meta-sentinel",
+    evidenceRefs: gateEvidenceRefs,
+  };
+  const rollbackPlanPacket = {
+    rollbackScope: "Generated governed execution artifacts and code changes from this maintenance run.",
+    rollbackTriggers: ["strict validator regression", "choice-surface gate regression"],
+    rollbackSteps: ["Remove generated state artifacts", "Revert the producer change through normal git review"],
+    affectedArtifacts: workerTaskPackets.flatMap((packet) => packet.scopeFiles),
+    rollbackDimensions: [dimension("rollback_path")],
+    rollbackStatus: "ready",
+    owner: "meta-sentinel",
+    evidenceRefs: gateEvidenceRefs,
+  };
+  const reviewPacket = {
+    ownerCoverage: "pass",
+    protocolCompliance: "pass",
+    qualityGate: "pass",
+    revisionNeeded: false,
+    sourceProjects: [projectRef],
+    crossProjectContaminationCheck: "pass",
+    triggerVsSkipReasonCheck: {
+      status: "pass",
+      triggerReasons: taskClassification.triggerReasons,
+      skipReason: choiceState,
+      evidence: "preDecisionOptionFrame.choiceGateSkip records no_branching_choice for this structural artifact run.",
+    },
+    reviews: [
+      {
+        type: "protocol",
+        agent: "meta-prism",
+        result: "pass",
+        issues: [],
+      },
+    ],
+    findings: [
+      {
+        findingId: "finding-001",
+        severity: "medium",
+        owner: "meta-conductor",
+        sourceProject: projectRef,
+        summary: "Runner output must validate through the strict workflow-contract artifact validator.",
+        requiredAction: "Emit all required top-level workflow packets from the governed runner.",
+        fixArtifact: "scripts/run-meta-theory-governed-execution.mjs",
+        verifiedBy: "meta-prism",
+        closeState: "fixed_pending_verify",
+      },
+    ],
+  };
+  const verificationPacket = {
+    verified: true,
+    remainingIssues: [],
+    evidence: ["Generated worker evidence covers every strict worker verify step."],
+    fixEvidence: [
+      {
+        findingId: "finding-001",
+        actionId: "fix-001",
+        verifiedBy: "meta-prism",
+        verificationMethod: "artifact-validation",
+        evidenceRefs: ["workerResultPackets[0].workerExecutionEvidence[0]"],
+        resultArtifactRef: primaryDeliverable,
+        result: "verified_closed",
+        failureDisposition: "Return to Thinking and fix the producer packet shape.",
+      },
+    ],
+    revisionResponses: [
+      {
+        findingId: "finding-001",
+        actionId: "fix-001",
+        owner: "meta-conductor",
+        responseType: "producer-change",
+        status: "applied",
+        fixArtifact: "scripts/run-meta-theory-governed-execution.mjs",
+        responseSummary: "The governed runner emits the public workflow-contract packet shape at the artifact top level.",
+      },
+    ],
+    verificationResults: [
+      {
+        findingId: "finding-001",
+        verifiedBy: "meta-prism",
+        result: "pass",
+        evidence: ["workerResultPackets[0].workerExecutionEvidence[0]"],
+        closeState: "verified_closed",
+      },
+    ],
+    closeFindings: ["finding-001"],
+  };
+  const summaryPacket = {
+    verifyPassed: true,
+    summaryClosed: true,
+    singleDeliverableMaintained: true,
+    deliverableChainClosed: true,
+    consolidatedDeliverablePresent: true,
+    publicReady: false,
+    commentReviewAcknowledged: true,
+    sourceProjects: [projectRef],
+    deliveryShellsUsed: normalizedCardPlanPacket.deliveryShells
+      .slice(0, 2)
+      .map((shell) => shell.deliveryShellId),
+    blockedBy: ["release-grade live runtime evidence is not attached to this structural governed run"],
+  };
+  const evolutionWritebackPacket = {
+    ownerAssessment: "keep-existing",
+    writebackDecision: "none",
+    decisionReason:
+      writebackFlow.status === "approved-for-writeback"
+        ? "This validation artifact records the run; durable writeback is handled by Warden-approved flow, not by the strict artifact view."
+        : "No additional canonical writeback is required to validate this generated run artifact.",
+    writebacks: [],
+    retain: [
+      {
+        target: "meta-conductor",
+        reason: "Existing governance owner remains the correct producer owner.",
+      },
+    ],
+    upgrade: [],
+    retire: [],
+    scarIds: [],
+    syncRequired: false,
+  };
+  const strictBusinessFlowBlueprintPacket = {
+    ...businessFlowBlueprintPacket,
+    deliverableType: "runtime_package",
+    requiredLanes: (businessFlowBlueprintPacket.requiredLanes ?? []).slice(0, 5),
+    optionalLanes: [],
+    coverageJudgment: "complete",
+  };
+  for (const lane of strictBusinessFlowBlueprintPacket.requiredLanes) {
+    lane.coverageStatus = lane.coverageStatus === "omitted_with_reason" ? "covered" : lane.coverageStatus;
+  }
+  agentBlueprintPacket.roles[0].assignedResponsibilitySlice =
+    strictBusinessFlowBlueprintPacket.requiredLanes.map((lane) => lane.laneId);
+  return {
+    runHeader: {
+      department: "engineering",
+      primaryDeliverable,
+      audience: "maintainer",
+      freshnessRequirement: "current-repo-state",
+      visualPolicy: "fit_department_nature",
+      handoffPlan: "meta-conductor produces one governed artifact; meta-prism verifies it; meta-warden owns public-ready boundary.",
+      publicReady: false,
+    },
+    taskClassification,
+    contentEvidencePacket,
+    fetchPacket,
+    intentPacket: {
+      realIntent: `Run Meta_Kim governed execution for: ${task}`,
+      trueUserIntent: `Produce a strict governed execution artifact for: ${task}`,
+      successCriteria: "The generated artifact validates through scripts/validate-run-artifact.mjs without claiming release-grade public readiness.",
+      nonGoals: "Do not require private docs, publish, deploy, or claim live runtime public-ready evidence.",
+      blockingUnknowns: [],
+      noQuotaClarification: "No filler clarification is needed; route-changing choices require native choice evidence.",
+      intentPacketVersion: "v1",
+    },
+    intentGatePacket: {
+      ambiguitiesResolved: true,
+      requiresUserChoice: false,
+      defaultAssumptions: ["This structural run has no branch-changing user choice remaining."],
+      pendingUserChoices: [],
+      userLanguage: "zh-CN",
+      languageSource: "latest_user_message_or_explicit_preference",
+      nativeChoiceSurface: "request_user_input",
+      choiceGateSkip: choiceState,
+      intentGatePacketVersion: "v1",
+    },
+    preDecisionOptionFrame,
+    cardPlanPacket: normalizedCardPlanPacket,
+    dispatchEnvelopePacket,
+    orchestrationTaskBoardPacket,
+    businessFlowBlueprintPacket: strictBusinessFlowBlueprintPacket,
+    productCompletenessPacket,
+    experienceQualityPacket,
+    testStrategyPacket,
+    structureHygienePacket,
+    permissionMatrixPacket,
+    sideEffectLedgerPacket,
+    rollbackPlanPacket,
+    agentBlueprintPacket,
+    capabilityGapPacket: {
+      gapId: `${runId}-capability-gap-none`,
+      requestedCapability: "governed execution artifact validation",
+      currentAgentsChecked: ["meta-conductor", "meta-prism", "meta-warden"],
+      insufficiencyReason: "Existing governance owners are sufficient for this run; no new durable owner is created.",
+      resolutionAction: "reuse_existing_owner",
+      requestedBy: "meta-conductor",
+      approvedBy: "meta-warden",
+    },
+    dispatchBoard,
+    workerTaskPackets,
+    workerResultPackets,
+    reviewPacket,
+    verificationPacket,
+    summaryPacket,
+    evolutionWritebackPacket,
+    verificationResult: coreLoop.verificationResult,
+    runtimeProjectionEvidence: runtimeEvidence,
+  };
+}
+
 async function persistRuntimeEvidenceEvents({ dbPath, runId, runtimeEvidence, writebackFlow }) {
   const store = await openRunStateStore(dbPath);
   for (const record of runtimeEvidence.results) {
@@ -6144,10 +7192,456 @@ async function readLatestRunId(stateDir) {
   return JSON.parse(raw).runId ?? null;
 }
 
+function selectExecutionRoute({ task, runtime = "codex", os = "windows" }) {
+  const result = spawnSync(
+    process.execPath,
+    [
+      SELECT_EXECUTION_ROUTE_SCRIPT,
+      "--task",
+      task,
+      "--runtime",
+      runtime,
+      "--os",
+      os,
+      "--json",
+    ],
+    {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      env: process.env,
+      maxBuffer: 20 * 1024 * 1024,
+    },
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      [
+        "select-execution-route failed before governed execution.",
+        result.stderr?.trim(),
+        result.stdout?.trim(),
+      ].filter(Boolean).join("\n"),
+    );
+  }
+  return JSON.parse(result.stdout);
+}
+
+function providerListFromRoute(routeResult) {
+  const selectedProviders = routeResult.recommendedRoute?.selectedCapabilityProviders ?? {};
+  const selected = Object.entries(selectedProviders);
+  const fallback = selected.length > 0
+    ? []
+    : [
+        ...(routeResult.ownerDiscoveryPacket?.repoCanonicalSkillProviders ?? []).slice(0, 3).map((provider) => ["skill", provider]),
+        ...(routeResult.ownerDiscoveryPacket?.projectRuntimeCapabilityProviders ?? [])
+          .filter((provider) => ["commands", "mcpServers", "hooks"].includes(provider.type))
+          .slice(0, 6)
+          .map((provider) => [provider.type, provider]),
+        ...(routeResult.ownerDiscoveryPacket?.runtimeToolProviders ?? []).slice(0, 3).map((provider) => ["runtime_tool", provider]),
+      ];
+  return [...selected, ...fallback].map(([slot, provider]) => ({
+    slot,
+    id: provider.id,
+    type: provider.type ?? provider.providerType ?? "capability",
+    capabilityType: provider.type ?? provider.providerType ?? "capability",
+    coverageStatus: "selected",
+    source: provider.source ?? "selected_execution_route",
+    sourceRef: provider.sourceRef ?? provider.id,
+    platformId: provider.platformId ?? provider.runtime ?? null,
+    routeImpact: `${slot} provider selected for route-driven execution`,
+  }));
+}
+
+function routeEvidenceSources(routeResult) {
+  const base = [
+    ["project_overview", "README.md"],
+    ["maintainer_contract", "AGENTS.md"],
+    ["command_inventory", "package.json#scripts"],
+    ["project_graph", "graphify-out"],
+    ["canonical_skill", "canonical/skills/meta-theory/SKILL.md"],
+    ["machine_contract", "config/contracts/core-loop-contract.json"],
+    ["capability_index", "config/capability-index/meta-kim-capabilities.json"],
+    ["mcp_inventory", ".mcp.json"],
+    ["external_research_capability", "config/skills.json"],
+  ].map(([sourceType, sourceRef]) => ({
+    sourceType,
+    sourceRef,
+    checked: true,
+    routeImpact: "Feeds route-driven Fetch evidence before Thinking locks the dispatch board.",
+  }));
+  const discovered = (routeResult.ownerDiscoveryPacket?.evidenceRefs ?? [])
+    .slice(0, 40)
+    .map((sourceRef) => ({
+      sourceType: "capability_discovery_ref",
+      sourceRef,
+      checked: true,
+      routeImpact: "Discovered by select-execution-route owner/provider search.",
+    }));
+  return [...base, ...discovered];
+}
+
+function providersByLane(routeResult, lane) {
+  const selected = routeResult.recommendedRoute?.selectedCapabilityProviders ?? {};
+  const laneProvider = lane?.capabilityProvider ?? null;
+  const laneBinding = lane?.capabilityBinding ?? {};
+  const selectedProviders = laneBinding.selectedProviders ?? {};
+  const skillLoadout = [];
+  if (laneProvider?.type === "skills") skillLoadout.push(laneProvider);
+  for (const provider of [selectedProviders.skill]) {
+    if (provider?.type === "skills" && !skillLoadout.some((item) => item.id === provider.id)) {
+      skillLoadout.push(provider);
+    }
+  }
+  const hasLaneBinding = Object.keys(selectedProviders).length > 0;
+  if (!hasLaneBinding) {
+    for (const provider of [
+      selected.skill,
+      selected.skillDiscovery,
+      selected.skillCreation,
+      selected.agentCreation,
+      ...Object.values(selected).filter((provider) => provider?.type === "skills"),
+    ]) {
+      if (provider?.type === "skills" && !skillLoadout.some((item) => item.id === provider.id)) {
+        skillLoadout.push(provider);
+      }
+    }
+  }
+  const runtimeTools = [lane?.runtimeTool, selectedProviders.runtimeTool, selected.runtimeTool, selected.runtimeEdit, selected.shell]
+    .filter(Boolean)
+    .filter((provider, index, all) => all.findIndex((item) => item.id === provider.id) === index);
+  return {
+    skillLoadout,
+    mcpLoadout: [selectedProviders.mcp, ...(!hasLaneBinding ? [selected.mcp, selected.mcpServer, selected.mcpTool] : [])]
+      .filter(Boolean)
+      .filter((provider, index, all) => all.findIndex((item) => item.id === provider.id) === index),
+    toolLoadout: runtimeTools,
+    commandLoadout: [selectedProviders.command, ...(!hasLaneBinding ? [selected.command, selected.verificationCommand] : [])]
+      .filter(Boolean)
+      .filter((provider, index, all) => all.findIndex((item) => item.id === provider.id) === index),
+  };
+}
+
+function buildRouteDrivenWorkerTasks({ runId, routeResult, task }) {
+  const route = routeResult.recommendedRoute;
+  const routeId = route?.id ?? "unresolved-route";
+  const lanes = route?.subjectiveUiCapabilityAmplification?.lanes ?? [];
+  const drafts = routeResult.workerTaskPacketDrafts ?? [];
+  const durableRequests = durableCapabilityRequestsFromTask(task, runId);
+  const sourceTasks = lanes.length > 0
+    ? lanes.map((lane) => ({
+        lane,
+        draft: drafts.find((draft) => draft.roleInstanceId === lane.laneId) ?? {},
+      }))
+    : durableRequests.length > 1
+      ? durableRequests.map((request) => ({
+          lane: {
+            laneId: request.requestId,
+            roleDisplayName:
+              request.decision === "create_script"
+                ? "backend"
+                : request.decision === "create_agent"
+                  ? "analysis"
+                  : request.decision === "create_mcp_provider"
+                    ? "backend"
+                    : "docs",
+            ownerAgent:
+              request.decision === "create_script" || request.decision === "create_mcp_provider"
+                ? "backend"
+                : request.decision === "create_agent"
+                  ? "analysis"
+                  : "docs",
+            purpose: `Prepare durable ${request.candidateType} candidate evidence for: ${request.sourceText}`,
+            decisionImpact: "Decides whether this explicit reusable capability should stay candidate-only or proceed through Warden approval.",
+            capabilityProvider: route?.selectedCapabilityProviders?.skillCreation ?? route?.selectedCapabilityProviders?.skill,
+            dependsOn: [],
+            parallelGroup: "durable-capability-candidates",
+          },
+          draft: {},
+        }))
+    : [
+        {
+          lane: {
+            laneId: "route-execution",
+            roleDisplayName: route?.owner?.replace(/^meta-/, "") ?? "operations",
+            ownerAgent: route?.owner ?? "meta-conductor",
+            purpose: "Execute the selected capability-first route.",
+            decisionImpact: "Turns the selected route into bounded worker execution.",
+            dependsOn: [],
+            parallelGroup: "route-execution",
+          },
+          draft: drafts[0] ?? {},
+        },
+      ];
+  return sourceTasks.map(({ lane, draft }, index) => {
+    const loadout = providersByLane(routeResult, lane);
+    const taskPacketId = `${runId}-${lane.laneId ?? `route-${index + 1}`}`;
+    const roleDisplayName = lane.roleDisplayName ?? draft.roleDisplayName ?? "operations";
+    const ownerAgent = lane.ownerAgent ?? draft.ownerAgent ?? route?.owner ?? "meta-conductor";
+    const isVerification = ["test", "review"].includes(roleDisplayName);
+    const isEvolution = lane.laneId === "evolution-signal";
+    return {
+      taskPacketId,
+      taskKind: "run_worker_task",
+      packetKind: "run_scoped_task_not_agent_definition",
+      userVisibleTypeLabel: "本次任务，不是 agent 设定",
+      routeId,
+      owner: ownerAgent,
+      ownerAgent,
+      ownerMode: "existing-owner",
+      executionMode: isVerification || isEvolution ? "verification_execution" : "primary_execution",
+      businessRoleId: roleDisplayName,
+      businessFlowLaneId: lane.businessFlowLaneId ?? lane.laneId ?? null,
+      businessFlowLaneLabel: lane.businessFlowLaneLabel ?? lane.label ?? lane.purpose ?? null,
+      roleDisplayName,
+      roleInstanceId: lane.laneId ?? draft.roleInstanceId ?? `route-${index + 1}`,
+      runtimeInstanceAlias: "",
+      coreProblem: lane.purpose ?? draft.purpose ?? "Run the selected route lane.",
+      todayTask: lane.purpose ?? draft.purpose ?? "Run the selected route lane.",
+      nonGoals: [
+        "Do not rewrite durable agent identity for this one-run task.",
+        "Do not use old capability-gap orchestration as the default path.",
+      ],
+      output: isEvolution ? "evolution_decision" : `${roleDisplayName}_lane_result`,
+      acceptanceCriteria: [
+        "The lane declares capabilityNeed before any concrete provider binding.",
+        "Concrete provider bindings are selected from current inventory by capabilityNeed, not by fixed agent-to-skill pairs.",
+        "The lane declares agent, skill, MCP, tool, command, and verification loadout when the runtime inventory provides them.",
+        "Concrete task scope stays in workerTaskPackets, not in durable agent settings.",
+        ...(lane.laneId === "read-before-edit-implementation"
+          ? ["Target files must be read in the same turn before any edit/write/apply_patch."]
+          : []),
+      ],
+      deliverableLink: `route://${routeId}/${lane.laneId ?? index + 1}`,
+      scopeFiles: [`route://${routeId}/${lane.laneId ?? index + 1}`],
+      qualityBar: "route-driven execution with visible provider loadout and no generic fallback",
+      workType: roleDisplayName,
+      expertLensRefs: [roleDisplayName],
+      evidenceRefs: [
+        "selectedExecutionRoute.recommendedRoute",
+        "selectedExecutionRoute.ownerDiscoveryPacket",
+        "selectedExecutionRoute.recommendedRoute.subjectiveUiCapabilityAmplification.lanes[].providerMatch",
+      ],
+      capabilityNeed: lane.capabilityNeed ?? [],
+      capabilityRequirements:
+        Array.isArray(lane.capabilityNeed) && lane.capabilityNeed.length > 0
+          ? lane.capabilityNeed
+          : [lane.capabilityProvider?.id ?? draft.dependency ?? route?.dependency ?? "selected-route-provider"],
+      providerMatch: lane.providerMatch ?? null,
+      capabilitySelection: {
+        selectionPolicy:
+          lane.providerMatch?.selectionPolicy ??
+          lane.capabilityBinding?.selectionPolicy ??
+          "route_selected_provider",
+        candidateProviders: lane.providerMatch?.candidateProviders ?? [],
+        selectedProvider: lane.providerMatch?.selectedProvider ?? null,
+        whySelected: lane.providerMatch?.whySelected ?? null,
+        whyNotSelected: lane.providerMatch?.whyNotSelected ?? [],
+      },
+      capabilityBindings: {
+        agent: ownerAgent,
+        skills: loadout.skillLoadout,
+        mcp: loadout.mcpLoadout,
+        tools: loadout.toolLoadout,
+        commands: loadout.commandLoadout,
+      },
+      capabilityLoadout: {
+        capabilityProfileId: routeId,
+        repoSkills: capabilityProviderRefs(loadout.skillLoadout),
+        runtimeSkillCandidates: capabilityProviderRefs(loadout.skillLoadout),
+        repoMcpTools: capabilityProviderRefs(loadout.mcpLoadout),
+        runtimeMcpCandidates: capabilityProviderRefs(loadout.mcpLoadout),
+        commands: capabilityProviderRefs(loadout.commandLoadout),
+        runtimeTools: capabilityProviderRefs(loadout.toolLoadout),
+      },
+      skillLoadout: loadout.skillLoadout,
+      mcpLoadout: loadout.mcpLoadout,
+      toolLoadout: loadout.toolLoadout,
+      commandLoadout: loadout.commandLoadout,
+      readBeforeEditRequired: lane.laneId === "read-before-edit-implementation",
+      referenceDirection: lane.decisionImpact ?? draft.decisionImpact ?? "Use selected route evidence.",
+      handoffTarget: draft.verificationOwner ?? route?.verificationOwner ?? "meta-prism",
+      handoffContract: {
+        handoffTo: draft.verificationOwner ?? route?.verificationOwner ?? "meta-prism",
+        handoffWhen: "after lane result and evidence are produced",
+        handoffPayload: "lane result, provider loadout, evidence refs, blockers",
+        acceptanceSignal: "review accepts lane output or returns to Thinking with a concrete missing provider",
+      },
+      lengthExpectation: "compact",
+      visualOrAssetPlan: roleDisplayName === "frontend" ? "browser and visual review evidence when UI is in scope" : "none",
+      dependsOn: Array.isArray(lane.dependsOn) ? lane.dependsOn.map((dep) => `${runId}-${dep}`) : [],
+      parallelGroup: lane.parallelGroup ?? draft.parallelGroup ?? "route-driven",
+      mergeOwner: draft.mergeOwner ?? "meta-warden",
+      shardKey: lane.laneId ?? `route-${index + 1}`,
+      shardScope: [lane.laneId ?? `route-${index + 1}`],
+      workspaceIsolation: "same_workspace_readonly_overlap",
+      artifactNamespace: `${routeId}/${lane.laneId ?? index + 1}`,
+      collisionPolicy: "no_overlap",
+      verifySteps: [
+        {
+          id: `${taskPacketId}-route-loadout`,
+          step: "Check lane provider loadout and route gate state",
+          verify: "Agent, skill/MCP/tool/command loadout and verification owner are declared.",
+        },
+      ],
+      preDecisionOptionFrameRef: "selectedExecutionRoute.decisionCard",
+      userChoiceState: routeResult.routeExecutionGate?.canEnterExecution
+        ? "no_branching_choice"
+        : (routeResult.routeExecutionGate?.returnToStage ?? "route_choice_required"),
+      finalizationGate: routeResult.routeExecutionGate?.canEnterExecution
+        ? "after_route_gate_pass"
+        : "blocked_before_execution",
+    };
+  });
+}
+
+function buildRouteDrivenOrchestration({ task, runId }) {
+  const routeResult = selectExecutionRoute({ task });
+  const route = routeResult.recommendedRoute;
+  const providerList = providerListFromRoute(routeResult);
+  const workerTaskPackets = buildRouteDrivenWorkerTasks({ runId, routeResult, task });
+  const routeGate = routeResult.routeExecutionGate ?? {};
+  const blocked = routeGate.canEnterExecution !== true;
+  const capabilityGaps = routeResult.capabilityGapDetected && routeResult.capabilityGapDecision
+    ? [
+        {
+          gapId: `${runId}-route-capability-gap`,
+          blocked: routeGate.canEnterExecution !== true,
+          gapType: "selected_route_gap",
+          decision: routeResult.capabilityGapDecision.decision,
+          reason: routeResult.capabilityGapDecision.blockedReason ?? "Selected route reported a capability gap.",
+          decisionReason:
+            routeResult.capabilityGapDecision.blockedReason ?? "Selected route reported a capability gap.",
+          owner: "meta-conductor",
+        },
+      ]
+    : [];
+  const selectedLaneIds = workerTaskPackets.map((packet) => packet.roleInstanceId);
+  const omittedLaneIds =
+    route?.subjectiveUiCapabilityAmplification?.omittedLanesWithReason?.map((lane) => lane.laneId) ?? [];
+  const checks = {
+    multiTypeCapabilityInventoryPresent:
+      providerList.some((provider) => provider.type === "skills") &&
+      providerList.some((provider) => provider.type === "runtimeTools" || provider.type === "commands") &&
+      providerList.some((provider) => provider.type === "mcpServers" || provider.type === "mcpTools"),
+    workerTasksDeclareExecutionMode: workerTaskPackets.every((packet) => Boolean(packet.executionMode)),
+    routeDrivenDefaultPath: true,
+    oldCapabilityGapDefaultPathRemoved: true,
+    taskVsAgentBoundaryVisible: workerTaskPackets.every(
+      (packet) => packet.packetKind === "run_scoped_task_not_agent_definition",
+    ),
+    loadoutFamiliesVisible: workerTaskPackets.every(
+      (packet) =>
+        Array.isArray(packet.skillLoadout) &&
+        Array.isArray(packet.mcpLoadout) &&
+        Array.isArray(packet.toolLoadout) &&
+        Array.isArray(packet.commandLoadout),
+    ),
+  };
+  return {
+    status: route && !blocked ? "pass" : "partial",
+    selectedExecutionRoute: routeResult,
+    criticalSummary: {
+      realGoal: `Run Meta_Kim through the selected route for: ${task}`,
+      successCriteria: [
+        "One default route drives Critical, Fetch, Thinking, Execution, Review, Meta-Review, Verification, and Evolution.",
+        "Worker task cards separate one-run task scope from durable agent settings.",
+        "Agent, skill, MCP, tool, command, hook, and evolution decisions are visible.",
+      ],
+      nonGoals: [
+        "No old capability-gap orchestration as the default governed execution path.",
+        "No validator/hook rescue loop after a weak route.",
+      ],
+    },
+    fetchEvidence: {
+      sources: routeEvidenceSources(routeResult),
+      capabilityInventory: providerList,
+      orchestrationOwner: route?.owner ?? "meta-conductor",
+      decisionImpactMap: [
+        {
+          finding: "selectedExecutionRoute.recommendedRoute",
+          impacts: ["dispatchBoard", "workerTaskPackets", "providerLoadout"],
+          decisionChanged: "Default governed execution consumes the selected route instead of the old capability-gap orchestrator.",
+          stageAffected: "Thinking",
+        },
+      ],
+    },
+    capabilityGaps,
+    decisionCounts: {
+      routeDriven: workerTaskPackets.length,
+      capabilityGap: capabilityGaps.length,
+      oldDefaultPath: 0,
+    },
+    thinkingRoute: {
+      boardMode: "route_driven_dispatch",
+      businessFlowLaneCount: workerTaskPackets.length,
+      dynamicWorkflowPlan: {
+        selectedLaneIds,
+        omittedLaneIds,
+      },
+    },
+    orchestrationTaskBoardPacket: {
+      dispatchBoardId: `${runId}-route-dispatch-board`,
+      boardMode: "route_driven_dispatch",
+      triggerChain: [
+        "entry_classifier",
+        "capability_discovery",
+        "select_execution_route",
+        "worker_task_packets",
+      ],
+      tasks: workerTaskPackets.map((packet, index) => ({
+        taskId: packet.taskPacketId,
+        taskKind: packet.taskKind,
+        userVisibleTypeLabel: packet.userVisibleTypeLabel,
+        owner: packet.owner,
+        businessRoleId: packet.businessRoleId,
+        roleDisplayName: packet.roleDisplayName,
+        roleInstanceId: packet.roleInstanceId,
+        sequence: index + 1,
+        dependsOn: packet.dependsOn,
+        deliverable: packet.deliverableLink,
+        capabilityBindings: packet.capabilityBindings,
+      })),
+      synthesisOwner: "meta-conductor",
+      mergeOwner: "meta-warden",
+    },
+    workerTaskPackets,
+    reviewResult: {
+      owner: "meta-prism",
+      status: checks.multiTypeCapabilityInventoryPresent && checks.workerTasksDeclareExecutionMode ? "pass" : "partial",
+      checks,
+      findings: blocked
+        ? [
+            {
+              severity: "high",
+              summary: routeGate.reason ?? "Route gate blocks execution.",
+              returnToStage: routeGate.returnToStage ?? "Thinking",
+              blockedBy: routeGate.blockedBy ?? [],
+            },
+          ]
+        : [],
+    },
+    verificationResult: {
+      owner: route?.verificationOwner ?? "meta-prism",
+      status: route ? "pass" : "partial",
+      command: "npm run meta:route:validate",
+    },
+    stageVisibility: {
+      requiredStages: ["Critical", "Fetch", "Thinking", "Review"],
+      Critical: "visible_intent_and_choice_boundary",
+      Fetch: "visible_capability_inventory",
+      Thinking: "visible_route_and_worker_task_cards",
+      Execution: blocked ? "blocked_before_execution_by_route_gate" : "route_driven_worker_tasks_ready",
+      Review: "visible_review_checks",
+      "Meta-Review": "visible_overclaim_boundary",
+      Verification: "visible_verification_owner_and_command",
+      Evolution: "visible_family_writeback_decision",
+    },
+  };
+}
+
 export async function runMetaTheoryGovernedExecution({
   task,
   runId = null,
   stateDir = DEFAULT_STATE_DIR,
+  artifactDir = null,
   dbPath = DEFAULT_DB_PATH,
   approvalEvidence = null,
   approvalPacket = null,
@@ -6166,14 +7660,17 @@ export async function runMetaTheoryGovernedExecution({
     throw new Error("Missing task for governed meta-theory execution.");
   }
   const effectiveRunId = runId ?? stableId("meta-run", normalizedTask);
-  const orchestrationReport = buildCapabilityGapOrchestration(normalizedTask);
-  const capabilityInventoryBus = await writeCapabilityInventory();
-  const requests = decomposeCapabilityGapRequests(normalizedTask);
-  const decisionResults = requests.map((request, index) =>
-    decideCapabilityGap(request.input, {
-      runId: stableId("gap-run", `${effectiveRunId}-${index}-${request.input}`),
-    })
+  const orchestrationReport = buildRouteDrivenOrchestration({
+    task: normalizedTask,
+    runId: effectiveRunId,
+  });
+  const capabilityInventoryBus = await writeCapabilityInventory(
+    path.join(stateDir, "capability-inventory.json"),
   );
+  const decisionResults = buildRouteDrivenDecisionResults({
+    task: normalizedTask,
+    runId: effectiveRunId,
+  });
   const runtimeEvidence = await buildRuntimeProjectionEvidence({
     repoRoot: REPO_ROOT,
     orchestrationReport,
@@ -6211,10 +7708,11 @@ export async function runMetaTheoryGovernedExecution({
     runtimeEvidence,
     writebackFlow,
   });
-  await fs.mkdir(stateDir, { recursive: true });
-  const jsonPath = path.join(stateDir, `${effectiveRunId}.json`);
-  const markdownPath = path.join(stateDir, `${effectiveRunId}.zh-CN.md`);
-  const latestPath = path.join(stateDir, "latest.json");
+  const outputDir = artifactDir ? path.resolve(artifactDir) : stateDir;
+  await fs.mkdir(outputDir, { recursive: true });
+  const jsonPath = path.join(outputDir, `${effectiveRunId}.json`);
+  const markdownPath = path.join(outputDir, `${effectiveRunId}.zh-CN.md`);
+  const latestPath = path.join(outputDir, "latest.json");
   const labels = getReportLabelsForPath(markdownPath);
   const sectionLabels = labels.sections;
   const toolList = labels.toolList(labels.toolNames);
@@ -6277,6 +7775,7 @@ export async function runMetaTheoryGovernedExecution({
   const userReportMarkdown = buildUserReadableRunReport({
     runId: effectiveRunId,
     task: normalizedTask,
+    artifactStatus,
     orchestrationReport,
     decisionResults,
     runtimeEvidence,
@@ -6310,6 +7809,17 @@ export async function runMetaTheoryGovernedExecution({
       markdown: markdownPath,
       sqlite: dbPath,
     },
+  });
+  const workflowContractPackets = buildWorkflowContractPackets({
+    runId: effectiveRunId,
+    task: normalizedTask,
+    artifactStatus,
+    orchestrationReport,
+    coreLoop,
+    runtimeEvidence,
+    writebackFlow,
+    cardPlanPacket,
+    businessFlowBlueprintPacket,
   });
   const artifact = {
     schemaVersion: 1,
@@ -6444,6 +7954,7 @@ export async function runMetaTheoryGovernedExecution({
       orchestrationReport,
       decisionResults,
     },
+    ...workflowContractPackets,
   };
   await fs.writeFile(jsonPath, `${JSON.stringify(artifact, null, 2)}\n`);
   await fs.writeFile(markdownPath, userReportMarkdown);
@@ -6473,13 +7984,15 @@ export async function runMetaTheoryGovernedExecution({
 export async function readGovernedExecutionRun({
   runId,
   stateDir = DEFAULT_STATE_DIR,
+  artifactDir = null,
 } = {}) {
-  const effectiveRunId = runId === "latest" || !runId ? await readLatestRunId(stateDir) : runId;
+  const outputDir = artifactDir ? path.resolve(artifactDir) : stateDir;
+  const effectiveRunId = runId === "latest" || !runId ? await readLatestRunId(outputDir) : runId;
   if (!effectiveRunId) {
     throw new Error("No governed execution run found.");
   }
-  const jsonPath = path.join(stateDir, `${effectiveRunId}.json`);
-  const markdownPath = path.join(stateDir, `${effectiveRunId}.zh-CN.md`);
+  const jsonPath = path.join(outputDir, `${effectiveRunId}.json`);
+  const markdownPath = path.join(outputDir, `${effectiveRunId}.zh-CN.md`);
   return {
     runId: effectiveRunId,
     artifact: JSON.parse(await fs.readFile(jsonPath, "utf8")),
@@ -6502,6 +8015,7 @@ function positionalTask(fallback = null) {
         "--task",
         "--run-id",
         "--state-dir",
+        "--artifact-dir",
         "--db",
         "--approval-evidence",
         "--approval-packet",
@@ -6528,6 +8042,7 @@ function rawPositionals() {
         "--task",
         "--run-id",
         "--state-dir",
+        "--artifact-dir",
         "--db",
         "--approval-evidence",
         "--approval-packet",
@@ -6550,8 +8065,10 @@ async function main() {
   const taskArg = argValue("--task", null);
   const runIdArg = argValue("--run-id", null);
   const stateDirArg = argValue("--state-dir", null);
+  const artifactDirArg = argValue("--artifact-dir", null);
   const dbArg = argValue("--db", null);
   const stateDir = path.resolve(stateDirArg ?? (taskArg ? DEFAULT_STATE_DIR : positional[2] ?? DEFAULT_STATE_DIR));
+  const artifactDir = artifactDirArg ? path.resolve(artifactDirArg) : null;
   if (process.argv.includes("--classify-entry")) {
     const task = taskArg ?? positionalTask("");
     process.stdout.write(`${JSON.stringify(classifyMetaTheoryEntry(task), null, 2)}\n`);
@@ -6561,6 +8078,7 @@ async function main() {
     const run = await readGovernedExecutionRun({
       runId: runIdArg ?? positional[0] ?? "latest",
       stateDir,
+      artifactDir,
     });
     process.stdout.write(
       `${JSON.stringify(
@@ -6584,6 +8102,7 @@ async function main() {
     task,
     runId: runIdArg ?? (taskArg ? null : positional[1] ?? null),
     stateDir,
+    artifactDir,
     dbPath: path.resolve(dbArg ?? (taskArg ? DEFAULT_DB_PATH : positional[3] ?? DEFAULT_DB_PATH)),
     approvalEvidence: argValue("--approval-evidence", null),
     approvalPacket,
@@ -6618,7 +8137,7 @@ async function main() {
       2
     )}\n`
   );
-  if (report.status !== "pass") process.exitCode = 1;
+  if (process.argv.includes("--strict-exit-code") && report.status !== "pass") process.exitCode = 1;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

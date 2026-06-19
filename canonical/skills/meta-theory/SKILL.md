@@ -65,7 +65,7 @@ When fan-out eligible, Thinking must produce `workerTaskPackets` before Executio
 | # | Stage | Action | Interaction |
 |---|---|---|---|
 | 1 | Critical | clarify intent first, lock user pain, value, success criteria, non-goals, permissions, and Architecture Type; for wishful or ambiguous input, enter Critical-Fetch intent loop: translate intent -> read context -> enrich intent -> present IntentCard for user confirmation (up to `criticalFetchLoopMax` rounds) | If a required intent dimension is missing and the answer changes route, scope, risk, or non-goal, set `choiceSurfaceState = critical_clarification_allowed` and ask before proceeding. Do not present execution options during Critical. Present an IntentCard after context-enriched intent translation; Codex and Claude Code must confirm through their native interactive choice surface, while compatibility runtimes may use a clearly labeled chat decision card fallback. |
-| 2 | Fetch | gather online/web and local evidence, confirm the problem, list candidate solutions with sources, extract material claims, run targeted read-only baseline verification when it changes the route, discover retrieval capabilities, complete a multi-type capability inventory before Thinking, and build a change fact card before any file mutation | If evidence suggests multiple valid paths with different trade-offs, surface the options in the user's language before Thinking. If current external facts or third-party capability claims matter, `meta-scout` or an equivalent evidence owner must finish source-backed research before Thinking. |
+| 2 | Fetch | gather online/web and local evidence, confirm the problem, list candidate solutions with sources, extract material claims, run targeted read-only baseline verification when it changes the route, discover retrieval capabilities, complete a multi-type capability inventory before Thinking, read every target file that may be changed, and build a change fact card before any file mutation | If evidence suggests multiple valid paths with different trade-offs, surface the options in the user's language before Thinking. If current external facts or third-party capability claims matter, `meta-scout` or an equivalent evidence owner must finish source-backed research before Thinking. |
 | 3 | Thinking | determine needed execution capabilities across governance agents, execution agents, skills, scripts, commands, MCP capabilities/providers/tools, runtime tools, plugins/connectors, retrieval capabilities, dependency/external packages, and run-scoped workerTasks; match existing capabilities; create or upgrade only for gaps; bind the file delivery contract; plan DAG/parallel/serial lanes with `mergeOwner` | Present at least 2 candidate paths with a recommended default. Ask the user to confirm the chosen path before Execution. |
 | 4 | Execution | run multi-agent work using the agents, skills, scripts, commands, MCP capabilities, runtime tools, plugins/connectors, retrieval capabilities, dependencies, and tools selected by Thinking artifacts | No interaction unless route-changing discovery occurs mid-execution — then pause and inform. |
 | 5 | Review | meta-prism checks upstream Critical, Fetch, Thinking, and result quality | If review finds issues that require user preference (quality vs speed trade-off), ask before proceeding. |
@@ -73,9 +73,59 @@ When fan-out eligible, Thinking must produce `workerTaskPackets` before Executio
 | 7 | Verification | run real tests with fresh evidence and `verificationPacket.fixEvidence` | No interaction. Run checks and record evidence. |
 | 8 | Evolution | after Warden approval, directly edit the target agent definition or SOUL.md for meta-agent lessons; execution-agent gaps use `capabilityGapPacket` + Type B pipeline | No interaction. Record writeback decision. |
 
+Autonomous discovery rule: for natural-language durable work, Fetch starts capability discovery from the entry classification itself. The user must not need to say "Critical", "Fetch", "Thinking", "Review", agent, skill, MCP, command, or tool for Meta_Kim to search local/global agents, skills, commands, MCP providers, runtime tools, plugins, hooks, and verification owners. Native choice gates may pause branch-changing execution, but they must not be the mechanism that first reveals missing discovery.
+
 ## User Interaction
 
 **MANDATORY**: Use the current runtime adapter's verified native choice surface at key decision points. Keep the canonical card contract platform-neutral; renderer-specific schemas and tool names belong in runtime references such as `runtime-claude.md` or `runtime-codex.md`, not in the generic contract. For Codex and Claude Code, required branch-changing decisions must use `request_user_input` or `AskUserQuestion`; if that native interactive surface is unavailable, empty, rejected, stripped, or not deferred to host UI, block before Execution and return to Critical/Thinking. Only compatibility runtimes may fall back to a localized chat decision card, and that fallback must not be reported as a Codex or Claude Code popup.
+
+### Choice Dialog Style
+
+Every decision-impacting point inside the governed route MUST be confirmed with the user through an AskUserQuestion / request_user_input dialog. Plain-text questions are not a substitute.
+
+Typical decision-impacting scenarios:
+
+- Multi-path selection (candidate approaches, artifacts to persist, Owner / Weapon / Dependency combinations)
+- Persistence layer and write-back target
+- Change scope, rollback, and continue vs. stop
+
+Dialog layout — three blocks:
+
+- Left option list with `❯` selection cursor, index, recommended label, and short description
+- Right unicode preview using `┌ ┐ └ ┘ │ ─ ┃ ━` borders to draw routing / evidence / comparison schematics
+- Bottom Notes line: `Notes: press n to add notes`
+
+The top of the dialog is free — no required step indicator.
+
+Trigger stages: Critical / Fetch / Thinking / Review.
+
+**When NOT to pop** — symmetric guardrail to keep the dialog from becoming UI decoration:
+
+- Pure informational confirmation where any short reply (y/n, ok, continue) is equivalent
+- Single-word answers already implied by the prior context
+- Low-risk follow-ups chained inside the same decision (e.g., "which file?" right after "which path?")
+- User has already expressed a clear, unambiguous direction in the same turn
+
+If in doubt, prefer one consolidated dialog over a chain of small ones. Do not ritual-question every micro-step.
+
+Preview example:
+
+```text
+┌─[Critical] Decision Point ──┐
+│ ❯ 1. All three (Recommended)│
+│   2. Canonical only         │
+│   3. Capability only        │
+├─────────────────────────────┤
+│ ┌─────────────────────────┐ │
+│ │ canonical/agents        │ │
+│ │ config/capability       │ │
+│ │ package.json scripts    │ │
+│ │   ↓                     │ │
+│ │ Three-layer evidence    │ │
+│ └─────────────────────────┘ │
+└─────────────────────────────┘
+Notes: press n to add notes
+```
 
 ## Global-First Project Bootstrap
 
@@ -199,6 +249,10 @@ Governed meta-theory entry enters through `meta-warden` entry gate, whether it w
 
 Translate the surface request into the real product problem. Compare minimal fix against ten-x path challenge and path shift. Final user-facing closure states the root goal, what this run did, whether it still fits the root direction, whether delivery is complete or partial, chosen rationale, why changed / why change, what changed, where changed, user impact, verification, complexity added or avoided, remaining limits, deferred work, and next action.
 
+Product-route or strategy-unclear requests must not automatically expand into a full product build. When the user's real question is "which route should I take?", first design a decision protocol and minimum evidence bench: candidate routes, required evidence, first experiment, pass/kill signals, time box, and review checks. A UI, backend, database, automation, or full app lane starts only when the user asks to build, evidence proves the route, or Thinking records why implementation is now the smallest useful test.
+
+Repository or product-doc cleanup requests must first separate change pressure from durable architecture. Before suggesting directory moves, classify the current work into change trains and source layers: source layer, projection layer, evidence layer, and reader layer. Record whether scripts or commands are read-only, generate state, sync runtime projections, install/update dependencies, or run live/slow checks. Do not treat "many files visible" as proof that directories should be moved; first decide which layer the confusion belongs to.
+
 ## Decision Cross-Validation Gate
 
 For PR, issue, release, compatibility, public-ready, or skill-prioritization decisions, the answer must survive adversarial cross-validation before it is treated as done. Record the evidence snapshot time, source state matrix, confidence labels, counterevidence, contradiction log, falsification checks, and replay commands. Re-check current external state when it can change, such as open PRs, open issues, comments, labels, review state, release status, package versions, or platform support.
@@ -213,6 +267,8 @@ Stage updates must be compact, human, and in the resolved user language. Record 
 
 Public status surface uses `runStatusEnvelope`, `publicLabels`, `.meta-kim/state/{profile}/active-run.json`, and `.meta-kim/state/{profile}/runs/{runId}/status.json`. Apply runtime/tool selected output language first, then latest input language. Do not hardcode labels. The public notice must not expose internal protocol fields such as `Preflight` or `conversation_fallback` unless debug is requested.
 
+Host-visible notice rule: in Codex App and Claude Code, a governed run must say the important progress information in normal assistant chat, in the resolved user language. HookPrompt / `additionalContext`, `systemMessage` warnings, CLI artifacts, JSON packets, and markdown reports may help the model or maintainer, but they do not count as user-visible progress unless the assistant also renders the notice in the conversation. Required visible moments are run start, route selected before Execution, blocker/degraded state when present, and closure. Keep each notice to at most three bullets. Use native choice surfaces only for branch-changing decisions, not for routine status.
+
 User experience truth boundary: users should not need to run `npm` scripts, inspect JSON, or know packet names to understand a governed run. Internal artifacts such as `ownerDiscoveryPacket`, `orchestrationTaskBoardPacket`, `workerTaskPackets`, and command output are evidence, not the user experience itself. When reporting orchestration, show compact localized notices for progress, route, owner handoff, blockers, and verification, and explicitly avoid claiming that users can experience a feature when it only exists as an internal artifact or maintainer-only command.
 
 Natural-language trigger rule: the user does not need to ask for stages, agents, skills, MCPs, commands, packets, or reports. If a normal human task triggers meta-theory, the dispatcher must automatically translate the internal route into a plain-language stage plan: what this stage does, what capability/loadout will be used, what result the user will see, and what starts next. Technical names may appear only as a compact backing loadout for traceability; the primary explanation must read like an operation handoff, not a protocol dump.
@@ -226,6 +282,8 @@ Capability invocation truth: every governed run that names agents/subagents, app
 ## Dynamic business-flow capability matrix
 
 Fetch expands executable deliverables into a Business-flow capability matrix by intent signals, not by a fixed template. The candidate lane universe may include product, research, content, UX, UI, frontend, backend, database, integration, security, motion, accessibility, browser QA, performance, release, feedback, and evolution. Thinking selects only the lanes justified by the current task, records omitted lanes with reasons, binds dependencies and merge owner per selected lane, and uses fan-out / synthesize / adversarial verification when the task has independent work streams.
+
+For strategy, product-route, prioritization, roadmap, or "I do not know what to build first" asks, the default selected lane is a decision-protocol lane, not implementation. Its output is a route judgment card: user/value frame, 2-3 candidate routes, evidence needed for each route, first experiment, pass/kill signal, and next review gate. Mark UI/frontend/backend/database/integration lanes as omitted unless they are the smallest experiment or explicitly requested.
 
 Selected dynamic lanes must synthesize project-scoped agent profiles from the current project profile and capability requirements. Thinking records them in `projectAgentBlueprintPacket` with `ownerMode = project-agent-profile`, a pinned `capabilityProfileId`, `capabilityLoadout`, `roleSoulPolicy`, project memory strategy, `externalEvidencePolicy`, `localBaselineComparison`, and `knowledgeGraphPolicy`. Current external claims such as platform rules, provider/API capability, dependency versions, pricing, compliance, security, release, or third-party workflow feasibility require source-backed Fetch evidence through `web_search`, `url_fetch`, `docs_lookup`, `browser_open`, `mcp_search`, or equivalent runtime retrieval before route lock; if that evidence is unavailable, block or return to Fetch instead of guessing. Every selected lane must also compare against local reality before dispatch: canonical agents/skills/contracts, capability indexes, runtime mirrors, package scripts, MCP configs, OS/runtime matrices, project memory, and graph navigation slices when available. Execution then calls the selected real provider surfaces when the host exposes them: agents/subagents, skills, MCP tools, commands/scripts, runtime tools, prompts/rules, or bounded run-scoped workers. A degraded structural runner may create only run-scoped worker instances and must mark uncalled selected providers as partial rather than pass, plus emit `hostInvocationRequestPacket` so the host adapter knows the exact calls still required. Capability updates change the capability profile for future runs; in-flight workers keep the pinned profile. A synthesized profile becomes a durable high-quality project agent file only through `GapDecision = create_agent` plus the Type B `GeneratedAgentSpec` review path. Durable-agent completion needs the `durableAgentLifecyclePacket` chain: definition candidate, Warden approval/writeback, host reload/discovery, and live invocation proof.
 
@@ -273,7 +331,7 @@ Hardcode capability families and conflict rules in prompts; discover concrete pr
 |---|---|---|
 | `governance-orchestration` | Durable planning, governance, review, verification, prioritization, repair, runtime, or release work | Governance agents route and review; they do not become generic implementation workers. |
 | `capability-discovery-and-retrieval` | Owner, tool, dependency, current fact, provider, or verification path affects the route | `findskill` and external search are run-scoped Fetch inputs, not permanent agent identity bindings. |
-| `prompt-intake-optimization` | User prompt submission or prompt optimization request | `hookprompt` may add prompt context; it must not override user intent, PRD decisions, meta-theory route, or planning state. |
+| `prompt-intake-optimization` | User prompt submission or prompt optimization request | `hookprompt` may add prompt context and, when the runtime emits a mandatory foreground prompt-understanding block, that block must be rendered before Meta_Kim route notices or native choice surfaces. It must not override user intent, PRD decisions, meta-theory route, planning state, or later progress notices. |
 | `planning-continuity` | Non-query durable work needs resume, progress, evidence, route, or acceptance continuity | Planning files are update-only continuity state: append, refine, or mark superseded; do not overwrite or reset `task_plan.md`, `findings.md`, or `progress.md`. |
 | `skill-agent-tool-creation` | Fetch proves a reusable capability gap after existing providers are checked | `skill-creator`, create-agent, or tool creation starts only after gap proof, review, and Warden-approved durable writeback. |
 | `runtime-native-surfaces` | Runtime-facing route, projection, hook, command, skill, agent, MCP, choice, sandbox, or approval behavior | Preserve native, partial, unknown, and blocked states; do not fake or replace runtime-native abilities. |
@@ -315,7 +373,7 @@ Execution may start only when the key behavior gate is true (or degraded mode is
 - Owner has a usable loadout: skill, command, MCP capability, runtime tool, normal tool, or abstract prompt.
 - Runtime/OS support is not known-unsupported; unknown or partial support is recorded with a probe/degraded route.
 - Memory strategy exists (`project_only`, `cross_project_readonly`, `none-with-reason`, or equivalent).
-- For file mutation, `fileChangeFactCard` exists and each target file has a consumer/distribution path, overlap decision, and data-shape note when applicable.
+- For file mutation, the current content of every target file has been read in the same execution turn before editing, and `fileChangeFactCard` exists with each target file's consumer/distribution path, overlap decision, and data-shape note when applicable.
 - Review standard is known. Verification owner, rollback, dependency eligibility, and detailed packet fields are required for public-ready, not as universal hook blockers.
 
 Worker output schema validation: when `workerTaskPacket.output` defines an expected structure, the dispatcher (or receiving agent) must validate the worker result against that structure before accepting it. On mismatch, the worker retries (up to 2 attempts) before reporting failure. Record `workerResultPacket.schemaValidationAttempts = [{attempt, passed, violationDetail}]`. This prevents format drift between Thinking's output contract and Execution's actual return.
@@ -327,7 +385,7 @@ Review must check upstream chain before output polish:
 - Critical locked the right user outcome and success criteria.
 - Fetch evidence changed or justified the route.
 - Thinking selected owner + weapon + dependency + runtime + OS + verification.
-- Planned file changes were justified by `fileChangeFactCard`; no new file exists only because the worker found a convenient place to write.
+- Planned file changes were preceded by reading the target files and justified by `fileChangeFactCard`; no new file exists only because the worker found a convenient place to write.
 - Execution evidence is reproducible.
 - No foundational capability or runtime-native ability was deleted or downgraded.
 - No reference-only dependency entered execution.

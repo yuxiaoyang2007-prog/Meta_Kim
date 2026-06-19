@@ -285,7 +285,11 @@ function installGraphify({ upgrade = false } = {}) {
 }
 
 function runRebuild() {
-  const direct = spawnSync("graphify", ["update", "."], {
+  const graphifyArgs = ["update", "."];
+  if (process.argv.includes("--force")) {
+    graphifyArgs.push("--force");
+  }
+  const direct = spawnSync("graphify", graphifyArgs, {
     stdio: "inherit",
     shell: false,
   });
@@ -304,7 +308,7 @@ function runRebuild() {
 
   const result = runPythonModule(
     python,
-    ["-m", "graphify", "update", "."],
+    ["-m", "graphify", ...graphifyArgs],
     undefined,
     { stdio: "inherit" },
   );

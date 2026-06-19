@@ -120,6 +120,17 @@ test("strict global hook validation checks Codex and Cursor HookPrompt adapters"
   }
 });
 
+test("HookPrompt fixer writes adapter source before registering global hooks", () => {
+  const source = readFileSync("scripts/validate-provider-capabilities.mjs", "utf8");
+
+  assert.match(source, /buildHookPromptAdapterSource/);
+  assert.match(
+    source,
+    /fs\.writeFile\(\s*adapter,\s*buildHookPromptAdapterSource\(runtimeId\)/s,
+    "fix mode must create hookprompt-adapter.mjs, not only add a hooks.json command",
+  );
+});
+
 test("plugin manifest entries cannot exist only in skills.json", () => {
   const registry = JSON.parse(
     readFileSync("config/capability-index/provider-registry.json", "utf8"),

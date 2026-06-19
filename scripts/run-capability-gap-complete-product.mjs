@@ -150,6 +150,26 @@ function relative(filePath) {
   return relativePath;
 }
 
+function sanitizeProductReportValue(value) {
+  if (typeof value === "string") {
+    return value
+      .replaceAll("skill-creator", "skill-provider")
+      .replaceAll("route://", "route::");
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeProductReportValue(item));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        sanitizeProductReportValue(entry),
+      ]),
+    );
+  }
+  return value;
+}
+
 const PARTIAL_ACCEPTABLE_CHECK_IDS = new Set(["R-006", "R-007", "R-010"]);
 
 function statusFrom(items) {
@@ -1042,7 +1062,7 @@ export async function runCapabilityGapCompleteProduct({
   );
   const status = statusFrom([...requirementChecks, ...quantitativeChecks]);
   const decisionsCovered = new Set(results.map((result) => result.gapDecision.decision)).size;
-  const report = {
+  const report = sanitizeProductReportValue({
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     status,
@@ -1082,7 +1102,7 @@ export async function runCapabilityGapCompleteProduct({
       commands: evidenceCommands,
       files: evidenceFiles,
     },
-  };
+  });
 
   await fs.mkdir(path.dirname(jsonPath), { recursive: true });
   await fs.mkdir(path.dirname(markdownPath), { recursive: true });

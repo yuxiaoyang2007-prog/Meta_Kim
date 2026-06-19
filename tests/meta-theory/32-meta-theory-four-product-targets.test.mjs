@@ -20,6 +20,8 @@ const multiGapTask = [
 
 const productExperienceTask =
   "帮我做个小红书营销自动发布器，需要动态规划、平台规则研究、内容策略、前端界面、后端 API、数据模型、平台集成、权限风控、测试验收和发布运维，但不要真实发布或使用生产凭证。";
+const contentOnlyProductTask =
+  "我想做个东西，能把我平时随手记的想法变成能发出去的内容，但我现在也说不清先做成啥，你帮我拆一下怎么落地，别真发。";
 
 describe("32 — Meta-theory three product goals and support gates", () => {
   test("T-001 runs the default governed orchestration runtime path", async () => {
@@ -36,10 +38,10 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.equal(report.defaultRuntimePath.status, "partial");
       assert.equal(report.defaultRuntimePath.entry, "meta:theory:run");
       assert.deepEqual(report.defaultRuntimePath.triggerChain, [
-        "meta-theory-skill-adapter",
-        "meta-warden-entry-gate",
-        "meta-conductor-orchestration",
-        "capability-gap-decision-kernel",
+        "entry_classifier",
+        "capability_discovery",
+        "select_execution_route",
+        "worker_task_packets",
       ]);
       assert.equal(
         report.defaultRuntimePath.orchestrationTaskBoardPacket.synthesisOwner,
@@ -442,6 +444,104 @@ describe("32 — Meta-theory three product goals and support gates", () => {
     assert.ok(output.userPerceptionCues >= 6);
   });
 
+  test("T-005b binds product-build lanes by capabilityNeed instead of fixed agent-skill pairs", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-product-build-dynamic-match-"));
+    try {
+      const report = await runMetaTheoryGovernedExecution({
+        task: productExperienceTask,
+        runId: "test-product-build-dynamic-match",
+        stateDir: tempDir,
+        dbPath: path.join(tempDir, "runs.sqlite"),
+      });
+      const lanes = report.defaultRuntimePath.workerTaskPackets;
+      const rows = report.coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingRows;
+      const marketResearch = lanes.find(
+        (packet) => packet.businessFlowLaneId === "market-research"
+      );
+      const capabilityTeamBlueprint =
+        report.sourceArtifacts.orchestrationReport.selectedExecutionRoute.recommendedRoute
+          .subjectiveUiCapabilityAmplification.capabilityTeamBlueprint;
+
+      assert.equal(lanes.length, 11);
+      assert.match(capabilityTeamBlueprint.inspiration, /agent-teams-playbook/);
+      assert.equal(capabilityTeamBlueprint.rows.length, lanes.length);
+      assert.equal(capabilityTeamBlueprint.rows.every((row) => row.capabilitySlot && row.providerBindingPolicy === "capability_need_runtime_match"), true);
+      assert.ok(
+        lanes.every(
+          (packet) =>
+            Array.isArray(packet.capabilityNeed) &&
+            packet.capabilityNeed.length > 0 &&
+            packet.capabilitySelection?.selectionPolicy === "capability_need_runtime_match" &&
+            packet.capabilitySelection?.candidateProviders.length > 0
+        )
+      );
+      assert.ok(
+        marketResearch.capabilityNeed.includes("capability-discovery-and-retrieval")
+      );
+      assert.ok(
+        marketResearch.capabilitySelection.candidateProviders.some(
+          (provider) => provider.id === "findskill"
+        ),
+        "findskill should be discovered as a capability-discovery candidate, not injected by user wording"
+      );
+      assert.ok(
+        rows.every(
+          (row) =>
+            Array.isArray(row.capabilityNeed) &&
+            row.capabilityNeed.length > 0 &&
+            row.capabilitySelection?.selectionPolicy === "capability_need_runtime_match"
+        )
+      );
+      assert.ok(
+        rows.some((row) => row.capabilitySelection.selectedProvider?.id),
+        "dynamic workflow rows should expose selected providers from capabilityNeed matching"
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("T-005c content-shaped product work omits unrelated technical lanes", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-product-build-content-lanes-"));
+    try {
+      const report = await runMetaTheoryGovernedExecution({
+        task: contentOnlyProductTask,
+        runId: "test-product-build-content-lanes",
+        stateDir: tempDir,
+        dbPath: path.join(tempDir, "runs.sqlite"),
+      });
+      const lanes = report.defaultRuntimePath.workerTaskPackets;
+      const selectedLaneIds = lanes.map((packet) => packet.businessFlowLaneId);
+      const omittedLaneIds = report.coreLoop.thinkingPacket.omittedLanesWithReason ?? [];
+      const capabilityTeamBlueprint =
+        report.sourceArtifacts.orchestrationReport.selectedExecutionRoute.recommendedRoute
+          .subjectiveUiCapabilityAmplification.capabilityTeamBlueprint;
+
+      assert.ok(selectedLaneIds.includes("product-definition"));
+      assert.ok(selectedLaneIds.includes("content-strategy"));
+      assert.ok(!selectedLaneIds.includes("backend-api"));
+      assert.ok(!selectedLaneIds.includes("data-model"));
+      assert.ok(!selectedLaneIds.includes("platform-integration"));
+      assert.ok(omittedLaneIds.includes("backend-api"));
+      assert.ok(omittedLaneIds.includes("data-model"));
+      assert.ok(omittedLaneIds.includes("platform-integration"));
+      assert.ok(lanes.length < 11, "content-only work should not inherit the full product-build template");
+      assert.equal(capabilityTeamBlueprint.rows.length, lanes.length);
+      assert.equal(capabilityTeamBlueprint.omittedCapabilitySlots.some((lane) => lane.laneId === "backend-api"), true);
+      assert.notEqual(capabilityTeamBlueprint.scenario.scenario, 4);
+      assert.ok(
+        lanes.every(
+          (packet) =>
+            Array.isArray(packet.capabilityNeed) &&
+            packet.capabilityNeed.length > 0 &&
+            packet.capabilitySelection?.selectionPolicy === "capability_need_runtime_match"
+        )
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("T-006 host invocation evidence can promote selected executable families to product pass", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-host-evidence-pass-"));
     try {
@@ -589,7 +689,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         ],
         { cwd: process.cwd(), encoding: "utf8" }
       );
-      assert.equal(result.status, 1, result.stderr);
+      assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
       assert.equal(summary.status, "partial");
       assert.equal(summary.runId, "test-run-cli");
@@ -613,11 +713,39 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         ],
         { cwd: process.cwd(), encoding: "utf8" }
       );
-      assert.equal(result.status, 1, result.stderr);
+      assert.equal(result.status, 0, result.stderr);
       const summary = JSON.parse(result.stdout);
       assert.equal(summary.status, "partial");
       assert.equal(summary.runId, "test-run-cli-positional");
       assert.match(summary.report, /test-run-cli-positional\.zh-CN\.md$/);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("CLI strict exit code preserves CI failure semantics for partial runs", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-governed-cli-strict-"));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          "scripts/run-meta-theory-governed-execution.mjs",
+          "--task",
+          "同一套 PRD review standard 需要 skill。",
+          "--run-id",
+          "test-run-cli-strict",
+          "--state-dir",
+          tempDir,
+          "--db",
+          path.join(tempDir, "runs.sqlite"),
+          "--strict-exit-code",
+        ],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+      assert.equal(result.status, 1, result.stderr);
+      const summary = JSON.parse(result.stdout);
+      assert.equal(summary.status, "partial");
+      assert.equal(summary.runId, "test-run-cli-strict");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

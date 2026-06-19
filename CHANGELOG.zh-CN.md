@@ -8,6 +8,31 @@
 
 ## [Unreleased]
 
+## [2.8.43] - 2026-06-19
+
+### 解决的问题
+
+本次发布解决的是 governed run 看似已经在 hook context 或生成报告里完成，但用户仍然看不到清晰进度、没有原生选择证据、也没有真实能力路线的问题。同时收紧 setup/update 清理路径，让旧安装留下的项目级 Meta_Kim 残留可以被安全移除，而不会删掉用户自己的文件。
+
+### 变更
+
+- **用户可见治理进度** - 新增 host-visible notice contract 和 runtime 指南，要求 Codex 与 Claude Code 在普通 assistant chat 中显示 run start、route、blocker、closure 等关键进度；原生选择面板只用于会改变路线的决策。
+- **自动能力发现** - 扩展 route selection：自然语言 durable work 会先扫描项目/runtime/全局 skills、commands、MCP providers、hooks、scripts、runtime tools，再由 Thinking 绑定 owner；不再要求用户先说出 agent、skill 或协议阶段。
+- **原生选择证据门** - 对主观质量或路线会变化的任务，跟踪 Codex `request_user_input` 与 Claude `AskUserQuestion` 证据后才允许执行；结构化报告不能再冒充真实原生选择。
+- **项目清理与 Bootstrap 安全** - 新增 setup cleanup 路径，用于清理冗余 Meta_Kim 项目资产；`AGENTS.md` / `CLAUDE.md` 改为 managed block 合并；补齐 Codex `.agents/skills` 项目投影覆盖，并增加保护未知本地 skill 与 git-tracked 文件的回归测试。
+- **全局 Hook 与记忆对齐** - 保持 HookPrompt 在 Meta_Kim spine hook 之前运行，新增 Codex 全局 HookPrompt adapter 同步；doctor 检查接受健康的 Claude 全局 hook；MCP memory 检查能识别 `hooks/meta-kim/` 下的 hook。
+
+### 验证
+
+- `npm run meta:verify:all`
+- `npm run meta:release:smoke`
+- `npm run meta:check`
+- `npm run meta:doctor:governance`
+- `npm run meta:check:global:release`
+- `node --test tests/setup/claude-settings-merge.test.mjs tests/setup/lazy-project-bootstrap.test.mjs tests/setup/doctor-governance.test.mjs tests/setup/mcp-memory-hooks.test.mjs`
+- `node scripts/validate-capability-routing.mjs`
+- `git diff --check`
+
 ## [2.8.42] - 2026-06-18
 
 ### 解决的问题

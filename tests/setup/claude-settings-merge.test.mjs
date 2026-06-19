@@ -32,6 +32,60 @@ describe("Claude settings hook command rendering", () => {
     );
   });
 
+  test("Claude global hook template keeps native HookPrompt before Meta_Kim spine", () => {
+    const template = buildMetaKimHooksTemplate(
+      "C:\\Users\\Example\\.claude\\hooks\\meta-kim",
+      "D:\\KimProject\\Meta_Kim",
+      {
+        hookPromptCommand:
+          'node "C:/Users/Example/.claude/hooks/user-prompt-submit.js"',
+      },
+    );
+    const promptHooks = template.UserPromptSubmit[0].hooks;
+
+    assert.match(promptHooks[0].command, /user-prompt-submit\.js/);
+    assert.match(promptHooks[1].command, /activate-meta-theory-spine\.mjs/);
+    assert.doesNotMatch(
+      JSON.stringify(promptHooks),
+      /hookprompt-adapter\.mjs/,
+    );
+  });
+
+  test("global settings merge keeps native HookPrompt block before existing prompt hooks", () => {
+    const base = {
+      hooks: {
+        UserPromptSubmit: [
+          {
+            matcher: ".*",
+            hooks: [
+              {
+                type: "command",
+                command: 'node "C:/Users/Example/.claude/hooks/optional.js"',
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const template = buildMetaKimHooksTemplate(
+      "C:\\Users\\Example\\.claude\\hooks\\meta-kim",
+      "D:\\KimProject\\Meta_Kim",
+      {
+        hookPromptCommand:
+          'node "C:/Users/Example/.claude/hooks/user-prompt-submit.js"',
+      },
+    );
+
+    const merged = mergeGlobalMetaKimHooksIntoSettings(base, template);
+    const promptHooks = merged.hooks.UserPromptSubmit.flatMap(
+      (block) => block.hooks ?? [],
+    );
+
+    assert.match(promptHooks[0].command, /user-prompt-submit\.js/);
+    assert.match(promptHooks[1].command, /activate-meta-theory-spine\.mjs/);
+    assert.match(promptHooks[2].command, /optional\.js/);
+  });
+
   test("global settings merge strips retired git push confirmation hooks", () => {
     const base = {
       hooks: {

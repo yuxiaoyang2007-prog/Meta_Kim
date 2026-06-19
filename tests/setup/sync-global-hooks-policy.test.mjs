@@ -63,6 +63,14 @@ describe("sync-global-meta-theory hook policy", () => {
 
   test("--with-global-hooks installs prompt-entry bootstrap hook package", async () => {
     await withTempRuntimeHomes(async ({ env, root }) => {
+      const claudeHooksDir = path.join(root, "claude", "hooks");
+      await mkdir(claudeHooksDir, { recursive: true });
+      await writeFile(
+        path.join(claudeHooksDir, "user-prompt-submit.js"),
+        "process.stdout.write(JSON.stringify({}));\n",
+        "utf8",
+      );
+
       await runScript(["--targets", "claude", "--with-global-hooks"], env);
 
       const hookDir = path.join(root, "claude", "hooks", "meta-kim");
@@ -81,6 +89,11 @@ describe("sync-global-meta-theory hook policy", () => {
       const promptHooks = settings.hooks?.UserPromptSubmit?.flatMap(
         (block) => block.hooks ?? [],
       ) ?? [];
+      assert.match(
+        promptHooks[0]?.command ?? "",
+        /user-prompt-submit\.js/,
+        "Claude should use HookPrompt native hook before Meta_Kim spine",
+      );
       assert.ok(
         promptHooks.some(
           (hook) =>
@@ -88,6 +101,11 @@ describe("sync-global-meta-theory hook policy", () => {
             hook.command.includes("--package-root"),
         ),
         "global Claude settings must register prompt-entry project bootstrap hook with package-root evidence",
+      );
+      assert.doesNotMatch(
+        JSON.stringify(promptHooks),
+        /hookprompt-adapter\.mjs/,
+        "Claude must not wrap native HookPrompt through the Meta_Kim adapter",
       );
     });
   });
@@ -197,9 +215,15 @@ describe("sync-global-meta-theory hook policy", () => {
       const hooksJson = JSON.parse(
         await readFile(path.join(root, "codex", "hooks.json"), "utf8"),
       );
+      await readFile(
+        path.join(root, "codex", "hooks", "hookprompt-adapter.mjs"),
+        "utf8",
+      );
       assert.ok(
         JSON.stringify(hooksJson).includes("activate-meta-theory-spine.mjs"),
       );
+      assert.ok(JSON.stringify(hooksJson).includes("meta-kim-memory-save.mjs"));
+      assert.ok(JSON.stringify(hooksJson).includes("hookprompt-adapter.mjs"));
       assert.ok(JSON.stringify(hooksJson).includes("--package-root"));
     });
   });

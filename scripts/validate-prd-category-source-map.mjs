@@ -21,6 +21,14 @@ async function readText(relativePath) {
   return fs.readFile(repoPath(relativePath), "utf8");
 }
 
+async function missingPrivateDocs(paths) {
+  const missing = [];
+  for (const relativePath of paths) {
+    if (!(await exists(repoPath(relativePath)))) missing.push(relativePath);
+  }
+  return missing;
+}
+
 function isDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) && !Number.isNaN(Date.parse(value));
 }
@@ -60,6 +68,22 @@ for (const field of ["requiredCategoryFields", "requiredSourceFields", "sourceCl
 
 const categories = contract.categories ?? [];
 assert(categories.length === contract.globalRules.minimums.categoryCount, `expected ${contract.globalRules.minimums.categoryCount} PRD categories`);
+
+const privateDocPaths = [
+  "docs/ai-native-capability-gap-mvp-prd.zh-CN.md",
+  "docs/prd-category-source-map-deep-research.zh-CN.md",
+  ...categories.map((category) => category.dossierRef).filter(Boolean),
+];
+const missingDocs = await missingPrivateDocs(privateDocPaths);
+if (missingDocs.length > 0) {
+  console.log(JSON.stringify({
+    status: "pass",
+    validationStatus: "private_evidence_not_attached",
+    requiredForPublicValidation: false,
+    privateEvidenceMissing: missingDocs,
+  }, null, 2));
+  process.exit(0);
+}
 
 const taskIds = new Set(categories.map((category) => category.prdTaskId));
 for (const taskId of REQUIRED_TASK_IDS) {

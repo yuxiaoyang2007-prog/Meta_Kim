@@ -136,7 +136,7 @@
     {
       "id": "hookprompt-no-route-override",
       "capabilityFamily": "prompt-intake-optimization",
-      "rule": "HookPrompt may add prompt context but must not override user intent, PRD source-of-truth decisions, meta-theory stage routing, or planning state."
+      "rule": "HookPrompt may add prompt context and, when the runtime emits a mandatory foreground prompt-understanding block, that block must be rendered before Meta_Kim route notices or native choice surfaces. It must not override user intent, PRD source-of-truth decisions, meta-theory stage routing, planning state, or later progress notices."
     },
     {
       "id": "findskill-run-scoped",

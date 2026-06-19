@@ -53,6 +53,22 @@ assert(fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.mode === "cached_gl
 assert(fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.staleAfterMinutes === 20160, "Route output must use a 14-day global inventory stale threshold");
 assert(fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.staleAfterDays === 14, "Route output must expose the 2-week capability refresh cadence");
 assert(typeof fuzzy.ownerDiscoveryPacket?.globalInventoryFreshness?.refreshRequiredBeforeExecution === "boolean", "Route output must expose whether refresh is required before execution");
+assert(fuzzy.autonomousCapabilityDiscovery?.requiredByDefault === true, "Governed durable work must self-start capability discovery by default");
+assert(
+  fuzzy.autonomousCapabilityDiscovery?.sourcesChecked?.includes("project_runtime_inventory") &&
+    fuzzy.autonomousCapabilityDiscovery?.sourcesChecked?.includes("claude_global_inventory_cache") &&
+    fuzzy.autonomousCapabilityDiscovery?.sourcesChecked?.includes("codex_global_inventory_cache") &&
+    fuzzy.autonomousCapabilityDiscovery?.sourcesChecked?.includes("cursor_global_inventory_cache") &&
+    fuzzy.autonomousCapabilityDiscovery?.sourcesChecked?.includes("openclaw_global_inventory_cache") &&
+    fuzzy.autonomousCapabilityDiscovery?.sourcesChecked?.includes("codex_global_skill_filesystem_light_scan") &&
+    fuzzy.autonomousCapabilityDiscovery?.sourcesChecked?.includes("mcp_inventory") &&
+    fuzzy.autonomousCapabilityDiscovery?.sourcesChecked?.includes("package_json_scripts"),
+  "Autonomous capability discovery must cover project inventory, all runtime global caches, global skills, MCP, and commands",
+);
+assert(
+  /~\/\.codex.*~\/\.claude.*~\/\.cursor.*~\/\.openclaw.*~\/\.agents/i.test(fuzzy.autonomousCapabilityDiscovery?.sourceRefPolicy ?? ""),
+  "Reportable sourceRef policy must be cross-runtime and home-relative",
+);
 assert(fuzzy.routeExecutionGate?.canPreviewRoute === true, "Stale cache may still allow route preview");
 assert(typeof fuzzy.routeExecutionGate?.canEnterExecution === "boolean", "Route output must expose whether Execution may start");
 assert(fuzzy.ownerDiscoveryPacket?.candidateReusableCapabilityProviders?.length > 0, "Route output must expose reusable capability providers before agent creation");
@@ -121,6 +137,24 @@ assert(fuzzy.recommendedRoute?.verificationOwner, "Recommended route needs verif
 assert(fuzzy.recommendedRoute?.runtime, "Recommended route needs runtime");
 assert(fuzzy.recommendedRoute?.os, "Recommended route needs OS");
 assert(fuzzy.recommendedRoute?.verificationMethod, "Recommended route needs verification method");
+
+const subjectiveQuality = route("这个页面不好看，帮我弄高级一点", "codex", "windows");
+assert(
+  subjectiveQuality.recommendedRoute?.id === "subjective-ui-design-orchestration:codex:windows",
+  "No-keyword subjective UI request must route to subjective UI orchestration",
+);
+assert(subjectiveQuality.autonomousCapabilityDiscovery?.userReminderDetected === false, "Subjective UI discovery must not depend on explicit stage words");
+assert(subjectiveQuality.recommendedRoute?.blockedReasons?.length === 0, "Subjective UI route should naturally bind providers before the choice gate");
+assert(
+  subjectiveQuality.workerTaskPacketDrafts?.some((packet) => packet.roleDisplayName === "frontend") &&
+    subjectiveQuality.workerTaskPacketDrafts?.some((packet) => packet.roleDisplayName === "test") &&
+    subjectiveQuality.workerTaskPacketDrafts?.some((packet) => packet.roleDisplayName === "review"),
+  "Subjective UI route must amplify into frontend, test, and review lanes",
+);
+assert(
+  !JSON.stringify(subjectiveQuality.recommendedRoute?.selectedCapabilityProviders ?? {}).includes("C:/Users/"),
+  "Route provider refs must not leak local absolute home paths",
+);
 
 const code = route("complex code refactor with tests");
 assert(!code.rankedRoutes.some((item) => item.dependencyProject === "kim-decision"), "Kim_Decision must not become implementation owner for pure code execution");

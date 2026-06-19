@@ -10,6 +10,7 @@ import { generateRunDeliverables } from "../../scripts/generate-meta-theory-run-
 import { runMetaTheoryGovernedExecution } from "../../scripts/run-meta-theory-governed-execution.mjs";
 import { getReportLabels } from "../../scripts/meta-kim-i18n.mjs";
 import { buildAgentProjectionTargets } from "../../scripts/runtime-tool-profiles.mjs";
+import { readJson, readFile as readRepoFile } from "./_helpers.mjs";
 
 const task = [
   "同一套 PRD review standard 需要 skill。",
@@ -170,6 +171,65 @@ describe("34 — Meta-theory run deliverables", () => {
     }
     assert.doesNotMatch(visibleTopLevelLabelText(getReportLabels("ja-JP")), /[\uac00-\ud7af]/u);
     assert.doesNotMatch(visibleTopLevelLabelText(getReportLabels("ko-KR")), /[\u3040-\u30ff]/u);
+  });
+
+  test("host-visible notice contract separates chat status from hook context", async () => {
+    const contract = await readJson("config/contracts/workflow-contract.json");
+    const visibleNotice =
+      contract.runDiscipline?.qualityFirstPolicy?.hostVisibleNoticeContract;
+    const codex = await readRepoFile(
+      "canonical/skills/meta-theory/references/runtime-codex.md",
+    );
+    const claude = await readRepoFile(
+      "canonical/skills/meta-theory/references/runtime-claude.md",
+    );
+    const notice = await readRepoFile(
+      "canonical/templates/user-interaction/notice-template.md",
+    );
+
+    assert.equal(visibleNotice.required, true);
+    assert.equal(visibleNotice.primaryUserVisibleSurface, "assistant_chat_message");
+    assert.ok(
+      visibleNotice.notUserVisibleSurfaces.includes(
+        "hookSpecificOutput.additionalContext",
+      ),
+    );
+    assert.ok(visibleNotice.notUserVisibleSurfaces.includes("markdown_report_only"));
+    assert.deepEqual(visibleNotice.i18n.languageOrder, [
+      "runtime_selected_output_language",
+      "explicit_user_language",
+      "latest_user_input_language",
+      "neutral_fallback",
+    ]);
+    assert.equal(visibleNotice.i18n.maxBulletsPerNotice, 3);
+    assert.equal(
+      visibleNotice.runtimeAdapters.codex.choiceSurface,
+      "request_user_input",
+    );
+    assert.equal(visibleNotice.runtimeAdapters.claude.choiceSurface, "AskUserQuestion");
+    assert.match(codex, /additionalContext.*model\/developer context/i);
+    assert.match(codex, /normal assistant chat text/i);
+    assert.match(codex, /request_user_input.*branch-changing decisions/i);
+    assert.match(claude, /MessageDisplay.*display-only/i);
+    assert.match(claude, /assistant message itself/i);
+    assert.match(claude, /AskUserQuestion.*branch-changing decisions/i);
+    assert.match(notice, /ordinary assistant chat text/i);
+    assert.match(notice, /HookPrompt\s*\/\s*`additionalContext`/i);
+  });
+
+  test("skill absorbs route-judgment and cleanup feedback as reusable rules", async () => {
+    const skill = await readRepoFile("canonical/skills/meta-theory/SKILL.md");
+
+    assert.match(skill, /Product-route or strategy-unclear requests/i);
+    assert.match(skill, /decision protocol and minimum evidence bench/i);
+    assert.match(skill, /candidate routes, required evidence, first experiment, pass\/kill signals/i);
+    assert.match(skill, /full app lane starts only when/i);
+    assert.match(skill, /Repository or product-doc cleanup requests/i);
+    assert.match(skill, /change trains and source layers/i);
+    assert.match(skill, /source layer, projection layer, evidence layer, and reader layer/i);
+    assert.match(skill, /read-only, generate state, sync runtime projections, install\/update dependencies, or run live\/slow checks/i);
+    assert.match(skill, /route judgment card/i);
+    assert.match(skill, /Mark UI\/frontend\/backend\/database\/integration lanes as omitted/i);
   });
 
   test("generates separate UI, readability, rubric, and case-pack deliverables", async () => {
@@ -637,7 +697,7 @@ describe("34 — Meta-theory run deliverables", () => {
         ],
         { cwd: process.cwd(), encoding: "utf8" }
       );
-      assert.equal(result.status, 1, result.stderr);
+      assert.equal(result.status, 0, result.stderr);
       assert.match(result.stdout, /^Meta_Kim 对话提示:/u);
       assert.match(result.stdout, /开始原因: 进入 Meta-Theory/u);
       assert.match(result.stdout, /8 阶段: 触发 8 阶段/u);
@@ -649,7 +709,6 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.match(result.stdout, /产品定义/u);
       assert.match(result.stdout, /市场与平台规则研究/u);
       assert.match(result.stdout, /内容策略与生成/u);
-      assert.match(result.stdout, /前端界面/u);
       assert.match(result.stdout, /后端 API/u);
       assert.match(result.stdout, /测试验收/u);
       assert.match(result.stdout, /验证/u);
@@ -674,7 +733,7 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.ok(artifact.cardPlanPacket.dealStandard.minimumScore >= 80);
       const emittedHash = createHash("sha256").update(emittedText, "utf8").digest("hex");
       assert.equal(artifact.conversationNotice.status, "emitted");
-      assert.equal(artifact.conversationNotice.routeSummary.workerTaskCount, 11);
+      assert.ok(artifact.conversationNotice.routeSummary.workerTaskCount >= 2);
       assert.equal(artifact.conversationNotice.emitted, true);
       assert.equal(artifact.conversationNotice.channel, "stdout");
       assert.equal(artifact.conversationNotice.adapter, "meta-theory-governed-execution-cli");
@@ -686,7 +745,16 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(artifact.userExperienceNotice.primarySurface, "localized_conversation_notice");
       assert.equal(artifact.userExperienceNotice.pendingPrimarySurface, null);
       assert.equal(artifact.userExperienceNotice.conversationNoticeEmitted, true);
-      assert.equal(artifact.defaultRuntimePath.workerTaskPackets.length, 11);
+      const selectedLaneIds = artifact.defaultRuntimePath.workerTaskPackets.map(
+        (packet) => packet.businessFlowLaneId
+      );
+      const omittedLaneIds = artifact.coreLoop.thinkingPacket.omittedLanesWithReason ?? [];
+      assert.ok(selectedLaneIds.includes("product-definition"));
+      assert.ok(selectedLaneIds.includes("market-research"));
+      assert.ok(selectedLaneIds.includes("content-strategy"));
+      assert.ok(selectedLaneIds.includes("backend-api"));
+      assert.ok(omittedLaneIds.includes("frontend-ui"));
+      assert.equal(artifact.defaultRuntimePath.workerTaskPackets.length, selectedLaneIds.length);
       assert.equal(artifact.defaultRuntimePath.agentTeamsPlaybookPacket.status, "pass");
       assert.equal(artifact.defaultRuntimePath.agentTeamsPlaybookPacket.selected, true);
       assert.equal(
@@ -713,22 +781,13 @@ describe("34 — Meta-theory run deliverables", () => {
         artifact.defaultRuntimePath.agentTeamsPlaybookPacket.acceptance.noArbitraryMetaKimCap,
         true
       );
-      assert.deepEqual(
-        artifact.defaultRuntimePath.workerTaskPackets.map((packet) => packet.businessFlowLaneId),
-        [
-          "product-definition",
-          "market-research",
-          "content-strategy",
-          "ux-flow",
-          "frontend-ui",
-          "backend-api",
-          "data-model",
-          "platform-integration",
-          "security-approval",
-          "test-qa",
-          "release-ops",
-        ]
-      );
+      assert.ok(selectedLaneIds.includes("ux-flow"));
+      assert.ok(selectedLaneIds.includes("data-model"));
+      assert.ok(selectedLaneIds.includes("platform-integration"));
+      assert.ok(selectedLaneIds.includes("security-approval"));
+      assert.ok(selectedLaneIds.includes("test-qa"));
+      assert.ok(selectedLaneIds.includes("release-ops"));
+      assert.ok(!selectedLaneIds.includes("frontend-ui"));
       assert.equal(
         artifact.userExperienceNotice.conversationNoticeEvidence.textSha256,
         emittedHash

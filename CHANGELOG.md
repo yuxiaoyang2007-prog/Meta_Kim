@@ -8,6 +8,31 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## [Unreleased]
 
+## [2.8.43] - 2026-06-19
+
+### Solved Problem
+
+This release addresses governed runs that could look complete in hidden hook context or generated artifacts while the user still lacked visible progress, native choice proof, or a real capability route. It also tightens setup/update cleanup so project-local residue from older installs can be removed without deleting user-owned files.
+
+### Changed
+
+- **Visible Governed Run Notices** - Added a host-visible notice contract and runtime guidance so Codex and Claude Code must render important run-start, route, blocker, and closure updates in normal assistant chat, while native choice surfaces stay reserved for branch-changing decisions.
+- **Autonomous Capability Discovery** - Expanded route selection so natural-language durable work scans project/runtime/global skills, commands, MCP providers, hooks, scripts, and runtime tools before Thinking binds owners, instead of relying on users to name agents, skills, or protocol stages.
+- **Native Choice Evidence Gate** - Strengthened subjective or route-changing work so Codex `request_user_input` and Claude `AskUserQuestion` evidence is tracked before execution, with structural reports no longer standing in for a real native choice.
+- **Project Cleanup And Bootstrap Safety** - Added setup cleanup paths for redundant Meta_Kim project assets, managed-block handling for `AGENTS.md` / `CLAUDE.md`, Codex `.agents/skills` projection coverage, and regression tests that preserve unknown local skills and tracked files.
+- **Global Hook And Memory Alignment** - Preserved HookPrompt ordering ahead of Meta_Kim spine hooks, added Codex global HookPrompt adapter sync, accepted healthy global Claude hooks in doctor checks, and taught MCP memory checks to find hooks under `hooks/meta-kim/`.
+
+### Verification
+
+- `npm run meta:verify:all`
+- `npm run meta:release:smoke`
+- `npm run meta:check`
+- `npm run meta:doctor:governance`
+- `npm run meta:check:global:release`
+- `node --test tests/setup/claude-settings-merge.test.mjs tests/setup/lazy-project-bootstrap.test.mjs tests/setup/doctor-governance.test.mjs tests/setup/mcp-memory-hooks.test.mjs`
+- `node scripts/validate-capability-routing.mjs`
+- `git diff --check`
+
 ## [2.8.42] - 2026-06-18
 
 ### Solved Problem

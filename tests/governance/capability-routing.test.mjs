@@ -3,8 +3,8 @@ import { spawnSync } from "node:child_process";
 import process from "node:process";
 import test from "node:test";
 
-function route(task, runtime = "auto", os = "auto") {
-  const result = spawnSync(process.execPath, ["scripts/select-execution-route.mjs", "--task", task, "--runtime", runtime, "--os", os, "--json"], { encoding: "utf8" });
+function route(task, runtime = "auto", os = "auto", extraArgs = []) {
+  const result = spawnSync(process.execPath, ["scripts/select-execution-route.mjs", "--task", task, "--runtime", runtime, "--os", os, "--json", ...extraArgs], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
   return JSON.parse(result.stdout);
 }
@@ -92,6 +92,156 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   assert.equal(chineseProduct.recommendedRoute?.weapon, "meta-kim-decision-patterns");
   assert.equal(chineseProduct.recommendedRoute?.dependencyProject, null);
 
+  const subjectiveQuality = route("这个页面不好看，帮我弄高级一点", "codex", "windows");
+  assert.equal(subjectiveQuality.entryClassification?.ambiguityPacket?.choicePolicy, "must_ask");
+  assert.equal(subjectiveQuality.routeExecutionGate?.canEnterExecution, false);
+  assert.equal(subjectiveQuality.recommendedRoute?.id, "subjective-ui-design-orchestration:codex:windows");
+  assert.equal(
+    subjectiveQuality.autonomousCapabilityDiscovery?.trigger,
+    "entry_classifier_auto_governed_entry",
+    "ordinary vague product/UI input must self-start capability discovery",
+  );
+  assert.equal(
+    subjectiveQuality.autonomousCapabilityDiscovery?.requiredByDefault,
+    true,
+    "capability discovery must be a default entry behavior, not a user-reminder side effect",
+  );
+  assert.equal(
+    subjectiveQuality.autonomousCapabilityDiscovery?.userReminderDetected,
+    false,
+    "the no-keyword subjective request fixture proves discovery was not triggered by the user's stage words",
+  );
+  for (const family of ["execution_agents", "skills", "mcp_servers", "commands", "runtime_tools", "verification_owner"]) {
+    assert.ok(
+      subjectiveQuality.autonomousCapabilityDiscovery?.familiesChecked?.includes(family),
+      `autonomous capability discovery must check ${family}`,
+    );
+  }
+  for (const source of [
+    "project_runtime_inventory",
+    "claude_global_inventory_cache",
+    "codex_global_inventory_cache",
+    "cursor_global_inventory_cache",
+    "openclaw_global_inventory_cache",
+    "codex_global_skill_filesystem_light_scan",
+    "mcp_inventory",
+    "package_json_scripts",
+  ]) {
+    assert.ok(
+      subjectiveQuality.autonomousCapabilityDiscovery?.sourcesChecked?.includes(source),
+      `autonomous capability discovery must check ${source}`,
+    );
+  }
+  assert.match(
+    subjectiveQuality.autonomousCapabilityDiscovery?.sourceRefPolicy ?? "",
+    /~\/\.codex.*~\/\.claude.*~\/\.cursor.*~\/\.openclaw.*~\/\.agents/i,
+    "reportable source refs must use a cross-runtime home-relative policy",
+  );
+  assert.ok(subjectiveQuality.decisionCheckpoints?.length >= 3);
+  assert.ok(
+    subjectiveQuality.decisionCheckpoints.some((checkpoint) => checkpoint.stage === "Thinking"),
+    "subjective UI work must ask again after Fetch/Thinking when route choices diverge",
+  );
+  assert.ok(
+    subjectiveQuality.workerTaskPacketDrafts?.some((packet) => packet.roleDisplayName === "frontend"),
+    "subjective UI route must create frontend work lanes",
+  );
+  assert.ok(
+    subjectiveQuality.workerTaskPacketDrafts?.some((packet) => packet.roleDisplayName === "test"),
+    "subjective UI route must create browser/test verification lanes",
+  );
+  assert.ok(
+    subjectiveQuality.workerTaskPacketDrafts?.some((packet) => packet.roleDisplayName === "review"),
+    "subjective UI route must create a real review lane",
+  );
+  assert.ok(
+    /read target page\/component\/style files/i.test(
+      subjectiveQuality.subjectiveUiCapabilityAmplification?.readBeforeEditPolicy ?? "",
+    ),
+    "subjective UI implementation lane must preserve read-before-edit behavior",
+  );
+  assert.ok(
+    JSON.stringify(subjectiveQuality.recommendedRoute?.selectedCapabilityProviders ?? {}).match(
+      /product-design|design-review|design-html|e2e|browser/i,
+    ),
+    "subjective UI route must bind concrete design/frontend/browser/review capabilities",
+  );
+  assert.equal(subjectiveQuality.recommendedRoute?.blockedReasons?.length, 0);
+  assert.equal(
+    JSON.stringify(subjectiveQuality.recommendedRoute?.selectedCapabilityProviders ?? {}).includes("C:/Users/"),
+    false,
+    "route provider refs should not leak local absolute home paths into reportable route JSON",
+  );
+  assert.ok(
+    subjectiveQuality.routeExecutionGate?.blockedBy.includes(
+      "native_choice_surface_required_before_execution",
+    ),
+  );
+  assert.equal(subjectiveQuality.routeExecutionGate?.returnToStage, "Critical");
+  assert.notEqual(
+    subjectiveQuality.recommendedRoute?.weapon,
+    "dependency-project-registry",
+    "subjective quality choices must stay on the internal decision/route path unless dependency discovery is explicit",
+  );
+
+  const subjectiveQualityWithReminder = route(
+    "这个页面不好看，帮我弄高级一点 critical and fetch thinking and review",
+    "codex",
+    "windows",
+  );
+  assert.equal(
+    subjectiveQualityWithReminder.recommendedRoute?.id,
+    subjectiveQuality.recommendedRoute?.id,
+    "explicit stage words must not be required to reach the subjective UI orchestration route",
+  );
+  assert.equal(subjectiveQualityWithReminder.autonomousCapabilityDiscovery?.userReminderDetected, true);
+  assert.deepEqual(
+    subjectiveQualityWithReminder.workerTaskPacketDrafts?.map((packet) => packet.roleInstanceId),
+    subjectiveQuality.workerTaskPacketDrafts?.map((packet) => packet.roleInstanceId),
+    "the no-keyword route must get the same lane amplification as the explicit stage-word route",
+  );
+
+  const subjectiveQualityConfirmed = route(
+    "这个页面不好看，帮我弄高级一点",
+    "codex",
+    "windows",
+    [
+      "--native-choice-evidence",
+      JSON.stringify({
+        surface: "request_user_input",
+        choices: [
+          { stage: "Critical", status: "completed" },
+        ],
+      }),
+    ],
+  );
+  assert.equal(subjectiveQualityConfirmed.routeExecutionGate?.canEnterExecution, false);
+  assert.ok(
+    subjectiveQualityConfirmed.routeExecutionGate?.blockedBy.includes(
+      "thinking_route_choice_required_before_execution",
+    ),
+  );
+  assert.equal(subjectiveQualityConfirmed.routeExecutionGate?.returnToStage, "Thinking");
+  assert.equal(subjectiveQualityConfirmed.routeExecutionGate?.nativeChoiceSurface?.evidence?.trusted, true);
+
+  const subjectiveQualityFullyConfirmed = route(
+    "这个页面不好看，帮我弄高级一点",
+    "codex",
+    "windows",
+    [
+      "--native-choice-evidence",
+      JSON.stringify({
+        surface: "request_user_input",
+        choices: [
+          { stage: "Critical", status: "completed" },
+          { stage: "Thinking", status: "completed" },
+        ],
+      }),
+    ],
+  );
+  assert.equal(subjectiveQualityFullyConfirmed.routeExecutionGate?.canEnterExecution, true);
+  assert.equal(subjectiveQualityFullyConfirmed.routeExecutionGate?.thinkingChoiceSurface?.evidenceTrusted, true);
+
   const refactor = route("complex code refactor");
   assert.ok(refactor.recommendedRoute || refactor.capabilityGapPacket);
   assert.ok(refactor.capabilityGapPacket || !/^meta-/.test(refactor.recommendedRoute?.owner ?? ""), "Pure code execution must not route governance agent as implementation worker");
@@ -109,6 +259,16 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   assert.ok(!/^meta-/.test(smoke.recommendedRoute?.owner ?? ""), "Engineering smoke route must use an execution owner");
   assert.equal(smoke.recommendedRoute?.selectedCapabilityProviders?.skillDiscovery?.id, "findskill");
   assert.equal(smoke.recommendedRoute?.selectedCapabilityProviders?.skillCreation?.id, "skill-creator");
+  assert.equal(
+    smoke.recommendedRoute?.selectedCapabilityProviders?.skillDiscovery?.platformId,
+    "codex",
+    "Codex smoke route must prefer the Codex-installed findskill provider over same-name Claude Code skills",
+  );
+  assert.equal(
+    smoke.recommendedRoute?.selectedCapabilityProviders?.skillCreation?.platformId,
+    "codex",
+    "Codex smoke route must prefer the Codex-installed skill-creator provider over same-name Claude Code skills",
+  );
   assert.ok(smoke.recommendedRoute?.selectedCapabilityProviders?.agent, "Engineering smoke route must bind an execution agent provider");
   assert.notEqual(
     smoke.recommendedRoute?.selectedCapabilityProviders?.agent?.platformId,

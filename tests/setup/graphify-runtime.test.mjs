@@ -1,5 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   detectPython310,
@@ -13,6 +15,21 @@ import {
   ensurePip,
   discoverWindowsPythonPathCommands,
 } from "../../scripts/graphify-runtime.mjs";
+
+const repoRoot = join(import.meta.dirname, "..", "..");
+
+describe("project-post-copy-init graphify bootstrap", () => {
+  test("uses the shared Python detector instead of a local launcher list", () => {
+    const source = readFileSync(
+      join(repoRoot, "scripts", "project-post-copy-init.mjs"),
+      "utf8",
+    );
+
+    assert.match(source, /detectPython310/);
+    assert.match(source, /bootstrapPip:\s*true/);
+    assert.doesNotMatch(source, /function pythonCandidates/);
+  });
+});
 
 describe("detectPython310()", () => {
   test("detects python when version is printed to stderr", () => {

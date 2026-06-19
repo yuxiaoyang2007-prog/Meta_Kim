@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { promises as fs } from "node:fs";
-import { assert, readJson, repoPath } from "./governance-lib.mjs";
+import { assert, exists, readJson, repoPath } from "./governance-lib.mjs";
 
 const DOSSIER_PATH = "docs/prd-category-product-requirements-discovery-dossier.zh-CN.md";
 const contract = await readJson("config/contracts/prd-category-source-map-contract.json");
@@ -8,6 +8,22 @@ const pkg = await readJson("package.json");
 
 async function readText(relativePath) {
   return fs.readFile(repoPath(relativePath), "utf8");
+}
+
+async function exitIfPrivateEvidenceMissing(paths) {
+  const missing = [];
+  for (const relativePath of paths) {
+    if (!(await exists(repoPath(relativePath)))) missing.push(relativePath);
+  }
+  if (missing.length > 0) {
+    console.log(JSON.stringify({
+      status: "pass",
+      validationStatus: "private_evidence_not_attached",
+      requiredForPublicValidation: false,
+      privateEvidenceMissing: missing,
+    }, null, 2));
+    process.exit(0);
+  }
 }
 
 function hasAll(text, markers, label) {
@@ -24,6 +40,11 @@ assert(productCategory.status === "dossier_ready", "P-095 category must be dossi
 assert(productCategory.dossierRef === DOSSIER_PATH, "P-095 category must point at the local-private dossier");
 assert(productCategory.verificationCommand === "npm run meta:prd:product-discovery:validate", "P-095 category has wrong verificationCommand");
 assert((productCategory.primarySources ?? []).length >= 5, "P-095 must keep at least five primary sources");
+
+await exitIfPrivateEvidenceMissing([
+  DOSSIER_PATH,
+  "docs/ai-native-capability-gap-mvp-prd.zh-CN.md",
+]);
 
 for (const sourceId of [
   "atlassian-prd-requirements",

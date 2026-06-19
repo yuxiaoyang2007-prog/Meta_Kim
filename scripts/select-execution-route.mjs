@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { GOVERNANCE_OWNERS, OS_TARGETS, RUNTIMES, classifyTaskShape, exists, readJson, repoPath, scoreRoute, stateDir, supportScore, toPosix } from "./governance-lib.mjs";
 import { CAPABILITY_GAP_DECISION_CONTRACT, decideCapabilityGap } from "./capability-gap-mvp.mjs";
+import { classifyMetaTheoryEntry } from "./meta-theory-entry-classifier.mjs";
 
 function argValue(name, fallback = null) {
   const index = process.argv.indexOf(name);
@@ -22,6 +23,85 @@ const runtime = runtimeArg === "auto" ? "codex" : runtimeArg;
 const osTarget = osArg === "auto" ? "windows" : osArg;
 const taskShape = classifyTaskShape(task);
 const taskText = String(task ?? "").toLowerCase();
+const entryClassification = classifyMetaTheoryEntry(task);
+const choicePolicy = entryClassification.ambiguityPacket?.choicePolicy ?? "no_choice_needed";
+const subjectiveRouteChoice = entryClassification.triggerReason === "subjective_quality_ambiguous";
+const nativeChoiceEvidenceRaw =
+  argValue("--native-choice-evidence", null) ??
+  process.env.META_KIM_NATIVE_CHOICE_EVIDENCE ??
+  null;
+function normalizeNativeChoiceEvidence(raw) {
+  const base = {
+    completedStages: [],
+  };
+  if (!raw) {
+    return {
+      ...base,
+      status: "missing",
+      surface: null,
+      answerRecorded: false,
+      trusted: false,
+    };
+  }
+  if (raw === "completed" || raw === "confirmed") {
+    return {
+      ...base,
+      status: "completed",
+      surface: "request_user_input",
+      answerRecorded: true,
+      trusted: true,
+      completedStages: ["Critical"],
+    };
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    const evidenceItems = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed.choices)
+        ? parsed.choices
+        : Array.isArray(parsed.answers)
+          ? parsed.answers
+          : [parsed];
+    const completedStages = evidenceItems
+      .filter((item) => item?.status === "completed" || item?.state === "completed" || item?.answerRecorded === true)
+      .map((item) => item.stage ?? item.choiceStage ?? item.checkpoint ?? parsed.stage ?? parsed.choiceStage ?? null)
+      .filter(Boolean);
+    const answerRecorded =
+      parsed.answerRecorded === true ||
+      parsed.status === "completed" ||
+      parsed.state === "completed" ||
+      evidenceItems.some((item) => item?.status === "completed" || item?.state === "completed" || item?.answerRecorded === true);
+    const surface = parsed.surface ?? parsed.hostSurface ?? evidenceItems.find((item) => item?.surface || item?.hostSurface)?.surface ?? evidenceItems.find((item) => item?.surface || item?.hostSurface)?.hostSurface ?? null;
+    return {
+      ...base,
+      status: answerRecorded ? "completed" : (parsed.status ?? parsed.state ?? "present"),
+      surface,
+      answerRecorded,
+      trusted:
+        answerRecorded &&
+        ["request_user_input", "AskUserQuestion", "native_choice"].includes(
+          surface,
+        ),
+      evidenceRef: parsed.evidenceRef ?? parsed.answerRef ?? null,
+      completedStages,
+    };
+  } catch {
+    return {
+      ...base,
+      status: "invalid",
+      surface: null,
+      answerRecorded: false,
+      trusted: false,
+    };
+  }
+}
+const nativeChoiceEvidence = normalizeNativeChoiceEvidence(nativeChoiceEvidenceRaw);
+function hasChoiceStage(stage) {
+  return nativeChoiceEvidence.trusted === true && nativeChoiceEvidence.completedStages.includes(stage);
+}
+const criticalChoiceBlocksExecution = choicePolicy === "must_ask" && !hasChoiceStage("Critical");
+const subjectiveThinkingChoiceRequired = subjectiveRouteChoice;
+const thinkingChoiceBlocksExecution = subjectiveThinkingChoiceRequired && !hasChoiceStage("Thinking");
 
 const weapons = (await readJson("config/capability-index/weapon-registry.json")).weapons ?? [];
 const registryDependencies = (await readJson("config/capability-index/dependency-project-registry.json")).projects ?? [];
@@ -30,7 +110,7 @@ const workflowContract = await readJson("config/contracts/workflow-contract.json
 const capabilityInventory = await readStateJson("capability-inventory.json", { capabilities: [] });
 const globalCapabilityInventory = await readStateJson(path.join("capability-index", "global-capabilities.json"), { byCapabilityType: { agents: {} }, byPlatform: {} });
 const dependencyIndex = await readStateJson("dependency-capability-index.json", { discoveredDependencyProjects: [] });
-const choicePolicy = await readJson("config/governance/choice-surface-policy.json");
+const choiceSurfacePolicy = await readJson("config/governance/choice-surface-policy.json");
 const intentContract = await readJson("config/governance/intent-amplification-contract.json");
 
 function textContains(entry, terms) {
@@ -132,6 +212,10 @@ function uniqueById(items) {
     unique.push(item);
   }
   return unique;
+}
+
+function uniqueStrings(items) {
+  return [...new Set(items.filter(Boolean).map((item) => String(item)))];
 }
 
 function compactAgent(entry, source) {
@@ -327,11 +411,75 @@ async function projectCapabilityProviders() {
   return providers;
 }
 
+async function scanSkillRoot(rootDir, source, platformId, { maxProviders = 160 } = {}) {
+  const providers = [];
+  if (!(await exists(rootDir))) return providers;
+  const home = process.env.USERPROFILE ?? process.env.HOME ?? "";
+  function displaySkillRef(skillFile) {
+    const normalizedSkillFile = toPosix(skillFile);
+    const normalizedHome = home ? toPosix(home) : "";
+    if (normalizedHome && normalizedSkillFile.startsWith(`${normalizedHome}/`)) {
+      return `~/${toPosix(path.relative(home, skillFile))}`;
+    }
+    return normalizedSkillFile;
+  }
+  async function visit(absDir, depth) {
+    if (providers.length >= maxProviders || depth > 8) return;
+    let entries = [];
+    try {
+      entries = await fs.readdir(absDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    if (entries.some((entry) => entry.isFile() && entry.name === "SKILL.md")) {
+      const rel = toPosix(path.relative(rootDir, absDir));
+      const id = rel && rel !== "." ? rel : path.basename(absDir);
+      providers.push({
+        id,
+        type: "skills",
+        source,
+        platformId,
+        sourceRef: displaySkillRef(path.join(absDir, "SKILL.md")),
+      });
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (["node_modules", ".git", "dist", "build"].includes(entry.name)) continue;
+      await visit(path.join(absDir, entry.name), depth + 1);
+      if (providers.length >= maxProviders) return;
+    }
+  }
+  await visit(rootDir, 0);
+  return providers;
+}
+
+async function codexGlobalSkillProviders() {
+  const home = process.env.USERPROFILE ?? process.env.HOME ?? "";
+  if (!home) return [];
+  const roots = [
+    {
+      root: path.join(home, ".codex", "skills"),
+      source: "codex_global_skill_filesystem_light_scan",
+    },
+    {
+      root: path.join(home, ".codex", "plugins", "cache"),
+      source: "codex_plugin_skill_filesystem_light_scan",
+    },
+  ];
+  const providers = [];
+  for (const root of roots) {
+    providers.push(...await scanSkillRoot(root.root, root.source, "codex"));
+  }
+  return uniqueById(providers);
+}
+
 const repoCanonicalAgents = capabilityEntries(repoCapabilityIndex, "agents").map((entry) => compactAgent(entry, "repo_canonical_capability_index"));
 const localGlobalAgents = capabilityEntries(globalCapabilityInventory, "agents").map((entry) => compactAgent(entry, "local_global_agent_inventory"));
 const projectRuntimeAgentCandidates = await projectRuntimeAgents();
 const repoCanonicalSkillProviders = capabilityEntries(repoCapabilityIndex, "skills").map((entry) => compactCapabilityProvider(entry, "repo_canonical_capability_index", "skills"));
 const projectRuntimeSkillProviders = await projectSkillProviders();
+const codexGlobalSkillFileProviders = await codexGlobalSkillProviders();
 const repoCanonicalCapabilityProviders = [
   ...repoCanonicalSkillProviders,
   ...["commands", "hooks", "mcpServers", "mcpTools", "plugins", "rules", "prompts"].flatMap((type) =>
@@ -345,7 +493,7 @@ const projectRuntimeCapabilityProviders = [
 const localGlobalCapabilityProvidersAll = ["skills", "commands", "hooks", "plugins", "mcpServers", "mcpTools", "rules", "prompts"].flatMap((type) =>
   capabilityEntries(globalCapabilityInventory, type)
     .map((entry) => compactCapabilityProvider(entry, `local_global_${type}_inventory`, type)),
-);
+).concat(codexGlobalSkillFileProviders);
 const localGlobalCapabilityProviders = localGlobalCapabilityProvidersAll.slice(0, 120);
 const localGlobalSkillProviders = localGlobalCapabilityProvidersAll
   .filter((provider) => provider.type === "skills")
@@ -383,6 +531,9 @@ const capabilityProviderCoverage = {
   repoCanonical: Object.fromEntries(["skills", "commands", "hooks", "mcpServers", "mcpTools", "plugins", "rules", "prompts", "runtimeTools"].map((type) => [type, capabilityEntries(repoCapabilityIndex, type).length])),
   projectRuntimeLightScan: Object.fromEntries(["skills", "commands", "hooks", "mcpServers", "rules", "prompts", "runtimeTools"].map((type) => [type, type === "runtimeTools" ? runtimeToolProviders.length : projectRuntimeCapabilityProviders.filter((provider) => provider.type === type).length])),
   localGlobalCached: Object.fromEntries(["agents", "skills", "commands", "hooks", "plugins", "mcpServers", "mcpTools", "rules", "prompts", "runtimeTools"].map((type) => [type, type === "runtimeTools" ? runtimeToolProviders.length : capabilityEntries(globalCapabilityInventory, type).length])),
+  codexFilesystemLightScan: {
+    skills: codexGlobalSkillFileProviders.length,
+  },
 };
 const globalInventoryGeneratedAt = globalCapabilityInventory.generatedAt ?? null;
 const globalInventoryAgeMinutes = globalInventoryGeneratedAt
@@ -415,6 +566,53 @@ const globalInventoryFreshness = {
     : globalInventoryStale
       ? "The last full capability scan is over 2 weeks old; this run should first update with npm run discover:global to match newly added user content and reach the best capability route."
       : null,
+};
+const explicitGovernanceReminderDetected =
+  /critical\s+and\s+fetch\s+thinking\s+and\s+review|critical.*fetch.*thinking.*review|meta-theory|元理论/i.test(task);
+const autonomousCapabilityDiscovery = {
+  stage: "Fetch",
+  trigger: entryClassification.governedEntry
+    ? "entry_classifier_auto_governed_entry"
+    : "route_probe",
+  triggerReason: entryClassification.triggerReason,
+  requiredByDefault: entryClassification.governedEntry && entryClassification.path !== "fast_path",
+  userReminderDetected: explicitGovernanceReminderDetected,
+  productRule:
+    "Natural-language durable work self-starts capability discovery; users do not need to say Critical, Fetch, Thinking, Review, agent, skill, MCP, command, or tool.",
+  behavior:
+    "Fetch scans capability sources before Thinking binds owners and lanes; validators only confirm the route artifact, not rescue a weak route after the fact.",
+  routePreviewState: "completed_before_execution_gate",
+  executionMayStillBlockOn: ["native_route_choice", "stale_capability_cache", "capability_gap"],
+  familiesChecked: [
+    "governance_agents",
+    "execution_agents",
+    "skills",
+    "skill_creation",
+    "mcp_servers",
+    "mcp_tools",
+    "commands",
+    "runtime_tools",
+    "plugins",
+    "hooks",
+    "rules_prompts",
+    "verification_owner",
+  ],
+  sourcesChecked: [
+    "repo_canonical_capability_index",
+    "runtime_mirror_capability_indexes",
+    "project_runtime_inventory",
+    "local_global_inventory_cache",
+    "claude_global_inventory_cache",
+    "codex_global_inventory_cache",
+    "cursor_global_inventory_cache",
+    "openclaw_global_inventory_cache",
+    "codex_global_skill_filesystem_light_scan",
+    "mcp_inventory",
+    "package_json_scripts",
+    "runtime_tools",
+  ],
+  sourceRefPolicy:
+    "Reportable provider refs use repo-relative paths, runtime ids, or home-relative refs like ~/.codex, ~/.claude, ~/.cursor, ~/.openclaw, and ~/.agents instead of machine absolute home paths.",
 };
 const governanceStagePolicy = workflowContract.protocols?.agentBlueprintPacket?.governanceStageCoveragePolicy ?? {};
 const governanceStages = Object.fromEntries(
@@ -449,6 +647,7 @@ const candidateExistingExecutionOwners = [
   .map((agent) => agent.id);
 const ownerDiscoveryPacket = {
   discoveryPrinciple: "canonical_index_first_capability_discovery_owner_last_binding",
+  autonomousCapabilityDiscovery,
   searchOrder: [
     "repo_canonical_capability_index",
     "runtime_mirror_indexes",
@@ -486,6 +685,7 @@ const ownerDiscoveryPacket = {
     { source: "local_global_inventory_cache", checked: true, sourceRef: ".meta-kim/state/default/capability-index/global-capabilities.json" },
     { source: "claude_global_inventory", checked: true, sourceRef: "~/.claude/agents; ~/.claude/skills; ~/.claude/commands; ~/.claude/hooks; ~/.claude/settings.json" },
     { source: "codex_global_inventory", checked: true, sourceRef: "~/.codex/agents; ~/.codex/skills; ~/.codex/commands; ~/.codex/hooks; ~/.codex/hooks.json; ~/.codex/config.toml; ~/.agents/skills" },
+    { source: "codex_global_skill_filesystem_light_scan", checked: true, sourceRef: "~/.codex/skills; ~/.codex/plugins/cache" },
     { source: "cursor_global_inventory", checked: true, sourceRef: "~/.cursor/agents; ~/.cursor/skills; ~/.cursor/rules; ~/.cursor/prompts; ~/.cursor/hooks; ~/.cursor/hooks.json; ~/.cursor/mcp.json" },
     { source: "openclaw_global_inventory", checked: true, sourceRef: "~/.openclaw/openclaw.json; ~/.openclaw/workspace-*; ~/.openclaw/skills; ~/.openclaw/hooks; ~/.agents/skills" },
     { source: "mcp_inventory", checked: true, sourceRef: ".mcp.json; .cursor/mcp.json; .codex/config.toml; MCP server/tool inventory" },
@@ -615,9 +815,20 @@ function routeForWeapon(weapon) {
     if (dep.runtimeSupport?.[runtime] === "unsupported") blockedReasons.push("dependency runtime unsupported");
     if (dep.osSupport?.[osTarget] === "unsupported") blockedReasons.push("dependency OS unsupported");
   }
-  const dependencyFit = dep ? (dependencyExecutable(dep) ? dep.reuseScore ?? 70 : 20) : 70;
-  const intentFit = (taskShape === "strategy_product_decision" && weapon.id === "meta-kim-decision-patterns") ? 100 : fitsTask(weapon) ? 85 : 50;
-  const weaponFit = (taskShape === "strategy_product_decision" && weapon.id === "meta-kim-decision-patterns") ? 100 : 90;
+  const dependencyFit = dep
+    ? subjectiveRouteChoice
+      ? 35
+      : (dependencyExecutable(dep) ? dep.reuseScore ?? 70 : 20)
+    : 70;
+  const internalChoiceWeapon =
+    subjectiveRouteChoice &&
+    ["meta-kim-decision-patterns", "select-execution-route"].includes(weapon.id);
+  const intentFit = (taskShape === "strategy_product_decision" && weapon.id === "meta-kim-decision-patterns") || internalChoiceWeapon
+    ? 100
+    : fitsTask(weapon)
+      ? 85
+      : 50;
+  const weaponFit = (taskShape === "strategy_product_decision" && weapon.id === "meta-kim-decision-patterns") || internalChoiceWeapon ? 100 : 90;
   const routeScore = blockedReasons.length ? Math.min(49, scoreRoute({
     intentFit,
     ownerFit: weapon.ownerCandidates?.length ? 85 : 0,
@@ -675,20 +886,415 @@ function routeForWeapon(weapon) {
   };
 }
 
-const reusableProviders = uniqueById([
+function runtimeMatchScore(provider) {
+  const runtimeValue = String(provider?.runtime ?? "").toLowerCase();
+  const platformValue = String(provider?.platformId ?? "").toLowerCase();
+  const sourceValue = String(provider?.source ?? "").toLowerCase();
+  if (runtimeValue === runtime) return 0;
+  if (platformMatchesRuntime(provider)) {
+    if (platformValue) return 0;
+    if (sourceValue.includes(runtime)) return 0;
+    return 1;
+  }
+  if (!runtimeValue && !platformValue) return 1;
+  return 9;
+}
+
+function providerPriority(provider) {
+  const source = String(provider?.source ?? "");
+  const runtimeScope = runtimeMatchScore(provider);
+  const sourceRank = source.includes("project_runtime")
+    ? 0
+    : source.includes(`${runtime}_global`) || source.includes(`${runtime}_plugin`)
+      ? 1
+      : source.includes("repo_canonical")
+        ? 2
+        : source.includes("local_global")
+          ? 3
+          : 4;
+  return runtimeScope * 10 + sourceRank;
+}
+
+function sortProvidersForRuntime(providers) {
+  return [...providers].sort((left, right) => {
+    const priorityDelta = providerPriority(left) - providerPriority(right);
+    if (priorityDelta !== 0) return priorityDelta;
+    return String(left.id ?? "").localeCompare(String(right.id ?? ""));
+  });
+}
+
+const reusableProviders = uniqueById(sortProvidersForRuntime([
   ...repoCanonicalCapabilityProviders,
   ...projectRuntimeCapabilityProviders,
   ...localGlobalCapabilityProvidersAll,
   ...runtimeToolProviders,
-]);
+]));
 
 function selectProvider(type, preferredIds = []) {
-  const providers = reusableProviders.filter((provider) => provider.type === type);
+  const providers = sortProvidersForRuntime(reusableProviders.filter((provider) => provider.type === type));
   for (const preferredId of preferredIds) {
-    const match = providers.find((provider) => provider.id === preferredId || provider.id?.includes(preferredId));
+    const match = providers.find((provider) => provider.id === preferredId) ??
+      providers.find((provider) => provider.id?.includes(preferredId));
     if (match) return match;
   }
   return providers[0] ?? null;
+}
+
+function selectAnyProvider(preferredIds = [], allowedTypes = null) {
+  const providers = sortProvidersForRuntime(
+    allowedTypes
+      ? reusableProviders.filter((provider) => allowedTypes.includes(provider.type))
+      : reusableProviders,
+  );
+  for (const preferredId of preferredIds) {
+    const match = providers.find((provider) => provider.id === preferredId) ??
+      providers.find((provider) => provider.id?.includes(preferredId));
+    if (match) return match;
+  }
+  return providers[0] ?? null;
+}
+
+const CAPABILITY_NEED_TERMS = {
+  "product-intent-and-context": ["product", "context", "get-context", "design-consultation", "strategy", "用户", "产品"],
+  "capability-discovery-and-retrieval": ["findskill", "skill-scout", "skill-stocktake", "discover", "search", "retrieval", "capability", "发现", "检索"],
+  "current-platform-policy-research": ["deep-research", "browse", "browser", "research", "platform", "policy", "market", "规则", "研究"],
+  "content-generation-and-review": ["document-generate", "writing", "content", "humanizer", "docs", "内容", "文案"],
+  "frontend-ui-design": ["design-html", "image-to-code", "frontend", "ui", "taste", "visual", "界面", "前端"],
+  "backend-api-and-workflow": ["tdd-workflow", "backend", "api", "server", "plankton", "workflow", "后端"],
+  "data-state-and-observability": ["database", "data", "state", "memory", "graph", "observability", "状态", "数据"],
+  "mcp-external-provider-and-plugin": ["mcp", "plugin", "provider", "external", "integration", "runtime", "集成"],
+  "safety-hooks-and-permissions": ["review", "security", "guard", "hook", "permission", "sentinel", "risk", "权限", "风险"],
+  "verification-eval-and-release": ["e2e", "test", "qa", "verify", "validation", "release", "smoke", "验收", "测试"],
+  "execution-tools-and-commands": ["command", "script", "shell", "apply_patch", "runtime", "tool", "执行", "命令"],
+  "governance-orchestration": ["agent-teams-playbook", "orchestration", "conductor", "meta-theory", "workflow", "编排"],
+};
+
+function providerSearchText(provider) {
+  return [
+    provider?.id,
+    provider?.name,
+    provider?.description,
+    provider?.summary,
+    provider?.type,
+    provider?.providerType,
+    provider?.source,
+    provider?.sourceRef,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function termMatchesProviderText(text, term) {
+  if (!term) return false;
+  return new RegExp(`(^|[^a-z0-9])${escapeRegExp(term)}([^a-z0-9]|$)`, "i").test(text);
+}
+
+function capabilityNeedTerms(capabilityNeed = []) {
+  return uniqueStrings(
+    []
+      .concat(capabilityNeed)
+      .flatMap((need) => [
+        String(need ?? ""),
+        ...(CAPABILITY_NEED_TERMS[String(need ?? "")] ?? []),
+      ])
+      .map((term) => term.toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function scoreProviderForCapabilityNeed(provider, capabilityNeed = []) {
+  const terms = capabilityNeedTerms(capabilityNeed);
+  const primaryTerms = capabilityNeedTerms([capabilityNeed[0]]);
+  const text = providerSearchText(provider);
+  const matchedTerms = terms.filter((term) => termMatchesProviderText(text, term));
+  const primaryMatchedTerms = primaryTerms.filter((term) => termMatchesProviderText(text, term));
+  const typeBoost =
+    provider?.type === "runtimeTools" && terms.some((term) => ["tool", "runtime", "apply_patch", "shell"].includes(term))
+      ? 3
+      : provider?.type === "commands" && terms.some((term) => ["command", "script", "smoke", "validation"].includes(term))
+        ? 3
+        : provider?.type === "mcpServers" || provider?.type === "mcpTools"
+          ? terms.some((term) => ["mcp", "provider", "external", "integration"].includes(term)) ? 3 : 0
+          : 0;
+  const score = matchedTerms.length * 10 + primaryMatchedTerms.length * 12 + typeBoost - providerPriority(provider);
+  return {
+    provider,
+    score,
+    matchedTerms,
+  };
+}
+
+function candidateProvidersForCapabilityNeed(capabilityNeed = [], allowedTypes = null, limit = 6) {
+  const pool = sortProvidersForRuntime(
+    allowedTypes
+      ? reusableProviders.filter((provider) => allowedTypes.includes(provider.type))
+      : reusableProviders,
+  );
+  const scored = pool
+    .map((provider) => scoreProviderForCapabilityNeed(provider, capabilityNeed))
+    .filter((entry) => entry.score > 0 || entry.matchedTerms.length > 0)
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      return String(left.provider.id ?? "").localeCompare(String(right.provider.id ?? ""));
+    });
+  const fallback = scored.length > 0 ? [] : pool.slice(0, limit).map((provider) => ({
+    provider,
+    score: 0 - providerPriority(provider),
+    matchedTerms: [],
+  }));
+  return [...scored, ...fallback].slice(0, limit);
+}
+
+function providerSummary(entry, selectedId = null) {
+  const provider = entry?.provider ?? entry;
+  if (!provider) return null;
+  const isSelected = provider.id === selectedId;
+  return {
+    id: provider.id,
+    type: provider.type ?? provider.providerType ?? "capability",
+    source: provider.source ?? "runtime_inventory",
+    sourceRef: provider.sourceRef ?? provider.id,
+    platformId: provider.platformId ?? provider.runtime ?? null,
+    score: entry?.score ?? null,
+    matchedTerms: entry?.matchedTerms ?? [],
+    selected: isSelected,
+    reason: isSelected
+      ? "Best runtime-matching provider for this lane capabilityNeed."
+      : "Available candidate, not selected because another provider scored higher for this lane.",
+  };
+}
+
+function bindLaneCapabilityProviders(lane) {
+  const capabilityNeed = lane.capabilityNeed ?? [];
+  const skillCandidates = candidateProvidersForCapabilityNeed(capabilityNeed, ["skills"], 6);
+  const mcpCandidates = candidateProvidersForCapabilityNeed(capabilityNeed, ["mcpServers", "mcpTools"], 3);
+  const commandCandidates = candidateProvidersForCapabilityNeed(capabilityNeed, ["commands"], 3);
+  const toolCandidates = candidateProvidersForCapabilityNeed(capabilityNeed, ["runtimeTools"], 3);
+  const selectedSkill = skillCandidates[0]?.provider ?? null;
+  const selectedMcp = mcpCandidates[0]?.provider ?? null;
+  const selectedCommand = commandCandidates[0]?.provider ?? null;
+  const selectedTool = toolCandidates[0]?.provider ?? null;
+  const selectedProviderIds = new Set(
+    [selectedSkill, selectedMcp, selectedCommand, selectedTool].filter(Boolean).map((provider) => provider.id),
+  );
+  return {
+    capabilityNeed,
+    selectionPolicy: "capability_need_runtime_match",
+    selectedProvider: selectedSkill,
+    selectedProviders: {
+      skill: selectedSkill,
+      mcp: selectedMcp,
+      command: selectedCommand,
+      runtimeTool: selectedTool,
+    },
+    candidateProviders: [
+      ...skillCandidates,
+      ...mcpCandidates,
+      ...commandCandidates,
+      ...toolCandidates,
+    ].map((entry) => providerSummary(entry, selectedProviderIds.has(entry.provider?.id) ? entry.provider.id : null)),
+    whySelected: selectedSkill
+      ? `${selectedSkill.id} matched lane capabilityNeed without a fixed agent-to-skill binding.`
+      : "No skill provider matched; lane keeps non-skill candidates and reports a capability gap if execution needs one.",
+    whyNotSelected: [
+      ...skillCandidates.slice(1),
+      ...mcpCandidates.filter((entry) => entry.provider?.id !== selectedMcp?.id),
+      ...commandCandidates.filter((entry) => entry.provider?.id !== selectedCommand?.id),
+      ...toolCandidates.filter((entry) => entry.provider?.id !== selectedTool?.id),
+    ].slice(0, 8).map((entry) => ({
+      id: entry.provider.id,
+      reason: "Candidate was discovered dynamically but was not the best fit for this lane capabilityNeed.",
+    })),
+  };
+}
+
+function taskMatchesPattern(pattern) {
+  return pattern.test(taskText);
+}
+
+function taskMatchesAnyPattern(patterns) {
+  return patterns.some((pattern) => taskMatchesPattern(pattern));
+}
+
+const PRODUCT_BUILD_INTENT_SIGNALS = {
+  content: [
+    /article|essay|post|copy|content|writing|newsletter|script|draft/i,
+    /文章|稿子|帖子|内容|写作|文案|脚本|草稿|随手记|想法|发出去/,
+  ],
+  currentResearch: [
+    /market|research|competitor|policy|platform|rule|current/i,
+    /市场|研究|竞品|平台|规则|最新|调研|小红书|抖音|公众号|视频号/,
+  ],
+  interface: [
+    /app|web|site|dashboard|frontend|ui|ux|interface|page|tool|product|mvp/i,
+    /应用|网站|网页|页面|前端|界面|工具|产品|面板|后台|MVP/i,
+  ],
+  implementation: [
+    /build|implement|develop|ship|launch|api|backend|database|service|queue|workflow/i,
+    /实现|开发|上线|接口|API|后端|数据库|服务|队列|工作流/,
+  ],
+  automationIntegration: [
+    /auto[-\s]?publish|scheduler|integration|callback|oauth|account|adapter/i,
+    /自动发布|发布器|定时|排期|集成|回调|账号|授权|适配|连接/,
+  ],
+  dataState: [
+    /database|state|history|record|storage|analytics|observability/i,
+    /数据库|状态|历史|记录|存储|数据|追踪|观测|统计/,
+  ],
+  safety: [
+    /security|permission|approval|risk|compliance|credential|auth/i,
+    /安全|权限|审批|风险|合规|凭证|授权|账号/,
+  ],
+  verification: [
+    /test|qa|verify|acceptance|regression|release|launch/i,
+    /测试|验收|验证|回归|发布|上线/,
+  ],
+  monetization: [
+    /payment|billing|subscription|pricing|monetization/i,
+    /付费|支付|订阅|定价|商业化|收款/,
+  ],
+  mobile: [
+    /ios|android|native mobile|mobile app/i,
+    /原生|移动端|手机 App|安卓|苹果/,
+  ],
+};
+
+function hasProductBuildSignal(name) {
+  return taskMatchesAnyPattern(PRODUCT_BUILD_INTENT_SIGNALS[name] ?? []);
+}
+
+function productBuildLaneEvidence() {
+  const content = hasProductBuildSignal("content");
+  const currentResearch = hasProductBuildSignal("currentResearch");
+  const interfaceNeeded = hasProductBuildSignal("interface");
+  const implementation = hasProductBuildSignal("implementation");
+  const automationIntegration = hasProductBuildSignal("automationIntegration");
+  const dataState = hasProductBuildSignal("dataState");
+  const safety = hasProductBuildSignal("safety") || automationIntegration;
+  const verification = hasProductBuildSignal("verification") || implementation || automationIntegration;
+  const contentOnly =
+    content &&
+    !interfaceNeeded &&
+    !implementation &&
+    !automationIntegration &&
+    !dataState &&
+    !hasProductBuildSignal("monetization") &&
+    !hasProductBuildSignal("mobile");
+
+  return {
+    content,
+    currentResearch,
+    interfaceNeeded,
+    implementation,
+    automationIntegration,
+    dataState,
+    safety,
+    verification,
+    contentOnly,
+  };
+}
+
+function productRouteDecisionRequested() {
+  const routeDecisionSignal =
+    /\b(?:which|choose|prioriti[sz]e|route|path|strategy|roadmap|first|minimum test|growth|pricing|conversion)\b/i.test(taskText) ||
+    /(?:哪个|哪条|选择|选|优先|路线|路径|战略|策略|路线图|先做|第一步|最小验证|增长|定价|转化|变现|怎么发展|怎么玩)/u.test(taskText) ||
+    /不知道.*(?:先做|选择|选|路线|路径|增长|定价|转化)/u.test(taskText);
+  if (!routeDecisionSignal) return false;
+  const explicitBuildSignal =
+    /(?:build|implement|develop|ship|launch|api|backend|database|automation|auto[-\s]?publish|scheduler)/i.test(taskText) ||
+    /(?:实现|开发|上线|接口|后端|数据库|自动发布|发布器|定时|排期|工作流|做个|做一个)/u.test(taskText);
+  return !explicitBuildSignal;
+}
+
+function capabilityTeamScenarioForLanes(lanes, evidence) {
+  const executableLaneCount = lanes.length;
+  if (executableLaneCount <= 1) {
+    return {
+      scenario: 1,
+      name: "提示增强",
+      reason: "Only one executable capability lane is needed; team fan-out would add overhead.",
+    };
+  }
+  if (executableLaneCount <= 5 && !evidence.automationIntegration) {
+    return {
+      scenario: 3,
+      name: "计划+评审",
+      reason: "A few independent capability lanes can run as bounded sub-tasks and return to one synthesis owner.",
+    };
+  }
+  if (evidence.automationIntegration || evidence.implementation) {
+    return {
+      scenario: 4,
+      name: "Lead-Member",
+      reason: "Implementation or integration lanes need a lead capability to coordinate dependencies and review boundaries.",
+    };
+  }
+  return {
+    scenario: 5,
+    name: "复合编排",
+    reason: "Many heterogeneous capability lanes require staged composition rather than one fixed team shape.",
+  };
+}
+
+function capabilityTeamCollaborationMode(lanes, scenario) {
+  if (lanes.length < 2) {
+    return {
+      mode: "Single capability lane",
+      reason: "Fewer than 2 executable lanes; agent-teams-playbook fan-out is not required.",
+    };
+  }
+  if (scenario.scenario === 4 || scenario.scenario === 5) {
+    return {
+      mode: "Agent Team if host supports it; otherwise independent subagents plus main-thread synthesis",
+      reason: "Some lanes have dependency coordination or integration boundaries.",
+    };
+  }
+  return {
+    mode: "Subagent",
+    reason: "Selected lanes can report independently to the merge owner without peer-to-peer communication.",
+  };
+}
+
+function buildCapabilityTeamBlueprint(lanes, omittedLanesWithReason, evidence) {
+  const scenario = capabilityTeamScenarioForLanes(lanes, evidence);
+  const collaborationMode = capabilityTeamCollaborationMode(lanes, scenario);
+  return {
+    schemaVersion: "capability-team-blueprint-v0.1",
+    inspiration: "agent-teams-playbook abstracted from agent roles to capability slots",
+    scenario,
+    collaborationMode,
+    fallbackChain: [
+      "local capability inventory",
+      "find-skills or equivalent capability discovery",
+      "runtime provider binding",
+      "run-scoped workerTaskPacket",
+      "degraded main-thread staged execution with reason",
+    ],
+    rows: lanes.map((lane, index) => ({
+      id: index + 1,
+      capabilitySlot: lane.laneId,
+      laneLabel: lane.businessFlowLaneLabel,
+      capabilityNeed: lane.capabilityNeed,
+      responsibility: lane.purpose,
+      ownerFamily: lane.roleDisplayName,
+      selectedOwner: lane.ownerAgent,
+      providerBindingPolicy: "capability_need_runtime_match",
+      dependsOn: lane.dependsOn,
+      parallelGroup: lane.parallelGroup,
+      runtimeExecutionSurface:
+        lanes.length >= 2
+          ? "host subagent/custom-agent when available; otherwise workerTaskPacket"
+          : "single workerTaskPacket",
+    })),
+    omittedCapabilitySlots: omittedLanesWithReason,
+  };
+}
+
+function selectOwner(preferredOwners = []) {
+  const available = new Set(ownerDiscoveryPacket.candidateExistingExecutionOwners);
+  return preferredOwners.find((owner) => available.has(owner)) ?? null;
 }
 
 function selectExecutionOwner() {
@@ -796,7 +1402,462 @@ function executionCapabilityDiscoveryRoute() {
   };
 }
 
-const syntheticRoutes = [executionCapabilityDiscoveryRoute()].filter(Boolean);
+function subjectiveUiDesignRoute() {
+  if (!subjectiveRouteChoice) return null;
+  const selectedProviders = {
+    context: selectAnyProvider(["product-design/0.1.46/skills/get-context", "get-context", "design-consultation"], ["skills"]),
+    ideation: selectAnyProvider(["product-design/0.1.46/skills/ideate", "ideate", "design-shotgun", "taste-skill", "web-design-guidelines"], ["skills"]),
+    visualReview: selectAnyProvider(["design-review", "plan-design-review", "taste-skill", "design-qa"], ["skills"]),
+    implementation: selectAnyProvider(["design-html", "frontend-patterns", "product-design/0.1.46/skills/image-to-code", "image-to-code"], ["skills"]),
+    browser: selectAnyProvider(["control-in-app-browser", "agent-browser", "open-gstack-browser", "cli-anything-browser"], ["skills"]),
+    e2e: selectAnyProvider(["e2e-testing", "windows-desktop-e2e", "agent-browser-verify"], ["skills"]),
+    runtimeEdit: selectProvider("runtimeTools", ["apply_patch"]),
+    shell: selectProvider("runtimeTools", ["shell_command"]),
+    verificationCommand: selectProvider("commands", ["package-script:meta:route:validate", "package-script:meta:test:meta-theory", "package-script:meta:release:smoke"]),
+    mcp: selectProvider("mcpServers", ["meta-kim-runtime", "repo-mcp", "codex-config-mcp"]),
+  };
+  const lanes = [
+    {
+      laneId: "intent-calibration",
+      roleDisplayName: "analysis",
+      ownerAgent: selectOwner(["analysis", "frontend", "worker"]) ?? "analysis",
+      purpose: "把“高级一点”翻译成目标用户、页面目标、审美方向、非目标和验收标准。",
+      capabilityProvider: selectedProviders.context,
+      decisionImpact: "决定是微调、系统重做，还是先做诊断报告。",
+      dependsOn: [],
+      parallelGroup: "subjective-ui-prep",
+    },
+    {
+      laneId: "design-direction",
+      roleDisplayName: "frontend",
+      ownerAgent: selectOwner(["frontend", "analysis", "worker"]) ?? "frontend",
+      purpose: "提出视觉层级、间距、字体、颜色、组件状态、响应式和动效方案。",
+      capabilityProvider: selectedProviders.ideation,
+      decisionImpact: "决定设计路线和需要变更的文件范围。",
+      dependsOn: ["intent-calibration"],
+      parallelGroup: "subjective-ui-design",
+    },
+    {
+      laneId: "read-before-edit-implementation",
+      roleDisplayName: "frontend",
+      ownerAgent: selectOwner(["frontend", "worker"]) ?? "frontend",
+      purpose: "先读取页面、组件、样式和设计系统，再做最小可逆改动。",
+      capabilityProvider: selectedProviders.implementation,
+      runtimeTool: selectedProviders.runtimeEdit,
+      decisionImpact: "把设计方案变成代码，但不能绕过读前改约束。",
+      dependsOn: ["design-direction"],
+      parallelGroup: "subjective-ui-execution",
+    },
+    {
+      laneId: "browser-qa",
+      roleDisplayName: "test",
+      ownerAgent: selectOwner(["test", "verify", "worker"]) ?? "test",
+      purpose: "用浏览器/截图/响应式检查验证页面是否真的变高级且没有破坏体验。",
+      capabilityProvider: selectedProviders.e2e ?? selectedProviders.browser,
+      runtimeTool: selectedProviders.shell,
+      decisionImpact: "决定是否可以进入 Review，还是回到设计/实现。",
+      dependsOn: ["read-before-edit-implementation"],
+      parallelGroup: "subjective-ui-verification",
+    },
+    {
+      laneId: "design-review",
+      roleDisplayName: "review",
+      ownerAgent: selectOwner(["review", "verify", "analysis"]) ?? "review",
+      purpose: "检查是否只是堆装饰、是否违背产品目标、是否破坏设计系统和可用性。",
+      capabilityProvider: selectedProviders.visualReview,
+      decisionImpact: "决定修订、放行，或需要用户在质量/速度间再选。",
+      dependsOn: ["browser-qa"],
+      parallelGroup: "subjective-ui-review",
+    },
+    {
+      laneId: "evolution-signal",
+      roleDisplayName: "analysis",
+      ownerAgent: "meta-chrysalis",
+      purpose: "只有当同类审美/页面改造模式可复用时才写回，否则 none-with-reason。",
+      capabilityProvider: selectAnyProvider(["evolution-writeback", "meta-theory"], ["skills"]),
+      decisionImpact: "让 Evolution 成为复用信号判断，而不是摆设。",
+      dependsOn: ["design-review"],
+      parallelGroup: "subjective-ui-evolution",
+    },
+  ];
+  const missing = lanes
+    .filter((lane) => !lane.ownerAgent || !lane.capabilityProvider)
+    .map((lane) => `${lane.laneId}:missing_owner_or_provider`);
+  const score = missing.length ? 78 : 94;
+  return {
+    id: `subjective-ui-design-orchestration:${runtime}:${osTarget}`,
+    owner: "meta-conductor",
+    weapon: "select-execution-route",
+    dependency: selectedProviders.ideation?.id ?? selectedProviders.context?.id ?? null,
+    dependencyProject: null,
+    runtime,
+    os: osTarget,
+    verificationOwner: "meta-prism",
+    verificationMethod: "npm run meta:route:validate",
+    verification: {
+      command: "npm run meta:route:validate",
+      artifact: "route JSON and UI workflow evidence",
+      passCondition: "Subjective UI route exposes intent, design, implementation, browser QA, review, and evolution lanes with concrete providers and no read-before-edit gap.",
+    },
+    score,
+    scoreBand: score >= 85 ? "execute_after_native_choices" : "confirm_or_fetch_more",
+    routeScoreBreakdown: {
+      intentFitWeight: 20,
+      ownerFitWeight: 15,
+      weaponFitWeight: 15,
+      dependencyFitWeight: 15,
+      runtimeSupportWeight: 10,
+      osSupportWeight: 10,
+      verificationStrengthWeight: 10,
+      riskRollbackClarityWeight: 5,
+      runtimeSupport: "native",
+      osSupport: "supported",
+      dependencyFit: missing.length ? 60 : 92,
+    },
+    ownerBinding: {
+      selectedOwner: "meta-conductor",
+      source: "subjective_ui_design_orchestration",
+      existingOwnerMatched: true,
+      bindingStage: "Thinking",
+      providerEvidenceRef: "subjectiveUiCapabilityAmplification.lanes",
+      ownerDiscoveryRef: "ownerDiscoveryPacket",
+    },
+    selectedCapabilityProviders: selectedProviders,
+    subjectiveUiCapabilityAmplification: {
+      intent: "把模糊审美诉求放大成产品目标、设计方向、实现边界、浏览器验证、审美评审和复用判断。",
+      decisionCheckpoints: [
+        {
+          stage: "Critical",
+          surface: "request_user_input",
+          question: "高级一点是哪种高级，以及这次允许改到什么范围？",
+          options: ["最小可逆视觉升级", "系统化重做页面体验", "先出诊断报告不改代码"],
+          requiredBefore: "Fetch/Thinking route lock",
+        },
+        {
+          stage: "Thinking",
+          surface: "request_user_input",
+          question: "Fetch 读完页面和能力后，选择执行路线：微调、重做、还是只交付审美诊断？",
+          options: ["保守微调", "系统化重做", "诊断报告"],
+          requiredBefore: "Execution",
+        },
+        {
+          stage: "Review",
+          surface: "request_user_input_if_tradeoff",
+          question: "如果 Review 发现速度和质量冲突，是否继续打磨还是先收敛上线？",
+          options: ["继续打磨", "先收敛", "回到设计"],
+          requiredBefore: "Revision",
+        },
+      ],
+      lanes,
+      omittedLanesWithReason: [
+        { laneId: "backend", reason: "页面视觉质量请求没有后端/API 证据。" },
+        { laneId: "database", reason: "没有数据结构或迁移需求。" },
+        { laneId: "auth-security", reason: "没有权限、安全或认证变更。" },
+        { laneId: "external-dependency", reason: "不默认引入第三方 UI 依赖；只有用户选择系统化重做或 Fetch 证明现有能力不足时才触发。" },
+      ],
+      readBeforeEditPolicy:
+        "Execution lane must read target page/component/style files in the same turn before apply_patch/Edit/Write.",
+      reviewUse:
+        "Review now has concrete standards: product goal fit, visual hierarchy, design-system consistency, browser evidence, responsive behavior, and no decorative-only polish.",
+      evolutionUse:
+        "Evolution records reusable UI-polish playbook only when the same pattern repeats or Review finds a durable skill/agent gap; otherwise none-with-reason.",
+    },
+    blockedReasons: missing,
+  };
+}
+
+function productBuildOrchestrationRoute() {
+  if (
+    entryClassification.triggerReason !== "natural_language_product_build" &&
+    !entryClassification.fanoutSignals?.includes("product_build_has_multiple_execution_lanes")
+  ) {
+    return null;
+  }
+  if (productRouteDecisionRequested()) {
+    return null;
+  }
+  const lane = ({
+    laneId,
+    label,
+    roleDisplayName,
+    ownerPriority,
+    purpose,
+    capabilityNeed,
+    includeWhen = () => true,
+    omissionReason = "当前输入没有证明这条 lane 是必要执行范围。",
+    dependsOn = [],
+    parallelGroup,
+  }) => ({
+    laneId,
+    businessFlowLaneId: laneId,
+    businessFlowLaneLabel: label,
+    roleDisplayName,
+    ownerAgent: selectOwner(ownerPriority) ?? ownerPriority.at(-1) ?? "worker",
+    purpose,
+    capabilityNeed,
+    includeWhen,
+    omissionReason,
+    decisionImpact: `${label} 决定当前产品构建路线是否能继续进入下一批执行。`,
+    dependsOn,
+    parallelGroup,
+  });
+  const evidence = productBuildLaneEvidence();
+  const candidateLanes = [
+    lane({
+      laneId: "product-definition",
+      label: "产品定义",
+      roleDisplayName: "analysis",
+      ownerPriority: ["analysis", "worker"],
+      purpose: "把一句许愿式需求拆成用户、核心场景、边界、成功标准和非目标。",
+      capabilityNeed: ["product-intent-and-context", "governance-orchestration"],
+      parallelGroup: "product-build-discovery",
+    }),
+    lane({
+      laneId: "market-research",
+      label: "市场与平台规则研究",
+      roleDisplayName: "analysis",
+      ownerPriority: ["analysis", "docs", "worker"],
+      purpose: "查清平台规则、内容风险、竞品和自动发布限制，避免先做错方向。",
+      capabilityNeed: ["capability-discovery-and-retrieval", "current-platform-policy-research"],
+      includeWhen: () => evidence.currentResearch || evidence.automationIntegration || evidence.safety,
+      omissionReason: "当前任务没有平台规则、竞品、外部事实或自动发布风险证据。",
+      parallelGroup: "product-build-discovery",
+    }),
+    lane({
+      laneId: "content-strategy",
+      label: "内容策略与生成",
+      roleDisplayName: "docs",
+      ownerPriority: ["docs", "analysis", "worker"],
+      purpose: "设计内容主题、生成链路、审核口径和人工介入点。",
+      capabilityNeed: ["content-generation-and-review", "safety-hooks-and-permissions"],
+      dependsOn: ["product-definition", "market-research"],
+      parallelGroup: "product-build-design",
+    }),
+    lane({
+      laneId: "ux-flow",
+      label: "UX 流程",
+      roleDisplayName: "frontend",
+      ownerPriority: ["frontend", "analysis", "worker"],
+      purpose: "设计从选题、生成、审核、排期到发布回看的一条主流程。",
+      capabilityNeed: ["frontend-ui-design", "product-intent-and-context"],
+      includeWhen: () => evidence.interfaceNeeded || evidence.implementation || evidence.automationIntegration,
+      omissionReason: "当前任务更像内容/方案产出，没有用户界面或操作流程设计证据。",
+      dependsOn: ["product-definition", "content-strategy"],
+      parallelGroup: "product-build-design",
+    }),
+    lane({
+      laneId: "frontend-ui",
+      label: "前端界面",
+      roleDisplayName: "frontend",
+      ownerPriority: ["frontend", "worker"],
+      purpose: "设计选题、内容预览、排期、审核和发布状态的操作界面。",
+      capabilityNeed: ["frontend-ui-design", "execution-tools-and-commands"],
+      includeWhen: () => evidence.interfaceNeeded || evidence.implementation,
+      omissionReason: "当前任务没有页面、应用、前端或可视化操作界面证据。",
+      dependsOn: ["ux-flow"],
+      parallelGroup: "product-build-implementation",
+    }),
+    lane({
+      laneId: "backend-api",
+      label: "后端 API",
+      roleDisplayName: "backend",
+      ownerPriority: ["backend", "worker"],
+      purpose: "定义内容生成、审核、排期、发布、回调和状态查询 API。",
+      capabilityNeed: ["backend-api-and-workflow", "execution-tools-and-commands"],
+      includeWhen: () => evidence.implementation || evidence.automationIntegration,
+      omissionReason: "当前任务没有 API、后端服务、自动化工作流或系统实现证据。",
+      dependsOn: ["platform-integration"],
+      parallelGroup: "product-build-implementation",
+    }),
+    lane({
+      laneId: "data-model",
+      label: "数据与任务状态",
+      roleDisplayName: "backend",
+      ownerPriority: ["backend", "worker"],
+      purpose: "设计任务状态、发布记录、错误记录和可追踪证据。",
+      capabilityNeed: ["data-state-and-observability", "execution-tools-and-commands"],
+      includeWhen: () => evidence.dataState || evidence.automationIntegration || evidence.implementation,
+      omissionReason: "当前任务没有数据库、任务状态、记录留存或观测追踪证据。",
+      dependsOn: ["platform-integration"],
+      parallelGroup: "product-build-implementation",
+    }),
+    lane({
+      laneId: "platform-integration",
+      label: "自动发布架构",
+      roleDisplayName: "backend",
+      ownerPriority: ["backend", "analysis", "worker"],
+      purpose: "设计账号、任务、队列、发布适配和失败重试的执行架构。",
+      capabilityNeed: ["mcp-external-provider-and-plugin", "backend-api-and-workflow"],
+      includeWhen: () => evidence.automationIntegration,
+      omissionReason: "当前任务没有外部平台集成、账号授权、自动发布或适配器证据。",
+      dependsOn: ["product-definition", "market-research"],
+      parallelGroup: "product-build-design",
+    }),
+    lane({
+      laneId: "security-approval",
+      label: "风险与权限边界",
+      roleDisplayName: "review",
+      ownerPriority: ["review", "analysis", "worker"],
+      purpose: "确认账号权限、平台规则、敏感操作和人工确认点，不把高风险发布做成黑箱。",
+      capabilityNeed: ["safety-hooks-and-permissions", "mcp-external-provider-and-plugin"],
+      includeWhen: () => evidence.safety || evidence.automationIntegration,
+      omissionReason: "当前任务没有权限、账号、外部写入、平台风险或敏感操作证据。",
+      dependsOn: ["market-research", "platform-integration"],
+      parallelGroup: "product-build-review",
+    }),
+    lane({
+      laneId: "test-qa",
+      label: "测试验收",
+      roleDisplayName: "test",
+      ownerPriority: ["test", "verify", "worker"],
+      purpose: "设计端到端、失败重试、权限边界、内容审核和回归验收。",
+      capabilityNeed: ["verification-eval-and-release", "execution-tools-and-commands"],
+      includeWhen: () => evidence.verification,
+      omissionReason: "当前任务未进入实现、上线或可执行系统验证范围。",
+      dependsOn: ["frontend-ui", "backend-api", "data-model"],
+      parallelGroup: "product-build-verification",
+    }),
+    lane({
+      laneId: "release-ops",
+      label: "发布与运行手册",
+      roleDisplayName: "docs",
+      ownerPriority: ["docs", "test", "worker"],
+      purpose: "整理上线前检查、运行步骤、回滚方式和用户可见交付物。",
+      capabilityNeed: ["content-generation-and-review", "verification-eval-and-release"],
+      includeWhen: () => evidence.verification || evidence.automationIntegration,
+      omissionReason: "当前任务没有上线、运行、回滚或系统交付手册证据。",
+      dependsOn: ["test-qa", "security-approval"],
+      parallelGroup: "product-build-closure",
+    }),
+  ];
+  const selectedLaneIds = new Set(candidateLanes.filter((item) => item.includeWhen(evidence)).map((item) => item.laneId));
+  const lanes = candidateLanes
+    .filter((item) => selectedLaneIds.has(item.laneId))
+    .map(({ includeWhen, omissionReason, dependsOn, ...item }) => ({
+      ...item,
+      dependsOn: dependsOn.filter((laneId) => selectedLaneIds.has(laneId)),
+      selectionEvidence: {
+        policy: "dynamic_evidence_screening",
+        source: "task_intent_signals",
+        contentOnly: evidence.contentOnly,
+      },
+    }));
+  const omittedLanesWithReason = [
+    ...candidateLanes
+      .filter((item) => !selectedLaneIds.has(item.laneId))
+      .map((item) => ({ laneId: item.laneId, reason: item.omissionReason })),
+    ...(!hasProductBuildSignal("monetization")
+      ? [{ laneId: "payment", reason: "用户没有要求付费、订阅、定价或商业化收款。" }]
+      : []),
+    ...(!hasProductBuildSignal("mobile")
+      ? [{ laneId: "native-mobile", reason: "当前需求没有原生 App 或移动端实现证据。" }]
+      : []),
+  ];
+  const capabilityTeamBlueprint = buildCapabilityTeamBlueprint(lanes, omittedLanesWithReason, evidence);
+  const lanesWithBindings = lanes.map((item) => {
+    const capabilityBinding = bindLaneCapabilityProviders(item);
+    return {
+      ...item,
+      capabilityProvider: capabilityBinding.selectedProvider,
+      runtimeTool: capabilityBinding.selectedProviders.runtimeTool,
+      capabilityBinding,
+      providerMatch: {
+        capabilityNeed: capabilityBinding.capabilityNeed,
+        selectionPolicy: capabilityBinding.selectionPolicy,
+        candidateProviders: capabilityBinding.candidateProviders,
+        selectedProvider: providerSummary(
+          capabilityBinding.selectedProvider,
+          capabilityBinding.selectedProvider?.id,
+        ),
+        whySelected: capabilityBinding.whySelected,
+        whyNotSelected: capabilityBinding.whyNotSelected,
+      },
+    };
+  });
+  const laneProviderEntries = lanesWithBindings.flatMap((item) => {
+    const providers = item.capabilityBinding?.selectedProviders ?? {};
+    return Object.entries(providers)
+      .filter(([, provider]) => provider)
+      .map(([kind, provider]) => [`lane:${item.laneId}:${kind}`, provider]);
+  });
+  const selectedProviders = Object.fromEntries(laneProviderEntries);
+  const firstSelectedSkill = lanesWithBindings.find((item) => item.capabilityProvider)?.capabilityProvider ?? null;
+  const missing = lanes
+    .filter((item, index) => !item.ownerAgent || !lanesWithBindings[index]?.capabilityProvider)
+    .map((item) => `${item.laneId}:missing_owner_or_provider`);
+  const score = missing.length ? 78 : 93;
+  return {
+    id: `product-build-orchestration:${runtime}:${osTarget}`,
+    owner: "meta-conductor",
+    weapon: "select-execution-route",
+    dependency: firstSelectedSkill?.id ?? null,
+    dependencyProject: null,
+    runtime,
+    os: osTarget,
+    verificationOwner: "meta-prism",
+    verificationMethod: "npm run meta:route:validate",
+    verification: {
+      command: "npm run meta:route:validate",
+      artifact: "route JSON and product-build lane evidence",
+      passCondition: "Natural-language product build route selects only evidence-backed lanes from a broad candidate universe and records omitted lanes with reasons.",
+    },
+    score,
+    scoreBand: score >= 85 ? "execute" : "confirm_or_fetch_more",
+    routeScoreBreakdown: {
+      intentFitWeight: 20,
+      ownerFitWeight: 15,
+      weaponFitWeight: 15,
+      dependencyFitWeight: 15,
+      runtimeSupportWeight: 10,
+      osSupportWeight: 10,
+      verificationStrengthWeight: 10,
+      riskRollbackClarityWeight: 5,
+      runtimeSupport: "native",
+      osSupport: "supported",
+      dependencyFit: missing.length ? 60 : 90,
+    },
+    ownerBinding: {
+      selectedOwner: "meta-conductor",
+      source: "natural_language_product_build_orchestration",
+      existingOwnerMatched: true,
+      bindingStage: "Thinking",
+      providerEvidenceRef: "subjectiveUiCapabilityAmplification.lanes",
+      ownerDiscoveryRef: "ownerDiscoveryPacket",
+    },
+    selectedCapabilityProviders: selectedProviders,
+    subjectiveUiCapabilityAmplification: {
+      intent: "把许愿式产品构建需求放大成用户能看懂的业务执行图，再映射到 agent、skill、MCP、command、runtime tool 和验证 owner。",
+      decisionCheckpoints: [
+        {
+          stage: "Critical",
+          surface: "request_user_input_if_route_changes",
+          question: "如果产品方向、发布风险或自动化边界会改变执行路线，先让用户选择范围。",
+          options: ["先做 MVP", "先做方案和风险评审", "直接进入实现"],
+          requiredBefore: "Execution when route-changing ambiguity remains",
+        },
+      ],
+      lanes: lanesWithBindings,
+      candidateLaneUniverse: candidateLanes.map((item) => item.laneId),
+      laneSelectionPolicy:
+        "dynamic_evidence_screening: keep a broad candidate universe, select only lanes justified by current task signals, and record omitted lanes with human-readable reasons.",
+      capabilityTeamBlueprint,
+      omittedLanesWithReason,
+      readBeforeEditPolicy:
+        "Any implementation lane must read target files in the same turn before apply_patch/Edit/Write.",
+      reviewUse:
+        "Review checks product value, platform risk, implementation boundaries, test evidence, and whether the route stayed user-visible.",
+      evolutionUse:
+        "Evolution writes back only when repeated product-build routing exposes a reusable agent, skill, MCP, command, or hook improvement.",
+    },
+    blockedReasons: missing,
+  };
+}
+
+const syntheticRoutes = [
+  productBuildOrchestrationRoute(),
+  subjectiveUiDesignRoute(),
+  executionCapabilityDiscoveryRoute(),
+].filter(Boolean);
 const rankedRoutes = [...candidateWeapons.map(routeForWeapon), ...syntheticRoutes].sort((a, b) => b.score - a.score);
 const recommendedRoute = rankedRoutes.find((route) => route.score >= 85) ?? rankedRoutes.find((route) => route.score >= 70) ?? null;
 const capabilityGapPacket = recommendedRoute ? null : {
@@ -848,7 +1909,7 @@ const userChoiceNeeded = Boolean(recommendedRoute && recommendedRoute.score >= 7
 const decisionCard = userChoiceNeeded ? {
   recommendedDefault: recommendedRoute.id,
   reason: "Route is useful but needs confirmation or more evidence because score is 70-84.",
-  choicePolicy: choicePolicy.choiceRequiredWhen,
+  choicePolicy: choiceSurfacePolicy.choiceRequiredWhen,
   options: rankedRoutes.slice(0, 3).map((route) => ({
     id: route.id,
     bestFor: route.scoreBand,
@@ -864,16 +1925,24 @@ const routeExecutionGate = {
   canEnterExecution:
     Boolean(recommendedRoute?.score >= 85) &&
     !globalInventoryFreshness.refreshRequiredBeforeExecution &&
-    !capabilityGapBlocksExecution,
+    !capabilityGapBlocksExecution &&
+    !criticalChoiceBlocksExecution &&
+    !thinkingChoiceBlocksExecution,
   blockedBy: [
     ...(!recommendedRoute ? ["missing_recommended_route"] : []),
     ...(recommendedRoute && recommendedRoute.score < 85 ? ["route_requires_confirmation_or_more_fetch"] : []),
     ...(globalInventoryFreshness.refreshRequiredBeforeExecution ? ["global_capability_inventory_refresh_required"] : []),
     ...(capabilityGapBlocksExecution ? ["capability_gap_decision_blocks_execution"] : []),
+    ...(criticalChoiceBlocksExecution ? ["native_choice_surface_required_before_execution"] : []),
+    ...(thinkingChoiceBlocksExecution ? ["thinking_route_choice_required_before_execution"] : []),
   ],
   returnToStage: !recommendedRoute
     ? "Thinking"
     : capabilityGapBlocksExecution
+      ? "Thinking"
+    : criticalChoiceBlocksExecution
+      ? "Critical"
+    : thinkingChoiceBlocksExecution
       ? "Thinking"
     : recommendedRoute.score < 85 || globalInventoryFreshness.refreshRequiredBeforeExecution
       ? "Fetch"
@@ -885,9 +1954,29 @@ const routeExecutionGate = {
       ? "Route preview is available, but Execution needs confirmation or stronger provider evidence before starting."
       : capabilityGapBlocksExecution
         ? "Capability-gap decision requires approval, stronger evidence, or return to Thinking before Execution."
+      : criticalChoiceBlocksExecution
+        ? "The input has a route-changing ambiguity and requires a trusted native choice-surface answer before Execution."
+      : thinkingChoiceBlocksExecution
+        ? "The user intent is calibrated, but the fetched capability route still has multiple product/design execution paths; Thinking needs a trusted native route choice before Execution."
       : globalInventoryFreshness.refreshRequiredBeforeExecution
         ? "Cached provider evidence is missing or older than 14 days; route preview is allowed, but Execution must refresh capability discovery first."
         : "Cached provider evidence is fresh enough and the route has execution-grade owner/provider/verification binding.",
+  entryClassification,
+  choicePolicy,
+  nativeChoiceSurface: {
+    required: choicePolicy === "must_ask",
+    primarySurface: "request_user_input",
+    evidence: nativeChoiceEvidence,
+    rule:
+      "Branch-changing choices must be answered through the native host surface before Execution; artifact-only cards or chat text do not satisfy this gate.",
+  },
+  thinkingChoiceSurface: {
+    required: subjectiveThinkingChoiceRequired,
+    primarySurface: "request_user_input",
+    evidenceTrusted: hasChoiceStage("Thinking"),
+    rule:
+      "Subjective product/design work needs a second route choice after Fetch/Thinking when implementation paths have different scope, cost, and verification impact.",
+  },
 };
 
 const output = {
@@ -897,7 +1986,9 @@ const output = {
     scoreThreshold: intentContract.scoreBands?.find((band) => band.status?.includes("may_claim"))?.min ?? 90,
     reason: "Route may change based on real intent, success criteria, and userGoalDone evidence.",
   },
+  entryClassification,
   ownerDiscoveryPacket,
+  autonomousCapabilityDiscovery,
   candidateOwners: [...new Set([...candidateWeapons.flatMap((weapon) => weapon.ownerCandidates ?? []), ...ownerDiscoveryPacket.candidateExistingExecutionOwners])],
   candidateWeapons: candidateWeapons.map((weapon) => weapon.id),
   candidateDependencies: candidateDependencies.map((dep) => dep.id),
@@ -910,23 +2001,46 @@ const output = {
   osFilterResult: { requested: osArg, applied: osTarget, unsupported: !OS_TARGETS.includes(osTarget) },
   rankedRoutes,
   recommendedRoute,
+  subjectiveUiCapabilityAmplification: recommendedRoute?.subjectiveUiCapabilityAmplification ?? null,
+  decisionCheckpoints: recommendedRoute?.subjectiveUiCapabilityAmplification?.decisionCheckpoints ?? [],
   capabilityGapDetected,
   capabilityGapDecision,
   routeExecutionGate,
   userChoiceNeeded,
   decisionCard,
-  dispatchBoardDraft: recommendedRoute ? { owner: "meta-conductor", route: recommendedRoute.id, mergeOwner: "meta-warden" } : null,
-  workerTaskPacketDrafts: recommendedRoute ? [{
-    ownerAgent: recommendedRoute.owner,
-    roleDisplayName: recommendedRoute.owner?.replace(/^meta-/, "") ?? "unknown",
-    weapon: recommendedRoute.weapon,
-    dependency: recommendedRoute.dependency,
-    runtime,
-    os: osTarget,
-    verificationOwner: recommendedRoute.verificationOwner,
-    dependsOn: [],
+  dispatchBoardDraft: recommendedRoute ? {
+    owner: "meta-conductor",
+    route: recommendedRoute.id,
     mergeOwner: "meta-warden",
-  }] : [],
+    parallelGroups: recommendedRoute.subjectiveUiCapabilityAmplification?.lanes?.map((lane) => lane.parallelGroup) ?? [],
+  } : null,
+  workerTaskPacketDrafts: recommendedRoute?.subjectiveUiCapabilityAmplification?.lanes
+    ? recommendedRoute.subjectiveUiCapabilityAmplification.lanes.map((lane) => ({
+        ownerAgent: lane.ownerAgent,
+        roleDisplayName: lane.roleDisplayName,
+        roleInstanceId: lane.laneId,
+        weapon: recommendedRoute.weapon,
+        dependency: lane.capabilityProvider?.id ?? recommendedRoute.dependency,
+        runtime,
+        os: osTarget,
+        verificationOwner: recommendedRoute.verificationOwner,
+        dependsOn: lane.dependsOn,
+        parallelGroup: lane.parallelGroup,
+        mergeOwner: "meta-warden",
+        purpose: lane.purpose,
+        decisionImpact: lane.decisionImpact,
+      }))
+    : recommendedRoute ? [{
+        ownerAgent: recommendedRoute.owner,
+        roleDisplayName: recommendedRoute.owner?.replace(/^meta-/, "") ?? "unknown",
+        weapon: recommendedRoute.weapon,
+        dependency: recommendedRoute.dependency,
+        runtime,
+        os: osTarget,
+        verificationOwner: recommendedRoute.verificationOwner,
+        dependsOn: [],
+        mergeOwner: "meta-warden",
+      }] : [],
   capabilityGapPacket,
   verificationPlan: {
     command: "npm run meta:route:validate",

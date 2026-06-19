@@ -27,6 +27,9 @@ export function isGlobalMetaKimManagedHookCommand(command) {
   if (norm.includes("hooks/meta-kim/")) {
     return true;
   }
+  if (norm.includes("/hooks/hookprompt-adapter.mjs")) {
+    return true;
+  }
   const managedFiles = [
     ...REPO_META_KIM_HOOK_FILES,
     ...RETIRED_META_KIM_HOOK_FILES,
@@ -36,6 +39,18 @@ export function isGlobalMetaKimManagedHookCommand(command) {
       norm.includes(`/hooks/${file}`) ||
       norm.includes(`.claude/hooks/${file}`) ||
       norm.includes(`/hooks/${file} `),
+  );
+}
+
+export function isRawHookPromptUserPromptSubmitCommand(command) {
+  if (typeof command !== "string") {
+    return false;
+  }
+  const norm = normalizeHookCommand(command).replace(/\\/g, "/");
+  return (
+    norm.includes("/hooks/user-prompt-submit.js") ||
+    norm.includes("/skills/hookprompt/.claude/hooks/user-prompt-submit.js") ||
+    norm.includes("/skills/hookprompt/.codex/hooks/user-prompt-submit.js")
   );
 }
 
@@ -68,7 +83,11 @@ export function hookCommandNode(absScriptPath) {
 }
 
 /** Hook blocks matching Meta_Kim canonical runtime (absolute paths under meta-kim/). */
-export function buildMetaKimHooksTemplate(absHooksDir, packageRoot = null) {
+export function buildMetaKimHooksTemplate(
+  absHooksDir,
+  packageRoot = null,
+  { hookPromptAdapter = false, hookPromptCommand = null } = {},
+) {
   const cmd = (name, args = []) => ({
     type: "command",
     command: [
@@ -77,15 +96,27 @@ export function buildMetaKimHooksTemplate(absHooksDir, packageRoot = null) {
     ].join(" "),
   });
 
+  const userPromptHooks = [];
+  if (hookPromptCommand) {
+    userPromptHooks.push({
+      type: "command",
+      command: hookPromptCommand,
+      timeout: 10000,
+    });
+  } else if (hookPromptAdapter) {
+    userPromptHooks.push(cmd("hookprompt-adapter.mjs"));
+  }
+  userPromptHooks.push(
+    cmd(
+      "activate-meta-theory-spine.mjs",
+      packageRoot ? ["--package-root", packageRoot] : [],
+    ),
+  );
+
   return {
     UserPromptSubmit: [
       {
-        hooks: [
-          cmd(
-            "activate-meta-theory-spine.mjs",
-            packageRoot ? ["--package-root", packageRoot] : [],
-          ),
-        ],
+        hooks: userPromptHooks,
       },
     ],
     PreToolUse: [
@@ -104,7 +135,8 @@ export function stripGlobalMetaKimHookEntriesFromBlocks(blocks) {
       hooks: (block.hooks || []).filter(
         (h) =>
           !isGlobalMetaKimManagedHookCommand(h.command || "") &&
-          !isRetiredMetaKimHookCommand(h.command || ""),
+          !isRetiredMetaKimHookCommand(h.command || "") &&
+          !isRawHookPromptUserPromptSubmitCommand(h.command || ""),
       ),
     }))
     .filter((block) => (block.hooks || []).length > 0);
@@ -215,7 +247,10 @@ export function mergeGlobalMetaKimHooksIntoSettings(settings, template) {
   }
 
   for (const [event, additionBlocks] of Object.entries(template)) {
-    hooks[event] = mergeHookMatcherBlocks(hooks[event] || [], additionBlocks);
+    hooks[event] =
+      event === "UserPromptSubmit"
+        ? mergeHookMatcherBlocks(additionBlocks, hooks[event] || [])
+        : mergeHookMatcherBlocks(hooks[event] || [], additionBlocks);
   }
 
   next.hooks = hooks;

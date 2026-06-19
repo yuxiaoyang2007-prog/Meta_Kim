@@ -383,6 +383,59 @@ function buildPacket(testCase, cursorContract) {
       "record contradictions before Thinking",
     ],
     originalSynthesisPolicy: ORIGINAL_SYNTHESIS_POLICY,
+    decisionQualityFrame: {
+      intent: testCase.researchRequired
+        ? "Close the evidence gaps that can change route, owner, risk, acceptance, or verification."
+        : "Explain why local evidence is enough before Thinking.",
+      subject: "Meta_Kim conductor, reviewer, and verification owner.",
+      path: "Prompt -> evidence gaps -> source coverage -> competing routes -> minimum test -> Thinking handoff.",
+      constraints: [
+        "Do not turn search volume into decision quality.",
+        "Do not activate external providers without approval or credential proof.",
+      ],
+      evidenceUse: "Only evidence that changes or blocks a route can drive Thinking.",
+      outputCommitment: "Produce a pass, blocked, or return-to-Fetch handoff with concrete next action.",
+    },
+    competingHypotheses: [
+      {
+        hypothesis: "Local Meta_Kim evidence is enough for the decision.",
+        wouldExpect: "Required route facts resolve to canonical source, contract, or project evidence.",
+        disconfirmingEvidence: "Missing current platform/API/policy facts or unresolved approval boundaries.",
+        currentStatus: testCase.researchRequired ? "not_supported_without_external_fetch" : "supported",
+        decisionImpact: "Allows Thinking to stay local only when all route-changing facts are repo-current.",
+      },
+      {
+        hypothesis: "External or cross-source research is required before Thinking.",
+        wouldExpect: "The task depends on current facts, third-party policies, provider behavior, or market/API evidence.",
+        disconfirmingEvidence: "No route-changing claim depends on external freshness or third-party behavior.",
+        currentStatus: testCase.researchRequired ? "supported" : "not_required",
+        decisionImpact: "Forces Fetch to gather source-backed evidence or block route lock.",
+      },
+    ],
+    minimumDecisionTest: {
+      goal: "Determine whether research can safely hand off to Thinking.",
+      input: "Source list, key information targets, claim cards, contradictions, and capability readiness.",
+      action: "Check whether the preferred route survives counterevidence and whether blocked gaps are explicit.",
+      output: "readyForThinking true/false plus returnToStage when blocked.",
+      passCondition: "Every route-changing claim has source support, counterevidence check, and decision impact.",
+      failSignal: "Single-source route claim, stale source, missing credential/approval, or unclosed key information target.",
+      nextStep: "Proceed to Thinking if pass; otherwise return to Fetch or approval.",
+      doNotDo: "Do not produce a longer report to hide unresolved evidence gaps.",
+    },
+    evidenceConfidencePolicy: {
+      sourceStates: ["confirmed", "user_provided", "inference", "unconfirmed"],
+      downgradeReasons: ["single_source", "stale", "indirect", "conflicted", "unverified_origin"],
+    },
+    decisionReadinessGate: {
+      requiredSignals: [
+        "right_frame",
+        "real_alternatives",
+        "meaningful_data",
+        "tradeoffs_clear",
+        "logical_reasoning",
+        "action_commitment",
+      ],
+    },
     freshnessPolicy: testCase.researchRequired
       ? "current facts and official/provider claims must be refreshed during Fetch"
       : "repo-current local evidence is enough",

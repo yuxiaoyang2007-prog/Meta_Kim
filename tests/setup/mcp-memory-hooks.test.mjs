@@ -2,6 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -971,6 +972,51 @@ describe("MCP memory cross-runtime hooks", () => {
       assert.ok(codexHooks.hooks.SessionStart);
       assert.ok(codexHooks.hooks.UserPromptSubmit);
       assert.ok(codexHooks.hooks.Stop);
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  test("installer reuses runtime meta-kim hook package when present", () => {
+    const tempHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-memory-namespaced-"));
+    try {
+      mkdirSync(path.join(tempHome, ".codex", "hooks", "meta-kim"), {
+        recursive: true,
+      });
+      const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+      const result = spawnSync(
+        process.execPath,
+        [installer, "--targets", "codex"],
+        {
+          cwd: repoRoot,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            HOME: tempHome,
+            USERPROFILE: tempHome,
+          },
+          timeout: 10000,
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      const namespacedHook = path.join(
+        tempHome,
+        ".codex",
+        "hooks",
+        "meta-kim",
+        "meta-kim-memory-save.mjs",
+      );
+      assert.equal(existsSync(namespacedHook), true);
+      assert.equal(
+        existsSync(path.join(tempHome, ".codex", "hooks", "meta-kim-memory-save.mjs")),
+        false,
+      );
+      const codexHooks = JSON.parse(
+        readFileSync(path.join(tempHome, ".codex", "hooks.json"), "utf8"),
+      );
+      const renderedHooks = JSON.stringify(codexHooks).replace(/\\\\/g, "/");
+      assert.match(renderedHooks, /hooks\/meta-kim\/meta-kim-memory-save\.mjs/);
     } finally {
       rmSync(tempHome, { recursive: true, force: true });
     }

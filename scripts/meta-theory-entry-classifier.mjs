@@ -7,10 +7,10 @@ const EXPLICIT_META_THEORY_RE =
   /(?:^|\b)(?:\/?meta-theory|meta theory|run meta theory|execute meta theory)(?:\b|$)|元理论/u;
 
 const ACTION_RE =
-  /\b(?:build|create|implement|fix|repair|change|update|refactor|plan|start|handle|organize|prioritize|verify|review|audit|generate|write|sync)\b|(?:帮我|开始|处理|整理|规划|修复|验证|审查|检查|生成|写|改|优化|同步)/iu;
+  /\b(?:build|create|implement|fix|repair|change|update|refactor|plan|start|handle|organize|prioritize|verify|review|audit|generate|write|sync)\b|(?:帮我|开始|处理|整理|规划|修复|验证|审查|检查|生成|写|改|优化|同步|做|拆|拆解|落地)/iu;
 
 const DURABLE_OUTPUT_RE =
-  /\b(?:plan|checklist|priority|priorities|recommendation|recommendations|verification|audit|report|artifact|implementation|fixes|tests?)\b|(?:优先级|修复建议|验证清单|计划|报告|产物|测试|清单|建议)/iu;
+  /\b(?:plan|checklist|priority|priorities|recommendation|recommendations|verification|audit|report|artifact|implementation|fixes|tests?|roadmap|launch plan)\b|(?:优先级|修复建议|验证清单|计划|报告|产物|测试|清单|建议|落地|方案|路径|拆解)/iu;
 
 const PURE_QUERY_RE =
   /^(?:what|why|how|when|where|who|is|are|can|could|should)\b|^(?:什么|为什么|怎么|如何|是否|能否|可以|介绍|解释|说明)/iu;
@@ -24,7 +24,7 @@ const FILE_OR_MUTATION_RE =
   /\b(?:file|code|repo|repository|project|app|page|component|test|config|contract|script)\b|(?:文件|代码|仓库|项目|页面|组件|测试|配置|合同|脚本)/iu;
 
 const PRODUCT_BUILD_OBJECT_RE =
-  /\b(?:app|web app|dashboard|platform|tool|saas|automation|publisher|scheduler|workflow)\b|(?:系统|平台|工具|应用|网站|面板|看板|自动发布器|发布器|营销.*器|自动化|工作流|小红书)/iu;
+  /\b(?:app|web app|dashboard|platform|tool|saas|automation|publisher|scheduler|workflow|product|assistant|content)\b|(?:系统|平台|工具|应用|网站|面板|看板|自动发布器|发布器|营销.*器|自动化|工作流|小红书|东西|产品|助手|内容)/iu;
 
 const PROJECT_UNDERSTANDING_RE =
   /\b(?:project|repo|repository|codebase|architecture|commerciali[sz]e|market|competitor|business model|strategy|roadmap)\b|(?:项目|仓库|代码库|架构|怎么玩|干啥|做什么|商业化|市场|竞品|商业模式|发展|路线图|战略)/iu;
@@ -37,6 +37,9 @@ const COMPLEXITY_COMPLAINT_RE =
 
 const MULTI_LANE_WORD_RE =
   /\b(?:review|fix|verify|test|release|sync|hook|security|frontend|backend|database|api|docs|research|runtime|mcp|tool|agent|skill)\b|(?:审查|修复|验证|测试|发布|同步|钩子|安全|前端|后端|数据库|接口|文档|调研|运行时|工具|智能体|技能)/giu;
+
+const HIGH_RISK_DECISION_RE =
+  /\b(?:deploy|publish|release|production|auth|permission|security|delete|remove|payment|credential|secret|database|migration)\b|(?:发布|上线|生产|权限|安全|删除|支付|凭证|密钥|数据库|迁移)/iu;
 
 function normalizePrompt(prompt) {
   return String(prompt ?? "").trim();
@@ -119,9 +122,44 @@ function buildFanoutMetadata(text, context) {
   };
 }
 
+function buildAmbiguityPacket(text, {
+  subjectiveQuality = false,
+  actionIntent = false,
+  fileOrMutationIntent = false,
+  productBuildIntent = false,
+} = {}) {
+  const routeChangingDimensions = [];
+  if (subjectiveQuality) routeChangingDimensions.push("quality_dimension");
+  if (fileOrMutationIntent || productBuildIntent) routeChangingDimensions.push("scope");
+  if (HIGH_RISK_DECISION_RE.test(text)) routeChangingDimensions.push("risk_or_permission");
+
+  const changesExecutionRoute = subjectiveQuality && actionIntent;
+  const highRisk = HIGH_RISK_DECISION_RE.test(text);
+  const safeDefaultAvailable = changesExecutionRoute && !highRisk;
+  const choicePolicy = changesExecutionRoute ? "must_ask" : "no_choice_needed";
+
+  return {
+    ambiguous: changesExecutionRoute,
+    basis:
+      "Ask when missing information would change execution route, acceptance, risk, owner, permission, non-goal, or scope.",
+    routeChangingDimensions,
+    safeDefaultAvailable,
+    userDelegatedDefault: false,
+    choicePolicy,
+    recommendedDefaultRoute: safeDefaultAvailable
+      ? "Offer the narrowest reversible option as the recommended native choice, but do not execute until the native choice surface records an answer."
+      : null,
+    mustAskReason:
+      choicePolicy === "must_ask"
+        ? "The missing answer changes route, risk, owner, acceptance, permission, non-goal, or scope; a native choice answer is required before execution."
+        : null,
+  };
+}
+
 function withFanoutMetadata(base, text, context) {
   return {
     ...base,
+    ambiguityPacket: buildAmbiguityPacket(text, context),
     ...buildFanoutMetadata(text, context),
   };
 }
@@ -142,6 +180,8 @@ export function classifyMetaTheoryEntry(prompt) {
     productBuildIntent,
     durableOutputIntent,
     fileOrMutationIntent,
+    subjectiveQuality,
+    actionIntent,
   };
 
   if (!text) {
@@ -175,7 +215,7 @@ export function classifyMetaTheoryEntry(prompt) {
       taskClassification: "meta_theory_auto",
       triggerReason: "subjective_quality_ambiguous",
       choiceSurfaceState: "critical_clarification_allowed",
-      shouldAskBeforeFetch: true,
+      shouldAskBeforeFetch: buildAmbiguityPacket(text, fanoutContext).choicePolicy === "must_ask",
       confidence: 0.9,
     }, text, fanoutContext);
   }
@@ -185,10 +225,10 @@ export function classifyMetaTheoryEntry(prompt) {
       governedEntry: true,
       path: "standard_path",
       taskClassification: "meta_theory_auto",
-      triggerReason: durableOutputIntent
-        ? "natural_language_durable_work"
-        : productBuildIntent
+      triggerReason: productBuildIntent
           ? "natural_language_product_build"
+          : durableOutputIntent
+        ? "natural_language_durable_work"
           : "natural_language_execution_work",
       choiceSurfaceState: "not_allowed",
       shouldAskBeforeFetch: false,

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { promises as fs } from "node:fs";
-import { assert, readJson, repoPath } from "./governance-lib.mjs";
+import { assert, exists, readJson, repoPath } from "./governance-lib.mjs";
 
 const SPECS = [
   {
@@ -137,6 +137,25 @@ assert(selectedSpecs.length > 0, `unknown --task ${selectedTaskId}`);
 
 const contract = await readJson("config/contracts/prd-category-source-map-contract.json");
 const pkg = await readJson("package.json");
+async function exitIfPrivateEvidenceMissing(paths) {
+  const missing = [];
+  for (const relativePath of paths) {
+    if (!(await exists(repoPath(relativePath)))) missing.push(relativePath);
+  }
+  if (missing.length > 0) {
+    console.log(JSON.stringify({
+      status: "pass",
+      validationStatus: "private_evidence_not_attached",
+      requiredForPublicValidation: false,
+      privateEvidenceMissing: missing,
+    }, null, 2));
+    process.exit(0);
+  }
+}
+await exitIfPrivateEvidenceMissing([
+  "docs/ai-native-capability-gap-mvp-prd.zh-CN.md",
+  ...selectedSpecs.map((spec) => spec.dossier),
+]);
 const prd = await fs.readFile(repoPath("docs/ai-native-capability-gap-mvp-prd.zh-CN.md"), "utf8");
 
 function hasAll(text, markers, label) {

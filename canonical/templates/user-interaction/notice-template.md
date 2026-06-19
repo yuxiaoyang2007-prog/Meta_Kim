@@ -15,6 +15,8 @@ Use this template for informational updates that do not require user choice.
 
 This is the user-visible rendering of the `runStatusEnvelope` stored under `.meta-kim/state/{profile}/active-run.json` and `.meta-kim/state/{profile}/runs/{runId}/status.json`. It must stay short and must not expose internal protocol fields such as `Preflight`, `nativeChoiceSurface`, `conversation_fallback`, packet ids, or protocol traces unless the user explicitly asks for debug/audit/protocol details.
 
+For Codex App and Claude Code, render this template as ordinary assistant chat text. HookPrompt / `additionalContext`, hook `systemMessage` warnings, JSON artifacts, and markdown reports do not satisfy this notice by themselves, because users may never see them in the conversation. A captured CLI stdout notice counts only when the CLI command is explicitly invoked and its stdout is shown to the user.
+
 Render every public label and stage purpose from the selected Claude/Codex/Cursor/OpenClaw output language first. If the tool has not selected one, fall back to the user's latest input language. Keep canonical protocol stage labels such as `Critical`, `Fetch`, `Thinking`, and `Review` in English when useful, but pair them with a plain-language purpose, for example `Fetch：收集证据和能力来源`. Do not hardcode any single human language as the default public notice shell.
 
 ## Label Source
@@ -27,6 +29,7 @@ Render every public label and stage purpose from the selected Claude/Codex/Curso
 ## When to Use
 
 - Stage transitions (Critical → Fetch → Thinking → ...)
+- Run start, route selected before Execution, blocker/degraded state when present, and closure
 - Progress updates during long-running operations
 - Informational status that does not require branching logic
 - User asks whether meta-theory governance is active or what stage it is in

@@ -201,6 +201,10 @@ describe("setup update default flow", () => {
       "global install/update may ask for cleanup-only redundant project asset removal",
     );
     assert.match(source, /cleanupProjectRedundancyDirs\(activeTargets, cleanupDirs\)/);
+    assert.match(source, /projectCleanupMode/);
+    assert.match(source, /runProjectCleanupCli/);
+    assert.match(source, /--cleanup-projects/);
+    assert.match(source, /includeSelfCleanup/);
     assert.match(source, /if \(deployDirs\.length > 0\) \{\s*await copyToDeployDirs\(activeTargets, deployDirs\);/);
     assert.match(source, /copyToDeployDirs\(activeTargets, targetDirs\)/);
     assert.match(source, /projectDeployProtectionNote/);
@@ -230,6 +234,26 @@ describe("setup update default flow", () => {
       source,
       /const wantCleanup = await askYesNo\(t\.askProjectRedundantCleanup, true\);[\s\S]*?if \(savedDirs\.length === 0\) \{[\s\S]*?const dirs = await collectProjectDeployDirs\(false\);/,
       "answering yes to global cleanup must force directory entry when no saved directories exist",
+    );
+    assert.match(
+      cleanupFunctionSource,
+      /projectCleanupUseSaved\(savedDirs\.length\)/,
+      "cleanup mode must label saved project selection as cleanup, not update",
+    );
+    assert.match(
+      cleanupFunctionSource,
+      /projectCleanupSelectAndRemember/,
+      "cleanup mode must label saved-directory edits as cleanup",
+    );
+    assert.match(
+      cleanupFunctionSource,
+      /projectCleanupSelectOnce/,
+      "cleanup mode must label one-time directory selection as cleanup",
+    );
+    assert.doesNotMatch(
+      cleanupFunctionSource,
+      /projectDeployUseSaved\(savedDirs\.length\)|projectDeploySelectAndRemember|projectDeploySelectOnce/,
+      "cleanup mode must not reuse project update menu labels",
     );
   });
 
@@ -295,6 +319,11 @@ describe("setup update default flow", () => {
       cleanupSource,
       /reportProjectAssetCleanup\(cleanup, \{ reason: "global_redundancy" \}\)/,
       "global cleanup must keep global redundancy wording",
+    );
+    assert.match(
+      cleanupSource,
+      /resolve\(targetDir\) !== resolve\(PROJECT_DIR\)/,
+      "global cleanup must skip the self-host Meta_Kim source workspace by default",
     );
   });
 

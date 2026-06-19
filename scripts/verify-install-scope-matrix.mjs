@@ -26,8 +26,8 @@ const projectCases = [
   {
     id: "project-codex",
     targets: ["codex"],
-    present: ["AGENTS.md", ".codex/hooks.json"],
-    absent: ["CLAUDE.md", ".claude", ".agents", ".cursor", "openclaw"],
+    present: ["AGENTS.md", ".codex/hooks.json", ".agents/skills/meta-theory/SKILL.md"],
+    absent: ["CLAUDE.md", ".claude", ".cursor", "openclaw"],
   },
   {
     id: "project-cursor",
@@ -60,9 +60,10 @@ const projectCases = [
       "AGENTS.md",
       ".claude/settings.json",
       ".codex/hooks.json",
+      ".agents/skills/meta-theory/SKILL.md",
       ".mcp.json",
     ],
-    absent: [".agents", ".cursor", "openclaw"],
+    absent: [".cursor", "openclaw"],
   },
   {
     id: "project-all-explicit",
@@ -77,8 +78,9 @@ const projectCases = [
       ".cursor/mcp.json",
       "openclaw/openclaw.template.json",
       "openclaw/skills/meta-theory/SKILL.md",
+      ".agents/skills/meta-theory/SKILL.md",
     ],
-    absent: [".agents"],
+    absent: [],
   },
 ];
 

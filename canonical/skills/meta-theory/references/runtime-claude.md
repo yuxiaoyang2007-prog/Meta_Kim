@@ -12,6 +12,12 @@ Known limitation: PreToolUse hooks strip `AskUserQuestion` return data (GitHub i
 
 Trigger proof rule: when `AskUserQuestion` is available and `choiceSurfaceState` is `critical_clarification_allowed` or `execution_confirmation_allowed`, Claude Code must call `AskUserQuestion` or produce a deferred `AskUserQuestion` tool call for the host UI before Execution. A `cardPlanPacket`, CLI report, hook notification, or markdown decision card is not proof that the native question surface appeared. In non-interactive `claude -p` flows, acceptable proof is a deferred `AskUserQuestion` tool call handled by the caller or a non-empty resumed answer. Missing native proof blocks the run.
 
+## Visible Status Boundary
+
+Claude Code `UserPromptSubmit` / HookPrompt context can help Claude decide what to do, but it is not the same thing as telling the user what is happening. `MessageDisplay` can transform assistant text while it streams, but it is display-only: it cannot create a missing stage notice, cannot change what Claude sees, and cannot replace the conversation transcript. For Claude Code, the reliable user-visible status surface is the assistant message itself.
+
+Therefore every governed Claude Code run must render localized assistant-message notices for run start, route selected before Execution, blocker/degraded state when present, and closure. Use `AskUserQuestion` only for branch-changing decisions; do not use it for routine progress.
+
 Use `AskUserQuestion` in exactly these cases:
 
 - Critical clarification: only when the missing answer changes deliverable, scope, permission, safety, owner, capability, acceptance, or non-goal, and Fetch cannot safely proceed.
@@ -93,6 +99,7 @@ Do not copy the external hook's wording into durable Meta_Kim instructions. Keep
 - For agent creation/iteration, produce a durable project-agent candidate with formal tool projection targets from the sync manifest and compatibility catalog; use subagents only as factory or review workers.
 - Record unavailable providers as evidence, not as permission to fake delegation.
 - Cite `workerTaskPackets[].taskPacketId` in every Agent dispatch prompt.
+- Read the current content of every target file in the same execution turn before using Edit, MultiEdit, Write, or any command that rewrites it.
 - Build `fileChangeFactCard` before file mutation, and use it to answer write-time fact gates before retrying the same operation.
 - Block with `nativeChoiceSurfaceBlocked` when `AskUserQuestion` is unavailable, returns empty, or cannot be deferred to the host UI.
 
@@ -114,7 +121,7 @@ Do not copy the external hook's wording into durable Meta_Kim instructions. Keep
 ## Pass criteria
 
 - Every dispatched provider returned a result matching its declared output schema.
-- Every mutated file has a recorded target, consumer, overlap decision, and data-shape note where applicable.
+- Every mutated file was read before rewrite and has a recorded target, consumer, overlap decision, and data-shape note where applicable.
 - `AskUserQuestion` returned a non-empty answer, or non-interactive mode produced a deferred `AskUserQuestion` tool call that the host UI handles before resume.
 - `workerResultPackets[].schemaValidationAttempts[].passed === true` for each lane.
 - The main thread did not directly edit, write, or run implementation commands.
@@ -122,6 +129,7 @@ Do not copy the external hook's wording into durable Meta_Kim instructions. Keep
 ## Fail criteria
 
 - Main thread directly executed implementation work without dispatching a provider.
+- File mutation attempted through Edit, MultiEdit, Write, or rewrite commands before reading the target file in the same execution turn.
 - File mutation started without `fileChangeFactCard` when the change was non-trivial, new-file, data-file, runtime-facing, or hook-gated.
 - `AskUserQuestion` returned empty and the run did not block with `nativeChoiceSurfaceBlocked`.
 - `workerTaskPackets` missing `taskPacketId` or `roleInstanceId`.

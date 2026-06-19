@@ -52,9 +52,20 @@ describe("graphify idempotent wiring (contract)", () => {
     );
 
     assert.match(src, /function runRebuild\(\)/);
-    assert.match(src, /spawnSync\("graphify", \["update", "\."\]/);
-    assert.match(src, /\["-m", "graphify", "update", "\."\]/);
+    assert.match(src, /const graphifyArgs = \["update", "\."\]/);
+    assert.match(src, /spawnSync\("graphify", graphifyArgs/);
+    assert.match(src, /\["-m", "graphify", \.\.\.graphifyArgs\]/);
     assert.match(src, /case "rebuild":/);
+  });
+
+  test("graphify-cli.mjs can forward --force for intentional smaller rebuilds", () => {
+    const src = readFileSync(
+      path.join(root, "scripts/graphify-cli.mjs"),
+      "utf8",
+    );
+
+    assert.match(src, /process\.argv\.includes\("--force"\)/);
+    assert.match(src, /graphifyArgs\.push\("--force"\)/);
   });
 
   test("graphify-cli.mjs stamps freshness metadata after successful rebuild", () => {

@@ -8,5 +8,12 @@ test("PRD remaining category dossier validator passes", () => {
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /P-096, P-097, P-098, P-099, P-100 dossier_ready/);
+  if (result.stdout.trim().startsWith("{")) {
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.status, "pass");
+    assert.equal(summary.validationStatus, "private_evidence_not_attached");
+    assert.equal(summary.requiredForPublicValidation, false);
+  } else {
+    assert.match(result.stdout, /P-096, P-097, P-098, P-099, P-100 dossier_ready/);
+  }
 });

@@ -307,6 +307,47 @@
     },
     "qualityFirstPolicy": {
       "principle": "Start only when the work is defined well enough to create a ten-times-better outcome, not when a later review might catch defects.",
+      "hostVisibleNoticeContract": {
+        "required": true,
+        "primaryUserVisibleSurface": "assistant_chat_message",
+        "notUserVisibleSurfaces": [
+          "hookSpecificOutput.additionalContext",
+          "developer_context",
+          "systemMessage_warning",
+          "internal_artifact_only",
+          "markdown_report_only"
+        ],
+        "decisionSurfaceBoundary": "native_choice_for_branching_only",
+        "requiredMoments": [
+          "run_start",
+          "route_selected_before_execution",
+          "blocker_or_degraded_state",
+          "closure"
+        ],
+        "runtimeAdapters": {
+          "codex": {
+            "statusSurface": "assistant_chat_or_captured_cli_stdout",
+            "choiceSurface": "request_user_input",
+            "modelContextField": "hookSpecificOutput.additionalContext"
+          },
+          "claude": {
+            "statusSurface": "assistant_chat_message",
+            "choiceSurface": "AskUserQuestion",
+            "modelContextField": "hookSpecificOutput.additionalContext",
+            "displayTransformOnly": "MessageDisplay"
+          }
+        },
+        "i18n": {
+          "languageOrder": [
+            "runtime_selected_output_language",
+            "explicit_user_language",
+            "latest_user_input_language",
+            "neutral_fallback"
+          ],
+          "maxBulletsPerNotice": 3
+        },
+        "description": "Governed runs must show important progress in the conversation itself. HookPrompt/additionalContext, hook warnings, internal artifacts, and markdown reports may support the run but do not prove the user saw progress."
+      },
       "clarificationPolicy": {
         "questionCountPolicy": "no_quota_ask_only_outcome_branching",
         "askOnlyIfAnswerChangesExecution": true,
@@ -1821,6 +1862,11 @@
           "crossCheckStrategy",
           "originalSynthesisRules",
           "decisionImpactCriteria",
+          "decisionQualityFrame",
+          "competingHypotheses",
+          "minimumDecisionTest",
+          "evidenceConfidencePolicy",
+          "decisionReadinessGate",
           "keyInformationTargets",
           "iterationPlan",
           "stopCondition",
@@ -1837,6 +1883,51 @@
         "minimumSearchAngles": 3,
         "minimumKeySourcesToDeepRead": 3,
         "minimumIndependentSourcesForRouteChangingClaim": 2,
+        "decisionQualityFrameRequiredFields": [
+          "intent",
+          "subject",
+          "path",
+          "constraints",
+          "evidenceUse",
+          "outputCommitment"
+        ],
+        "minimumDecisionTestRequiredFields": [
+          "goal",
+          "input",
+          "action",
+          "output",
+          "passCondition",
+          "failSignal",
+          "nextStep",
+          "doNotDo"
+        ],
+        "competingHypothesesPolicy": {
+          "minimumHypotheses": 2,
+          "requiredFields": [
+            "hypothesis",
+            "wouldExpect",
+            "disconfirmingEvidence",
+            "currentStatus",
+            "decisionImpact"
+          ],
+          "rule": "Research must compare plausible alternatives and seek evidence that would weaken the preferred route before Thinking."
+        },
+        "evidenceConfidencePolicy": {
+          "sourceStates": ["confirmed", "user_provided", "inference", "unconfirmed"],
+          "downgradeReasons": ["single_source", "stale", "indirect", "conflicted", "unverified_origin"],
+          "rule": "Every route-changing claim must declare confidence state and downgrade reason when evidence is weaker than confirmed."
+        },
+        "decisionReadinessGate": {
+          "requiredSignals": [
+            "right_frame",
+            "real_alternatives",
+            "meaningful_data",
+            "tradeoffs_clear",
+            "logical_reasoning",
+            "action_commitment"
+          ],
+          "rule": "Fetch is not complete until the research can change a route, block a route, or define a minimum test."
+        },
         "snippetOnlyPolicy": "Search snippets may discover candidates, but route-changing claims require full source reading or an explicit blocked / unverified label.",
         "singleSourceClaimPolicy": "A claim supported by only one source must be flagged unverified and cannot alone decide owner, route, scope, acceptance, or release readiness.",
         "originalSynthesisPolicy": {

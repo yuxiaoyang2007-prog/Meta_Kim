@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-17T19:57:13.761Z",
+  "generatedAt": "2026-06-18T16:30:07.230Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -207,8 +207,8 @@
         "type": "skills",
         "namespace": "canonical",
         "path": "canonical/skills/meta-theory/SKILL.md",
-        "size": 59814,
-        "modified": "2026-06-16T19:44:09.903Z"
+        "size": 63538,
+        "modified": "2026-06-18T16:26:50.799Z"
       },
       "repo:canonical:same-set-reusable-flow-for-project-file-inventor": {
         "id": "same-set-reusable-flow-for-project-file-inventor",
@@ -233,8 +233,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/dev-governance.md",
         "relativePath": "dev-governance.md",
-        "size": 20363,
-        "modified": "2026-06-14T17:23:13.094Z"
+        "size": 21393,
+        "modified": "2026-06-18T08:47:19.052Z"
       },
       "repo:canonical-reference:evolution-writeback": {
         "id": "evolution-writeback",
@@ -305,8 +305,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/runtime-claude.md",
         "relativePath": "runtime-claude.md",
-        "size": 15436,
-        "modified": "2026-06-16T10:18:57.710Z"
+        "size": 16512,
+        "modified": "2026-06-18T16:13:44.715Z"
       },
       "repo:canonical-reference:runtime-codex": {
         "id": "runtime-codex",
@@ -314,8 +314,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/runtime-codex.md",
         "relativePath": "runtime-codex.md",
-        "size": 19309,
-        "modified": "2026-06-16T10:18:41.121Z"
+        "size": 20187,
+        "modified": "2026-06-18T16:13:44.714Z"
       },
       "repo:canonical-reference:spine-state": {
         "id": "spine-state",
@@ -352,8 +352,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/activate-meta-theory-spine.mjs",
         "relativePath": "activate-meta-theory-spine.mjs",
-        "size": 8845,
-        "modified": "2026-06-17T19:51:12.300Z"
+        "size": 9426,
+        "modified": "2026-06-18T03:21:46.963Z"
       },
       "repo:canonical-runtime-assets:meta-kim-memory-save.mjs": {
         "id": "meta-kim-memory-save.mjs",
@@ -397,8 +397,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/bash-readonly-whitelist.mjs",
         "relativePath": "bash-readonly-whitelist.mjs",
-        "size": 12795,
-        "modified": "2026-06-01T09:40:31.762Z"
+        "size": 13343,
+        "modified": "2026-06-18T02:44:00.041Z"
       },
       "repo:canonical-runtime-assets:block-dangerous-bash.mjs": {
         "id": "block-dangerous-bash.mjs",
@@ -424,8 +424,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
         "relativePath": "enforce-agent-dispatch.mjs",
-        "size": 43406,
-        "modified": "2026-06-17T19:13:28.285Z"
+        "size": 43445,
+        "modified": "2026-06-18T02:44:07.712Z"
       },
       "repo:canonical-runtime-assets:graphify-context.mjs": {
         "id": "graphify-context.mjs",
@@ -534,7 +534,7 @@
         "namespace": "repo-mcp",
         "path": ".mcp.json",
         "size": 220,
-        "modified": "2026-06-17T19:40:36.575Z"
+        "modified": "2026-06-18T16:18:03.279Z"
       }
     },
     "mcpTools": {
@@ -544,7 +544,7 @@
         "namespace": "repo-mcp",
         "path": ".mcp.json",
         "size": 220,
-        "modified": "2026-06-17T19:40:36.575Z"
+        "modified": "2026-06-18T16:18:03.279Z"
       },
       "repo:repo-mcp:meta-kim-runtime:get_meta_agent": {
         "id": "meta-kim-runtime:get_meta_agent",
@@ -552,7 +552,7 @@
         "namespace": "repo-mcp",
         "path": ".mcp.json",
         "size": 220,
-        "modified": "2026-06-17T19:40:36.575Z"
+        "modified": "2026-06-18T16:18:03.279Z"
       },
       "repo:repo-mcp:meta-kim-runtime:get_meta_runtime_capabilities": {
         "id": "meta-kim-runtime:get_meta_runtime_capabilities",
@@ -560,7 +560,7 @@
         "namespace": "repo-mcp",
         "path": ".mcp.json",
         "size": 220,
-        "modified": "2026-06-17T19:40:36.575Z"
+        "modified": "2026-06-18T16:18:03.279Z"
       }
     },
     "plugins": {

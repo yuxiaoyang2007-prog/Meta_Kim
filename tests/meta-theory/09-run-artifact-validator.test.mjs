@@ -348,6 +348,36 @@ describe("validate-run-artifact.mjs", () => {
     );
   });
 
+  test("rejects deep research without decision quality frame", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      delete artifact.contentEvidencePacket.deepResearchPlan.decisionQualityFrame;
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /decisionQualityFrame/,
+    );
+  });
+
+  test("rejects deep research without competing hypotheses", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.contentEvidencePacket.deepResearchPlan.competingHypotheses = [
+        artifact.contentEvidencePacket.deepResearchPlan.competingHypotheses[0],
+      ];
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /competingHypotheses/,
+    );
+  });
+
   test("rejects missing Critical production-correctness intent fields", async (t) => {
     const tempFixture = await writeTempFixture(t, (artifact) => {
       delete artifact.intentPacket.realIntent;

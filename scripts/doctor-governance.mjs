@@ -8,6 +8,7 @@
 
 import { promises as fs } from "node:fs";
 import { execFile } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
@@ -91,6 +92,91 @@ function collectClaudeHookCommands(hooksRoot) {
   return commands;
 }
 
+function hookCommandScriptPath(command) {
+  const trimmed = String(command ?? "").trim();
+  const quoted = trimmed.match(/^node\s+"([^"]+)"/u);
+  if (quoted) {
+    return quoted[1];
+  }
+  const unquoted = trimmed.match(/^node\s+([^\s]+)/u);
+  return unquoted?.[1] ?? null;
+}
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function checkGlobalClaudeHooksFallback() {
+  const claudeHome = process.env.META_KIM_CLAUDE_HOME ?? path.join(os.homedir(), ".claude");
+  const settingsPath = path.join(claudeHome, "settings.json");
+  let settings;
+  try {
+    settings = JSON.parse(await fs.readFile(settingsPath, "utf8"));
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `global Claude settings unreadable at ${settingsPath}: ${error.message}`,
+    };
+  }
+
+  const commands = collectClaudeHookCommands(settings.hooks);
+  const required = [
+    "hooks/meta-kim/activate-meta-theory-spine.mjs",
+    "hooks/meta-kim/block-dangerous-bash.mjs",
+  ];
+  const missing = [];
+
+  for (const requiredFragment of required) {
+    const command = commands.find((candidate) =>
+      candidate.replace(/\\/g, "/").includes(requiredFragment),
+    );
+    if (!command) {
+      missing.push(requiredFragment);
+      continue;
+    }
+    const scriptPath = hookCommandScriptPath(command);
+    if (!scriptPath || !(await fileExists(scriptPath))) {
+      missing.push(`${requiredFragment} (registered script missing)`);
+    }
+  }
+
+  async function hasExistingCommand(fragment) {
+    const command = commands.find((candidate) =>
+      candidate.replace(/\\/g, "/").includes(fragment),
+    );
+    if (!command) return false;
+    const scriptPath = hookCommandScriptPath(command);
+    return !scriptPath || (await fileExists(scriptPath));
+  }
+
+  const promptEntryCandidates = [
+    "hooks/meta-kim/hookprompt-adapter.mjs",
+    "hooks/user-prompt-submit.js",
+  ];
+  let promptEntryHealthy = false;
+  for (const candidateFragment of promptEntryCandidates) {
+    if (await hasExistingCommand(candidateFragment)) {
+      promptEntryHealthy = true;
+      break;
+    }
+  }
+  if (!promptEntryHealthy) {
+    missing.push(`prompt entry hook (${promptEntryCandidates.join(" or ")})`);
+  }
+
+  return missing.length === 0
+    ? { ok: true, settingsPath }
+    : {
+        ok: false,
+        reason: `global Claude hooks missing: ${missing.join(", ")}`,
+      };
+}
+
 async function checkContract() {
   const raw = await fs.readFile(CONTRACT, "utf8");
   const json = JSON.parse(raw);
@@ -107,8 +193,15 @@ async function checkHooks() {
   const settings = JSON.parse(await fs.readFile(SETTINGS, "utf8"));
   const hooks = settings.hooks;
   if (!hooks?.PreToolUse?.length || !hooks?.PostToolUse?.length) {
+    const globalFallback = await checkGlobalClaudeHooksFallback();
+    if (globalFallback.ok) {
+      return {
+        mode: "global",
+        settingsPath: globalFallback.settingsPath,
+      };
+    }
     throw new Error(
-      ".claude/settings.json: missing PreToolUse or PostToolUse hooks",
+      `.claude/settings.json has no project PreToolUse/PostToolUse hooks, and ${globalFallback.reason}`,
     );
   }
   // Compare by hook name: normalize both relative paths and absolute paths
@@ -121,6 +214,7 @@ async function checkHooks() {
       `Hook command set mismatch.\n  expected (${expected.length}): ${expected.join(", ")}\n  found (${found.length}): ${found.join(", ")}`,
     );
   }
+  return { mode: "project", settingsPath: SETTINGS };
 }
 
 async function checkSync() {
@@ -272,9 +366,11 @@ async function main() {
   }
 
   try {
-    await checkHooks();
+    const hookStatus = await checkHooks();
     runtimeLines.push(
-      `  [ok] .claude/settings.json hook commands (${EXPECTED_CLAUDE_HOOK_COMMANDS.length} commands)`,
+      hookStatus.mode === "global"
+        ? `  [ok] Claude global Meta_Kim hooks (${hookStatus.settingsPath})`
+        : `  [ok] .claude/settings.json hook commands (${EXPECTED_CLAUDE_HOOK_COMMANDS.length} commands)`,
     );
   } catch (e) {
     failed = true;

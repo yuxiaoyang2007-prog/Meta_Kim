@@ -551,6 +551,41 @@ async function validateWorkflowContract() {
     qualityFirst.promptPrecisionPolicy?.compactNotationAllowed === true,
     "workflow-contract.json qualityFirstPolicy must allow compact internal prompt notation.",
   );
+  const visibleNotice = qualityFirst.hostVisibleNoticeContract ?? {};
+  assert(
+    visibleNotice.required === true &&
+      visibleNotice.primaryUserVisibleSurface === "assistant_chat_message",
+    "workflow-contract.json qualityFirstPolicy.hostVisibleNoticeContract must require assistant-chat progress notices.",
+  );
+  for (const hiddenSurface of [
+    "hookSpecificOutput.additionalContext",
+    "markdown_report_only",
+  ]) {
+    assert(
+      visibleNotice.notUserVisibleSurfaces?.includes(hiddenSurface),
+      `workflow-contract.json hostVisibleNoticeContract.notUserVisibleSurfaces must include ${hiddenSurface}.`,
+    );
+  }
+  for (const requiredMoment of [
+    "run_start",
+    "route_selected_before_execution",
+    "closure",
+  ]) {
+    assert(
+      visibleNotice.requiredMoments?.includes(requiredMoment),
+      `workflow-contract.json hostVisibleNoticeContract.requiredMoments must include ${requiredMoment}.`,
+    );
+  }
+  assert(
+    visibleNotice.runtimeAdapters?.codex?.choiceSurface === "request_user_input" &&
+      visibleNotice.runtimeAdapters?.claude?.choiceSurface === "AskUserQuestion",
+    "workflow-contract.json hostVisibleNoticeContract must preserve native Codex and Claude choice surfaces.",
+  );
+  assert(
+    visibleNotice.i18n?.languageOrder?.includes("latest_user_input_language") &&
+      visibleNotice.i18n?.maxBulletsPerNotice === 3,
+    "workflow-contract.json hostVisibleNoticeContract must define i18n language fallback and concise notice size.",
+  );
 
   const requiredPackets = protocolFirst.requiredPackets ?? [];
   for (const packet of [
@@ -664,6 +699,11 @@ async function validateWorkflowContract() {
     "crossCheckStrategy",
     "originalSynthesisRules",
     "decisionImpactCriteria",
+    "decisionQualityFrame",
+    "competingHypotheses",
+    "minimumDecisionTest",
+    "evidenceConfidencePolicy",
+    "decisionReadinessGate",
     "keyInformationTargets",
     "iterationPlan",
     "stopCondition",
@@ -685,6 +725,32 @@ async function validateWorkflowContract() {
   assert(
     researchQualityGate.minimumIndependentSourcesForRouteChangingClaim >= 2,
     "workflow-contract.json deepResearchPlanQualityGate must require cross-source route evidence.",
+  );
+  for (const field of ["intent", "subject", "path", "constraints", "evidenceUse", "outputCommitment"]) {
+    assert(
+      researchQualityGate.decisionQualityFrameRequiredFields?.includes(field),
+      `workflow-contract.json deepResearchPlanQualityGate decisionQualityFrame must require ${field}.`,
+    );
+  }
+  for (const field of ["goal", "input", "action", "output", "passCondition", "failSignal", "nextStep", "doNotDo"]) {
+    assert(
+      researchQualityGate.minimumDecisionTestRequiredFields?.includes(field),
+      `workflow-contract.json deepResearchPlanQualityGate minimumDecisionTest must require ${field}.`,
+    );
+  }
+  assert(
+    researchQualityGate.competingHypothesesPolicy?.minimumHypotheses >= 2,
+    "workflow-contract.json deepResearchPlanQualityGate must require competing hypotheses.",
+  );
+  assert(
+    researchQualityGate.evidenceConfidencePolicy?.sourceStates?.includes("confirmed") &&
+      researchQualityGate.evidenceConfidencePolicy?.sourceStates?.includes("unconfirmed"),
+    "workflow-contract.json deepResearchPlanQualityGate must require evidence confidence states.",
+  );
+  assert(
+    researchQualityGate.decisionReadinessGate?.requiredSignals?.includes("real_alternatives") &&
+      researchQualityGate.decisionReadinessGate?.requiredSignals?.includes("action_commitment"),
+    "workflow-contract.json deepResearchPlanQualityGate must require decision readiness signals.",
   );
   assert(
     researchQualityGate.originalSynthesisPolicy?.forbidden?.includes(

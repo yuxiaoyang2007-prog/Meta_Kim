@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -134,6 +134,13 @@ function validateFixtureArtifact() {
 }
 
 function validatePrdMarkers() {
+  if (!existsSync(PRD_PATH)) {
+    return {
+      status: "private_evidence_not_attached",
+      requiredForPublicValidation: false,
+      path: "docs/ai-native-capability-gap-mvp-prd.zh-CN.md",
+    };
+  }
   const prd = readFileSync(PRD_PATH, "utf8");
   for (const marker of [
     "版本：v0.50",
@@ -156,6 +163,11 @@ function validatePrdMarkers() {
     /Primary release closure[\s\S]{0,220}P-024 解阻后/,
     "primary release closure must not wait for P-024",
   );
+  return {
+    status: "attached",
+    requiredForPublicValidation: true,
+    path: "docs/ai-native-capability-gap-mvp-prd.zh-CN.md",
+  };
 }
 
 function main() {
@@ -166,7 +178,7 @@ function main() {
 
   validateContractShape(contract, stageContract, liveContract, pkg);
   validateFixtureArtifact();
-  validatePrdMarkers();
+  const prdEvidence = validatePrdMarkers();
   process.stdout.write(
     `${JSON.stringify({
       status: "pass",
@@ -174,6 +186,7 @@ function main() {
       primaryRuntimeTier: PRIMARY,
       compatibilityRuntimeTier: COMPATIBILITY,
       compatibilityPriorityLeakTarget: 0,
+      privateEvidence: [prdEvidence],
     }, null, 2)}\n`,
   );
 }

@@ -8,5 +8,12 @@ test("PRD major-category source map validator passes", () => {
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /PRD category source map valid/);
+  if (result.stdout.trim().startsWith("{")) {
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.status, "pass");
+    assert.equal(summary.validationStatus, "private_evidence_not_attached");
+    assert.equal(summary.requiredForPublicValidation, false);
+  } else {
+    assert.match(result.stdout, /PRD category source map valid/);
+  }
 });

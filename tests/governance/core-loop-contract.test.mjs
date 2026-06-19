@@ -145,7 +145,7 @@ test("governed execution emits a coreLoop artifact summary", () => {
     ],
     { encoding: "utf8", timeout: 120_000 },
   );
-  assert.equal(result.status, 1, result.stderr || result.stdout);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
   const summary = JSON.parse(result.stdout);
   assert.equal(summary.status, "partial");
   assert.equal(summary.runId, runId);
@@ -425,7 +425,7 @@ test("host-visible subagents are observed, not relabeled as runner invocations",
     ],
     { encoding: "utf8", timeout: 120_000 },
   );
-  assert.equal(result.status, 1, result.stderr || result.stdout);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
   const summary = JSON.parse(result.stdout);
   assert.equal(summary.status, "partial");
   assert.equal(summary.runId, runId);
@@ -534,7 +534,7 @@ test("project-understanding governed run records deep Fetch source classes", () 
     ],
     { encoding: "utf8", timeout: 120_000 },
   );
-  assert.equal(result.status, 1, result.stderr || result.stdout);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
   const summary = JSON.parse(result.stdout);
   assert.equal(summary.status, "partial");
   assert.equal(summary.runId, runId);
@@ -566,6 +566,57 @@ test("project-understanding governed run records deep Fetch source classes", () 
   assert.equal(
     artifact.coreLoop.fetchPacket.capabilityDiscovery.searchLog.some((entry) =>
       String(entry.source ?? "").includes("MCP"),
+    ),
+    true,
+  );
+  rmSync(tempDir, { recursive: true, force: true });
+});
+
+test("default governed run is route-driven instead of old capability-gap orchestration", () => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-route-driven-"));
+  const runId = "route-driven-subjective-ui";
+  const result = spawnSync(
+    process.execPath,
+    [
+      "scripts/run-meta-theory-governed-execution.mjs",
+      "--task",
+      "这个页面不好看，帮我弄高级一点",
+      "--run-id",
+      runId,
+      "--state-dir",
+      tempDir,
+      "--db",
+      path.join(tempDir, "runs.sqlite"),
+    ],
+    { encoding: "utf8", timeout: 120_000 },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const artifact = JSON.parse(readFileSync(path.join(tempDir, `${runId}.json`), "utf8"));
+  const report = artifact.sourceArtifacts.orchestrationReport;
+  assert.equal(
+    report.selectedExecutionRoute.recommendedRoute.id,
+    "subjective-ui-design-orchestration:codex:windows",
+  );
+  assert.equal(report.decisionCounts.oldDefaultPath, 0);
+  assert.equal(artifact.workerTaskPackets.length, 6);
+  assert.ok(
+    artifact.workerTaskPackets.every(
+      (packet) => packet.packetKind === "run_scoped_task_not_agent_definition",
+    ),
+    "worker task cards must be marked as run tasks, not durable agent settings",
+  );
+  for (const packet of artifact.workerTaskPackets) {
+    assert.ok(Array.isArray(packet.skillLoadout), `${packet.roleInstanceId} missing skillLoadout`);
+    assert.ok(Array.isArray(packet.mcpLoadout), `${packet.roleInstanceId} missing mcpLoadout`);
+    assert.ok(Array.isArray(packet.toolLoadout), `${packet.roleInstanceId} missing toolLoadout`);
+    assert.ok(Array.isArray(packet.commandLoadout), `${packet.roleInstanceId} missing commandLoadout`);
+  }
+  assert.equal(
+    artifact.workerTaskPackets.some(
+      (packet) =>
+        packet.roleInstanceId === "read-before-edit-implementation" &&
+        packet.readBeforeEditRequired === true,
     ),
     true,
   );

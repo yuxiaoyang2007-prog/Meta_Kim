@@ -108,15 +108,35 @@ function buildMarkdown(packets) {
 }
 
 async function main() {
-  const prd = await fs.readFile(PRD_PATH, "utf8");
-  const tasks = parsePrdTasks(prd).filter((task) =>
-    /^P-0(?:26|27|28|34|36)$/.test(task.id),
-  );
+  let prd = "";
+  let privateEvidence = {
+    status: "attached",
+    requiredForPublicValidation: true,
+  };
+  try {
+    prd = await fs.readFile(PRD_PATH, "utf8");
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    privateEvidence = {
+      status: "private_evidence_not_attached",
+      requiredForPublicValidation: false,
+      path: relativeToRepo(PRD_PATH),
+    };
+  }
+  const tasks = prd
+    ? parsePrdTasks(prd).filter((task) => /^P-0(?:26|27|28|34|36)$/.test(task.id))
+    : Object.keys(COMMANDS_BY_TASK).map((taskId) => ({
+        id: taskId,
+        task: "Private PRD evidence is not attached; verify with the listed commands before claiming completion.",
+        owner: "verification",
+        status: "private_evidence_not_attached",
+      }));
   const packets = tasks.map(buildPacket);
   const report = {
     schemaVersion: "subwindow-verification-packets-v0.1",
     generatedAt: new Date().toISOString(),
     source: relativeToRepo(PRD_PATH),
+    privateEvidence,
     mainWindowName: "主窗口",
     packets,
   };
@@ -134,6 +154,7 @@ async function main() {
         packetCount: packets.length,
         report: relativeToRepo(jsonPath),
         markdown: relativeToRepo(mdPath),
+        prdEvidenceStatus: privateEvidence.status,
       },
       null,
       2,

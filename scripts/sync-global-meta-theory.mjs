@@ -11,6 +11,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import {
   buildMetaKimHooksTemplate,
+  hookCommandNode,
   isRetiredMetaKimHookCommand,
   isGlobalMetaKimManagedHookCommand,
   mergeHookMatcherBlocks,
@@ -33,7 +34,10 @@ import {
   applyRuntimePaths,
   buildCodexSkillContent,
 } from "./sync-runtimes.mjs";
-import { buildCodexHooksJson } from "./runtime-hook-mapping.mjs";
+import {
+  buildCodexHooksJson,
+  buildHookPromptAdapterSource,
+} from "./runtime-hook-mapping.mjs";
 
 // Recorder is lazily opened in runSync(); helpers record through this holder
 // so we do not have to thread recorder arg through every sync function.
@@ -628,7 +632,9 @@ async function syncClaudeGlobalSettingsHooks() {
   const settingsPath = path.join(runtimeHomes.claude.dir, "settings.json");
   assertHomeBound(settingsPath);
 
-  const template = buildMetaKimHooksTemplate(absHooks, repoRoot);
+  const template = buildMetaKimHooksTemplate(absHooks, repoRoot, {
+    hookPromptCommand: await claudeGlobalHookPromptCommand(),
+  });
   const recordSettingsMerge = () => {
     recordSafe((rec) => {
       const managedCommands = [];
@@ -696,6 +702,34 @@ function codexGlobalHooksJsonPath() {
   return path.join(runtimeHomes.codex.dir, "hooks.json");
 }
 
+function codexGlobalHookPromptAdapterPath() {
+  return path.join(runtimeHomes.codex.dir, "hooks", "hookprompt-adapter.mjs");
+}
+
+async function claudeGlobalHookPromptCommand() {
+  const scriptPath = path.join(
+    runtimeHomes.claude.dir,
+    "hooks",
+    "user-prompt-submit.js",
+  );
+  return (await pathExists(scriptPath)) ? hookCommandNode(scriptPath) : null;
+}
+
+async function ensureCodexGlobalHookPromptAdapter() {
+  const adapterPath = codexGlobalHookPromptAdapterPath();
+  assertHomeBound(adapterPath);
+  await fs.mkdir(path.dirname(adapterPath), { recursive: true });
+  await fs.writeFile(adapterPath, buildHookPromptAdapterSource("codex"), "utf8");
+  recordSafe((rec) =>
+    rec.recordFile(adapterPath, {
+      source: "sync-global-meta-theory",
+      purpose: "codex-global-hookprompt-adapter",
+      category: CATEGORIES.B,
+    }),
+  );
+  return adapterPath;
+}
+
 function buildCodexGlobalHooksTemplate() {
   const absHooks = codexGlobalMetaKimHooksDir();
   return buildCodexHooksJson({
@@ -707,6 +741,7 @@ function buildCodexGlobalHooksTemplate() {
       absHooks,
       "enforce-agent-dispatch.mjs",
     ),
+    hookPromptAdapterPath: codexGlobalHookPromptAdapterPath(),
   });
 }
 
@@ -854,7 +889,9 @@ function hookCommandScriptPath(command) {
 async function checkClaudeGlobalSettingsHooks() {
   const settingsPath = path.join(runtimeHomes.claude.dir, "settings.json");
   const absHooks = globalMetaKimHooksDir();
-  const template = buildMetaKimHooksTemplate(absHooks, repoRoot);
+  const template = buildMetaKimHooksTemplate(absHooks, repoRoot, {
+    hookPromptCommand: await claudeGlobalHookPromptCommand(),
+  });
   const settings = await readClaudeGlobalSettings(settingsPath);
   const expected = mergeGlobalMetaKimHooksIntoSettings(settings, template);
   stripRetiredGlobalHookEntries(expected);
@@ -1127,6 +1164,7 @@ async function runSync() {
 
   if (selectedTargetIds.includes("codex") && withGlobalHooks) {
     await copyCanonicalHooksToCodexGlobal();
+    await ensureCodexGlobalHookPromptAdapter();
     console.log(
       `${C.green}✓${C.reset} ${C.dim}Synced Codex global hooks: ${codexGlobalMetaKimHooksDir()}${C.reset}`,
     );

@@ -1247,7 +1247,69 @@
       ],
       "originalSynthesisRules": [
         "Extract Meta_Kim-native invariants and avoid copying external prompt structures."
-      ]
+      ],
+      "decisionQualityFrame": {
+        "intent": "Produce a decision-ready governed run artifact instead of a long unstructured report.",
+        "subject": "Meta_Kim maintainer, conductor, and verification owner.",
+        "path": "User request -> Fetch evidence -> competing routes -> minimum test -> Thinking handoff.",
+        "constraints": [
+          "Use source-backed evidence for route-changing claims.",
+          "Do not treat structural fixture evidence as live runtime proof."
+        ],
+        "evidenceUse": "Evidence must change or block owner, route, scope, risk, acceptance, or verification.",
+        "outputCommitment": "Return a concrete pass, blocked, or return-to-Fetch decision."
+      },
+      "competingHypotheses": [
+        {
+          "hypothesis": "The local governed artifact is enough for this fixture decision.",
+          "wouldExpect": "Required packet fields and evidence references resolve locally.",
+          "disconfirmingEvidence": "A missing packet, unresolved source ref, or external-current claim would refute this route.",
+          "currentStatus": "supported",
+          "decisionImpact": "Allows Thinking to proceed when the fixture stays local and validates."
+        },
+        {
+          "hypothesis": "External or cross-source research is required before route lock.",
+          "wouldExpect": "The task depends on current platform, API, policy, pricing, or market evidence.",
+          "disconfirmingEvidence": "All route-changing claims resolve to current local contract evidence.",
+          "currentStatus": "not_required_for_this_fixture",
+          "decisionImpact": "Blocks public-ready external claims until current evidence is attached."
+        }
+      ],
+      "minimumDecisionTest": {
+        "goal": "Decide whether Fetch evidence is strong enough to enter Thinking.",
+        "input": "contentEvidencePacket, claim evidence cards, contradictions, and validator policy.",
+        "action": "Validate the artifact and check whether the preferred route survives counterevidence.",
+        "output": "pass, blocked, or return_to_fetch decision.",
+        "passCondition": "Required packets validate and every route-changing claim has evidence and decision impact.",
+        "failSignal": "Missing field, unresolved evidence ref, stale claim, or unclosed key information target.",
+        "nextStep": "Enter Thinking when pass; otherwise return to Fetch and repair the evidence path.",
+        "doNotDo": "Do not write a longer report to hide unresolved evidence gaps."
+      },
+      "evidenceConfidencePolicy": {
+        "sourceStates": [
+          "confirmed",
+          "user_provided",
+          "inference",
+          "unconfirmed"
+        ],
+        "downgradeReasons": [
+          "single_source",
+          "stale",
+          "indirect",
+          "conflicted",
+          "unverified_origin"
+        ]
+      },
+      "decisionReadinessGate": {
+        "requiredSignals": [
+          "right_frame",
+          "real_alternatives",
+          "meaningful_data",
+          "tradeoffs_clear",
+          "logical_reasoning",
+          "action_commitment"
+        ]
+      }
     },
     "sourceCategoryCoverage": [
       "local-code",

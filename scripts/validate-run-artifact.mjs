@@ -1058,24 +1058,97 @@ function validateContentEvidencePacket(contract, artifact) {
     "contentEvidencePacket.capabilityGap must be a string or object.",
   );
   ensureObject(packet.deepResearchPlan, "contentEvidencePacket.deepResearchPlan");
-  for (const field of [
-    "keyInformationTargets",
+  const researchGate = policy.deepResearchPlanQualityGate ?? {};
+  const stringArrayPlanFields = [
+    "decisionUse",
     "questions",
     "sourceCategoriesPlanned",
+    "deepReadTargets",
+    "sourceQualityLadder",
+    "claimAttributionRules",
+    "crossCheckStrategy",
+    "originalSynthesisRules",
+    "decisionImpactCriteria",
+    "keyInformationTargets",
     "iterationPlan",
     "stopCondition",
     "decisionUpdateRule",
-    "decisionImpactCriteria",
-  ]) {
-    ensureStringArray(
-      packet.deepResearchPlan[field],
-      `contentEvidencePacket.deepResearchPlan.${field}`,
-    );
+  ];
+  for (const field of researchGate.requiredPlanFields ?? stringArrayPlanFields) {
+    const context = `contentEvidencePacket.deepResearchPlan.${field}`;
+    if (stringArrayPlanFields.includes(field)) {
+      ensureStringArray(packet.deepResearchPlan[field], context);
+      ensure(
+        packet.deepResearchPlan[field].length >= 1,
+        `${context} must explain what evidence would change the decision.`,
+      );
+    } else {
+      ensure(
+        packet.deepResearchPlan[field] && typeof packet.deepResearchPlan[field] === "object",
+        `${context} must be present for decision-grade research.`,
+      );
+    }
+  }
+  const decisionFrame = packet.deepResearchPlan.decisionQualityFrame;
+  ensureObject(decisionFrame, "contentEvidencePacket.deepResearchPlan.decisionQualityFrame");
+  for (const field of researchGate.decisionQualityFrameRequiredFields ?? []) {
     ensure(
-      packet.deepResearchPlan[field].length >= 1,
-      `contentEvidencePacket.deepResearchPlan.${field} must explain what evidence would change the decision.`,
+      typeof decisionFrame[field] === "string" ||
+        (Array.isArray(decisionFrame[field]) && decisionFrame[field].length >= 1),
+      `contentEvidencePacket.deepResearchPlan.decisionQualityFrame.${field} must be non-empty.`,
     );
   }
+  const minimumTest = packet.deepResearchPlan.minimumDecisionTest;
+  ensureObject(minimumTest, "contentEvidencePacket.deepResearchPlan.minimumDecisionTest");
+  for (const field of researchGate.minimumDecisionTestRequiredFields ?? []) {
+    ensureString(
+      minimumTest[field],
+      `contentEvidencePacket.deepResearchPlan.minimumDecisionTest.${field}`,
+    );
+  }
+  const hypothesisPolicy = researchGate.competingHypothesesPolicy ?? {};
+  ensureArray(
+    packet.deepResearchPlan.competingHypotheses,
+    "contentEvidencePacket.deepResearchPlan.competingHypotheses",
+  );
+  ensure(
+    packet.deepResearchPlan.competingHypotheses.length >=
+      (hypothesisPolicy.minimumHypotheses ?? 2),
+    "contentEvidencePacket.deepResearchPlan.competingHypotheses must compare at least two plausible routes or explanations.",
+  );
+  for (const [index, hypothesis] of packet.deepResearchPlan.competingHypotheses.entries()) {
+    const context = `contentEvidencePacket.deepResearchPlan.competingHypotheses[${index}]`;
+    ensureObject(hypothesis, context);
+    ensureFields(
+      hypothesis,
+      hypothesisPolicy.requiredFields ?? [
+        "hypothesis",
+        "wouldExpect",
+        "disconfirmingEvidence",
+        "currentStatus",
+        "decisionImpact",
+      ],
+      context,
+    );
+    for (const field of ["hypothesis", "wouldExpect", "disconfirmingEvidence", "currentStatus", "decisionImpact"]) {
+      ensureString(hypothesis[field], `${context}.${field}`);
+    }
+  }
+  const confidencePolicy = packet.deepResearchPlan.evidenceConfidencePolicy;
+  ensureObject(confidencePolicy, "contentEvidencePacket.deepResearchPlan.evidenceConfidencePolicy");
+  ensureStringArray(
+    confidencePolicy.sourceStates,
+    "contentEvidencePacket.deepResearchPlan.evidenceConfidencePolicy.sourceStates",
+  );
+  ensureStringArray(
+    confidencePolicy.downgradeReasons,
+    "contentEvidencePacket.deepResearchPlan.evidenceConfidencePolicy.downgradeReasons",
+  );
+  ensureObject(packet.deepResearchPlan.decisionReadinessGate, "contentEvidencePacket.deepResearchPlan.decisionReadinessGate");
+  ensureStringArray(
+    packet.deepResearchPlan.decisionReadinessGate.requiredSignals,
+    "contentEvidencePacket.deepResearchPlan.decisionReadinessGate.requiredSignals",
+  );
   for (const field of [
     "localSourcesRead",
     "contentFindings",

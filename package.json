@@ -1,6 +1,6 @@
 {
   "name": "meta-kim",
-  "version": "2.8.42",
+  "version": "2.8.43",
   "description": "Governance layer for AI coding: canonical meta agents and workflow contracts with formal Claude/Codex/OpenClaw/Cursor projections plus a source-backed candidate compatibility catalog.",
   "private": true,
   "type": "module",
