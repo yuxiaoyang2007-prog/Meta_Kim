@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "node .cursor/hooks/activate-meta-theory-spine.mjs --package-root __REPO_ROOT__",
+        "timeout": 5
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "node .cursor/hooks/enforce-agent-dispatch.mjs",
+        "timeout": 10,
+        "failClosed": true
+      },
+      {
+        "command": "node .cursor/hooks/graphify-context.mjs"
+      }
+    ],
+    "postToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "command": "node .cursor/hooks/post-format.mjs"
+          },
+          {
+            "command": "node .cursor/hooks/post-typecheck.mjs"
+          },
+          {
+            "command": "node .cursor/hooks/post-console-log-warn.mjs"
+          }
+        ]
+      }
+    ],
+    "subagentStart": [
+      {
+        "command": "node .cursor/hooks/subagent-context.mjs"
+      }
+    ],
+    "stop": [
+      {
+        "command": "node .cursor/hooks/stop-compaction.mjs"
+      },
+      {
+        "command": "node .cursor/hooks/stop-console-log-audit.mjs"
+      },
+      {
+        "command": "node .cursor/hooks/stop-completion-guard.mjs"
+      },
+      {
+        "command": "node .cursor/hooks/stop-spine-cleanup.mjs"
+      }
+    ]
+  }
+}

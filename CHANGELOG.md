@@ -8,6 +8,37 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## [Unreleased]
 
+## [2.8.44] - 2026-06-19
+
+### Solved Problem
+
+This release closes the install/update gap between canonical Meta_Kim sources, global hook packages, and project runtime projections. Fresh users and existing projects now get the same governed `meta-theory` behavior without copying reusable global assets into project mirrors, and source-repository health checks no longer misread intentionally absent generated runtime folders as stale installs.
+
+### Changed
+
+- **Canonical Runtime Source Projection** - `meta-theory` runtime smoke checks now fall back to canonical source assets when generated project mirrors are absent, while still failing materialized runtime mirrors that are broken or incomplete.
+- **Global Hook Dependency Closure** - Global Claude hook scripts now resolve shared helpers from the packaged `hooks/meta-kim/` directory instead of importing missing project-local shared paths.
+- **Fetch Self-Lock Repair Path** - Fetch-stage hook enforcement now allows a constrained repair-only `fetchRecord` write to `spine-state.json`, while keeping business-file mutation blocked until real capability discovery and execution clearance exist.
+- **Install And Update Scope Alignment** - Setup/update paths keep global installs global, bootstrap project mirrors only from canonical sources, and avoid treating the Meta_Kim source repository as a special-case install target.
+- **11-Phase User Visibility** - Governed run reports now keep the user-facing business phase focused on feedback/acceptance when runtime verification remains blocked, so users can see the next human action without losing blocker evidence.
+- **Product Bundle Bootstrap** - Product delivery bundle generation now shares one run id and state directory between the governed run and deliverable generation, eliminating the missing-run failure in clean smoke tests.
+- **First-Class Memory Discovery** - Canonical memory hooks are now represented as stable `memory` providers in the default capability inventory, so clean-state governed runs no longer depend on pre-existing local state files to prove memory capability coverage.
+- **Source Repository Health Wording** - Runtime health checks distinguish source-repository self-checks from installed-user mirrors, avoiding misleading stale-mirror messages for empty generated folders.
+
+### Verification
+
+- `npm run meta:verify:all`
+- `npm run meta:release:smoke`
+- `npm run meta:prd:smooth-capability:validate`
+- `npm run meta:prd:stage-runtime-control:validate`
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `node --test tests/meta-theory/32-meta-theory-four-product-targets.test.mjs`
+- `node --test tests/meta-theory/43-product-delivery-bundle.test.mjs`
+- `node --test tests/meta-theory/49-business-phase-visibility.test.mjs`
+- isolated setup/hooks worker: `130 pass / 0 fail`
+- runtime health worker: `meta:public-assets:validate`, `meta:check:runtimes`, hook sync tests, and stale projection simulation
+- `git diff --check`
+
 ## [2.8.43] - 2026-06-19
 
 ### Solved Problem

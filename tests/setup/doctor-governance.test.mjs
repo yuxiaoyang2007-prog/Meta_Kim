@@ -12,7 +12,9 @@ test("doctor-governance accepts healthy global hooks when project hooks are inte
   try {
     const claudeHome = join(root, ".claude");
     const hooksDir = join(claudeHome, "hooks", "meta-kim");
+    const projectSettingsPath = join(root, "project-settings.json");
     mkdirSync(hooksDir, { recursive: true });
+    writeFileSync(projectSettingsPath, '{"hooks":{}}\n', "utf8");
 
     for (const fileName of [
       "activate-meta-theory-spine.mjs",
@@ -69,6 +71,7 @@ test("doctor-governance accepts healthy global hooks when project hooks are inte
         env: {
           ...process.env,
           META_KIM_CLAUDE_HOME: claudeHome,
+          META_KIM_DOCTOR_PROJECT_SETTINGS: projectSettingsPath,
         },
         timeout: 120_000,
       },
@@ -88,7 +91,9 @@ test("doctor-governance accepts native Claude HookPrompt before Meta_Kim spine",
     const claudeHome = join(root, ".claude");
     const hooksDir = join(claudeHome, "hooks");
     const metaKimHooksDir = join(hooksDir, "meta-kim");
+    const projectSettingsPath = join(root, "project-settings.json");
     mkdirSync(metaKimHooksDir, { recursive: true });
+    writeFileSync(projectSettingsPath, '{"hooks":{}}\n', "utf8");
 
     writeFileSync(join(hooksDir, "user-prompt-submit.js"), "// native hookprompt\n", "utf8");
     for (const fileName of [
@@ -145,6 +150,7 @@ test("doctor-governance accepts native Claude HookPrompt before Meta_Kim spine",
         env: {
           ...process.env,
           META_KIM_CLAUDE_HOME: claudeHome,
+          META_KIM_DOCTOR_PROJECT_SETTINGS: projectSettingsPath,
         },
         timeout: 120_000,
       },

@@ -104,6 +104,7 @@ function refreshGlobalCapabilityInventory(activeTargets = []) {
     process.execPath,
     [
       path.join(repoRoot, "scripts", "discover-global-capabilities.mjs"),
+      "--runtime-inventory-only",
       "--targets",
       activeTargets.join(","),
     ],

@@ -165,6 +165,9 @@ describe("capability index inheritance chain", () => {
     assert.match(source, /function normalizePlatformTargets\(rawValue\)/);
     assert.match(source, /argValue\(args, "--targets"\) \|\| argValue\(args, "--platform"\)/);
     assert.match(source, /filterTargets\.length > 0/);
+    assert.match(source, /runtimeInventoryOnly/);
+    assert.match(source, /writeRepoIndex = !runtimeInventoryOnly/);
+    assert.match(source, /HOME_GLOBAL_INVENTORY/);
     assert.match(source, /\.meta-kim-legacy-backup\//);
     assert.doesNotMatch(
       source,
@@ -173,9 +176,14 @@ describe("capability index inheritance chain", () => {
     );
   });
 
-  test("repo canonical index and all runtime mirrors are byte-for-byte identical", async () => {
+  test("runtime mirror capability indexes are optional in clean checkout but exact when present", async () => {
     const canonical = await fs.readFile(canonicalIndexPath, "utf8");
     for (const mirrorPath of mirrorIndexPaths) {
+      try {
+        await fs.access(mirrorPath);
+      } catch {
+        continue;
+      }
       assert.equal(
         await fs.readFile(mirrorPath, "utf8"),
         canonical,
@@ -325,6 +333,11 @@ describe("capability index inheritance chain", () => {
     );
     assert.match(
       setupSource,
+      /"\-\-runtime-inventory-only"/,
+      "setup global install/update must refresh runtime inventory without writing project runtime mirrors",
+    );
+    assert.match(
+      setupSource,
       /"\-\-targets", activeTargets\.join\(","\)/,
       "setup.mjs must restrict global discovery to the selected runtime targets",
     );
@@ -344,6 +357,11 @@ describe("capability index inheritance chain", () => {
       installSource,
       /"--targets",\s*activeTargets\.join\(","\)/,
       "global skill dependency installer must restrict discovery to the selected runtime targets",
+    );
+    assert.match(
+      installSource,
+      /"\-\-runtime-inventory-only"/,
+      "global skill dependency installer must not refresh project runtime mirrors during global install/update",
     );
     assert.match(
       installSource,

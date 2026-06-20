@@ -163,7 +163,7 @@ function deriveOwnerAgents(artifact) {
     addOwner(artifact.dispatchEnvelopePacket?.[field]);
   }
   addOwner(artifact.cardPlanPacket?.dealerOwner);
-  for (const card of artifact.cardPlanPacket?.cards ?? []) {
+  for (const card of artifact.cardPlanPacket?.cardTypeDecisions ?? []) {
     addOwner(card.cardSource);
   }
   for (const decision of artifact.cardPlanPacket?.controlDecisions ?? []) {

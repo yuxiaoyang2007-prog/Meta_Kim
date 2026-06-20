@@ -8,6 +8,37 @@
 
 ## [Unreleased]
 
+## [2.8.44] - 2026-06-19
+
+### 解决的问题
+
+本次发布补上 canonical 源、全局 hook 包和项目 runtime 投影之间的安装/更新断层。新用户和已有项目现在会拿到一致的 governed `meta-theory` 行为；可复用的全局资产不会被误复制进项目镜像；源仓库自检也不会再把预期为空的生成目录误报成安装镜像过期。
+
+### 变更
+
+- **Canonical Runtime Source Projection** - `meta-theory` runtime smoke 检查在项目镜像尚未生成时会回退检查 canonical 源资产；但如果 runtime 镜像已经 materialized 且内容坏掉，仍然会判为不完整。
+- **全局 Hook 依赖闭环** - Claude 全局 hook 脚本现在从打包后的 `hooks/meta-kim/` 目录解析 shared helper，不再导入缺失的项目本地 shared 路径。
+- **Fetch 自锁维修路径** - Fetch 阶段的 hook enforcement 现在允许受限的 repair-only `fetchRecord` 写入 `spine-state.json`；但在完成真实能力发现和执行放行前，业务文件写入仍会被拦住。
+- **安装与更新范围对齐** - setup/update 路径保持全局安装只写全局、项目 bootstrap 只从 canonical 源生成项目镜像，并取消对 Meta_Kim 源仓库的特殊处理。
+- **11 阶段用户可见性** - governed run 报告在 runtime verification 仍然 blocked 时，会把用户可见 business phase 保持在 feedback / acceptance 等待点，同时保留 blocker 证据。
+- **产品交付包 Bootstrap** - product delivery bundle 生成现在让 governed run 和 deliverable generation 共用同一个 run id 与 state dir，修复 clean smoke 中找不到 governed run 的失败。
+- **一等 Memory 能力发现** - canonical memory hooks 现在会作为稳定的 `memory` provider 进入默认 capability inventory；干净 state 下的 governed run 不再依赖已有本地状态文件来证明 memory 能力覆盖。
+- **源仓库健康检查口径** - runtime health 检查区分源仓库自检和用户安装态镜像，避免对空生成目录输出误导性的 stale-mirror 文案。
+
+### 验证
+
+- `npm run meta:verify:all`
+- `npm run meta:release:smoke`
+- `npm run meta:prd:smooth-capability:validate`
+- `npm run meta:prd:stage-runtime-control:validate`
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `node --test tests/meta-theory/32-meta-theory-four-product-targets.test.mjs`
+- `node --test tests/meta-theory/43-product-delivery-bundle.test.mjs`
+- `node --test tests/meta-theory/49-business-phase-visibility.test.mjs`
+- 隔离 setup/hooks worker：`130 pass / 0 fail`
+- runtime health worker：`meta:public-assets:validate`、`meta:check:runtimes`、hook sync tests、stale projection simulation
+- `git diff --check`
+
 ## [2.8.43] - 2026-06-19
 
 ### 解决的问题

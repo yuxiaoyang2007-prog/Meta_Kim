@@ -993,7 +993,9 @@ describe("workflow-contract.json — schema compliance", async () => {
     for (const field of [
       "dealerOwner",
       "dealerMode",
-      "cards",
+      "cardEvents",
+      "cardTypeCatalog",
+      "cardTypeDecisions",
       "deliveryShells",
       "dealStandard",
       "silenceDecision",

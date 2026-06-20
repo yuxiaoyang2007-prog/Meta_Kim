@@ -45,7 +45,10 @@ describe("install platform config", () => {
     assert.match(rootsBody, /platformId === "openclaw"/);
     assert.match(rootsBody, /platformId === "codex"/);
     assert.match(rootsBody, /platformId === "cursor"/);
-    assert.match(rootsBody, /add\("\.agents\/skills"\)/);
+    assert.match(
+      rootsBody,
+      /add\("canonical\/skills\/meta-theory", "\.agents\/skills\/meta-theory"\)/,
+    );
     assert.doesNotMatch(rootsBody, /add\("\.codex\/skills"\)/);
     assert.equal(
       rootsBody.match(/add\("AGENTS\.md"\)/g)?.length,

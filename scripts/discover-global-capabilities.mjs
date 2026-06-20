@@ -22,6 +22,8 @@ const CANONICAL_CAPABILITY_INDEX =
   "config/capability-index/meta-kim-capabilities.json";
 const LOCAL_GLOBAL_INVENTORY =
   ".meta-kim/state/{profile}/capability-index/global-capabilities.json";
+const HOME_GLOBAL_INVENTORY =
+  "~/.meta-kim/state/{profile}/capability-index/global-capabilities.json";
 const LONG_TERM_META_SKILL_PROVIDER_IDS = [
   "meta-theory",
   "agent-teams-playbook",
@@ -1717,6 +1719,9 @@ async function main() {
   const outputFormat = args.includes("--json") ? "json" : "table";
   const verboseOutput =
     args.includes("--verbose") || args.includes("--details");
+  const runtimeInventoryOnly =
+    args.includes("--runtime-inventory-only") || args.includes("--local-only");
+  const writeRepoIndex = !runtimeInventoryOnly;
   const langArg = argValue(args, "--lang");
   const outputLang = normalizeOutputLang(
     langArg || process.env.META_KIM_LANG || process.env.LANG || "en",
@@ -1747,12 +1752,20 @@ async function main() {
     }
   }
 
-  const profileState = await ensureProfileState();
+  const profileName = process.env.META_KIM_PROFILE || "default";
+  const profileState = runtimeInventoryOnly
+    ? {
+        profile: profileName,
+        profileDir: path.join(os.homedir(), ".meta-kim", "state", profileName),
+      }
+    : await ensureProfileState();
   const canonicalIndexPath = path.join(repoRoot, CANONICAL_CAPABILITY_INDEX);
-  const repoCapabilityIndex = preserveGeneratedAtWhenUnchanged(
-    await buildRepoCapabilityIndex(),
-    await readJsonIfExists(canonicalIndexPath),
-  );
+  const repoCapabilityIndex = writeRepoIndex
+    ? preserveGeneratedAtWhenUnchanged(
+        await buildRepoCapabilityIndex(),
+        await readJsonIfExists(canonicalIndexPath),
+      )
+    : null;
   const globalInventory = await buildGlobalCapabilityInventory(
     scannedResults,
     profileState.profile,
@@ -1770,30 +1783,6 @@ async function main() {
     );
   }
 
-  // Write the repo-neutral canonical index, then mirror only that index into
-  // runtime projections. Machine-specific global inventory stays local-only.
-  const repoContent = `${JSON.stringify(repoCapabilityIndex, null, 2)}\n`;
-  await fs.mkdir(path.dirname(canonicalIndexPath), { recursive: true });
-  await fs.writeFile(canonicalIndexPath, repoContent);
-
-  const platformIndexDirs = [
-    path.join(repoRoot, ".claude", "capability-index"),
-    path.join(repoRoot, ".codex", "capability-index"),
-    path.join(repoRoot, "openclaw", "capability-index"),
-    path.join(repoRoot, ".cursor", "capability-index"),
-  ];
-
-  for (const indexDir of platformIndexDirs) {
-    await fs.mkdir(indexDir, { recursive: true });
-    await fs.writeFile(
-      path.join(indexDir, "meta-kim-capabilities.json"),
-      repoContent,
-    );
-    await fs.rm(path.join(indexDir, "global-capabilities.json"), {
-      force: true,
-    });
-  }
-
   const localInventoryPath = path.join(
     profileState.profileDir,
     "capability-index",
@@ -1805,14 +1794,47 @@ async function main() {
     `${JSON.stringify(globalInventory, null, 2)}\n`,
   );
 
-  console.error(`\n✅ ${labels.canonicalIndexWritten(CANONICAL_CAPABILITY_INDEX)}`);
+  let platformIndexDirs = [];
+  if (writeRepoIndex) {
+    // Write the repo-neutral canonical index, then mirror only that index into
+    // runtime projections. Machine-specific global inventory stays local-only.
+    const repoContent = `${JSON.stringify(repoCapabilityIndex, null, 2)}\n`;
+    await fs.mkdir(path.dirname(canonicalIndexPath), { recursive: true });
+    await fs.writeFile(canonicalIndexPath, repoContent);
+
+    platformIndexDirs = [
+      path.join(repoRoot, ".claude", "capability-index"),
+      path.join(repoRoot, ".codex", "capability-index"),
+      path.join(repoRoot, "openclaw", "capability-index"),
+      path.join(repoRoot, ".cursor", "capability-index"),
+    ];
+
+    for (const indexDir of platformIndexDirs) {
+      await fs.mkdir(indexDir, { recursive: true });
+      await fs.writeFile(
+        path.join(indexDir, "meta-kim-capabilities.json"),
+        repoContent,
+      );
+      await fs.rm(path.join(indexDir, "global-capabilities.json"), {
+        force: true,
+      });
+    }
+
+    console.error(`\n✅ ${labels.canonicalIndexWritten(CANONICAL_CAPABILITY_INDEX)}`);
+  }
   console.error(
-    `✅ ${labels.localInventoryWritten(path.relative(repoRoot, localInventoryPath).replace(/\\/g, "/"))}`,
+    `✅ ${labels.localInventoryWritten(
+      runtimeInventoryOnly
+        ? HOME_GLOBAL_INVENTORY.replace("{profile}", profileState.profile)
+        : path.relative(repoRoot, localInventoryPath).replace(/\\/g, "/"),
+    )}`,
   );
-  console.error(`✅ ${labels.canonicalIndexMirrored(platformIndexDirs.length)}`);
-  for (const dir of platformIndexDirs) {
-    const rel = path.relative(repoRoot, dir).replace(/\\/g, "/");
-    console.error(`   ${rel}/`);
+  if (writeRepoIndex) {
+    console.error(`✅ ${labels.canonicalIndexMirrored(platformIndexDirs.length)}`);
+    for (const dir of platformIndexDirs) {
+      const rel = path.relative(repoRoot, dir).replace(/\\/g, "/");
+      console.error(`   ${rel}/`);
+    }
   }
 
   // Generate grep-friendly search index

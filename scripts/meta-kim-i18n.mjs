@@ -168,6 +168,8 @@ const STRINGS = {
     syncRuntimesCheckStale: "Generated runtime assets are out of date:",
     syncRuntimesCheckStaleLine: (file) => `- ${file}`,
     syncRuntimesCheckOk: "Runtime assets are up to date.",
+    syncRuntimesCheckSourceRepoProjectionAbsent: (count) =>
+      `Source repository check passed: project runtime projections are intentionally absent here (${count} generated project file(s) skipped). Run project bootstrap in a target project to materialize project-local assets.`,
     // Reverse mode strings
     reverseModeIntro: "Scanning runtime projections for evolution signals...",
     reverseModeNoSignals: "No evolution signals detected. Runtime projections match canonical sources.",
@@ -436,6 +438,8 @@ const STRINGS = {
     syncRuntimesCheckStale: "生成的工具端镜像已过期：",
     syncRuntimesCheckStaleLine: (file) => `- ${file}`,
     syncRuntimesCheckOk: "工具端镜像已是最新。",
+    syncRuntimesCheckSourceRepoProjectionAbsent: (count) =>
+      `源仓库自检通过：项目级工具端投影在这里按预期保持未生成（已跳过 ${count} 个应生成的项目文件）。需要项目本地资产时，请在目标项目中运行 project bootstrap。`,
     // Reverse mode strings
     reverseModeIntro: "扫描工具端镜像以检测演进信号...",
     reverseModeNoSignals: "未检测到演进信号。工具端镜像与 canonical 源一致。",
@@ -685,6 +689,8 @@ const STRINGS = {
     syncRuntimesCheckStale: "生成されたランタイム資産が古くなっています:",
     syncRuntimesCheckStaleLine: (file) => `- ${file}`,
     syncRuntimesCheckOk: "ランタイム資産は最新です。",
+    syncRuntimesCheckSourceRepoProjectionAbsent: (count) =>
+      `Source repository check passed: project runtime projections are intentionally absent here (${count} generated project file(s) skipped). Run project bootstrap in a target project to materialize project-local assets.`,
     // Reverse mode strings
     reverseModeIntro: "ランタイム投影から進化信号をスキャン中...",
     reverseModeNoSignals: "進化信号は検出されませんでした。ランタイム投影は canonical ソースと一致しています。",
@@ -946,6 +952,8 @@ const STRINGS = {
     syncRuntimesCheckStale: "생성된 런타임 자산이 오래되었습니다:",
     syncRuntimesCheckStaleLine: (file) => `- ${file}`,
     syncRuntimesCheckOk: "런타임 자산이 최신입니다.",
+    syncRuntimesCheckSourceRepoProjectionAbsent: (count) =>
+      `Source repository check passed: project runtime projections are intentionally absent here (${count} generated project file(s) skipped). Run project bootstrap in a target project to materialize project-local assets.`,
     // Reverse mode strings
     reverseModeIntro: "런타임 프로젝션에서 진화 신호 스캔 중...",
     reverseModeNoSignals: "진화 신호가 감지되지 않았습니다. 런타임 프로젝션이 canonical 소스와 일치합니다.",
@@ -1272,6 +1280,8 @@ const REPORT_STRINGS = {
       emissionEvidenceLabel: "Conversation notice evidence",
       signal: "User-visible signal",
       internalOnly: "Internal evidence only",
+      internalOnlySummary:
+        "Machine-readable audit packets are retained internally; this report shows plain-language summaries instead of field names.",
       partialStatusReason:
         "The readable report is generated, but no runtime conversation notice is emitted by this script yet.",
       emittedStatusReason: (channel, adapter, hash) =>
@@ -1382,12 +1392,63 @@ const REPORT_STRINGS = {
     capabilityType: "Capability Type",
     routeImpact: "Route Impact",
     cardPlanTitle: "Card Dealing",
-    cardPlanSummary: (dealt, deckSize, pauseRule) =>
-      `Card plan: dealt ${dealt}/${deckSize} cards; ${pauseRule}.`,
+    cardPlanSummary: (eventCount, cardTypeCount, pauseRule) =>
+      `Card plan: ${eventCount} card events across ${cardTypeCount} card types; ${pauseRule}.`,
     cardDealer: "Dealer",
     card: "Card",
     cardShell: "Shell",
     cardWhy: "Why now",
+    cardNames: {
+      clarify: "Clarify",
+      "shrink-scope": "Shrink scope",
+      options: "Options",
+      risk: "Risk",
+      execute: "Execute",
+      verify: "Verify",
+      fix: "Fix",
+      rollback: "Rollback",
+      nudge: "Nudge",
+      pause: "Pause",
+    },
+    cardVisibleSummary: {
+      sectionTitle: "User-visible card summary",
+      signalLabel: "Card dealing summary",
+      userFocusLabel: "User focus cards",
+      riskInserted: "Risk inserted",
+      riskNotTriggered: "Risk not triggered",
+      pauseTriggered: "Pause triggered",
+      pauseNotTriggered: "Pause not triggered",
+      nativeChoiceBoundary:
+        "This is a chat/report summary, not native choice popup proof.",
+      dealtLine: ({ eventCount, cardTypeCount, activeCards }) =>
+        `Card dealing: ${eventCount} card events across ${cardTypeCount} card types: ${activeCards}.`,
+      inactiveLine: ({ inactiveCards }) => `Inactive this round: ${inactiveCards}.`,
+      userLine: ({ userCards, interruptCards, riskState, pauseState }) =>
+        `User-relevant: ${userCards}; interrupts: ${interruptCards}; ${riskState}; ${pauseState}`,
+      progressSectionTitle: "In-run card dealing",
+      progressStageLine: ({ stage }) => `${stage} in progress`,
+      progressDealLine: ({ discovery, cardName, repeatNote }) =>
+        `Card dealt: found ${discovery}; triggered ${cardName} card${repeatNote ? ` (${repeatNote})` : ""}.`,
+      repeatEventNote: ({ repeatOrdinal, repeatReason }) =>
+        `repeat #${repeatOrdinal}, ${repeatReason}`,
+      progressDiscoveries: {
+        clarify: "the goal or acceptance boundary may change the route",
+        "shrink-scope": "the route has multiple lanes and needs a tighter boundary",
+        options: "more than one viable path exists",
+        risk: "runtime or external-platform risk can preempt execution",
+        execute: "owner, route, and verification are ready for bounded work",
+        verify: "fresh proof is needed before claiming completion",
+        fix: "review or verification found a bounded repair point",
+        rollback: "risk may exceed the approved boundary",
+        nudge: "the user needs one compact next action",
+        pause: "the run needs a digest or decision window",
+        default: "a route-changing signal appeared",
+      },
+      repeatPolicy:
+        "Card types are dynamic signals; the same card type can be dealt repeatedly across stages.",
+      nextLine:
+        "Next: read the user-relevant cards first, then check whether risk or pause changed the route.",
+    },
     businessPhasePlanTitle: "11-phase Business Workflow",
     businessPhaseSummary: (count) => `${count} business phases are recorded for packaging and closure.`,
     phase: "Phase",
@@ -1638,6 +1699,8 @@ const REPORT_STRINGS = {
       emissionEvidenceLabel: "conversation notice 发射证据",
       signal: "用户可见信号",
       internalOnly: "仅内部证据",
+      internalOnlySummary:
+        "机器可审计 packet 仍在内部保留；这份报告只展示人话摘要，不列内部字段名。",
       partialStatusReason:
         "可读报告已生成，但这个脚本还没有发出 runtime conversation notice。",
       emittedStatusReason: (channel, adapter, hash) =>
@@ -1748,12 +1811,69 @@ const REPORT_STRINGS = {
     capabilityType: "能力类型",
     routeImpact: "路线影响",
     cardPlanTitle: "发牌",
-    cardPlanSummary: (dealt, deckSize, pauseRule) =>
-      `发牌计划：本次显性处理 ${dealt}/${deckSize} 张牌；${pauseRule}。`,
+    cardPlanSummary: (eventCount, cardTypeCount, pauseRule) =>
+      `发牌计划：本轮记录 ${eventCount} 次发牌事件，涉及 ${cardTypeCount} 类牌；${pauseRule}。`,
     cardDealer: "发牌 owner",
     card: "牌",
     cardShell: "呈现壳",
     cardWhy: "为什么现在发",
+    cardNames: {
+      clarify: "澄清",
+      "shrink-scope": "收窄范围",
+      options: "选项",
+      risk: "风险",
+      execute: "执行",
+      verify: "验证",
+      fix: "修复",
+      rollback: "回滚",
+      nudge: "下一步提醒",
+      pause: "暂停",
+    },
+    cardVisibleSummary: {
+      sectionTitle: "用户可见发牌摘要",
+      signalLabel: "发牌摘要",
+      userFocusLabel: "用户相关牌",
+      riskInserted: "风险已插入",
+      riskNotTriggered: "风险未触发",
+      pauseTriggered: "暂停已触发",
+      pauseNotTriggered: "暂停未触发",
+      nativeChoiceBoundary:
+        "这是对话/报告摘要，不是 native choice popup 证据。",
+      dealtLine: ({ eventCount, cardTypeCount, activeCards }) =>
+        `触发发牌：本轮生成 ${eventCount} 次发牌事件，涉及 ${cardTypeCount} 类牌：${activeCards}。`,
+      inactiveLine: ({ inactiveCards }) => `本轮未触发的牌型：${inactiveCards}。`,
+      userLine: ({ userCards, interruptCards, riskState, pauseState }) =>
+        `和用户直接相关：${userCards}；插入/打断：${interruptCards}；${riskState}；${pauseState}`,
+      progressSectionTitle: "过程发牌事件",
+      progressStageLine: ({ stage }) => `${stage} 进行中`,
+      progressDealLine: ({ discovery, cardName, repeatNote }) =>
+        `触发发牌：发现${discovery}，触发${cardName}牌${repeatNote ? `（${repeatNote}）` : ""}。`,
+      repeatEventNote: ({ repeatOrdinal, repeatReason }) => {
+        const reasons = {
+          user_decision_window: "用户决策窗口",
+          high_cost_control_window: "高成本节奏控制",
+          digest_window_after_visible_status: "状态摘要后的消化窗口",
+        };
+        return `第 ${repeatOrdinal} 次，原因=${reasons[repeatReason] ?? repeatReason}`;
+      },
+      progressDiscoveries: {
+        clarify: "目标或验收边界可能改变路线",
+        "shrink-scope": "路线过宽，需要先收窄边界",
+        options: "存在多个可行路径，需要选择",
+        risk: "运行时或外部平台风险可能抢占执行",
+        execute: "负责人、路线和验证条件已就绪",
+        verify: "需要新证据才能声称完成",
+        fix: "审查或验证发现可修复点",
+        rollback: "风险可能超过已批准边界",
+        nudge: "用户需要一个低成本下一步",
+        pause: "当前需要消化窗口或决策窗口",
+        default: "出现会改变路线的信号",
+      },
+      repeatPolicy:
+        "牌是动态节奏信号；同一类牌可以在不同阶段、不同原因下重复发。",
+      nextLine:
+        "下一步先看用户相关牌，再看风险或暂停有没有改变路线。",
+    },
     businessPhasePlanTitle: "11 阶段业务流",
     businessPhaseSummary: (count) => `已记录 ${count} 个业务阶段，用于打包、闭环、反馈和镜像。`,
     phase: "阶段",
@@ -2002,6 +2122,8 @@ const REPORT_STRINGS = {
       emissionEvidenceLabel: "conversation notice 発射証拠",
       signal: "ユーザーに見える信号",
       internalOnly: "内部証拠のみ",
+      internalOnlySummary:
+        "機械可読の監査 packet は内部に保持し、このレポートではフィールド名ではなく平易な要約を表示します。",
       partialStatusReason:
         "読みやすいレポートは生成済みですが、このスクリプトはまだ runtime conversation notice を発射していません。",
       emittedStatusReason: (channel, adapter, hash) =>
@@ -2112,12 +2234,63 @@ const REPORT_STRINGS = {
     capabilityType: "能力種別",
     routeImpact: "ルートへの影響",
     cardPlanTitle: "カード配布",
-    cardPlanSummary: (dealt, deckSize, pauseRule) =>
-      `カード計画: 今回は ${dealt}/${deckSize} 枚を可視化して処理します。${pauseRule}。`,
+    cardPlanSummary: (eventCount, cardTypeCount, pauseRule) =>
+      `カード計画: 今回は ${eventCount} 件のカードイベント、${cardTypeCount} 種類のカードを記録します。${pauseRule}。`,
     cardDealer: "配布 owner",
     card: "カード",
     cardShell: "表示シェル",
     cardWhy: "今出す理由",
+    cardNames: {
+      clarify: "明確化",
+      "shrink-scope": "範囲縮小",
+      options: "選択肢",
+      risk: "リスク",
+      execute: "実行",
+      verify: "検証",
+      fix: "修正",
+      rollback: "ロールバック",
+      nudge: "次の一手",
+      pause: "一時停止",
+    },
+    cardVisibleSummary: {
+      sectionTitle: "ユーザー向けカード要約",
+      signalLabel: "カード配布要約",
+      userFocusLabel: "ユーザー関連カード",
+      riskInserted: "リスクを挿入",
+      riskNotTriggered: "リスク未発火",
+      pauseTriggered: "一時停止が発火",
+      pauseNotTriggered: "一時停止未発火",
+      nativeChoiceBoundary:
+        "これは会話/レポート要約であり、native choice popup の証拠ではありません。",
+      dealtLine: ({ eventCount, cardTypeCount, activeCards }) =>
+        `カード配布: ${eventCount} 件のカードイベント、${cardTypeCount} 種類: ${activeCards}。`,
+      inactiveLine: ({ inactiveCards }) => `今回未発火のカード種類: ${inactiveCards}。`,
+      userLine: ({ userCards, interruptCards, riskState, pauseState }) =>
+        `ユーザー関連: ${userCards}; 割り込み: ${interruptCards}; ${riskState}; ${pauseState}`,
+      progressSectionTitle: "実行中カードイベント",
+      progressStageLine: ({ stage }) => `${stage} 進行中`,
+      progressDealLine: ({ discovery, cardName, repeatNote }) =>
+        `カード配布: ${discovery} を検出し、${cardName} カードを発火${repeatNote ? `（${repeatNote}）` : ""}。`,
+      repeatEventNote: ({ repeatOrdinal, repeatReason }) =>
+        `${repeatOrdinal} 回目、理由=${repeatReason}`,
+      progressDiscoveries: {
+        clarify: "目標または受け入れ境界がルートを変える可能性",
+        "shrink-scope": "ルートが広く、境界を絞る必要",
+        options: "複数の実行可能な道筋",
+        risk: "実行を先取りする可能性のあるランタイムまたは外部リスク",
+        execute: "owner、ルート、検証条件が揃った状態",
+        verify: "完了主張前に fresh proof が必要",
+        fix: "レビューまたは検証で修正点を検出",
+        rollback: "リスクが承認済み境界を超える可能性",
+        nudge: "ユーザーに低コストの次手が必要",
+        pause: "消化または意思決定のための間",
+        default: "ルートを変える信号",
+      },
+      repeatPolicy:
+        "カード種類は動的なリズム信号です。同じ種類のカードは段階をまたいで繰り返し配布できます。",
+      nextLine:
+        "次はユーザー関連カードを先に見て、リスクや一時停止がルートを変えたか確認します。",
+    },
     businessPhasePlanTitle: "11フェーズ業務ワークフロー",
     businessPhaseSummary: (count) =>
       `${count} 個の業務フェーズを、パッケージングと完了確認のために記録しています。`,
@@ -2370,6 +2543,8 @@ const REPORT_STRINGS = {
       emissionEvidenceLabel: "conversation notice 발사 증거",
       signal: "사용자에게 보이는 신호",
       internalOnly: "내부 증거 전용",
+      internalOnlySummary:
+        "기계 판독용 감사 packet 은 내부에 보존하고, 이 보고서는 필드명 대신 쉬운 요약만 표시합니다.",
       partialStatusReason:
         "읽기 쉬운 보고서는 생성되었지만 이 스크립트는 아직 runtime conversation notice 를 발사하지 않았습니다.",
       emittedStatusReason: (channel, adapter, hash) =>
@@ -2480,12 +2655,63 @@ const REPORT_STRINGS = {
     capabilityType: "능력 유형",
     routeImpact: "경로 영향",
     cardPlanTitle: "카드 배분",
-    cardPlanSummary: (dealt, deckSize, pauseRule) =>
-      `카드 계획: 이번 실행에서 ${dealt}/${deckSize}장을 가시적으로 처리합니다. ${pauseRule}.`,
+    cardPlanSummary: (eventCount, cardTypeCount, pauseRule) =>
+      `카드 계획: 이번 실행에서 ${eventCount}개의 카드 이벤트와 ${cardTypeCount}개 카드 유형을 기록합니다. ${pauseRule}.`,
     cardDealer: "배분 owner",
     card: "카드",
     cardShell: "표시 shell",
     cardWhy: "지금 배분하는 이유",
+    cardNames: {
+      clarify: "명확화",
+      "shrink-scope": "범위 축소",
+      options: "선택지",
+      risk: "위험",
+      execute: "실행",
+      verify: "검증",
+      fix: "수정",
+      rollback: "롤백",
+      nudge: "다음 행동",
+      pause: "일시정지",
+    },
+    cardVisibleSummary: {
+      sectionTitle: "사용자 표시 카드 요약",
+      signalLabel: "카드 배분 요약",
+      userFocusLabel: "사용자 관련 카드",
+      riskInserted: "위험 삽입됨",
+      riskNotTriggered: "위험 미발동",
+      pauseTriggered: "일시정지 발동됨",
+      pauseNotTriggered: "일시정지 미발동",
+      nativeChoiceBoundary:
+        "이것은 대화/보고서 요약이며 native choice popup 증거가 아닙니다.",
+      dealtLine: ({ eventCount, cardTypeCount, activeCards }) =>
+        `카드 배분: ${eventCount}개 카드 이벤트, ${cardTypeCount}개 카드 유형: ${activeCards}.`,
+      inactiveLine: ({ inactiveCards }) => `이번 라운드 미발동 카드 유형: ${inactiveCards}.`,
+      userLine: ({ userCards, interruptCards, riskState, pauseState }) =>
+        `사용자 관련: ${userCards}; 인터럽트: ${interruptCards}; ${riskState}; ${pauseState}`,
+      progressSectionTitle: "실행 중 카드 이벤트",
+      progressStageLine: ({ stage }) => `${stage} 진행 중`,
+      progressDealLine: ({ discovery, cardName, repeatNote }) =>
+        `카드 배분: ${discovery} 발견, ${cardName} 카드 발동${repeatNote ? `(${repeatNote})` : ""}.`,
+      repeatEventNote: ({ repeatOrdinal, repeatReason }) =>
+        `${repeatOrdinal}번째, 이유=${repeatReason}`,
+      progressDiscoveries: {
+        clarify: "목표나 수용 기준이 경로를 바꿀 수 있음",
+        "shrink-scope": "경로가 넓어 경계를 좁혀야 함",
+        options: "실행 가능한 경로가 여러 개 있음",
+        risk: "런타임 또는 외부 플랫폼 위험이 실행을 선점할 수 있음",
+        execute: "owner, 경로, 검증 조건이 준비됨",
+        verify: "완료 주장 전에 fresh proof 가 필요함",
+        fix: "리뷰 또는 검증에서 수정 지점 발견",
+        rollback: "위험이 승인된 경계를 넘을 수 있음",
+        nudge: "사용자에게 낮은 비용의 다음 행동이 필요함",
+        pause: "소화 또는 의사결정 시간이 필요함",
+        default: "경로를 바꿀 수 있는 신호",
+      },
+      repeatPolicy:
+        "카드 유형은 동적 리듬 신호입니다. 같은 유형의 카드는 단계마다 반복해서 배분될 수 있습니다.",
+      nextLine:
+        "다음은 사용자 관련 카드를 먼저 보고 위험이나 일시정지가 경로를 바꿨는지 확인합니다.",
+    },
     businessPhasePlanTitle: "11단계 비즈니스 워크플로",
     businessPhaseSummary: (count) =>
       `${count}개 비즈니스 단계를 패키징과 종료 확인을 위해 기록했습니다.`,

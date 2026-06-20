@@ -5,7 +5,9 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const repoRoot = path.resolve(__dirname, "..");
+export const repoRoot = process.env.META_KIM_REPO_ROOT
+  ? path.resolve(process.env.META_KIM_REPO_ROOT)
+  : path.resolve(__dirname, "..");
 export const canonicalRoot = path.join(repoRoot, "canonical");
 export const canonicalAgentsDir = path.join(canonicalRoot, "agents");
 export const canonicalSkillsDir = path.join(canonicalRoot, "skills");

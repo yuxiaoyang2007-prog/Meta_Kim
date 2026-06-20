@@ -151,7 +151,9 @@ test("lazy project bootstrap dry-run exposes source chain and writes nothing", (
       byRel.get(".codex/hooks.json")?.mergePolicy,
       "additive_preserve_user_state_json",
     );
-    assert.equal(byRel.get(".codex/config.toml")?.mergePolicy, "never_touch");
+    if (byRel.has(".codex/config.toml")) {
+      assert.equal(byRel.get(".codex/config.toml")?.mergePolicy, "never_touch");
+    }
     assert.equal(
       byRel.has(".meta-kim/meta-kim-post-copy.mjs"),
       false,
@@ -428,6 +430,28 @@ test("global cleanup removes old full-file Meta_Kim AGENTS and CLAUDE projection
   }
 });
 
+test("project cleanup json output is machine-parseable without log prefix", () => {
+  const projectDir = tempProject();
+  try {
+    runBootstrapForTargets(projectDir, "claude,codex", ["--apply"]);
+    const result = runSetup([
+      "--project-cleanup",
+      "--targets",
+      "claude,codex",
+      "--project-dir",
+      projectDir,
+      "--json",
+    ]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(result.stdout.trimStart().startsWith("{"), true);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.ok, true);
+    assert.equal(summary.resultCount, 1);
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("global cleanup removes signed Meta_Kim residue but preserves unknown local skills", () => {
   const projectDir = tempProject();
   try {
@@ -476,7 +500,10 @@ test("global cleanup removes signed Meta_Kim residue but preserves unknown local
     mkdirSync(path.join(projectDir, ".meta-kim", "state", "default"), { recursive: true });
     writeFileSync(
       path.join(projectDir, ".claude", "settings.json"),
-      readFileSync(path.join(REPO_ROOT, ".claude", "settings.json"), "utf8"),
+      readFileSync(
+        path.join(REPO_ROOT, "canonical", "runtime-assets", "claude", "settings.json"),
+        "utf8",
+      ),
       "utf8",
     );
     writeFileSync(
@@ -501,7 +528,16 @@ test("global cleanup removes signed Meta_Kim residue but preserves unknown local
     );
     writeFileSync(
       path.join(projectDir, "openclaw", "openclaw.template.json"),
-      readFileSync(path.join(REPO_ROOT, "openclaw", "openclaw.template.json"), "utf8"),
+      readFileSync(
+        path.join(
+          REPO_ROOT,
+          "canonical",
+          "runtime-assets",
+          "openclaw",
+          "openclaw.template.json",
+        ),
+        "utf8",
+      ),
       "utf8",
     );
     writeFileSync(

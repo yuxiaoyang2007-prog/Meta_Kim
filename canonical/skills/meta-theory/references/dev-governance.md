@@ -137,6 +137,8 @@ Report triggers:
 
 Each report is a compact notice (max 3 bullets). If a discovery changes scope, owner, or risk, upgrade to a Decision requiring user input. The user should never need to ask "what's happening?" during a non-trivial run.
 
+For governed runs that activate the 11-phase business workflow, user-visible status must include all phase states (`done`, `skipped`, `blocked`, `pending`), a plain reason for each state, and the current blocked or pending phase. The JSON artifact and validator pass are evidence layers; they do not prove the user saw the workflow state unless a localized conversation notice or readable report exposes it.
+
 ## Fetch And Thinking Boundary
 
 Fetch collects evidence and capability candidates. It does not finalize execution owners.

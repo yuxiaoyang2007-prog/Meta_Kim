@@ -1,11 +1,12 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import {
+  buildRuntimeProjectionEvidence,
   readGovernedExecutionRun,
   runMetaTheoryGovernedExecution,
 } from "../../scripts/run-meta-theory-governed-execution.mjs";
@@ -243,6 +244,55 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         report.analytics.runtimeEvidenceDistribution.map((item) => item.failureClass).sort(),
         ["projection_only", "projection_only", "projection_only", "projection_only"]
       );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("T-002b uses canonical source projection only when runtime mirrors are absent", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-source-projection-"));
+    const writeSource = async (relativePath, content) => {
+      const target = path.join(tempDir, relativePath);
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, content);
+    };
+    try {
+      const routeText =
+        "meta-warden meta-conductor orchestration workerTaskPackets multi-type capability inventory meta-theory capability";
+      await writeSource("canonical/skills/meta-theory/SKILL.md", routeText);
+      await writeSource("canonical/agents/meta-conductor.md", routeText);
+      await writeSource("canonical/runtime-assets/codex/commands/meta-theory.md", routeText);
+      await writeSource("canonical/runtime-assets/cursor/rules/meta-enforcement.mdc", routeText);
+      await writeSource("canonical/runtime-assets/openclaw/openclaw.template.json", routeText);
+
+      const orchestrationReport = {
+        orchestrationTaskBoardPacket: { dispatchBoardId: "source-projection-board" },
+        workerTaskPackets: [{ taskPacketId: "source-projection-task" }],
+      };
+      const sourceOnly = await buildRuntimeProjectionEvidence({
+        repoRoot: tempDir,
+        orchestrationReport,
+      });
+      assert.equal(sourceOnly.status, "pass");
+      assert.ok(
+        sourceOnly.results.every(
+          (item) =>
+            item.status === "smoke_pass" &&
+            item.evidenceSource === "canonical_source_projection" &&
+            item.runtimeProjectionMaterialized === false
+        )
+      );
+
+      await writeSource(".claude/skills/meta-theory/SKILL.md", "broken materialized projection");
+      const materializedPartial = await buildRuntimeProjectionEvidence({
+        repoRoot: tempDir,
+        orchestrationReport,
+      });
+      const claude = materializedPartial.results.find((item) => item.runtime === "claude");
+      assert.equal(materializedPartial.status, "partial");
+      assert.equal(claude.status, "partial");
+      assert.equal(claude.evidenceSource, "runtime_projection");
+      assert.equal(claude.runtimeProjectionMaterialized, true);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

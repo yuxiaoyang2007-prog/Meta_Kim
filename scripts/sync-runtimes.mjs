@@ -10,6 +10,7 @@ import {
   buildCodexHooksJson,
   buildCursorHooksJson,
   buildHookPromptAdapterSource,
+  hookCommand,
   nodeHookCommand,
 } from "./runtime-hook-mapping.mjs";
 import { ensureCodexAppNativeControls } from "./codex-config-merge.mjs";
@@ -44,6 +45,134 @@ const PROJECT_RUNTIME_SKILL_IDS = new Set(["meta-theory"]);
 // --check. Populated even when not in --json mode so callers get deterministic
 // planning data; consumers just ignore it when they do not need it.
 const staleFiles = [];
+
+const SOURCE_REPO_PROJECT_PROJECTION_MARKERS = [
+  ".claude/agents",
+  ".claude/capability-index",
+  ".claude/commands",
+  ".claude/hooks",
+  ".claude/settings.json",
+  ".claude/skills",
+  ".mcp.json",
+  ".agents/skills",
+  ".codex/agents",
+  ".codex/capability-index",
+  ".codex/commands",
+  ".codex/config.toml",
+  ".codex/hooks",
+  ".codex/hooks.json",
+  ".codex/skills",
+  ".cursor/agents",
+  ".cursor/capability-index",
+  ".cursor/hooks",
+  ".cursor/hooks.json",
+  ".cursor/mcp.json",
+  ".cursor/rules",
+  ".cursor/skills",
+  "codex/config.toml.example",
+  "openclaw/capability-index",
+  "openclaw/hooks",
+  "openclaw/openclaw.template.json",
+  "openclaw/skills",
+  "openclaw/workspaces",
+];
+
+function normalizeRepoRelativePath(filePath) {
+  const absolutePath = path.isAbsolute(filePath)
+    ? filePath
+    : path.join(repoRoot, filePath);
+  const rel = path.relative(repoRoot, absolutePath).replace(/\\/g, "/");
+  if (rel.startsWith("../") || rel === ".." || path.isAbsolute(rel)) {
+    return null;
+  }
+  return rel;
+}
+
+function isSourceRepoProjectProjectionPath(filePath) {
+  const rel = normalizeRepoRelativePath(filePath);
+  if (!rel) return false;
+  return SOURCE_REPO_PROJECT_PROJECTION_MARKERS.some(
+    (marker) => rel === marker || rel.startsWith(`${marker}/`),
+  );
+}
+
+async function existsAtRepoPath(relativePath) {
+  try {
+    await fs.access(path.join(repoRoot, relativePath));
+    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+async function hasMaterialFileUnder(dirPath) {
+  let entries;
+  try {
+    entries = await fs.readdir(dirPath, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
+
+  for (const entry of entries) {
+    const childPath = path.join(dirPath, entry.name);
+    if (entry.isFile()) return true;
+    if (entry.isDirectory() && (await hasMaterialFileUnder(childPath))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function hasMaterialProjectionAtRepoPath(relativePath) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  let stat;
+  try {
+    stat = await fs.stat(absolutePath);
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
+  if (stat.isFile()) return true;
+  if (stat.isDirectory()) return hasMaterialFileUnder(absolutePath);
+  return false;
+}
+
+async function isMetaKimSourceRepo() {
+  try {
+    const pkg = JSON.parse(
+      await fs.readFile(path.join(repoRoot, "package.json"), "utf8"),
+    );
+    return (
+      pkg.name === "meta-kim" &&
+      (await existsAtRepoPath("canonical")) &&
+      (await existsAtRepoPath("config/sync.json"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function hasMaterialProjectProjection() {
+  for (const marker of SOURCE_REPO_PROJECT_PROJECTION_MARKERS) {
+    if (await hasMaterialProjectionAtRepoPath(marker)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function expectedSourceRepoProjectProjectionAbsence(scope, staleRecords) {
+  if (scope !== "project" || staleRecords.length === 0) return false;
+  if (!(await isMetaKimSourceRepo())) return false;
+  if (await hasMaterialProjectProjection()) return false;
+  return staleRecords.every(
+    (record) =>
+      record.action === "create" &&
+      isSourceRepoProjectProjectionPath(record.path),
+  );
+}
 
 // Recorder is lazily opened in main() when scope includes "project" so every
 // write point (writeGeneratedFile / writeGeneratedJson) can record through
@@ -820,6 +949,12 @@ const canonicalOpenClawMemoryHookDir = path.join(
   "hooks",
   "mcp-memory-service",
 );
+const canonicalOpenClawStopSaveProgressHookPath = path.join(
+  canonicalRuntimeAssetsDir,
+  "claude",
+  "hooks",
+  "stop-save-progress.mjs",
+);
 const canonicalSharedMemorySaveHookPath = path.join(
   canonicalRuntimeAssetsDir,
   "shared",
@@ -830,6 +965,7 @@ const GLOBAL_META_KIM_HOOK_PACKAGE_FILES = new Set([
   "activate-meta-theory-spine.mjs",
   "bash-readonly-whitelist.mjs",
   "block-dangerous-bash.mjs",
+  "ecc-permission-cache-wrapper.mjs",
   "enforce-agent-dispatch.mjs",
   "graphify-context.mjs",
   "post-console-log-warn.mjs",
@@ -838,6 +974,8 @@ const GLOBAL_META_KIM_HOOK_PACKAGE_FILES = new Set([
   "stop-compaction.mjs",
   "stop-completion-guard.mjs",
   "stop-console-log-audit.mjs",
+  "stop-memory-save.mjs",
+  "stop-save-progress.mjs",
   "stop-spine-cleanup.mjs",
   "subagent-context.mjs",
   "utils.mjs",
@@ -1971,7 +2109,7 @@ export function buildCodexProjectHooksJson({
   hookPromptAdapterPath = null,
   packageRoot = null,
 } = {}) {
-  return buildCodexHooksJson({
+  const config = buildCodexHooksJson({
     graphifyHookPath,
     memoryHookPath,
     spineHookPath,
@@ -1979,6 +2117,35 @@ export function buildCodexProjectHooksJson({
     hookPromptAdapterPath,
     packageRoot,
   });
+  config.hooks.PostToolUse = [
+    {
+      matcher: "Edit|Write",
+      hooks: [
+        hookCommand(nodeHookCommand(".codex/hooks/post-format.mjs")),
+        hookCommand(nodeHookCommand(".codex/hooks/post-typecheck.mjs")),
+        hookCommand(nodeHookCommand(".codex/hooks/post-console-log-warn.mjs")),
+      ],
+    },
+  ];
+  config.hooks.SubagentStart = [
+    {
+      matcher: "*",
+      hooks: [hookCommand(nodeHookCommand(".codex/hooks/subagent-context.mjs"))],
+    },
+  ];
+  config.hooks.Stop = [
+    ...(config.hooks.Stop ?? []),
+    {
+      matcher: "*",
+      hooks: [
+        hookCommand(nodeHookCommand(".codex/hooks/stop-compaction.mjs")),
+        hookCommand(nodeHookCommand(".codex/hooks/stop-console-log-audit.mjs")),
+        hookCommand(nodeHookCommand(".codex/hooks/stop-completion-guard.mjs")),
+        hookCommand(nodeHookCommand(".codex/hooks/stop-spine-cleanup.mjs")),
+      ],
+    },
+  ];
+  return config;
 }
 
 export function buildCursorProjectHooksJson({
@@ -1989,7 +2156,7 @@ export function buildCursorProjectHooksJson({
   hookPromptAdapterPath = null,
   packageRoot = null,
 } = {}) {
-  return buildCursorHooksJson({
+  const config = buildCursorHooksJson({
     graphifyHookPath,
     memoryHookPath,
     spineHookPath,
@@ -1997,6 +2164,29 @@ export function buildCursorProjectHooksJson({
     hookPromptAdapterPath,
     packageRoot,
   });
+  config.hooks.postToolUse = [
+    {
+      matcher: "Edit|Write",
+      hooks: [
+        { command: nodeHookCommand(".cursor/hooks/post-format.mjs") },
+        { command: nodeHookCommand(".cursor/hooks/post-typecheck.mjs") },
+        { command: nodeHookCommand(".cursor/hooks/post-console-log-warn.mjs") },
+      ],
+    },
+  ];
+  config.hooks.subagentStart = [
+    {
+      command: nodeHookCommand(".cursor/hooks/subagent-context.mjs"),
+    },
+  ];
+  config.hooks.stop = [
+    ...(config.hooks.stop ?? []),
+    { command: nodeHookCommand(".cursor/hooks/stop-compaction.mjs") },
+    { command: nodeHookCommand(".cursor/hooks/stop-console-log-audit.mjs") },
+    { command: nodeHookCommand(".cursor/hooks/stop-completion-guard.mjs") },
+    { command: nodeHookCommand(".cursor/hooks/stop-spine-cleanup.mjs") },
+  ];
+  return config;
 }
 
 async function syncRuntimeSkills(
@@ -2136,8 +2326,16 @@ const CODEX_ACTIVE_PROJECT_HOOK_FILES = new Set([
   "bash-readonly-whitelist.mjs",
   "enforce-agent-dispatch.mjs",
   "graphify-context.mjs",
+  "post-console-log-warn.mjs",
+  "post-format.mjs",
+  "post-typecheck.mjs",
   "skip-reminder.mjs",
   "spine-state.mjs",
+  "stop-compaction.mjs",
+  "stop-completion-guard.mjs",
+  "stop-console-log-audit.mjs",
+  "stop-spine-cleanup.mjs",
+  "subagent-context.mjs",
   "utils.mjs",
 ]);
 
@@ -2169,12 +2367,24 @@ const CURSOR_ACTIVE_PROJECT_HOOK_FILES = new Set([
   "bash-readonly-whitelist.mjs",
   "enforce-agent-dispatch.mjs",
   "graphify-context.mjs",
+  "post-console-log-warn.mjs",
+  "post-format.mjs",
+  "post-typecheck.mjs",
   "skip-reminder.mjs",
   "spine-state.mjs",
+  "stop-compaction.mjs",
+  "stop-completion-guard.mjs",
+  "stop-console-log-audit.mjs",
+  "stop-spine-cleanup.mjs",
+  "subagent-context.mjs",
   "utils.mjs",
 ]);
 
-const OPENCLAW_PROJECT_HOOK_FILES = new Set(["HOOK.md", "handler.ts"]);
+const OPENCLAW_PROJECT_HOOK_FILES = new Set([
+  "HOOK.md",
+  "handler.ts",
+  "stop-save-progress.mjs",
+]);
 
 // Map from platform id to whitelist for project-level hook cleanup.
 const PROJECT_HOOK_FILES_BY_PLATFORM = {
@@ -2232,10 +2442,6 @@ async function syncClaudeProjection(
   canonicalSkills,
   changedFiles,
 ) {
-  // Global-hooks migration: remove project-level Meta_Kim hook files in
-  // <target>/.claude/hooks/ so that ~/.claude/hooks/meta-kim/ becomes the
-  // single source of truth. No backup (per project policy). User-authored
-  // hook files (not on the whitelist) are preserved.
   const {
     claudeAgentsProjectionDir,
     claudeSkillsProjectionDir,
@@ -2245,10 +2451,16 @@ async function syncClaudeProjection(
     claudeMcpProjectionPath,
     displayPaths,
   } = dirs;
-  const inRepoRoot = claudeSettingsProjectionPath.includes(repoRoot);
   const globalScope = dirs.scope === "global";
-  if (inRepoRoot) {
-    await removeProjectMetaKimHooks(dirs.claudeHooksProjectionDir, "claude");
+  const targetHasMetaRuntimeServer =
+    typeof claudeMcpProjectionPath === "string" &&
+    claudeMcpProjectionPath.includes(repoRoot);
+  if (globalScope) {
+    await syncGlobalHookPackage(
+      claudeHooksProjectionDir,
+      displayPaths.claudeHooks,
+      changedFiles,
+    );
   }
 
   for (const agent of agents) {
@@ -2287,7 +2499,7 @@ async function syncClaudeProjection(
     changedFiles.push(`${displayPaths.claudeCommands}/meta-theory.md`);
   }
 
-  if (!inRepoRoot) {
+  if (!globalScope) {
     const hookEntries = (
       await fs.readdir(canonicalClaudeHooksDir, { withFileTypes: true })
     )
@@ -2358,7 +2570,7 @@ async function syncClaudeProjection(
   let finalSettingsContent;
   const canonicalParsed = JSON.parse(settingsContent);
 
-  if (inRepoRoot) {
+  if (!globalScope) {
     let base = {};
     try {
       const prev = await fs.readFile(claudeSettingsProjectionPath, "utf8");
@@ -2401,10 +2613,9 @@ async function syncClaudeProjection(
     changedFiles.push(displayPaths.claudeSettings);
   }
   if (claudeMcpProjectionPath) {
-    // Only write meta-kim-runtime MCP config when inside the Meta_Kim repo.
-    // The MCP server script (scripts/mcp/meta-runtime-server.mjs) only exists
-    // inside this repo — writing it to external projects breaks MCP startup.
-    if (inRepoRoot) {
+    // Only write meta-kim-runtime MCP config when the target contains the
+    // server script; writing that command elsewhere breaks MCP startup.
+    if (targetHasMetaRuntimeServer) {
       const renderedMcpContent = renderMetaKimRuntimeMcp(mcpContent, repoRoot);
       if (
         (await writeGeneratedFile(claudeMcpProjectionPath, renderedMcpContent))
@@ -2593,6 +2804,13 @@ Examples:
     const openclawInRepoRoot =
       dirs.openclawTemplateConfigPath?.includes(repoRoot);
     if (openclawInRepoRoot) {
+      const removedOpenclawRootHooks = await removeProjectMetaKimHooks(
+        dirs.openclawHooksDir,
+        "openclaw",
+      );
+      for (const hookName of removedOpenclawRootHooks) {
+        changedFiles.push(`${dp.openclawHooks}/${hookName}`);
+      }
       const removedOpenclawHooks = await removeProjectMetaKimHooks(
         path.join(dirs.openclawHooksDir, "mcp-memory-service"),
         "openclaw",
@@ -2640,6 +2858,20 @@ Examples:
             `${dp.openclawHooks}/mcp-memory-service/${hookEntry.name}`,
           );
         }
+      }
+      const stopSaveProgressHook = await tryReadCanonical(
+        canonicalOpenClawStopSaveProgressHookPath,
+      );
+      if (
+        stopSaveProgressHook &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.openclawHooksDir, "stop-save-progress.mjs"),
+            stopSaveProgressHook,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.openclawHooks}/stop-save-progress.mjs`);
       }
     }
 
@@ -3281,7 +3513,14 @@ Examples:
     }
   }
 
+  const sourceRepoProjectProjectionAbsent = checkOnly
+    ? await expectedSourceRepoProjectProjectionAbsence(scope, staleFiles)
+    : false;
+
   if (checkOnly && jsonMode) {
+    const effectiveStaleFiles = sourceRepoProjectProjectionAbsent
+      ? []
+      : staleFiles;
     const byCategory = staleFiles.reduce((acc, f) => {
       const k = f.category || "unknown";
       acc[k] = (acc[k] || 0) + 1;
@@ -3296,20 +3535,45 @@ Examples:
         {
           scope,
           targets: selectedTargets,
-          total: staleFiles.length,
-          byCategory,
-          byAction,
-          staleFiles,
+          status: sourceRepoProjectProjectionAbsent
+            ? "source_repo_project_projections_absent"
+            : staleFiles.length > 0
+              ? "stale"
+              : "ok",
+          total: effectiveStaleFiles.length,
+          byCategory: sourceRepoProjectProjectionAbsent ? {} : byCategory,
+          byAction: sourceRepoProjectProjectionAbsent ? {} : byAction,
+          sourceRepoProjectProjections: sourceRepoProjectProjectionAbsent
+            ? {
+                expectedAbsent: true,
+                skippedStaleFiles: staleFiles.length,
+                message: t.syncRuntimesCheckSourceRepoProjectionAbsent(
+                  staleFiles.length,
+                ),
+              }
+            : {
+                expectedAbsent: false,
+                skippedStaleFiles: 0,
+              },
+          staleFiles: effectiveStaleFiles,
         },
         null,
         2,
       )}\n`,
     );
-    if (staleFiles.length > 0) process.exitCode = 1;
+    if (!sourceRepoProjectProjectionAbsent && staleFiles.length > 0) {
+      process.exitCode = 1;
+    }
     return;
   }
 
   if (checkOnly && changedFiles.length > 0) {
+    if (sourceRepoProjectProjectionAbsent) {
+      console.log(
+        t.syncRuntimesCheckSourceRepoProjectionAbsent(staleFiles.length),
+      );
+      return;
+    }
     console.error(t.syncRuntimesCheckStale);
     for (const file of changedFiles) {
       console.error(t.syncRuntimesCheckStaleLine(file));

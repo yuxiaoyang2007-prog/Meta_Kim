@@ -30,6 +30,14 @@ describe("Claude settings hook command rendering", () => {
       commands.some((entry) => entry.includes("pre-git-push-confirm.mjs")),
       false,
     );
+    assert.equal(
+      commands.some((entry) => entry.includes("stop-save-progress.mjs")),
+      true,
+    );
+    assert.equal(
+      commands.some((entry) => entry.includes("stop-compaction.mjs")),
+      true,
+    );
   });
 
   test("Claude global hook template keeps native HookPrompt before Meta_Kim spine", () => {
@@ -130,13 +138,13 @@ describe("Claude settings hook command rendering", () => {
     const merged = mergeGlobalMetaKimHooksIntoSettings(
       {
         hooks: {
-          Stop: [
+          PostToolUse: [
             {
               hooks: [
                 {
                   type: "command",
                   command:
-                    'node "C:/Users/Example/.claude/hooks/meta-kim/stop-compaction.mjs"',
+                    'node "C:/Users/Example/.claude/hooks/meta-kim/post-format.mjs"',
                 },
               ],
             },
@@ -146,7 +154,7 @@ describe("Claude settings hook command rendering", () => {
       template,
     );
 
-    assert.equal(merged.hooks.Stop, undefined);
+    assert.equal(merged.hooks.PostToolUse, undefined);
     assert.match(
       JSON.stringify(merged.hooks),
       /block-dangerous-bash\.mjs/,
@@ -210,7 +218,7 @@ describe("Claude settings hook command rendering", () => {
     );
   });
 
-  test("repo settings merge does not re-add project hook commands", () => {
+  test("repo settings merge adds canonical project hook commands", () => {
     const canonical = {
       hooks: {
         PreToolUse: [
@@ -229,10 +237,10 @@ describe("Claude settings hook command rendering", () => {
 
     const merged = mergeRepoClaudeSettings({}, canonical, "/Users/delphi/work/Finance");
 
-    assert.deepEqual(merged.hooks, {});
+    assert.deepEqual(merged.hooks, canonical.hooks);
   });
 
-  test("repo settings merge removes legacy Meta_Kim hook entries", () => {
+  test("repo settings merge replaces legacy Meta_Kim hook entries with canonical project hooks", () => {
     const base = {
       hooks: {
         PreToolUse: [
@@ -292,10 +300,17 @@ describe("Claude settings hook command rendering", () => {
       .flatMap((blocks) => blocks.flatMap((block) => block.hooks ?? []))
       .map((hook) => hook.command);
 
-    assert.deepEqual(commands, []);
+    assert.deepEqual(commands, [
+      "node .claude/hooks/enforce-agent-dispatch.mjs",
+      "node .claude/hooks/stop-spine-cleanup.mjs",
+    ]);
+    assert.equal(
+      commands.some((command) => command.includes("D:/Old/Meta_Kim")),
+      false,
+    );
   });
 
-  test("repo settings merge keeps user hooks while removing managed hooks", () => {
+  test("repo settings merge keeps user hooks while refreshing managed project hooks", () => {
     const merged = mergeRepoClaudeSettings(
       {
         hooks: {
@@ -336,6 +351,7 @@ describe("Claude settings hook command rendering", () => {
 
     assert.match(JSON.stringify(merged.hooks), /user-session-start\.mjs/);
     assert.doesNotMatch(JSON.stringify(merged.hooks), /meta-kim-memory-save\.mjs/);
-    assert.doesNotMatch(JSON.stringify(merged.hooks), /graphify-context\.mjs/);
+    assert.match(JSON.stringify(merged.hooks), /graphify-context\.mjs/);
   });
+
 });

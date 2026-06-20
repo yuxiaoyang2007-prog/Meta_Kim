@@ -157,7 +157,7 @@ test("generated card plans mark choice cards as adapter-required, not native-tri
     assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
 
     const artifact = JSON.parse(await readFile(path.join(tempDir, `${runId}.json`), "utf8"));
-    const choiceCards = artifact.cardPlanPacket.cards.filter((card) =>
+    const choiceCards = artifact.cardPlanPacket.cardEvents.filter((card) =>
       ["clarify", "options"].includes(card.cardKey),
     );
 

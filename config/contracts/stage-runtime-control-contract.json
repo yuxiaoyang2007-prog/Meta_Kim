@@ -94,6 +94,7 @@
     "fetch_in_progress_does_not_require_fetchRecord_until_commit",
     "read_only_hook_allowance_does_not_auto_advance_stage",
     "fetch_stage_allows_spine_state_write_before_fetchRecord",
+    "fetch_self_lock_allows_repair_only_fetchRecord_write",
     "business_mutation_still_denied_without_execution_readiness",
     "auto_prompt_activation_creates_hook_observed_advisory_state",
     "observed_state_allows_ordinary_local_mutation",

@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -78,9 +78,38 @@ describe("sync-global-meta-theory hook policy", () => {
         "activate-meta-theory-spine.mjs",
         "block-dangerous-bash.mjs",
         "spine-state.mjs",
+        "stop-save-progress.mjs",
+        "stop-memory-save.mjs",
         "utils.mjs",
       ]) {
         await readFile(path.join(hookDir, fileName), "utf8");
+      }
+      for (const fileName of [
+        "enforce-agent-dispatch.mjs",
+        "stop-compaction.mjs",
+        "stop-spine-cleanup.mjs",
+      ]) {
+        const source = await readFile(path.join(hookDir, fileName), "utf8");
+        assert.doesNotMatch(
+          source,
+          /\.\.\/\.\.\/shared\/hooks\//,
+          `${fileName} must resolve shared dependencies from the flattened global hook package`,
+        );
+      }
+      for (const fileName of ["stop-compaction.mjs", "stop-spine-cleanup.mjs"]) {
+        const result = spawnSync(
+          process.execPath,
+          [path.join(hookDir, fileName)],
+          {
+            cwd: root,
+            env,
+            input: "{}\n",
+            encoding: "utf8",
+            timeout: 5000,
+          },
+        );
+        assert.equal(result.status, 0, result.stderr || result.stdout);
+        assert.doesNotMatch(result.stderr, /ERR_MODULE_NOT_FOUND|shared[\\/]hooks/);
       }
 
       const settings = JSON.parse(
@@ -106,6 +135,17 @@ describe("sync-global-meta-theory hook policy", () => {
         JSON.stringify(promptHooks),
         /hookprompt-adapter\.mjs/,
         "Claude must not wrap native HookPrompt through the Meta_Kim adapter",
+      );
+      const stopHooks = settings.hooks?.Stop?.flatMap(
+        (block) => block.hooks ?? [],
+      ) ?? [];
+      assert.ok(
+        stopHooks.some((hook) => hook.command.includes("stop-save-progress.mjs")),
+        "global Claude settings must register the continuation progress Stop hook",
+      );
+      assert.ok(
+        stopHooks.some((hook) => hook.command.includes("stop-compaction.mjs")),
+        "global Claude settings must register governed compaction Stop hook",
       );
     });
   });
@@ -346,7 +386,9 @@ describe("sync-global-meta-theory hook policy", () => {
 
       await runScript(["--targets", "claude", "--with-global-hooks"], env);
       const repaired = JSON.parse(await readFile(settingsPath, "utf8"));
-      assert.equal(repaired.hooks.Stop, undefined);
+      const repairedStop = JSON.stringify(repaired.hooks.Stop ?? []);
+      assert.doesNotMatch(repairedStop, /missing-retired-hook\.mjs/);
+      assert.match(repairedStop, /stop-save-progress\.mjs/);
     });
   });
 

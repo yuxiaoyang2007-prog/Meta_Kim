@@ -26,13 +26,13 @@
 
 ## Overview
 
-**Meta_Kim** is not another AI coding tool. It is the governance layer for AI coding work.
+**Meta_Kim** is not another AI coding tool. It is a governance layer for durable AI coding work.
 
 The hard part of AI coding is no longer getting a model to change files. The hard part is deciding what should happen first, which capability should own it, what evidence proves it worked, and how the lesson survives the next run.
 
 Claude Code, Codex, OpenClaw, and Cursor are all hands: they can write code and change files. But who decides which file to change first? Who reviews the result? Who fixes the problems that show up? And how do we make sure the same mistake does not repeat next time?
 
-Meta_Kim is built for that. It is **AI above AI**: a unified governance layer that keeps complex work from turning into a mess.
+Meta_Kim is built for that. It is the governance layer above the coding hands: a runnable set of agents, skills, contracts, hooks, scripts, and evidence gates that keeps complex work from turning into a mess.
 
 ### One-line summary
 
@@ -552,10 +552,10 @@ Meta_Kim currently owns four formal projection targets:
 
 | Platform | Status | Mapping style |
 | --- | --- | --- |
-| **Claude Code** | Fully supported | `.claude/agents/*.md` + `SKILL.md` + hooks + MCP |
-| **Codex** | Fully supported | generated local `.codex/agents/*.toml` + `.agents/skills/` + commands + hooks |
-| **OpenClaw** | Formal projection | `openclaw/` workspaces + skills + internal hooks; stricter tool-denial changes need contributor-owned OpenClaw self-test evidence, and can merge only after that evidence passes review |
-| **Cursor** | Formal projection | `.cursor/agents/*.md` + `.cursor/rules/*.mdc` + skills + hooks + MCP; Cursor changes need contributor-owned Cursor self-test evidence, and can merge only after that evidence passes review |
+| **Claude Code** | Default formal projection | `.claude/agents/*.md` + `SKILL.md` + hooks + MCP; primary prompt-first path verified by sync/check and maintained as a default target |
+| **Codex** | Default formal projection | generated local `.codex/agents/*.toml` + `.agents/skills/` + commands + hooks; primary prompt-first path verified by sync/check and maintained as a default target |
+| **OpenClaw** | Non-default formal projection | `openclaw/` workspaces + skills + internal hooks; stricter tool-denial changes need contributor-owned OpenClaw self-test evidence, and can merge only after that evidence passes review |
+| **Cursor** | Non-default formal projection | `.cursor/agents/*.md` + `.cursor/rules/*.mdc` + skills + hooks + MCP; Cursor changes need contributor-owned Cursor self-test evidence, and can merge only after that evidence passes review |
 
 Meta_Kim also tracks candidate compatibility probes for Qoder CLI, Trae, Kiro, Windsurf / Devin Desktop Cascade, Cline, Roo Code, and Continue. These products expose compatible primitives in their official docs, but setup does not generate project projections for them until a runtime profile, projection layout, generated paths, sync tests, install policy, and live or official probe evidence are added.
 
@@ -584,7 +584,7 @@ flowchart TB
 
 You can keep adding platform mappings over time, but the upgrade path is gated: a candidate becomes a formal projection only after Meta_Kim owns the adapter shape and can verify it.
 
-The four tool targets are first-class Meta_Kim projections, but their native surfaces differ. Claude Code and Codex are the default selected primary path; OpenClaw and Cursor are also formal projections, just non-default selected targets. PRs that improve OpenClaw or Cursor native behavior must include strict contributor-owned self-test evidence from that tool, and can merge only after that evidence passes review.
+The four tool targets are first-class Meta_Kim projections, but their native surfaces and evidence levels differ. Claude Code and Codex are the default selected primary path; OpenClaw and Cursor are also formal projections, just non-default selected targets. PRs that improve OpenClaw or Cursor native behavior must include strict contributor-owned self-test evidence from that tool, and can merge only after that evidence passes review. Projection smoke, fixture validation, and generated reports are useful evidence, but they are not the same thing as native-live runtime proof.
 
 | Capability surface | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
@@ -592,7 +592,7 @@ The four tool targets are first-class Meta_Kim projections, but their native sur
 | **Skills / references** | Native skills, references, and a mature global ecosystem | `.agents/skills/` is the project skill root | Workspace skills and installable skills | Project skill/reference mirrors |
 | **Hooks / automation** | Project hooks + settings.json + plugin ecosystem | Trusted `.codex/hooks.json` project/user hooks | Internal lifecycle hooks; typed plugin hooks needed for blocking/canceling policy | `.cursor/hooks.json` lowerCamel lifecycle hooks with `preToolUse` / `failClosed` |
 | **MCP / configuration** | Full native MCP and config surface | Can connect via runtime adapters and MCP | Clear workspace config | Project MCP and configuration mirrors |
-| **Governance loop support** | Fully supported through Claude-native surfaces | Fully supported through Codex-native surfaces | Formal projection through OpenClaw-native surfaces; typed plugin tool-denial changes need strict tests | Formal projection through Cursor-native surfaces; project decision cards and official hook gates preserve native semantics |
+| **Governance loop support** | Default formal projection through Claude-native surfaces | Default formal projection through Codex-native surfaces | Non-default formal projection through OpenClaw-native surfaces; typed plugin tool-denial changes need strict tests | Non-default formal projection through Cursor-native surfaces; project decision cards and official hook gates preserve native semantics |
 
 The point is format discipline, not a ranking: each formal tool target keeps its own agent, skill, hook, MCP, choice, and config surface instead of pretending one host's format is universal.
 
@@ -936,7 +936,7 @@ Together, they cost far less than asking AI to reread the entire project from sc
 
 ### Q: Which platforms are supported?
 
-Claude Code, Codex, OpenClaw, and Cursor are formal runtime projections. Qoder CLI, Trae, Kiro, Windsurf / Devin Desktop Cascade, Cline, Roo Code, and Continue are tracked as candidate probes because their official docs expose compatible primitives, but they are not yet formal Meta_Kim runtime projections. Dependency-project install targets are handled by those upstream projects and are not repeated as Meta_Kim support claims. The exact support boundary lives in `config/runtime-compatibility-catalog.json`.
+Claude Code and Codex are default formal runtime projections. OpenClaw and Cursor are non-default formal projections. Qoder CLI, Trae, Kiro, Windsurf / Devin Desktop Cascade, Cline, Roo Code, and Continue are tracked as candidate probes because their official docs expose compatible primitives, but they are not yet formal Meta_Kim runtime projections. Dependency-project install targets are handled by those upstream projects and are not repeated as Meta_Kim support claims. The exact support boundary lives in `config/runtime-compatibility-catalog.json`.
 
 ### Q: Is the installation complicated?
 

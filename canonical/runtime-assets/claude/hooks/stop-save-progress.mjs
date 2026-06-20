@@ -26,7 +26,11 @@ try { INPUT = JSON.parse(RAW_STDIN || "{}"); } catch { INPUT = {}; }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOOKS_ROOT = path.resolve(__dirname, "..");
-const PYTHON_HOOK = path.join(HOOKS_ROOT, "mcp_memory_global.py");
+const PYTHON_HOOK_CANDIDATES = [
+  path.join(HOOKS_ROOT, "mcp_memory_global.py"),
+  path.join(HOOKS_ROOT, "memory-hooks", "mcp_memory_global.py"),
+  path.join(__dirname, "mcp_memory_global.py"),
+];
 
 // ── Task extraction patterns ────────────────────────────────────────────────
 
@@ -40,8 +44,17 @@ const DONE_PATTERNS = [
 
 // Patterns that indicate a current/remaining task
 const REMAINING_PATTERNS = [
-  /\b(下一步|待做|还剩|还需要|还没做|remaining|pending|todo|接下来)[^\n]{3,80}/gi,
-  /\b(还没|还没完|未完成|进行中|in progress)[^\n]{3,80}/gi,
+  /(下一步|待做|还剩|还需要|还没做|remaining|pending|todo|接下来)[^\n]{3,80}/gi,
+  /(还没|还没完|未完成|进行中|in progress)[^\n]{3,80}/gi,
+  /(?:再|然后|接着|继续)\s*(?:Critical|Fetch|Thinking|Execution|Review|Meta-Review|Verification|Evolution|执行|推进|处理|做)[^\n]{0,80}/gi,
+];
+
+// Patterns that indicate an unfinished handoff: "I'll list tasks first, then continue"
+// The assistant announced a continuation but the turn is ending — flag it for the next turn.
+const HANDOFF_PATTERNS = [
+  /(?:建|列|先列|先建|创建)?(?:一个|一份|个)?(?:任务清单|任务列表|任务单|todo\s*list|task\s*list)/i,
+  /我先[^\n。]{1,30}(?:再|然后|继续|接着)/,
+  /(?:再|然后|接着|继续)\s*(?:fetch|执行|推进|跑|做)/i,
 ];
 
 // Patterns that describe what was just done
@@ -103,9 +116,24 @@ function extractCurrentTask(lines) {
   return "";
 }
 
+async function pathExists(candidate) {
+  return fs.stat(candidate).then(() => true).catch(() => false);
+}
+
+async function resolvePythonHook() {
+  for (const candidate of PYTHON_HOOK_CANDIDATES) {
+    if (await pathExists(candidate)) return candidate;
+  }
+  return null;
+}
+
 function runPythonSave(args) {
-  return new Promise((resolve) => {
-    const proc = spawn("python", [PYTHON_HOOK, ...args], {
+  return resolvePythonHook().then((pythonHook) => new Promise((resolve) => {
+    if (!pythonHook) {
+      resolve({ code: 0, stdout: "", stderr: "memory helper missing", skipped: true });
+      return;
+    }
+    const proc = spawn("python", [pythonHook, ...args], {
       cwd: process.cwd(),
       timeout: 8000,
     });
@@ -119,7 +147,24 @@ function runPythonSave(args) {
     proc.on("error", () => {
       resolve({ code: -1, stdout: "", stderr: "spawn error" });
     });
-  });
+  }));
+}
+
+async function isLikelyProjectRoot(projectRoot) {
+  const markers = [
+    ".git",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "package.json",
+    ".codex",
+    ".cursor",
+    "openclaw",
+    ".meta-kim",
+  ];
+  for (const marker of markers) {
+    if (await pathExists(path.join(projectRoot, marker))) return true;
+  }
+  return false;
 }
 
 // ── Main ────────────────────────────────────────────────────────────────
@@ -141,6 +186,7 @@ async function main() {
   }
 
   const text = lines.join("\n");
+  const handoffMatched = HANDOFF_PATTERNS.some((re) => re.test(text));
 
   // Only save if there's meaningful work done
   const hasMeaningfulContent = (
@@ -149,7 +195,11 @@ async function main() {
     text.includes("写") || text.includes("改") ||
     text.includes("fix") || text.includes("add") ||
     text.includes("save-progress") ||
-    text.includes("进度")
+    text.includes("进度") ||
+    text.includes("继续") ||
+    text.includes("任务单") ||
+    text.includes("任务清单") ||
+    handoffMatched
   );
 
   if (!hasMeaningfulContent) {
@@ -162,8 +212,11 @@ async function main() {
   const completed = extractUniqueItems(lines, DONE_PATTERNS, 5);
   const remaining = extractUniqueItems(lines, REMAINING_PATTERNS, 3);
   const currentTask = extractCurrentTask(lines);
+  if (handoffMatched && remaining.length === 0) {
+    remaining.push(currentTask || "continuation handoff detected");
+  }
 
-  if (completed.length === 0 && remaining.length === 0) {
+  if (completed.length === 0 && remaining.length === 0 && !handoffMatched) {
     // Nothing extractable — skip silently
     process.exit(0);
     return;
@@ -178,11 +231,52 @@ async function main() {
 
   const result = await runPythonSave(args);
 
-  if (result.code === 0) {
+  if (result.skipped) {
+    console.error("stop-save-progress: memory helper missing, continuation check still ran");
+  } else if (result.code === 0) {
     // Success — result.stdout has the JSON
     console.error(`stop-save-progress: saved ${completed.length} done, ${remaining.length} remaining`);
   } else {
     console.error(`stop-save-progress: failed (${result.code}): ${result.stderr}`);
+  }
+
+  // ── Continuation handoff flag ────────────────────────────────────────
+  // If the assistant announced an unfinished handoff (e.g. "建任务清单，再继续 Fetch")
+  // and there are remaining tasks, write a continuationRequired flag into the
+  // project's .claude/project-task-state.json so the next turn can auto-resume.
+  // Scoped to cwd: when the hook runs outside a project, this is a no-op.
+  try {
+    if (handoffMatched && remaining.length > 0) {
+      const projectRoot = process.cwd();
+      const claudeDir = path.join(projectRoot, ".claude");
+      const statePath = path.join(claudeDir, "project-task-state.json");
+      if (await isLikelyProjectRoot(projectRoot)) {
+        await fs.mkdir(claudeDir, { recursive: true });
+        let prev = {};
+        try {
+          const raw = await fs.readFile(statePath, "utf8");
+          prev = JSON.parse(raw);
+        } catch {
+          prev = {};
+        }
+        prev.meta_kim = true;
+        prev.continuationRequired = true;
+        prev.continuationHandoff = {
+          matched: true,
+          ts: new Date().toISOString(),
+          source: "stop-save-progress",
+          remainingCount: remaining.length,
+          currentTask: currentTask || null,
+        };
+        prev.updated_at = new Date().toISOString();
+        await fs.writeFile(statePath, JSON.stringify(prev, null, 2), "utf8");
+        console.error(
+          `stop-save-progress: continuationRequired=true (${remaining.length} remaining, cwd=${projectRoot})`
+        );
+      }
+    }
+  } catch (err) {
+    console.error(`stop-save-progress: continuation flag skipped: ${err.message}`);
   }
 
   process.exit(0);

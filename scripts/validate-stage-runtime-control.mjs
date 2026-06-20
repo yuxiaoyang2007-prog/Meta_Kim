@@ -169,6 +169,7 @@ function assertRegressionTests() {
       "Fetch in progress does not require fetchRecord until stage commit",
       "read-only hook allowance does not auto-advance Critical to Fetch",
       "Fetch stage allows Bash spine-state writes even before fetchRecord exists",
+      "Fetch self-lock allows repair-only Node fetchRecord spine-state write",
       `${deprecatedModeMarker} residue in spine state cannot skip dispatch governance`,
       "auto prompt activation creates observed advisory state instead of managed hard-gate state",
       "observed hook state allows ordinary local file mutation with one readable notice",

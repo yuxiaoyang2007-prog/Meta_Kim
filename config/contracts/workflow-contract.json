@@ -167,6 +167,26 @@
       "rule": "Every business phase must prove why it triggered, skipped, blocked, or waits. phaseCount=11 is never enough evidence by itself.",
       "deepResearchBinding": "Use key signals, evidence refs, falsification checks, and decision impact in the same spirit as deep-research claim evidence."
     },
+    "phaseStatusVisibilityPolicy": {
+      "schemaVersion": "business-phase-status-visibility-v0.1",
+      "required": true,
+      "requiredPhaseFields": [
+        "status",
+        "statusReason",
+        "nextAction",
+        "triggerEvaluation"
+      ],
+      "requiredClosureFields": [
+        "currentPhase",
+        "currentStatus",
+        "currentReason",
+        "currentNextAction"
+      ],
+      "primaryVisibleSurface": "localized_conversation_notice",
+      "secondaryVisibleSurface": "user_readable_run_report",
+      "defaultCliBehavior": "emit_localized_notice_unless_explicitly_suppressed",
+      "rule": "A governed run must expose all 11 business phase statuses, why each status was assigned, and the current blocked or pending phase in a user-visible surface. Validator pass or artifact presence alone does not prove user-visible workflow closure."
+    },
     "markerPhases": [
       "meta_review",
       "verify",
@@ -2186,7 +2206,9 @@
       "requiredFields": [
         "dealerOwner",
         "dealerMode",
-        "cards",
+        "cardEvents",
+        "cardTypeCatalog",
+        "cardTypeDecisions",
         "deliveryShells",
         "dealStandard",
         "silenceDecision",

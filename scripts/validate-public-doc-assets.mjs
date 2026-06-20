@@ -59,4 +59,6 @@ for (const image of REQUIRED_PUBLIC_IMAGES) {
   assert(gitTracked(image), `${image} must be tracked as a public README asset`);
 }
 
-console.log(`public docs image assets valid: ${referenced.size} README image assets checked`);
+console.log(
+  `public docs image assets valid: ${referenced.size} README image assets checked`,
+);

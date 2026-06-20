@@ -96,7 +96,6 @@ const silentMode = args.includes("--silent") || !process.stdout.isTTY;
 const useSavedProjectDirsMode =
   args.includes("--all-projects") || args.includes("--update-projects");
 const saveProjectDirsMode = args.includes("--save-project-dirs");
-const includeSelfCleanup = args.includes("--include-self-cleanup");
 
 function writeUtf8BomFileSync(path, content) {
   writeFileSync(
@@ -3327,6 +3326,8 @@ const GLOBAL_HOOK_PACKAGE_FILES_LIST = [
   "stop-compaction.mjs",
   "stop-completion-guard.mjs",
   "stop-console-log-audit.mjs",
+  "stop-memory-save.mjs",
+  "stop-save-progress.mjs",
   "stop-spine-cleanup.mjs",
   "subagent-context.mjs",
   "utils.mjs",
@@ -3378,6 +3379,7 @@ const PROJECT_HOOK_REL_DIRS_BY_PLATFORM = {
   claude: ".claude/hooks",
   codex: ".codex/hooks",
   cursor: ".cursor/hooks",
+  openclaw: "openclaw/hooks",
 };
 
 const PROJECT_HOOK_SOURCE_CANDIDATES = {
@@ -3390,8 +3392,16 @@ const PROJECT_HOOK_SOURCE_CANDIDATES = {
     "bash-readonly-whitelist.mjs",
     "enforce-agent-dispatch.mjs",
     "graphify-context.mjs",
+    "post-console-log-warn.mjs",
+    "post-format.mjs",
+    "post-typecheck.mjs",
     "skip-reminder.mjs",
     "spine-state.mjs",
+    "stop-compaction.mjs",
+    "stop-completion-guard.mjs",
+    "stop-console-log-audit.mjs",
+    "stop-spine-cleanup.mjs",
+    "subagent-context.mjs",
     "utils.mjs",
   ],
   cursor: [
@@ -3399,9 +3409,20 @@ const PROJECT_HOOK_SOURCE_CANDIDATES = {
     "bash-readonly-whitelist.mjs",
     "enforce-agent-dispatch.mjs",
     "graphify-context.mjs",
+    "post-console-log-warn.mjs",
+    "post-format.mjs",
+    "post-typecheck.mjs",
     "skip-reminder.mjs",
     "spine-state.mjs",
+    "stop-compaction.mjs",
+    "stop-completion-guard.mjs",
+    "stop-console-log-audit.mjs",
+    "stop-spine-cleanup.mjs",
+    "subagent-context.mjs",
     "utils.mjs",
+  ],
+  openclaw: [
+    "stop-save-progress.mjs",
   ],
 };
 
@@ -3461,28 +3482,325 @@ function buildCodexGraphifyContextHookSource() {
   ].join("\n");
 }
 
+const OPENCLAW_AGENT_ORDER = [
+  "meta-warden",
+  "meta-genesis",
+  "meta-artisan",
+  "meta-sentinel",
+  "meta-librarian",
+  "meta-conductor",
+  "meta-prism",
+  "meta-scout",
+];
+
+function parseSetupAgentFrontmatter(raw, filePath) {
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!match) {
+    throw new Error(`${filePath} is missing YAML frontmatter.`);
+  }
+
+  const data = {};
+  for (const line of match[1].split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separator = trimmed.indexOf(":");
+    if (separator === -1) {
+      throw new Error(`${filePath} has an invalid frontmatter line: ${line}`);
+    }
+    const key = trimmed.slice(0, separator).trim();
+    let value = trimmed.slice(separator + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    data[key] = value;
+  }
+
+  return { data, body: match[2].trimStart() };
+}
+
+function extractSetupAgentTitle(body, fallback) {
+  const match = body.match(/^#\s+(.+)$/m);
+  return match ? match[1].trim() : fallback;
+}
+
+function roleFromSetupAgentTitle(title, fallback) {
+  const parts = title.split(":");
+  return parts.length > 1 ? parts.slice(1).join(":").trim() : fallback;
+}
+
+function sortSetupAgents(agents) {
+  return [...agents].sort((left, right) => {
+    const leftIndex = OPENCLAW_AGENT_ORDER.indexOf(left.id);
+    const rightIndex = OPENCLAW_AGENT_ORDER.indexOf(right.id);
+    if (leftIndex === -1 && rightIndex === -1) return left.id.localeCompare(right.id);
+    if (leftIndex === -1) return 1;
+    if (rightIndex === -1) return -1;
+    return leftIndex - rightIndex;
+  });
+}
+
+function loadSetupAgents() {
+  const canonicalAgentsDir = join(PROJECT_DIR, "canonical", "agents");
+  const files = readdirSync(canonicalAgentsDir)
+    .filter((file) => file.endsWith(".md"))
+    .sort();
+
+  const agents = [];
+  for (const file of files) {
+    const filePath = join(canonicalAgentsDir, file);
+    const raw = readFileSync(filePath, "utf8");
+    const { data, body } = parseSetupAgentFrontmatter(raw, filePath);
+    if (!data.name || !data.description) {
+      throw new Error(`${filePath} must define frontmatter name and description.`);
+    }
+    const title = extractSetupAgentTitle(body, data.name);
+    agents.push({
+      id: data.name,
+      description: data.description,
+      sourceFile: relative(PROJECT_DIR, filePath).replace(/\\/g, "/"),
+      title,
+      role: roleFromSetupAgentTitle(title, data.description),
+      body: body.trim(),
+    });
+  }
+
+  return sortSetupAgents(agents);
+}
+
+function parseSetupAgentPresentation(agent) {
+  const titleMatch = agent.title.match(
+    /^(.*?)(?::\s*(.*?))?(?:\s+([^\s]+))?$/u,
+  );
+  return {
+    displayName: titleMatch?.[1]?.trim() || agent.id,
+    localizedRole: titleMatch?.[2]?.trim() || agent.description,
+    emoji: titleMatch?.[3]?.trim() || "🤖",
+  };
+}
+
+function buildSetupOpenClawBootstrap(agent) {
+  const { displayName, localizedRole } = parseSetupAgentPresentation(agent);
+
+  return `# BOOTSTRAP.md - ${agent.id}
+
+This workspace already ships Meta_Kim meta-architecture assets; do not invent a persona from scratch.
+
+## Cold-start order
+
+1. Read \`IDENTITY.md\` — confirm you are \`${displayName}\` and your role is ${localizedRole}.
+2. Read \`SOUL.md\` — boundaries and quality bar.
+3. Read \`TOOLS.md\` and \`AGENTS.md\` — decide what to delegate.
+4. Update \`USER.md\` only when the user explicitly asks for long-lived context.
+
+## First reply
+
+- One sentence: what you own (and only that).
+- Do not absorb other meta agents' responsibilities.
+- Escalate cross-boundary conflicts to \`meta-warden\`.
+`;
+}
+
+function buildSetupOpenClawIdentity(agent) {
+  const { displayName, localizedRole, emoji } = parseSetupAgentPresentation(agent);
+
+  return `# IDENTITY.md - ${agent.id}
+
+- **Name:** ${displayName}
+- **Creature:** Meta_Kim meta agent
+- **Vibe:** Focused, minimal, clear boundaries; primary job: ${localizedRole}
+- **Emoji:** ${emoji}
+- **Avatar:**
+
+## Identity Notes
+
+- Agent ID: \`${agent.id}\`
+- Core role: ${agent.description}
+- Canonical source: \`${agent.sourceFile}\`
+`;
+}
+
+function buildSetupOpenClawUser() {
+  return `# USER.md - About Your Human
+
+- **Name:**
+- **What to call them:**
+- **Pronouns:** _(optional)_
+- **Timezone:**
+- **Notes:**
+
+## Context
+
+Record this user's long-term preferences for Meta_Kim work; do not store unrelated private data.
+`;
+}
+
+function buildSetupOpenClawBoot(agent) {
+  const { displayName } = parseSetupAgentPresentation(agent);
+
+  return `# BOOT.md - ${agent.id}
+
+After the OpenClaw gateway starts, run one-time boot checks in this order when needed.
+
+1. Confirm the workspace path and that \`IDENTITY.md\`, \`SOUL.md\`, \`TOOLS.md\`, and \`AGENTS.md\` are readable.
+2. Do not message the user proactively; act only when the boot task explicitly requires it.
+3. If you see role-boundary conflicts, record them in \`MEMORY.md\` under open questions — do not rewrite persona on your own.
+4. If you are \`${displayName}\`, keep boot checks inside your own boundary only.
+`;
+}
+
+function buildSetupOpenClawMemory(agent) {
+  return `# MEMORY.md - ${agent.id}
+
+Store information that stays true across sessions.
+
+## Do record
+
+- Stable user preferences
+- Recurring architecture decisions
+- Confirmed boundary interpretations
+- Risk constraints that keep applying
+
+## Do not record
+
+- One-off task state
+- Ephemeral command output
+- Unconfirmed guesses
+- Personal data unrelated to Meta_Kim
+`;
+}
+
+function buildSetupOpenClawTeamDirectory(agents) {
+  const rows = agents
+    .map((agent) => `| \`${agent.id}\` | ${agent.title} | ${agent.description} |`)
+    .join("\n");
+
+  return `# AGENTS.md - Meta_Kim Team Directory
+
+This file is generated from \`canonical/agents/*.md\` by Meta_Kim runtime sync/bootstrap.
+
+Use the smallest agent whose boundary matches the task. Escalate to \`meta-warden\` when the task spans multiple agent boundaries.
+
+Important: this file lists only the Meta_Kim team. It is not the full OpenClaw registry. If the user asks how many agents exist, which agents are currently registered, or who can collaborate right now, query the live runtime registry first instead of answering from this file alone.
+
+| Agent ID | Name | Responsibility |
+| --- | --- | --- |
+${rows}
+`;
+}
+
+function buildSetupOpenClawSoul(agent) {
+  return `# SOUL.md - ${agent.id}
+
+Generated from \`${agent.sourceFile}\`. Edit the canonical source first, then run Meta_Kim runtime sync/bootstrap.
+
+## Runtime Notes
+
+- You are running inside OpenClaw.
+- Read the local \`AGENTS.md\` before delegating with \`sessions_send\`.
+- \`AGENTS.md\` only lists the Meta_Kim team, not the full OpenClaw registry.
+- When the user asks which agents exist, how many agents exist, or who can collaborate right now, query the live runtime registry first through \`agents_list\`. If that tool is unavailable, fall back to an explicit runtime command and state the result source.
+- Stay inside your own responsibility boundary unless the user explicitly asks you to coordinate broader work.
+- The theory source is \`canonical/skills/meta-theory/references/meta-theory.md\`; public runtime behavior must not depend on local narrative notes.
+- For \`meta-theory\`, \`/meta-theory\`, project understanding, architecture, runtime routing, hook/MCP/tool routing, commercialization, market, competitor, pricing, growth, strategy, or roadmap tasks, run or faithfully follow \`npm run meta:theory:run -- "<user request>"\` before Thinking. If command execution or retrieval capability is unavailable, return \`blocked_to_fetch\` with the exact missing capability instead of giving a shallow summary.
+- Project-understanding Fetch must account for README, AGENTS, package scripts, canonical agents/skills/runtime assets, contracts, capability index, runtime projections, MCP configs, hooks, dependency registry, and Graphify when present.
+
+${agent.body}
+`;
+}
+
+function buildSetupOpenClawHeartbeat(agent) {
+  const templatePath = join(
+    PROJECT_DIR,
+    "canonical",
+    "runtime-assets",
+    "openclaw",
+    "HEARTBEAT.template.md",
+  );
+  const raw = readFileSync(templatePath, "utf8");
+  return raw.replace(/^<!--[\s\S]*?-->\r?\n/, "").replaceAll("{{AGENT_ID}}", agent.id);
+}
+
+function buildSetupOpenClawTools(agent, agents) {
+  const teammates = agents
+    .filter((item) => item.id !== agent.id)
+    .map((item) => `- \`${item.id}\`: ${item.description}`)
+    .join("\n");
+
+  return `# TOOLS.md - ${agent.id}
+
+Auto-generated by Meta_Kim runtime sync/bootstrap. Edit canonical sources first, then re-sync.
+
+## OpenClaw runtime conventions
+
+- Read \`SOUL.md\` and \`AGENTS.md\` in this directory first.
+- For collaboration, prefer OpenClaw native agent-to-agent routing.
+- \`AGENTS.md\` lists the Meta_Kim team only — it is not the full OpenClaw registry.
+- When the user asks for agent counts, names, or who can collaborate, call \`agents_list\` first; if unavailable, use an explicit command and state the source.
+- Shared skill: \`../../skills/meta-theory/SKILL.md\` (directory under \`openclaw/skills/\`, not duplicated per workspace).
+- Do not absorb other agents' duties; delegate or escalate to \`meta-warden\` when out of scope.
+
+## Teammates
+
+${teammates || "- None"}
+`;
+}
+
+function buildOpenClawWorkspacePlans(targetDir) {
+  const agents = loadSetupAgents();
+  const teamDirectory = buildSetupOpenClawTeamDirectory(agents);
+  const builders = {
+    "BOOT.md": (agent) => buildSetupOpenClawBoot(agent),
+    "BOOTSTRAP.md": (agent) => buildSetupOpenClawBootstrap(agent),
+    "IDENTITY.md": (agent) => buildSetupOpenClawIdentity(agent),
+    "MEMORY.md": (agent) => buildSetupOpenClawMemory(agent),
+    "USER.md": () => buildSetupOpenClawUser(),
+    "SOUL.md": (agent) => buildSetupOpenClawSoul(agent),
+    "AGENTS.md": () => teamDirectory,
+    "HEARTBEAT.md": (agent) => buildSetupOpenClawHeartbeat(agent),
+    "TOOLS.md": (agent) => buildSetupOpenClawTools(agent, agents),
+  };
+
+  return agents.flatMap((agent) =>
+    OPENCLAW_WORKSPACE_MD.map((fileName) =>
+      projectGeneratedFilePlan(
+        `openclaw/workspaces/${agent.id}/${fileName}`,
+        builders[fileName](agent),
+        targetDir,
+        `generated:openclaw-workspace:${agent.id}:${fileName}`,
+      ),
+    ),
+  );
+}
+
 function projectHookGeneratedPlans(platformId, targetDir) {
+  const plans = [];
   const relDir = PROJECT_HOOK_REL_DIRS_BY_PLATFORM[platformId];
   const hookNames = PROJECT_HOOK_SOURCE_CANDIDATES[platformId] ?? [];
-  if (!relDir || hookNames.length === 0) return [];
-  return hookNames
-    .map((hookName) => {
+  if (relDir && hookNames.length > 0) {
+    for (const hookName of hookNames) {
       const content = readProjectHookSource(platformId, hookName);
-      if (!content) return null;
-      return projectGeneratedFilePlan(
+      if (!content) continue;
+      plans.push(projectGeneratedFilePlan(
         `${relDir}/${hookName}`,
         content,
         targetDir,
         `generated:project-hook:${platformId}:${hookName}`,
-      );
-    })
-    .filter(Boolean);
+      ));
+    }
+  }
+  if (platformId === "openclaw") {
+    plans.push(...buildOpenClawWorkspacePlans(targetDir));
+  }
+  return plans;
 }
 
 function writeProjectGeneratedHooks(platformId, targetDir) {
   let count = 0;
   for (const plan of projectHookGeneratedPlans(platformId, targetDir)) {
-    const content = readProjectHookSource(platformId, plan.relPath.split("/").pop());
+    const content = plan.content;
     if (!content) continue;
     const destPath = join(targetDir, plan.relPath);
     mkdirSync(dirname(destPath), { recursive: true });
@@ -3638,6 +3956,7 @@ function rewriteProjectDirRefs(raw, targetDir) {
   const sourceForward = PROJECT_DIR.replace(/\\/g, "/");
   const targetForward = targetDir.replace(/\\/g, "/");
   return String(raw)
+    .replaceAll("__REPO_ROOT__", targetForward)
     .replaceAll(sourceForward, targetForward)
     .replaceAll(PROJECT_DIR, targetDir);
 }
@@ -3792,12 +4111,6 @@ function prepareProjectDeployJson(relPath, srcPath, targetDir) {
   if (rel === ".mcp.json" || rel === ".cursor/mcp.json") {
     return { mcpServers: {} };
   }
-  if (rel === ".codex/hooks.json") {
-    return buildCodexHooksJson({ memoryHookPath: null, packageRoot: PROJECT_DIR });
-  }
-  if (rel === ".cursor/hooks.json") {
-    return buildCursorHooksJson({ memoryHookPath: null, packageRoot: PROJECT_DIR });
-  }
 
   const raw = readFileSync(srcPath, "utf8");
   const parsed = parseJsonText(rewriteProjectDirRefs(raw, targetDir), srcPath);
@@ -3900,40 +4213,38 @@ function projectDeployRootsForPlatform(platformId) {
   }
 
   // Replace whole-directory roots (.claude/.codex/.cursor/openclaw) with
-  // explicit subpath roots so the deploy stage never recurses into a
-  // directory whose Meta_Kim-managed files have already been migrated away
-  // (e.g. .claude/hooks/). Whole-directory roots would either hit fs.cpSync's
-  // "src and dest cannot be the same" check on Meta_Kim self-host, or copy
-  // back hook files that the global migration just removed.
+  // explicit subpath roots so deploy only touches known runtime projection
+  // surfaces and never recurses through unrelated local state.
   if (platformId === "claude" || platformId === "all") {
-    add(".claude/agents");
-    add(".claude/skills");
-    add(".claude/capability-index");
-    add(".claude/commands");
-    add(".claude/settings.json");
-    if (existsSync(join(PROJECT_DIR, ".mcp.json"))) add(".mcp.json");
+    add("canonical/agents", ".claude/agents");
+    add("canonical/skills/meta-theory", ".claude/skills/meta-theory");
+    add("config/capability-index", ".claude/capability-index");
+    add("canonical/runtime-assets/claude/commands", ".claude/commands");
+    add("canonical/runtime-assets/claude/settings.json", ".claude/settings.json");
+    add("canonical/runtime-assets/claude/mcp.json", ".mcp.json");
   }
   if (platformId === "openclaw" || platformId === "all") {
-    add("openclaw/workspaces");
-    add("openclaw/skills");
-    add("openclaw/capability-index");
-    add("openclaw/openclaw.template.json");
+    add("canonical/skills/meta-theory", "openclaw/skills/meta-theory");
+    add("config/capability-index", "openclaw/capability-index");
+    add(
+      "canonical/runtime-assets/openclaw/openclaw.template.json",
+      "openclaw/openclaw.template.json",
+    );
   }
   if (platformId === "codex" || platformId === "all") {
-    add(".codex/agents");
-    add(".agents/skills");
-    add(".codex/capability-index");
-    add(".codex/commands");
-    add(".codex/hooks.json");
+    add("canonical/skills/meta-theory", ".agents/skills/meta-theory");
+    add("config/capability-index", ".codex/capability-index");
+    add("canonical/runtime-assets/codex/commands", ".codex/commands");
+    add("canonical/runtime-assets/codex/hooks.json", ".codex/hooks.json");
     add(".codex/config.toml");
   }
   if (platformId === "cursor" || platformId === "all") {
-    add(".cursor/agents");
-    add(".cursor/skills");
-    add(".cursor/capability-index");
-    add(".cursor/rules");
-    add(".cursor/hooks.json");
-    add(".cursor/mcp.json");
+    add("canonical/agents", ".cursor/agents");
+    add("canonical/skills/meta-theory", ".cursor/skills/meta-theory");
+    add("config/capability-index", ".cursor/capability-index");
+    add("canonical/runtime-assets/cursor/rules", ".cursor/rules");
+    add("canonical/runtime-assets/cursor/hooks.json", ".cursor/hooks.json");
+    add("canonical/runtime-assets/claude/mcp.json", ".cursor/mcp.json");
   }
   return roots;
 }
@@ -3944,14 +4255,19 @@ function collectDeployFilePlansFromRoot(srcRoot, destRoot, context = {}) {
   const targetDir = context.targetDir || destRoot;
   const plans = [];
   if (!statSync(srcRoot).isDirectory()) {
-    const relPath = normalizeDeployRelPath(relative(sourceRoot, srcRoot));
+    const relPath = normalizeDeployRelPath(
+      context.destRelBase || relative(sourceRoot, srcRoot),
+    );
     const destPath = join(targetDir, relPath);
     plans.push(projectDeployFilePlan(srcRoot, destPath, relPath, targetDir, context));
     return plans;
   }
   for (const entry of readdirSync(srcRoot, { withFileTypes: true })) {
     const srcPath = join(srcRoot, entry.name);
-    const relPath = normalizeDeployRelPath(relative(sourceRoot, srcPath));
+    const sourceRel = normalizeDeployRelPath(relative(sourceRoot, srcPath));
+    const relPath = normalizeDeployRelPath(
+      context.destRelBase ? join(context.destRelBase, sourceRel) : sourceRel,
+    );
     const destPath = join(targetDir, relPath);
     if (entry.isDirectory()) {
       plans.push(
@@ -3959,6 +4275,7 @@ function collectDeployFilePlansFromRoot(srcRoot, destRoot, context = {}) {
           sourceRoot,
           targetDir,
           managedRelPaths: context.managedRelPaths,
+          destRelBase: context.destRelBase,
         }),
       );
     } else {
@@ -4055,6 +4372,7 @@ function projectGeneratedFilePlan(relPath, content, targetDir, source) {
   return {
     relPath: rel,
     source,
+    content,
     exists,
     contentStatus,
     ownership: isMetaKimNamespacedProjectPath(rel)
@@ -4100,9 +4418,10 @@ function collectProjectDeployPlan(activeTargets, targetDir) {
       const src = join(PROJECT_DIR, root.srcRel);
       const dest = join(targetDir, root.destRel);
       for (const plan of collectDeployFilePlansFromRoot(src, dest, {
-        sourceRoot: PROJECT_DIR,
+        sourceRoot: root.destRel !== root.srcRel ? src : PROJECT_DIR,
         targetDir,
         managedRelPaths,
+        destRelBase: root.destRel !== root.srcRel ? root.destRel : null,
       })) {
         if (seen.has(plan.relPath)) continue;
         seen.add(plan.relPath);
@@ -4651,12 +4970,23 @@ function stripMetaKimProjectConfig(relPath, config = {}) {
   return next;
 }
 
-function generatedProjectConfigForRel(targetDir, relPath) {
+function generatedProjectConfigVariantsForRel(targetDir, relPath, currentFilePlans = []) {
   const rel = normalizeDeployRelPath(relPath);
-  const sourcePath = join(PROJECT_DIR, rel);
+  const plan = currentFilePlans.find(
+    (file) => normalizeDeployRelPath(file.relPath) === rel,
+  );
+  const sourcePath = join(PROJECT_DIR, plan?.source ?? rel);
   if (!existsSync(sourcePath)) return null;
-  const raw = rewriteProjectDirRefs(readFileSync(sourcePath, "utf8"), targetDir);
-  return parseJsonText(raw, sourcePath);
+  const raw = readFileSync(sourcePath, "utf8");
+  const candidates = [raw, rewriteProjectDirRefs(raw, targetDir)];
+  const variants = [];
+  const seen = new Set();
+  for (const candidate of candidates) {
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    variants.push(parseJsonText(candidate, sourcePath));
+  }
+  return variants;
 }
 
 function isEmptyProjectConfigShell(config = {}) {
@@ -4678,10 +5008,16 @@ function isGeneratedOnlyProjectConfig(targetDir, relPath, config, currentFilePla
     plan?.ownership === "shared_config_merge" ||
     plan?.mergePolicy === "additive_preserve_user_state_json";
   if (!hasMetaKimManagementEvidence) return false;
-  const generated = generatedProjectConfigForRel(targetDir, rel);
-  if (!generated) return false;
-  const strippedGenerated = stripMetaKimProjectConfig(rel, generated);
-  return jsonEquivalent(config, generated) || jsonEquivalent(config, strippedGenerated);
+  const generatedVariants = generatedProjectConfigVariantsForRel(
+    targetDir,
+    rel,
+    currentFilePlans,
+  );
+  if (!generatedVariants) return false;
+  return generatedVariants.some((generated) => {
+    const strippedGenerated = stripMetaKimProjectConfig(rel, generated);
+    return jsonEquivalent(config, generated) || jsonEquivalent(config, strippedGenerated);
+  });
 }
 
 function cleanupRedundantProjectConfigs(targetDir, activeTargets, currentFilePlans = []) {
@@ -5165,7 +5501,7 @@ const PROJECT_HOOK_DIRS_BY_PLATFORM = {
   claude: ".claude/hooks",
   codex: ".codex/hooks",
   cursor: ".cursor/hooks",
-  // openclaw has no hook concept.
+  openclaw: "openclaw/hooks",
 };
 
 // Per-platform whitelist of Meta_Kim-managed hook files. Files NOT on the
@@ -5207,6 +5543,9 @@ const PROJECT_HOOK_FILE_WHITELIST_BY_PLATFORM = {
     "planning-with-files-adapter.mjs",
     "post_tool_use.py",
     "post-tool-use.sh",
+    "post-console-log-warn.mjs",
+    "post-format.mjs",
+    "post-typecheck.mjs",
     "pre_tool_use.py",
     "pre-tool-use.sh",
     "pre-compact.sh",
@@ -5220,6 +5559,11 @@ const PROJECT_HOOK_FILE_WHITELIST_BY_PLATFORM = {
     "resolve-plan-dir.sh",
     "skip-reminder.mjs",
     "spine-state.mjs",
+    "stop-compaction.mjs",
+    "stop-console-log-audit.mjs",
+    "stop-completion-guard.mjs",
+    "stop-spine-cleanup.mjs",
+    "subagent-context.mjs",
     "utils.mjs",
   ]),
   cursor: new Set([
@@ -5233,6 +5577,9 @@ const PROJECT_HOOK_FILE_WHITELIST_BY_PLATFORM = {
     "planning-with-files-adapter.mjs",
     "post-tool-use.ps1",
     "post-tool-use.sh",
+    "post-console-log-warn.mjs",
+    "post-format.mjs",
+    "post-typecheck.mjs",
     "pre-tool-use.ps1",
     "pre-tool-use.sh",
     "stop.ps1",
@@ -5241,7 +5588,15 @@ const PROJECT_HOOK_FILE_WHITELIST_BY_PLATFORM = {
     "user-prompt-submit.sh",
     "skip-reminder.mjs",
     "spine-state.mjs",
+    "stop-compaction.mjs",
+    "stop-console-log-audit.mjs",
+    "stop-completion-guard.mjs",
+    "stop-spine-cleanup.mjs",
+    "subagent-context.mjs",
     "utils.mjs",
+  ]),
+  openclaw: new Set([
+    "stop-save-progress.mjs",
   ]),
 };
 
@@ -5381,12 +5736,6 @@ function projectBootstrapFailureResult(targetDir, activeTargets, error) {
 
 function deployPlatformFiles(platformId, targetDir) {
   let fileCount = 0;
-  // Whole-directory skip: when the destination root collides with the source
-  // root (Meta_Kim self-host), skip copying .claude/.codex/.cursor/openclaw
-  // directories in place — fs.cpSync refuses src === dest, and the global
-  // hooks migration has already taken care of removing Meta_Kim project-level
-  // hook files. Top-level files like CLAUDE.md / AGENTS.md / .mcp.json still
-  // get copied/merged normally.
   const targetIsRepo = resolve(targetDir) === resolve(PROJECT_DIR);
   const copyIfExists = (srcRel, destRel) => {
     const src = join(PROJECT_DIR, srcRel);
@@ -5731,15 +6080,15 @@ function cleanupProjectHookConfigs(activeTargets, targetDir) {
 }
 
 async function cleanupProjectRedundancyDirs(activeTargets, targetDirs) {
-  const dirs = uniqueProjectDeployDirs(targetDirs).filter(
-    (targetDir) => includeSelfCleanup || resolve(targetDir) !== resolve(PROJECT_DIR),
-  );
+  const dirs = uniqueProjectDeployDirs(targetDirs);
   if (dirs.length === 0) return [];
 
-  heading(t.projectCleanupBatchHeading(dirs.length));
-  console.log(`${C.dim}${t.projectCleanupProtectionNote}${C.reset}`);
-  info(t.projectAssetsCleanupIntro);
-  info(t.projectAssetsCleanupScope);
+  if (!jsonOutputMode) {
+    heading(t.projectCleanupBatchHeading(dirs.length));
+    console.log(`${C.dim}${t.projectCleanupProtectionNote}${C.reset}`);
+    info(t.projectAssetsCleanupIntro);
+    info(t.projectAssetsCleanupScope);
+  }
 
   const results = [];
   for (const targetDir of dirs) {
@@ -5781,15 +6130,21 @@ async function cleanupProjectRedundancyDirs(activeTargets, targetDirs) {
         localStateCleanup,
         emptyDirCleanup,
       );
-      reportProjectAssetCleanup(cleanup, { reason: "global_redundancy" });
+      if (!jsonOutputMode) {
+        reportProjectAssetCleanup(cleanup, { reason: "global_redundancy" });
+      }
       results.push({ dir: targetDir, status: "ok", cleanup, strippedHookConfigs });
     } catch (error) {
       const msg = error?.message || String(error);
-      warn(t.projectDeployFailed(targetDir, msg));
+      if (!jsonOutputMode) {
+        warn(t.projectDeployFailed(targetDir, msg));
+      }
       results.push({ dir: targetDir, status: "failed", message: msg });
     }
   }
-  printProjectCleanupSummary(results);
+  if (!jsonOutputMode) {
+    printProjectCleanupSummary(results);
+  }
   return results;
 }
 
@@ -6494,8 +6849,8 @@ function refreshGlobalCapabilityInventory(activeTargets = []) {
   info(t.refreshGlobalCapabilityInventory);
   const targetArgs =
     Array.isArray(activeTargets) && activeTargets.length > 0
-      ? ["--targets", activeTargets.join(",")]
-      : [];
+      ? ["--runtime-inventory-only", "--targets", activeTargets.join(",")]
+      : ["--runtime-inventory-only"];
   const result = runNodeScript("scripts/discover-global-capabilities.mjs", targetArgs, {
     META_KIM_LANG: currentLangCode,
   });
@@ -6527,7 +6882,7 @@ function nonClaudeGlobalRuntimeHookTargets(targets) {
         .split(",")
         .filter(Boolean);
   return targetList.filter((target) =>
-    ["codex", "cursor", "openclaw"].includes(target),
+    ["cursor", "openclaw"].includes(target),
   );
 }
 
@@ -8287,8 +8642,6 @@ async function runProjectCleanupCli() {
     schemaVersion: "meta-kim-project-cleanup-result-v0.1",
     mode: "cleanup",
     ok: failed.length === 0,
-    skippedSelf:
-      !includeSelfCleanup && targetDirs.some((dir) => resolve(dir) === resolve(PROJECT_DIR)),
     resultCount: results.length,
     results,
   };
@@ -8301,9 +8654,6 @@ async function runProjectCleanupCli() {
   console.log(`Meta_Kim project cleanup: ${summary.ok ? "ok" : "failed"}`);
   console.log(`  targets=${activeTargets.join(",")}`);
   console.log(`  cleanedProjects=${summary.resultCount}`);
-  if (summary.skippedSelf) {
-    console.log("  skippedSelf=true");
-  }
   return summary.ok;
 }
 

@@ -89,6 +89,23 @@ describe("Part A: 11-phase business workflow structure", async () => {
     assert.match(standard.deepResearchBinding ?? "", /deep-research claim evidence/i);
   });
 
+  test("phase status visibility policy requires user-visible reasons", () => {
+    const policy = contract.businessWorkflow?.phaseStatusVisibilityPolicy ?? {};
+    assert.equal(policy.schemaVersion, "business-phase-status-visibility-v0.1");
+    assert.equal(policy.required, true);
+    for (const field of ["status", "statusReason", "nextAction", "triggerEvaluation"]) {
+      assert.ok(policy.requiredPhaseFields?.includes(field), `missing phase field: ${field}`);
+    }
+    for (const field of ["currentPhase", "currentStatus", "currentReason", "currentNextAction"]) {
+      assert.ok(policy.requiredClosureFields?.includes(field), `missing closure field: ${field}`);
+    }
+    assert.equal(policy.primaryVisibleSurface, "localized_conversation_notice");
+    assert.equal(policy.secondaryVisibleSurface, "user_readable_run_report");
+    assert.equal(policy.defaultCliBehavior, "emit_localized_notice_unless_explicitly_suppressed");
+    assert.match(policy.rule ?? "", /all 11 business phase statuses/i);
+    assert.match(policy.rule ?? "", /Validator pass or artifact presence alone/i);
+  });
+
   test("start reason policy keeps 8-stage and 11-phase triggers user-readable", () => {
     const policy = contract.businessWorkflow?.startReasonPolicy ?? {};
     assert.equal(policy.schemaVersion, "governance-start-reason-v0.1");

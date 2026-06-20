@@ -333,7 +333,9 @@ describe("Part E: card protocol structures", async () => {
     const required = [
       "dealerOwner",
       "dealerMode",
-      "cards",
+      "cardEvents",
+      "cardTypeCatalog",
+      "cardTypeDecisions",
       "deliveryShells",
       "dealStandard",
       "silenceDecision",

@@ -70,6 +70,11 @@
         },
         "boot-md": {
           "enabled": true
+        },
+        "continuation-save-progress": {
+          "enabled": true,
+          "description": "Writes a continuationRequired flag into the project's .claude/project-task-state.json when the assistant announces an unfinished handoff (e.g. '建任务清单，再继续 Fetch'). Cwd-scoped to the selected project directory.",
+          "command": "node __REPO_ROOT__/openclaw/hooks/stop-save-progress.mjs"
         }
       }
     }

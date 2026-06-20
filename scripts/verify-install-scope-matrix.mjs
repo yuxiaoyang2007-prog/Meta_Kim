@@ -110,6 +110,7 @@ function runNode(args, options = {}) {
   return spawnSync(process.execPath, args, {
     cwd: repoRoot,
     encoding: "utf8",
+    maxBuffer: 10 * 1024 * 1024,
     timeout: 120_000,
     windowsHide: true,
     env: { ...process.env, ...(options.env ?? {}) },
@@ -119,6 +120,7 @@ function runNode(args, options = {}) {
 function failPacket(result) {
   return {
     status: result.status,
+    error: result.error?.message,
     stdoutTail: result.stdout?.slice(-2000) ?? "",
     stderrTail: result.stderr?.slice(-2000) ?? "",
   };

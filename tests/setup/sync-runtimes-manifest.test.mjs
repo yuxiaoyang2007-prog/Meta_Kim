@@ -293,7 +293,7 @@ describe("sync-runtimes / Codex project hooks", () => {
     assert.doesNotMatch(command, /\[ -f|\|\| true|2>\/dev\/null/);
   });
 
-  test("repo Claude settings remove retired inline and managed project hooks", () => {
+  test("repo Claude settings remove retired inline hooks and refresh managed project hooks", () => {
     const retiredInlineHook =
       'CMD=$(python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get(\'tool_input\',d).get(\'command\',\'\'))" 2>/dev/null || true); case "$CMD" in *rg\\ *) [ -f graphify-out/graph.json ] && echo "{}" || true ;; esac';
     const canonical = {
@@ -338,9 +338,18 @@ describe("sync-runtimes / Codex project hooks", () => {
       .flatMap((blocks) => blocks.flatMap((block) => block.hooks ?? []))
       .map((hook) => hook.command);
 
-    assert.equal(commands.some((command) => command.includes("graphify-context.mjs")), false);
-    assert.equal(commands.some((command) => command.includes("enforce-agent-dispatch.mjs")), false);
+    assert.equal(commands.some((command) => command.includes("graphify-context.mjs")), true);
+    assert.equal(commands.some((command) => command.includes("enforce-agent-dispatch.mjs")), true);
     assert.equal(commands.some((command) => command.includes("CMD=$(python3")), false);
+  });
+
+  test("Claude sync branches on requested scope instead of repository identity", async () => {
+    const source = await readFsFile("scripts/sync-runtimes.mjs", "utf8");
+
+    assert.doesNotMatch(source, /includeProjectHooks/);
+    assert.match(source, /const globalScope = dirs\.scope === "global"/);
+    assert.match(source, /if \(!globalScope\) \{[\s\S]*mergeRepoClaudeSettings/);
+    assert.match(source, /else \{[\s\S]*mergeGlobalMetaKimHooksIntoSettings/);
   });
 
   test("project Codex hooks leave global-only packages out", () => {
@@ -353,11 +362,13 @@ describe("sync-runtimes / Codex project hooks", () => {
       ),
       "Codex project prompt entry must run the meta-theory spine hook",
     );
-    assert.equal(config.hooks.Stop, undefined);
+    assert.ok(Array.isArray(config.hooks.Stop));
+    assert.match(JSON.stringify(config.hooks.Stop), /stop-compaction\.mjs/);
     const allCommands = JSON.stringify(config);
     assert.match(allCommands, /--package-root/);
     assert.match(allCommands, /D:\/Meta_Kim/);
     assert.doesNotMatch(allCommands, /meta-kim-memory-save\.mjs/);
+    assert.doesNotMatch(allCommands, /stop-save-progress\.mjs/);
     assert.doesNotMatch(allCommands, /hookprompt-adapter\.mjs/);
     assert.doesNotMatch(allCommands, /planning-with-files-adapter\.mjs/);
   });
@@ -718,8 +729,10 @@ describe("sync-runtimes / Cursor project hooks", () => {
     );
     assert(graphifyEntry, "graphify-context should still be registered");
 
-    assert.equal(config.hooks.stop, undefined);
+    assert.ok(Array.isArray(config.hooks.stop));
+    assert.match(JSON.stringify(config.hooks.stop), /stop-compaction\.mjs/);
     assert.doesNotMatch(JSON.stringify(config), /meta-kim-memory-save\.mjs/);
+    assert.doesNotMatch(JSON.stringify(config), /stop-save-progress\.mjs/);
     assert.doesNotMatch(JSON.stringify(config), /hookprompt-adapter\.mjs/);
     assert.doesNotMatch(JSON.stringify(config), /planning-with-files-adapter\.mjs/);
   });

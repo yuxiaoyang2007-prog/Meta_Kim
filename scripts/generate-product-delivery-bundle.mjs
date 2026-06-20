@@ -17,6 +17,7 @@ const SCENARIO_PATH = path.join(
   "reviewer-calibration-samples.json",
 );
 const OUTPUT_DIR = path.join(REPO_ROOT, ".meta-kim", "state", "default", "product-delivery-bundle");
+const BUNDLE_RUN_ID = `product-delivery-bundle-${process.pid}`;
 
 const componentCommands = {
   governedRun: [
@@ -55,11 +56,19 @@ function runNodeScript(args) {
   if (commandArgs[0] === "scripts/run-meta-theory-governed-execution.mjs") {
     commandArgs.push(
       "--run-id",
-      `product-delivery-bundle-${process.pid}`,
+      BUNDLE_RUN_ID,
       "--state-dir",
       OUTPUT_DIR,
       "--db",
       path.join(OUTPUT_DIR, `governed-${process.pid}.sqlite`),
+    );
+  }
+  if (commandArgs[0] === "scripts/generate-meta-theory-run-deliverables.mjs") {
+    commandArgs.push(
+      "--run-id",
+      BUNDLE_RUN_ID,
+      "--state-dir",
+      OUTPUT_DIR,
     );
   }
   const allowPartialNonzero =

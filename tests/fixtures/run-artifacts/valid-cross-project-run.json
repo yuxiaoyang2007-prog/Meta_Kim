@@ -116,42 +116,6 @@
   "cardPlanPacket": {
     "dealerOwner": "meta-conductor",
     "dealerMode": "conductor-primary-warden-escalation",
-    "cards": [
-      {
-        "cardId": "card-clarify",
-        "cardType": "info",
-        "cardIntent": "clarify",
-        "cardDecision": "deal",
-        "cardAudience": "user",
-        "cardTiming": "immediate",
-        "cardShell": "conversation",
-        "cardPriority": 9,
-        "cardReason": "cross-project scope must be explicit",
-        "cardSource": "meta-conductor",
-        "cardSuppressed": false,
-        "suppressionReason": "",
-        "deliveryShellId": "shell-structured-status",
-        "choiceSurface": "conversation_fallback",
-        "userLanguage": "en"
-      },
-      {
-        "cardId": "card-risk",
-        "cardType": "risk",
-        "cardIntent": "risk_surface",
-        "cardDecision": "deal",
-        "cardAudience": "governance",
-        "cardTiming": "on_risk",
-        "cardShell": "summary",
-        "cardPriority": 10,
-        "cardReason": "cross-project read may leak project-specific secrets into shared artifact",
-        "cardSource": "meta-sentinel",
-        "cardSuppressed": false,
-        "suppressionReason": "",
-        "deliveryShellId": "shell-review-delta",
-        "choiceSurface": "conversation_fallback",
-        "userLanguage": "en"
-      }
-    ],
     "deliveryShells": [
       {
         "deliveryShellId": "shell-structured-status",
@@ -191,12 +155,123 @@
       "minimumScore": 100,
       "averageScore": 100,
       "coveragePass": true,
-      "activeCount": 2,
-      "suppressedCount": 0,
-      "interruptCount": 0,
       "rule": "Deck presence or hardcoded order is not enough evidence; each fixture card decision must retain measurable deal-standard coverage.",
-      "deepResearchAnalogy": "Like deep-research claim evidence cards, fixture card decisions need a visible standard rather than packet presence only."
-    }
+      "deepResearchAnalogy": "Like deep-research claim evidence cards, fixture card decisions need a visible standard rather than packet presence only.",
+      "eventCount": 2,
+      "activeTypeCount": 2,
+      "suppressedTypeCount": 0,
+      "interruptEventCount": 0
+    },
+    "cardEvents": [
+      {
+        "eventId": "card-clarify-event-1",
+        "eventIndex": 1,
+        "cardKey": "clarify",
+        "cardType": "info",
+        "label": "Clarify",
+        "cardIntent": "clarify",
+        "cardDecision": "deal",
+        "cardAudience": "user",
+        "cardTiming": "immediate",
+        "deliveryShellId": "shell-structured-status",
+        "cardShell": "conversation",
+        "owner": "meta-conductor",
+        "mapsToSpine": [],
+        "eventReason": "cross-project scope must be explicit",
+        "repeatOrdinal": 1,
+        "repeatReason": "primary_route_signal",
+        "choiceSurfaceDelivery": "not_applicable",
+        "choiceSurfaceTriggerProof": "fixture card event; not native popup evidence"
+      },
+      {
+        "eventId": "card-risk-event-1",
+        "eventIndex": 2,
+        "cardKey": "risk",
+        "cardType": "risk",
+        "label": "Risk",
+        "cardIntent": "risk_surface",
+        "cardDecision": "deal",
+        "cardAudience": "governance",
+        "cardTiming": "on_risk",
+        "deliveryShellId": "shell-review-delta",
+        "cardShell": "summary",
+        "owner": "meta-sentinel",
+        "mapsToSpine": [],
+        "eventReason": "cross-project read may leak project-specific secrets into shared artifact",
+        "repeatOrdinal": 1,
+        "repeatReason": "primary_route_signal",
+        "choiceSurfaceDelivery": "not_applicable",
+        "choiceSurfaceTriggerProof": "fixture card event; not native popup evidence"
+      }
+    ],
+    "cardTypeCatalog": [
+      {
+        "cardKey": "clarify",
+        "label": "Clarify",
+        "cardType": "info",
+        "cardIntent": "clarify",
+        "reusable": true
+      },
+      {
+        "cardKey": "risk",
+        "label": "Risk",
+        "cardType": "risk",
+        "cardIntent": "risk_surface",
+        "reusable": true
+      }
+    ],
+    "cardTypeDecisions": [
+      {
+        "cardId": "card-clarify",
+        "cardType": "info",
+        "cardIntent": "clarify",
+        "cardDecision": "deal",
+        "cardAudience": "user",
+        "cardTiming": "immediate",
+        "cardShell": "conversation",
+        "cardPriority": 9,
+        "cardReason": "cross-project scope must be explicit",
+        "cardSource": "meta-conductor",
+        "cardSuppressed": false,
+        "suppressionReason": "",
+        "deliveryShellId": "shell-structured-status",
+        "choiceSurface": "conversation_fallback",
+        "userLanguage": "en",
+        "cardKey": "clarify",
+        "label": "Clarify",
+        "eventIndexes": [
+          1
+        ]
+      },
+      {
+        "cardId": "card-risk",
+        "cardType": "risk",
+        "cardIntent": "risk_surface",
+        "cardDecision": "deal",
+        "cardAudience": "governance",
+        "cardTiming": "on_risk",
+        "cardShell": "summary",
+        "cardPriority": 10,
+        "cardReason": "cross-project read may leak project-specific secrets into shared artifact",
+        "cardSource": "meta-sentinel",
+        "cardSuppressed": false,
+        "suppressionReason": "",
+        "deliveryShellId": "shell-review-delta",
+        "choiceSurface": "conversation_fallback",
+        "userLanguage": "en",
+        "cardKey": "risk",
+        "label": "Risk",
+        "eventIndexes": [
+          2
+        ]
+      }
+    ],
+    "eventOrder": [
+      "clarify",
+      "risk"
+    ],
+    "cardTypeCatalogSource": "fixture",
+    "cardTypeCatalogSummary": "Fixture card types are reusable rhythm signals; cardEvents are the run result."
   },
   "dispatchEnvelopePacket": {
     "ownerAgent": "meta-conductor",

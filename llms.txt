@@ -1,6 +1,6 @@
 # Meta_Kim
 
-Meta_Kim is a cross-runtime governance layer for AI coding assistants.
+Meta_Kim is a governance layer for AI coding assistants: it turns durable coding work into intent, capability search, bounded ownership, review, verification, and writeback.
 
 It is not another code generator. It coordinates AI coding work through a repeatable spine:
 
@@ -56,13 +56,13 @@ Use `npm run meta:release:smoke` for routine prompt, docs, changelog, version, a
 
 Safe claims:
 
-- Meta_Kim has formal runtime projections for Claude Code, Codex, OpenClaw, and Cursor.
+- Meta_Kim has default formal projections for Claude Code and Codex, plus non-default formal projections for OpenClaw and Cursor.
 - The local complete-product MVP has repeatable scripts, tests, reports, and AI-readable delivery artifacts.
 - Capability-first dispatch is the default governance route: define the capability, search owners/tools, then execute.
 
 Do not overclaim:
 
-- Do not say every runtime is release-grade native-live complete while Cursor native live remains blocked.
+- Do not say every formal projection has the same native-live completeness or default install behavior.
 - Do not turn projection smoke, fixture pass, or generated reports into live runtime proof.
 - Do not describe the product as course, teacher, classroom, student, or lesson tooling. The product boundary is AI-readable governance and evidence review.
 

@@ -125,6 +125,18 @@ export function buildMetaKimHooksTemplate(
         hooks: [cmd("block-dangerous-bash.mjs")],
       },
     ],
+    Stop: [
+      {
+        matcher: "*",
+        hooks: [
+          cmd("stop-compaction.mjs"),
+          cmd("stop-console-log-audit.mjs"),
+          cmd("stop-completion-guard.mjs"),
+          cmd("stop-save-progress.mjs"),
+          cmd("stop-spine-cleanup.mjs"),
+        ],
+      },
+    ],
   };
 }
 
@@ -299,9 +311,9 @@ export function mergePermissionsDenyUnion(canonicalPerm, basePerm) {
 
 /**
  * Merge canonical Claude settings into existing repo-local settings: keep user
- * keys, union permissions.deny, and remove Meta_Kim project hook commands.
- * Meta_Kim hook execution is installed globally; repo-local settings are only
- * a protected merge boundary for user config.
+ * keys, union permissions.deny, strip stale Meta_Kim hook commands, and merge
+ * the current canonical project hook block. Global install carries reusable
+ * global hooks; project bootstrap still writes project-native runtime config.
  * @param {Record<string, unknown>} base - existing ~/.meta or user file (may be {})
  * @param {Record<string, unknown>} canonical - parsed canonical/runtime-assets/claude/settings.json with repo-relative hook paths.
  */
@@ -325,7 +337,10 @@ export function mergeRepoClaudeSettings(base, canonical, repoRoot = null) {
     base.permissions,
   );
 
-  out.hooks = stripRepoMetaKimHooksFromSettings(base).hooks;
+  out.hooks = mergeRepoMetaKimHooksIntoSettings(
+    stripRepoMetaKimHooksFromSettings(base),
+    canonicalForMerge.hooks,
+  ).hooks;
 
   return out;
 }

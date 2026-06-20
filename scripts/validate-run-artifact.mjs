@@ -2788,7 +2788,9 @@ function validateCardPlan(contract, artifact) {
     contract.protocols.cardPlanPacket.requiredFields,
     "cardPlanPacket",
   );
-  ensureArray(cardPlan.cards, "cardPlanPacket.cards");
+  ensureArray(cardPlan.cardEvents, "cardPlanPacket.cardEvents");
+  ensureArray(cardPlan.cardTypeCatalog, "cardPlanPacket.cardTypeCatalog");
+  ensureArray(cardPlan.cardTypeDecisions, "cardPlanPacket.cardTypeDecisions");
   ensureArray(cardPlan.deliveryShells, "cardPlanPacket.deliveryShells");
   ensureArray(cardPlan.controlDecisions, "cardPlanPacket.controlDecisions");
 
@@ -2805,12 +2807,64 @@ function validateCardPlan(contract, artifact) {
   const silencePolicy = contract.runDiscipline.silencePolicy;
   const controlPolicy = contract.runDiscipline.controlIntervention;
 
+  const cardEventIds = new Set();
+  for (const [index, event] of cardPlan.cardEvents.entries()) {
+    ensureFields(
+      event,
+      [
+        "eventId",
+        "eventIndex",
+        "cardKey",
+        "cardType",
+        "cardIntent",
+        "cardDecision",
+        "cardAudience",
+        "cardTiming",
+        "deliveryShellId",
+        "eventReason",
+        "repeatOrdinal",
+      ],
+      `cardPlanPacket.cardEvents[${index}]`,
+    );
+    ensure(!cardEventIds.has(event.eventId), `Duplicate card eventId: ${event.eventId}`);
+    cardEventIds.add(event.eventId);
+    ensure(
+      Number.isInteger(event.eventIndex) && event.eventIndex >= 1,
+      `card event ${event.eventId} eventIndex must be a positive integer.`,
+    );
+    ensure(
+      Number.isInteger(event.repeatOrdinal) && event.repeatOrdinal >= 1,
+      `card event ${event.eventId} repeatOrdinal must be a positive integer.`,
+    );
+    ensureEnum(event.cardType, cardPolicy.cardTypeEnum, `card event ${event.eventId} cardType`);
+    ensureEnum(
+      event.cardIntent,
+      cardPolicy.cardIntentEnum,
+      `card event ${event.eventId} cardIntent`,
+    );
+    ensureEnum(
+      event.cardDecision,
+      cardPolicy.cardDecisionEnum,
+      `card event ${event.eventId} cardDecision`,
+    );
+    ensureEnum(
+      event.cardAudience,
+      cardPolicy.cardAudienceEnum,
+      `card event ${event.eventId} cardAudience`,
+    );
+    ensureEnum(
+      event.cardTiming,
+      cardPolicy.cardTimingEnum,
+      `card event ${event.eventId} cardTiming`,
+    );
+  }
+
   const cardIds = new Set();
-  for (const [index, card] of cardPlan.cards.entries()) {
+  for (const [index, card] of cardPlan.cardTypeDecisions.entries()) {
     ensureFields(
       card,
       contract.protocols.cardDecision.requiredFields,
-      `cardPlanPacket.cards[${index}]`,
+      `cardPlanPacket.cardTypeDecisions[${index}]`,
     );
     ensure(!cardIds.has(card.cardId), `Duplicate cardId: ${card.cardId}`);
     cardIds.add(card.cardId);
@@ -2907,10 +2961,16 @@ function validateCardPlan(contract, artifact) {
     shellIds.has(cardPlan.defaultShellId),
     `cardPlanPacket.defaultShellId ${cardPlan.defaultShellId} must reference an existing delivery shell.`,
   );
-  for (const card of cardPlan.cards) {
+  for (const card of cardPlan.cardTypeDecisions) {
     ensure(
       shellIds.has(card.deliveryShellId),
       `card ${card.cardId} references missing deliveryShellId ${card.deliveryShellId}.`,
+    );
+  }
+  for (const event of cardPlan.cardEvents) {
+    ensure(
+      shellIds.has(event.deliveryShellId),
+      `card event ${event.eventId} references missing deliveryShellId ${event.deliveryShellId}.`,
     );
   }
 

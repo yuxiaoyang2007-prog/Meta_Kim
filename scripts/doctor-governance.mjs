@@ -27,6 +27,7 @@ const execFileAsync = promisify(execFile);
 
 /** @type {string[]} Same order as generated .claude/settings.json hook commands. */
 const EXPECTED_CLAUDE_HOOK_COMMANDS = [
+  "node .claude/hooks/activate-meta-theory-spine.mjs",
   "node .claude/hooks/graphify-context.mjs",
   "node .claude/hooks/enforce-agent-dispatch.mjs",
   "node .claude/hooks/activate-meta-theory-spine.mjs",
@@ -190,7 +191,9 @@ async function checkContract() {
 }
 
 async function checkHooks() {
-  const settings = JSON.parse(await fs.readFile(SETTINGS, "utf8"));
+  const settingsPath =
+    process.env.META_KIM_DOCTOR_PROJECT_SETTINGS ?? SETTINGS;
+  const settings = JSON.parse(await fs.readFile(settingsPath, "utf8"));
   const hooks = settings.hooks;
   if (!hooks?.PreToolUse?.length || !hooks?.PostToolUse?.length) {
     const globalFallback = await checkGlobalClaudeHooksFallback();
@@ -214,7 +217,7 @@ async function checkHooks() {
       `Hook command set mismatch.\n  expected (${expected.length}): ${expected.join(", ")}\n  found (${found.length}): ${found.join(", ")}`,
     );
   }
-  return { mode: "project", settingsPath: SETTINGS };
+  return { mode: "project", settingsPath };
 }
 
 async function checkSync() {

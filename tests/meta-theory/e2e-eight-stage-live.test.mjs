@@ -379,7 +379,12 @@ describe("Stage 4: Execution — Dispatch & Card Dealing", () => {
 
   test("Execution记录每个card的发出决策", () => {
     const cardFields = contract.protocols?.cardPlanPacket?.requiredFields || [];
-    assert.ok(cardFields.includes("cards"), "cardPlanPacket must have cards");
+    assert.ok(cardFields.includes("cardEvents"), "cardPlanPacket must have cardEvents");
+    assert.ok(cardFields.includes("cardTypeCatalog"), "cardPlanPacket must have cardTypeCatalog");
+    assert.ok(
+      cardFields.includes("cardTypeDecisions"),
+      "cardPlanPacket must have cardTypeDecisions",
+    );
     assert.ok(
       cardFields.includes("deliveryShells"),
       "cardPlanPacket must have deliveryShells",
