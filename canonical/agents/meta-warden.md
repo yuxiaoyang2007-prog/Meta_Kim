@@ -65,13 +65,15 @@ Warden manages the following spine-state fields as part of gate ownership:
 |-------|----------|-------|---------|
 | `taskClassification` | Critical stage | `{ type, triggerReason, scope, unfreezeRequired }` | Task classification for routing |
 | `gateState` | Throughout run | `planning-open / planning-passed / review-open / meta-review-open / verification-open / verification-closed / synthesis-ready` | Gate progression tracking |
-| `surfaceState` | Throughout run | `debug-surface / internal-ready / public-ready` | Public-display discipline |
+| `surfaceState` | Throughout run | `silent / notice / decision` | Runtime interaction display mode |
+| `publicReadinessState` | Throughout run | `debug-surface / internal-ready / public-ready` | Public-display discipline |
 | `exceptionState` | When needed | `normal / accepted-risk / carry-forward / blocked` | Exception handling |
 
 **Rules**:
 - Warden sets `taskClassification` during Critical and updates it when scope changes
 - Warden transitions `gateState` at each gate decision point
-- Warden controls `surfaceState` to prevent incomplete runs from entering public display
+- Warden may request `surfaceState=notice` or `surfaceState=decision` for user interaction, but `surfaceState` never means readiness
+- Warden controls `publicReadinessState` to prevent incomplete runs from entering public display
 - Warden records `exceptionState` when findings cannot be closed in the current run
 
 See SKILL.md "Data Structure Contract" section for the full stage output requirements.
@@ -195,10 +197,11 @@ Warden treats governance as a **hidden gate-state machine** layered on top of Co
 | State Layer | Values | Owned by Warden? | Purpose |
 |-------------|--------|------------------|---------|
 | `gateState` | `planning-open / planning-passed / review-open / meta-review-open / verification-open / verification-closed / synthesis-ready` | Yes | Determines what kind of completion claim is legally allowed |
-| `surfaceState` | `debug-surface / internal-ready / public-ready` | Yes | Controls whether a run stays internal, awaits fixes, or is safe for public display |
+| `surfaceState` | `silent / notice / decision` | Shared runtime field | Controls whether the runtime stays quiet, shows a notice, or asks for a decision |
+| `publicReadinessState` | `debug-surface / internal-ready / public-ready` | Yes | Controls whether a run stays internal, awaits fixes, or is safe for public display |
 | `exceptionState` | `normal / accepted-risk / carry-forward / blocked` | Yes | Makes unresolved findings explicit instead of hiding them under summary text |
 
-**Rule**: this skeleton is **not** a second front-end. It exists so Warden can enforce public-display discipline, verification closure, and risk carry-forward without improvising criteria from memory.
+**Rule**: this skeleton is **not** a second front-end. It exists so Warden can enforce public-display discipline, verification closure, and risk carry-forward without improvising criteria from memory. Runtime `surfaceState` is only an interaction mode; public readiness lives in `publicReadinessState` and summary/public surface packets.
 
 ## Gate-State to Card-Deck Mapping
 

@@ -29,6 +29,11 @@ describe("meta-theory run status envelope", () => {
     assert.equal(envelope.pathPolicy?.mustStayWithin, ".meta-kim/state");
     assert.equal(envelope.publicDisplayPolicy?.primaryDisplay, "conversation_notice");
     assert.equal(envelope.publicDisplayPolicy?.popupRequired, false);
+    assert.deepEqual(envelope.authorityPolicy?.authorityModeEnum, [
+      "managed_runtime_spine",
+      "hook_observed_advisory",
+    ]);
+    assert.equal(envelope.authorityPolicy?.publicReadyAuthority, false);
 
     for (const field of [
       "active",
@@ -40,6 +45,14 @@ describe("meta-theory run status envelope", () => {
       "completed",
       "next",
       "blockedOn",
+      "authorityMode",
+      "driverMode",
+      "hookGateMode",
+      "publicReadyAuthority",
+      "publicReadyBoundary",
+      "deactivatedAt",
+      "deactivationReason",
+      "continuationBoundary",
       "surfaceMode",
       "resolvedOutputLanguage",
       "languageResolution",
@@ -106,6 +119,14 @@ describe("meta-theory run status envelope", () => {
       assert.equal(active.stageIndex, 1);
       assert.equal(active.stageTotal, 8);
       assert.equal(active.percent, 12);
+      assert.equal(active.authorityMode, "managed_runtime_spine");
+      assert.equal(active.driverMode, "managed");
+      assert.equal(active.hookGateMode, "block");
+      assert.equal(active.publicReadyAuthority, false);
+      assert.equal(active.publicReadyBoundary.status, "not_public_ready_authority");
+      assert.equal(active.deactivatedAt, null);
+      assert.equal(active.deactivationReason, null);
+      assert.equal(active.continuationBoundary.status, "active_run");
       assert.equal(active.resolvedOutputLanguage, "undetermined");
       assert.equal(active.languageResolution.source, "not_resolved");
       assert.equal(active.stagePurposeKey, "critical");
@@ -142,6 +163,58 @@ describe("meta-theory run status envelope", () => {
         else process.env[k] = v;
       }
     }
+  });
+
+  test("hook-observed advisory status is not managed runtime or public-ready authority", async () => {
+    const spine = await import(
+      `../../canonical/runtime-assets/shared/hooks/spine-state.mjs?observed=${Date.now()}`
+    );
+    const envelope = spine.createMetaRunStatusEnvelope({
+      active: true,
+      runId: "meta-observed-test",
+      currentStage: "fetch",
+      stageRuntimeControl: {
+        activationMode: "hook_observed",
+        driverMode: "hook_observed",
+        hookGateMode: "advisory",
+      },
+      stages: {
+        critical: { status: "completed" },
+        fetch: { status: "in_progress" },
+      },
+    });
+
+    assert.equal(envelope.currentStage, "Fetch");
+    assert.equal(envelope.authorityMode, "hook_observed_advisory");
+    assert.equal(envelope.driverMode, "hook_observed");
+    assert.equal(envelope.hookGateMode, "advisory");
+    assert.equal(envelope.publicReadyAuthority, false);
+    assert.match(envelope.publicReadyBoundary.reason, /Public-ready requires/);
+  });
+
+  test("inactive session-stop status exposes continuation boundary", async () => {
+    const spine = await import(
+      `../../canonical/runtime-assets/shared/hooks/spine-state.mjs?inactive=${Date.now()}`
+    );
+    const envelope = spine.createMetaRunStatusEnvelope({
+      active: false,
+      runId: "meta-stopped-test",
+      currentStage: "critical",
+      deactivatedAt: "2026-06-20T18:27:05.423Z",
+      deactivationReason: "session_stop",
+      stages: {
+        critical: { status: "in_progress" },
+      },
+    });
+
+    assert.equal(envelope.active, false);
+    assert.equal(envelope.deactivatedAt, "2026-06-20T18:27:05.423Z");
+    assert.equal(envelope.deactivationReason, "session_stop");
+    assert.equal(
+      envelope.continuationBoundary.mode,
+      "session_stop_requires_new_run_or_offline_audit",
+    );
+    assert.match(envelope.continuationBoundary.reason, /Inactive run status/);
   });
 
   test("skill and notice template describe the public status surface", async () => {
@@ -193,6 +266,56 @@ describe("meta-theory run status envelope", () => {
 
       assert.equal(result.status, 0);
       assert.match(result.stdout, /meta_governance_status=inactive/);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("status CLI reports inactive session-stop boundary without active label", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-status-cli-"));
+    try {
+      const statusDir = path.join(tempDir, ".meta-kim", "state", "default");
+      await mkdir(statusDir, { recursive: true });
+      await writeFile(
+        path.join(statusDir, "active-run.json"),
+        JSON.stringify(
+          {
+            active: false,
+            runId: "meta-stopped-cli",
+            currentStage: "Critical",
+            stageIndex: 1,
+            stageTotal: 8,
+            percent: 12,
+            completed: [],
+            next: "Fetch",
+            blockedOn: null,
+            deactivatedAt: "2026-06-20T18:27:05.423Z",
+            deactivationReason: "session_stop",
+            continuationBoundary: {
+              status: "inactive_run",
+              mode: "session_stop_requires_new_run_or_offline_audit",
+            },
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [path.join(__dirname, "..", "..", "scripts", "meta-run-status.mjs")],
+        {
+          cwd: tempDir,
+          encoding: "utf8",
+        },
+      );
+
+      assert.equal(result.status, 0);
+      assert.match(result.stdout, /meta_governance_status=inactive/);
+      assert.match(result.stdout, /reason=session_stop/);
+      assert.match(result.stdout, /continuation=local_continuity_or_new_run_only/);
+      assert.doesNotMatch(result.stdout, /meta_governance_active/);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

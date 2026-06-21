@@ -112,6 +112,18 @@ const globalCapabilityInventory = await readStateJson(path.join("capability-inde
 const dependencyIndex = await readStateJson("dependency-capability-index.json", { discoveredDependencyProjects: [] });
 const choiceSurfacePolicy = await readJson("config/governance/choice-surface-policy.json");
 const intentContract = await readJson("config/governance/intent-amplification-contract.json");
+const localOverrides = (await exists(repoPath(".meta-kim/local.overrides.json")))
+  ? await readJson(".meta-kim/local.overrides.json")
+  : {};
+const projectProjectionMode = localOverrides.projectProjectionMode ?? "project";
+const projectProjectionPolicy = {
+  projectProjectionMode,
+  projectRuntimeProvidersExpected: projectProjectionMode !== "global_only",
+  validationProviderLayer: projectProjectionMode === "global_only" ? "local_global_runtime_inventory" : "project_runtime_inventory",
+  reason: projectProjectionMode === "global_only"
+    ? "Project runtime projections are intentionally skipped by local overrides; route validation must use local/global runtime inventory plus canonical provider sources."
+    : "Project runtime projections may be materialized and should be validated when present.",
+};
 
 function textContains(entry, terms) {
   const text = JSON.stringify(entry).toLowerCase();
@@ -674,10 +686,12 @@ const ownerDiscoveryPacket = {
   localGlobalCapabilityProviders,
   runtimeToolProviders: runtimeToolProviders.slice(0, 40),
   capabilityProviderCoverage,
+  projectProjectionPolicy,
   globalInventoryFreshness,
   capabilityDiscoverySearchLog: [
     { source: "repo_canonical_capability_index", checked: true, sourceRef: "config/capability-index/meta-kim-capabilities.json" },
     { source: "runtime_mirror_capability_indexes", checked: true, sourceRef: ".claude/.codex/.cursor/openclaw capability-index mirrors" },
+    { source: "project_projection_policy", checked: true, sourceRef: `.meta-kim/local.overrides.json#projectProjectionMode=${projectProjectionMode}` },
     { source: "claude_project_inventory", checked: true, sourceRef: ".claude/agents; .claude/skills; .claude/commands; .claude/hooks; .claude/settings.json" },
     { source: "codex_project_inventory", checked: true, sourceRef: ".codex/agents; .agents/skills; .codex/commands; .codex/hooks; .codex/hooks.json; .codex/config.toml; .mcp.json; package.json scripts" },
     { source: "cursor_project_inventory", checked: true, sourceRef: ".cursor/agents; .cursor/skills; .cursor/rules; .cursor/prompts; .cursor/hooks; .cursor/hooks.json; .cursor/mcp.json" },
@@ -701,6 +715,7 @@ const ownerDiscoveryPacket = {
   governanceStageOwners,
   evidenceRefs: [
     "config/capability-index/meta-kim-capabilities.json",
+    ".meta-kim/local.overrides.json",
     ".codex/agents",
     ".codex/commands",
     ".codex/hooks",
@@ -1312,7 +1327,17 @@ function selectExecutionOwner() {
     const owner = group.owners.find((candidate) => available.has(candidate));
     if (owner) return owner;
   }
-  return ["worker", "analysis", "backend", "test", "verify"].find((candidate) => available.has(candidate)) ?? null;
+  return [
+    "worker",
+    "analysis",
+    "backend",
+    "test",
+    "verify",
+    "codebase-search",
+    "search-specialist",
+    "docs-researcher",
+    "reviewer",
+  ].find((candidate) => available.has(candidate)) ?? null;
 }
 
 function capabilityDiscoveryTaskRequested() {
@@ -2011,7 +2036,7 @@ const output = {
   dispatchBoardDraft: recommendedRoute ? {
     owner: "meta-conductor",
     route: recommendedRoute.id,
-    mergeOwner: "meta-warden",
+    mergeOwner: "meta-conductor",
     parallelGroups: recommendedRoute.subjectiveUiCapabilityAmplification?.lanes?.map((lane) => lane.parallelGroup) ?? [],
   } : null,
   workerTaskPacketDrafts: recommendedRoute?.subjectiveUiCapabilityAmplification?.lanes
@@ -2026,7 +2051,7 @@ const output = {
         verificationOwner: recommendedRoute.verificationOwner,
         dependsOn: lane.dependsOn,
         parallelGroup: lane.parallelGroup,
-        mergeOwner: "meta-warden",
+        mergeOwner: "meta-conductor",
         purpose: lane.purpose,
         decisionImpact: lane.decisionImpact,
       }))
@@ -2039,7 +2064,7 @@ const output = {
         os: osTarget,
         verificationOwner: recommendedRoute.verificationOwner,
         dependsOn: [],
-        mergeOwner: "meta-warden",
+        mergeOwner: "meta-conductor",
       }] : [],
   capabilityGapPacket,
   verificationPlan: {

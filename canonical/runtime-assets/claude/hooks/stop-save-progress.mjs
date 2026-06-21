@@ -31,6 +31,18 @@ const PYTHON_HOOK_CANDIDATES = [
   path.join(HOOKS_ROOT, "memory-hooks", "mcp_memory_global.py"),
   path.join(__dirname, "mcp_memory_global.py"),
 ];
+const HOOKPROMPT_BLOCK_START_PATTERNS = [
+  /MANDATORY_FORMAT_INSTRUCTION/,
+  /(?:^|\s)📝?\s*原始输入[:：]?/,
+  /(?:^|\s)🔄?\s*优化后的理解[:：]?/,
+  /(?:^|\s)✅?\s*优化后的完整提示词[:：]?/,
+  /#\s*提示词优化元提示词/,
+];
+const HOOKPROMPT_BLOCK_END_RE = /^\s*(?:---+|<\/MANDATORY_FORMAT_INSTRUCTION>)\s*$/;
+const HOOKPROMPT_INLINE_END_PATTERNS = [
+  /(?:\\r?\\n|\r?\n)\s*---+\s*(?:\\r?\\n|\r?\n|$)/,
+  /<\/MANDATORY_FORMAT_INSTRUCTION>/,
+];
 
 // ── Task extraction patterns ────────────────────────────────────────────────
 
@@ -79,6 +91,81 @@ async function readTranscriptLines(transcriptPath, maxLines = 400) {
   } catch {
     return [];
   }
+}
+
+function stripHookPromptDisplayBlocks(text) {
+  if (!text) return "";
+  const kept = [];
+  let droppingHookPromptBlock = false;
+
+  for (const line of text.split(/\r?\n/)) {
+    const hookPromptStart = firstHookPromptStartIndex(line);
+    if (!droppingHookPromptBlock && hookPromptStart >= 0) {
+      if (
+        isStructuredTranscriptLine(line) ||
+        hasInlineHookPromptEnd(line, hookPromptStart) ||
+        hookPromptStart > 0
+      ) {
+        const stripped = stripHookPromptSegmentsFromLine(line);
+        if (stripped.trim().length > 0) kept.push(stripped);
+        continue;
+      }
+      droppingHookPromptBlock = true;
+      continue;
+    }
+
+    if (droppingHookPromptBlock) {
+      if (HOOKPROMPT_BLOCK_END_RE.test(line)) {
+        droppingHookPromptBlock = false;
+      }
+      continue;
+    }
+
+    kept.push(line);
+  }
+
+  return kept.join("\n");
+}
+
+function firstHookPromptStartIndex(line) {
+  let first = -1;
+  for (const pattern of HOOKPROMPT_BLOCK_START_PATTERNS) {
+    const index = line.search(pattern);
+    if (index >= 0 && (first === -1 || index < first)) first = index;
+  }
+  return first;
+}
+
+function isStructuredTranscriptLine(line) {
+  const trimmed = line.trimStart();
+  return trimmed.startsWith("{") || trimmed.startsWith("[") || line.includes("\\n");
+}
+
+function hasInlineHookPromptEnd(line, startIndex) {
+  return inlineHookPromptEndIndex(line, startIndex) < line.length;
+}
+
+function inlineHookPromptEndIndex(line, startIndex) {
+  const tail = line.slice(startIndex);
+  let best = null;
+  for (const pattern of HOOKPROMPT_INLINE_END_PATTERNS) {
+    const match = pattern.exec(tail);
+    if (!match) continue;
+    const end = startIndex + match.index + match[0].length;
+    if (best === null || end < best) best = end;
+  }
+  return best ?? line.length;
+}
+
+function stripHookPromptSegmentsFromLine(line) {
+  let output = line;
+  for (let guard = 0; guard < 10; guard += 1) {
+    const start = firstHookPromptStartIndex(output);
+    if (start < 0) break;
+    const end = inlineHookPromptEndIndex(output, start);
+    output = `${output.slice(0, start).trimEnd()} ${output.slice(end).trimStart()}`.trim();
+  }
+  return output;
 }
 
 function extractUniqueItems(lines, patterns, maxItems = 5) {
@@ -185,7 +272,13 @@ async function main() {
     return;
   }
 
-  const text = lines.join("\n");
+  const rawText = lines.join("\n");
+  const text = stripHookPromptDisplayBlocks(rawText);
+  const effectiveLines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (effectiveLines.length < 5) {
+    process.exit(0);
+    return;
+  }
   const handoffMatched = HANDOFF_PATTERNS.some((re) => re.test(text));
 
   // Only save if there's meaningful work done
@@ -209,9 +302,9 @@ async function main() {
   }
 
   // Extract tasks
-  const completed = extractUniqueItems(lines, DONE_PATTERNS, 5);
-  const remaining = extractUniqueItems(lines, REMAINING_PATTERNS, 3);
-  const currentTask = extractCurrentTask(lines);
+  const completed = extractUniqueItems(effectiveLines, DONE_PATTERNS, 5);
+  const remaining = extractUniqueItems(effectiveLines, REMAINING_PATTERNS, 3);
+  const currentTask = extractCurrentTask(effectiveLines);
   if (handoffMatched && remaining.length === 0) {
     remaining.push(currentTask || "continuation handoff detected");
   }
@@ -227,7 +320,7 @@ async function main() {
   if (currentTask) args.push("--task", currentTask);
   for (const item of completed) args.push("--done", item);
   for (const item of remaining) args.push("--remaining", item);
-  args.push("--note", `auto-save from Stop hook, ${lines.length} transcript lines`);
+  args.push("--note", `auto-save from Stop hook, ${effectiveLines.length} transcript lines`);
 
   const result = await runPythonSave(args);
 
@@ -261,12 +354,16 @@ async function main() {
         }
         prev.meta_kim = true;
         prev.continuationRequired = true;
+        prev.continuationAuthority = "local_continuity_only";
+        prev.mustNotClaimActiveRun = true;
         prev.continuationHandoff = {
           matched: true,
           ts: new Date().toISOString(),
           source: "stop-save-progress",
           remainingCount: remaining.length,
           currentTask: currentTask || null,
+          authority: "local_continuity_only",
+          mustNotClaimActiveRun: true,
         };
         prev.updated_at = new Date().toISOString();
         await fs.writeFile(statePath, JSON.stringify(prev, null, 2), "utf8");

@@ -12,7 +12,7 @@ If you only keep six rules in mind:
 - When `meta-theory` is active, the main Claude thread dispatches; it does not execute complex work directly.
 - Critical, Fetch, Thinking, and Review must make the run executable before mutation; hooks are final safeguards, not the primary design path.
 - Capability-first dispatch is **mechanically enforced** in Claude Code via the `enforce-agent-dispatch.mjs` PreToolUse hook (deny payload). Codex and Cursor v1.7+ use the same projected hook; OpenClaw remains declarative. The current matrix lives in `AGENTS.md` under Mechanical Enforcement.
-- User-visible worker names must be coarse English business role-family names such as `frontend`, `backend`, or `test`, not scoped work items or host-generated personal nicknames. Localized trigger words may be recognized as input, but durable governance files stay English.
+- User-visible run-scoped worker labels may be coarse English role-family names such as `frontend`, `backend`, or `test`, but Meta_Kim does not project those execution labels as durable agents. Durable governance files stay with the nine `meta-*` owners.
 
 ## What This Repository Is
 
@@ -184,6 +184,7 @@ Keep three names separate:
 
 Rules:
 
+- `roleDisplayName` is a run-scoped task-packet label, not a durable agent identity and not a projection file.
 - Do not expose random personal nicknames as the primary agent name.
 - Prefer short role names over long task sentences.
 - Do not put concrete work items into `roleDisplayName`; when the same role has parallel shards, keep the same coarse role name and put shard scope in `roleInstanceId` / `shardScope`.

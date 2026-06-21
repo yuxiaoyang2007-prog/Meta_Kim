@@ -23,7 +23,7 @@ describe("eval-meta-agents Claude smoke", () => {
     );
   });
 
-  test("Claude discovery falls back to project agent files when CLI lacks agents command", () => {
+  test("Claude discovery falls back to project agent files or canonical agents when CLI lacks agents command", () => {
     const source = readFileSync(
       path.join(repoRoot, "scripts", "eval-meta-agents.mjs"),
       "utf8",
@@ -35,8 +35,9 @@ describe("eval-meta-agents Claude smoke", () => {
     assert.ok(discovery);
     assert.match(discovery, /cmd\.toArgs\(\["--help"\]\)/);
     assert.match(discovery, /supportsAgentsCommand/);
+    assert.match(discovery, /readRuntimeAgentIdsOrCanonical/);
     assert.match(discovery, /\.claude", "agents"/);
-    assert.match(discovery, /source: "project-files"/);
+    assert.match(discovery, /source: discoveredAgents\.source/);
     assert.match(discovery, /source: "claude-agents-command"/);
     assert.match(discovery, /claude-agents-command-unavailable/);
     assert.match(discovery, /claude-agents-command-non-tty/);

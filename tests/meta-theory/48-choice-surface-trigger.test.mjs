@@ -34,6 +34,66 @@ test("choice surface policy requires trigger proof rather than artifact-only com
   assert.ok(policy.triggerProofPolicy?.artifactOnlySignals.includes("conversationNotice"));
 });
 
+test("choice surface policy rejects false native choice claims without runtime evidence", async () => {
+  const policy = await readJson("config/governance/choice-surface-policy.json");
+  const contract = await readJson("config/contracts/workflow-contract.json");
+  const falseClaim = policy.falseNativeChoiceClaimPolicy;
+  const contractFalseClaim =
+    contract.runDiscipline?.userInteractionPolicy?.falseNativeChoiceClaimPolicy;
+
+  assert.equal(falseClaim?.enabled, true);
+  assert.equal(falseClaim?.failureClass, "false_native_choice_claim");
+  assert.ok(falseClaim?.appliesTo.includes("assistant_chat_text"));
+  assert.ok(falseClaim?.claimPhrases.includes("choice panel did not return"));
+  assert.ok(falseClaim?.claimPhrases.includes("选择面板没有返回"));
+  assert.ok(
+    falseClaim?.evidenceByRuntime?.codex?.acceptedEvidence.includes(
+      "request_user_input_answer",
+    ),
+  );
+  assert.ok(
+    falseClaim?.evidenceByRuntime?.codex?.acceptedEvidence.includes(
+      "nativeChoiceSurfaceBlocked",
+    ),
+  );
+  assert.ok(
+    falseClaim?.evidenceByRuntime?.codex?.forbiddenSubstitutes.includes(
+      "cardPlanPacket",
+    ),
+  );
+  assert.equal(falseClaim?.evidenceByRuntime?.codex?.fallbackAllowed, false);
+  assert.ok(
+    falseClaim?.evidenceByRuntime?.claude_code?.acceptedEvidence.includes(
+      "AskUserQuestion_answer",
+    ),
+  );
+  assert.ok(
+    falseClaim?.evidenceByRuntime?.claude_code?.acceptedEvidence.includes(
+      "deferred_AskUserQuestion_tool_call",
+    ),
+  );
+  assert.equal(
+    falseClaim?.evidenceByRuntime?.cursor?.mustLabelFallback,
+    true,
+  );
+  assert.equal(
+    falseClaim?.evidenceByRuntime?.openclaw?.mustLabelFallback,
+    true,
+  );
+  assert.equal(
+    falseClaim?.evidenceByRuntime?.structural_runner?.mustLabelPending,
+    true,
+  );
+  assert.equal(
+    falseClaim?.rule,
+    contractFalseClaim?.rule,
+  );
+  assert.deepEqual(
+    falseClaim?.evidenceByRuntime,
+    contractFalseClaim?.evidenceByRuntime,
+  );
+});
+
 test("runtime contract distinguishes native choice trigger from generated artifacts", async () => {
   const contract = await readJson("config/contracts/workflow-contract.json");
   const policy = contract.runDiscipline?.userInteractionPolicy?.triggerProofPolicy;
@@ -51,6 +111,7 @@ test("runtime contract distinguishes native choice trigger from generated artifa
   assert.equal(surfaces.claude?.unavailableAction, "block_before_execution");
   assert.deepEqual(surfaces.claude?.fallbackSurfaces, []);
   assert.match(surfaces.claude?.implementation ?? "", /deferred/i);
+  assert.match(surfaces.claude?.implementation ?? "", /Do not narrate/);
   assert.match(surfaces.claude?.implementation ?? "", /AI understanding/);
   assert.match(surfaces.claude?.implementation ?? "", /Candidate paths/);
   assert.doesNotMatch(surfaces.claude?.implementation ?? "", /render a localized chat decision card/i);
@@ -61,6 +122,7 @@ test("runtime contract distinguishes native choice trigger from generated artifa
     /active schema's maximum meaningful option count|active host schema/i,
   );
   assert.match(surfaces.codex?.implementation ?? "", /host-maximum set/i);
+  assert.match(surfaces.codex?.implementation ?? "", /Do not narrate/);
 });
 
 test("Codex and Claude adapters require real native calls and block instead of downgrading", async () => {
@@ -70,9 +132,13 @@ test("Codex and Claude adapters require real native calls and block instead of d
   assert.match(codex, /must call `request_user_input`/);
   assert.match(codex, /block instead of treating a chat card as an accepted Codex decision/);
   assert.match(codex, /cardPlanPacket[\s\S]*not evidence/i);
+  assert.match(codex, /False native choice claim guard/);
+  assert.match(codex, /do not invent an empty response/);
   assert.match(claude, /must call `AskUserQuestion`/);
   assert.match(claude, /deferred `AskUserQuestion` tool call/i);
   assert.match(claude, /Missing native proof blocks the run/);
+  assert.match(claude, /False native choice claim guard/);
+  assert.match(claude, /do not narrate an empty return/);
   assert.match(codex, /active runtime-native maximum meaningful option count/i);
   assert.match(codex, /observed host capacity, not a permanent Meta_Kim limit/i);
   assert.match(codex, /Native structured panel content/i);

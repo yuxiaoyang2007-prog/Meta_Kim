@@ -14,6 +14,8 @@ async function withTempRuntimeHomes(fn) {
   const root = await mkdtemp(path.join(os.tmpdir(), "meta-kim-global-sync-"));
   const env = {
     ...process.env,
+    HOME: root,
+    USERPROFILE: root,
     META_KIM_CLAUDE_HOME: path.join(root, "claude"),
     META_KIM_CODEX_HOME: path.join(root, "codex"),
     META_KIM_OPENCLAW_HOME: path.join(root, "openclaw"),
@@ -177,6 +179,9 @@ describe("sync-global-meta-theory hook policy", () => {
     await withTempRuntimeHomes(async ({ env, root }) => {
       const claudeHome = path.join(root, "claude");
       await mkdir(path.join(claudeHome, "hooks"), { recursive: true });
+      const legacySkillPath = path.join(claudeHome, "skills", "meta-theory.md");
+      await mkdir(path.dirname(legacySkillPath), { recursive: true });
+      await writeFile(legacySkillPath, "user legacy claude skill\n", "utf8");
       const sentinelPath = path.join(claudeHome, "settings.json");
       const sentinel = `${JSON.stringify(
         { hooks: { UserPromptSubmit: [{ hooks: [{ command: "node user-only.js" }] }] } },
@@ -188,6 +193,7 @@ describe("sync-global-meta-theory hook policy", () => {
       await runScript(["--targets", "codex", "--with-global-hooks"], env);
 
       assert.equal(await readFile(sentinelPath, "utf8"), sentinel);
+      assert.equal(await readFile(legacySkillPath, "utf8"), "user legacy claude skill\n");
       await assert.rejects(() =>
         readFile(path.join(claudeHome, "hooks", "meta-kim", "activate-meta-theory-spine.mjs")),
       );
@@ -239,6 +245,18 @@ describe("sync-global-meta-theory hook policy", () => {
       assert.match(skill, /Claude Code 用 `\.claude\/agents\/`/);
       assert.match(skill, /`\.claude\/hooks\/`/);
       assert.doesNotMatch(skill, /Claude Code 用[\s\S]{0,120}`\.codex\/hooks\/`/);
+
+      const command = await readFile(
+        path.join(root, "codex", "commands", "meta-theory.md"),
+        "utf8",
+      );
+      assert.ok(
+        command.includes(REPO_ROOT.replace(/\\/g, "/")),
+        "global Codex command must render the installed Meta_Kim package root",
+      );
+      assert.doesNotMatch(command, /__META_KIM_PACKAGE_ROOT__/);
+      assert.match(command, /run-meta-theory-governed-execution\.mjs/);
+      assert.match(command, /--emit-conversation-notice/);
 
       const check = await runScript(["--check", "--targets", "codex"], env);
       assert.match(check.stdout, /Codex global skill/);
@@ -328,10 +346,44 @@ describe("sync-global-meta-theory hook policy", () => {
     });
   });
 
+  test("default sync preserves manifest-owned hook records when hooks are skipped", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      await runScript(["--targets", "codex", "--with-global-hooks"], env);
+
+      const manifestPath = path.join(root, ".meta-kim", "install-manifest.json");
+      const withHooks = JSON.parse(await readFile(manifestPath, "utf8"));
+      assert.ok(
+        withHooks.entries.some(
+          (entry) => entry.purpose === "codex-global-hook",
+        ),
+        "precondition: explicit hook sync should record Codex global hook files",
+      );
+
+      await runScript(["--targets", "codex"], env);
+
+      const afterSkippedHooks = JSON.parse(await readFile(manifestPath, "utf8"));
+      assert.ok(
+        afterSkippedHooks.entries.some(
+          (entry) => entry.purpose === "codex-global-hook",
+        ),
+        "skipping global hooks must not erase previously recorded hook ownership",
+      );
+      assert.ok(
+        afterSkippedHooks.entries.some(
+          (entry) => entry.purpose === "codex-global-command",
+        ),
+        "regular skill/command records should still be refreshed",
+      );
+    });
+  });
+
   test("target filtering does not touch Codex home when only Claude is selected", async () => {
     await withTempRuntimeHomes(async ({ env, root }) => {
       const codexHome = path.join(root, "codex");
       await mkdir(codexHome, { recursive: true });
+      const legacySkillPath = path.join(codexHome, "skills", "meta-theory.md");
+      await mkdir(path.dirname(legacySkillPath), { recursive: true });
+      await writeFile(legacySkillPath, "user legacy codex skill\n", "utf8");
       const sentinelPath = path.join(codexHome, "hooks.json");
       const sentinel = `${JSON.stringify(
         { hooks: { UserPromptSubmit: [{ hooks: [{ command: "node user-only.js" }] }] } },
@@ -343,6 +395,7 @@ describe("sync-global-meta-theory hook policy", () => {
       await runScript(["--targets", "claude", "--with-global-hooks"], env);
 
       assert.equal(await readFile(sentinelPath, "utf8"), sentinel);
+      assert.equal(await readFile(legacySkillPath, "utf8"), "user legacy codex skill\n");
       await assert.rejects(() =>
         readFile(path.join(codexHome, "skills", "meta-theory", "SKILL.md")),
       );

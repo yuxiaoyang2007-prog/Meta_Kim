@@ -708,7 +708,278 @@ describe("MCP memory cross-runtime hooks", () => {
 
       assert.deepEqual(packet.openFindings, []);
       assert.deepEqual(packet.pendingRevisions, []);
-      assert.equal(packet.verifyGateState, "verified");
+      assert.equal(packet.authority, "local_continuity_only");
+      assert.equal(packet.sourceAuthority, "transcript_heuristic");
+      assert.equal(packet.sourceAuthorityDetail.publicReadyClaimAllowed, false);
+      assert.equal(packet.verifyGateState, "pending_verify");
+      assert.equal(packet.summaryDelta.publicReady, false);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(compactionRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("Claude stop compaction ignores HookPrompt display blocks as stage evidence", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-compaction-hookprompt-"));
+    const transcriptPath = path.join(tempDir, "transcript.jsonl");
+    const profile = `test-hookprompt-${process.pid}-${Date.now()}`;
+    const compactionRoot = path.join(tempDir, ".meta-kim", "state", profile);
+
+    try {
+      writeFileSync(
+        transcriptPath,
+        [
+          "MANDATORY_FORMAT_INSTRUCTION",
+          "📝 原始输入：critical and fetch thinking and review",
+          "🔄 优化后的理解：继续当前 active run，先建任务清单，再继续 Fetch。",
+          "✅ 优化后的完整提示词：Critical Fetch Thinking Execution Review Verification Evolution all appear here only as HookPrompt prompt-intake display text.",
+          "这段文字很长，足以超过 Stop hook 的长度阈值，但它只是 HookPrompt 前台说明，不是 runtime spine、workerTaskPacket、reviewPacket 或 verification evidence。",
+          "---",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const hookPath = path.join(
+        repoRoot,
+        "canonical",
+        "runtime-assets",
+        "claude",
+        "hooks",
+        "stop-compaction.mjs",
+      );
+      const result = spawnSync(
+        process.execPath,
+        [hookPath],
+        {
+          input: JSON.stringify({ transcript_path: transcriptPath }),
+          encoding: "utf8",
+          env: { ...process.env, META_KIM_PROFILE: profile },
+          cwd: tempDir,
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(
+        existsSync(path.join(compactionRoot, "compaction", "latest.json")),
+        false,
+      );
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(compactionRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("Claude stop compaction preserves real transcript after one-line HookPrompt JSONL block", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-compaction-jsonl-"));
+    const transcriptPath = path.join(tempDir, "transcript.jsonl");
+    const profile = `test-jsonl-hookprompt-${process.pid}-${Date.now()}`;
+    const compactionRoot = path.join(tempDir, ".meta-kim", "state", profile);
+
+    try {
+      writeFileSync(
+        transcriptPath,
+        [
+          JSON.stringify({
+            role: "assistant",
+            content:
+              "MANDATORY_FORMAT_INSTRUCTION\\n📝 原始输入：critical and fetch thinking and review\\n✅ 优化后的完整提示词：Critical Fetch Thinking Execution Review Verification Evolution all appear here only as HookPrompt display text.\\n---\\n",
+          }),
+          "用户要求继续 Meta_Kim 的 critical and fetch thinking and review 问题审计。",
+          "我先完成 Critical：真实目标是修复 HookPrompt、active-run、session_stop 和 public-ready 证据边界。",
+          "然后进入 Fetch：读取 runtime spine state、active-run status、Stop hook transcript 与 capability invocation truth。",
+          "Thinking 阶段决定把 HookPrompt 保留为 prompt-intake context，但不允许它替代 workerTaskPacket 或 Review 证据。",
+          "Review 记录 HIGH finding：JSONL HookPrompt 单行块不能吞掉后续真实 assistant progress。",
+          "Verification 将运行 stop-compaction 与 stop-save-progress 回归测试，这段真实文本必须足够长，才能通过 local continuity fallback 的长度阈值。",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const hookPath = path.join(
+        repoRoot,
+        "canonical",
+        "runtime-assets",
+        "claude",
+        "hooks",
+        "stop-compaction.mjs",
+      );
+      const result = spawnSync(
+        process.execPath,
+        [hookPath],
+        {
+          input: JSON.stringify({ transcript_path: transcriptPath }),
+          encoding: "utf8",
+          env: { ...process.env, META_KIM_PROFILE: profile },
+          cwd: tempDir,
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      const latestPath = path.join(compactionRoot, "compaction", "latest.json");
+      assert.equal(existsSync(latestPath), true);
+      const packet = JSON.parse(readFileSync(latestPath, "utf8"));
+      assert.equal(packet.sourceAuthority, "transcript_heuristic");
+      assert.equal(packet.authority, "local_continuity_only");
+      assert.equal(packet.sourceAuthorityDetail.publicReadyClaimAllowed, false);
+      assert.doesNotMatch(packet.handoffNote, /Resume from .* stage/);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(compactionRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("Claude stop compaction prefers runtime spine state over transcript stage guesses", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-compaction-spine-"));
+    const transcriptPath = path.join(tempDir, "transcript.jsonl");
+    const profile = `test-spine-${process.pid}-${Date.now()}`;
+    const compactionRoot = path.join(tempDir, ".meta-kim", "state", profile);
+    const spineDir = path.join(compactionRoot, "spine");
+
+    try {
+      mkdirSync(spineDir, { recursive: true });
+      writeFileSync(
+        path.join(spineDir, "spine-state.json"),
+        JSON.stringify(
+          {
+            active: true,
+            runId: "meta-spine-test",
+            currentStage: "critical",
+            stages: {
+              critical: { status: "in_progress" },
+              fetch: { status: "pending" },
+              thinking: { status: "pending" },
+              execution: { status: "pending" },
+              review: { status: "pending" },
+              meta_review: { status: "pending" },
+              verification: { status: "pending" },
+              evolution: { status: "pending" },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+      writeFileSync(
+        transcriptPath,
+        [
+          "Critical Fetch Thinking Execution Review Meta-Review Verification Evolution are all mentioned in a long documentation excerpt.",
+          "This transcript has enough words to pass the Stop hook threshold, but it is only prose and must not override runtime spine state.",
+          "Verification and Evolution words appear here as examples, not as authoritative stage completion evidence.",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const hookPath = path.join(
+        repoRoot,
+        "canonical",
+        "runtime-assets",
+        "claude",
+        "hooks",
+        "stop-compaction.mjs",
+      );
+      const result = spawnSync(
+        process.execPath,
+        [hookPath],
+        {
+          input: JSON.stringify({ transcript_path: transcriptPath }),
+          encoding: "utf8",
+          env: { ...process.env, META_KIM_PROFILE: profile },
+          cwd: tempDir,
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+
+      const latestPath = path.join(compactionRoot, "compaction", "latest.json");
+      const packet = JSON.parse(readFileSync(latestPath, "utf8"));
+
+      assert.equal(packet.stageState.current, "Critical");
+      assert.deepEqual(packet.stageState.completed, []);
+      assert.equal(packet.sourceAuthority, "runtime_spine_state");
+      assert.equal(packet.sourceAuthorityDetail.runtimeRunId, "meta-spine-test");
+      assert.equal(packet.sourceAuthorityDetail.transcriptFallbackUsed, false);
+      assert.equal(packet.verifyGateState, "pending_verify");
+      assert.equal(packet.summaryDelta.publicReady, false);
+      assert.match(packet.handoffNote, /Local continuity suggests inspecting from Critical/);
+      assert.doesNotMatch(packet.handoffNote, /Resume from .* stage/);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(compactionRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("Claude stop compaction does not borrow default spine for another profile", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-compaction-profile-"));
+    const transcriptPath = path.join(tempDir, "transcript.jsonl");
+    const profile = `test-isolated-${process.pid}-${Date.now()}`;
+    const compactionRoot = path.join(tempDir, ".meta-kim", "state", profile);
+    const defaultSpineDir = path.join(tempDir, ".meta-kim", "state", "default", "spine");
+
+    try {
+      mkdirSync(defaultSpineDir, { recursive: true });
+      writeFileSync(
+        path.join(defaultSpineDir, "spine-state.json"),
+        JSON.stringify(
+          {
+            active: true,
+            runId: "default-profile-run-must-not-leak",
+            currentStage: "verification",
+            stages: {
+              critical: { status: "completed" },
+              fetch: { status: "completed" },
+              thinking: { status: "completed" },
+              execution: { status: "completed" },
+              review: { status: "completed" },
+              meta_review: { status: "completed" },
+              verification: { status: "completed" },
+              evolution: { status: "pending" },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+      writeFileSync(
+        transcriptPath,
+        [
+          "Critical Fetch Thinking Review governed run with enough stage text for local continuity.",
+          "This non-default profile has no runtime spine state, so default profile state must not be reused.",
+          "Execution, Meta-Review, Verification, and Evolution appear here only as transcript words for continuity detection, not as runtime authority. The test intentionally exceeds the Stop hook minimum transcript length so the fallback path writes a local compaction packet.",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const hookPath = path.join(
+        repoRoot,
+        "canonical",
+        "runtime-assets",
+        "claude",
+        "hooks",
+        "stop-compaction.mjs",
+      );
+      const result = spawnSync(
+        process.execPath,
+        [hookPath],
+        {
+          input: JSON.stringify({ transcript_path: transcriptPath }),
+          encoding: "utf8",
+          env: { ...process.env, META_KIM_PROFILE: profile },
+          cwd: tempDir,
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+
+      const latestPath = path.join(compactionRoot, "compaction", "latest.json");
+      const packet = JSON.parse(readFileSync(latestPath, "utf8"));
+
+      assert.equal(packet.profile, profile);
+      assert.equal(packet.sourceAuthority, "transcript_heuristic");
+      assert.equal(packet.sourceAuthorityDetail.runtimeRunId, null);
+      assert.equal(packet.sourceAuthorityDetail.transcriptFallbackUsed, true);
+      assert.equal(packet.verifyGateState, "pending_verify");
+      assert.equal(packet.summaryDelta.publicReady, false);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
       rmSync(compactionRoot, { recursive: true, force: true });
@@ -841,6 +1112,109 @@ describe("MCP memory cross-runtime hooks", () => {
     }
   });
 
+  test("Claude stop save progress marks handoff as local continuity only", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-stop-save-"));
+    const transcriptPath = path.join(tempDir, "transcript.jsonl");
+    const statePath = path.join(tempDir, ".claude", "project-task-state.json");
+
+    try {
+      writeFileSync(path.join(tempDir, "AGENTS.md"), "test project marker\n", "utf8");
+      writeFileSync(
+        transcriptPath,
+        [
+          "用户要求继续处理 Meta_Kim 的 critical and fetch thinking and review 问题。",
+          "我先建一个任务列表来跟踪本次诊断，再继续 Fetch。",
+          "接下来继续 Fetch runtime 状态、HookPrompt 边界和 active-run 证据。",
+          "还需要检查 stop-save-progress 与 stop-compaction 的续跑记录。",
+          "这是真实 assistant handoff，不是 HookPrompt 前台优化块。",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const hookPath = path.join(
+        repoRoot,
+        "canonical",
+        "runtime-assets",
+        "claude",
+        "hooks",
+        "stop-save-progress.mjs",
+      );
+      const result = spawnSync(
+        process.execPath,
+        [hookPath],
+        {
+          input: JSON.stringify({ transcript_path: transcriptPath }),
+          encoding: "utf8",
+          cwd: tempDir,
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      const state = JSON.parse(readFileSync(statePath, "utf8"));
+      assert.equal(state.continuationRequired, true);
+      assert.equal(state.continuationAuthority, "local_continuity_only");
+      assert.equal(state.mustNotClaimActiveRun, true);
+      assert.equal(state.continuationHandoff.authority, "local_continuity_only");
+      assert.equal(state.continuationHandoff.mustNotClaimActiveRun, true);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("Claude stop save progress preserves real handoff after one-line HookPrompt JSONL block", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-stop-save-jsonl-"));
+    const transcriptPath = path.join(tempDir, "transcript.jsonl");
+    const statePath = path.join(tempDir, ".claude", "project-task-state.json");
+
+    try {
+      writeFileSync(path.join(tempDir, "AGENTS.md"), "test project marker\n", "utf8");
+      writeFileSync(
+        transcriptPath,
+        [
+          JSON.stringify({
+            role: "assistant",
+            content:
+              "MANDATORY_FORMAT_INSTRUCTION\\n📝 原始输入：critical and fetch thinking and review\\n✅ 优化后的完整提示词：继续当前 active run，先建任务清单，再继续 Fetch。\\n---\\n",
+          }),
+          "用户要求继续处理 Meta_Kim 的 critical and fetch thinking and review 问题。",
+          "我先建一个任务列表来跟踪本次诊断，再继续 Fetch。",
+          "接下来继续 Fetch runtime 状态、HookPrompt 边界和 active-run 证据。",
+          "还需要检查 stop-save-progress 与 stop-compaction 的续跑记录。",
+          "这是真实 assistant handoff，不是 HookPrompt 前台优化块。",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const hookPath = path.join(
+        repoRoot,
+        "canonical",
+        "runtime-assets",
+        "claude",
+        "hooks",
+        "stop-save-progress.mjs",
+      );
+      const result = spawnSync(
+        process.execPath,
+        [hookPath],
+        {
+          input: JSON.stringify({ transcript_path: transcriptPath }),
+          encoding: "utf8",
+          cwd: tempDir,
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      const state = JSON.parse(readFileSync(statePath, "utf8"));
+      assert.equal(state.continuationRequired, true);
+      assert.equal(state.continuationAuthority, "local_continuity_only");
+      assert.equal(state.mustNotClaimActiveRun, true);
+      assert.equal(state.continuationHandoff.authority, "local_continuity_only");
+      assert.equal(state.continuationHandoff.mustNotClaimActiveRun, true);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("Claude spine state dir rejects META_KIM_SPINE_STATE_DIR outside .meta-kim/state", async () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-spine-"));
     const outsideDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-outside-"));
@@ -880,6 +1254,65 @@ describe("MCP memory cross-runtime hooks", () => {
       } else {
         process.env.META_KIM_SPINE_STATE_DIR = previous;
       }
+      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  test("Claude stop spine cleanup never deletes outside META_KIM_SPINE_STATE_DIR", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-stop-cleanup-"));
+    const outsideDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-outside-cleanup-"));
+    const outsideSpineDir = path.join(outsideDir, "spine");
+    const outsideFile = path.join(outsideSpineDir, "spine-state.json");
+    const fallbackSpineDir = path.join(
+      tempDir,
+      ".meta-kim",
+      "state",
+      "default",
+      "spine",
+    );
+    const fallbackFile = path.join(fallbackSpineDir, "spine-state.json");
+
+    try {
+      mkdirSync(outsideSpineDir, { recursive: true });
+      mkdirSync(fallbackSpineDir, { recursive: true });
+      const completedState = {
+        active: true,
+        currentStage: "evolution",
+        dispatchedAgents: [],
+        stages: {
+          evolution: { status: "completed" },
+        },
+      };
+      writeFileSync(outsideFile, JSON.stringify(completedState, null, 2), "utf8");
+      writeFileSync(fallbackFile, JSON.stringify(completedState, null, 2), "utf8");
+
+      const hookPath = path.join(
+        repoRoot,
+        "canonical",
+        "runtime-assets",
+        "claude",
+        "hooks",
+        "stop-spine-cleanup.mjs",
+      );
+      const result = spawnSync(
+        process.execPath,
+        [hookPath],
+        {
+          input: "{}",
+          encoding: "utf8",
+          cwd: tempDir,
+          env: {
+            ...process.env,
+            META_KIM_SPINE_STATE_DIR: outsideSpineDir,
+          },
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(existsSync(outsideFile), true);
+      assert.equal(existsSync(fallbackFile), false);
+    } finally {
       rmSync(tempDir, { recursive: true, force: true });
       rmSync(outsideDir, { recursive: true, force: true });
     }

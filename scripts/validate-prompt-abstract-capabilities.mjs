@@ -76,6 +76,10 @@ const REQUIRED_PROVIDER_TYPES = [
   "graph_provider",
 ];
 
+const OPTIONAL_PROJECT_INVENTORY_SOURCES = new Set([
+  ".mcp.json",
+]);
+
 const TARGETED_PROMPT_ASSETS = [
   "canonical/skills/same-set-reusable-flow-for-project-file-inventor/SKILL.md",
   "canonical/runtime-assets/claude/commands/meta-theory.md",
@@ -142,6 +146,9 @@ for (const source of contract.inventorySources ?? []) {
   if (source.includes("{profile}") || source.startsWith("graphify-out")) continue;
   const sourceExists = await exists(repoPath(source));
   if (source.includes(".meta-kim/state/default/capability-index/global-capabilities.json")) {
+    continue;
+  }
+  if (!sourceExists && OPTIONAL_PROJECT_INVENTORY_SOURCES.has(source)) {
     continue;
   }
   assert(sourceExists, `inventory source missing ${source}`);

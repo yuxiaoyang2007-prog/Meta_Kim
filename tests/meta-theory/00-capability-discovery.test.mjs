@@ -276,14 +276,11 @@ describe("Part A: SKILL.md documents all capability types", async () => {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 describe("Part B: Runtime MCP Integration", async () => {
-  test(".mcp.json exists and configures meta-kim-runtime", async () => {
-    const exists = await fileExists(".mcp.json");
-    assert.ok(exists, ".mcp.json must exist");
-
-    const mcpConfig = await readJson(".mcp.json");
+  test("canonical MCP config declares meta-kim-runtime", async () => {
+    const mcpConfig = await readJson("canonical/runtime-assets/claude/mcp.json");
     assert.ok(
       mcpConfig.mcpServers?.["meta-kim-runtime"],
-      ".mcp.json must configure meta-kim-runtime server",
+      "canonical MCP config must declare meta-kim-runtime server",
     );
   });
 
@@ -543,12 +540,12 @@ describe("Part D: Skill Discovery", async () => {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 describe("Part E: MCP Tool Discovery", async () => {
-  test(".mcp.json references at least one server", async () => {
-    const mcpConfig = await readJson(".mcp.json");
+  test("canonical MCP config references at least one server", async () => {
+    const mcpConfig = await readJson("canonical/runtime-assets/claude/mcp.json");
     const servers = mcpConfig.mcpServers;
     assert.ok(
       servers && Object.keys(servers).length > 0,
-      ".mcp.json must have at least one MCP server configured",
+      "canonical MCP config must have at least one MCP server configured",
     );
   });
 

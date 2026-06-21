@@ -41,18 +41,39 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     fuzzy.ownerDiscoveryPacket?.searchOrder?.includes("available_capability_providers_skills_tools_mcp"),
     "skill/tool/MCP providers must still be checked before agent creation",
   );
+  const projectProjectionPolicy = fuzzy.ownerDiscoveryPacket?.projectProjectionPolicy ?? {};
+  const projectRuntimeProvidersExpected = projectProjectionPolicy.projectRuntimeProvidersExpected !== false;
+  assert.equal(typeof projectProjectionPolicy.projectProjectionMode, "string");
   assert.ok(
-    fuzzy.ownerDiscoveryPacket?.projectRuntimeSkillProviders?.some((provider) => provider.id === "meta-theory"),
-    "project-local skill providers must be visible in owner discovery",
+    ["project_runtime_inventory", "local_global_runtime_inventory"].includes(projectProjectionPolicy.validationProviderLayer),
+    "route output must name the runtime provider validation layer",
   );
-  assert.ok(
-    fuzzy.ownerDiscoveryPacket?.projectRuntimeCapabilityProviders?.some((provider) => provider.type === "hooks"),
-    "project-local hook providers must be visible in owner discovery",
-  );
-  assert.ok(
-    fuzzy.ownerDiscoveryPacket?.projectRuntimeCapabilityProviders?.some((provider) => provider.type === "rules"),
-    "project-local rule/prompt providers must be visible in owner discovery",
-  );
+  if (projectRuntimeProvidersExpected) {
+    assert.ok(
+      fuzzy.ownerDiscoveryPacket?.projectRuntimeSkillProviders?.some((provider) => provider.id === "meta-theory"),
+      "project-local skill providers must be visible in owner discovery",
+    );
+    assert.ok(
+      fuzzy.ownerDiscoveryPacket?.projectRuntimeCapabilityProviders?.some((provider) => provider.type === "hooks"),
+      "project-local hook providers must be visible in owner discovery",
+    );
+    assert.ok(
+      fuzzy.ownerDiscoveryPacket?.projectRuntimeCapabilityProviders?.some((provider) => provider.type === "rules"),
+      "project-local rule/prompt providers must be visible in owner discovery",
+    );
+  } else {
+    const routeSearchRefs = fuzzy.ownerDiscoveryPacket.capabilityDiscoverySearchLog
+      .map((entry) => `${entry.source}:${entry.sourceRef}`)
+      .join("\n");
+    assert.equal(projectProjectionPolicy.projectProjectionMode, "global_only");
+    assert.equal(projectProjectionPolicy.validationProviderLayer, "local_global_runtime_inventory");
+    assert.match(routeSearchRefs, /\.meta-kim\/local\.overrides\.json#projectProjectionMode=global_only/);
+    assert.match(routeSearchRefs, /~\/\.codex\/hooks\.json/);
+    assert.ok(
+      fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.localGlobalCached?.hooks >= 1,
+      "global_only route validation must rely on cached global hook providers",
+    );
+  }
   assert.ok(
     fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.localGlobalCached?.plugins >= 1,
     "cached global plugin providers must be counted without per-run full scan",

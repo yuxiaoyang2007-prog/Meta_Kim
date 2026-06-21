@@ -183,24 +183,18 @@ async function resolveTargets() {
     dir: path.join(runtimeHomes[targetId].dir, "skills", "meta-theory"),
   }));
 
-  cleanupTargets = [
-    {
-      label: "legacy Claude Code flat skill",
-      dir: path.join(runtimeHomes.claude.dir, "skills", "meta-theory.md"),
-    },
-    {
-      label: "legacy Codex flat skill",
-      dir: path.join(runtimeHomes.codex.dir, "skills", "meta-theory.md"),
-    },
-    {
-      label: "legacy OpenClaw flat skill",
-      dir: path.join(runtimeHomes.openclaw.dir, "skills", "meta-theory.md"),
-    },
-    {
-      label: "legacy Cursor flat skill",
-      dir: path.join(runtimeHomes.cursor.dir, "skills", "meta-theory.md"),
-    },
-  ];
+  const legacyFlatSkillLabels = {
+    claude: "legacy Claude Code flat skill",
+    codex: "legacy Codex flat skill",
+    openclaw: "legacy OpenClaw flat skill",
+    cursor: "legacy Cursor flat skill",
+  };
+  cleanupTargets = selectedTargetIds.map((targetId) => ({
+    label:
+      legacyFlatSkillLabels[targetId] ??
+      `legacy ${targetContext.profiles[targetId]?.label ?? targetId} flat skill`,
+    dir: path.join(runtimeHomes[targetId].dir, "skills", "meta-theory.md"),
+  }));
 }
 
 async function* walkFiles(rootDir) {
@@ -395,6 +389,10 @@ async function assertCanonicalSkillFrontmatter() {
   }
 }
 
+function renderGlobalCommandContent(raw) {
+  return raw.replaceAll("__META_KIM_PACKAGE_ROOT__", repoRoot.replace(/\\/g, "/"));
+}
+
 async function copyCodexMetaTheoryCommand() {
   const commandsDir = path.join(runtimeHomes.codex.dir, "commands");
   const targetPath = path.join(commandsDir, "meta-theory.md");
@@ -405,7 +403,11 @@ async function copyCodexMetaTheoryCommand() {
     );
   }
   await fs.mkdir(commandsDir, { recursive: true });
-  await fs.copyFile(codexMetaTheoryCommandSource, targetPath);
+  await fs.writeFile(
+    targetPath,
+    renderGlobalCommandContent(await fs.readFile(codexMetaTheoryCommandSource, "utf8")),
+    "utf8",
+  );
   recordSafe((rec) =>
     rec.recordFile(targetPath, {
       source: "sync-global-meta-theory",
@@ -426,7 +428,11 @@ async function copyClaudeMetaTheoryCommand() {
     );
   }
   await fs.mkdir(commandsDir, { recursive: true });
-  await fs.copyFile(claudeMetaTheoryCommandSource, targetPath);
+  await fs.writeFile(
+    targetPath,
+    renderGlobalCommandContent(await fs.readFile(claudeMetaTheoryCommandSource, "utf8")),
+    "utf8",
+  );
   recordSafe((rec) =>
     rec.recordFile(targetPath, {
       source: "sync-global-meta-theory",
@@ -1075,7 +1081,9 @@ async function runCheck() {
       "commands",
       "meta-theory.md",
     );
-    const sourceRaw = await fs.readFile(claudeMetaTheoryCommandSource, "utf8");
+    const sourceRaw = renderGlobalCommandContent(
+      await fs.readFile(claudeMetaTheoryCommandSource, "utf8"),
+    );
     const targetRaw = (await pathExists(commandPath))
       ? await fs.readFile(commandPath, "utf8")
       : null;
@@ -1094,7 +1102,9 @@ async function runCheck() {
       "commands",
       "meta-theory.md",
     );
-    const sourceRaw = await fs.readFile(codexMetaTheoryCommandSource, "utf8");
+    const sourceRaw = renderGlobalCommandContent(
+      await fs.readFile(codexMetaTheoryCommandSource, "utf8"),
+    );
     const targetRaw = (await pathExists(commandPath))
       ? await fs.readFile(commandPath, "utf8")
       : null;
@@ -1132,7 +1142,6 @@ async function runSync() {
   manifestRecorder = openRecorder({
     scope: "global",
     metaKimVersion: process.env.META_KIM_VERSION ?? null,
-    replaceSources: ["sync-global-meta-theory"],
   });
 
   for (const target of cleanupTargets) {

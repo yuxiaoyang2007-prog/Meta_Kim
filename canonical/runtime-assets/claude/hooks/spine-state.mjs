@@ -291,6 +291,17 @@ export async function readSpineState(cwd) {
   }
 }
 
+export async function readSpineStateIncludingInactive(cwd) {
+  const filePath = spineStatePath(cwd);
+  try {
+    const raw = await readFile(filePath, "utf-8");
+    const status = JSON.parse(raw);
+    return status && typeof status === "object" ? status : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function writeSpineState(cwd, state) {
   const filePath = spineStatePath(cwd);
   await ensureDir(filePath);
@@ -400,10 +411,43 @@ export function createMetaRunStatusEnvelope(state, options = {}) {
     state?.stagePurpose ||
     state?.stagePurposes?.[languageResolution.language] ||
     null;
+  const runtimeControl = state?.stageRuntimeControl || {};
+  const hookObserved = isHookObservedState(state);
+  const driverMode =
+    runtimeControl.driverMode ||
+    state?.driverMode ||
+    (hookObserved ? "hook_observed" : "managed");
+  const hookGateMode =
+    runtimeControl.hookGateMode ||
+    state?.hookGateMode ||
+    (hookObserved ? "advisory" : "managed");
+  const authorityMode = hookObserved
+    ? "hook_observed_advisory"
+    : "managed_runtime_spine";
+  const active = state?.active !== false;
+  const deactivatedAt = active ? null : state?.deactivatedAt || null;
+  const deactivationReason = active ? null : state?.deactivationReason || null;
+  const continuationBoundary =
+    state?.continuationBoundary ||
+    (active
+      ? {
+          status: "active_run",
+          mode: "not_applicable",
+          reason: null,
+        }
+      : {
+          status: "inactive_run",
+          mode:
+            deactivationReason === "session_stop"
+              ? "session_stop_requires_new_run_or_offline_audit"
+              : "inactive_run_requires_state_reconciliation",
+          reason:
+            "Inactive run status is history only. A later prompt may start a new run or offline audit, but it must not claim this run is still active.",
+        });
 
   return {
     schemaVersion: 1,
-    active: state?.active !== false,
+    active,
     runId,
     triggeredBy:
       state?.triggerReason || state?.triggeredBy || "meta-theory",
@@ -415,6 +459,18 @@ export function createMetaRunStatusEnvelope(state, options = {}) {
     completed,
     next: nextStage ? STAGE_PUBLIC_LABELS[nextStage] : null,
     blockedOn: state?.blockedOn || null,
+    authorityMode,
+    driverMode,
+    hookGateMode,
+    publicReadyAuthority: false,
+    publicReadyBoundary: {
+      status: "not_public_ready_authority",
+      reason:
+        "Run status reports current runtime progress only. Public-ready requires summary, verification, real invocation coverage, and Warden gates.",
+    },
+    deactivatedAt,
+    deactivationReason,
+    continuationBoundary,
     startedAt,
     updatedAt,
     lastUserVisibleNotice: state?.lastUserVisibleNotice || null,
@@ -460,7 +516,7 @@ export async function readMetaRunStatus(cwd, profile) {
   try {
     const raw = await readFile(filePath, "utf-8");
     const status = JSON.parse(raw);
-    return status?.active === false ? null : status;
+    return status && typeof status === "object" ? status : null;
   } catch {
     return null;
   }

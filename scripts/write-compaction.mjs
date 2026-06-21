@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Simulate a governance run interruption and write a real compaction packet.
+ * Simulate a governance run interruption and write a local continuity
+ * compaction packet.
  *
  * Usage: node scripts/write-compaction.mjs [--run-ref <name>] [--profile <name>]
  *
@@ -8,7 +9,8 @@
  * is interrupted mid-way — it writes a real compaction packet to:
  *   .meta-kim/state/{profile}/compaction/{run-ref}.json
  *
- * The packet follows the exact contract from workflow-contract.json compactionPacket.
+ * The packet is local-only continuity state. It is not runtime stage authority,
+ * verification proof, public-ready proof, or Evolution writeback evidence.
  */
 
 import { promises as fs } from "node:fs";
@@ -46,6 +48,14 @@ async function writeCompaction({ runRef, profile }) {
       completed: ["Critical", "Fetch", "Thinking", "Execution"],
       resumeFrom: "Review",
       stepNumber: 5,
+    },
+    authority: "local_continuity_only",
+    sourceAuthority: "manual_doctor_fixture",
+    sourceAuthorityDetail: {
+      runtimeRunId: null,
+      transcriptFallbackUsed: false,
+      publicReadyClaimAllowed: false,
+      note: "Manual fixture for local continuity and doctor demonstrations only.",
     },
     openFindings: [
       {
@@ -87,10 +97,16 @@ async function writeCompaction({ runRef, profile }) {
     singleDeliverableState: {
       currentDeliverable: "auth-module-security-fix",
       closed: false,
+      singleDeliverableMaintained: false,
+      deliverableChainClosed: false,
     },
     summaryDelta: {
       written: false,
       content: null,
+      publicReady: false,
+      verifyPassed: false,
+      summaryClosed: false,
+      source: "local_compaction_no_public_ready_claim",
     },
     writebackDecision: {
       decision: "none",
@@ -101,7 +117,7 @@ async function writeCompaction({ runRef, profile }) {
         "Local compaction is continuity state only, not an Evolution writeback to memory.",
     },
     accepted_risk: null,
-    handoffNote: `Compaction written at ${timestamp}. Session interrupted during Review stage (step 5/8). 2 open findings need revision before verification can proceed. Resume from Review stage.`,
+    handoffNote: `Compaction written at ${timestamp}. Local continuity only: session was interrupted during Review stage (step 5/8), and 2 open findings need revision before verification can proceed. Inspect runtime spine state before claiming active-run continuation.`,
   };
 
   const outFile = path.join(state.compactionDir, `${runRef}.json`);
@@ -136,7 +152,7 @@ async function main() {
     `  gate:    ${result.findingsCount > 0 ? "pending_verify" : "verified"}`,
   );
   console.log(
-    `\nTo resume: load this file at session start to continue from Review stage.`,
+    "\nContinuity note: load this file as local context only, then inspect runtime spine state before claiming continuation.",
   );
 }
 

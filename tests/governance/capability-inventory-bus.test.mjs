@@ -13,6 +13,7 @@ test("capability inventory bus emits unified multi-source provider records", () 
   const inventory = JSON.parse(
     readFileSync(".meta-kim/state/default/capability-inventory.json", "utf8"),
   );
+  const globalOnly = inventory.projectProjectionMode === "global_only";
   const providerTypes = new Set(inventory.capabilities.map((record) => record.providerType));
 
   for (const providerType of [
@@ -52,18 +53,30 @@ test("capability inventory bus emits unified multi-source provider records", () 
   }
 
   const sourcePaths = new Set(inventory.capabilities.map((record) => record.sourcePath));
-  for (const sourcePath of [
+  const expectedSourcePaths = [
     "canonical/agents/meta-warden.md",
-    ".codex/agents/meta-warden.toml",
-    ".claude/agents/meta-warden.md",
-    ".cursor/agents/meta-warden.md",
-    "openclaw/workspaces/meta-warden/SOUL.md",
-    ".mcp.json",
     "scripts/mcp/meta-runtime-server.mjs",
     "config/runtime-capability-matrix.json",
     "config/os-compatibility-matrix.json",
     "graphify-out/GRAPH_REPORT.md",
-  ]) {
+  ];
+
+  if (globalOnly) {
+    expectedSourcePaths.push(
+      ".meta-kim/state/default/capability-index/global-capabilities.json",
+      "~/.codex/agents/meta-warden.toml",
+    );
+  } else {
+    expectedSourcePaths.push(
+      ".mcp.json",
+      ".codex/agents/meta-warden.toml",
+      ".claude/agents/meta-warden.md",
+      ".cursor/agents/meta-warden.md",
+      "openclaw/workspaces/meta-warden/SOUL.md",
+    );
+  }
+
+  for (const sourcePath of expectedSourcePaths) {
     assert.ok(sourcePaths.has(sourcePath), `missing source path ${sourcePath}`);
   }
 
@@ -73,18 +86,30 @@ test("capability inventory bus emits unified multi-source provider records", () 
   assert.ok(inventory.summary.byProviderType.runtime >= 1);
 
   const byId = new Map(inventory.capabilities.map((record) => [record.id, record]));
-  for (const configId of [
-    "project-mcp-config",
-    "cursor-mcp-config",
-    "codex-mcp-config",
-    "claude-settings",
-    "codex-hooks",
-    "cursor-hooks",
-  ]) {
-    const record = byId.get(configId);
-    assert.ok(record, `missing config record ${configId}`);
-    assert.equal(record.routeEligibility, "reference", `${configId} must be reference-only`);
-    assert.equal(record.canExecute, false, `${configId} must not be executable`);
+  if (globalOnly) {
+    const cachedGlobal = byId.get("cached-global-capability-inventory");
+    assert.ok(cachedGlobal, "global_only inventory must retain cached global provider evidence");
+    assert.equal(cachedGlobal.routeEligibility, "reference");
+    assert.equal(cachedGlobal.canExecute, false);
+
+    const globalCodexWarden = byId.get("global:codex:agents:meta-warden");
+    assert.ok(globalCodexWarden, "global_only inventory must expose global Codex meta-warden");
+    assert.equal(globalCodexWarden.sourcePath, "~/.codex/agents/meta-warden.toml");
+    assert.equal(globalCodexWarden.routeEligibility, "governance_owner");
+  } else {
+    for (const configId of [
+      "project-mcp-config",
+      "cursor-mcp-config",
+      "codex-mcp-config",
+      "claude-settings",
+      "codex-hooks",
+      "cursor-hooks",
+    ]) {
+      const record = byId.get(configId);
+      assert.ok(record, `missing config record ${configId}`);
+      assert.equal(record.routeEligibility, "reference", `${configId} must be reference-only`);
+      assert.equal(record.canExecute, false, `${configId} must not be executable`);
+    }
   }
   assert.equal(byId.get("meta-kim-runtime-mcp-server")?.canExecute, true);
 });

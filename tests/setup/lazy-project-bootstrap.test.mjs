@@ -23,6 +23,7 @@ function runSetup(args, options = {}) {
   return spawnSync(process.execPath, ["setup.mjs", ...args], {
     cwd: REPO_ROOT,
     encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
     timeout: 120_000,
     ...options,
   });
@@ -32,6 +33,7 @@ function runBin(args, options = {}) {
   return spawnSync(process.execPath, ["bin/meta-kim.mjs", ...args], {
     cwd: REPO_ROOT,
     encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
     timeout: 120_000,
     ...options,
   });

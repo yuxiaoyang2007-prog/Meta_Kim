@@ -598,7 +598,15 @@
         "verification_pending"
       ]
     },
-    "writebackDecision": "none"
+    "writebackDecision": "none",
+    "authority": "local_continuity_only",
+    "sourceAuthority": "runtime_spine_state",
+    "sourceAuthorityDetail": {
+      "runtimeRunId": null,
+      "transcriptFallbackUsed": false,
+      "publicReadyClaimAllowed": false,
+      "note": "Fixture source authority is classified for compaction contract validation."
+    }
   },
   "evolutionWritebackPacket": {
     "ownerAssessment": "keep-existing",

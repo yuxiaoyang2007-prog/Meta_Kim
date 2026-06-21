@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { readJsonFromStdin } from "./utils.mjs";
 import {
   readSpineState,
+  readSpineStateIncludingInactive,
   writeSpineState,
   createInitialState,
 } from "./spine-state.mjs";
@@ -24,6 +25,8 @@ const EXPLICIT_META_THEORY_RE =
   /(?:^|\b)(?:\/?meta-theory|meta theory|run meta theory|execute meta theory)(?:\b|$)|元理论/u;
 const CRITICAL_FETCH_THINKING_RE =
   /critical[\s\S]{0,80}fetch[\s\S]{0,80}thinking[\s\S]{0,80}review|critical\s+and\s+fetch\s+thinking\s+and\s+review|深度.*(?:fetch|检索|研究).*review|critical.*review/iu;
+const CONTINUATION_REQUEST_RE =
+  /\b(?:continue|resume|continuation|current\s+run|active\s+run|same\s+run)\b|(?:继续|续跑|接着|恢复|当前\s*run|active\s*run|同一个\s*run|不要重启|不重启)/iu;
 const ACTION_RE =
   /\b(?:build|create|implement|fix|repair|change|update|refactor|plan|start|handle|organize|prioritize|verify|review|audit|generate|write|sync|release|publish|ship|commit|push)\b|(?:帮我|开始|处理|整理|规划|修复|验证|审查|检查|生成|写|改|优化|同步|提交|推送|发布|更新|实机测试)/iu;
 const DURABLE_OUTPUT_RE =
@@ -202,6 +205,28 @@ function shouldReplaceActiveState(existing, promptFingerprint) {
   return !isManagedStageState(existing) && ageMs(existing) > staleCutoffMs;
 }
 
+function buildContinuationBoundary(previousState, promptText) {
+  if (!previousState || previousState.active !== false) return null;
+  if (!CONTINUATION_REQUEST_RE.test(promptText || "")) return null;
+
+  return {
+    status: "new_run_from_inactive_request",
+    mode:
+      previousState.deactivationReason === "session_stop"
+        ? "session_stop_continuation_request"
+        : "inactive_run_continuation_request",
+    previousRunId: previousState.runId || null,
+    previousActive: false,
+    previousStage: previousState.currentStage || null,
+    previousDeactivatedAt: previousState.deactivatedAt || null,
+    previousDeactivationReason: previousState.deactivationReason || null,
+    authority:
+      "HookPrompt may preserve the user's continuation wording, but runtime state says the previous run is inactive.",
+    requiredNextAction:
+      "Reconcile current active-run/spine-state before claiming continuation; choose new governed run or offline audit if the previous run stopped.",
+  };
+}
+
 function startPostCopyAutoInit() {
   if (process.env.META_KIM_POST_COPY_AUTO === "off") return;
 
@@ -242,7 +267,8 @@ startPostCopyAutoInit();
 
 const rawPromptText = getRawPromptText();
 const promptFingerprint = fingerprintPrompt(rawPromptText);
-const existing = await readSpineState(cwd);
+const rawExisting = await readSpineStateIncludingInactive(cwd);
+const existing = rawExisting?.active === false ? null : rawExisting || (await readSpineState(cwd));
 if (existing && existing.active && !shouldReplaceActiveState(existing, promptFingerprint)) {
   process.exit(0);
 }
@@ -258,6 +284,11 @@ const state = createInitialState({
   factGatePolicy: "managed_gate_required_for_public_ready",
   executionLeasePolicy: "advisory_until_managed_stage_driver",
 });
+
+const continuationBoundary = buildContinuationBoundary(rawExisting, rawPromptText);
+if (continuationBoundary) {
+  state.continuationBoundary = continuationBoundary;
+}
 
 await writeSpineState(cwd, state);
 process.exit(0);

@@ -698,7 +698,7 @@ async function scanMcpConfig(configPath) {
 
     servers.push(serverEntry);
 
-    const selfTest = runKnownMcpSelfTest(command, args);
+    const selfTest = runKnownMcpSelfTest(command, resolveRepoPlaceholdersInArgs(args));
     if (selfTest?.ok) {
       serverEntry.metadata.permissionStatus = "self_test_verified";
       serverEntry.metadata.toolCount = String(selfTest.tools.length);
@@ -737,6 +737,14 @@ async function scanMcpConfig(configPath) {
   }
 
   return { servers, tools };
+}
+
+function resolveRepoPlaceholdersInArgs(args) {
+  return args.map((arg) =>
+    typeof arg === "string"
+      ? arg.replaceAll("__REPO_ROOT__", repoRoot.replace(/\\/g, "/"))
+      : arg,
+  );
 }
 
 async function scanCodexTomlMcpServers(configPath) {
@@ -1080,7 +1088,9 @@ async function collectRepoCanonicalCapabilities() {
   const codexCommands = await scanCommandFiles(
     path.join(repoRoot, "canonical", "runtime-assets", "codex", "commands"),
   );
-  const mcpDiscovery = await scanMcpConfig(path.join(repoRoot, ".mcp.json"));
+  const mcpDiscovery = await scanMcpConfig(
+    path.join(repoRoot, "canonical", "runtime-assets", "claude", "mcp.json"),
+  );
   const skillsManifest = await readJsonIfExists(
     path.join(repoRoot, "config", "skills.json"),
   );

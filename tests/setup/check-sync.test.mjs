@@ -86,18 +86,21 @@ describe("validateHooks()", () => {
 });
 
 describe("summarizeExpectedFiles()", () => {
-  test("Codex expected projections include runtime adapter agents", () => {
+  test("Codex expected projections include only governance agents", () => {
     const expectedCodex = expectedAgentProjectionFiles(".toml", [
       ...META_AGENTS,
       ...CODEX_RUNTIME_ADAPTER_AGENT_IDS,
       ...CODEX_BUSINESS_ROLE_AGENT_IDS,
     ]);
 
-    assert.ok(expectedCodex.includes("worker.toml"));
-    assert.ok(expectedCodex.includes("explorer.toml"));
-    assert.ok(expectedCodex.includes("frontend.toml"));
-    assert.ok(expectedCodex.includes("backend.toml"));
-    assert.ok(expectedCodex.includes("test.toml"));
+    assert.deepStrictEqual(CODEX_RUNTIME_ADAPTER_AGENT_IDS, []);
+    assert.deepStrictEqual(CODEX_BUSINESS_ROLE_AGENT_IDS, []);
+    assert.ok(expectedCodex.includes("meta-warden.toml"));
+    assert.ok(!expectedCodex.includes("worker.toml"));
+    assert.ok(!expectedCodex.includes("explorer.toml"));
+    assert.ok(!expectedCodex.includes("frontend.toml"));
+    assert.ok(!expectedCodex.includes("backend.toml"));
+    assert.ok(!expectedCodex.includes("test.toml"));
     assert.strictEqual(
       expectedCodex.length,
       META_AGENTS.length +

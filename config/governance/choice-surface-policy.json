@@ -36,6 +36,84 @@
     ],
     "description": "When Codex or Claude Code needs a branch-changing choice, the runtime assistant must actually call or defer the native tool. Generated packets and notices only prove that a choice is needed; they do not prove the user saw a popup. If the primary native surface is unavailable, block before Execution instead of accepting a chat-card fallback. Conversation fallback is compatibility-only for non-primary runtimes."
   },
+  "falseNativeChoiceClaimPolicy": {
+    "enabled": true,
+    "failureClass": "false_native_choice_claim",
+    "claimDefinition": "Assistant text states or implies that a runtime choice surface was shown, sent, used, returned empty, timed out, completed, or selected.",
+    "appliesTo": [
+      "assistant_chat_text",
+      "run_report",
+      "conversation_notice",
+      "artifact_summary"
+    ],
+    "claimPhrases": [
+      "I used the choice panel",
+      "choice panel did not return",
+      "popup did not return",
+      "native choice was shown",
+      "我用 Codex 的选择面板",
+      "选择面板没有返回",
+      "弹框没有返回",
+      "已弹出选择"
+    ],
+    "evidenceByRuntime": {
+      "codex": {
+        "acceptedEvidence": [
+          "request_user_input_answer",
+          "nativeChoiceSurfaceBlocked"
+        ],
+        "forbiddenSubstitutes": [
+          "chat_text",
+          "markdown_card",
+          "conversationNotice",
+          "cardPlanPacket",
+          "run_report"
+        ],
+        "fallbackAllowed": false
+      },
+      "claude_code": {
+        "acceptedEvidence": [
+          "AskUserQuestion_answer",
+          "deferred_AskUserQuestion_tool_call",
+          "nativeChoiceSurfaceBlocked"
+        ],
+        "forbiddenSubstitutes": [
+          "chat_text",
+          "markdown_card",
+          "conversationNotice",
+          "cardPlanPacket",
+          "run_report"
+        ],
+        "fallbackAllowed": false
+      },
+      "cursor": {
+        "acceptedEvidence": [
+          "verified_native_choice_answer",
+          "conversation_fallback_user_reply"
+        ],
+        "mustLabelFallback": true,
+        "forbiddenClaim": "native_popup"
+      },
+      "openclaw": {
+        "acceptedEvidence": [
+          "verified_native_choice_answer",
+          "conversation_fallback_user_reply",
+          "channel_user_reply"
+        ],
+        "mustLabelFallback": true,
+        "forbiddenClaim": "native_popup"
+      },
+      "structural_runner": {
+        "acceptedEvidence": [
+          "hostInvocationRequestPacket",
+          "host_handoff_pending"
+        ],
+        "mustLabelPending": true,
+        "forbiddenClaim": "choice_completed"
+      }
+    },
+    "rule": "A choice-surface claim is valid only when the current runtime adapter attaches matching evidence. If evidence is missing, report the exact pending or blocked state instead of narrating a result."
+  },
   "platformChoiceSurfaces": {
     "claude_code": [
       {

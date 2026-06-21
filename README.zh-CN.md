@@ -119,7 +119,7 @@ npm run meta:validate
 |---|---|---|
 | Meta_Kim 仓库 + Claude Code | 完整治理（CLAUDE.md 提供 8-stage spine、门、分发规则） | 直接说任务；需要 durable 处理的工作会进入治理路线 |
 | 任意其他项目 + Claude Code | 全局 skill/hooks 可被发现；项目内文件只在确认需要定制/bootstrap 后写入 | 直接说任务；`/meta-theory` 只是维护者快捷方式 |
-| Codex | 全局 skill/hooks + 项目 `AGENTS.md` 上下文；本地 `.codex/agents`、`.codex/commands` 或 `.agents/skills` 是项目专用覆盖层 | 直接说任务；Codex 会区分 durable 工作、主观模糊输入和纯查询 |
+| Codex | 全局 skill/hooks + 项目 `AGENTS.md` 上下文；本地 `.codex/agents`、`.codex/commands` 或 `.agents/skills` 是项目专用覆盖层，不是默认执行层投影 | 直接说任务；Codex 会区分 durable 工作、主观模糊输入和纯查询 |
 | OpenClaw | 全局/共享 skill + OpenClaw config/auth；项目 `openclaw/` 材料用于项目专用 workspace/context 覆盖层 | 需要配置 OpenClaw config/auth；提交者必须先在 OpenClaw 自己完成严格自测并提供证据，证据通过审查后才能合并 |
 | Cursor | 全局 skill + 项目 rules/context；本地 `.cursor/agents`、`.cursor/rules`、`.cursor/skills`、hooks、MCP 是项目专用覆盖层 | 提交者必须先在 Cursor 自己完成严格自测并提供证据，证据通过审查后才能合并 |
 
@@ -549,7 +549,7 @@ Meta_Kim 当前拥有 4 个正式投影目标：
 | 平台 | 状态 | 映射方式 |
 | --- | --- | --- |
 | **Claude Code** | 默认正式投影 | `.claude/agents/*.md` + `SKILL.md` + hooks + MCP；作为默认 target 参与主链路，由 sync/check 验证 |
-| **Codex** | 默认正式投影 | 本地生成的 `.codex/agents/*.toml` + `.agents/skills/` + commands + hooks；作为默认 target 参与主链路，由 sync/check 验证 |
+| **Codex** | 默认正式投影 | 为九个治理 agent 生成本地 `.codex/agents/*.toml` + `.agents/skills/` + commands + hooks；作为默认 target 参与主链路，由 sync/check 验证 |
 | **OpenClaw** | 非默认正式投影 | `openclaw/` workspaces + skills + internal hooks；更强工具阻断改造需提交者先在 OpenClaw 自己完成严格自测并提供证据，证据通过审查后才能合并 |
 | **Cursor** | 非默认正式投影 | `.cursor/agents/*.md` + `.cursor/rules/*.mdc` + skills + hooks + MCP；Cursor 改造需提交者先在 Cursor 自己完成严格自测并提供证据，证据通过审查后才能合并 |
 
@@ -557,14 +557,14 @@ Meta_Kim 还记录 Qoder CLI、Trae、Kiro、Windsurf / Devin Desktop Cascade、
 
 主源层由 `canonical/agents/`、`canonical/skills/meta-theory/`、`config/contracts/`、`config/capability-index/` 组成，再通过同步脚本（`npm run meta:sync`）镜像 / 投影到不同平台的文件结构。
 
-开源边界：生成的 runtime projection 目录是本地输出，由 `.gitignore` 保护，不能作为 GitHub source 提交。包括 `.claude/`、`.codex/`、`.agents/`、`.cursor/`、`openclaw/`、`.mcp.json` 和 `codex/`。九个治理 agent 的唯一源码在 `canonical/agents/`；Codex adapter 或 business-role `.toml` 文件可以在本地为宿主生成，但不能 force-add，也不能打进仓库源码包。
+开源边界：生成的 runtime projection 目录是本地输出，由 `.gitignore` 保护，不能作为 GitHub source 提交。包括 `.claude/`、`.codex/`、`.agents/`、`.cursor/`、`openclaw/`、`.mcp.json` 和 `codex/`。九个治理 agent 的唯一源码在 `canonical/agents/`；Meta_Kim sync 不生成 `worker`、`explorer`、`frontend`、`backend`、`test`、`review`、`analysis`、`verify` 或 `docs` 这类执行层 Codex agent。
 
 ```mermaid
 flowchart TB
     CANONICAL["canonical/ + config/<br/>（统一主源层）"]
 
     CANONICAL --> |npm run meta:sync| CLAUDE[".claude/<br/>Claude Code<br/>agents + skills + hooks"]
-    CANONICAL --> |npm run meta:sync| CODEX[".codex/ + .agents/<br/>Codex<br/>agents.toml + skills + hooks"]
+    CANONICAL --> |npm run meta:sync| CODEX[".codex/ + .agents/<br/>Codex<br/>治理 agents.toml + skills + hooks"]
     CANONICAL --> |npm run meta:sync| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills + internal hooks"]
     CANONICAL --> |npm run meta:sync| CURSOR[".cursor/<br/>Cursor<br/>agents + rules + skills + hooks + MCP"]
 

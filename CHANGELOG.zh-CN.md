@@ -8,6 +8,66 @@
 
 ## [Unreleased]
 
+## [2.8.46] - 2026-06-21
+
+### 解决的问题
+
+本次发布修复 Claude Code 会话中断后的续跑边界：当 runtime spine 已经 `session_stop`，后续再说“继续当前 active run”不能再被误读成真的 active governed run。HookPrompt 仍然保持首屏意图增强层，但它的 model-visible context 不再能冒充 Fetch、Thinking、worker、Execution、Verification 或 public-ready 证据。
+
+### 变更
+
+- **HookPrompt 证据边界** - 在 meta-theory skill、抽象能力契约和 runtime safety contract 中明确 HookPrompt 只是 prompt-intake context；它可以澄清意图，但不能推进阶段或满足治理证据。
+- **HookPrompt JSONL Transcript 安全** - Stop hooks 现在会只剥离 HookPrompt 展示片段；当 Claude 把前台提示展示写成一行 escaped newline JSONL 时，不会吞掉后面的真实 transcript 内容。
+- **Public Readiness 状态拆分** - 将 runtime `surfaceState`（`silent` / `notice` / `decision`）和 Warden 拥有的 `publicReadinessState`（`debug-surface` / `internal-ready` / `public-ready`）分离，避免交互展示状态冒充发布就绪。
+- **Dynamic Workflow lane 证据闭环** - Route 选中的 worker lanes 现在直接进入 business-flow blueprint，保留 omitted lanes with reasons，并由 `meta-conductor` 作为编排 synthesis 的 merge owner。
+- **Invocation Truth Public-Ready 硬门** - Run artifact validator 现在会拒绝 selected executable capability 只被选中、不可用、被阻断、缺 host evidence，或 top-level packet 与 `coreLoop` 不一致时的 public-ready 声明。
+- **LangGraph-style Runtime 边界** - 产品证据现在明确这是 LangGraph-style 结构控制图，不新增也不声称真实 LangGraph runtime dependency。
+- **Global-only 能力清单** - Capability discovery 在 `global_only` 投影模式下可读取缓存的全局 runtime inventory，同时继续把项目配置记录保持为 reference-only。
+- **Inactive Run 续跑边界** - `active-run.json` 与 status envelope 现在公开 `deactivatedAt`、`deactivationReason` 和 `continuationBoundary`，让 `session_stop` 历史可见，但不会被当成 active managed run。
+- **Claude Runtime Session-Stop 修复** - Claude spine activation 会先读取 inactive spine state；当用户要求继续时，创建新的 observed run，并记录前一个已停止 run 的边界，而不是声称旧 run 仍然 active。
+- **Continuation 文案识别对齐** - Shared 与 Claude activation hooks 现在识别同一组宽口径续跑说法，例如 `current run`、`same run`、`当前 run`、`同一个 run`。
+- **Stop Hook Transcript 过滤** - Stop compaction 和 progress hook 在 transcript 启发式判断前会剥离 HookPrompt 前台展示块，避免提示词优化文本制造假的阶段进度、finding 或续跑 handoff。
+- **Stop Cleanup 路径安全** - `stop-spine-cleanup` 删除 completed spine state 前会复用 repo-local state resolver，非法 `META_KIM_SPINE_STATE_DIR` 不能删除 `.meta-kim/state` 之外的文件。
+- **Local Continuity 文案降权** - Stop compaction 和 project task state 现在把交接标记为 `local_continuity_only` 并写入 `mustNotClaimActiveRun`，替换容易误导的 “Resume from X stage” 说法。
+- **状态 CLI 诚实输出** - `meta-run-status` 对 inactive `session_stop` 会输出 reason 和 continuation boundary，而不是只折叠成一行笼统 inactive。
+- **发布元数据对齐** - 将包元数据提升到 `2.8.46`，确保 source tree、tag 和 GitHub Release 指向同一版本。
+
+### 验证
+
+- `node --check canonical/runtime-assets/claude/hooks/stop-compaction.mjs canonical/runtime-assets/claude/hooks/stop-save-progress.mjs canonical/runtime-assets/claude/hooks/activate-meta-theory-spine.mjs canonical/runtime-assets/claude/hooks/spine-state.mjs canonical/runtime-assets/shared/hooks/spine-state.mjs scripts/meta-run-status.mjs`
+- `node --test tests/meta-theory/20-run-status-envelope.test.mjs`
+- `node --test tests/meta-theory/09-run-artifact-validator.test.mjs`
+- `node --test tests/meta-theory/32-meta-theory-four-product-targets.test.mjs`
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `node --test tests/governance/runtime-safety-contract.test.mjs`
+- `node --test tests/governance/capability-inventory-bus.test.mjs`
+- `node --test tests/setup/mcp-memory-hooks.test.mjs`
+- `npm run meta:release:smoke`
+- `npm run meta:verify:all`
+- Public-ready 边界保持诚实：HookPrompt prompt-intake context 不是 runtime invocation、Verification 或 release-grade all-runtime live evidence。
+
+## [2.8.45] - 2026-06-20
+
+### 解决的问题
+
+本次发布补上 Meta_Kim 的 Dynamic Workflow / LangGraph-style governed execution 声明与用户可检查证据之间的断层。默认发布面现在记录最新的 hook 自锁修复，确保私有项目 manual 不进入开源 source 集合，并附带一份 full-pass governed execution artifact，用来证明能力发现、worker fan-out、host invocation truth 与 Verification 已经跑通；同时不把它越级说成 release-grade live all-runtime ready。
+
+### 变更
+
+- **Dynamic Workflow 证据闭环** - 复测 `C:/Users/Kim/AppData/Local/Temp/meta-kim-host-full-db9a8dd9aa5c43418aba89f7b210bd57/artifacts/goalpro-codex-host-full-proof.json`，确认其中包含 `fetchPacket`、`capabilityInventory`、`capabilityRoute`、`dynamicWorkflowRuntimePacket`、`langGraphRunPacket`、`workerTaskPackets`、`workerResultPackets` 与 `verificationPacket`。
+- **Host Invocation Truth** - 确认真实 Codex host 证据覆盖 `spawn_agent_result`、`agent_team_result` 与 `skill_application`，并有 MCP、command/script、runtime-tool 三类 fresh local probes；artifact 中 `realInvocationCoverage.missingFamilies` 为空。
+- **Hook 自锁修复** - Fetch 阶段 dispatch gate 现在可以受限修复自己的 `fetchRecord` 状态，同时在能力发现和 execution clearance 前仍然阻止业务文件写入。
+- **开源 Source 边界** - 从公开 source 树移除私有 manual 文档，并让 README 引用保持在受支持的公开文档面上。
+- **发布元数据对齐** - 将包元数据提升到 `2.8.45`，确保 source tree、tag 和 GitHub Release 指向同一版本。
+
+### 验证
+
+- `npm run meta:validate:run -- C:/Users/Kim/AppData/Local/Temp/meta-kim-host-full-db9a8dd9aa5c43418aba89f7b210bd57/artifacts/goalpro-codex-host-full-proof.json`
+- `npm run meta:test:meta-theory`
+- `npm run meta:release:smoke`
+- `git diff --check`
+- Public-ready 边界保持诚实：`publicReadyDecision.publicReady = false`，因为本次没有附带 release-grade live all-runtime evidence。
+
 ## [2.8.44] - 2026-06-19
 
 ### 解决的问题

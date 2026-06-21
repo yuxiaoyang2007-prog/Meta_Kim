@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-19T12:32:30.357Z",
+  "generatedAt": "2026-06-20T06:42:32.825Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -233,8 +233,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/dev-governance.md",
         "relativePath": "dev-governance.md",
-        "size": 21393,
-        "modified": "2026-06-19T08:57:54.606Z"
+        "size": 21802,
+        "modified": "2026-06-19T12:44:33.850Z"
       },
       "repo:canonical-reference:evolution-writeback": {
         "id": "evolution-writeback",
@@ -424,8 +424,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
         "relativePath": "enforce-agent-dispatch.mjs",
-        "size": 43445,
-        "modified": "2026-06-18T02:44:07.712Z"
+        "size": 51251,
+        "modified": "2026-06-19T18:52:09.557Z"
       },
       "repo:canonical-runtime-assets:graphify-context.mjs": {
         "id": "graphify-context.mjs",
@@ -469,8 +469,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/stop-compaction.mjs",
         "relativePath": "stop-compaction.mjs",
-        "size": 10192,
-        "modified": "2026-06-17T19:12:57.928Z"
+        "size": 10175,
+        "modified": "2026-06-19T14:01:33.822Z"
       },
       "repo:canonical-runtime-assets:stop-completion-guard.mjs": {
         "id": "stop-completion-guard.mjs",
@@ -506,7 +506,7 @@
         "path": "canonical/runtime-assets/claude/hooks/stop-save-progress.mjs",
         "relativePath": "stop-save-progress.mjs",
         "size": 10420,
-        "modified": "2026-06-19T12:23:04.031Z"
+        "modified": "2026-06-19T12:40:34.592Z"
       },
       "repo:canonical-runtime-assets:stop-spine-cleanup.mjs": {
         "id": "stop-spine-cleanup.mjs",
@@ -514,8 +514,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/stop-spine-cleanup.mjs",
         "relativePath": "stop-spine-cleanup.mjs",
-        "size": 1545,
-        "modified": "2026-06-17T19:12:57.931Z"
+        "size": 1528,
+        "modified": "2026-06-19T14:01:33.822Z"
       },
       "repo:canonical-runtime-assets:subagent-context.mjs": {
         "id": "subagent-context.mjs",
@@ -532,9 +532,9 @@
         "id": "meta-kim-runtime",
         "type": "mcpServers",
         "namespace": "repo-mcp",
-        "path": ".mcp.json",
-        "size": 220,
-        "modified": "2026-06-19T12:32:26.890Z"
+        "path": "canonical/runtime-assets/claude/mcp.json",
+        "size": 211,
+        "modified": "2026-05-15T15:13:52.586Z"
       }
     },
     "mcpTools": {
@@ -542,25 +542,25 @@
         "id": "meta-kim-runtime:list_meta_agents",
         "type": "mcpTools",
         "namespace": "repo-mcp",
-        "path": ".mcp.json",
-        "size": 220,
-        "modified": "2026-06-19T12:32:26.890Z"
+        "path": "canonical/runtime-assets/claude/mcp.json",
+        "size": 211,
+        "modified": "2026-05-15T15:13:52.586Z"
       },
       "repo:repo-mcp:meta-kim-runtime:get_meta_agent": {
         "id": "meta-kim-runtime:get_meta_agent",
         "type": "mcpTools",
         "namespace": "repo-mcp",
-        "path": ".mcp.json",
-        "size": 220,
-        "modified": "2026-06-19T12:32:26.890Z"
+        "path": "canonical/runtime-assets/claude/mcp.json",
+        "size": 211,
+        "modified": "2026-05-15T15:13:52.586Z"
       },
       "repo:repo-mcp:meta-kim-runtime:get_meta_runtime_capabilities": {
         "id": "meta-kim-runtime:get_meta_runtime_capabilities",
         "type": "mcpTools",
         "namespace": "repo-mcp",
-        "path": ".mcp.json",
-        "size": 220,
-        "modified": "2026-06-19T12:32:26.890Z"
+        "path": "canonical/runtime-assets/claude/mcp.json",
+        "size": 211,
+        "modified": "2026-05-15T15:13:52.586Z"
       }
     },
     "plugins": {

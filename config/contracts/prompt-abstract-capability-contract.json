@@ -14,6 +14,7 @@
     "config/runtime-capability-matrix.json",
     "config/os-compatibility-matrix.json",
     "package.json",
+    "canonical/runtime-assets/claude/mcp.json",
     ".mcp.json",
     ".meta-kim/state/default/capability-index/global-capabilities.json"
   ],
@@ -30,7 +31,7 @@
     {
       "id": "capability-discovery-and-retrieval",
       "kind": "abstract_foundational",
-      "sourceRefs": ["config/capability-index", "config/skills.json", "package.json", ".mcp.json"],
+      "sourceRefs": ["config/capability-index", "config/skills.json", "package.json", "canonical/runtime-assets/claude/mcp.json", ".mcp.json"],
       "examples": ["repo capability index", "runtime mirrors", "global inventory", "findskill", "web/docs/MCP/plugin/local search"],
       "promptHardcodePolicy": "hardcode_discovery_order_and_return_to_fetch_on_gap",
       "trigger": "before route lock when owner, tool, dependency, provider, current fact, or verification path affects the outcome",
@@ -43,7 +44,7 @@
       "examples": ["hookprompt", "Codex HookPrompt adapter", "Cursor HookPrompt adapter", "Claude UserPromptSubmit"],
       "promptHardcodePolicy": "hardcode_as_prompt_submission_context_when_runtime_supports_it",
       "trigger": "user prompt submission or prompt optimization request",
-      "conflictPolicy": "HookPrompt may optimize or add context for the submitted prompt; it must not replace user intent, rewrite PRD decisions, override meta-theory route selection, or mutate planning files."
+      "conflictPolicy": "HookPrompt may optimize or add context for the submitted prompt as a prompt-intake layer; it must not replace user intent, rewrite PRD decisions, override meta-theory route selection, mutate planning files, advance stage state, create active-run authority, or stand in for Fetch, Thinking, worker, execution, verification, or public-ready evidence."
     },
     {
       "id": "planning-continuity",
@@ -84,7 +85,7 @@
     {
       "id": "mcp-external-provider-and-plugin",
       "kind": "provider_foundational",
-      "sourceRefs": [".mcp.json", "config/capability-index/provider-registry.json", "config/skills.json"],
+      "sourceRefs": ["canonical/runtime-assets/claude/mcp.json", ".mcp.json", "config/capability-index/provider-registry.json", "config/skills.json"],
       "examples": ["MCP servers", "MCP tools", "plugins", "connectors", "cli-anything", "superpowers", "ecc", "gstack"],
       "promptHardcodePolicy": "hardcode_provider_discovery_and_trust_review_not_concrete_execution",
       "trigger": "external data, external tools, provider SDK, plugin, connector, or dependency ecosystem affects the route",
@@ -136,7 +137,7 @@
     {
       "id": "hookprompt-no-route-override",
       "capabilityFamily": "prompt-intake-optimization",
-      "rule": "HookPrompt may add prompt context and, when the runtime emits a mandatory foreground prompt-understanding block, that block must be rendered before Meta_Kim route notices or native choice surfaces. It must not override user intent, PRD source-of-truth decisions, meta-theory stage routing, planning state, or later progress notices."
+      "rule": "HookPrompt may add prompt context and, when the runtime emits a mandatory foreground prompt-understanding block, that block must be rendered before Meta_Kim route notices or native choice surfaces. It is prompt-intake context only: it must not override user intent, PRD source-of-truth decisions, meta-theory stage routing, planning state, later progress notices, active-run state, Fetch records, Thinking packets, workerTaskPackets, execution evidence, verification evidence, or public-ready claims."
     },
     {
       "id": "findskill-run-scoped",

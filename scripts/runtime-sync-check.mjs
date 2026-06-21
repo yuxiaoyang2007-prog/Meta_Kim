@@ -10,17 +10,12 @@ export const META_AGENTS = [
   "meta-warden",
 ];
 
-export const CODEX_RUNTIME_ADAPTER_AGENT_IDS = ["worker", "explorer"];
+// Meta_Kim projects only nine governance agents into Codex. Execution-layer
+// labels such as frontend/backend/test remain run-scoped packet labels; they
+// are not generated as durable `.codex/agents/*.toml` files.
+export const CODEX_RUNTIME_ADAPTER_AGENT_IDS = [];
 
-export const CODEX_BUSINESS_ROLE_AGENT_IDS = [
-  "frontend",
-  "backend",
-  "test",
-  "review",
-  "analysis",
-  "verify",
-  "docs",
-];
+export const CODEX_BUSINESS_ROLE_AGENT_IDS = [];
 
 export const OPENCLAW_WORKSPACE_MD = [
   "BOOT.md",

@@ -8,9 +8,7 @@ import {
   CODEX_RUNTIME_ADAPTER_AGENTS,
   applyRuntimePaths,
   buildCodexAgent,
-  buildCodexBusinessRoleAgent,
   buildCodexProjectConfig,
-  buildCodexRuntimeAdapterAgent,
   buildCodexSkillContent,
   buildCursorAgent,
   buildCursorProjectHooksJson,
@@ -31,6 +29,29 @@ const REPO = path.resolve("/fake/repo");
 function p(...bits) {
   return path.join(REPO, ...bits);
 }
+
+describe("sync-runtimes / target selection", () => {
+  test("uses activeTargets instead of all supportedTargets by default", async () => {
+    const source = await readFsFile("scripts/sync-runtimes.mjs", "utf8");
+
+    assert.match(
+      source,
+      /const targetContext = await resolveTargetContext\(cliArgs\);/,
+    );
+    assert.match(
+      source,
+      /targetContext\.localOverrides\.projectProjectionMode === "global_only"/,
+    );
+    assert.match(
+      source,
+      /const selectedTargets = globalOnlyProjectSync \? \[\] : targetContext\.activeTargets;/,
+    );
+    assert.doesNotMatch(
+      source,
+      /const selectedTargets = cliTargets\.length > 0 \? cliTargets : supportedTargets;/,
+    );
+  });
+});
 
 describe("sync-runtimes / inferProjectCategory", () => {
   test("maps .claude/settings.json to category G", () => {
@@ -598,46 +619,12 @@ describe("sync-runtimes / Codex agents", () => {
     assert.doesNotMatch(rendered, /代码库分析|执行|审查|验证/);
   });
 
-  test("emits Codex runtime adapter agents for built-in worker and explorer names", () => {
-    const adapterIds = CODEX_RUNTIME_ADAPTER_AGENTS.map((agent) => agent.id);
-    assert.deepEqual(adapterIds, ["worker", "explorer"]);
-
-    for (const agent of CODEX_RUNTIME_ADAPTER_AGENTS) {
-      const rendered = buildCodexRuntimeAdapterAgent(agent);
-      assert.match(rendered, new RegExp(`^name = "${agent.id}"$`, "m"));
-      assert.match(rendered, /^nickname_candidates = \[/m);
-      assert.match(rendered, /runtimeInstanceAlias/);
-      assert.match(rendered, /roleDisplayName/);
-      assert.match(rendered, /not a canonical durable Meta_Kim owner|Do not edit files/);
-    }
+  test("does not project Codex execution-layer adapter agents", () => {
+    assert.deepEqual(CODEX_RUNTIME_ADAPTER_AGENTS, []);
+    assert.deepEqual(CODEX_BUSINESS_ROLE_AGENTS, []);
   });
 
-  test("emits Codex business-role custom agents with stable role names", () => {
-    const roleIds = CODEX_BUSINESS_ROLE_AGENTS.map((agent) => agent.id);
-    assert.deepEqual(roleIds, [
-      "frontend",
-      "backend",
-      "test",
-      "review",
-      "analysis",
-      "verify",
-      "docs",
-    ]);
-
-    for (const agent of CODEX_BUSINESS_ROLE_AGENTS) {
-      const rendered = buildCodexBusinessRoleAgent(agent);
-      assert.match(rendered, new RegExp(`^name = "${agent.id}"$`, "m"));
-      assert.match(
-        rendered,
-        new RegExp(`Use this role only when the task packet's roleDisplayName is ${agent.roleDisplayName}`),
-      );
-      assert.match(rendered, /^nickname_candidates = \[/m);
-      assert.match(rendered, /runtimeInstanceAlias/);
-      assert.doesNotMatch(rendered, /Popper|Zeno|agent-019e/);
-    }
-  });
-
-  test("treats generated Codex adapter files as runtime agent projections", () => {
+  test("classifies stale Codex adapter files as runtime-local projections only", () => {
     assert.equal(
       inferProjectCategory(p(".codex", "agents", "worker.toml"), REPO),
       CATEGORIES.F,

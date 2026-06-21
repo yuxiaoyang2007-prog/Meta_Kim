@@ -121,7 +121,7 @@ After the default install (`node setup.mjs` or `npx`) or a confirmed project boo
 |---|---|---|
 | Meta_Kim repo with Claude Code | Full governance via CLAUDE.md (8-stage spine, gates, dispatch rules) | Say the task naturally; durable work is classified into the governed route |
 | Any other project with Claude Code | Global skills/hooks can be discovered; project-local files are written only after confirmed customization/bootstrap | Say the task naturally; explicit `/meta-theory` remains a maintainer shortcut |
-| Codex | Global skills/hooks plus project `AGENTS.md` context when present; local `.codex/agents`, `.codex/commands`, or `.agents/skills` are project-specific overrides | Say the task naturally; Codex classifies durable work, subjective ambiguity, and pure queries differently |
+| Codex | Global skills/hooks plus project `AGENTS.md` context when present; local `.codex/agents`, `.codex/commands`, or `.agents/skills` are project-specific overrides, not default execution-layer projection | Say the task naturally; Codex classifies durable work, subjective ambiguity, and pure queries differently |
 | OpenClaw | Global/shared skills plus OpenClaw config/auth; project `openclaw/` material is for project-specific workspace/context overrides | Requires OpenClaw config/auth; contributors must complete strict OpenClaw self-testing and provide evidence; changes can merge only after that evidence passes review |
 | Cursor | Global skills plus project rules/context when present; local `.cursor/agents`, `.cursor/rules`, `.cursor/skills`, hooks, and MCP are project-specific overrides | Contributors must complete strict Cursor self-testing and provide evidence; changes can merge only after that evidence passes review |
 
@@ -553,7 +553,7 @@ Meta_Kim currently owns four formal projection targets:
 | Platform | Status | Mapping style |
 | --- | --- | --- |
 | **Claude Code** | Default formal projection | `.claude/agents/*.md` + `SKILL.md` + hooks + MCP; primary prompt-first path verified by sync/check and maintained as a default target |
-| **Codex** | Default formal projection | generated local `.codex/agents/*.toml` + `.agents/skills/` + commands + hooks; primary prompt-first path verified by sync/check and maintained as a default target |
+| **Codex** | Default formal projection | generated local `.codex/agents/*.toml` for the nine governance agents + `.agents/skills/` + commands + hooks; primary prompt-first path verified by sync/check and maintained as a default target |
 | **OpenClaw** | Non-default formal projection | `openclaw/` workspaces + skills + internal hooks; stricter tool-denial changes need contributor-owned OpenClaw self-test evidence, and can merge only after that evidence passes review |
 | **Cursor** | Non-default formal projection | `.cursor/agents/*.md` + `.cursor/rules/*.mdc` + skills + hooks + MCP; Cursor changes need contributor-owned Cursor self-test evidence, and can merge only after that evidence passes review |
 
@@ -561,14 +561,14 @@ Meta_Kim also tracks candidate compatibility probes for Qoder CLI, Trae, Kiro, W
 
 The canonical source layer is `canonical/agents/`, `canonical/skills/meta-theory/`, `config/contracts/`, and `config/capability-index/`. The repository mirrors that layer into platform-specific projections through `npm run meta:sync`.
 
-Open-source boundary: Generated runtime projection directories are local outputs, gitignored, and not GitHub source. That includes `.claude/`, `.codex/`, `.agents/`, `.cursor/`, `openclaw/`, `.mcp.json`, and `codex/`. The nine governance agents live in `canonical/agents/`; Codex adapter or business-role `.toml` files may be generated locally for the host, but they must not be force-added or packaged as repository source.
+Open-source boundary: Generated runtime projection directories are local outputs, gitignored, and not GitHub source. That includes `.claude/`, `.codex/`, `.agents/`, `.cursor/`, `openclaw/`, `.mcp.json`, and `codex/`. The nine governance agents live in `canonical/agents/`; Meta_Kim sync does not generate execution-layer Codex agents such as `worker`, `explorer`, `frontend`, `backend`, `test`, `review`, `analysis`, `verify`, or `docs`.
 
 ```mermaid
 flowchart TB
     CANONICAL["canonical/ + config/<br/>(single source layer)"]
 
     CANONICAL --> |npm run meta:sync| CLAUDE[".claude/<br/>Claude Code<br/>agents + skills + hooks"]
-    CANONICAL --> |npm run meta:sync| CODEX[".codex/ + .agents/<br/>Codex<br/>agents.toml + skills + hooks"]
+    CANONICAL --> |npm run meta:sync| CODEX[".codex/ + .agents/<br/>Codex<br/>governance agents.toml + skills + hooks"]
     CANONICAL --> |npm run meta:sync| OPENCLAW["openclaw/<br/>OpenClaw<br/>workspaces + skills + internal hooks"]
     CANONICAL --> |npm run meta:sync| CURSOR[".cursor/<br/>Cursor<br/>agents + rules + skills + hooks + MCP"]
 

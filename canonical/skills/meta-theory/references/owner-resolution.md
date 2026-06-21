@@ -13,7 +13,7 @@ Capability-first dispatch order:
 
 existing owner -> owner upgrade -> create owner -> `capabilityGapPacket`.
 
-Degraded path: when no Agent dispatch exists and no owner matches, record `capabilityGapPacket` with `currentAgentsChecked`, `currentProvidersChecked`, and `degradationReason`. Enter `controlState=degraded`. The dispatcher may self-execute only with `degradedFlag: true` and `surfaceState=internal-ready`.
+Degraded path: when no Agent dispatch exists and no owner matches, record `capabilityGapPacket` with `currentAgentsChecked`, `currentProvidersChecked`, and `degradationReason`. Enter `controlState=degraded`. The dispatcher may self-execute only with `degradedFlag: true`, `publicReadinessState=internal-ready`, and runtime `surfaceState=notice` or `silent`.
 
 Do not use temporary fallback owners. Do not persist concrete child skills into long-term agent identity; keep concrete skill/provider selection run-scoped.
 

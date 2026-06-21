@@ -4041,6 +4041,174 @@ function validateSummaryAndEvolution(contract, artifact) {
   );
 }
 
+function nestedPacket(artifact, packetName) {
+  return artifact.coreLoop?.[packetName] ?? artifact[packetName] ?? null;
+}
+
+function publicReadySignals(artifact) {
+  return [
+    ["runHeader.publicReady", artifact.runHeader?.publicReady],
+    ["summaryPacket.publicReady", artifact.summaryPacket?.publicReady],
+    ["publicReadyDecision.publicReady", artifact.publicReadyDecision?.publicReady],
+    [
+      "coreLoop.publicReadyDecision.publicReady",
+      artifact.coreLoop?.publicReadyDecision?.publicReady,
+    ],
+  ].filter(([, value]) => typeof value === "boolean");
+}
+
+function publicReadyClaims(artifact) {
+  return publicReadySignals(artifact).filter(([, value]) => value === true);
+}
+
+function canonicalJson(value) {
+  return JSON.stringify(value);
+}
+
+function validateNestedPacketConsistency(artifact, packetName) {
+  const topLevel = artifact[packetName];
+  const coreLoop = artifact.coreLoop?.[packetName];
+  if (topLevel === undefined || coreLoop === undefined) return;
+  ensure(
+    canonicalJson(topLevel) === canonicalJson(coreLoop),
+    `${packetName} must match coreLoop.${packetName}; top-level packets cannot mask stale or failing coreLoop truth.`,
+  );
+}
+
+function validateCoreLoopPublicReadyConsistency(artifact) {
+  for (const packetName of [
+    "runtimeInvocationPlanPacket",
+    "hostInvocationRequestPacket",
+    "capabilityInvocationTruthPacket",
+    "productExperiencePacket",
+    "publicReadyDecision",
+  ]) {
+    validateNestedPacketConsistency(artifact, packetName);
+  }
+
+  const claims = publicReadyClaims(artifact);
+  if (claims.length === 0) return;
+
+  const readinessSignals = publicReadySignals(artifact);
+  const falseSignals = readinessSignals.filter(([, value]) => value === false);
+  ensure(
+    falseSignals.length === 0,
+    `${claims.map(([name]) => name).join(", ")} cannot coexist with false public-ready signals: ${falseSignals
+      .map(([name]) => name)
+      .join(", ")}.`,
+  );
+
+  const runtimeInvocationPlanPacket = nestedPacket(
+    artifact,
+    "runtimeInvocationPlanPacket",
+  );
+  const hostInvocationRequestPacket = nestedPacket(
+    artifact,
+    "hostInvocationRequestPacket",
+  );
+  const capabilityInvocationTruthPacket = nestedPacket(
+    artifact,
+    "capabilityInvocationTruthPacket",
+  );
+  const productExperiencePacket = nestedPacket(
+    artifact,
+    "productExperiencePacket",
+  );
+  const claimNames = claims.map(([name]) => name).join(", ");
+
+  ensure(
+    runtimeInvocationPlanPacket?.status === "pass",
+    `${claimNames} requires runtimeInvocationPlanPacket.status=pass.`,
+  );
+  ensure(
+    hostInvocationRequestPacket?.status === "pass",
+    `${claimNames} requires hostInvocationRequestPacket.status=pass.`,
+  );
+  ensure(
+    capabilityInvocationTruthPacket?.realInvocationCoverage?.status === "pass",
+    `${claimNames} requires capabilityInvocationTruthPacket.realInvocationCoverage.status=pass.`,
+  );
+  ensure(
+    productExperiencePacket?.status === "product_experience_pass",
+    `${claimNames} requires productExperiencePacket.status=product_experience_pass.`,
+  );
+
+  const realCoverage = capabilityInvocationTruthPacket.realInvocationCoverage;
+  const requiredFamilies = Array.isArray(realCoverage.requiredFamilies)
+    ? realCoverage.requiredFamilies
+    : [];
+  const hostEvidenceCount = Number(realCoverage.hostEvidenceCount ?? 0);
+  ensure(
+    requiredFamilies.length === 0 || hostEvidenceCount > 0,
+    `${claimNames} requires capabilityInvocationTruthPacket.realInvocationCoverage.hostEvidenceCount > 0 for selected executable families.`,
+  );
+
+  const invocationEvidence = Array.isArray(runtimeInvocationPlanPacket.evidence)
+    ? runtimeInvocationPlanPacket.evidence
+    : [];
+  ensure(
+    requiredFamilies.length === 0 || invocationEvidence.length > 0,
+    `${claimNames} requires runtimeInvocationPlanPacket.evidence for selected executable families.`,
+  );
+  for (const family of requiredFamilies) {
+    ensure(
+      invocationEvidence.some(
+        (item) =>
+          item?.family === family &&
+          item.passEligible === true &&
+          (typeof item.evidenceRef === "string"
+            ? item.evidenceRef.trim().length > 0
+            : Boolean(item.evidenceRef)),
+      ),
+      `${claimNames} requires trusted invocation evidence for selected executable family ${family}.`,
+    );
+  }
+
+  const blockingRows = (capabilityInvocationTruthPacket.rows ?? []).filter(
+    (row) =>
+      row?.selectedCount > 0 &&
+      ["selected_not_invoked", "unavailable", "blocked"].includes(row.state),
+  );
+  ensure(
+    blockingRows.length === 0,
+    `${claimNames} cannot coexist with selected executable capability states: ${blockingRows
+      .map((row) => `${row.family}:${row.state}`)
+      .join(", ")}.`,
+  );
+
+  for (const row of capabilityInvocationTruthPacket.rows ?? []) {
+    if (
+      row?.selectedCount > 0 &&
+      ["invoked", "applied"].includes(row.state)
+    ) {
+      ensure(
+        Array.isArray(row.invocationEvidenceRefs) &&
+          row.invocationEvidenceRefs.length > 0,
+        `${claimNames} requires invocationEvidenceRefs for selected executable capability ${row.family}.`,
+      );
+    }
+  }
+
+  ensure(
+    (hostInvocationRequestPacket.pendingFamilies ?? []).length === 0,
+    `${claimNames} requires hostInvocationRequestPacket.pendingFamilies to be empty.`,
+  );
+  ensure(
+    (hostInvocationRequestPacket.requests ?? []).every(
+      (request) => request.status === "satisfied" && request.passEligible === true,
+    ),
+    `${claimNames} requires every hostInvocationRequestPacket request to be satisfied and passEligible.`,
+  );
+
+  if (artifact.publicReadyDecision && artifact.coreLoop?.publicReadyDecision) {
+    ensure(
+      artifact.publicReadyDecision.publicReady ===
+        artifact.coreLoop.publicReadyDecision.publicReady,
+      "publicReadyDecision.publicReady must match coreLoop.publicReadyDecision.publicReady.",
+    );
+  }
+}
+
 function validateCompactionPacket(contract, artifact) {
   const packet = artifact.compactionPacket;
   if (!packet) {
@@ -4056,6 +4224,22 @@ function validateCompactionPacket(contract, artifact) {
   ensureString(packet.runRef, "compactionPacket.runRef");
   ensureString(packet.profile, "compactionPacket.profile");
   ensureString(packet.profileKey, "compactionPacket.profileKey");
+  ensure(
+    packet.authority === contract.protocols.compactionPacket.authorityPolicy.defaultAuthority,
+    "compactionPacket.authority must be local_continuity_only.",
+  );
+  ensureEnum(
+    packet.sourceAuthority,
+    contract.protocols.compactionPacket.authorityPolicy.allowedSourceAuthority,
+    "compactionPacket.sourceAuthority",
+  );
+  ensure(
+    packet.sourceAuthorityDetail &&
+      typeof packet.sourceAuthorityDetail === "object" &&
+      packet.sourceAuthorityDetail.publicReadyClaimAllowed ===
+        contract.protocols.compactionPacket.authorityPolicy.publicReadyClaimAllowed,
+    "compactionPacket.sourceAuthorityDetail must record publicReadyClaimAllowed=false.",
+  );
   ensureStringArray(packet.openFindings, "compactionPacket.openFindings");
   ensureStringArray(
     packet.pendingRevisions,
@@ -4192,6 +4376,7 @@ export function validateArtifact(contract, artifact) {
   validateWorkerPackets(contract, artifact);
   validateFindingChain(contract, artifact);
   validateSummaryAndEvolution(contract, artifact);
+  validateCoreLoopPublicReadyConsistency(artifact);
   validateCompactionPacket(contract, artifact);
   validateHardPublicReadyTodoGate(contract, artifact);
   validateHardCommentReviewGate(contract, artifact);

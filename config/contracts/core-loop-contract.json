@@ -40,7 +40,25 @@
       ],
       "blockingGates": ["unclear_user_intent", "unsafe_or_unbounded_permission"],
       "warningGates": ["minor wording ambiguity with no route impact"],
-      "defaultOwner": "meta-warden"
+      "defaultOwner": "meta-warden",
+      "decisionResponsibilities": {
+        "responsibilityRef": "intent_lock",
+        "decisionQuestion": "Which missing intent, success, non-goal, permission, or architecture-type fact would change the route?",
+        "informationToCollect": [
+          "user pain and value",
+          "success criteria",
+          "non-goals",
+          "permissions",
+          "blocking unknowns",
+          "architecture type"
+        ],
+        "decisionOutputs": [
+          "clarify before Fetch",
+          "proceed with documented assumptions",
+          "block unsafe or unbounded scope"
+        ],
+        "userChoiceWhen": "Ask only when the answer changes route, scope, risk, acceptance, permission, or non-goal."
+      }
     },
     {
       "stage": "Fetch",
@@ -62,7 +80,25 @@
       ],
       "blockingGates": ["missing_fetch_evidence", "missing_capability_discovery", "known_unsupported_runtime_or_os"],
       "warningGates": ["stale global cache that does not affect selected route"],
-      "defaultOwner": "meta-conductor"
+      "defaultOwner": "meta-conductor",
+      "decisionResponsibilities": {
+        "responsibilityRef": "evidence_and_capability_discovery",
+        "decisionQuestion": "Which evidence or capability fact changes candidate routes, owners, risk, scope, or verification?",
+        "informationToCollect": [
+          "local project evidence",
+          "external or current evidence when needed",
+          "capability inventory",
+          "contradictions and assumptions",
+          "read-before-edit facts",
+          "route-changing evidence confidence"
+        ],
+        "decisionOutputs": [
+          "expand or shrink candidate options",
+          "block unsupported routes",
+          "update decisionImpactMap before Thinking"
+        ],
+        "userChoiceWhen": "Ask when evidence exposes multiple valid paths with different user-visible trade-offs."
+      }
     },
     {
       "stage": "Thinking",
@@ -94,7 +130,26 @@
       ],
       "blockingGates": ["missing_owner", "missing_weapon", "missing_verification_owner", "blind_execute"],
       "warningGates": ["single obvious path recorded as no_branching_choice"],
-      "defaultOwner": "meta-conductor"
+      "defaultOwner": "meta-conductor",
+      "decisionResponsibilities": {
+        "responsibilityRef": "route_design_and_owner_selection",
+        "decisionQuestion": "Which owner, weapon, dependency, runtime, OS, lane shape, and verification path best serves the intent?",
+        "informationToCollect": [
+          "candidate routes",
+          "owner and weapon fit",
+          "dependency policy",
+          "runtime and OS support",
+          "worker task DAG",
+          "omitted lanes with reasons"
+        ],
+        "decisionOutputs": [
+          "recommended route",
+          "candidate path trade-offs",
+          "workerTaskPackets",
+          "review and verification owner"
+        ],
+        "userChoiceWhen": "Ask before Execution when candidate routes differ in scope, cost, risk, owner, acceptance, or persistence."
+      }
     },
     {
       "stage": "Execution",
@@ -122,7 +177,25 @@
       ],
       "blockingGates": ["unsafe_mutation", "external_write_without_approval", "global_write_without_approval"],
       "warningGates": ["low-risk local wording edit"],
-      "defaultOwner": "selected worker or selected capability provider"
+      "defaultOwner": "selected worker or selected capability provider",
+      "decisionResponsibilities": {
+        "responsibilityRef": "bounded_execution_and_midrun_branching",
+        "decisionQuestion": "Did execution discover a route-changing fact that should pause, continue, narrow, or return to Thinking?",
+        "informationToCollect": [
+          "worker execution evidence",
+          "side effects and rollback facts",
+          "unexpected dependencies",
+          "target file conflicts",
+          "new route-changing blockers"
+        ],
+        "decisionOutputs": [
+          "continue selected route",
+          "pause for user choice",
+          "return to Fetch or Thinking",
+          "record execution evidence"
+        ],
+        "userChoiceWhen": "Ask when execution discovers a new trade-off or permission/scope change that the selected route did not cover."
+      }
     },
     {
       "stage": "Review",
@@ -147,7 +220,26 @@
       ],
       "blockingGates": ["review_finds_unresolved_critical_or_high_issue"],
       "warningGates": ["minor polish issue that does not affect acceptance"],
-      "defaultOwner": "meta-prism"
+      "defaultOwner": "meta-prism",
+      "decisionResponsibilities": {
+        "responsibilityRef": "upstream_and_output_quality_review",
+        "decisionQuestion": "Is the chain good enough for the claimed result, and which finding changes acceptance or revision direction?",
+        "informationToCollect": [
+          "Critical completeness",
+          "Fetch decision evidence",
+          "Thinking owner and route support",
+          "execution evidence",
+          "output quality findings",
+          "user preference trade-offs"
+        ],
+        "decisionOutputs": [
+          "accept",
+          "revise",
+          "block",
+          "ask user on quality versus speed trade-off"
+        ],
+        "userChoiceWhen": "Ask only when a review finding requires a user preference rather than a correctness fix."
+      }
     },
     {
       "stage": "Meta-Review",
@@ -165,7 +257,25 @@
       ],
       "blockingGates": ["public_ready_overclaim", "review_standard_too_low"],
       "warningGates": ["non-public smoke evidence only"],
-      "defaultOwner": "meta-warden"
+      "defaultOwner": "meta-warden",
+      "decisionResponsibilities": {
+        "responsibilityRef": "review_standard_and_public_ready_gate",
+        "decisionQuestion": "Is Review's standard strong enough for the intended claim, especially public-ready or release-grade claims?",
+        "informationToCollect": [
+          "review coverage",
+          "bias and overclaim risks",
+          "public-ready intent",
+          "verification plan adequacy",
+          "evidence tier"
+        ],
+        "decisionOutputs": [
+          "accept Review standard",
+          "return to Review",
+          "downgrade claim",
+          "block public-ready overclaim"
+        ],
+        "userChoiceWhen": "No direct interaction; route back to Review or Verification when the claim standard changes."
+      }
     },
     {
       "stage": "Verification",
@@ -196,7 +306,26 @@
         "unsafe_operation_unverified"
       ],
       "warningGates": ["ordinary low-risk step that does not make a completion claim"],
-      "defaultOwner": "verify"
+      "defaultOwner": "verify",
+      "decisionResponsibilities": {
+        "responsibilityRef": "fresh_evidence_and_truth_state",
+        "decisionQuestion": "Which fresh evidence proves, weakens, or limits the completion claim?",
+        "informationToCollect": [
+          "fresh command results",
+          "logs and artifacts",
+          "runtime or OS probe evidence",
+          "human acceptance requirements",
+          "remaining risk"
+        ],
+        "decisionOutputs": [
+          "verified",
+          "partial",
+          "blocked",
+          "reopen",
+          "accept risk with evidence"
+        ],
+        "userChoiceWhen": "No direct interaction unless human acceptance or accepted-risk closure is explicitly required."
+      }
     },
     {
       "stage": "Evolution",
@@ -215,7 +344,26 @@
       ],
       "blockingGates": ["writeback_without_warden_approval", "missing_writeback_or_none_reason"],
       "warningGates": ["candidate writeback requires later approval"],
-      "defaultOwner": "meta-chrysalis"
+      "defaultOwner": "meta-chrysalis",
+      "decisionResponsibilities": {
+        "responsibilityRef": "durable_learning_and_writeback",
+        "decisionQuestion": "What reusable lesson, capability gap, scar, or none-with-reason should survive this run?",
+        "informationToCollect": [
+          "review findings",
+          "verification result",
+          "capability gaps",
+          "same-type failure scars",
+          "writeback targets and owner approval"
+        ],
+        "decisionOutputs": [
+          "writeback",
+          "none-with-reason",
+          "capabilityGapPacket",
+          "scarPacket",
+          "Type B upgrade route"
+        ],
+        "userChoiceWhen": "No direct interaction; Warden approval gates durable writeback."
+      }
     }
   ],
   "capabilityDiscovery": {

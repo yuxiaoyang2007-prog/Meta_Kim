@@ -871,6 +871,12 @@ describe("workflow-contract.json — schema compliance", async () => {
     assert.equal(localState.globalProjectRegistry?.storesProjectBodies, false);
     assert.equal(localState.compaction?.localOnly, true);
     assert.equal(localState.compaction?.publicArtifactForbidden, true);
+    assert.deepEqual(localState.compaction?.authoritySourcePreference, [
+      "runtime_spine_state",
+      "runStatusEnvelope",
+      "transcript_heuristic",
+    ]);
+    assert.match(localState.compaction?.transcriptFallbackPolicy ?? "", /local continuity only/);
 
     const compactionFields =
       contract.protocols?.compactionPacket?.requiredFields ?? [];
@@ -879,6 +885,9 @@ describe("workflow-contract.json — schema compliance", async () => {
       "runRef",
       "profile",
       "profileKey",
+      "authority",
+      "sourceAuthority",
+      "sourceAuthorityDetail",
       "openFindings",
       "pendingRevisions",
       "verifyGateState",
@@ -894,6 +903,22 @@ describe("workflow-contract.json — schema compliance", async () => {
     assert.deepEqual(
       contract.protocols?.compactionPacket?.verifyGateStateEnum,
       ["pending_verify", "verified", "accepted_risk"],
+    );
+    assert.equal(
+      contract.protocols?.compactionPacket?.authorityPolicy?.defaultAuthority,
+      "local_continuity_only",
+    );
+    assert.deepEqual(
+      contract.protocols?.compactionPacket?.authorityPolicy?.allowedSourceAuthority,
+      [
+        "runtime_spine_state",
+        "transcript_heuristic",
+        "manual_doctor_fixture",
+      ],
+    );
+    assert.equal(
+      contract.protocols?.compactionPacket?.authorityPolicy?.publicReadyClaimAllowed,
+      false,
     );
   });
 

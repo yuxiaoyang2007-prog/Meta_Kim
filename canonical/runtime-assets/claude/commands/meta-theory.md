@@ -9,14 +9,22 @@ $ARGUMENTS
 
 Default product runtime path:
 
+When this command is installed globally, run the installed Meta_Kim package root directly:
+
 ```bash
-npm run meta:theory:run -- "$ARGUMENTS"
+node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --emit-conversation-notice "$ARGUMENTS"
+```
+
+If this command file has not been rendered by global sync and the placeholder is still present, fall back only when the current project is the Meta_Kim source checkout or provides the package script:
+
+```bash
+npm run meta:theory:run:notice -- "$ARGUMENTS"
 ```
 
 Then reopen the report with:
 
 ```bash
-npm run meta:theory:report -- latest
+node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --read latest
 ```
 
 This command is not a prose-only reminder. For explicit `/meta-theory` requests,
@@ -37,9 +45,10 @@ Minimum route:
 4. Use the run artifact and report as the evidence surface. Do not replace the
    machine route with a short manual summary.
 
-If `npm run meta:theory:run` is unavailable in the current directory, say that
-the machine entry is unavailable and list the checked path. Do not continue as
-if governed Fetch happened.
+If the rendered package-root runner is unavailable and the current directory
+does not provide the fallback package script, say that the machine entry is
+unavailable and list the checked paths. Do not continue as if governed Fetch
+happened.
 
 ## Prompt Acceptance
 
@@ -48,12 +57,12 @@ This command adapter binds `governance-orchestration`, `capability-discovery-and
 ## Required inputs
 
 - User request from `$ARGUMENTS`.
-- Current project directory with `package.json`.
+- Rendered installed Meta_Kim package root, or a source-checkout current project directory with `package.json`.
 - Available Claude Code command and shell capability.
 
 ## Pass
 
-- The request is routed through `npm run meta:theory:run -- "$ARGUMENTS"` or a precise blocked reason is returned.
+- The request is routed through the rendered package-root runner or the `meta:theory:run:notice` source-checkout fallback, or a precise blocked reason is returned.
 - Fetch evidence is produced by the machine artifact before route claims.
 - The report is reopened with `npm run meta:theory:report -- latest` or the returned runId when user-readable closure is needed.
 
@@ -65,7 +74,7 @@ This command adapter binds `governance-orchestration`, `capability-discovery-and
 
 ## Block
 
-Block when the project directory does not contain the expected package script, shell execution is unavailable, or the request requires current external evidence but no retrieval path exists.
+Block when the rendered package-root runner and fallback package script are unavailable, shell execution is unavailable, or the request requires current external evidence but no retrieval path exists.
 
 ## Return to stage
 

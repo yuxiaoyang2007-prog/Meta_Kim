@@ -384,7 +384,7 @@
       "visualOrAssetPlan": "none",
       "dependsOn": [],
       "parallelGroup": "auth-core",
-      "mergeOwner": "meta-warden",
+      "mergeOwner": "meta-conductor",
       "verifySteps": [
         {
           "id": "task-001-verify-1",
@@ -649,7 +649,15 @@
       "publicReady": true,
       "blockedBy": []
     },
-    "writebackDecision": "none"
+    "writebackDecision": "none",
+    "authority": "local_continuity_only",
+    "sourceAuthority": "runtime_spine_state",
+    "sourceAuthorityDetail": {
+      "runtimeRunId": null,
+      "transcriptFallbackUsed": false,
+      "publicReadyClaimAllowed": false,
+      "note": "Fixture source authority is classified for compaction contract validation."
+    }
   },
   "evolutionWritebackPacket": {
     "ownerAssessment": "keep-existing",
@@ -1745,5 +1753,126 @@
         "evidenceRef": "rollbackPlanPacket.rollbackSteps"
       }
     ]
+  },
+  "runtimeInvocationPlanPacket": {
+    "schemaVersion": "runtime-invocation-plan-v0.1",
+    "status": "pass",
+    "requiredFamilies": [
+      "skill",
+      "command_script"
+    ],
+    "invokedFamilies": [
+      "skill",
+      "command_script"
+    ],
+    "missingFamilies": [],
+    "requests": [
+      {
+        "family": "skill",
+        "state": "invoked_or_applied",
+        "passEligible": true
+      },
+      {
+        "family": "command_script",
+        "state": "invoked_or_applied",
+        "passEligible": true
+      }
+    ],
+    "evidence": [
+      {
+        "family": "skill",
+        "state": "applied",
+        "providerId": "meta-theory",
+        "hostSurface": "skill",
+        "evidenceKind": "skill_application",
+        "evidenceRef": "fixture:skill:trusted-invocation",
+        "passEligible": true
+      },
+      {
+        "family": "command_script",
+        "state": "invoked",
+        "providerId": "command_script-provider",
+        "hostSurface": "shell",
+        "evidenceKind": "command_output",
+        "evidenceRef": "fixture:command_script:trusted-invocation",
+        "passEligible": true
+      }
+    ]
+  },
+  "hostInvocationRequestPacket": {
+    "schemaVersion": "host-invocation-request-v0.1",
+    "status": "pass",
+    "requiredFamilies": [
+      "skill",
+      "command_script"
+    ],
+    "pendingFamilies": [],
+    "requests": [
+      {
+        "family": "skill",
+        "status": "satisfied",
+        "passEligible": true
+      },
+      {
+        "family": "command_script",
+        "status": "satisfied",
+        "passEligible": true
+      }
+    ]
+  },
+  "capabilityInvocationTruthPacket": {
+    "schemaVersion": "capability-invocation-truth-v0.3",
+    "status": "pass",
+    "realInvocationCoverage": {
+      "status": "pass",
+      "requiredFamilies": [
+        "skill",
+        "command_script"
+      ],
+      "invokedFamilies": [
+        "skill",
+        "command_script"
+      ],
+      "missingFamilies": [],
+      "hostEvidenceCount": 2,
+      "evidenceRef": "runtimeInvocationPlanPacket.evidence"
+    },
+    "rows": [
+      {
+        "family": "skill",
+        "state": "applied",
+        "selectedCount": 1,
+        "invokedCount": 0,
+        "appliedCount": 1,
+        "invocationEvidenceRefs": [
+          "fixture:skill:trusted-invocation"
+        ]
+      },
+      {
+        "family": "command_script",
+        "state": "invoked",
+        "selectedCount": 1,
+        "invokedCount": 1,
+        "appliedCount": 0,
+        "invocationEvidenceRefs": [
+          "fixture:command_script:trusted-invocation"
+        ]
+      }
+    ]
+  },
+  "productExperiencePacket": {
+    "schemaVersion": "product-experience-v0.1",
+    "status": "product_experience_pass",
+    "evidenceTier": "runtime_live_pass"
+  },
+  "publicReadyDecision": {
+    "publicReady": true,
+    "status": "pass",
+    "runtimeInvocationPlanStatus": "pass",
+    "hostInvocationRequestStatus": "pass",
+    "realInvocationCoverageStatus": "pass",
+    "productExperienceStatus": "product_experience_pass",
+    "selectedExecutableTruthGaps": [],
+    "blockedBy": []
   }
 }

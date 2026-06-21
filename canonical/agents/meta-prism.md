@@ -328,7 +328,7 @@ Prism: Collect Evidence -> AI-Slop Scan -> Assertion Evaluation -> Claims Verifi
 | Verification Gate | `meta-warden` + `meta-prism` | Provides: `fixEvidence` + `closeFindings` for each required revision | Reviews closure packet, makes final gate decision |
 | Synthesis Gate | `meta-warden` | — | Owner; Prism does not participate in synthesis gate |
 
-**Escalation Rule**: If `criteriaState` drifts (review standards become too loose or too strict), Prism escalates to Warden for standards recalibration via the `surfaceState: debug-surface` mechanism.
+**Escalation Rule**: If `criteriaState` drifts (review standards become too loose or too strict), Prism escalates to Warden for standards recalibration via the `publicReadinessState: debug-surface` mechanism.
 
 ## Core Analysis Interfaces (Conceptual Layer)
 

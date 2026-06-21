@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { OS_TARGETS, RUNTIMES, exists, listFiles, readJson, repoPath, stateDir, toPosix, writeJson } from "./governance-lib.mjs";
@@ -45,6 +46,30 @@ const PROVIDER_TYPE_BY_TYPE = {
   external: "external",
 };
 
+const GLOBAL_INVENTORY_TYPE_TO_RECORD_TYPE = {
+  agents: "agent",
+  skills: "skill",
+  hooks: "hook",
+  plugins: "plugin",
+  commands: "command",
+  rules: "reference",
+  prompts: "reference",
+  mcpServers: "mcp_server",
+  mcpTools: "mcp_server",
+};
+
+const GLOBAL_PROVIDER_ROUTE_ELIGIBILITY = {
+  agents: "governance_owner",
+  skills: "callable",
+  hooks: "callable",
+  plugins: "requires_provider_validation",
+  commands: "callable",
+  rules: "reference",
+  prompts: "reference",
+  mcpServers: "callable",
+  mcpTools: "callable",
+};
+
 function riskLevelFor(record) {
   const riskText = JSON.stringify(record.risk ?? {}).toLowerCase();
   if (/credential|global|externalwrite|thirdparty|trust|approval|unsafe|delete|uninstall/.test(riskText)) {
@@ -61,6 +86,26 @@ function ownerBoundaryFor(record) {
   if (record.routeEligibility === "callable") return "callable_provider";
   if (record.routeEligibility === "reference") return "reference_only";
   return record.ownerCandidates?.[0] ?? "unknown_owner_boundary";
+}
+
+function homeRelativePath(filePath) {
+  if (!filePath || typeof filePath !== "string") return null;
+  const normalizedPath = path.resolve(filePath);
+  const homeDir = path.resolve(os.homedir());
+  const relativeToHome = path.relative(homeDir, normalizedPath);
+  if (!relativeToHome.startsWith("..") && !path.isAbsolute(relativeToHome)) {
+    return `~/${toPosix(relativeToHome)}`;
+  }
+  return toPosix(filePath);
+}
+
+async function readJsonIfExists(relativePath) {
+  try {
+    return await readJson(relativePath);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 function canVerify(record) {
@@ -236,6 +281,84 @@ async function runtimeMirrorCapabilities() {
   ];
 }
 
+async function globalRuntimeCapabilities(projectProjectionMode) {
+  if (projectProjectionMode !== "global_only") return [];
+
+  const inventory = await readJsonIfExists(
+    ".meta-kim/state/default/capability-index/global-capabilities.json",
+  );
+  const byPlatform = inventory?.byPlatform;
+  if (!byPlatform || typeof byPlatform !== "object") return [];
+
+  const records = [];
+  for (const [platformKey, platformRecord] of Object.entries(byPlatform)) {
+    const platformId = platformRecord?.platformId ?? platformKey;
+    const capabilities = platformRecord?.capabilities ?? {};
+    for (const [capabilityType, entries] of Object.entries(capabilities)) {
+      if (!Array.isArray(entries)) continue;
+      const recordType =
+        GLOBAL_INVENTORY_TYPE_TO_RECORD_TYPE[capabilityType] ?? "external";
+      for (const entry of entries) {
+        if (
+          capabilityType !== "agents" ||
+          !String(entry?.id ?? "").startsWith("meta-")
+        ) {
+          continue;
+        }
+        const sourcePath =
+          homeRelativePath(entry?.path) ??
+          `global:${platformId}:${capabilityType}:${entry?.id ?? "unknown"}`;
+        const id = `global:${platformId}:${capabilityType}:${entry?.id ?? path.basename(sourcePath)}`;
+        records.push({
+          id,
+          type: recordType,
+          sourcePath,
+          sourceRef: sourcePath,
+          triggerWords: [
+            entry?.id,
+            entry?.metadata?.name,
+            capabilityType,
+            platformId,
+          ].filter(Boolean),
+          ownerCandidates: String(entry?.id ?? "").startsWith("meta-")
+            ? [entry.id]
+            : ["meta-artisan"],
+          weaponCandidates: [],
+          dependencyCandidates: [],
+          verificationMethod: "npm run discover:global",
+          risk: {
+            globalProvider: true,
+            platformId,
+            capabilityType,
+          },
+          configOnly: false,
+          mustPreserve: String(entry?.id ?? "").startsWith("meta-"),
+          routeEligibility:
+            GLOBAL_PROVIDER_ROUTE_ELIGIBILITY[capabilityType] ?? "reference",
+          missingFields: [],
+          evidence: {
+            source: "cached_global_inventory",
+            sourceRef: sourcePath,
+            confidence: "verified_local",
+          },
+          confidence: "verified_local",
+          invocationPath: sourcePath,
+          writebackKey: `global:${platformId}:${capabilityType}:${entry?.id ?? sourcePath}`,
+          runtimeSupport: supportForRuntime(
+            platformId === "claudeCode" ? "claude_code" : platformId,
+            "native",
+            "unknown",
+          ),
+          osSupport: defaultSupport("partial", "native").osSupport,
+          reason:
+            "Global runtime provider discovered from cached global capability inventory because projectProjectionMode=global_only.",
+        });
+      }
+    }
+  }
+  return records;
+}
+
 async function mcpCapabilities() {
   return [
     ...(await fileRecordIfExists(".mcp.json", { id: "project-mcp-config", type: "mcp_config", providerType: "MCP", ownerCandidates: ["meta-artisan", "meta-sentinel"], routeEligibility: "reference", configOnly: true, verificationMethod: "npm run meta:test:mcp" })),
@@ -265,6 +388,8 @@ export async function buildCapabilityInventory() {
   const skills = await readJson("config/skills.json");
   const runtimeMatrix = await readJson("config/runtime-capability-matrix.json");
   const osMatrix = await readJson("config/os-compatibility-matrix.json");
+  const localOverrides = await readJsonIfExists(".meta-kim/local.overrides.json");
+  const projectProjectionMode = localOverrides?.projectProjectionMode ?? "project";
   const records = [
     ...(await fileCapabilities("canonical/agents", "agent", ["meta-warden"], { match: (file) => file.endsWith(".md"), mustPreserve: true, routeEligibility: "governance_owner" })),
     ...(await fileCapabilities("canonical/skills", "skill", ["meta-artisan"], { match: (file) => path.basename(file) === "SKILL.md", mustPreserve: true, routeEligibility: "callable", invocationPath: "skill trigger" })),
@@ -272,6 +397,7 @@ export async function buildCapabilityInventory() {
     ...(await fileCapabilities("scripts", "script", ["meta-artisan", "meta-prism"], { match: (file) => file.endsWith(".mjs"), mustPreserve: true, routeEligibility: "callable", invocationPath: "node <script>" })),
     ...(await fileCapabilities("canonical/runtime-assets", "hook", ["meta-sentinel"], { match: (file) => /hooks|memory-hooks/.test(file), mustPreserve: true, routeEligibility: "callable" })),
     ...(await runtimeMirrorCapabilities()),
+    ...(await globalRuntimeCapabilities(projectProjectionMode)),
     ...(await mcpCapabilities()),
     ...(await configAndStateCapabilities()),
     ...(await packageScripts()),
@@ -448,6 +574,7 @@ export async function buildCapabilityInventory() {
   }, {});
   return {
     generatedAt: new Date().toISOString(),
+    projectProjectionMode,
     capabilities: normalizedRecords,
     runtimeMatrixCapabilities: runtimeMatrix.capabilityNames ?? [],
     osTargets: (osMatrix.operatingSystems ?? []).map((entry) => entry.id),

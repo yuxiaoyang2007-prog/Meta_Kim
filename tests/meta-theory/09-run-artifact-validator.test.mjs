@@ -54,6 +54,10 @@ describe("validate-run-artifact.mjs", () => {
     return file;
   }
 
+  function cloneJson(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
   function routePrimaryExecutionOwner(artifact, ownerAgent) {
     artifact.dispatchEnvelopePacket.ownerAgent = ownerAgent;
     artifact.orchestrationTaskBoardPacket.tasks[0].owner = ownerAgent;
@@ -587,6 +591,8 @@ describe("validate-run-artifact.mjs", () => {
       artifact.summaryPacket.verifyPassed = false;
       artifact.summaryPacket.blockedBy = ["finding-001 accepted risk"];
       artifact.runHeader.publicReady = false;
+      artifact.publicReadyDecision.publicReady = false;
+      artifact.publicReadyDecision.status = "partial";
     });
     await assert.rejects(
       execFileAsync(
@@ -666,6 +672,115 @@ describe("validate-run-artifact.mjs", () => {
           cwd: REPO_ROOT,
         },
       ),
+    );
+  });
+
+  test("rejects public-ready when selected executable capability was not invoked", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.capabilityInvocationTruthPacket.realInvocationCoverage.status =
+        "partial";
+      artifact.capabilityInvocationTruthPacket.realInvocationCoverage.missingFamilies =
+        ["skill"];
+      artifact.capabilityInvocationTruthPacket.rows[0].state =
+        "selected_not_invoked";
+      artifact.capabilityInvocationTruthPacket.rows[0].appliedCount = 0;
+      artifact.publicReadyDecision.publicReady = true;
+      artifact.publicReadyDecision.status = "pass";
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /realInvocationCoverage\.status=pass|selected executable capability/,
+    );
+  });
+
+  test("rejects public-ready when invocation coverage has no host evidence count", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.capabilityInvocationTruthPacket.realInvocationCoverage.status = "pass";
+      artifact.capabilityInvocationTruthPacket.realInvocationCoverage.missingFamilies = [];
+      artifact.capabilityInvocationTruthPacket.realInvocationCoverage.hostEvidenceCount = 0;
+      artifact.runtimeInvocationPlanPacket.evidence = [
+        {
+          family: "skill",
+          state: "applied",
+          providerId: "meta-theory",
+          hostSurface: "skill",
+          evidenceKind: "skill_application",
+          evidenceRef: "skill:meta-theory:SKILL.md-read",
+          passEligible: true,
+        },
+        {
+          family: "command_script",
+          state: "invoked",
+          providerId: "npm-test",
+          hostSurface: "shell",
+          evidenceKind: "command_output",
+          evidenceRef: "command:node-test:pass",
+          passEligible: true,
+        },
+      ];
+      for (const row of artifact.capabilityInvocationTruthPacket.rows) {
+        row.invocationEvidenceRefs = [`fixture:${row.family}:evidence`];
+      }
+      artifact.summaryPacket.publicReady = true;
+      artifact.publicReadyDecision.publicReady = true;
+      artifact.publicReadyDecision.status = "pass";
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /hostEvidenceCount > 0/,
+    );
+  });
+
+  test("rejects public-ready when top-level packet masks failing coreLoop truth", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.coreLoop = {
+        runtimeInvocationPlanPacket: cloneJson(artifact.runtimeInvocationPlanPacket),
+        hostInvocationRequestPacket: cloneJson(artifact.hostInvocationRequestPacket),
+        capabilityInvocationTruthPacket: cloneJson(artifact.capabilityInvocationTruthPacket),
+        productExperiencePacket: cloneJson(artifact.productExperiencePacket),
+        publicReadyDecision: cloneJson(artifact.publicReadyDecision),
+      };
+      artifact.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status =
+        "partial";
+      artifact.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingFamilies =
+        ["skill"];
+      artifact.coreLoop.capabilityInvocationTruthPacket.rows[0].state =
+        "selected_not_invoked";
+      artifact.coreLoop.publicReadyDecision.publicReady = false;
+      artifact.coreLoop.publicReadyDecision.status = "partial";
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /must match coreLoop\.capabilityInvocationTruthPacket|publicReadyDecision\.publicReady must match/,
+    );
+  });
+
+  test("rejects public-ready when summary and publicReadyDecision disagree", async (t) => {
+    const tempFixture = await writeTempFixture(t, (artifact) => {
+      artifact.summaryPacket.publicReady = false;
+      artifact.summaryPacket.blockedBy = ["forced disagreement"];
+      artifact.publicReadyDecision.publicReady = true;
+      artifact.publicReadyDecision.status = "pass";
+    });
+    await assert.rejects(
+      execFileAsync(
+        "node",
+        ["scripts/validate-run-artifact.mjs", tempFixture],
+        { cwd: REPO_ROOT },
+      ),
+      /false public-ready signals/,
     );
   });
 

@@ -1258,7 +1258,7 @@ Generated from \`${agent.sourceFile}\`. Edit the canonical source first, then ru
 - When the user asks which agents exist, how many agents exist, or who can collaborate right now, query the live runtime registry first through \`agents_list\`. If that tool is unavailable, fall back to an explicit runtime command and state the result source.
 - Stay inside your own responsibility boundary unless the user explicitly asks you to coordinate broader work.
 - The theory source is \`canonical/skills/meta-theory/references/meta-theory.md\`; public runtime behavior must not depend on local narrative notes.
-- For \`meta-theory\`, \`/meta-theory\`, project understanding, architecture, runtime routing, hook/MCP/tool routing, commercialization, market, competitor, pricing, growth, strategy, or roadmap tasks, run or faithfully follow \`npm run meta:theory:run -- "<user request>"\` before Thinking. If command execution or retrieval capability is unavailable, return \`blocked_to_fetch\` with the exact missing capability instead of giving a shallow summary.
+- For \`meta-theory\`, \`/meta-theory\`, project understanding, architecture, runtime routing, hook/MCP/tool routing, commercialization, market, competitor, pricing, growth, strategy, or roadmap tasks, run or faithfully follow \`npm run meta:theory:run:notice -- "<user request>"\` before Thinking and relay the compact notice/report path. If command execution or retrieval capability is unavailable, return \`blocked_to_fetch\` with the exact missing capability instead of giving a shallow summary.
 - Project-understanding Fetch must account for README, AGENTS, package scripts, canonical agents/skills/runtime assets, contracts, capability index, runtime projections, MCP configs, hooks, dependency registry, and Graphify when present.
 
 ${agent.body}
@@ -1429,128 +1429,12 @@ const CODEX_NICKNAME_CANDIDATES_BY_AGENT = {
   "meta-chrysalis": ["Meta Chrysalis", "Chrysalis"],
 };
 
-export const CODEX_RUNTIME_ADAPTER_AGENTS = [
-  {
-    id: "worker",
-    description:
-      "Execute bounded Meta_Kim implementation tasks after governance dispatch.",
-    nicknameCandidates: ["Execution", "Worker", "Implementation"],
-    instructions: [
-      "You are the Codex runtime adapter for bounded Meta_Kim execution work.",
-      "This file exists to give Codex a readable project-level custom-agent definition for its generic worker role.",
-      "It is not a canonical durable Meta_Kim owner. Durable governance ownership stays with canonical meta agents; concrete execution ownership is selected per run through matched capabilities, skills, commands, MCP capabilities, and tools.",
-      "Use the parent task packet as the source of truth for roleDisplayName, roleInstanceId, scope, dependencies, verification steps, and merge owner.",
-      "Never replace roleDisplayName with a Codex runtime nickname. If Codex assigns an incidental alias, report it only as runtimeInstanceAlias.",
-    ].join("\n"),
-  },
-  {
-    id: "explorer",
-    description:
-      "Perform read-only codebase, platform, and evidence discovery for Meta_Kim runs.",
-    nicknameCandidates: ["Codebase Analysis", "Explorer", "Research"],
-    instructions: [
-      "You are the Codex runtime adapter for read-only Meta_Kim discovery work.",
-      "This file exists to give Codex a readable project-level custom-agent definition for its generic explorer role.",
-      "Inspect files, official documentation, capability indexes, commands, MCP capabilities, and tool availability as requested by the parent task packet.",
-      "Do not edit files or finalize implementation decisions. Return evidence, uncertainty, and candidate paths for the governance owner to merge.",
-      "Never replace roleDisplayName with a Codex runtime nickname. If Codex assigns an incidental alias, report it only as runtimeInstanceAlias.",
-    ].join("\n"),
-  },
-];
+// Meta_Kim projects only governance agents into Codex. Execution-layer labels
+// such as frontend/backend/test are run-scoped `roleDisplayName` values in
+// packets, not durable project/global `.codex/agents/*.toml` files.
+export const CODEX_RUNTIME_ADAPTER_AGENTS = [];
 
-export const CODEX_BUSINESS_ROLE_AGENTS = [
-  {
-    id: "frontend",
-    roleDisplayName: "frontend",
-    description:
-      "Implement bounded frontend, UI, and client-side work after Meta_Kim governance dispatch.",
-    nicknameCandidates: ["frontend", "ui", "client"],
-    instructions: [
-      "You are the Codex project custom agent for Meta_Kim frontend work.",
-      "Use this role only when the task packet's roleDisplayName is frontend or an equivalent client/UI role family.",
-      "Follow the parent task packet for scope, dependencies, verification, and merge owner.",
-      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
-    ].join("\n"),
-  },
-  {
-    id: "backend",
-    roleDisplayName: "backend",
-    description:
-      "Implement bounded backend, API, data, and service work after Meta_Kim governance dispatch.",
-    nicknameCandidates: ["backend", "server", "api"],
-    instructions: [
-      "You are the Codex project custom agent for Meta_Kim backend work.",
-      "Use this role only when the task packet's roleDisplayName is backend or an equivalent service/API/data role family.",
-      "Follow the parent task packet for scope, dependencies, verification, and merge owner.",
-      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
-    ].join("\n"),
-  },
-  {
-    id: "test",
-    roleDisplayName: "test",
-    description:
-      "Write or run bounded tests and QA checks after Meta_Kim governance dispatch.",
-    nicknameCandidates: ["test", "qa", "checks"],
-    instructions: [
-      "You are the Codex project custom agent for Meta_Kim test and QA work.",
-      "Use this role only when the task packet's roleDisplayName is test or an equivalent QA role family.",
-      "Follow the parent task packet for target checks, expected evidence, dependencies, and merge owner.",
-      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
-    ].join("\n"),
-  },
-  {
-    id: "review",
-    roleDisplayName: "review",
-    description:
-      "Review bounded implementation outputs and report findings after Meta_Kim governance dispatch.",
-    nicknameCandidates: ["review", "quality", "audit"],
-    instructions: [
-      "You are the Codex project custom agent for Meta_Kim review work.",
-      "Use this role only when the task packet's roleDisplayName is review or an equivalent quality/audit role family.",
-      "Return findings, risks, and missing verification. Do not patch reviewed files unless the parent task explicitly re-dispatches execution.",
-      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
-    ].join("\n"),
-  },
-  {
-    id: "analysis",
-    roleDisplayName: "analysis",
-    description:
-      "Perform bounded read-only codebase, platform, or product analysis after Meta_Kim governance dispatch.",
-    nicknameCandidates: ["analysis", "research", "discovery"],
-    instructions: [
-      "You are the Codex project custom agent for Meta_Kim analysis work.",
-      "Use this role only when the task packet's roleDisplayName is analysis or an equivalent discovery/research role family.",
-      "Return evidence, uncertainty, and candidate paths. Do not finalize implementation decisions or edit files.",
-      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
-    ].join("\n"),
-  },
-  {
-    id: "verify",
-    roleDisplayName: "verify",
-    description:
-      "Run bounded verification evidence collection after Meta_Kim governance dispatch.",
-    nicknameCandidates: ["verify", "validation", "evidence"],
-    instructions: [
-      "You are the Codex project custom agent for Meta_Kim verification work.",
-      "Use this role only when the task packet's roleDisplayName is verify or an equivalent validation/evidence role family.",
-      "Run or inspect only the checks assigned by the parent task packet and report fresh evidence.",
-      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
-    ].join("\n"),
-  },
-  {
-    id: "docs",
-    roleDisplayName: "docs",
-    description:
-      "Write or update bounded documentation after Meta_Kim governance dispatch.",
-    nicknameCandidates: ["docs", "writing", "documentation"],
-    instructions: [
-      "You are the Codex project custom agent for Meta_Kim documentation work.",
-      "Use this role only when the task packet's roleDisplayName is docs or an equivalent documentation/writing role family.",
-      "Follow the parent task packet for audience, files, scope, and review owner.",
-      "Do not rename this role from a Codex host nickname. If the host assigns an incidental alias, report it only as runtimeInstanceAlias.",
-    ].join("\n"),
-  },
-];
+export const CODEX_BUSINESS_ROLE_AGENTS = [];
 
 function normalizeCodexNicknameCandidate(value) {
   return String(value ?? "").trim().replace(/\s+/g, " ");
@@ -1618,38 +1502,6 @@ export function buildCodexAgent(agent) {
   const nicknameCandidates = buildCodexNicknameCandidates(agent);
 
   return `name = "${agent.id}"
-description = "${escapeTomlBasicString(agent.description)}"
-nickname_candidates = ${formatTomlStringArray(nicknameCandidates)}
-developer_instructions = """
-${instructions}
-"""
-`;
-}
-
-export function buildCodexRuntimeAdapterAgent(agent) {
-  const nicknameCandidates = uniqueNicknameCandidates(
-    agent.nicknameCandidates ?? [],
-    `Codex runtime adapter ${agent.id}`,
-  );
-  const instructions = escapeTomlBasicMultiline(agent.instructions ?? "");
-
-  return `name = "${escapeTomlBasicString(agent.id)}"
-description = "${escapeTomlBasicString(agent.description)}"
-nickname_candidates = ${formatTomlStringArray(nicknameCandidates)}
-developer_instructions = """
-${instructions}
-"""
-`;
-}
-
-export function buildCodexBusinessRoleAgent(agent) {
-  const nicknameCandidates = uniqueNicknameCandidates(
-    agent.nicknameCandidates ?? [agent.roleDisplayName, agent.id],
-    `Codex business role agent ${agent.id}`,
-  );
-  const instructions = escapeTomlBasicMultiline(agent.instructions ?? "");
-
-  return `name = "${escapeTomlBasicString(agent.id)}"
 description = "${escapeTomlBasicString(agent.description)}"
 nickname_candidates = ${formatTomlStringArray(nicknameCandidates)}
 developer_instructions = """
@@ -2671,8 +2523,12 @@ Examples:
   }
 
   const scope = parseScopeArg(cliArgs);
-  const { cliTargets, supportedTargets } = await resolveTargetContext(cliArgs);
-  const selectedTargets = cliTargets.length > 0 ? cliTargets : supportedTargets;
+  const targetContext = await resolveTargetContext(cliArgs);
+  const globalOnlyProjectSync =
+    scope === "project" &&
+    targetContext.cliTargets.length === 0 &&
+    targetContext.localOverrides.projectProjectionMode === "global_only";
+  const selectedTargets = globalOnlyProjectSync ? [] : targetContext.activeTargets;
   const dirs = resolveProjectionDirs(scope);
   const agents = await loadAgents();
   const teamDirectory = buildWorkspaceDirectory(agents);
@@ -3191,31 +3047,6 @@ Examples:
       }
     }
 
-    for (const agent of CODEX_RUNTIME_ADAPTER_AGENTS) {
-      if (
-        (
-          await writeGeneratedFile(
-            path.join(dirs.codexAgentsDir, `${agent.id}.toml`),
-            buildCodexRuntimeAdapterAgent(agent),
-          )
-        ).changed
-      ) {
-        changedFiles.push(`${dp.codexAgents}/${agent.id}.toml`);
-      }
-    }
-
-    for (const agent of CODEX_BUSINESS_ROLE_AGENTS) {
-      if (
-        (
-          await writeGeneratedFile(
-            path.join(dirs.codexAgentsDir, `${agent.id}.toml`),
-            buildCodexBusinessRoleAgent(agent),
-          )
-        ).changed
-      ) {
-        changedFiles.push(`${dp.codexAgents}/${agent.id}.toml`);
-      }
-    }
   }
 
   // ── Cursor sync ───────────────────────────────────────────────
@@ -3736,10 +3567,7 @@ Examples:
           label: dirs.displayPaths.codexAgents,
           count: layerCounts.codexAgents,
           summaryKind: "agents",
-          expectedCount:
-            teamSize +
-            CODEX_RUNTIME_ADAPTER_AGENTS.length +
-            CODEX_BUSINESS_ROLE_AGENTS.length,
+          expectedCount: teamSize,
         },
         {
           label: dirs.displayPaths.codexSkillsRoot,

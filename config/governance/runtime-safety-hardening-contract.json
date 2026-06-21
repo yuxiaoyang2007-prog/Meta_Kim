@@ -409,7 +409,8 @@
       "Raw user input and optimized prompt bodies are fenced before display.",
       "Codex adapter emits additionalContext, not systemMessage.",
       "Cursor adapter emits prompt.",
-      "Host registration must be global for reusable HookPrompt and project-local only for project governance hooks."
+      "Host registration must be global for reusable HookPrompt and project-local only for project governance hooks.",
+      "HookPrompt model-visible output is prompt-intake context only; it must not satisfy active-run, Fetch, Thinking, workerTaskPacket, execution, verification, or public-ready evidence."
     ]
   },
   "residueSweep": {

@@ -3372,7 +3372,8 @@ const PROJECT_META_KIM_CONFIG_RELS_BY_PLATFORM = {
 
 const PROJECT_META_KIM_LOCAL_STATE_RELS = [
   ".claude/project-task-state.json",
-  ".meta-kim",
+  ".meta-kim/meta-kim-post-copy.mjs",
+  ".meta-kim/state/default/project-bootstrap.json",
 ];
 
 const PROJECT_HOOK_REL_DIRS_BY_PLATFORM = {
@@ -3704,7 +3705,7 @@ Generated from \`${agent.sourceFile}\`. Edit the canonical source first, then ru
 - When the user asks which agents exist, how many agents exist, or who can collaborate right now, query the live runtime registry first through \`agents_list\`. If that tool is unavailable, fall back to an explicit runtime command and state the result source.
 - Stay inside your own responsibility boundary unless the user explicitly asks you to coordinate broader work.
 - The theory source is \`canonical/skills/meta-theory/references/meta-theory.md\`; public runtime behavior must not depend on local narrative notes.
-- For \`meta-theory\`, \`/meta-theory\`, project understanding, architecture, runtime routing, hook/MCP/tool routing, commercialization, market, competitor, pricing, growth, strategy, or roadmap tasks, run or faithfully follow \`npm run meta:theory:run -- "<user request>"\` before Thinking. If command execution or retrieval capability is unavailable, return \`blocked_to_fetch\` with the exact missing capability instead of giving a shallow summary.
+- For \`meta-theory\`, \`/meta-theory\`, project understanding, architecture, runtime routing, hook/MCP/tool routing, commercialization, market, competitor, pricing, growth, strategy, or roadmap tasks, run or faithfully follow \`npm run meta:theory:run:notice -- "<user request>"\` before Thinking and relay the compact notice/report path. If command execution or retrieval capability is unavailable, return \`blocked_to_fetch\` with the exact missing capability instead of giving a shallow summary.
 - Project-understanding Fetch must account for README, AGENTS, package scripts, canonical agents/skills/runtime assets, contracts, capability index, runtime projections, MCP configs, hooks, dependency registry, and Graphify when present.
 
 ${agent.body}
@@ -4637,7 +4638,7 @@ function removeUntrackedProjectPath(targetDir, relPath, skipped, options = {}) {
   return true;
 }
 
-function pruneEmptyProjectDirs(targetDir, relPath) {
+function pruneEmptyProjectDirs(targetDir, relPath, removedDirs = null) {
   let currentDir = dirname(join(targetDir, normalizeDeployRelPath(relPath)));
   const root = resolve(targetDir);
   while (currentDir !== root && isPathInsideDir(currentDir, root)) {
@@ -4649,7 +4650,11 @@ function pruneEmptyProjectDirs(targetDir, relPath) {
       throw error;
     }
     if (entries.length > 0) return;
+    const removedRel = normalizeDeployRelPath(relative(targetDir, currentDir));
     rmSync(currentDir, { recursive: true, force: true });
+    if (Array.isArray(removedDirs) && removedRel) {
+      removedDirs.push(removedRel);
+    }
     currentDir = dirname(currentDir);
   }
 }
@@ -5084,7 +5089,7 @@ function removeMetaKimProjectLocalState(targetDir) {
     }
     if (!removeUntrackedProjectPath(targetDir, rel, skipped)) continue;
     removed.push(rel);
-    pruneEmptyProjectDirs(targetDir, rel);
+    pruneEmptyProjectDirs(targetDir, rel, removed);
   }
   return { removed, skipped };
 }
@@ -6823,6 +6828,14 @@ async function selectActiveTargets(runtimes) {
   }
 
   return chosenTargets;
+}
+
+async function rememberProjectProjectionMode(mode) {
+  const localOverrides = await loadLocalOverrides();
+  await writeLocalOverrides({
+    ...localOverrides,
+    projectProjectionMode: mode,
+  });
 }
 
 function runNodeScript(scriptRelative, extraArgs = [], envOverrides = {}) {
@@ -8745,6 +8758,7 @@ async function runInstall() {
   const installScope = await askInstallScope();
   const needProject = installScope === "project";
   const needGlobal = installScope === "global";
+  await rememberProjectProjectionMode(needGlobal ? "global_only" : "project");
 
   // Ask proxy configuration (saves to localOverrides)
   await askProxyConfig();
@@ -8953,6 +8967,7 @@ async function runUpdate() {
   const updateScope = await askInstallScope();
   const needProject = updateScope === "project";
   const needGlobal = updateScope === "global";
+  await rememberProjectProjectionMode(needGlobal ? "global_only" : "project");
 
   // Ask proxy configuration (saves to localOverrides)
   await askProxyConfig();

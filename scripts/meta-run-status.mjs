@@ -265,6 +265,23 @@ const labels = {
     ? status.publicLabels
     : {}),
 };
+
+if (status.active === false) {
+  const continuation =
+    status.deactivationReason === "session_stop"
+      ? "local_continuity_or_new_run_only"
+      : status.continuationBoundary?.mode || labels.none;
+  console.log(
+    [
+      labels.inactive,
+      `${labels.reason || "reason"}${labels.separator}${status.deactivationReason || labels.none}`,
+      `${labels.continuation || "continuation"}${labels.separator}${continuation}`,
+      `${labels.current}${labels.separator}${status.currentStage || labels.none}`,
+    ].join("\n"),
+  );
+  process.exit(0);
+}
+
 const completed = status.completed?.length
   ? status.completed.join(labels.listSeparator)
   : labels.none;

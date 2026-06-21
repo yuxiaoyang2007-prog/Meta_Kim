@@ -1805,8 +1805,10 @@ function buildBusinessPhasePlanPacket({ runId, orchestrationReport, runtimeEvide
   };
 }
 
-function buildBusinessFlowBlueprintPacket({ businessPhasePlanPacket }) {
+function buildBusinessFlowBlueprintPacket({ businessPhasePlanPacket, orchestrationReport = null }) {
   const triggerCoveragePass = businessPhasePlanPacket.triggerStandard?.coveragePass === true;
+  const routeWorkerTasks = orchestrationReport?.workerTaskPackets ?? [];
+  const routePlan = orchestrationReport?.thinkingRoute?.dynamicWorkflowPlan ?? {};
   const laneForPhase = (phase) => {
     const selectedOwner = phase.owner.startsWith("meta-") ? phase.owner : "meta-conductor";
     const capabilitySlot = `${phase.phase}_business_phase`;
@@ -1849,22 +1851,119 @@ function buildBusinessFlowBlueprintPacket({ businessPhasePlanPacket }) {
       coverageStatus: "covered",
     };
   };
-  const requiredLanes = businessPhasePlanPacket.phases
-    .filter((phase) => phase.status !== "skipped")
-    .map(laneForPhase);
+  const laneForWorkerTask = (packet, index) => {
+    const laneId =
+      packet.businessFlowLaneId ??
+      packet.roleInstanceId ??
+      packet.taskPacketId ??
+      `selected-lane-${index + 1}`;
+    const selectedProvider =
+      packet.capabilitySelection?.selectedProvider ??
+      packet.providerMatch?.selectedProvider ??
+      null;
+    const capabilityNeed = Array.isArray(packet.capabilityNeed)
+      ? packet.capabilityNeed.join("; ")
+      : Array.isArray(packet.capabilityRequirements)
+        ? packet.capabilityRequirements.join("; ")
+        : String(packet.capabilityNeed ?? packet.capabilityRequirements ?? packet.coreProblem ?? laneId);
+    return {
+      laneId,
+      businessLane: laneId,
+      capabilityNeed,
+      capabilitySearchQuery: `${laneId} ${packet.roleDisplayName ?? "lane"} capability route`,
+      candidateOwners: [
+        ...new Set([
+          packet.ownerAgent,
+          packet.owner,
+          packet.handoffTarget,
+          "meta-conductor",
+          "meta-artisan",
+        ].filter(Boolean)),
+      ],
+      candidateSkills: capabilityProviderRefs(
+        packet.skillLoadout ?? packet.capabilityBindings?.skills ?? [],
+      ),
+      matchedCapabilities: [
+        {
+          matchId: `${laneId}_route_match`,
+          capabilitySlot: `${laneId}_route_capability`,
+          bindingType: selectedProvider?.type ?? "route_selected_provider",
+          bindingRef:
+            selectedProvider?.id ??
+            packet.capabilityLoadout?.capabilityProfileId ??
+            packet.routeId ??
+            "selectedExecutionRoute.recommendedRoute",
+          source: "selectedExecutionRoute.recommendedRoute",
+          confidenceScore: selectedProvider?.score ?? 1,
+          selectionReason:
+            packet.capabilitySelection?.whySelected ??
+            packet.referenceDirection ??
+            "Selected by route selector from current capability inventory.",
+          selectionScope: "run_scoped",
+          persistencePolicy: "do_not_persist_to_agent_identity",
+          fallback: "capabilityGapPacket",
+        },
+      ],
+      capabilityBindings: [
+        {
+          bindingId: `${laneId}_route_binding`,
+          capabilitySlot: `${laneId}_route_capability`,
+          bindingType: selectedProvider?.type ?? "route_selected_provider",
+          bindingRef:
+            selectedProvider?.id ??
+            packet.capabilityLoadout?.capabilityProfileId ??
+            "selectedExecutionRoute.recommendedRoute",
+          source: "selectedExecutionRoute.recommendedRoute",
+          evidenceRef: `${laneId}_route_match`,
+        },
+      ],
+      selectedOwner: packet.ownerAgent ?? packet.owner ?? "meta-conductor",
+      selectionReason:
+        packet.referenceDirection ??
+        "Dynamic Workflow selected this lane from task intent and route evidence.",
+      coverageStatus: "covered",
+      workerTaskPacketRef: packet.taskPacketId,
+      omitted: false,
+    };
+  };
+  const requiredLanes = routeWorkerTasks.length > 0
+    ? routeWorkerTasks.map(laneForWorkerTask)
+    : businessPhasePlanPacket.phases
+        .filter((phase) => phase.status !== "skipped")
+        .map(laneForPhase);
+  const routeOmittedLanes =
+    routePlan.omittedLanesWithReason ??
+    routePlan.omittedLaneRecords ??
+    (routePlan.omittedLaneIds ?? []).map((laneId) => ({
+      laneId,
+      reason: "Omitted by selected route.",
+      evidenceRef: "selectedExecutionRoute.recommendedRoute.subjectiveUiCapabilityAmplification.omittedLanesWithReason",
+    }));
+  const omittedLanes = routeOmittedLanes.length > 0
+    ? routeOmittedLanes.map((lane) => ({
+        laneId: lane.laneId,
+        lane: lane.laneId,
+        reason: lane.reason ?? lane.omitReason ?? "Omitted by selected route.",
+        evidenceRef:
+          lane.evidenceRef ??
+          "selectedExecutionRoute.recommendedRoute.subjectiveUiCapabilityAmplification.omittedLanesWithReason",
+        coverageStatus: "omitted_with_reason",
+      }))
+    : businessPhasePlanPacket.phases
+        .filter((phase) => phase.status === "skipped")
+        .map((phase) => ({
+          laneId: phase.phase,
+          lane: phase.phase,
+          reason: phase.skipReason,
+          evidenceRef: "businessPhasePlanPacket.phases",
+          coverageStatus: "omitted_with_reason",
+        }));
   return {
     deliverableType: "custom",
     deliverableSubtype: "governed_meta_theory_run",
     requiredLanes,
     optionalLanes: [],
-    omittedLanes: businessPhasePlanPacket.phases
-      .filter((phase) => phase.status === "skipped")
-      .map((phase) => ({
-        laneId: phase.phase,
-        lane: phase.phase,
-        reason: phase.skipReason,
-        coverageStatus: "omitted_with_reason",
-      })),
+    omittedLanes,
     laneDependencies: [
       "direction -> planning",
       "planning -> execution",
@@ -1877,15 +1976,24 @@ function buildBusinessFlowBlueprintPacket({ businessPhasePlanPacket }) {
       "evolve -> mirror",
     ],
     coverageJudgment:
-      businessPhasePlanPacket.phaseCount === 11 && triggerCoveragePass
+      requiredLanes.length > 0 && businessPhasePlanPacket.phaseCount === 11 && triggerCoveragePass
         ? "complete"
         : "incomplete",
     coverageDetail:
-      businessPhasePlanPacket.phaseCount === 11 && triggerCoveragePass
-        ? "pass_all_11_business_phases_trigger_evaluated"
-        : "fail_missing_or_weak_business_phase_trigger_evidence",
+      requiredLanes.length > 0 && businessPhasePlanPacket.phaseCount === 11 && triggerCoveragePass
+        ? "pass_route_selected_lanes_plus_all_11_business_phases_trigger_evaluated"
+        : "fail_missing_route_lane_or_weak_business_phase_trigger_evidence",
     phaseTriggerStandard: businessPhasePlanPacket.triggerStandard,
-    blueprintSource: businessPhasePlanPacket.source,
+    phasePackage: {
+      phaseCount: businessPhasePlanPacket.phaseCount,
+      source: businessPhasePlanPacket.source,
+      role:
+        "The 11-phase workflow packages closure and delivery state; it does not replace route-selected Dynamic Workflow lanes.",
+    },
+    blueprintSource:
+      routeWorkerTasks.length > 0
+        ? "selectedExecutionRoute.recommendedRoute + businessPhasePlanPacket"
+        : businessPhasePlanPacket.source,
     blueprintVersion: businessPhasePlanPacket.schemaVersion,
   };
 }
@@ -3032,7 +3140,7 @@ function buildTraceEvalControlPlane({
                 taskPacketId: `${runId}-structural-handoff`,
                 owner: "meta-conductor",
                 roleDisplayName: "orchestration",
-                mergeOwner: "meta-warden",
+                mergeOwner: "meta-conductor",
               },
             ],
     },
@@ -3992,8 +4100,12 @@ function buildLangGraphRunPacket({
   return {
     schemaVersion: "langgraph-style-run-v0.1",
     status: pass ? "pass" : "partial",
-    evidenceKind: pass ? "product_experience_pass" : "contract_ready",
+    evidenceKind: pass ? "langgraph_style_structural_pass" : "contract_ready",
     architectureStyle: "LangGraph-style StateGraph without adding a LangGraph runtime dependency",
+    runtimeDependency: "none",
+    runtimeExecutionEvidence: "not_claimed",
+    runtimeBoundary:
+      "This packet proves Meta_Kim's node/edge/state/checkpoint projection. It does not claim execution by a LangGraph runtime.",
     alignmentRefs: [
       "state",
       "nodes",
@@ -4141,18 +4253,26 @@ function buildDynamicWorkflowRuntimePacket({
   };
   const plannedSelectedLaneIds =
     orchestrationReport.thinkingRoute?.dynamicWorkflowPlan?.selectedLaneIds ?? [];
+  const plannedOmittedLanesWithReason =
+    orchestrationReport.thinkingRoute?.dynamicWorkflowPlan?.omittedLanesWithReason ?? [];
   const derivedSelectedLaneIds = uniqueStrings(bindingRows.map((row) => row.laneId));
   const plannedBusinessFlowLaneCount = orchestrationReport.thinkingRoute?.businessFlowLaneCount ?? 0;
-  const pass = Object.values(coverage).every(Boolean);
+  const effectiveSelectedLaneIds =
+    plannedSelectedLaneIds.length > 0 ? plannedSelectedLaneIds : derivedSelectedLaneIds;
+  const selectedLaneBindingConsistent = effectiveSelectedLaneIds.every((laneId) =>
+    derivedSelectedLaneIds.includes(laneId),
+  );
+  const pass = Object.values(coverage).every(Boolean) && selectedLaneBindingConsistent;
   return {
     schemaVersion: "dynamic-workflow-runtime-v0.1",
     status: pass ? "pass" : "partial",
     evidenceKind: pass ? "product_experience_pass" : "local_runner_pass",
     notFixedChecklist: true,
     selectedLaneIds:
-      plannedSelectedLaneIds.length > 0 ? plannedSelectedLaneIds : derivedSelectedLaneIds,
+      effectiveSelectedLaneIds,
     omittedLaneIds:
       orchestrationReport.thinkingRoute?.dynamicWorkflowPlan?.omittedLaneIds ?? [],
+    omittedLanesWithReason: plannedOmittedLanesWithReason,
     businessFlowLaneCount:
       plannedBusinessFlowLaneCount > 0
         ? plannedBusinessFlowLaneCount
@@ -4165,6 +4285,13 @@ function buildDynamicWorkflowRuntimePacket({
     })),
     capabilityBindingRows: bindingRows,
     capabilityBindingCoverage: coverage,
+    laneSelectionConsistency: {
+      selectedLaneBindingConsistent,
+      plannedSelectedLaneIds,
+      derivedSelectedLaneIds,
+      rule:
+        "Dynamic Workflow selected lanes must match capability binding rows generated from workerTaskPackets.",
+    },
     invocationPolicy: {
       skills: "selected into capability loadout and available to worker profile",
       mcp: "matched to repo or runtime MCP provider/tool; live external invocation requires task need and approval boundary",
@@ -5250,6 +5377,7 @@ function buildVisibleMetaTheorySurfacePacket({
       status: dynamicWorkflowRuntimePacket.status,
       selectedLaneIds: dynamicWorkflowRuntimePacket.selectedLaneIds,
       omittedLaneIds: dynamicWorkflowRuntimePacket.omittedLaneIds,
+      omittedLanesWithReason: dynamicWorkflowRuntimePacket.omittedLanesWithReason,
       businessFlowLaneCount: dynamicWorkflowRuntimePacket.businessFlowLaneCount,
       capabilityBindingCoverage: dynamicWorkflowRuntimePacket.capabilityBindingCoverage,
       callableInvocationCoverage: capabilityInvocationTruthPacket.callableInvocationCoverage,
@@ -5312,12 +5440,15 @@ function buildVisibleMetaTheorySurfacePacket({
     },
     langGraph: {
       status: langGraphRunPacket.status,
+      evidenceKind: langGraphRunPacket.evidenceKind,
       nodeCount: langGraphRunPacket.nodes.length,
       edgeCount: langGraphRunPacket.edges.length,
       conditionalEdgeCount: langGraphRunPacket.conditionalEdges.length,
       checkpointCount: langGraphRunPacket.checkpoint.count,
       replayCommand: langGraphRunPacket.replay.command,
       architectureStyle: langGraphRunPacket.architectureStyle,
+      runtimeDependency: langGraphRunPacket.runtimeDependency,
+      runtimeExecutionEvidence: langGraphRunPacket.runtimeExecutionEvidence,
     },
     failIf:
       "The report or conversation surface only says stages passed, but does not show orchestration, Dynamic Workflow, non-skill capabilities, peer agent mesh, and LangGraph-style graph details.",
@@ -5655,7 +5786,7 @@ function buildProductExperiencePacket({
   const goals = [
     {
       id: "P-102",
-      name: "LangGraph-style 可执行控制图",
+      name: "LangGraph-style 结构控制图",
       status: langGraphRunPacket.status === "pass" ? "pass" : "partial",
       evidenceKind: langGraphRunPacket.evidenceKind,
       evidenceRefs: [
@@ -5666,7 +5797,7 @@ function buildProductExperiencePacket({
         "coreLoop.langGraphRunPacket.checkpoint",
       ],
       failIf:
-        "Only schema, fixture, board, or static documentation exists without checkpoint/replay.",
+        "Only schema, fixture, board, or static documentation exists without checkpoint/replay, or structural evidence is described as real LangGraph runtime execution.",
     },
     {
       id: "P-103",
@@ -5967,7 +6098,8 @@ function buildCoreLoopArtifact({
       : writebackFlow.status === "none-with-reason"
         ? "none-with-reason"
         : "candidate-writeback";
-  const publicReady = artifactStatus === "pass" && liveReleaseEvidenceReady;
+  let publicReady = false;
+  let publicReadyBlockedBy = [];
   const governanceAgentResultPackets = buildGovernanceAgentResultPackets({
     runId,
     orchestrationReport,
@@ -6280,6 +6412,29 @@ function buildCoreLoopArtifact({
     cardPlanPacket,
     dynamicWorkflowDecisionRecord,
   });
+  const selectedExecutableTruthGaps = (capabilityInvocationTruthPacket.rows ?? [])
+    .filter(
+      (row) =>
+        row.selectedCount > 0 &&
+        ["selected_not_invoked", "unavailable", "blocked"].includes(row.state),
+    )
+    .map((row) => `${row.family}:${row.state}`);
+  publicReadyBlockedBy = [
+    ...(artifactStatus === "pass" ? [] : ["artifactStatus is not pass before coreLoop gate closure."]),
+    ...(liveReleaseEvidenceReady ? [] : ["live release/runtime evidence is not release-grade ready."]),
+    ...(runtimeInvocationPlanPacket.status === "pass" ? [] : ["runtimeInvocationPlanPacket.status is not pass."]),
+    ...(hostInvocationRequestPacket.status === "pass" ? [] : ["hostInvocationRequestPacket.status is not pass."]),
+    ...(capabilityInvocationTruthPacket.realInvocationCoverage?.status === "pass"
+      ? []
+      : ["capabilityInvocationTruthPacket.realInvocationCoverage.status is not pass."]),
+    ...(productExperiencePacket.status === "product_experience_pass"
+      ? []
+      : ["productExperiencePacket.status is not product_experience_pass."]),
+    ...selectedExecutableTruthGaps.map(
+      (gap) => `selected executable capability is not invoked: ${gap}.`,
+    ),
+  ];
+  publicReady = publicReadyBlockedBy.length === 0;
   const performanceCostBudget = buildPerformanceCostBudget();
   const contextEngineeringBudget = buildContextEngineeringBudget({
     capabilitySearchLog,
@@ -6380,6 +6535,8 @@ function buildCoreLoopArtifact({
       parallelGroups,
       dependencyPolicy: "capability gap route before blind execution; external writes require approval",
       omittedLanesWithReason: orchestrationReport.thinkingRoute?.dynamicWorkflowPlan?.omittedLaneIds ?? [],
+      omittedLaneRecords:
+        orchestrationReport.thinkingRoute?.dynamicWorkflowPlan?.omittedLanesWithReason ?? [],
       governanceInputsConsumed: conductorConsumptionEvidence.consumedPacketRefs,
     },
     executionResult: {
@@ -6577,13 +6734,13 @@ function buildCoreLoopArtifact({
       status: publicReady ? "pass" : "partial",
       verificationEvidencePresent: verificationEvidence.length > 0,
       liveReleaseEvidenceReady,
-      blockedBy: publicReady
-        ? []
-        : [
-            actualWorkerExecution
-              ? "Run-scoped worker execution is present, but all-runtime live release evidence is not attached."
-              : "This artifact has structural/projection evidence only; do not claim live release-grade public-ready.",
-          ],
+      runtimeInvocationPlanStatus: runtimeInvocationPlanPacket.status,
+      hostInvocationRequestStatus: hostInvocationRequestPacket.status,
+      realInvocationCoverageStatus:
+        capabilityInvocationTruthPacket.realInvocationCoverage?.status ?? "missing",
+      productExperienceStatus: productExperiencePacket.status,
+      selectedExecutableTruthGaps,
+      blockedBy: publicReady ? [] : publicReadyBlockedBy,
     },
   };
 }
@@ -7369,19 +7526,27 @@ function buildWorkflowContractPackets({
     ],
     closeFindings: ["finding-001"],
   };
+  const strictPublicReady = coreLoop.publicReadyDecision?.publicReady === true;
+  const strictPublicReadyBlockedBy = strictPublicReady
+    ? []
+    : (
+        coreLoop.publicReadyDecision?.blockedBy?.length
+          ? coreLoop.publicReadyDecision.blockedBy
+          : ["release-grade live runtime evidence is not attached to this structural governed run"]
+      );
   const summaryPacket = {
     verifyPassed: true,
     summaryClosed: true,
     singleDeliverableMaintained: true,
     deliverableChainClosed: true,
     consolidatedDeliverablePresent: true,
-    publicReady: false,
+    publicReady: strictPublicReady,
     commentReviewAcknowledged: true,
     sourceProjects: [projectRef],
     deliveryShellsUsed: normalizedCardPlanPacket.deliveryShells
       .slice(0, 2)
       .map((shell) => shell.deliveryShellId),
-    blockedBy: ["release-grade live runtime evidence is not attached to this structural governed run"],
+    blockedBy: strictPublicReadyBlockedBy,
   };
   const evolutionWritebackPacket = {
     ownerAssessment: "keep-existing",
@@ -7405,7 +7570,7 @@ function buildWorkflowContractPackets({
   const strictBusinessFlowBlueprintPacket = {
     ...businessFlowBlueprintPacket,
     deliverableType: "runtime_package",
-    requiredLanes: (businessFlowBlueprintPacket.requiredLanes ?? []).slice(0, 5),
+    requiredLanes: businessFlowBlueprintPacket.requiredLanes ?? [],
     optionalLanes: [],
   };
   agentBlueprintPacket.roles[0].assignedResponsibilitySlice =
@@ -7418,7 +7583,7 @@ function buildWorkflowContractPackets({
       freshnessRequirement: "current-repo-state",
       visualPolicy: "fit_department_nature",
       handoffPlan: "meta-conductor produces one governed artifact; meta-prism verifies it; meta-warden owns public-ready boundary.",
-      publicReady: false,
+      publicReady: summaryPacket.publicReady,
     },
     taskClassification,
     contentEvidencePacket,
@@ -7800,7 +7965,7 @@ function buildRouteDrivenWorkerTasks({ runId, routeResult, task }) {
       visualOrAssetPlan: roleDisplayName === "frontend" ? "browser and visual review evidence when UI is in scope" : "none",
       dependsOn: Array.isArray(lane.dependsOn) ? lane.dependsOn.map((dep) => `${runId}-${dep}`) : [],
       parallelGroup: lane.parallelGroup ?? draft.parallelGroup ?? "route-driven",
-      mergeOwner: draft.mergeOwner ?? "meta-warden",
+      mergeOwner: "meta-conductor",
       shardKey: lane.laneId ?? `route-${index + 1}`,
       shardScope: [lane.laneId ?? `route-${index + 1}`],
       workspaceIsolation: "same_workspace_readonly_overlap",
@@ -7846,8 +8011,15 @@ function buildRouteDrivenOrchestration({ task, runId }) {
       ]
     : [];
   const selectedLaneIds = workerTaskPackets.map((packet) => packet.roleInstanceId);
-  const omittedLaneIds =
-    route?.subjectiveUiCapabilityAmplification?.omittedLanesWithReason?.map((lane) => lane.laneId) ?? [];
+  const omittedLanesWithReason =
+    route?.subjectiveUiCapabilityAmplification?.omittedLanesWithReason?.map((lane) => ({
+      laneId: lane.laneId,
+      reason: lane.reason ?? lane.omitReason ?? "Omitted by route selector.",
+      evidenceRef:
+        lane.evidenceRef ??
+        "selectedExecutionRoute.recommendedRoute.subjectiveUiCapabilityAmplification.omittedLanesWithReason",
+    })) ?? [];
+  const omittedLaneIds = omittedLanesWithReason.map((lane) => lane.laneId);
   const checks = {
     multiTypeCapabilityInventoryPresent:
       providerList.some((provider) => provider.type === "skills") &&
@@ -7907,6 +8079,7 @@ function buildRouteDrivenOrchestration({ task, runId }) {
       dynamicWorkflowPlan: {
         selectedLaneIds,
         omittedLaneIds,
+        omittedLanesWithReason,
       },
     },
     orchestrationTaskBoardPacket: {
@@ -7932,7 +8105,7 @@ function buildRouteDrivenOrchestration({ task, runId }) {
         capabilityBindings: packet.capabilityBindings,
       })),
       synthesisOwner: "meta-conductor",
-      mergeOwner: "meta-warden",
+      mergeOwner: "meta-conductor",
     },
     workerTaskPackets,
     reviewResult: {
@@ -8027,6 +8200,7 @@ export async function runMetaTheoryGovernedExecution({
   });
   const businessFlowBlueprintPacket = buildBusinessFlowBlueprintPacket({
     businessPhasePlanPacket,
+    orchestrationReport,
   });
   const governanceStartReasonPacket = buildGovernanceStartReasonPacket({
     orchestrationReport,

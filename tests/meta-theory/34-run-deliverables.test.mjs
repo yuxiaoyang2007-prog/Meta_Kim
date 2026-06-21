@@ -561,8 +561,8 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(
         runArtifact.businessFlowBlueprintPacket.coverageDetail,
         computedPhaseCoveragePass
-          ? "pass_all_11_business_phases_trigger_evaluated"
-          : "fail_missing_or_weak_business_phase_trigger_evidence"
+          ? "pass_route_selected_lanes_plus_all_11_business_phases_trigger_evaluated"
+          : "fail_missing_route_lane_or_weak_business_phase_trigger_evidence"
       );
       assert.equal(
         runArtifact.businessFlowBlueprintPacket.phaseTriggerStandard.coveragePass,

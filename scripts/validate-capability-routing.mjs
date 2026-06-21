@@ -22,30 +22,45 @@ assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.projectRuntimeSkillProviders), 
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.localGlobalSkillProviders), "Route output must expose local/global skill provider discovery");
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.projectRuntimeCapabilityProviders), "Route output must expose project runtime capability provider discovery");
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.localGlobalCapabilityProviders), "Route output must expose local/global capability provider discovery");
+const projectProjectionPolicy = fuzzy.ownerDiscoveryPacket?.projectProjectionPolicy ?? {};
+const projectRuntimeProvidersExpected = projectProjectionPolicy.projectRuntimeProvidersExpected !== false;
+assert(typeof projectProjectionPolicy.projectProjectionMode === "string", "Route output must expose project projection mode");
 assert(
-  fuzzy.ownerDiscoveryPacket.projectRuntimeCapabilityProviders.some((provider) => provider.id === "codex-hooks-json" && provider.sourceRef === ".codex/hooks.json"),
-  "Route output must expose .codex/hooks.json as a real Codex hook config provider",
+  ["project_runtime_inventory", "local_global_runtime_inventory"].includes(projectProjectionPolicy.validationProviderLayer),
+  "Route output must expose which provider layer validates runtime projections",
 );
-for (const [providerId, providerPath] of [
-  ["claude-settings-json", ".claude/settings.json"],
-  ["cursor-hooks-json", ".cursor/hooks.json"],
-  ["openclaw-template-json", "openclaw/openclaw.template.json"],
-]) {
+if (projectRuntimeProvidersExpected) {
   assert(
-    fuzzy.ownerDiscoveryPacket.projectRuntimeCapabilityProviders.some((provider) => provider.id === providerId && provider.sourceRef === providerPath),
-    `Route output must expose ${providerPath} as a real runtime config provider`,
+    fuzzy.ownerDiscoveryPacket.projectRuntimeCapabilityProviders.some((provider) => provider.id === "codex-hooks-json" && provider.sourceRef === ".codex/hooks.json"),
+    "Route output must expose .codex/hooks.json as a real Codex hook config provider",
+  );
+  for (const [providerId, providerPath] of [
+    ["claude-settings-json", ".claude/settings.json"],
+    ["cursor-hooks-json", ".cursor/hooks.json"],
+    ["openclaw-template-json", "openclaw/openclaw.template.json"],
+  ]) {
+    assert(
+      fuzzy.ownerDiscoveryPacket.projectRuntimeCapabilityProviders.some((provider) => provider.id === providerId && provider.sourceRef === providerPath),
+      `Route output must expose ${providerPath} as a real runtime config provider`,
+    );
+  }
+  assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.projectRuntimeLightScan?.hooks >= 1, "Route output must expose project hook provider coverage");
+  assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.projectRuntimeLightScan?.rules >= 1, "Route output must expose project rule/prompt provider coverage");
+} else {
+  assert(projectProjectionPolicy.projectProjectionMode === "global_only", "Project runtime providers may be absent only under global_only projection mode");
+  assert(projectProjectionPolicy.validationProviderLayer === "local_global_runtime_inventory", "global_only validation must use local/global runtime inventory");
+  assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.localGlobalCached?.hooks >= 1, "global_only route validation must expose cached global hook provider coverage");
+}
+if (projectRuntimeProvidersExpected) {
+  assert(
+    fuzzy.ownerDiscoveryPacket.projectRuntimeAgents.some((agent) => agent.runtime === "openclaw" && agent.sourceRef?.startsWith("openclaw/workspaces/")),
+    "Route output must expose OpenClaw workspace agents as project runtime agent providers",
   );
 }
-assert(
-  fuzzy.ownerDiscoveryPacket.projectRuntimeAgents.some((agent) => agent.runtime === "openclaw" && agent.sourceRef?.startsWith("openclaw/workspaces/")),
-  "Route output must expose OpenClaw workspace agents as project runtime agent providers",
-);
 assert(
   fuzzy.ownerDiscoveryPacket.projectRuntimeCapabilityProviders.some((provider) => provider.id?.startsWith("package-script:") && provider.sourceRef?.startsWith("package.json#scripts.")),
   "Route output must expose package.json scripts as real command providers",
 );
-assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.projectRuntimeLightScan?.hooks >= 1, "Route output must expose project hook provider coverage");
-assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.projectRuntimeLightScan?.rules >= 1, "Route output must expose project rule/prompt provider coverage");
 assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.localGlobalCached?.plugins >= 1, "Route output must expose cached global plugin provider coverage");
 assert(fuzzy.ownerDiscoveryPacket?.runtimeToolProviders?.some((provider) => provider.type === "runtimeTools"), "Route output must expose runtime tool providers");
 assert(fuzzy.ownerDiscoveryPacket?.capabilityProviderCoverage?.projectRuntimeLightScan?.runtimeTools >= 1, "Route output must count runtime tool providers");
@@ -77,7 +92,7 @@ assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.capabilityDiscoverySearchLog), 
 const routeSearchRefs = fuzzy.ownerDiscoveryPacket.capabilityDiscoverySearchLog
   .map((entry) => `${entry.source}:${entry.sourceRef}`)
   .join("\n");
-for (const requiredRef of [
+const projectRuntimeSearchRefs = [
   ".codex/agents",
   ".agents/skills",
   ".codex/commands",
@@ -91,11 +106,6 @@ for (const requiredRef of [
   ".claude/commands",
   ".claude/hooks",
   ".claude/settings.json",
-  "~/.claude/agents",
-  "~/.claude/skills",
-  "~/.claude/commands",
-  "~/.claude/hooks",
-  "~/.claude/settings.json",
   ".cursor/agents",
   ".cursor/skills",
   ".cursor/rules",
@@ -103,6 +113,17 @@ for (const requiredRef of [
   ".cursor/hooks",
   ".cursor/hooks.json",
   ".cursor/mcp.json",
+  "openclaw/workspaces",
+  "openclaw/skills",
+  "openclaw/hooks",
+  "openclaw/openclaw.template.json",
+];
+const globalRuntimeSearchRefs = [
+  "~/.claude/agents",
+  "~/.claude/skills",
+  "~/.claude/commands",
+  "~/.claude/hooks",
+  "~/.claude/settings.json",
   "~/.cursor/agents",
   "~/.cursor/skills",
   "~/.cursor/rules",
@@ -110,10 +131,6 @@ for (const requiredRef of [
   "~/.cursor/hooks",
   "~/.cursor/hooks.json",
   "~/.cursor/mcp.json",
-  "openclaw/workspaces",
-  "openclaw/skills",
-  "openclaw/hooks",
-  "openclaw/openclaw.template.json",
   "~/.openclaw/openclaw.json",
   "~/.openclaw/workspace-*",
   "~/.openclaw/skills",
@@ -125,6 +142,10 @@ for (const requiredRef of [
   "~/.codex/hooks.json",
   "~/.codex/config.toml",
   "~/.agents/skills",
+];
+for (const requiredRef of [
+  ...(projectRuntimeProvidersExpected ? projectRuntimeSearchRefs : [".meta-kim/local.overrides.json"]),
+  ...globalRuntimeSearchRefs,
 ]) {
   assert(routeSearchRefs.includes(requiredRef), `Route Fetch searchLog must include ${requiredRef}`);
 }

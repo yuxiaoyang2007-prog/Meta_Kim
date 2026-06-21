@@ -2,7 +2,7 @@ import process from "node:process";
 import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { readJsonFromStdin } from "./utils.mjs";
-import { readSpineState } from "./spine-state.mjs";
+import { readSpineState, resolveRepoLocalStateDir } from "./spine-state.mjs";
 
 // Stop hook: deactivate spine state on session end.
 // Reads spine state, marks inactive, or deletes if evolution completed.
@@ -10,8 +10,12 @@ import { readSpineState } from "./spine-state.mjs";
 await readJsonFromStdin();
 
 const cwd = process.cwd();
-const SPINE_STATE_DIR =
-  process.env.META_KIM_SPINE_STATE_DIR || ".meta-kim/state/default/spine";
+const DEFAULT_SPINE_STATE_DIR = ".meta-kim/state/default/spine";
+const SPINE_STATE_DIR = resolveRepoLocalStateDir(
+  cwd,
+  process.env.META_KIM_SPINE_STATE_DIR,
+  DEFAULT_SPINE_STATE_DIR,
+);
 
 try {
   const state = await readSpineState(cwd);
@@ -21,7 +25,7 @@ try {
 
   // If evolution completed, clean up the file
   if (state.stages?.evolution?.status === "completed") {
-    const filePath = join(cwd, SPINE_STATE_DIR, "spine-state.json");
+    const filePath = join(SPINE_STATE_DIR, "spine-state.json");
     try {
       await unlink(filePath);
     } catch {

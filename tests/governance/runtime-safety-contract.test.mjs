@@ -264,6 +264,18 @@ test("HookPrompt protocol contract binds source, adapter, host, and model-visibl
   assert.doesNotMatch(codexSource, /systemMessage:\s*additionalContext/);
   assert.match(cursorSource, /prompt:\s*additionalContext/);
   assert.match(JSON.stringify(codexHooks), /hookprompt-adapter\.mjs/);
+  assert.ok(
+    CONTRACT.hookPromptProtocol.rules.some(
+      (rule) =>
+        /prompt-intake context only/i.test(rule) &&
+        /active-run/i.test(rule) &&
+        /Fetch/i.test(rule) &&
+        /Thinking/i.test(rule) &&
+        /verification/i.test(rule) &&
+        /public-ready/i.test(rule),
+    ),
+    "HookPrompt must stay as prompt-intake context, not runtime evidence",
+  );
 });
 
 test("HookPrompt bad-input fixtures flow through adapter into model-visible fields", () => {

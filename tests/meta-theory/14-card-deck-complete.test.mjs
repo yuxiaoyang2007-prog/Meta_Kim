@@ -631,18 +631,19 @@ describe("Part I: warden escalation integration", async () => {
   });
 
   test("warden owns public display gate", () => {
-    // Warden controls surfaceState: public-ready, debug-surface, internal-ready
+    // Warden controls publicReadinessState: public-ready, debug-surface, internal-ready.
+    // Runtime surfaceState remains silent/notice/decision interaction mode.
     // This is the public display gate ownership
     const patterns = [
       /public.*display/i,
       /public.display/i,
       /gate.*ownership/i,
-      /surfaceState.*public/i,
+      /publicReadinessState.*public/i,
       /public.*ready.*warden/i,
     ];
     assert.ok(
       patterns.some((p) => p.test(warden)),
-      "meta-warden must own public display gate (controls surfaceState)",
+      "meta-warden must own public display gate (controls publicReadinessState)",
     );
   });
 });

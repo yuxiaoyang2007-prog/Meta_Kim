@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { readJsonFromStdin } from "./utils.mjs";
 import {
   readSpineState,
+  readSpineStateIncludingInactive,
   writeSpineState,
   createInitialState,
 } from "./spine-state.mjs";
@@ -36,6 +37,8 @@ const PROJECT_UNDERSTANDING_RE =
   /\b(?:project|repo|repository|codebase|architecture|commerciali[sz]e|market|competitor|business model|strategy|roadmap)\b|(?:项目|仓库|代码库|架构|怎么玩|干啥|做什么|商业化|市场|竞品|商业模式|发展|路线图|战略)/iu;
 const SUBJECTIVE_QUALITY_RE =
   /\b(?:good|bad|beautiful|ugly|smooth|professional|premium|advanced|clean|simple|fast|slow|feels off|hard to use)\b|(?:好看|不好看|顺畅|不顺|高级|专业|简洁|太慢|太快|难用|怪|不对劲)/iu;
+const CONTINUATION_REQUEST_RE =
+  /\b(?:continue|resume|continuation|current\s+run|active\s+run|same\s+run)\b|(?:继续|续跑|接着|恢复|当前\s*run|active\s*run|同一个\s*run|不要重启|不重启)/iu;
 
 const DEFAULT_STALE_MINUTES = 360;
 
@@ -184,6 +187,27 @@ function isManagedStageState(state) {
   );
 }
 
+function buildContinuationBoundary(previousState, promptText) {
+  if (!previousState || previousState.active !== false) return null;
+  if (!CONTINUATION_REQUEST_RE.test(promptText || "")) return null;
+  return {
+    status: "new_run_from_inactive_request",
+    mode:
+      previousState.deactivationReason === "session_stop"
+        ? "session_stop_continuation_request"
+        : "inactive_run_continuation_request",
+    previousRunId: previousState.runId || null,
+    previousActive: false,
+    previousStage: previousState.currentStage || null,
+    previousDeactivatedAt: previousState.deactivatedAt || null,
+    previousDeactivationReason: previousState.deactivationReason || null,
+    authority:
+      "HookPrompt may preserve the user's continuation wording, but runtime state says the previous run is inactive.",
+    requiredNextAction:
+      "Reconcile current active-run/spine-state before claiming continuation; choose new governed run or offline audit if the previous run stopped.",
+  };
+}
+
 function shouldReplaceActiveState(existing, promptFingerprint) {
   if (!existing?.active) return true;
 
@@ -242,7 +266,8 @@ startPostCopyAutoInit();
 
 const rawPromptText = getRawPromptText();
 const promptFingerprint = fingerprintPrompt(rawPromptText);
-const existing = await readSpineState(cwd);
+const rawExisting = await readSpineStateIncludingInactive(cwd);
+const existing = rawExisting?.active === false ? null : rawExisting || (await readSpineState(cwd));
 if (existing && existing.active && !shouldReplaceActiveState(existing, promptFingerprint)) {
   process.exit(0);
 }
@@ -258,6 +283,10 @@ const state = createInitialState({
   factGatePolicy: "managed_gate_required_for_public_ready",
   executionLeasePolicy: "advisory_until_managed_stage_driver",
 });
+const continuationBoundary = buildContinuationBoundary(rawExisting, rawPromptText);
+if (continuationBoundary) {
+  state.continuationBoundary = continuationBoundary;
+}
 
 await writeSpineState(cwd, state);
 process.exit(0);

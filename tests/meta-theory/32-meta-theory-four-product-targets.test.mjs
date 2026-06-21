@@ -49,6 +49,14 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         "meta-conductor"
       );
       assert.equal(report.defaultRuntimePath.workerTaskPackets.length, 4);
+      assert.deepEqual(
+        [...new Set(report.defaultRuntimePath.workerTaskPackets.map((packet) => packet.mergeOwner))],
+        ["meta-conductor"],
+      );
+      assert.equal(
+        report.defaultRuntimePath.orchestrationTaskBoardPacket.mergeOwner,
+        "meta-conductor",
+      );
       assert.equal(report.defaultRuntimePath.governanceAgentResultPackets.length, 9);
       assert.equal(report.defaultRuntimePath.conductorConsumptionEvidence.status, "pass");
       assert.ok(
@@ -64,6 +72,16 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.equal(report.defaultRuntimePath.peerAgentMeshPacket.status, "pass");
       assert.equal(report.defaultRuntimePath.agentTeamsPlaybookPacket.status, "pass");
       assert.equal(report.defaultRuntimePath.agentTeamsPlaybookPacket.selected, true);
+      assert.deepEqual(
+        [
+          ...new Set(
+            report.defaultRuntimePath.agentTeamsPlaybookPacket.waves.flatMap((wave) =>
+              wave.mergeOwner
+            ),
+          ),
+        ],
+        ["meta-conductor"],
+      );
       assert.equal(
         report.defaultRuntimePath.agentTeamsPlaybookPacket.fanoutSafetyPacket.safeForParallelFanout,
         true
@@ -563,6 +581,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       const lanes = report.defaultRuntimePath.workerTaskPackets;
       const selectedLaneIds = lanes.map((packet) => packet.businessFlowLaneId);
       const omittedLaneIds = report.coreLoop.thinkingPacket.omittedLanesWithReason ?? [];
+      const omittedLaneRecords = report.coreLoop.thinkingPacket.omittedLaneRecords ?? [];
       const capabilityTeamBlueprint =
         report.sourceArtifacts.orchestrationReport.selectedExecutionRoute.recommendedRoute
           .subjectiveUiCapabilityAmplification.capabilityTeamBlueprint;
@@ -575,6 +594,11 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.ok(omittedLaneIds.includes("backend-api"));
       assert.ok(omittedLaneIds.includes("data-model"));
       assert.ok(omittedLaneIds.includes("platform-integration"));
+      assert.ok(
+        omittedLaneRecords.some(
+          (lane) => lane.laneId === "backend-api" && lane.reason && lane.evidenceRef,
+        ),
+      );
       assert.ok(lanes.length < 11, "content-only work should not inherit the full product-build template");
       assert.equal(capabilityTeamBlueprint.rows.length, lanes.length);
       assert.equal(capabilityTeamBlueprint.omittedCapabilitySlots.some((lane) => lane.laneId === "backend-api"), true);

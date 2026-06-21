@@ -58,6 +58,10 @@ function assertLangGraphStyle(report) {
   assert.ok(packet.eventLog.length >= 8);
   assert.equal(packet.checkpoint.count, packet.nodes.length);
   assert.equal(packet.replay.supported, true);
+  assert.equal(packet.evidenceKind, "langgraph_style_structural_pass");
+  assert.equal(packet.runtimeDependency, "none");
+  assert.equal(packet.runtimeExecutionEvidence, "not_claimed");
+  assert.match(packet.runtimeBoundary, /does not claim execution by a LangGraph runtime/);
 }
 
 function assertDynamicWorkflow(report) {

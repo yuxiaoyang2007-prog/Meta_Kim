@@ -406,13 +406,17 @@ function runEnforceHookWithState(state, payload, options = {}) {
 
 function runActivateHook(existingState, payload, options = {}) {
   const cwd = mkdtempSync(join(tmpdir(), "meta-kim-activate-"));
-  const { staleMinutes = "360" } = options;
+  const { runtime = "shared", staleMinutes = "360" } = options;
   try {
     const hookDir = join(cwd, "hooks");
     mkdirSync(hookDir, { recursive: true });
+    const sourceDir =
+      runtime === "claude"
+        ? "canonical/runtime-assets/claude/hooks"
+        : "canonical/runtime-assets/shared/hooks";
     for (const fileName of ["activate-meta-theory-spine.mjs", "spine-state.mjs", "utils.mjs"]) {
       copyFileSync(
-        join(REPO_ROOT, "canonical/runtime-assets/shared/hooks", fileName),
+        join(REPO_ROOT, sourceDir, fileName),
         join(hookDir, fileName),
       );
     }
@@ -1312,6 +1316,82 @@ describe("Part F2: choice surface runtime gate", async () => {
     assert.equal(result.status, 0);
     assert.notEqual(nextState.runId, "meta-stale-legacy");
     assert.equal(nextState.stageRuntimeControl?.hookGateMode, "advisory");
+  });
+
+  test("continuation wording after session_stop records inactive-run boundary", () => {
+    for (const runtime of ["shared", "claude"]) {
+      const stopped = {
+        ...createInitialState({
+          taskClassification: "meta_theory_auto",
+          triggerReason: "previous-test",
+        }),
+        active: false,
+        runId: "meta-stopped-session",
+        currentStage: "critical",
+        deactivatedAt: "2026-06-20T18:27:05.423Z",
+        deactivationReason: "session_stop",
+      };
+
+      const { result, nextState } = runActivateHook(
+        stopped,
+        {
+          prompt:
+            "继续当前 active run，不退出、不重启 critical and fetch thinking and review",
+        },
+        { runtime },
+      );
+
+      assert.equal(result.status, 0, `${runtime}: ${result.stderr}`);
+      assert.equal(nextState.active, true);
+      assert.notEqual(nextState.runId, "meta-stopped-session");
+      assert.equal(
+        nextState.continuationBoundary?.mode,
+        "session_stop_continuation_request",
+      );
+      assert.equal(nextState.continuationBoundary?.previousRunId, "meta-stopped-session");
+      assert.equal(nextState.continuationBoundary?.previousActive, false);
+      assert.match(
+        nextState.continuationBoundary?.authority,
+        /HookPrompt may preserve/,
+      );
+    }
+  });
+
+  test("shared and Claude activation recognize broad continuation wording consistently", () => {
+    for (const runtime of ["shared", "claude"]) {
+      for (const prompt of [
+        "继续当前 run，不退出、不重启 critical and fetch thinking and review",
+        "resume same run and continue critical and fetch thinking and review",
+      ]) {
+        const stopped = {
+          ...createInitialState({
+            taskClassification: "meta_theory_auto",
+            triggerReason: "previous-test",
+          }),
+          active: false,
+          runId: "meta-stopped-session",
+          currentStage: "critical",
+          deactivatedAt: "2026-06-20T18:27:05.423Z",
+          deactivationReason: "session_stop",
+        };
+
+        const { result, nextState } = runActivateHook(
+          stopped,
+          { prompt },
+          { runtime },
+        );
+
+        assert.equal(result.status, 0, `${runtime}: ${result.stderr}`);
+        assert.equal(nextState.active, true);
+        assert.notEqual(nextState.runId, "meta-stopped-session");
+        assert.equal(
+          nextState.continuationBoundary?.mode,
+          "session_stop_continuation_request",
+          `${runtime} failed prompt: ${prompt}`,
+        );
+        assert.equal(nextState.continuationBoundary?.previousRunId, "meta-stopped-session");
+      }
+    }
   });
 
   test("Fetch in progress does not require fetchRecord until stage commit", () => {

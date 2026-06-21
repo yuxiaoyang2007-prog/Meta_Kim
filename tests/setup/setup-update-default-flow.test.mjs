@@ -102,6 +102,40 @@ describe("setup update default flow", () => {
     );
   });
 
+  test("global scope remembers global-only project projection mode", () => {
+    assert.match(
+      source,
+      /async function rememberProjectProjectionMode\(mode\)/,
+      "setup must expose a local override writer for project projection mode",
+    );
+    assert.match(
+      source,
+      /projectProjectionMode: mode/,
+      "project projection mode must be persisted in local overrides",
+    );
+    assert.match(
+      source,
+      /await rememberProjectProjectionMode\(needGlobal \? "global_only" : "project"\);/,
+      "install/update scope selection must switch global installs to global-only project projection mode",
+    );
+  });
+
+  test("global cleanup preserves local override state", () => {
+    const localStateStart = source.indexOf("const PROJECT_META_KIM_LOCAL_STATE_RELS");
+    const localStateEnd = source.indexOf("const PROJECT_HOOK_REL_DIRS_BY_PLATFORM", localStateStart);
+    const localStateSource = source.slice(localStateStart, localStateEnd);
+    assert.doesNotMatch(
+      localStateSource,
+      /"\.meta-kim",/,
+      "global cleanup must not remove .meta-kim/local.overrides.json",
+    );
+    assert.match(
+      localStateSource,
+      /"\.meta-kim\/state\/default\/project-bootstrap\.json"/,
+      "cleanup can remove the old bootstrap manifest without deleting the whole local state root",
+    );
+  });
+
   test("install copy keeps reusable capabilities global by default", () => {
     assert.doesNotMatch(
       source,

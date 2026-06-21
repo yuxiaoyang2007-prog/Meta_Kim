@@ -235,6 +235,19 @@ describe("SKILL.md structural integrity", async () => {
       assert.doesNotMatch(command, /For any non-trivial task,\s*first apply `agent-teams-playbook`/i);
     });
 
+    test("Codex /meta-theory command surfaces governed run output and discovers namespaced subagent tools", async () => {
+      const command = await readFile("canonical/runtime-assets/codex/commands/meta-theory.md");
+      const pkg = await readJson("package.json");
+      assert.match(command, /__META_KIM_PACKAGE_ROOT__\/scripts\/run-meta-theory-governed-execution\.mjs/);
+      assert.match(command, /meta:theory:run:notice -- "\$ARGUMENTS"/);
+      assert.match(command, /relay the compact stdout notice/i);
+      assert.match(command, /Windows\/npm paths strip forwarded flags/i);
+      assert.match(pkg.scripts["meta:theory:run:notice"], /--emit-conversation-notice/);
+      assert.match(command, /tool discovery/i);
+      assert.match(command, /multi_agent_v1\.spawn_agent/);
+      assert.match(command, /Record the exact tool name and returned agent id/i);
+    });
+
     test("SKILL.md preserves product reasoning, ten-x path challenge, and user-facing closure", () => {
       assert.match(raw, /Product Reasoning Contract/i);
       assert.match(raw, /surface request/i);

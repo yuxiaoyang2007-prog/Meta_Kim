@@ -39,6 +39,8 @@ describe("Clarity Gate unified execution confirmation", async () => {
   );
   const workflowContract = await readFile("config/contracts/workflow-contract.json");
   const workflowContractJson = JSON.parse(workflowContract);
+  const coreLoopContract = await readFile("config/contracts/core-loop-contract.json");
+  const coreLoopContractJson = JSON.parse(coreLoopContract);
   const devGov = await readFile(
     "canonical/skills/meta-theory/references/dev-governance.md",
   );
@@ -265,6 +267,76 @@ describe("Clarity Gate unified execution confirmation", async () => {
     assert.match(policyText, /decisionReadinessGate/);
     assert.match(policyText, /copying third-party prompt text/);
     assert.match(policyText, /cosmetic rewrites/);
+  });
+
+  test("decision information is responsibility-matched across stages, phases, and non-stage boundaries", () => {
+    const coreStages = coreLoopContractJson.stages ?? [];
+    assert.equal(coreStages.length, 8, "core loop must keep the eight-stage spine");
+    for (const stage of coreStages) {
+      const decision = stage.decisionResponsibilities;
+      assert.ok(decision, `${stage.stage} must define decisionResponsibilities`);
+      assert.equal(typeof decision.responsibilityRef, "string");
+      assert.equal(typeof decision.decisionQuestion, "string");
+      assert.ok(
+        Array.isArray(decision.informationToCollect) &&
+          decision.informationToCollect.length >= 3,
+        `${stage.stage} must name stage-specific information inputs`,
+      );
+      assert.ok(
+        Array.isArray(decision.decisionOutputs) &&
+          decision.decisionOutputs.length >= 2,
+        `${stage.stage} must name stage-specific decision outputs`,
+      );
+    }
+
+    const businessWorkflow = workflowContractJson.businessWorkflow;
+    const businessSemantics = businessWorkflow?.phaseDecisionSemantics;
+    for (const phase of businessWorkflow?.phases ?? []) {
+      const entry = businessSemantics?.phases?.[phase];
+      assert.ok(entry, `business phase ${phase} must define decision semantics`);
+      assert.equal(typeof entry.responsibility, "string");
+      assert.equal(typeof entry.decisionQuestion, "string");
+      assert.ok(Array.isArray(entry.informationToCollect));
+      assert.ok(Array.isArray(entry.decisionOutputs));
+    }
+
+    const metaWorkflow = workflowContractJson.metaWorkflow;
+    const metaSemantics = metaWorkflow?.phaseDecisionSemantics;
+    for (const phase of metaWorkflow?.phases ?? []) {
+      assert.ok(
+        metaSemantics?.phases?.[phase],
+        `meta phase ${phase} must define decision semantics`,
+      );
+    }
+
+    const scopeTypes = businessWorkflow?.decisionContextPolicy?.scopeTypes ?? [];
+    for (const scope of [
+      "spine_stage",
+      "business_phase",
+      "meta_phase",
+      "capability_route",
+      "tool_or_provider",
+      "verification_path",
+      "evolution_writeback",
+    ]) {
+      assert.ok(scopeTypes.includes(scope), `decisionContextPolicy missing ${scope}`);
+    }
+
+    const impactStages =
+      workflowContractJson.protocols?.contentEvidencePacket
+        ?.decisionImpactStageEnum ?? [];
+    for (const boundary of [
+      "Meta-Review",
+      "Verification",
+      "Evolution",
+      "business_phase",
+      "meta_phase",
+      "owner_weapon_dependency",
+      "runtime_os_support",
+      "user_interaction_surface",
+    ]) {
+      assert.ok(impactStages.includes(boundary), `decisionImpactStageEnum missing ${boundary}`);
+    }
   });
 
   test("contentEvidencePacket requires capability-proof research discovery without platformSurface", () => {

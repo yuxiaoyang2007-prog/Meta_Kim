@@ -115,6 +115,52 @@ async function fileExists(filePath) {
   }
 }
 
+async function readCanonicalAgentIds() {
+  return (await fs.readdir(canonicalAgentsDir))
+    .filter((file) => file.endsWith(".md"))
+    .map((file) => file.replace(/\.md$/, ""))
+    .sort();
+}
+
+async function readRuntimeAgentIdsOrCanonical(runtimeAgentsDir, extension) {
+  if (await fileExists(runtimeAgentsDir)) {
+    return {
+      source: path.relative(repoRoot, runtimeAgentsDir).replace(/\\/g, "/"),
+      ids: (await fs.readdir(runtimeAgentsDir))
+        .filter((file) => file.endsWith(extension))
+        .map((file) => file.slice(0, -extension.length))
+        .sort(),
+    };
+  }
+  return {
+    source: "canonical/agents",
+    ids: await readCanonicalAgentIds(),
+  };
+}
+
+async function readTextOrCanonical(primaryPath, fallbackPath) {
+  if (await fileExists(primaryPath)) {
+    return {
+      source: path.relative(repoRoot, primaryPath).replace(/\\/g, "/"),
+      text: await fs.readFile(primaryPath, "utf8"),
+    };
+  }
+  return {
+    source: path.relative(repoRoot, fallbackPath).replace(/\\/g, "/"),
+    text: await fs.readFile(fallbackPath, "utf8"),
+  };
+}
+
+async function readFilesOrCanonical(primaryDir, fallbackDir, extension) {
+  const sourceDir = (await fileExists(primaryDir)) ? primaryDir : fallbackDir;
+  return {
+    source: path.relative(repoRoot, sourceDir).replace(/\\/g, "/"),
+    files: (await fs.readdir(sourceDir))
+      .filter((file) => file.endsWith(extension))
+      .sort(),
+  };
+}
+
 /**
  * Node child processes may inherit a shorter PATH than an interactive terminal
  * (npm global shims are often under `%AppData%\\npm`). These dirs are checked first.
@@ -2768,17 +2814,16 @@ async function runClaudeDiscovery(agentIds) {
   const supportsAgentsCommand = /^\s{2}agents\s/m.test(help.stdout);
 
   async function discoverFromProjectFiles(extra = {}) {
-    const projectAgentFiles = (
-      await fs.readdir(path.join(repoRoot, ".claude", "agents"))
-    )
-      .filter((file) => file.endsWith(".md"))
-      .map((file) => file.replace(/\.md$/, ""));
-    const projectAgents = new Set(projectAgentFiles);
+    const discoveredAgents = await readRuntimeAgentIdsOrCanonical(
+      path.join(repoRoot, ".claude", "agents"),
+      ".md",
+    );
+    const projectAgents = new Set(discoveredAgents.ids);
     const missing = agentIds.filter((agentId) => !projectAgents.has(agentId));
     return {
       ok: missing.length === 0,
       missing,
-      source: "project-files",
+      source: discoveredAgents.source,
       cliSupportsAgentsCommand: false,
       ...extra,
     };
@@ -2973,18 +3018,18 @@ async function runCodexSmoke() {
 
   const configExamplePath = path.join(repoRoot, "codex", "config.toml.example");
   const configExample = await fs.readFile(configExamplePath, "utf8");
-  const codexAgentFiles = (
-    await fs.readdir(path.join(repoRoot, ".codex", "agents"))
-  )
-    .filter((file) => file.endsWith(".toml"))
-    .sort();
+  const codexAgents = await readRuntimeAgentIdsOrCanonical(
+    path.join(repoRoot, ".codex", "agents"),
+    ".toml",
+  );
   const payload = {
     runtime: "codex",
     cli_version: versionStdout.trim(),
     entrypoint: "AGENTS.md",
     canonical_skill_root: "canonical/skills/meta-theory",
     sync_manifest: "config/sync.json",
-    custom_agents: codexAgentFiles.map((file) => file.replace(/\.toml$/, "")),
+    custom_agents: codexAgents.ids,
+    custom_agents_source: codexAgents.source,
     mcp_supported: configExample.includes("[mcp_servers.meta_kim_runtime]"),
     sandbox_configurable: configExample.includes("sandbox_mode"),
     approvals_configurable: configExample.includes("approval_policy"),
@@ -3052,18 +3097,18 @@ async function runCodexLive() {
 
   const configExamplePath = path.join(repoRoot, "codex", "config.toml.example");
   const configExample = await fs.readFile(configExamplePath, "utf8");
-  const codexAgentFiles = (
-    await fs.readdir(path.join(repoRoot, ".codex", "agents"))
-  )
-    .filter((file) => file.endsWith(".toml"))
-    .sort();
+  const codexAgents = await readRuntimeAgentIdsOrCanonical(
+    path.join(repoRoot, ".codex", "agents"),
+    ".toml",
+  );
   const payload = {
     runtime: "codex",
     cli_version: versionStdout.trim(),
     entrypoint: "AGENTS.md",
     canonical_skill_root: "canonical/skills/meta-theory",
     sync_manifest: "config/sync.json",
-    custom_agents: codexAgentFiles.map((file) => file.replace(/\.toml$/, "")),
+    custom_agents: codexAgents.ids,
+    custom_agents_source: codexAgents.source,
     mcp_supported: configExample.includes("[mcp_servers.meta_kim_runtime]"),
     sandbox_configurable: configExample.includes("sandbox_mode"),
     approvals_configurable: configExample.includes("approval_policy"),
@@ -3227,14 +3272,20 @@ async function runCursorSmoke() {
   );
   const cursorHooksPath = path.join(repoRoot, ".cursor", "hooks.json");
   const cursorRulesDir = path.join(repoRoot, ".cursor", "rules");
-  const agentFiles = (await fs.readdir(cursorAgentsDir))
-    .filter((file) => file.endsWith(".md"))
-    .sort();
-  const skillText = await fs.readFile(cursorSkillPath, "utf8");
-  const hooksText = await fs.readFile(cursorHooksPath, "utf8");
-  const ruleFiles = (await fs.readdir(cursorRulesDir))
-    .filter((file) => file.endsWith(".mdc"))
-    .sort();
+  const cursorAgents = await readRuntimeAgentIdsOrCanonical(cursorAgentsDir, ".md");
+  const skill = await readTextOrCanonical(
+    cursorSkillPath,
+    path.join(canonicalAgentsDir, "..", "skills", "meta-theory", "SKILL.md"),
+  );
+  const hooks = await readTextOrCanonical(
+    cursorHooksPath,
+    path.join(canonicalRuntimeAssetsDir, "cursor", "hooks.json"),
+  );
+  const rules = await readFilesOrCanonical(
+    cursorRulesDir,
+    path.join(canonicalRuntimeAssetsDir, "cursor", "rules"),
+    ".mdc",
+  );
   const payload = {
     runtime: "cursor",
     mode: "smoke",
@@ -3242,11 +3293,15 @@ async function runCursorSmoke() {
     canonical_skill_root: "canonical/skills/meta-theory",
     generated_skill: ".cursor/skills/meta-theory/SKILL.md",
     generated_hooks: ".cursor/hooks.json",
-    generated_rules: ruleFiles.map((file) => `.cursor/rules/${file}`),
-    custom_agents: agentFiles.map((file) => file.replace(/\.md$/, "")),
-    skill_mentions_warden: /meta-warden/i.test(skillText),
-    skill_mentions_conductor: /meta-conductor/i.test(skillText),
-    hook_surface_configured: /preToolUse|postToolUse|failClosed/i.test(hooksText),
+    generated_rules: rules.files.map((file) => `.cursor/rules/${file}`),
+    custom_agents: cursorAgents.ids,
+    custom_agents_source: cursorAgents.source,
+    skill_source: skill.source,
+    hooks_source: hooks.source,
+    rules_source: rules.source,
+    skill_mentions_warden: /meta-warden/i.test(skill.text),
+    skill_mentions_conductor: /meta-conductor/i.test(skill.text),
+    hook_surface_configured: /preToolUse|postToolUse|failClosed/i.test(hooks.text),
     native_live_turn_harness: false,
   };
   const ok =

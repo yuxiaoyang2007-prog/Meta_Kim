@@ -12,6 +12,8 @@ Known limitation: PreToolUse hooks strip `AskUserQuestion` return data (GitHub i
 
 Trigger proof rule: when `AskUserQuestion` is available and `choiceSurfaceState` is `critical_clarification_allowed` or `execution_confirmation_allowed`, Claude Code must call `AskUserQuestion` or produce a deferred `AskUserQuestion` tool call for the host UI before Execution. A `cardPlanPacket`, CLI report, hook notification, or markdown decision card is not proof that the native question surface appeared. In non-interactive `claude -p` flows, acceptable proof is a deferred `AskUserQuestion` tool call handled by the caller or a non-empty resumed answer. Missing native proof blocks the run.
 
+False native choice claim guard: do not announce "I used AskUserQuestion", "the native question did not return", "the popup failed", or equivalent localized wording unless an `AskUserQuestion` answer, deferred `AskUserQuestion` tool call, or `nativeChoiceSurfaceBlocked` record exists. If the tool is unavailable, say the native question is blocked or pending; do not narrate an empty return that the runtime did not provide.
+
 ## Visible Status Boundary
 
 Claude Code `UserPromptSubmit` / HookPrompt context can help Claude decide what to do, but it is not the same thing as telling the user what is happening. `MessageDisplay` can transform assistant text while it streams, but it is display-only: it cannot create a missing stage notice, cannot change what Claude sees, and cannot replace the conversation transcript. For Claude Code, the reliable user-visible status surface is the assistant message itself.
@@ -68,7 +70,7 @@ Durable Claude Code agent completion is a four-step lifecycle, not a file write:
 
 Until steps 3 and 4 are attached, `durableAgentLifecyclePacket.status` remains partial even if the file exists.
 
-If no real provider is callable, do not self-execute to "keep moving". Return to Thinking with `capabilityGapPacket`, or enter degraded mode with explicit `degradationReason`, `humanAcceptanceRequired`, and `surfaceState=internal-ready`.
+If no real provider is callable, do not self-execute to "keep moving". Return to Thinking with `capabilityGapPacket`, or enter degraded mode with explicit `degradationReason`, `humanAcceptanceRequired`, `publicReadinessState=internal-ready`, and runtime `surfaceState=notice` or `silent`.
 
 ## Write-Time Fact Gates
 

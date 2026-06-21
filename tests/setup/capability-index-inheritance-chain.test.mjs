@@ -176,6 +176,29 @@ describe("capability index inheritance chain", () => {
     );
   });
 
+  test("repo MCP discovery uses canonical runtime asset instead of project projection", async () => {
+    const source = await fs.readFile(
+      path.join(repoRoot, "scripts", "discover-global-capabilities.mjs"),
+      "utf8",
+    );
+
+    assert.match(
+      source,
+      /canonical",\s*"runtime-assets",\s*"claude",\s*"mcp\.json"/,
+      "repo capability discovery must read the canonical MCP template",
+    );
+    assert.match(
+      source,
+      /resolveRepoPlaceholdersInArgs\(args\)/,
+      "canonical MCP __REPO_ROOT__ placeholders must be resolved for self-test",
+    );
+    assert.doesNotMatch(
+      source,
+      /scanMcpConfig\(path\.join\(repoRoot,\s*"\.mcp\.json"\)\)/,
+      "repo capability discovery must not require a project .mcp.json projection",
+    );
+  });
+
   test("runtime mirror capability indexes are optional in clean checkout but exact when present", async () => {
     const canonical = await fs.readFile(canonicalIndexPath, "utf8");
     for (const mirrorPath of mirrorIndexPaths) {

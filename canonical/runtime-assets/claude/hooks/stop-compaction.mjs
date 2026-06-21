@@ -2,9 +2,9 @@
 /**
  * Stop hook: auto-write compaction packet when session ends.
  *
- * Scans the conversation transcript for governance stage markers
- * (Critical / Fetch / Thinking / Execution / Review / Meta-Review / Verification / Evolution)
- * and open findings, then writes a real compaction packet to:
+ * Prefers authoritative runtime spine state for stage progress, then uses
+ * transcript scanning only as a local-continuity fallback. Structured Review
+ * findings are still extracted from the transcript, then written to:
  *   .meta-kim/state/{profile}/compaction/{run-ref}.json
  *
  * Runs on EVERY Stop event — detects governed run in progress by looking for
@@ -15,7 +15,13 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline";
-import { resolveProfileStateDir, sanitizeStateProfile } from "./spine-state.mjs";
+import {
+  readSpineState,
+  resolveProfileStateDir,
+  sanitizeStateProfile,
+  STAGE_ORDER,
+  STAGE_PUBLIC_LABELS,
+} from "./spine-state.mjs";
 
 // ── Read stdin ONCE at top level before anything else ────────────────────────
 const STDIN_CHUNKS = [];
@@ -26,11 +32,6 @@ try { INPUT = JSON.parse(RAW_STDIN || "{}"); } catch { INPUT = {}; }
 
 // ── Constants ───────────────────────────────────────────────────────────────
 const REPO_ROOT = path.resolve(INPUT.cwd || process.cwd());
-
-const STAGES = [
-  "Critical", "Fetch", "Thinking", "Execution",
-  "Review", "Meta-Review", "Verification", "Evolution",
-];
 
 const STAGE_PATTERNS = {
   Critical:     /\b(Critical|clarify|intentPacket|需求澄清|明确意图)\b/gi,
@@ -44,6 +45,25 @@ const STAGE_PATTERNS = {
 };
 
 const FINDING_SEVERITIES = new Set(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
+const PUBLIC_STAGE_TO_KEY = new Map(
+  Object.entries(STAGE_PUBLIC_LABELS).map(([key, label]) => [label, key]),
+);
+const HOOKPROMPT_BLOCK_START_PATTERNS = [
+  /MANDATORY_FORMAT_INSTRUCTION/,
+  /(?:^|\s)📝?\s*原始输入[:：]?/,
+  /(?:^|\s)🔄?\s*优化后的理解[:：]?/,
+  /(?:^|\s)✅?\s*优化后的完整提示词[:：]?/,
+  /#\s*提示词优化元提示词/,
+];
+const HOOKPROMPT_BLOCK_END_RE = /^\s*(?:---+|<\/MANDATORY_FORMAT_INSTRUCTION>)\s*$/;
+const HOOKPROMPT_INLINE_END_PATTERNS = [
+  /(?:\\r?\\n|\r?\n)\s*---+\s*(?:\\r?\\n|\r?\n|$)/,
+  /<\/MANDATORY_FORMAT_INSTRUCTION>/,
+];
+
+function publicStageLabels() {
+  return STAGE_ORDER.map((stage) => STAGE_PUBLIC_LABELS[stage]);
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 async function readTranscript(transcriptPath, maxLines = 600) {
@@ -61,6 +81,81 @@ async function readTranscript(transcriptPath, maxLines = 600) {
   }
 }
 
+function stripHookPromptDisplayBlocks(text) {
+  if (!text) return "";
+  const kept = [];
+  let droppingHookPromptBlock = false;
+
+  for (const line of text.split(/\r?\n/)) {
+    const hookPromptStart = firstHookPromptStartIndex(line);
+    if (!droppingHookPromptBlock && hookPromptStart >= 0) {
+      if (
+        isStructuredTranscriptLine(line) ||
+        hasInlineHookPromptEnd(line, hookPromptStart) ||
+        hookPromptStart > 0
+      ) {
+        const stripped = stripHookPromptSegmentsFromLine(line);
+        if (stripped.trim().length > 0) kept.push(stripped);
+        continue;
+      }
+      droppingHookPromptBlock = true;
+      continue;
+    }
+
+    if (droppingHookPromptBlock) {
+      if (HOOKPROMPT_BLOCK_END_RE.test(line)) {
+        droppingHookPromptBlock = false;
+      }
+      continue;
+    }
+
+    kept.push(line);
+  }
+
+  return kept.join("\n");
+}
+
+function firstHookPromptStartIndex(line) {
+  let first = -1;
+  for (const pattern of HOOKPROMPT_BLOCK_START_PATTERNS) {
+    const index = line.search(pattern);
+    if (index >= 0 && (first === -1 || index < first)) first = index;
+  }
+  return first;
+}
+
+function isStructuredTranscriptLine(line) {
+  const trimmed = line.trimStart();
+  return trimmed.startsWith("{") || trimmed.startsWith("[") || line.includes("\\n");
+}
+
+function hasInlineHookPromptEnd(line, startIndex) {
+  return inlineHookPromptEndIndex(line, startIndex) < line.length;
+}
+
+function inlineHookPromptEndIndex(line, startIndex) {
+  const tail = line.slice(startIndex);
+  let best = null;
+  for (const pattern of HOOKPROMPT_INLINE_END_PATTERNS) {
+    const match = pattern.exec(tail);
+    if (!match) continue;
+    const end = startIndex + match.index + match[0].length;
+    if (best === null || end < best) best = end;
+  }
+  return best ?? line.length;
+}
+
+function stripHookPromptSegmentsFromLine(line) {
+  let output = line;
+  for (let guard = 0; guard < 10; guard += 1) {
+    const start = firstHookPromptStartIndex(output);
+    if (start < 0) break;
+    const end = inlineHookPromptEndIndex(output, start);
+    output = `${output.slice(0, start).trimEnd()} ${output.slice(end).trimStart()}`.trim();
+  }
+  return output;
+}
+
 function detectCurrentStage(text) {
   let current = "Critical";
   let maxScore = 0;
@@ -75,13 +170,14 @@ function detectCurrentStage(text) {
 }
 
 function detectCompletedStages(text) {
+  const stages = publicStageLabels();
   const completed = [];
-  for (let i = 0; i < STAGES.length - 1; i++) {
-    const laterActive = STAGES.slice(i + 1).some(
+  for (let i = 0; i < stages.length - 1; i++) {
+    const laterActive = stages.slice(i + 1).some(
       (s) => (text.match(STAGE_PATTERNS[s]) || []).length > 0,
     );
-    const thisActive = (text.match(STAGE_PATTERNS[STAGES[i]]) || []).length > 0;
-    if (thisActive && laterActive) completed.push(STAGES[i]);
+    const thisActive = (text.match(STAGE_PATTERNS[stages[i]]) || []).length > 0;
+    if (thisActive && laterActive) completed.push(stages[i]);
   }
   return [...new Set(completed)];
 }
@@ -185,7 +281,97 @@ function extractFindings(text) {
   return findings;
 }
 
-async function writeCompaction({ stage, completed, findings, runRef, profile }) {
+async function readJsonIfExists(filePath) {
+  try {
+    return JSON.parse(await fs.readFile(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+async function readProfileSpineState(profile) {
+  const safeProfile = sanitizeStateProfile(profile);
+  const spinePath = resolveProfileStateDir(
+    REPO_ROOT,
+    safeProfile,
+    "spine",
+    "spine-state.json",
+  );
+  const state = await readJsonIfExists(spinePath);
+  if (!state || typeof state !== "object" || state.active === false) return null;
+  return state;
+}
+
+async function readAuthoritativeSpineState(profile) {
+  const safeProfile = sanitizeStateProfile(profile);
+  const profileState = await readProfileSpineState(safeProfile);
+  if (profileState) return profileState;
+
+  const active = await readSpineState(REPO_ROOT);
+  if (!active) return null;
+
+  if (safeProfile === "default" || process.env.META_KIM_SPINE_STATE_DIR) {
+    return active;
+  }
+
+  return null;
+}
+
+function normalizeStageKey(stage) {
+  const candidate = String(stage ?? "").trim();
+  const lower = candidate.toLowerCase().replace(/[-\s]+/g, "_");
+  if (STAGE_ORDER.includes(lower)) return lower;
+  const publicKey = PUBLIC_STAGE_TO_KEY.get(candidate);
+  return publicKey && STAGE_ORDER.includes(publicKey) ? publicKey : "critical";
+}
+
+function stageLabelFromKey(stageKey) {
+  return STAGE_PUBLIC_LABELS[normalizeStageKey(stageKey)] ?? STAGE_PUBLIC_LABELS.critical;
+}
+
+function deriveStageContext({ text, spineState }) {
+  if (spineState && typeof spineState === "object") {
+    const currentStageKey = normalizeStageKey(spineState.currentStage);
+    const stages = spineState.stages && typeof spineState.stages === "object"
+      ? spineState.stages
+      : {};
+    return {
+      sourceAuthority: "runtime_spine_state",
+      stage: stageLabelFromKey(currentStageKey),
+      completed: STAGE_ORDER
+        .filter((stage) => stages?.[stage]?.status === "completed")
+        .map(stageLabelFromKey),
+    };
+  }
+  return {
+    sourceAuthority: "transcript_heuristic",
+    stage: detectCurrentStage(text),
+    completed: detectCompletedStages(text),
+  };
+}
+
+function deriveVerifyGateState({ findings, spineState, sourceAuthority }) {
+  if (findings.length > 0) return "pending_verify";
+  const verificationStatus = spineState?.stages?.verification?.status;
+  const evolutionStatus = spineState?.stages?.evolution?.status;
+  if (
+    sourceAuthority === "runtime_spine_state" &&
+    (verificationStatus === "completed" || evolutionStatus === "completed")
+  ) {
+    return "verified";
+  }
+  return "pending_verify";
+}
+
+async function writeCompaction({
+  stage,
+  completed,
+  findings,
+  runRef,
+  profile,
+  sourceAuthority,
+  spineState,
+}) {
   const safeProfile = sanitizeStateProfile(profile);
   const compactionDir = resolveProfileStateDir(
     REPO_ROOT,
@@ -194,7 +380,8 @@ async function writeCompaction({ stage, completed, findings, runRef, profile }) 
   );
   await fs.mkdir(compactionDir, { recursive: true });
 
-  const stageIdx = STAGES.indexOf(stage);
+  const stageIdx = publicStageLabels().indexOf(stage);
+  const verifyGateState = deriveVerifyGateState({ findings, spineState, sourceAuthority });
   const outFile = path.join(compactionDir, `${runRef}.json`);
 
   const compaction = {
@@ -209,6 +396,18 @@ async function writeCompaction({ stage, completed, findings, runRef, profile }) 
       resumeFrom: stage,
       stepNumber: stageIdx + 1,
     },
+    authority: "local_continuity_only",
+    sourceAuthority,
+    stageSource: sourceAuthority,
+    sourceAuthorityDetail: {
+      runtimeRunId: spineState?.runId ?? null,
+      transcriptFallbackUsed: sourceAuthority !== "runtime_spine_state",
+      publicReadyClaimAllowed: false,
+      note:
+        sourceAuthority === "runtime_spine_state"
+          ? "Stage progress came from the active runtime spine state."
+          : "Stage progress came from transcript heuristics and is not runtime authority.",
+    },
     openFindings: findings.map((f) => ({ ...f, sourceFile: null, line: null })),
     pendingRevisions: findings.map((f) => ({
       findingId: f.id,
@@ -216,9 +415,21 @@ async function writeCompaction({ stage, completed, findings, runRef, profile }) 
       status: "planned",
       owner: null,
     })),
-    verifyGateState: findings.length > 0 ? "pending_verify" : "verified",
-    singleDeliverableState: { currentDeliverable: "governed-run", closed: false },
-    summaryDelta: { written: false, content: null },
+    verifyGateState,
+    singleDeliverableState: {
+      currentDeliverable: "governed-run",
+      closed: false,
+      singleDeliverableMaintained: false,
+      deliverableChainClosed: false,
+    },
+    summaryDelta: {
+      written: false,
+      content: null,
+      publicReady: false,
+      verifyPassed: verifyGateState === "verified",
+      summaryClosed: false,
+      source: "local_compaction_no_public_ready_claim",
+    },
     writebackDecision: {
       decision: "none",
       targets: [],
@@ -231,8 +442,8 @@ async function writeCompaction({ stage, completed, findings, runRef, profile }) 
     },
     accepted_risk: null,
     handoffNote:
-      `Auto-compaction from Stop hook. Stage=${stage}(${stageIdx + 1}/${STAGES.length}), findings=${findings.length}. ` +
-      `Auto-generated at session end. Resume from ${stage} stage.`,
+      `Auto-compaction from Stop hook. Stage=${stage}(${stageIdx + 1}/${STAGE_ORDER.length}), findings=${findings.length}, source=${sourceAuthority}. ` +
+      `Auto-generated at session end. Local continuity suggests inspecting from ${stage}; this is not active-run continuation, verification, or public-ready proof.`,
   };
 
   await fs.writeFile(outFile, JSON.stringify(compaction, null, 2), "utf8");
@@ -253,27 +464,37 @@ async function main() {
   // Only run on actual interruptions (not active=true stops)
   if (INPUT.stop_hook_active === true) return;
 
+  const profile = sanitizeStateProfile(process.env.META_KIM_PROFILE);
+  const spineState = await readAuthoritativeSpineState(profile);
   const transcriptPath = INPUT.transcript_path || INPUT.transcriptPath;
   if (!transcriptPath) return;
 
-  const text = await readTranscript(transcriptPath);
-  if (!text || text.length < 200) return; // too short to be a real session
+  const rawText = await readTranscript(transcriptPath);
+  const text = stripHookPromptDisplayBlocks(rawText);
+  if ((!text || text.length < 200) && !spineState) return; // too short to be a real session
 
-  const stage = detectCurrentStage(text);
-  const completed = detectCompletedStages(text);
+  const stageContext = deriveStageContext({ text, spineState });
+  const { stage, completed, sourceAuthority } = stageContext;
   const findings = extractFindings(text);
   const hasActivity = Object.values(STAGE_PATTERNS).some(
     (p) => (text.match(p) || []).length > 0,
   );
-  if (!hasActivity) return; // no governance activity detected
+  if (!hasActivity && !spineState) return; // no governance activity detected
 
-  const profile = sanitizeStateProfile(process.env.META_KIM_PROFILE);
   const runRef = `run-${Date.now()}`;
 
   try {
-    const relPath = await writeCompaction({ stage, completed, findings, runRef, profile });
+    const relPath = await writeCompaction({
+      stage,
+      completed,
+      findings,
+      runRef,
+      profile,
+      sourceAuthority,
+      spineState,
+    });
     process.stderr.write(
-      `[compaction] auto-written: ${relPath} (stage=${stage}, findings=${findings.length})\n`,
+      `[compaction] auto-written: ${relPath} (stage=${stage}, source=${sourceAuthority}, findings=${findings.length})\n`,
     );
   } catch (e) {
     process.stderr.write(`[compaction] warn: ${e.message}\n`);

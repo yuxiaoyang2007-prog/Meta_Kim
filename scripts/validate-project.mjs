@@ -335,6 +335,32 @@ async function validateCoreLoopContract() {
         stage.gateConditions.length > 0,
       `core-loop-contract ${stage.stage} must have non-empty IO, skip, and gate policy.`,
     );
+    const decision = stage.decisionResponsibilities ?? {};
+    for (const field of [
+      "responsibilityRef",
+      "decisionQuestion",
+      "informationToCollect",
+      "decisionOutputs",
+      "userChoiceWhen",
+    ]) {
+      assert(
+        decision[field] !== undefined,
+        `core-loop-contract ${stage.stage} decisionResponsibilities missing ${field}.`,
+      );
+    }
+    assert(
+      typeof decision.responsibilityRef === "string" &&
+        decision.responsibilityRef.length > 0 &&
+        typeof decision.decisionQuestion === "string" &&
+        decision.decisionQuestion.length > 0 &&
+        Array.isArray(decision.informationToCollect) &&
+        decision.informationToCollect.length >= 3 &&
+        Array.isArray(decision.decisionOutputs) &&
+        decision.decisionOutputs.length >= 2 &&
+        typeof decision.userChoiceWhen === "string" &&
+        decision.userChoiceWhen.length > 0,
+      `core-loop-contract ${stage.stage} must define responsibility-matched decision information.`,
+    );
   }
   const byStage = Object.fromEntries(stages.map((stage) => [stage.stage, stage]));
   for (const field of [
@@ -814,6 +840,42 @@ async function validateWorkflowContract() {
     );
   }
 
+  const decisionImpactValues =
+    contract.protocols?.contentEvidencePacket?.decisionImpactStageEnum ?? [];
+  for (const value of [
+    "Critical",
+    "Fetch",
+    "Thinking",
+    "Execution",
+    "Review",
+    "Meta-Review",
+    "Verification",
+    "Evolution",
+    "business_phase",
+    "meta_phase",
+    "business_lane",
+    "capability_route",
+    "owner_weapon_dependency",
+    "runtime_os_support",
+    "tool_or_provider",
+    "verification_path",
+    "evolution_writeback",
+    "user_interaction_surface",
+  ]) {
+    assert(
+      decisionImpactValues.includes(value),
+      `workflow-contract.json decisionImpactStageEnum must include ${value}.`,
+    );
+  }
+  const decisionScopePolicy =
+    contract.protocols?.contentEvidencePacket?.decisionImpactScopePolicy ?? {};
+  assert(
+    decisionScopePolicy.spineStageValues?.includes("Evolution") &&
+      decisionScopePolicy.nonSpineValues?.includes("business_phase") &&
+      decisionScopePolicy.nonSpineValues?.includes("tool_or_provider"),
+    "workflow-contract.json decisionImpactScopePolicy must cover spine and non-spine decision boundaries.",
+  );
+
   const optionFrame = contract.protocols?.preDecisionOptionFrame ?? {};
   for (const field of [
     "builtFromContentEvidence",
@@ -910,6 +972,83 @@ async function validateWorkflowContract() {
     businessFlow.coverageJudgmentEnum?.includes("incomplete") &&
       businessFlow.coverageJudgmentEnum?.includes("intentionally_reduced"),
     "workflow-contract.json businessFlowBlueprintPacket must distinguish incomplete coverage from intentional scope reduction.",
+  );
+
+  const decisionContext =
+    contract.businessWorkflow?.decisionContextPolicy ?? {};
+  for (const field of [
+    "scopeType",
+    "scopeId",
+    "responsibility",
+    "decisionQuestion",
+    "informationToCollect",
+    "candidateOptions",
+    "recommendationOrNextState",
+    "userChoiceImpact",
+    "evidenceRefs",
+  ]) {
+    assert(
+      decisionContext.requiredDecisionRecordFields?.includes(field),
+      `workflow-contract.json decisionContextPolicy must require ${field}.`,
+    );
+  }
+  for (const scope of [
+    "spine_stage",
+    "business_phase",
+    "meta_phase",
+    "business_lane",
+    "capability_route",
+    "owner_weapon_dependency",
+    "runtime_os_support",
+    "tool_or_provider",
+    "verification_path",
+    "evolution_writeback",
+    "user_interaction_surface",
+  ]) {
+    assert(
+      decisionContext.scopeTypes?.includes(scope),
+      `workflow-contract.json decisionContextPolicy.scopeTypes must include ${scope}.`,
+    );
+  }
+
+  const assertDecisionSemantics = (container, ids, label) => {
+    const requiredFields = container?.requiredPhaseFields ?? [];
+    for (const field of [
+      "responsibility",
+      "decisionQuestion",
+      "informationToCollect",
+      "decisionOutputs",
+    ]) {
+      assert(
+        requiredFields.includes(field),
+        `workflow-contract.json ${label} must require ${field}.`,
+      );
+    }
+    for (const id of ids) {
+      const entry = container?.phases?.[id];
+      assert(entry, `workflow-contract.json ${label} missing ${id}.`);
+      assert(
+        typeof entry.responsibility === "string" &&
+          entry.responsibility.length > 0 &&
+          typeof entry.decisionQuestion === "string" &&
+          entry.decisionQuestion.length > 0 &&
+          Array.isArray(entry.informationToCollect) &&
+          entry.informationToCollect.length >= 3 &&
+          Array.isArray(entry.decisionOutputs) &&
+          entry.decisionOutputs.length >= 2,
+        `workflow-contract.json ${label}.${id} must define responsibility-matched decision information.`,
+      );
+    }
+  };
+  assertDecisionSemantics(
+    contract.businessWorkflow?.phaseDecisionSemantics,
+    contract.businessWorkflow?.phases ?? [],
+    "businessWorkflow.phaseDecisionSemantics",
+  );
+  assertDecisionSemantics(
+    contract.metaWorkflow?.phaseDecisionSemantics,
+    contract.metaWorkflow?.phases ?? [],
+    "metaWorkflow.phaseDecisionSemantics",
   );
 
   const runArtifactValidation = contract.runDiscipline?.runArtifactValidation ?? {};

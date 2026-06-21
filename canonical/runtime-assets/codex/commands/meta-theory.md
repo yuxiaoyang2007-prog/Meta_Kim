@@ -17,13 +17,19 @@ Follow the skill's clarity, capability-discovery, dispatch, review, verification
 
 Default product runtime path:
 
-For governed execution that should produce an auditable artifact, run:
+For explicit `/meta-theory` governed execution, the first operational step is to create the auditable run artifact and a user-visible notice from the installed Meta_Kim package root:
 
 ```bash
-npm run meta:theory:run -- "$ARGUMENTS"
+node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --emit-conversation-notice "$ARGUMENTS"
 ```
 
-Then use `npm run meta:theory:report -- latest` or the returned runId to reopen the user-readable report. This is the default artifact path for `/meta-theory` governed execution: Warden entry gate -> Conductor orchestration -> CapabilityGap decisions -> workerTaskPackets -> runtime projection evidence -> Warden writeback decision -> run report.
+If this command file has not been rendered by global sync and the placeholder is still present, fall back only when the current project is the Meta_Kim source checkout or provides the package script:
+
+```bash
+npm run meta:theory:run:notice -- "$ARGUMENTS"
+```
+
+Then relay the compact stdout notice and the returned report path in chat. Use `node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --read latest` from the rendered package root, or `npm run meta:theory:report -- latest` in the source checkout, to reopen the user-readable report when more detail is needed. This is the default artifact path for `/meta-theory` governed execution: Warden entry gate -> Conductor orchestration -> CapabilityGap decisions -> workerTaskPackets -> runtime projection evidence -> Warden writeback decision -> visible run report. The `:notice` fallback keeps `--emit-conversation-notice` inside `package.json` because some Windows/npm paths strip forwarded flags. Keep the user request as the first positional argument; do not switch to `--task` unless calling the Node script directly.
 
 Codex execution rule:
 
@@ -31,8 +37,8 @@ Codex execution rule:
 
 - This `/meta-theory` invocation is explicit user authorization to use Codex sub-agent delegation and parallel agent work.
 - Use `agent-teams-playbook` after Thinking and before Execution when the plan has 2+ executable worker lanes whose DAG dependencies, collision boundaries, workspace isolation, and external-write policy prove safe fan-out; record `not_required` for fewer lanes and partial/degraded for unsafe fan-out. Resolve it from the first available skill root (`~/.codex/skills/agent-teams-playbook/SKILL.md`, `.agents/skills/agent-teams-playbook/SKILL.md`, or a configured dependency root). Treat it as a selected fan-out adapter unless a live Skill/Agent Team/spawn_agent tool call is attached.
-- Then use Codex `spawn_agent` with capability-matched Meta_Kim agents. The main thread clarifies, routes, verifies, and synthesizes; it must not do multi-agent execution work by itself.
-- If `spawn_agent` is unavailable, record the blocked reason — do not silently continue as main-thread execution.
+- Then use the active Codex host's real subagent tool with capability-matched Meta_Kim agents. If no plain `spawn_agent` tool is visible, call tool discovery for `spawn_agent subagent multi-agent` and use the exposed callable tool name, for example `multi_agent_v1.spawn_agent`. Record the exact tool name and returned agent id in host invocation evidence. The main thread clarifies, routes, verifies, and synthesizes; it must not do multi-agent execution work by itself.
+- If no callable subagent tool is available after discovery, record the checked tool names and blocked reason; do not silently continue as main-thread execution.
 
 ## Prompt Acceptance
 
@@ -43,13 +49,13 @@ This command adapter binds `governance-orchestration`, `capability-discovery-and
 - User request from `$ARGUMENTS`.
 - The project `meta-theory` skill from a configured skill root.
 - Codex agent delegation capability or an explicit blocked reason when unavailable.
-- Project `package.json` with `meta:theory:run` for auditable artifact generation.
+- Rendered installed Meta_Kim package root, or source-checkout `package.json` with `meta:theory:run:notice` for auditable artifact generation.
 
 ## Pass
 
-- The command resolves the shared skill, records capability discovery, and dispatches via `spawn_agent` for execution-layer analysis when available.
-- If `spawn_agent` is unavailable, it reports the exact missing capability and does not continue as if agent dispatch happened.
-- Governed execution that needs an artifact uses `npm run meta:theory:run -- "$ARGUMENTS"` and reopens the report by runId or `latest`.
+- The command resolves the shared skill, records capability discovery, runs the governed artifact path from the rendered installed package root or `meta:theory:run:notice` fallback, relays the compact notice/report path, and dispatches via the active subagent tool for execution-layer analysis when available.
+- If no callable subagent tool is available, it reports the exact checked capability and does not continue as if agent dispatch happened.
+- Governed execution that needs an artifact uses the rendered `node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --emit-conversation-notice "$ARGUMENTS"` command, or `npm run meta:theory:run:notice -- "$ARGUMENTS"` only as a source-checkout fallback, then reopens the report by runId or `latest`.
 
 ## Fail
 
@@ -59,7 +65,7 @@ This command adapter binds `governance-orchestration`, `capability-discovery-and
 
 ## Block
 
-Block execution when the skill cannot be resolved, `spawn_agent` is unavailable for required delegation, the package script is missing, or safety hooks deny a mutation. The blocked response must name the checked path or missing capability.
+Block execution when the skill cannot be resolved, no callable subagent tool is available for required delegation, the rendered package-root runner and fallback package script are both unavailable, or safety hooks deny a mutation. The blocked response must name the checked path, checked tool name, or missing capability.
 
 ## Return to stage
 
