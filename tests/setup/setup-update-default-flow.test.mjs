@@ -120,6 +120,56 @@ describe("setup update default flow", () => {
     );
   });
 
+  test("repo-local setup checks honor global-only mode and active targets", () => {
+    assert.match(
+      source,
+      /function checkProjectRuntimeSync\(runtimes, targetContext\) \{[\s\S]*?targetContext\.localOverrides\?\.projectProjectionMode !== "global_only"[\s\S]*?checkSync\(runtimes, targetContext\.activeTargets\);/,
+      "repo-local runtime sync checks must be skipped when local overrides declare global_only",
+    );
+
+    const checkOnlyStart = source.indexOf("if (checkOnly) {");
+    const checkOnlyEnd = source.indexOf("const localState = await ensureProfileState", checkOnlyStart);
+    const checkOnlySource = source.slice(checkOnlyStart, checkOnlyEnd);
+    assert.match(
+      checkOnlySource,
+      /checkProjectRuntimeSync\(detectedRuntimes, targetContext\)/,
+      "--check must route through the global-only-aware sync check",
+    );
+    assert.doesNotMatch(
+      checkOnlySource,
+      /checkSync\(detectedRuntimes, targetContext\.supportedTargets\)/,
+      "--check must not require every supported runtime projection",
+    );
+
+    const updateCheckStart = source.indexOf("// ── 6. checkSync (repo-local, project scope)");
+    const updateCheckEnd = source.indexOf("console.log(`\\n${C.bold}${C.green}✓ ${t.updateComplete}", updateCheckStart);
+    const updateCheckSource = source.slice(updateCheckStart, updateCheckEnd);
+    assert.match(
+      updateCheckSource,
+      /if \(needProject\) \{[\s\S]*?checkSync\(runtimes, activeTargets\);[\s\S]*?\}/,
+      "project-scope update validation must check only selected active targets",
+    );
+    assert.doesNotMatch(
+      updateCheckSource,
+      /supportedTargets/,
+      "project-scope update validation must not expand to all supported runtimes",
+    );
+
+    const runCheckStart = source.indexOf("async function runCheck()");
+    const runCheckEnd = source.indexOf("main().catch", runCheckStart);
+    const runCheckSource = source.slice(runCheckStart, runCheckEnd);
+    assert.match(
+      runCheckSource,
+      /checkProjectRuntimeSync\(runtimes, targetContext\)/,
+      "runCheck() must route through the global-only-aware sync check",
+    );
+    assert.doesNotMatch(
+      runCheckSource,
+      /checkSync\(runtimes, targetContext\.supportedTargets\)/,
+      "runCheck() must not require every supported runtime projection",
+    );
+  });
+
   test("global cleanup preserves local override state", () => {
     const localStateStart = source.indexOf("const PROJECT_META_KIM_LOCAL_STATE_RELS");
     const localStateEnd = source.indexOf("const PROJECT_HOOK_REL_DIRS_BY_PLATFORM", localStateStart);

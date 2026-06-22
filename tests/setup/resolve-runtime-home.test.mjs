@@ -13,6 +13,20 @@ import { mockEnv } from "./_mocks.mjs";
 //  when the source changes in non-functional ways.)
 
 const OS_HOME = process.env.HOME || process.env.USERPROFILE || "/home/test";
+const RUNTIME_HOME_ENV_KEYS = {
+  claude: ["META_KIM_CLAUDE_HOME", "CLAUDE_HOME"],
+  codex: ["META_KIM_CODEX_HOME", "CODEX_HOME"],
+  openclaw: ["META_KIM_OPENCLAW_HOME", "OPENCLAW_HOME"],
+  cursor: ["META_KIM_CURSOR_HOME", "CURSOR_HOME"],
+  qoder: ["META_KIM_QODER_HOME", "QODER_HOME"],
+};
+
+function mockRuntimeHomeEnv(runtimeId, overrides = {}) {
+  const cleared = Object.fromEntries(
+    (RUNTIME_HOME_ENV_KEYS[runtimeId] || []).map((key) => [key, ""]),
+  );
+  return mockEnv({ ...cleared, ...overrides });
+}
 
 function resolveRuntimeHomeUnderTest(runtimeId) {
   const envKeys = {
@@ -49,7 +63,9 @@ describe("resolveRuntimeHome()", () => {
   });
 
   test("falls back to CLAUDE_HOME for claude", () => {
-    const restore = mockEnv({ CLAUDE_HOME: "/fallback/claude" });
+    const restore = mockRuntimeHomeEnv("claude", {
+      CLAUDE_HOME: "/fallback/claude",
+    });
     try {
       const result = resolveRuntimeHomeUnderTest("claude");
       assert.match(result, /^CLAUDE_HOME→/);
@@ -70,7 +86,7 @@ describe("resolveRuntimeHome()", () => {
   });
 
   test("falls back to home/.codex for codex when no env", () => {
-    const restore = mockEnv({});
+    const restore = mockRuntimeHomeEnv("codex");
     try {
       const result = resolveRuntimeHomeUnderTest("codex");
       assert.ok(result.includes("/.codex"), result);
@@ -80,7 +96,7 @@ describe("resolveRuntimeHome()", () => {
   });
 
   test("falls back to home/.openclaw for openclaw when no env", () => {
-    const restore = mockEnv({});
+    const restore = mockRuntimeHomeEnv("openclaw");
     try {
       const result = resolveRuntimeHomeUnderTest("openclaw");
       assert.ok(result.includes("/.openclaw"), result);
@@ -90,7 +106,7 @@ describe("resolveRuntimeHome()", () => {
   });
 
   test("falls back to home/.cursor for cursor when no env", () => {
-    const restore = mockEnv({});
+    const restore = mockRuntimeHomeEnv("cursor");
     try {
       const result = resolveRuntimeHomeUnderTest("cursor");
       assert.ok(result.includes("/.cursor"), result);
@@ -111,7 +127,9 @@ describe("resolveRuntimeHome()", () => {
   });
 
   test("falls back to QODER_HOME for qoder", () => {
-    const restore = mockEnv({ QODER_HOME: "/fallback/qoder" });
+    const restore = mockRuntimeHomeEnv("qoder", {
+      QODER_HOME: "/fallback/qoder",
+    });
     try {
       const result = resolveRuntimeHomeUnderTest("qoder");
       assert.match(result, /^QODER_HOME→/);
@@ -121,7 +139,7 @@ describe("resolveRuntimeHome()", () => {
   });
 
   test("falls back to home/.qoder for qoder when no env", () => {
-    const restore = mockEnv({});
+    const restore = mockRuntimeHomeEnv("qoder");
     try {
       const result = resolveRuntimeHomeUnderTest("qoder");
       assert.ok(result.includes("/.qoder"), result);

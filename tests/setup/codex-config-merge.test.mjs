@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  assertCodexConfigTomlMergeable,
   ensureCodexAppNativeControls,
   ensureCodexWindowsNotifyCompat,
   ensureCodexRequestUserInputFeature,
@@ -66,6 +67,55 @@ describe("Codex config merge", () => {
       out,
       /\[features\]\nmulti_agent = true\ndefault_mode_request_user_input = true\n\[mcp_servers\.github\]/,
     );
+  });
+
+  test("rejects unclosed TOML arrays before Codex feature merges", () => {
+    const invalid = [
+      "notify = [",
+      '  "terminal-notifier"',
+      "multi_agent = true",
+      "",
+    ].join("\n");
+
+    assert.throws(
+      () => ensureCodexRequestUserInputFeature(invalid),
+      (error) => {
+        assert.equal(error.name, "CodexConfigTomlError");
+        assert.match(error.message, /line 3:1/);
+        assert.match(error.message, /array opened at line 1:10/);
+        assert.match(error.message, /multi_agent = true/);
+        assert.match(error.message, /\[features\]/);
+        assert.match(error.message, /missing comma or closing bracket/);
+        return true;
+      },
+    );
+    assert.throws(
+      () => mergeCodexConfigAddOnly(invalid, "[features]\njs_repl = true\n"),
+      /Codex config\.toml is not safe to merge/,
+    );
+    assert.throws(
+      () => ensureCodexAppNativeControls(invalid, { platformName: "darwin" }),
+      /Codex config\.toml is not safe to merge/,
+    );
+  });
+
+  test("allows valid multiline TOML arrays before feature merges", () => {
+    const valid = [
+      "notify = [",
+      '  "terminal-notifier",',
+      '  "-message",',
+      '  "done"',
+      "]",
+      "",
+      "[features]",
+      "multi_agent = true",
+      "",
+    ].join("\n");
+
+    assert.doesNotThrow(() => assertCodexConfigTomlMergeable(valid));
+    const out = ensureCodexRequestUserInputFeature(valid);
+    assert.match(out, /notify = \[/);
+    assert.match(out, /\[features\]\nmulti_agent = true\ndefault_mode_request_user_input = true/);
   });
 
   test("replaces macOS terminal-notifier with Windows-safe no-op notify", () => {

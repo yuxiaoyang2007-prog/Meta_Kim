@@ -6,7 +6,106 @@
 
 更新说明先解释本次解决的用户痛点或风险，再说明为了解决它改了什么、为什么重要。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
-## [Unreleased]
+## [2.8.49] - 2026-06-21
+
+### 解决的问题
+
+当用户级 Codex `config.toml` 在 `[features]` 上方有坏掉的 TOML 数组时，macOS 上的 Codex 可能在 Meta_Kim 启动前就失败。宿主错误会指向 `multi_agent = true`，看起来像这个合法 Codex feature 写错了，但真正的问题是上方数组缺逗号或没有闭合。
+
+Meta_Kim 的全局同步和依赖安装路径也会用行级合并修改 Codex 配置，所以需要在写入前拒绝合并结构不安全的配置，并给出可执行的本地修复提示。
+
+### 变更
+
+- **Codex 配置合并护栏** - Codex config merge 在写入 feature flags、App native controls 或 add-only 依赖配置前，会拒绝未闭合的 TOML 数组或 inline table。
+- **人话诊断** - 错误会指出仍处在未闭合 TOML 容器里的行、容器打开的行/列，并展示 `multi_agent = true` 应放在 `[features]` 下。
+- **全局检查可见性** - `meta:check:global` 现在会单独报告 Codex `config.toml` 无效，不再只降级成 `default_mode_request_user_input` 缺失。
+- **回归覆盖** - Setup 测试复现截图里的 `notify = [` 加 `multi_agent = true` 失败形态，同时保持合法多行 TOML 数组可用。
+
+### 验证
+
+- `node --check scripts/codex-config-merge.mjs`
+- `node --check scripts/sync-global-meta-theory.mjs`
+- `node --test tests/setup/codex-config-merge.test.mjs`
+- 临时 Codex home 执行 `sync-global-meta-theory.mjs --check --targets codex` 坏配置复现
+- `npm run meta:test:setup`
+- `npm run meta:check`
+- `npm run meta:check:global`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
+## [2.8.48] - 2026-06-21
+
+### 解决的问题
+
+Graphify 的提示仍可能把 agent 引向大范围读取 `GRAPH_REPORT.md` 或图谱上下文，使大项目上下文过重，也模糊了“图谱导航提示”和“源文件证据”的边界。即使 canonical source 已更新，旧的全局 Codex hook 也可能继续吐出旧版短提示。
+
+全局安装模式在 macOS 上也可能出现假红：`setup.mjs --check` 仍按项目本地投影检查所有 supported runtime，而没有尊重当前 `global_only` 模式和 active targets。
+
+### 变更
+
+- **Graphify Query-First 策略** - meta-theory 现在把 Graphify 视为导航能力，而不是上下文倾倒。聚焦任务应优先用 `graphify query`、`graphify path` 或 `graphify explain` 找候选锚点。
+- **源文件验证边界** - Graphify 结果只算候选文件锚点；会改变路线的判断必须回读源文件验证。结果泛、旧、或被生成状态污染时，回退到定向仓库搜索。
+- **Hook 上下文瘦身** - Claude subagent 与 Graphify hooks 现在明确禁止把完整 `graph.json`、完整 `GRAPH_REPORT.md` 或大范围 graph dump 注入 worker 上下文。
+- **Sync 模板对齐** - Codex runtime sync 和 setup 模板同步使用 query-first 文案，避免项目或全局同步把旧提示刷回来。
+- **Global-Only Setup 检查修复** - Setup check/update 路径现在尊重 `projectProjectionMode=global_only`；全局模式跳过项目本地投影校验，项目模式只校验当前选中的 active targets。
+- **全局 Hook 刷新** - 使用 `--with-global-hooks` 刷新全局 Claude 与 Codex `meta-kim` hooks，使当前运行时提示与 canonical policy 一致。
+- **文档与回归覆盖** - README/CLAUDE 现在说明 Graphify 应通过 query/path/explain 小切片使用，并配合源文件验证；setup 测试会拒绝旧的 compressed-context 文案。
+
+### 验证
+
+- `node --test tests/setup/sync-runtimes-manifest.test.mjs`
+- `node --test tests/setup/graphify-wiring-contract.test.mjs`
+- `node --test tests/setup/setup-update-default-flow.test.mjs`
+- `npm run meta:sync`
+- `npm run meta:validate`
+- `node scripts/graphify-cli.mjs rebuild --force`
+- `npm run meta:graphify:check`
+- `npm run discover:global`
+- `npm run meta:check`
+- `npm run meta:sync:global -- --with-global-hooks`
+- `npm run meta:check:global -- --with-global-hooks`
+- `npm run meta:release:smoke`
+- 当前 Codex 的 `rg` hook probe 已输出新版 query-first/source-verification Graphify 提示。
+- `git diff --check`
+
+## [2.8.47] - 2026-06-21
+
+### 解决的问题
+
+在 Codex/Windows 宿主禁止嵌套 Node 子进程时，governed execution CLI 和 smoke 测试会卡住或崩溃，导致真实模糊指令验收看起来像没跑通，即便路线选择器和 Node 测试本身是有效的。
+
+同时，产品体验支撑门仍会把结构性的 native choice 支撑误写成 pass。一次运行可能已经证明了 worker packets 和 selected providers，但仍有风险把 `selected_not_invoked`、CLI 子进程或 markdown/card artifact 误读成真实 host invocation 或 native choice 证据。
+
+### 变更
+
+- **路线选择器宿主 fallback** - 当 `spawnSync(process.execPath, ...)` 被宿主阻止时，governed execution 会退回同进程 route selector；普通不受限宿主仍走原 CLI 路径。
+- **Selector 紧凑输出** - 新增 runner-compact selector 模式，避免 governed run 携带过大的路线 payload，同时保留 selected providers、worker lanes 和 owner discovery counts。
+- **8 阶段可见进度** - 对话提示和 stage operation plan 现在展示 Critical、Fetch、Thinking、Execution、Review、Meta-Review、Verification、Evolution，不再停在 Review。
+- **能力 Smoke 宿主 fallback** - capability-discovery smoke 复用同进程 selector fallback，并诚实报告 spawn 错误，不再写出 undefined output。
+- **Node 测试包装器 fallback** - 共享 Node 测试包装器在 child-process 不可用时，对本仓本地脚本提供窄范围 worker-backed fallback。
+- **可信 Host Invocation 证据** - governed execution 现在只接受带有真实 family、state、provider 或 surface、合法 evidence kind、非空 evidence ref 的 trusted host evidence；`hostInvocationRequestPacket` 也必须 pass，artifact 才能 pass。
+- **Native Choice 证据门** - P-106 不再因为结构性 card 证据默认 pass。Codex/Claude 的分支决策会保持 `needs-host-invocation`，直到附上可信 `request_user_input` / `AskUserQuestion` 证据。
+- **禁止伪造 Native Choice 快捷口令** - `select-execution-route` 不再把纯字符串 `completed` / `confirmed` 当成可信 native choice 证明；结构化证据也必须带 native surface 和 evidence ref。
+- **Validator 摘要诚实化** - 默认 governed-execution validator 现在拆分 `validationStatus` 与 `governedExecutionStatus`，有效但 partial 的运行不会再被顶层 `status=pass` 混淆。
+
+### 验证
+
+- `node --check scripts/run-meta-theory-governed-execution.mjs scripts/select-execution-route.mjs scripts/run-capability-discovery-smoke.mjs scripts/run-node-tests.mjs scripts/meta-kim-i18n.mjs`
+- `node scripts/run-meta-theory-governed-execution.mjs --task "帮我把这个系统弄得更顺、更能自动处理复杂任务，并让我看见它怎么判断、怎么分工、怎么推进、怎么验收。" --run-id codex-goal-fuzzy-acceptance --state-dir .meta-kim/state/codex-goal-fuzzy --db .meta-kim/state/codex-goal-fuzzy/runs.sqlite --emit-conversation-notice --emit-card-dealing-summary`
+- `node scripts/validate-run-artifact.mjs .meta-kim/state/codex-goal-fuzzy/codex-goal-fuzzy-acceptance.json`
+- `node --test --test-concurrency=1 tests/meta-theory/*.test.mjs`
+- `npm run meta:test:integration`
+- `node --test tests/meta-theory/32-meta-theory-four-product-targets.test.mjs`
+- `node --test tests/governance/core-loop-contract.test.mjs tests/meta-theory/34-run-deliverables.test.mjs tests/governance/capability-routing.test.mjs`
+- `npm run meta:prd:default-execution:validate`
+- `npm run meta:prd:product-experience:validate`
+- 通过 `Start-Process node scripts/run-meta-theory-governed-execution.mjs` 启动干净 host-acceptance 新进程，使用当前 Codex `spawn_agent` 和 `request_user_input` 证据；产物结果为 artifact status `pass`、`hostInvocationRequest=pass`、`realInvocationCoverage=pass`、`nativeChoiceGate=pass`、`productExperience=product_experience_pass`
+- `npm run meta:release:smoke`
+- `npm run meta:verify:all`
+- `node scripts/graphify-cli.mjs rebuild --force`
+- `npm run meta:graphify:check`
+- `git diff --check`
+- 发布边界保持诚实：full verification、validator、graphify check 与干净 host evidence 支撑本次 patch 发布；全 runtime native live proof 仍是单独的 release-grade 目标。
 
 ## [2.8.46] - 2026-06-21
 

@@ -82,6 +82,20 @@ describe("eval-meta-agents Claude smoke", () => {
     assert.match(source, /attempts: attempt/);
   });
 
+  test("Claude live eval grounds role answers in loaded agent boundaries", () => {
+    const source = readFileSync(
+      path.join(repoRoot, "scripts", "eval-meta-agents.mjs"),
+      "utf8",
+    );
+
+    assert.match(source, /const scoutInstruction =/);
+    assert.match(source, /当前 Claude Code 已加载的 agent 定义/);
+    assert.match(source, /frontmatter、AGENTS\/CLAUDE/);
+    assert.match(source, /不要凭通用 agent 印象补写/);
+    assert.match(source, /tool-skill-MCP\/ROI/);
+    assert.match(source, /不直接执行工具或运行时动作/);
+    assert.match(source, /协调\/dispatch\/loadout\/final approval/);
+  });
   test("OpenClaw evaluation prefers the main config MiniMax M3 model", () => {
     const source = readFileSync(
       path.join(repoRoot, "scripts", "eval-meta-agents.mjs"),
@@ -196,11 +210,21 @@ describe("eval-meta-agents Claude smoke", () => {
     assert.match(source, /recentEvents/);
     assert.match(source, /eventMs >= sinceMs - 1_000/);
     assert.match(source, /const startedAtMs = Date\.now\(\)/);
+    assert.match(source, /function isOpenClawBoundaryPayload/);
+    assert.match(source, /typeof payload\.agent === "string"/);
+    assert.match(source, /Array\.isArray\(payload\.owns\)/);
+    assert.match(source, /Array\.isArray\(payload\.refuses\)/);
+    assert.match(source, /typeof payload\.artifact === "string"/);
+    assert.match(source, /Array\.isArray\(payload\.delegates_to\)/);
     assert.match(source, /function extractOpenClawPayloadFromSessionEvents/);
-    assert.match(source, /parseJsonObjectFromText\(text\)/);
+    assert.match(source, /parseJsonObjectFromText\(item\.text\)/);
+    assert.match(source, /isOpenClawBoundaryPayload\(payloadObject\)/);
+    assert.match(source, /if \(hasToolCall\) \{\s*continue;\s*\}/);
+    assert.match(source, /return null;\s*\}/);
     assert.match(source, /function normalizeOpenClawAgentPayload/);
     assert.match(source, /normalizeOpenClawAgentPayload\(agentId, turn\.payload\)/);
     assert.match(source, /async function runOpenClawAgentTurn/);
+    assert.match(source, /if \(code === 0\) \{\s*recoverFromSession\(\)/);
     assert.match(source, /OpenClaw live turn still running/);
     assert.match(source, /heartbeatMs = 30_000/);
     assert.match(source, /baseStatus\.tempConfig\.stateDir/);

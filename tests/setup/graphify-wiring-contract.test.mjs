@@ -481,7 +481,7 @@ describe("graphify idempotent wiring (contract)", () => {
     assert.match(wiring, /\["-m", "graphify", "hook", "install"\]/);
   });
 
-  test("canonical subagent-context mentions GRAPH_REPORT.md", () => {
+  test("canonical subagent-context treats Graphify as query-first navigation", () => {
     const src = readFileSync(
       path.join(
         root,
@@ -490,6 +490,28 @@ describe("graphify idempotent wiring (contract)", () => {
       "utf8",
     );
     assert.match(src, /GRAPH_REPORT\.md/);
+    assert.match(src, /graphify query/);
+    assert.match(src, /graphify path/);
+    assert.match(src, /graphify explain/);
+    assert.match(src, /candidate file anchors/);
+    assert.match(src, /verify route-changing claims against source files/);
+    assert.match(src, /Never inject full graph\.json or full GRAPH_REPORT\.md/);
+    assert.doesNotMatch(src, /compressed codebase context/);
+  });
+
+  test("setup embedded graphify hook source stays query-first", () => {
+    const src = readFileSync(path.join(root, "setup.mjs"), "utf8");
+    const idx = src.indexOf("function buildCodexGraphifyContextHookSource()");
+    assert.notEqual(idx, -1);
+    const hookSource = src.slice(idx, idx + 1500);
+
+    assert.match(hookSource, /graphify query/);
+    assert.match(hookSource, /graphify path/);
+    assert.match(hookSource, /graphify explain/);
+    assert.match(hookSource, /candidate file anchors/);
+    assert.match(hookSource, /verify route-changing claims against source files/);
+    assert.match(hookSource, /never inject full graph\.json or full GRAPH_REPORT\.md/);
+    assert.doesNotMatch(hookSource, /Read graphify-out\/GRAPH_REPORT\.md/);
   });
 
   test("graphify check fails when GRAPH_REPORT.md was built from an older HEAD", () => {

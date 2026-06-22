@@ -3475,7 +3475,7 @@ function buildCodexGraphifyContextHookSource() {
     "if (existsSync(graphPath)) {",
     "  console.log(",
     "    JSON.stringify({",
-    '      systemMessage: "graphify: Knowledge graph exists. Read graphify-out/GRAPH_REPORT.md for god nodes and community structure before searching raw files.",',
+    '      systemMessage: "graphify: Knowledge graph exists. For focused questions, run `graphify query \\"<question>\\" --budget 1000` first; use `graphify path`/`graphify explain` for relationships or concepts. Treat graph results as candidate file anchors and verify route-changing claims against source files; fall back to targeted `rg` when results are generic or stale. Read GRAPH_REPORT.md only for broad architecture context; never inject full graph.json or full GRAPH_REPORT.md.",',
     "    }),",
     "  );",
     "}",
@@ -8581,6 +8581,12 @@ function showModeInfo() {
   );
 }
 
+function checkProjectRuntimeSync(runtimes, targetContext) {
+  if (targetContext.localOverrides?.projectProjectionMode !== "global_only") {
+    checkSync(runtimes, targetContext.activeTargets);
+  }
+}
+
 async function runProjectBootstrapCli() {
   if (projectBootstrapApply && projectBootstrapDryRun) {
     throw new Error("--project-bootstrap cannot use --apply and --dry-run together");
@@ -8697,7 +8703,7 @@ async function main() {
     console.log(`\n${C.green}✓ ${t.envOk}${C.reset}\n`);
     const detectedRuntimes = await detectRuntimes();
     const targetContext = await resolveTargetContext(args);
-    checkSync(detectedRuntimes, targetContext.supportedTargets);
+    checkProjectRuntimeSync(detectedRuntimes, targetContext);
     console.log(
       `${C.dim}${t.checkTargets(targetContext.activeTargets.join(", "), targetContext.supportedTargets.join(", "))}${C.reset}`,
     );
@@ -9077,9 +9083,8 @@ async function runUpdate() {
   }
 
   // ── 6. checkSync (repo-local, project scope) ───────────────────────
-  const { supportedTargets } = await resolveTargetContext(args);
   if (needProject) {
-    checkSync(runtimes, supportedTargets);
+    checkSync(runtimes, activeTargets);
   }
   console.log(`\n${C.bold}${C.green}✓ ${t.updateComplete}${C.reset}\n`);
 
@@ -9093,7 +9098,7 @@ async function runCheck() {
   console.log(`\n${C.green}✓ ${t.envOk}${C.reset}\n`);
   const runtimes = await detectRuntimes();
   const targetContext = await resolveTargetContext(args);
-  checkSync(runtimes, targetContext.supportedTargets);
+  checkProjectRuntimeSync(runtimes, targetContext);
   console.log(
     `${C.dim}${t.checkTargets(targetContext.activeTargets.join(", "), targetContext.supportedTargets.join(", "))}${C.reset}`,
   );

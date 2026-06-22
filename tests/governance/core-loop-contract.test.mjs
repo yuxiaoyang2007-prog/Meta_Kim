@@ -363,8 +363,9 @@ test("governed execution emits a coreLoop artifact summary", () => {
   assert.equal(artifact.coreLoop.productExperiencePacket.noOverclaimGate.status, "pass");
   assert.equal(
     artifact.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.liveRuntimeBoundary.status,
-    "not_claimed_by_structural_runner",
+    "needs-host-invocation",
   );
+  assert.equal(artifact.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.status, "partial");
   assert.equal(
     artifact.coreLoop.productExperiencePacket.repeatFailureDesignGate.actionOnSecondOccurrence,
     "bottom_design_failure_return_to_critical_fetch_thinking",

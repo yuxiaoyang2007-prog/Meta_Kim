@@ -10,7 +10,7 @@ const additionalContext = [
   "- After editing agents or skills, run npm run meta:sync and npm run meta:validate",
   "- Prefer the smallest agent boundary that can solve the task cleanly",
   "- Do not fork runtime-specific instructions unless the target runtime genuinely requires it",
-  "- Graph context: if graphify-out/graph.json exists in the target project root, prefer reading graphify-out/GRAPH_REPORT.md when present, then graph.json as compressed codebase context (up to 71x smaller than reading all source files). Extract module boundaries from clusters, dependency chains from edges, and risk areas from God nodes. Treat AMBIGUOUS nodes (confidence 0.1-0.3) as uncertain dependencies requiring manual verification, not as absent dependencies.",
+  "- Graph context: if graphify-out/graph.json exists in the target project root, use Graphify as navigation, not as a context dump. For focused questions, prefer `graphify query \"<question>\" --budget 1000`, `graphify path \"A\" \"B\"`, or `graphify explain \"concept\"`; read GRAPH_REPORT.md only for broad architecture orientation. Treat graph results as candidate file anchors, verify route-changing claims against source files, and fall back to targeted repository search when graph results are generic, stale, or polluted by generated state. Never inject full graph.json or full GRAPH_REPORT.md.",
   "- CRITICAL: you are a dispatched subagent. If the task scope grows beyond your assigned boundary (multi-file, multi-module, multi-capability), report back to the dispatcher instead of self-expanding. Self-expansion is a governance violation.",
 ].join("\n");
 

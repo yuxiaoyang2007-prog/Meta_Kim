@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 const repoRoot = process.cwd();
 const stateDir = path.join(repoRoot, ".meta-kim", "state", "default");
@@ -19,10 +20,8 @@ const task = argValue(
 const runtime = argValue("--runtime", "codex");
 const osTarget = argValue("--os", "windows");
 
-const routeResult = spawnSync(
-  process.execPath,
-  [
-    "scripts/select-execution-route.mjs",
+function selectorArgs() {
+  return [
     "--task",
     task,
     "--runtime",
@@ -30,19 +29,68 @@ const routeResult = spawnSync(
     "--os",
     osTarget,
     "--json",
-  ],
+    "--runner-compact",
+  ];
+}
+
+async function runSelectorInProcess(spawnError = null) {
+  const originalArgv = process.argv;
+  const originalLog = console.log;
+  const originalError = console.error;
+  const stdout = [];
+  const stderr = [];
+  try {
+    process.argv = [
+      process.execPath,
+      path.join(repoRoot, "scripts/select-execution-route.mjs"),
+      ...selectorArgs(),
+    ];
+    console.log = (...args) => stdout.push(args.join(" "));
+    console.error = (...args) => stderr.push(args.join(" "));
+    const selectorUrl =
+      pathToFileURL(path.join(repoRoot, "scripts/select-execution-route.mjs")).href +
+      `?smoke=${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    await import(selectorUrl);
+  } finally {
+    process.argv = originalArgv;
+    console.log = originalLog;
+    console.error = originalError;
+  }
+  const text = stdout.join("\n").trim();
+  if (!text) {
+    throw new Error(
+      [
+        "select-execution-route produced no JSON output",
+        spawnError?.message ? `original spawn error: ${spawnError.message}` : null,
+        stderr.join("\n").trim(),
+      ].filter(Boolean).join("\n"),
+    );
+  }
+  return JSON.parse(text);
+}
+
+const routeResult = spawnSync(
+  process.execPath,
+  ["scripts/select-execution-route.mjs", ...selectorArgs()],
   {
     cwd: repoRoot,
     encoding: "utf8",
   },
 );
 
-if (routeResult.status !== 0) {
-  process.stderr.write(routeResult.stderr || routeResult.stdout);
+let routeOutput;
+if (routeResult.error) {
+  routeOutput = await runSelectorInProcess(routeResult.error);
+} else if (routeResult.status !== 0) {
+  process.stderr.write(
+    routeResult.stderr ||
+      routeResult.stdout ||
+      `select-execution-route failed with status ${routeResult.status}\n`,
+  );
   process.exit(routeResult.status ?? 1);
+} else {
+  routeOutput = JSON.parse(routeResult.stdout);
 }
-
-const routeOutput = JSON.parse(routeResult.stdout);
 const route = routeOutput.recommendedRoute;
 const providers = route?.selectedCapabilityProviders ?? {};
 const failures = [];

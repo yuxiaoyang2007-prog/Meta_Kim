@@ -6,7 +6,106 @@ This file is the reader-facing release history for Meta_Kim.
 
 The changelog explains the user-facing problem or risk each release solved, what changed to solve it, and why the change matters. It intentionally avoids long internal task ledgers, low-signal backlog ids, and implementation trivia. When exact evidence is needed, use the repository history, tests, generated reports, and PRD artifacts.
 
-## [Unreleased]
+## [2.8.49] - 2026-06-21
+
+### Solved Problem
+
+Codex could fail on macOS before Meta_Kim even started when the user-level `config.toml` had a malformed TOML array above `[features]`. The host error pointed at `multi_agent = true`, which made a valid Codex feature flag look wrong even though the real issue was an unclosed or comma-broken array above it.
+
+Meta_Kim's global sync and dependency install paths also edited Codex config through line-based merges, so they needed a guard that refuses to merge into a structurally unsafe config and explains the local repair.
+
+### Changed
+
+- **Codex Config Merge Guard** - Codex config merge now rejects unclosed TOML arrays or inline tables before writing feature flags, App native controls, or add-only dependency config.
+- **Human-Readable Diagnosis** - The error now points to the line that is still inside an unclosed TOML container, reports the opener line/column, and shows the correct `[features]` placement for `multi_agent = true`.
+- **Global Check Visibility** - `meta:check:global` now reports invalid Codex `config.toml` separately instead of reducing the problem to a missing `default_mode_request_user_input` feature.
+- **Regression Coverage** - Setup tests reproduce the screenshot-style `notify = [` plus `multi_agent = true` failure and keep valid multiline TOML arrays accepted.
+
+### Verification
+
+- `node --check scripts/codex-config-merge.mjs`
+- `node --check scripts/sync-global-meta-theory.mjs`
+- `node --test tests/setup/codex-config-merge.test.mjs`
+- Temporary Codex home `sync-global-meta-theory.mjs --check --targets codex` invalid-config reproduction
+- `npm run meta:test:setup`
+- `npm run meta:check`
+- `npm run meta:check:global`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
+## [2.8.48] - 2026-06-21
+
+### Solved Problem
+
+Graphify guidance could still push agents toward broad `GRAPH_REPORT.md` or graph context use, which made large projects feel too heavy and blurred the boundary between a graph navigation hint and source-backed evidence. A stale global Codex hook could also keep emitting the old short Graphify hint even after the canonical source had been updated.
+
+Global-only installs could also show false red sync failures on macOS because `setup.mjs --check` still required project-local runtime projection files for every supported runtime instead of respecting the active global targets.
+
+### Changed
+
+- **Graphify Query-First Policy** - Meta-theory now treats Graphify as a navigation capability, not a context dump. Focused work should use `graphify query`, `graphify path`, or `graphify explain` to find candidate anchors.
+- **Source Verification Boundary** - Graphify results are now explicitly candidate file anchors only; route-changing claims must be verified against source files, with targeted repository search as the fallback for stale, generic, or polluted graph results.
+- **Hook Context Slimming** - Claude subagent and Graphify hooks now forbid injecting full `graph.json`, full `GRAPH_REPORT.md`, or broad graph dumps into worker context.
+- **Sync Template Alignment** - Codex runtime sync and setup templates now carry the same query-first wording, preventing project or global sync from restoring the old guidance.
+- **Global-Only Setup Check** - Setup check/update paths now respect `projectProjectionMode=global_only`; repo-local projection checks are skipped in global-only mode, and project-scope validation checks only selected active targets.
+- **Global Hook Refresh** - The global Claude and Codex `meta-kim` hooks were refreshed with `--with-global-hooks` so the active runtime hint matches the canonical policy.
+- **Documentation And Regression Coverage** - README/CLAUDE surfaces now describe Graphify as query/path/explain slices plus source verification, and setup tests reject the old compressed-context wording.
+
+### Verification
+
+- `node --test tests/setup/sync-runtimes-manifest.test.mjs`
+- `node --test tests/setup/graphify-wiring-contract.test.mjs`
+- `node --test tests/setup/setup-update-default-flow.test.mjs`
+- `npm run meta:sync`
+- `npm run meta:validate`
+- `node scripts/graphify-cli.mjs rebuild --force`
+- `npm run meta:graphify:check`
+- `npm run discover:global`
+- `npm run meta:check`
+- `npm run meta:sync:global -- --with-global-hooks`
+- `npm run meta:check:global -- --with-global-hooks`
+- `npm run meta:release:smoke`
+- Runtime Codex `rg` hook probe emitted the new query-first/source-verification Graphify hint.
+- `git diff --check`
+
+## [2.8.47] - 2026-06-21
+
+### Solved Problem
+
+The governed execution CLI and smoke-test path could stall or crash in Codex/Windows hosts that block nested Node child processes. That made fuzzy-instruction acceptance look broken even when the route selector and Node tests were valid.
+
+The product-experience gate also still treated structural native-choice support as a pass. A run could prove worker packets and selected providers, but it could still over-read `selected_not_invoked`, a CLI child process, or a markdown/card artifact as real host invocation or native choice evidence.
+
+### Changed
+
+- **Route Selector Host Fallback** - Governed execution now falls back to an in-process route selector when `spawnSync(process.execPath, ...)` is blocked, while keeping the normal CLI path unchanged for unrestricted hosts.
+- **Compact Selector Output** - Added a runner-compact selector mode so governed runs avoid oversized route payloads but still preserve selected providers, worker lanes, and owner discovery counts.
+- **Eight-Stage Visible Progress** - Conversation notices and stage operation plans now surface Critical, Fetch, Thinking, Execution, Review, Meta-Review, Verification, and Evolution instead of stopping at Review.
+- **Capability Smoke Host Fallback** - Capability-discovery smoke now uses the same in-process selector fallback and reports spawn errors honestly instead of writing undefined output.
+- **Node Test Wrapper Fallback** - The shared Node test wrapper now has a narrow worker-backed fallback for local repo scripts when child-process execution is unavailable.
+- **Trusted Host Invocation Evidence** - Governed execution now accepts trusted host evidence through CLI/env only when it includes a real family, state, provider or surface, accepted evidence kind, and non-empty evidence ref; `hostInvocationRequestPacket` must be pass before the artifact can be pass.
+- **Native Choice Evidence Gate** - P-106 no longer defaults to pass from structural card evidence. Branch-changing Codex/Claude choices now stay `needs-host-invocation` until trusted `request_user_input` / `AskUserQuestion` evidence is attached.
+- **No Forged Native Choice Shortcut** - `select-execution-route` no longer accepts plain `completed` / `confirmed` strings as trusted native choice proof; structured evidence now needs a native surface and evidence reference.
+- **Honest Validator Summary** - The default governed-execution validator now reports `validationStatus` separately from `governedExecutionStatus`, so a valid partial run is no longer summarized as a top-level pass.
+
+### Verification
+
+- `node --check scripts/run-meta-theory-governed-execution.mjs scripts/select-execution-route.mjs scripts/run-capability-discovery-smoke.mjs scripts/run-node-tests.mjs scripts/meta-kim-i18n.mjs`
+- `node scripts/run-meta-theory-governed-execution.mjs --task "帮我把这个系统弄得更顺、更能自动处理复杂任务，并让我看见它怎么判断、怎么分工、怎么推进、怎么验收。" --run-id codex-goal-fuzzy-acceptance --state-dir .meta-kim/state/codex-goal-fuzzy --db .meta-kim/state/codex-goal-fuzzy/runs.sqlite --emit-conversation-notice --emit-card-dealing-summary`
+- `node scripts/validate-run-artifact.mjs .meta-kim/state/codex-goal-fuzzy/codex-goal-fuzzy-acceptance.json`
+- `node --test --test-concurrency=1 tests/meta-theory/*.test.mjs`
+- `npm run meta:test:integration`
+- `node --test tests/meta-theory/32-meta-theory-four-product-targets.test.mjs`
+- `node --test tests/governance/core-loop-contract.test.mjs tests/meta-theory/34-run-deliverables.test.mjs tests/governance/capability-routing.test.mjs`
+- `npm run meta:prd:default-execution:validate`
+- `npm run meta:prd:product-experience:validate`
+- clean host-acceptance process via `Start-Process node scripts/run-meta-theory-governed-execution.mjs`, using current Codex `spawn_agent` and `request_user_input` evidence; result artifact status `pass`, `hostInvocationRequest=pass`, `realInvocationCoverage=pass`, `nativeChoiceGate=pass`, `productExperience=product_experience_pass`
+- `npm run meta:release:smoke`
+- `npm run meta:verify:all`
+- `node scripts/graphify-cli.mjs rebuild --force`
+- `npm run meta:graphify:check`
+- `git diff --check`
+- Release boundary retained: full verification, validators, graphify check, and clean host evidence support this patch release; all-runtime native live proof remains a separate release-grade target.
 
 ## [2.8.46] - 2026-06-21
 

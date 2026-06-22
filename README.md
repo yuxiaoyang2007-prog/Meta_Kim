@@ -688,12 +688,12 @@ Each layer has different activation requirements:
 ### Layer 2: Graphify (project-level LLM wiki)
 
 - **Responsibility**: project-level code knowledge graph
-- **Storage**: `graphify-out/graph.json` (NetworkX node-link format); for humans and agents, prefer `graphify-out/GRAPH_REPORT.md` when present
+- **Storage**: `graphify-out/graph.json` (NetworkX node-link format); humans and agents use it through query/path/explain slices, with `graphify-out/GRAPH_REPORT.md` reserved for broad architecture orientation
 - **Mechanism (data)**: `node setup.mjs` (optional Python step) installs graphify and **idempotently** runs `python -m graphify claude install` and `python -m graphify hook install` even if graphify was already installed via pip; git hooks rebuild the graph on commit/checkout in the **current repo**. `npm run meta:graphify:install` does the same (including hooks).
-- **Mechanism (usage)**: synced meta-theory `dev-governance.md` Fetch **Step 0.5** defines how the model should detect and use the graph — not a background service. Claude Code subagents get a **short hint** via `subagent-context.mjs`, not automatic embedding of `graph.json`. Codex / OpenClaw / Cursor share the same reference after `meta:sync` but have no SubagentStart hook; optional `python -m graphify codex install` or `python -m graphify claw install` in a **target repo** patches that repo’s docs per graphify CLI (`python -m graphify --help`).
+- **Mechanism (usage)**: synced meta-theory `dev-governance.md` Fetch **Step 0.5** defines how the model should detect and use the graph — not a background service. Claude Code subagents get a **short hint** via `subagent-context.mjs`, not automatic embedding of `graph.json`. Focused work should call `graphify query`, `graphify path`, or `graphify explain` to get candidate file anchors, then verify route-changing claims against source files. Codex / OpenClaw / Cursor share the same reference after `meta:sync` but have no SubagentStart hook; optional `python -m graphify codex install` or `python -m graphify claw install` in a **target repo** patches that repo’s docs per graphify CLI (`python -m graphify --help`).
 - **Core value**:
   - Make memory increasingly familiar with the project - not by remembering raw code, but by understanding structure and relationships
-  - **Reduce hallucinations** - agents answer from graph facts instead of guessing
+  - **Reduce hallucinations** - agents start from graph-backed file anchors and verify claims against source instead of guessing
   - **Cut token usage** - subgraph extraction replaces raw file reads, with up to 71x compression
 - **Quality threshold**:
   - Fuzzy nodes > 30% -> mark the graph as low quality and fall back to direct file reads

@@ -289,7 +289,7 @@ function assertProductExperience(report) {
   );
   const supportGateById = new Map(packet.supportGates.map((gate) => [gate.id, gate]));
   assert.equal(supportGateById.get("P-105").status, "pass");
-  assert.equal(supportGateById.get("P-106").status, "pass");
+  assert.equal(supportGateById.get("P-106").status, "partial");
   assert.equal(supportGateById.get("P-107").status, "pass");
   assert.equal(supportGateById.get("P-108").status, "pass");
   assert.equal(supportGateById.get("P-109").status, "partial");
@@ -307,10 +307,10 @@ function assertProductExperience(report) {
       "agent_teams_playbook_selected_as_live_agent_team",
     ),
   );
-  assert.equal(packet.nativeChoiceSurfaceGate.status, "pass");
+  assert.equal(packet.nativeChoiceSurfaceGate.status, "partial");
   assert.equal(
     packet.nativeChoiceSurfaceGate.liveRuntimeBoundary.status,
-    "not_claimed_by_structural_runner",
+    "needs-host-invocation",
   );
   assert.equal(packet.nativeChoiceSurfaceGate.liveRuntimeBoundary.requiredForNativePass, true);
   assert.ok(

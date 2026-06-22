@@ -25,6 +25,7 @@ import {
 } from "./meta-kim-sync-config.mjs";
 import {
   CODEX_REQUEST_USER_INPUT_FEATURE,
+  assertCodexConfigTomlMergeable,
   ensureCodexAppNativeControls,
   hasCodexRequestUserInputFeature,
 } from "./codex-config-merge.mjs";
@@ -1120,7 +1121,17 @@ async function runCheck() {
     const configRaw = (await pathExists(configPath))
       ? await fs.readFile(configPath, "utf8")
       : "";
-    const featureEnabled = hasCodexRequestUserInputFeature(configRaw);
+    let featureEnabled = false;
+    try {
+      assertCodexConfigTomlMergeable(configRaw);
+      featureEnabled = hasCodexRequestUserInputFeature(configRaw);
+    } catch (error) {
+      console.log(
+        `${C.red}×${C.reset} ${C.dim}Codex config.toml is invalid: ${configPath}${C.reset}`,
+      );
+      console.error(error.message);
+      failed = true;
+    }
     console.log(
       `${featureEnabled ? `${C.green}✓${C.reset}` : `${C.yellow}⊘${C.reset}`} ${C.dim}Codex ${CODEX_REQUEST_USER_INPUT_FEATURE}: ${configPath}${C.reset}`,
     );

@@ -489,6 +489,13 @@ describe("sync-runtimes / Codex project hooks", () => {
 
     assert.match(source, /existsSync\(graphPath\)/);
     assert.match(source, /systemMessage/);
+    assert.match(source, /graphify query/);
+    assert.match(source, /graphify path/);
+    assert.match(source, /graphify explain/);
+    assert.match(source, /source files/);
+    assert.match(source, /targeted `rg`/);
+    assert.match(source, /never inject full graph\.json or full GRAPH_REPORT\.md/);
+    assert.doesNotMatch(source, /Read graphify-out\/GRAPH_REPORT\.md/);
     assert.doesNotMatch(source, /\[ -f|\|\| true|2>\/dev\/null/);
   });
 });

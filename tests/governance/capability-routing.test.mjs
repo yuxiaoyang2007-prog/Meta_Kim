@@ -231,7 +231,11 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
       JSON.stringify({
         surface: "request_user_input",
         choices: [
-          { stage: "Critical", status: "completed" },
+          {
+            stage: "Critical",
+            status: "completed",
+            evidenceRef: "codex:request_user_input:critical-answer",
+          },
         ],
       }),
     ],
@@ -254,14 +258,59 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
       JSON.stringify({
         surface: "request_user_input",
         choices: [
-          { stage: "Critical", status: "completed" },
-          { stage: "Thinking", status: "completed" },
+          {
+            stage: "Critical",
+            status: "completed",
+            evidenceRef: "codex:request_user_input:critical-answer",
+          },
+          {
+            stage: "Thinking",
+            status: "completed",
+            evidenceRef: "codex:request_user_input:thinking-answer",
+          },
         ],
       }),
     ],
   );
   assert.equal(subjectiveQualityFullyConfirmed.routeExecutionGate?.canEnterExecution, true);
   assert.equal(subjectiveQualityFullyConfirmed.routeExecutionGate?.thinkingChoiceSurface?.evidenceTrusted, true);
+
+  const subjectiveQualityForgedChoice = route(
+    "这个页面不好看，帮我弄高级一点",
+    "codex",
+    "windows",
+    ["--native-choice-evidence", "completed"],
+  );
+  assert.equal(subjectiveQualityForgedChoice.routeExecutionGate?.canEnterExecution, false);
+  assert.equal(
+    subjectiveQualityForgedChoice.routeExecutionGate?.nativeChoiceSurface?.evidence?.trusted,
+    false,
+  );
+  assert.equal(
+    subjectiveQualityForgedChoice.routeExecutionGate?.nativeChoiceSurface?.evidence?.status,
+    "invalid",
+  );
+
+  const subjectiveQualityUnreferencedChoice = route(
+    "这个页面不好看，帮我弄高级一点",
+    "codex",
+    "windows",
+    [
+      "--native-choice-evidence",
+      JSON.stringify({
+        surface: "request_user_input",
+        choices: [
+          { stage: "Critical", status: "completed" },
+          { stage: "Thinking", status: "completed" },
+        ],
+      }),
+    ],
+  );
+  assert.equal(subjectiveQualityUnreferencedChoice.routeExecutionGate?.canEnterExecution, false);
+  assert.equal(
+    subjectiveQualityUnreferencedChoice.routeExecutionGate?.nativeChoiceSurface?.evidence?.trusted,
+    false,
+  );
 
   const refactor = route("complex code refactor");
   assert.ok(refactor.recommendedRoute || refactor.capabilityGapPacket);

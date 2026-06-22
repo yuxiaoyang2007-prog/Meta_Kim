@@ -682,12 +682,12 @@ Meta_Kim 的记忆不是单一的。它有三层，各有分工，共同保障 a
 ### 第二层：Graphify（项目级 LLM Wiki）
 
 - **负责什么**：项目级别的代码知识图谱
-- **存储位置**：`graphify-out/graph.json`（NetworkX 节点链接格式）；深度阅读可优先看同目录下的 `GRAPH_REPORT.md`
+- **存储位置**：`graphify-out/graph.json`（NetworkX 节点链接格式）；人和 agent 应通过 query/path/explain 小切片使用它，`GRAPH_REPORT.md` 只作为大范围架构导览
 - **工作机制（数据面）**：`node setup.mjs` 可选步骤会安装 graphify、并**幂等**执行 `python -m graphify claude install` 与 `python -m graphify hook install`（即使 graphify 已通过 pip 安装过也会补全 hook）；git hook 在 commit/checkout 时触发当前仓库内图谱重建。`npm run meta:graphify:install` 行为与之一致（含 hook）。
-- **工作机制（使用面）**：同步后的 `meta-theory` 里 Fetch Step 0.5 约定模型如何检测与使用图谱；**不是**后台常驻进程。Claude Code 子代理仅通过 `subagent-context.mjs` 收到**短提示**，不会自动把整份 `graph.json` 塞进上下文。Codex / OpenClaw / Cursor 无该 hook，但共享同一份 `dev-governance.md` 引用；其他工具端可在**目标仓库**按需执行 `python -m graphify codex install` 或 `python -m graphify claw install`（参见 `python -m graphify --help`）。
+- **工作机制（使用面）**：同步后的 `meta-theory` 里 Fetch Step 0.5 约定模型如何检测与使用图谱；**不是**后台常驻进程。Claude Code 子代理仅通过 `subagent-context.mjs` 收到**短提示**，不会自动把整份 `graph.json` 塞进上下文。聚焦任务应先用 `graphify query`、`graphify path` 或 `graphify explain` 拿候选文件锚点，再回读真实源文件确认会影响路线的判断。Codex / OpenClaw / Cursor 无该 hook，但共享同一份 `dev-governance.md` 引用；其他工具端可在**目标仓库**按需执行 `python -m graphify codex install` 或 `python -m graphify claw install`（参见 `python -m graphify --help`）。
 - **核心价值**：
   - 让记忆越来越熟悉项目——不是记住代码原文，而是理解代码的结构和关系
-  - **大幅降低幻觉**——agent 不再凭记忆瞎编，而是基于图谱事实回答
+  - **大幅降低幻觉**——agent 先从图谱候选锚点定位，再用真实源文件确认，而不是凭记忆瞎编
   - **大幅减少 token 消耗**——通过子图提取代替原始文件读取，最高压缩 71 倍
 - **质量门槛**：
   - 模糊节点 > 30% → 标记为低质量图谱，回退到直接文件读取

@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { classifyMetaTheoryEntry } from "./meta-theory-entry-classifier.mjs";
 import {
   openRunStateStore,
@@ -1805,6 +1805,23 @@ function buildBusinessPhasePlanPacket({ runId, orchestrationReport, runtimeEvide
   };
 }
 
+function normalizeRouteBindingType(type) {
+  const normalized = {
+    skills: "skill",
+    skill: "skill",
+    commands: "command",
+    command: "command",
+    mcpServers: "mcp_tool",
+    mcpTools: "mcp_tool",
+    mcp_tool: "mcp_tool",
+    runtimeTools: "runtime_tool",
+    runtime_tool: "runtime_tool",
+    hooks: "contract_ref",
+    hook: "contract_ref",
+  };
+  return normalized[type] ?? type ?? "capability_index_query";
+}
+
 function buildBusinessFlowBlueprintPacket({ businessPhasePlanPacket, orchestrationReport = null }) {
   const triggerCoveragePass = businessPhasePlanPacket.triggerStandard?.coveragePass === true;
   const routeWorkerTasks = orchestrationReport?.workerTaskPackets ?? [];
@@ -1861,6 +1878,7 @@ function buildBusinessFlowBlueprintPacket({ businessPhasePlanPacket, orchestrati
       packet.capabilitySelection?.selectedProvider ??
       packet.providerMatch?.selectedProvider ??
       null;
+    const selectedBindingType = normalizeRouteBindingType(selectedProvider?.type);
     const capabilityNeed = Array.isArray(packet.capabilityNeed)
       ? packet.capabilityNeed.join("; ")
       : Array.isArray(packet.capabilityRequirements)
@@ -1887,7 +1905,7 @@ function buildBusinessFlowBlueprintPacket({ businessPhasePlanPacket, orchestrati
         {
           matchId: `${laneId}_route_match`,
           capabilitySlot: `${laneId}_route_capability`,
-          bindingType: selectedProvider?.type ?? "route_selected_provider",
+          bindingType: selectedBindingType,
           bindingRef:
             selectedProvider?.id ??
             packet.capabilityLoadout?.capabilityProfileId ??
@@ -1908,7 +1926,7 @@ function buildBusinessFlowBlueprintPacket({ businessPhasePlanPacket, orchestrati
         {
           bindingId: `${laneId}_route_binding`,
           capabilitySlot: `${laneId}_route_capability`,
-          bindingType: selectedProvider?.type ?? "route_selected_provider",
+          bindingType: selectedBindingType,
           bindingRef:
             selectedProvider?.id ??
             packet.capabilityLoadout?.capabilityProfileId ??
@@ -2238,9 +2256,25 @@ function capabilityToolingFor(packet) {
 function buildStageOperationPlan({
   orchestrationReport,
   runtimeEvidence,
+  writebackFlow,
   labels,
 }) {
   const stageLabels = labels.stageOperationPlan.stages;
+  const metaReviewLabels = stageLabels.metaReview ?? {
+    uses: "meta-warden overclaim audit",
+    whatHappens:
+      "检查是否混淆 validator pass、runtime invocation、native choice 和 public-ready。",
+  };
+  const verificationLabels = stageLabels.verification ?? {
+    uses: "artifact validator, targeted tests, runtime projection evidence",
+    whatHappens: "运行新鲜验证，并把失败返回 Review 或 Execution。",
+  };
+  const evolutionLabels = stageLabels.evolution ?? {
+    uses: "Warden writeback flow and none-with-reason policy",
+    whatHappens: "记录 writeback 或 none-with-reason，不把 local continuity 当作写回。",
+  };
+  const stageOutputs = labels.stageOperationPlan.outputs;
+  const stageResults = labels.stageOperationPlan.results;
   const workerTasks = orchestrationReport.workerTaskPackets.map((packet, index) => {
     const tooling = capabilityToolingFor(packet);
     const mcp =
@@ -2325,7 +2359,46 @@ function buildStageOperationPlan({
           orchestrationReport.reviewResult.status,
           runtimeEvidence.status
         ),
-        nextWork: "Verification / Evolution",
+        nextWork: "Meta-Review",
+      },
+      {
+        stage: "Meta-Review",
+        owner: "meta-warden",
+        uses: metaReviewLabels.uses,
+        whatHappens: metaReviewLabels.whatHappens,
+        outputShape:
+          stageOutputs.metaReview?.(orchestrationReport.reviewResult.findings.length) ??
+          "claim-boundary checks for public-ready, native choice, and invocation truth.",
+        resultReport:
+          stageResults.metaReview?.() ??
+          "Overclaim boundaries are checked before public-ready is considered.",
+        nextWork: "Verification",
+      },
+      {
+        stage: "Verification",
+        owner: orchestrationReport.verificationResult.owner,
+        uses: verificationLabels.uses,
+        whatHappens: verificationLabels.whatHappens,
+        outputShape:
+          stageOutputs.verification?.(runtimeEvidence.status) ??
+          "fresh verification evidence with runtime status=" + runtimeEvidence.status + ".",
+        resultReport:
+          stageResults.verification?.(runtimeEvidence.status) ??
+          "Verification evidence status=" + runtimeEvidence.status + "; failures return to Review or Execution.",
+        nextWork: "Evolution",
+      },
+      {
+        stage: "Evolution",
+        owner: "meta-chrysalis",
+        uses: evolutionLabels.uses,
+        whatHappens: evolutionLabels.whatHappens,
+        outputShape:
+          stageOutputs.evolution?.(writebackFlow?.status) ??
+          "writeback decision=" + (writebackFlow?.status ?? "unknown") + "; reusable lessons require Warden approval.",
+        resultReport:
+          stageResults.evolution?.(writebackFlow?.status) ??
+          "Evolution decision=" + (writebackFlow?.status ?? "unknown") + "; local continuity is not writeback.",
+        nextWork: "Feedback / next run",
       },
     ],
   };
@@ -4485,6 +4558,62 @@ function normalizeHostInvocationEvidence(input, { trusted = false } = {}) {
   return normalizeHostInvocationEvidence([input], { trusted });
 }
 
+function normalizeNativeChoiceEvidence(input, { trusted = false } = {}) {
+  if (!input) return [];
+  const acceptedStates = new Set(["completed", "answered", "returned", "deferred", "blocked"]);
+  const acceptedEvidenceKinds = new Set([
+    "request_user_input_answer",
+    "AskUserQuestion_answer",
+    "deferred_AskUserQuestion_tool_call",
+    "nativeChoiceSurfaceBlocked",
+  ]);
+  if (Array.isArray(input)) {
+    return input
+      .map((item) => {
+        const state = item?.state ?? item?.status ?? "missing";
+        const surface = item?.surface ?? item?.hostSurface ?? null;
+        const evidenceKind = item?.evidenceKind ?? "unverified_native_choice_claim";
+        const evidenceRef = item?.evidenceRef ?? item?.answerRef ?? item?.hostToolCallId ?? null;
+        const hasEvidenceRef =
+          typeof evidenceRef === "string" ? evidenceRef.trim().length > 0 : Boolean(evidenceRef);
+        const proofValid =
+          trusted &&
+          acceptedStates.has(state) &&
+          acceptedEvidenceKinds.has(evidenceKind) &&
+          hasEvidenceRef &&
+          Boolean(surface);
+        return {
+          runtime: item?.runtime ?? null,
+          stage: item?.stage ?? item?.choiceStage ?? null,
+          state,
+          surface,
+          evidenceKind,
+          evidenceRef,
+          proofValid,
+          passEligible:
+            item?.passEligible !== false &&
+            proofValid &&
+            evidenceKind !== "nativeChoiceSurfaceBlocked",
+          blockedEligible: proofValid && evidenceKind === "nativeChoiceSurfaceBlocked",
+          rejectionReason: proofValid
+            ? null
+            : "native choice evidence requires trusted host evidence, accepted state, accepted evidenceKind, surface, and non-empty evidenceRef",
+        };
+      })
+      .filter((item) => item.surface || item.evidenceKind !== "unverified_native_choice_claim");
+  }
+  if (typeof input === "string") {
+    const trimmed = input.trim();
+    if (!trimmed) return [];
+    try {
+      return normalizeNativeChoiceEvidence(JSON.parse(trimmed), { trusted });
+    } catch {
+      return [];
+    }
+  }
+  return normalizeNativeChoiceEvidence([input], { trusted });
+}
+
 function compactCommand(command, args = []) {
   return [path.basename(command), ...args].join(" ");
 }
@@ -5556,7 +5685,12 @@ function buildUserPerceptionPacket({
 const PRODUCT_EXPERIENCE_CORE_GOAL_IDS = ["P-102", "P-103", "P-104"];
 const PRODUCT_EXPERIENCE_SUPPORT_GATE_IDS = ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"];
 
-function buildNativeChoiceSurfaceGate({ cardPlanPacket, dynamicWorkflowDecisionRecord }) {
+function buildNativeChoiceSurfaceGate({
+  cardPlanPacket,
+  dynamicWorkflowDecisionRecord,
+  nativeChoiceEvidence,
+  nativeChoiceEvidenceTrusted,
+}) {
   const branchCardRefs = [
     ...(cardPlanPacket?.cardEvents ?? [])
       .filter((card) => ["clarify", "options", "approval"].includes(card.cardKey))
@@ -5565,10 +5699,27 @@ function buildNativeChoiceSurfaceGate({ cardPlanPacket, dynamicWorkflowDecisionR
       .filter((card) => ["clarify", "options", "approval"].includes(card.cardKey))
       .map((card) => `dynamicWorkflowDecisionRecord.cards.${card.cardKey}`),
   ];
+  const evidence = normalizeNativeChoiceEvidence(nativeChoiceEvidence, {
+    trusted: nativeChoiceEvidenceTrusted,
+  });
+  const acceptedAnswers = evidence.filter((item) => item.passEligible === true);
+  const blockedEvidence = evidence.filter((item) => item.blockedEligible === true);
+  const branchChoiceRequired = branchCardRefs.length > 0;
+  const liveStatus = !branchChoiceRequired
+    ? "no_branching_choice"
+    : acceptedAnswers.length > 0
+      ? "native_choice_answered"
+      : blockedEvidence.length > 0
+        ? "nativeChoiceSurfaceBlocked"
+        : "needs-host-invocation";
+  const status =
+    !branchChoiceRequired || acceptedAnswers.length > 0
+      ? "pass"
+      : "partial";
   return {
     id: "P-106",
     name: "Codex/Claude 原生选择面支撑门",
-    status: "pass",
+    status,
     evidenceKind: "product_support_gate",
     requiredFor:
       "Any branch-changing Critical clarification or post-Thinking execution confirmation in primary Codex/Claude Code runtimes.",
@@ -5595,8 +5746,20 @@ function buildNativeChoiceSurfaceGate({ cardPlanPacket, dynamicWorkflowDecisionR
       ],
     },
     liveRuntimeBoundary: {
-      status: "not_claimed_by_structural_runner",
+      status: liveStatus,
       requiredForNativePass: true,
+      branchChoiceRequired,
+      evidenceTrusted: nativeChoiceEvidenceTrusted === true,
+      acceptedEvidenceRefs: acceptedAnswers.map((item) => item.evidenceRef),
+      blockedEvidenceRefs: blockedEvidence.map((item) => item.evidenceRef),
+      rejectedEvidence:
+        evidence
+          .filter((item) => item.proofValid !== true)
+          .map((item) => ({
+            surface: item.surface,
+            evidenceKind: item.evidenceKind,
+            rejectionReason: item.rejectionReason,
+          })),
       acceptableProof: [
         "Codex request_user_input returned answer before Execution",
         "Claude AskUserQuestion returned or deferred answer before Execution",
@@ -5779,6 +5942,8 @@ function buildProductExperiencePacket({
   userPerceptionPacket,
   cardPlanPacket,
   dynamicWorkflowDecisionRecord,
+  nativeChoiceEvidence,
+  nativeChoiceEvidenceTrusted,
 }) {
   const callableInvocationPass =
     capabilityInvocationTruthPacket?.callableInvocationCoverage?.status === "pass" &&
@@ -5854,7 +6019,12 @@ function buildProductExperiencePacket({
       failIf:
         "Goal lacks verification, constraints, boundaries, iteration policy, stop/pause, or contains placeholders.",
     },
-    buildNativeChoiceSurfaceGate({ cardPlanPacket, dynamicWorkflowDecisionRecord }),
+    buildNativeChoiceSurfaceGate({
+      cardPlanPacket,
+      dynamicWorkflowDecisionRecord,
+      nativeChoiceEvidence,
+      nativeChoiceEvidenceTrusted,
+    }),
     buildRepeatFailureDesignGate(),
     buildNoHardcodedFixtureGate({ goalContractPacket }),
     buildCapabilityInvocationTruthGate({ capabilityInvocationTruthPacket }),
@@ -5902,14 +6072,15 @@ function buildProductExperiencePacket({
     capabilityInvocationTruthGate: supportGates.find((gate) => gate.id === "P-109"),
     agentTeamsPlaybookGate: supportGates.find((gate) => gate.id === "P-110"),
     noOverclaimGate,
-    completionEvidence: [
+    requiredCompletionEvidence: [
       "goalContractPacket.status=pass",
       "langGraphRunPacket.status=pass",
       "dynamicWorkflowRuntimePacket.status=pass",
       "peerAgentMeshPacket.status=pass",
-    "capabilityInvocationTruthPacket.status=pass",
-    "capabilityInvocationTruthPacket.callableInvocationCoverage.status=pass",
-    "visibleMetaTheorySurfacePacket.status=pass",
+      "nativeChoiceSurfaceGate.status=pass",
+      "capabilityInvocationTruthPacket.status=pass",
+      "capabilityInvocationTruthPacket.callableInvocationCoverage.status=pass",
+      "visibleMetaTheorySurfacePacket.status=pass",
       "userPerceptionPacket.status=pass",
       "productExperiencePacket.supportGates[].status=pass",
     ],
@@ -6037,6 +6208,8 @@ function buildCoreLoopArtifact({
   hostVisibleSubagents,
   hostInvocationEvidence,
   hostInvocationEvidenceTrusted,
+  nativeChoiceEvidence,
+  nativeChoiceEvidenceTrusted,
   agentTeamsPlaybookProvider,
   invokeCapabilityProbes = false,
 }) {
@@ -6411,6 +6584,8 @@ function buildCoreLoopArtifact({
     userPerceptionPacket,
     cardPlanPacket,
     dynamicWorkflowDecisionRecord,
+    nativeChoiceEvidence,
+    nativeChoiceEvidenceTrusted,
   });
   const selectedExecutableTruthGaps = (capabilityInvocationTruthPacket.rows ?? [])
     .filter(
@@ -7689,19 +7864,71 @@ async function readLatestRunId(stateDir) {
   return JSON.parse(raw).runId ?? null;
 }
 
-function selectExecutionRoute({ task, runtime = "codex", os = "windows" }) {
+function selectExecutionRouteArgs({ task, runtime = "codex", os = "windows" }) {
+  return [
+    "--task",
+    task,
+    "--runtime",
+    runtime,
+    "--os",
+    os,
+    "--json",
+    "--runner-compact",
+  ];
+}
+
+async function selectExecutionRouteInProcess({ task, runtime = "codex", os = "windows", spawnError = null }) {
+  const originalArgv = process.argv;
+  const originalLog = console.log;
+  const originalError = console.error;
+  const stdout = [];
+  const stderr = [];
+  try {
+    process.argv = [
+      process.execPath,
+      SELECT_EXECUTION_ROUTE_SCRIPT,
+      ...selectExecutionRouteArgs({ task, runtime, os }),
+    ];
+    console.log = (...args) => stdout.push(args.join(" "));
+    console.error = (...args) => stderr.push(args.join(" "));
+    await import(
+      `${pathToFileURL(SELECT_EXECUTION_ROUTE_SCRIPT).href}?runner=${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+  } catch (error) {
+    throw new Error(
+      [
+        "select-execution-route in-process fallback failed.",
+        spawnError?.message ? `original spawn error: ${spawnError.message}` : null,
+        error?.stack ?? error?.message ?? String(error),
+        tailText(stderr.join("\n")),
+      ].filter(Boolean).join("\n"),
+    );
+  } finally {
+    process.argv = originalArgv;
+    console.log = originalLog;
+    console.error = originalError;
+  }
+  const text = stdout.join("\n").trim();
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error(
+      [
+        "select-execution-route in-process fallback returned invalid JSON.",
+        spawnError?.message ? `original spawn error: ${spawnError.message}` : null,
+        error?.message ?? String(error),
+        tailText(text),
+        tailText(stderr.join("\n")),
+      ].filter(Boolean).join("\n"),
+    );
+  }
+}
+
+async function selectExecutionRoute({ task, runtime = "codex", os = "windows" }) {
+  const args = selectExecutionRouteArgs({ task, runtime, os });
   const result = spawnSync(
     process.execPath,
-    [
-      SELECT_EXECUTION_ROUTE_SCRIPT,
-      "--task",
-      task,
-      "--runtime",
-      runtime,
-      "--os",
-      os,
-      "--json",
-    ],
+    [SELECT_EXECUTION_ROUTE_SCRIPT, ...args],
     {
       cwd: REPO_ROOT,
       encoding: "utf8",
@@ -7709,12 +7936,22 @@ function selectExecutionRoute({ task, runtime = "codex", os = "windows" }) {
       maxBuffer: 20 * 1024 * 1024,
     },
   );
+  if (result.error) {
+    return selectExecutionRouteInProcess({
+      task,
+      runtime,
+      os,
+      spawnError: result.error,
+    });
+  }
   if (result.status !== 0) {
     throw new Error(
       [
         "select-execution-route failed before governed execution.",
+        result.error?.message ? `spawn error: ${result.error.message}` : null,
+        result.signal ? `spawn signal: ${result.signal}` : null,
         result.stderr?.trim(),
-        result.stdout?.trim(),
+        tailText(result.stdout),
       ].filter(Boolean).join("\n"),
     );
   }
@@ -7989,8 +8226,8 @@ function buildRouteDrivenWorkerTasks({ runId, routeResult, task }) {
   });
 }
 
-function buildRouteDrivenOrchestration({ task, runId }) {
-  const routeResult = selectExecutionRoute({ task });
+async function buildRouteDrivenOrchestration({ task, runId }) {
+  const routeResult = await selectExecutionRoute({ task });
   const route = routeResult.recommendedRoute;
   const providerList = providerListFromRoute(routeResult);
   const workerTaskPackets = buildRouteDrivenWorkerTasks({ runId, routeResult, task });
@@ -8158,6 +8395,8 @@ export async function runMetaTheoryGovernedExecution({
   hostVisibleSubagents = process.env.META_KIM_HOST_VISIBLE_SUBAGENTS ?? null,
   hostInvocationEvidence = process.env.META_KIM_HOST_INVOCATION_EVIDENCE ?? null,
   hostInvocationEvidenceTrusted = false,
+  nativeChoiceEvidence = process.env.META_KIM_NATIVE_CHOICE_EVIDENCE ?? null,
+  nativeChoiceEvidenceTrusted = false,
   invokeCapabilityProbes = false,
 } = {}) {
   const normalizedTask = normalizeTask(task);
@@ -8165,7 +8404,7 @@ export async function runMetaTheoryGovernedExecution({
     throw new Error("Missing task for governed meta-theory execution.");
   }
   const effectiveRunId = runId ?? stableId("meta-run", normalizedTask);
-  const orchestrationReport = buildRouteDrivenOrchestration({
+  const orchestrationReport = await buildRouteDrivenOrchestration({
     task: normalizedTask,
     runId: effectiveRunId,
   });
@@ -8244,6 +8483,7 @@ export async function runMetaTheoryGovernedExecution({
   const stageOperationPlan = buildStageOperationPlan({
     orchestrationReport,
     runtimeEvidence,
+    writebackFlow,
     labels,
   });
   const panelContractDefinition = await readJson(RUN_REPORT_PANEL_CONTRACT_PATH);
@@ -8272,12 +8512,16 @@ export async function runMetaTheoryGovernedExecution({
     hostVisibleSubagents,
     hostInvocationEvidence,
     hostInvocationEvidenceTrusted,
+    nativeChoiceEvidence,
+    nativeChoiceEvidenceTrusted,
     agentTeamsPlaybookProvider,
     invokeCapabilityProbes,
   });
   artifactStatus =
     artifactStatus === "pass" &&
     runtimeEvidence.status === "pass" &&
+    coreLoop.runtimeInvocationPlanPacket.status === "pass" &&
+    coreLoop.hostInvocationRequestPacket.status === "pass" &&
     coreLoop.capabilityInvocationTruthPacket.status === "pass" &&
     coreLoop.productExperiencePacket.status === "product_experience_pass"
       ? "pass"
@@ -8516,6 +8760,10 @@ function argValue(name, fallback = null) {
   return index >= 0 ? process.argv[index + 1] : fallback;
 }
 
+function truthyEnvFlag(value) {
+  return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
+}
+
 function positionalTask(fallback = null) {
   const positional = [];
   for (let index = 2; index < process.argv.length; index += 1) {
@@ -8532,6 +8780,7 @@ function positionalTask(fallback = null) {
         "--canonical-root",
         "--host-visible-subagents",
         "--host-invocation-evidence",
+        "--native-choice-evidence",
       ].includes(value)
     ) {
       index += 1;
@@ -8559,6 +8808,7 @@ function rawPositionals() {
         "--canonical-root",
         "--host-visible-subagents",
         "--host-invocation-evidence",
+        "--native-choice-evidence",
       ].includes(value)
     ) {
       index += 1;
@@ -8631,6 +8881,16 @@ async function main() {
       "--host-invocation-evidence",
       process.env.META_KIM_HOST_INVOCATION_EVIDENCE ?? null,
     ),
+    hostInvocationEvidenceTrusted:
+      process.argv.includes("--host-invocation-evidence-trusted") ||
+      truthyEnvFlag(process.env.META_KIM_HOST_INVOCATION_EVIDENCE_TRUSTED),
+    nativeChoiceEvidence: argValue(
+      "--native-choice-evidence",
+      process.env.META_KIM_NATIVE_CHOICE_EVIDENCE ?? null,
+    ),
+    nativeChoiceEvidenceTrusted:
+      process.argv.includes("--native-choice-evidence-trusted") ||
+      truthyEnvFlag(process.env.META_KIM_NATIVE_CHOICE_EVIDENCE_TRUSTED),
     invokeCapabilityProbes: process.argv.includes("--invoke-capability-probes"),
   });
   if (report.conversationNotice.emitted) {

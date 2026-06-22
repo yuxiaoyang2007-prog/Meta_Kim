@@ -300,12 +300,13 @@ Repository policy:
 
 This repo keeps a knowledge graph under `graphify-out/`.
 
-Use it as compressed codebase context, not as an infallible truth source:
+Use it as a query-first navigation index, not as compressed context or an infallible truth source:
 
-- for broad architecture review, start with `graphify-out/GRAPH_REPORT.md`
+- for focused questions, start with `graphify query "<question>" --budget 1000`, `graphify path`, or `graphify explain`
+- for broad architecture review, use `graphify-out/GRAPH_REPORT.md` only as orientation
 - if `graphify-out/wiki/index.md` exists, use it for broad navigation
-- for focused questions, prefer graph queries or subgraph extraction when available
-- treat ambiguous graph nodes as uncertain dependencies requiring manual verification
+- treat graph results as candidate file anchors, then verify route-changing claims against source files
+- treat ambiguous graph nodes as uncertain dependencies requiring manual verification, and fall back to targeted repository search when graph results are generic or stale
 - `npm run meta:graphify:check` and `npm run meta:validate` compare the graph's built commit with current `git rev-parse HEAD` and fail when `GRAPH_REPORT.md` is stale
 - after modifying code files, run `npm run meta:graphify:rebuild`
 

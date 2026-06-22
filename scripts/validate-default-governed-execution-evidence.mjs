@@ -183,10 +183,10 @@ function validateProductExperienceEvidence(report) {
     ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"]
   );
   assert.equal(report.coreLoop.productExperiencePacket.noOverclaimGate.status, "pass");
-  assert.equal(report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.status, "pass");
+  assert.equal(report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.status, "partial");
   assert.equal(
     report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.liveRuntimeBoundary.status,
-    "not_claimed_by_structural_runner"
+    "needs-host-invocation"
   );
   assert.equal(
     report.coreLoop.productExperiencePacket.repeatFailureDesignGate.actionOnSecondOccurrence,
@@ -281,7 +281,8 @@ async function main() {
 
     process.stdout.write(
       `${JSON.stringify({
-        status: "pass",
+        status: report.status === "pass" ? "validated_pass" : "validated_partial",
+        validationStatus: "pass",
         governedExecutionStatus: report.status,
         governanceAgentResultPackets: report.coreLoop.governanceAgentResultPackets.length,
         consumedGovernancePackets: report.coreLoop.conductorConsumptionEvidence.consumedPacketRefs.length,

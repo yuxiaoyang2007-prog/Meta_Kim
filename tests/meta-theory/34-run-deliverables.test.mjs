@@ -321,7 +321,16 @@ describe("34 — Meta-theory run deliverables", () => {
       );
       assert.deepEqual(
         runArtifact.stageOperationPlan.stages.map((item) => item.stage),
-        ["Critical", "Fetch", "Thinking", "Execution", "Review"]
+        [
+          "Critical",
+          "Fetch",
+          "Thinking",
+          "Execution",
+          "Review",
+          "Meta-Review",
+          "Verification",
+          "Evolution",
+        ]
       );
       const executionStage = runArtifact.stageOperationPlan.stages.find(
         (item) => item.stage === "Execution"
@@ -753,8 +762,9 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(runArtifact.productExperiencePacket.noOverclaimGate.status, "pass");
       assert.equal(
         runArtifact.productExperiencePacket.nativeChoiceSurfaceGate.liveRuntimeBoundary.status,
-        "not_claimed_by_structural_runner"
+        "needs-host-invocation"
       );
+      assert.equal(runArtifact.productExperiencePacket.nativeChoiceSurfaceGate.status, "partial");
       assert.equal(
         runArtifact.productExperiencePacket.repeatFailureDesignGate.actionOnSecondOccurrence,
         "bottom_design_failure_return_to_critical_fetch_thinking"
@@ -828,6 +838,9 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.match(result.stdout, /不是 native choice popup 证据/u);
       assert.match(result.stdout, /许愿式自然语言需求/u);
       assert.match(result.stdout, /阶段进度/u);
+      assert.match(result.stdout, /Meta-Review/u);
+      assert.match(result.stdout, /Verification/u);
+      assert.match(result.stdout, /Evolution/u);
       assert.match(result.stdout, /能力路线/u);
       assert.match(result.stdout, /产品定义/u);
       assert.match(result.stdout, /市场与平台规则研究/u);

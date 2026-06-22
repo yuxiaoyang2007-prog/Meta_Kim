@@ -1945,7 +1945,7 @@ export function buildCodexGraphifyContextHook() {
     "if (existsSync(graphPath)) {",
     "  console.log(",
     "    JSON.stringify({",
-    '      systemMessage: "graphify: Knowledge graph exists. Read graphify-out/GRAPH_REPORT.md for god nodes and community structure before searching raw files.",',
+    '      systemMessage: "graphify: Knowledge graph exists. For focused questions, run `graphify query \\"<question>\\" --budget 1000` first; use `graphify path`/`graphify explain` for relationships or concepts. Treat graph results as candidate file anchors and verify route-changing claims against source files; fall back to targeted `rg` when results are generic or stale. Read GRAPH_REPORT.md only for broad architecture context; never inject full graph.json or full GRAPH_REPORT.md.",',
     "    }),",
     "  );",
     "}",

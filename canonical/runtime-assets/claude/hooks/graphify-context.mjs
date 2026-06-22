@@ -31,7 +31,7 @@ if (isSearchCommand(command) && existsSync(graphPath)) {
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         additionalContext:
-          "graphify: knowledge graph at graphify-out/. For focused questions, run `graphify query \"<question>\"` first; read GRAPH_REPORT.md only for broad architecture context.",
+          "graphify: knowledge graph at graphify-out/. For focused questions, run `graphify query \"<question>\" --budget 1000` first; use `graphify path`/`graphify explain` for relationships or concepts. Treat graph results as candidate file anchors only: verify route-changing claims against source files, and fall back to targeted `rg` when results are generic or stale. Read GRAPH_REPORT.md only for broad architecture context; never inject full graph.json or full GRAPH_REPORT.md.",
       },
     }),
   );

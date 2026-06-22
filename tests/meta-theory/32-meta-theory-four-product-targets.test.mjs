@@ -23,6 +23,16 @@ const productExperienceTask =
   "帮我做个小红书营销自动发布器，需要动态规划、平台规则研究、内容策略、前端界面、后端 API、数据模型、平台集成、权限风控、测试验收和发布运维，但不要真实发布或使用生产凭证。";
 const contentOnlyProductTask =
   "我想做个东西，能把我平时随手记的想法变成能发出去的内容，但我现在也说不清先做成啥，你帮我拆一下怎么落地，别真发。";
+const trustedNativeChoiceEvidence = [
+  {
+    runtime: "codex",
+    stage: "Thinking",
+    state: "completed",
+    surface: "request_user_input",
+    evidenceKind: "request_user_input_answer",
+    evidenceRef: "codex:request_user_input:acceptance-route",
+  },
+];
 
 describe("32 — Meta-theory three product goals and support gates", () => {
   test("T-001 runs the default governed orchestration runtime path", async () => {
@@ -174,8 +184,9 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.equal(report.defaultRuntimePath.productExperiencePacket.noOverclaimGate.status, "pass");
       assert.equal(
         report.defaultRuntimePath.productExperiencePacket.nativeChoiceSurfaceGate.liveRuntimeBoundary.status,
-        "not_claimed_by_structural_runner"
+        "needs-host-invocation"
       );
+      assert.equal(report.defaultRuntimePath.productExperiencePacket.nativeChoiceSurfaceGate.status, "partial");
       assert.equal(
         report.defaultRuntimePath.productExperiencePacket.repeatFailureDesignGate.actionOnSecondOccurrence,
         "bottom_design_failure_return_to_critical_fetch_thinking"
@@ -490,7 +501,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
     assert.equal(output.evidenceTier, "partial");
     assert.deepEqual(output.goals.map((goal) => goal.id), ["P-102", "P-103", "P-104"]);
     assert.deepEqual(output.supportGates.map((gate) => gate.id), ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"]);
-    assert.equal(output.nativeChoiceSurface, "not_claimed_by_structural_runner");
+    assert.equal(output.nativeChoiceSurface, "needs-host-invocation");
     assert.equal(output.repeatFailureDesign, "bottom_design_failure_return_to_critical_fetch_thinking");
     assert.equal(output.generalizationGate, "pass");
     assert.ok(output.langGraph.nodes >= 8);
@@ -616,7 +627,59 @@ describe("32 — Meta-theory three product goals and support gates", () => {
     }
   });
 
-  test("T-006 host invocation evidence can promote selected executable families to product pass", async () => {
+  test("T-006 trusted host invocation still needs native choice evidence for product pass", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-host-evidence-no-native-"));
+    try {
+      const report = await runMetaTheoryGovernedExecution({
+        task: productExperienceTask,
+        runId: "test-run-host-evidence-no-native",
+        stateDir: tempDir,
+        dbPath: path.join(tempDir, "runs.sqlite"),
+        invokeCapabilityProbes: true,
+        hostInvocationEvidenceTrusted: true,
+        hostInvocationEvidence: [
+          {
+            family: "agent_subagent",
+            state: "invoked",
+            providerId: "codex-reviewer",
+            hostSurface: "spawn_agent",
+            evidenceKind: "spawn_agent_result",
+            evidenceRef: "agent:codex-reviewer:completed",
+          },
+          {
+            family: "skill",
+            state: "applied",
+            providerId: "meta-theory",
+            hostSurface: "skill",
+            evidenceKind: "skill_application",
+            evidenceRef: "skill:meta-theory:SKILL.md-read",
+          },
+          {
+            family: "agent_teams_playbook",
+            state: "invoked",
+            providerId: "agent-teams-playbook",
+            hostSurface: "spawn_agent",
+            evidenceKind: "agent_team_result",
+            evidenceRef: "agent-team:fanout:completed",
+          },
+        ],
+      });
+
+      assert.equal(report.status, "partial");
+      assert.equal(report.coreLoop.hostInvocationRequestPacket.status, "pass");
+      assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "pass");
+      assert.equal(report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.status, "partial");
+      assert.equal(
+        report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.liveRuntimeBoundary.status,
+        "needs-host-invocation",
+      );
+      assert.equal(report.coreLoop.productExperiencePacket.status, "partial");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("T-006b host and native choice evidence can promote selected executable families to product pass", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-host-evidence-pass-"));
     try {
       const report = await runMetaTheoryGovernedExecution({
@@ -652,6 +715,8 @@ describe("32 — Meta-theory three product goals and support gates", () => {
             evidenceRef: "agent-team:fanout:completed",
           },
         ],
+        nativeChoiceEvidenceTrusted: true,
+        nativeChoiceEvidence: trustedNativeChoiceEvidence,
       });
 
       assert.equal(report.status, "pass");
@@ -666,6 +731,11 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.equal(
         report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
         "pass",
+      );
+      assert.equal(report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.status, "pass");
+      assert.equal(
+        report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.liveRuntimeBoundary.status,
+        "native_choice_answered",
       );
       assert.deepEqual(
         report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingFamilies,
@@ -739,6 +809,82 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingFamilies.includes(
           "agent_subagent",
         ),
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("CLI clean process can accept trusted host invocation evidence for product pass", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-host-evidence-cli-"));
+    const hostInvocationEvidence = JSON.stringify([
+      {
+        family: "agent_subagent",
+        state: "invoked",
+        providerId: "codex-reviewer",
+        hostSurface: "spawn_agent",
+        evidenceKind: "spawn_agent_result",
+        evidenceRef: "agent:codex-reviewer:completed",
+      },
+      {
+        family: "skill",
+        state: "applied",
+        providerId: "meta-theory",
+        hostSurface: "skill",
+        evidenceKind: "skill_application",
+        evidenceRef: "skill:meta-theory:SKILL.md-read",
+      },
+      {
+        family: "agent_teams_playbook",
+        state: "invoked",
+        providerId: "agent-teams-playbook",
+        hostSurface: "spawn_agent",
+        evidenceKind: "agent_team_result",
+        evidenceRef: "agent-team:fanout:completed",
+      },
+    ]);
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          "scripts/run-meta-theory-governed-execution.mjs",
+          "--task",
+          productExperienceTask,
+          "--run-id",
+          "test-run-cli-host-evidence",
+          "--state-dir",
+          tempDir,
+          "--db",
+          path.join(tempDir, "runs.sqlite"),
+          "--invoke-capability-probes",
+          "--host-invocation-evidence",
+          hostInvocationEvidence,
+          "--host-invocation-evidence-trusted",
+          "--native-choice-evidence",
+          JSON.stringify(trustedNativeChoiceEvidence),
+          "--native-choice-evidence-trusted",
+          "--strict-exit-code",
+        ],
+        { cwd: process.cwd(), encoding: "utf8", timeout: 180_000 },
+      );
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const summary = JSON.parse(result.stdout);
+      assert.equal(summary.status, "pass");
+      assert.equal(summary.runId, "test-run-cli-host-evidence");
+
+      const artifact = JSON.parse(
+        await readFile(path.join(tempDir, "test-run-cli-host-evidence.json"), "utf8"),
+      );
+      assert.equal(artifact.status, "pass");
+      assert.equal(artifact.coreLoop.hostInvocationRequestPacket.status, "pass");
+      assert.equal(artifact.coreLoop.capabilityInvocationTruthPacket.status, "pass");
+      assert.equal(
+        artifact.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
+        "pass",
+      );
+      assert.equal(
+        artifact.coreLoop.productExperiencePacket.status,
+        "product_experience_pass",
       );
     } finally {
       await rm(tempDir, { recursive: true, force: true });

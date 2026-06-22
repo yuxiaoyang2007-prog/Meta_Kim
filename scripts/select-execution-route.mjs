@@ -43,16 +43,6 @@ function normalizeNativeChoiceEvidence(raw) {
       trusted: false,
     };
   }
-  if (raw === "completed" || raw === "confirmed") {
-    return {
-      ...base,
-      status: "completed",
-      surface: "request_user_input",
-      answerRecorded: true,
-      trusted: true,
-      completedStages: ["Critical"],
-    };
-  }
   try {
     const parsed = JSON.parse(raw);
     const evidenceItems = Array.isArray(parsed)
@@ -66,6 +56,10 @@ function normalizeNativeChoiceEvidence(raw) {
       .filter((item) => item?.status === "completed" || item?.state === "completed" || item?.answerRecorded === true)
       .map((item) => item.stage ?? item.choiceStage ?? item.checkpoint ?? parsed.stage ?? parsed.choiceStage ?? null)
       .filter(Boolean);
+    const evidenceRefs = evidenceItems
+      .filter((item) => item?.status === "completed" || item?.state === "completed" || item?.answerRecorded === true)
+      .map((item) => item.evidenceRef ?? item.answerRef ?? parsed.evidenceRef ?? parsed.answerRef ?? null)
+      .filter((ref) => typeof ref === "string" ? ref.trim().length > 0 : Boolean(ref));
     const answerRecorded =
       parsed.answerRecorded === true ||
       parsed.status === "completed" ||
@@ -79,10 +73,13 @@ function normalizeNativeChoiceEvidence(raw) {
       answerRecorded,
       trusted:
         answerRecorded &&
+        completedStages.length > 0 &&
+        evidenceRefs.length > 0 &&
         ["request_user_input", "AskUserQuestion", "native_choice"].includes(
           surface,
         ),
       evidenceRef: parsed.evidenceRef ?? parsed.answerRef ?? null,
+      evidenceRefs,
       completedStages,
     };
   } catch {
@@ -2078,5 +2075,173 @@ const output = {
   requiredUserChoiceIfAny: userChoiceNeeded ? decisionCard : null,
 };
 
-if (json) console.log(JSON.stringify(output, null, 2));
-else console.log(JSON.stringify(output, null, 2));
+function compactProvider(provider) {
+  if (!provider || typeof provider !== "object") return provider;
+  return Object.fromEntries(
+    [
+      ["id", provider.id],
+      ["type", provider.type ?? provider.providerType],
+      ["providerType", provider.providerType],
+      ["source", provider.source],
+      ["sourceRef", provider.sourceRef],
+      ["platformId", provider.platformId],
+      ["runtime", provider.runtime],
+      ["score", provider.score],
+      ["matchedTerms", provider.matchedTerms],
+      ["selected", provider.selected],
+      ["reason", provider.reason],
+      ["coverageStatus", provider.coverageStatus],
+    ].filter(([, value]) => value !== undefined)
+  );
+}
+
+function compactProviderCollection(value, limit = 20) {
+  if (Array.isArray(value)) return value.slice(0, limit).map(compactProvider);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, provider]) => [key, compactProvider(provider)])
+  );
+}
+
+function compactProviderMatch(providerMatch) {
+  if (!providerMatch || typeof providerMatch !== "object") return providerMatch;
+  return {
+    selectionPolicy: providerMatch.selectionPolicy,
+    candidateProviders: compactProviderCollection(providerMatch.candidateProviders ?? [], 12),
+    selectedProvider: compactProvider(providerMatch.selectedProvider),
+    whySelected: providerMatch.whySelected,
+    whyNotSelected: (providerMatch.whyNotSelected ?? [])
+      .slice(0, 12)
+      .map((item) => ({
+        id: item.id,
+        reason: item.reason,
+      })),
+  };
+}
+
+function compactLane(lane) {
+  if (!lane || typeof lane !== "object") return lane;
+  return {
+    ...lane,
+    capabilityProvider: compactProvider(lane.capabilityProvider),
+    capabilityBinding: lane.capabilityBinding
+      ? {
+          ...lane.capabilityBinding,
+          selectedProviders: compactProviderCollection(
+            lane.capabilityBinding.selectedProviders ?? {},
+          ),
+          candidatesByFamily: Object.fromEntries(
+            Object.entries(lane.capabilityBinding.candidatesByFamily ?? {}).map(
+              ([family, providers]) => [family, compactProviderCollection(providers, 12)],
+            ),
+          ),
+        }
+      : lane.capabilityBinding,
+    providerMatch: compactProviderMatch(lane.providerMatch),
+  };
+}
+
+function compactSubjectiveAmplification(amplification) {
+  if (!amplification || typeof amplification !== "object") return amplification;
+  return {
+    ...amplification,
+    lanes: (amplification.lanes ?? []).map(compactLane),
+    capabilityTeamBlueprint: amplification.capabilityTeamBlueprint
+      ? {
+          ...amplification.capabilityTeamBlueprint,
+          rows: (amplification.capabilityTeamBlueprint.rows ?? []).map((row) => ({
+            ...row,
+            selectedProvider: compactProvider(row.selectedProvider),
+          })),
+        }
+      : amplification.capabilityTeamBlueprint,
+  };
+}
+
+function compactRoute(route) {
+  if (!route || typeof route !== "object") return route;
+  return {
+    ...route,
+    selectedCapabilityProviders: compactProviderCollection(
+      route.selectedCapabilityProviders ?? {},
+    ),
+    subjectiveUiCapabilityAmplification: compactSubjectiveAmplification(
+      route.subjectiveUiCapabilityAmplification,
+    ),
+  };
+}
+
+function countPacketArray(packet, field) {
+  return Array.isArray(packet?.[field]) ? packet[field].length : 0;
+}
+
+function compactOwnerDiscoveryPacket(packet) {
+  if (!packet || typeof packet !== "object") return packet;
+  return {
+    discoveryPrinciple: packet.discoveryPrinciple,
+    autonomousCapabilityDiscovery: packet.autonomousCapabilityDiscovery,
+    searchOrder: packet.searchOrder,
+    ownerBindingOrder: packet.ownerBindingOrder,
+    governanceStages: packet.governanceStages,
+    evidenceRefs: (packet.evidenceRefs ?? []).slice(0, 80),
+    repoCanonicalAgents: compactProviderCollection(packet.repoCanonicalAgents ?? [], 20),
+    repoCanonicalSkillProviders: compactProviderCollection(
+      packet.repoCanonicalSkillProviders ?? [],
+      30,
+    ),
+    projectRuntimeCapabilityProviders: compactProviderCollection(
+      packet.projectRuntimeCapabilityProviders ?? [],
+      30,
+    ),
+    runtimeToolProviders: compactProviderCollection(packet.runtimeToolProviders ?? [], 20),
+    candidateExistingExecutionOwners: (
+      packet.candidateExistingExecutionOwners ?? []
+    ).slice(0, 80),
+    governanceStageOwners: packet.governanceStageOwners ?? [],
+    candidateReusableCapabilityProviders: compactProviderCollection(
+      packet.candidateReusableCapabilityProviders ?? [],
+      80,
+    ),
+    inventoryCounts: {
+      repoCanonicalAgents: countPacketArray(packet, "repoCanonicalAgents"),
+      projectRuntimeAgents: countPacketArray(packet, "projectRuntimeAgents"),
+      localGlobalAgents: countPacketArray(packet, "localGlobalAgents"),
+      repoCanonicalSkillProviders: countPacketArray(packet, "repoCanonicalSkillProviders"),
+      projectRuntimeSkillProviders: countPacketArray(packet, "projectRuntimeSkillProviders"),
+      localGlobalSkillProviders: countPacketArray(packet, "localGlobalSkillProviders"),
+      candidateReusableCapabilityProviders: countPacketArray(
+        packet,
+        "candidateReusableCapabilityProviders",
+      ),
+    },
+  };
+}
+
+function compactRouteOutput(raw) {
+  return {
+    ...raw,
+    ownerDiscoveryPacket: compactOwnerDiscoveryPacket(raw.ownerDiscoveryPacket),
+    candidateOwners: (raw.candidateOwners ?? []).slice(0, 80),
+    candidateWeapons: (raw.candidateWeapons ?? []).slice(0, 80),
+    candidateDependencies: (raw.candidateDependencies ?? []).slice(0, 80),
+    candidateDependencyProjects: (raw.candidateDependencyProjects ?? []).slice(0, 80),
+    candidateFoundationalCapabilities: compactProviderCollection(
+      raw.candidateFoundationalCapabilities ?? [],
+      80,
+    ),
+    rankedRoutes: (raw.rankedRoutes ?? []).slice(0, 8).map(compactRoute),
+    recommendedRoute: compactRoute(raw.recommendedRoute),
+    subjectiveUiCapabilityAmplification: compactSubjectiveAmplification(
+      raw.subjectiveUiCapabilityAmplification,
+    ),
+    rejectedRoutes: (raw.rejectedRoutes ?? []).slice(0, 16),
+  };
+}
+
+const printableOutput =
+  process.argv.includes("--runner-compact") || process.argv.includes("--compact-json")
+    ? compactRouteOutput(output)
+    : output;
+
+if (json) console.log(JSON.stringify(printableOutput, null, 2));
+else console.log(JSON.stringify(printableOutput, null, 2));

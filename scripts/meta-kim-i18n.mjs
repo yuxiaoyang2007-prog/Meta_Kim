@@ -1258,7 +1258,7 @@ const REPORT_STRINGS = {
       title: "Meta_Kim notice",
       stageProgress: "Stage progress",
       stageProgressDetail:
-        "Critical, Fetch, Thinking, Execution, and Review are being surfaced as compact progress.",
+        "Critical, Fetch, Thinking, Execution, Review, Meta-Review, Verification, and Evolution are surfaced as compact progress.",
       route: "Capability route",
       routeDetail: (count) =>
         `Interpreted the natural-language request and checked ${count} capability type(s).`,
@@ -1677,7 +1677,7 @@ const REPORT_STRINGS = {
       title: "Meta_Kim 对话提示",
       stageProgress: "阶段进度",
       stageProgressDetail:
-        "Critical、Fetch、Thinking、Execution、Review 会被压缩成用户能看懂的简短进度。",
+        "Critical、Fetch、Thinking、Execution、Review、Meta-Review、Verification、Evolution 会被压缩成用户能看懂的简短进度。",
       route: "能力路线",
       routeDetail: (count) =>
         `已把许愿式自然语言需求转成路线，并检查 ${count} 类能力。`,
@@ -2100,7 +2100,7 @@ const REPORT_STRINGS = {
       title: "Meta_Kim 通知",
       stageProgress: "ステージ進捗",
       stageProgressDetail:
-        "Critical、Fetch、Thinking、Execution、Review を、ユーザーが読める短い進捗として表示します。",
+        "Critical、Fetch、Thinking、Execution、Review、Meta-Review、Verification、Evolution を、ユーザーが読める短い進捗として表示します。",
       route: "能力ルート",
       routeDetail: (count) =>
         `願望に近い自然言語の依頼を解釈し、${count} 種類の能力を確認しました。`,
@@ -2521,7 +2521,7 @@ const REPORT_STRINGS = {
       title: "Meta_Kim 알림",
       stageProgress: "단계 진행",
       stageProgressDetail:
-        "Critical, Fetch, Thinking, Execution, Review 를 사용자가 읽을 수 있는 짧은 진행 상태로 표시합니다.",
+        "Critical, Fetch, Thinking, Execution, Review, Meta-Review, Verification, Evolution 를 사용자가 읽을 수 있는 짧은 진행 상태로 표시합니다.",
       route: "능력 경로",
       routeDetail: (count) =>
         `희망형 자연어 요청을 해석하고 ${count}개 능력 유형을 확인했습니다.`,
