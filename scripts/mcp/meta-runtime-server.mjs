@@ -252,7 +252,11 @@ server.registerTool(
   {
     description: "Return the definition of a single Meta_Kim agent.",
     inputSchema: {
-      agentId: z.string(),
+      agentId: z
+        .string()
+        .min(1)
+        .max(100)
+        .regex(/^[a-zA-Z0-9_-]+$/, "agentId must contain only alphanumeric/underscore/dash"),
       includePrompt: z.boolean().optional(),
     },
   },

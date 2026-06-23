@@ -751,6 +751,25 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(runArtifact.visibleMetaTheorySurfacePacket.agentTeamsPlaybook.status, "pass");
       assert.equal(runArtifact.visibleMetaTheorySurfacePacket.peerAgentMesh.status, "pass");
       assert.equal(runArtifact.visibleMetaTheorySurfacePacket.langGraph.status, "pass");
+      assert.equal(runArtifact.langGraphRunPacket.runtimeDependency, "none");
+      assert.equal(runArtifact.langGraphRunPacket.runtimeExecutionEvidence, "not_claimed");
+      assert.match(
+        runArtifact.langGraphRunPacket.runtimeBoundary,
+        /does not claim execution by a LangGraph runtime/
+      );
+      assert.equal(
+        runArtifact.langGraphRunPacket.checkpoint.count,
+        runArtifact.langGraphRunPacket.nodes.length
+      );
+      assert.equal(runArtifact.langGraphRunPacket.replay.supported, true);
+      assert.match(
+        runArtifact.visibleMetaTheorySurfacePacket.langGraph.architectureStyle,
+        /without adding a LangGraph runtime dependency/
+      );
+      assert.equal(
+        runArtifact.visibleMetaTheorySurfacePacket.langGraph.runtimeExecutionEvidence,
+        "not_claimed"
+      );
       assert.deepEqual(
         runArtifact.productExperiencePacket.goals.map((goal) => goal.id),
         ["P-102", "P-103", "P-104"]
@@ -772,8 +791,23 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(runArtifact.productExperiencePacket.generalizationGate.status, "pass");
       assert.equal(runArtifact.productExperiencePacket.capabilityInvocationTruthGate.status, "partial");
       assert.equal(runArtifact.productExperiencePacket.agentTeamsPlaybookGate.status, "pass");
+      assert.equal(runArtifact.productExperiencePacket.automationDecisionBoundary.status, "pass");
+      assert.equal(
+        runArtifact.productExperiencePacket.automationDecisionBoundary.decisionAuthority,
+        "human_required"
+      );
+      assert.deepEqual(
+        runArtifact.productExperiencePacket.automationDecisionBoundary.humanJudgmentStages,
+        ["Critical", "Fetch", "Thinking", "Review"]
+      );
+      assert.equal(
+        runArtifact.userPerceptionPacket.humanDecisionControl.automationRole,
+        "assistive_only"
+      );
       const markdown = await readFile(path.join(tempDir, "natural-user-task.zh-CN.md"), "utf8");
       assert.match(markdown, /## Meta-Theory 可见编排面/);
+      assert.match(markdown, /## 自动化与人工决策边界/);
+      assert.match(markdown, /Automation assists; humans decide\./);
       assert.match(markdown, /Dynamic Workflow/);
       assert.match(markdown, /能力发现/);
       assert.match(markdown, /Agent Teams Playbook/);
@@ -998,6 +1032,53 @@ describe("34 — Meta-theory run deliverables", () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  test("CLI temp-output keeps governed run artifacts outside the project state tree", async () => {
+    const runId = `temp-output-conversation-notice-${process.pid}`;
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/run-meta-theory-governed-execution.mjs",
+        "--task",
+        naturalUserTask,
+        "--run-id",
+        runId,
+        "--temp-output",
+      ],
+      { cwd: process.cwd(), encoding: "utf8" }
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.runId, runId);
+    assert.equal(summary.temporaryOutput.root.includes("meta-kim-governed-execution-"), true);
+    assert.equal(summary.report, `<external-temp>/${runId}.zh-CN.md`);
+
+    const artifact = JSON.parse(
+      await readFile(path.join(summary.temporaryOutput.artifactDir, `${runId}.json`), "utf8")
+    );
+    assert.equal(artifact.runId, runId);
+    const validation = spawnSync(
+      process.execPath,
+      [
+        "scripts/validate-run-artifact.mjs",
+        path.join(summary.temporaryOutput.artifactDir, `${runId}.json`),
+      ],
+      { cwd: process.cwd(), encoding: "utf8" }
+    );
+    assert.equal(validation.status, 0, validation.stderr || validation.stdout);
+
+    const defaultArtifactPath = path.join(
+      process.cwd(),
+      ".meta-kim",
+      "state",
+      "default",
+      "governed-executions",
+      `${runId}.json`
+    );
+    await assert.rejects(stat(defaultArtifactPath));
+    await rm(summary.temporaryOutput.root, { recursive: true, force: true });
   });
 
   test("CLI writes a manifest for the latest run", async () => {

@@ -168,6 +168,26 @@ describe("47 - Meta-theory entry classifier", () => {
     assert.equal(payload.subagentAuthorizationSource, "native_choice_surface_required");
   });
 
+  test("CLI temp-output flag does not consume a positional task", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/run-meta-theory-governed-execution.mjs",
+        "--classify-entry",
+        "--temp-output",
+        "帮我做个小红书营销自动发布器",
+      ],
+      { cwd: process.cwd(), encoding: "utf8" },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.governedEntry, true);
+    assert.equal(payload.path, "standard_path");
+    assert.equal(payload.triggerReason, "natural_language_product_build");
+    assert.notEqual(payload.triggerReason, "empty_input");
+  });
+
   test("user-facing docs present natural language as the normal entry path", async () => {
     const readme = await readFile("README.md");
     const readmeZh = await readFile("README.zh-CN.md");

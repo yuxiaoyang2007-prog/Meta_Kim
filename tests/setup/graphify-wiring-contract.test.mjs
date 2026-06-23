@@ -58,6 +58,19 @@ describe("graphify idempotent wiring (contract)", () => {
     assert.match(src, /case "rebuild":/);
   });
 
+  test("graphify-cli.mjs forwards query/path/explain to the graphify CLI", () => {
+    const src = readFileSync(path.join(root, "scripts/graphify-cli.mjs"), "utf8");
+
+    assert.match(src, /function runGraphifyPassthrough\(\)/);
+    assert.match(src, /const graphifyArgs = process\.argv\.slice\(2\)/);
+    assert.match(src, /spawnSync\("graphify", graphifyArgs/);
+    assert.match(src, /direct\.status \?\? 1/);
+    assert.match(src, /\["-m", "graphify", \.\.\.graphifyArgs\]/);
+    assert.match(src, /case "query":/);
+    assert.match(src, /case "path":/);
+    assert.match(src, /case "explain":/);
+  });
+
   test("graphify-cli.mjs can forward --force for intentional smaller rebuilds", () => {
     const src = readFileSync(
       path.join(root, "scripts/graphify-cli.mjs"),

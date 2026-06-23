@@ -163,6 +163,29 @@ async function pathExists(targetPath) {
   }
 }
 
+async function backupExistingPath(targetPath, { family, label }) {
+  assertHomeBound(targetPath);
+  if (!(await pathExists(targetPath))) return null;
+
+  const backupDir = path.join(
+    path.dirname(targetPath),
+    `.meta-kim-${family}-backup`,
+    legacyHookBackupStamp,
+  );
+  assertHomeBound(backupDir);
+  await fs.mkdir(backupDir, { recursive: true });
+
+  const backupPath = path.join(backupDir, path.basename(targetPath));
+  assertHomeBound(backupPath);
+  await fs.cp(targetPath, backupPath, {
+    recursive: true,
+    force: true,
+    errorOnExist: false,
+  });
+  console.log(`Backed up previous ${label} to ${backupPath}`);
+  return backupPath;
+}
+
 async function resolveTargets() {
   const targetContext = await resolveTargetContext(cliArgs);
   runtimeHomes = {
@@ -464,10 +487,10 @@ async function ensureCodexGlobalConfigChoiceSurface() {
   }
 
   if (prev) {
-    const bak = `${configPath}.meta-kim.bak`;
-    assertHomeBound(bak);
-    await fs.copyFile(configPath, bak);
-    console.log(`Backed up previous Codex config to ${bak}`);
+    await backupExistingPath(configPath, {
+      family: "settings",
+      label: "Codex config",
+    });
   }
 
   await fs.writeFile(configPath, next, "utf8");
@@ -536,6 +559,10 @@ async function copyCanonicalHooksToGlobal() {
   const dest = globalMetaKimHooksDir();
   assertHomeBound(dest);
   await fs.mkdir(path.dirname(dest), { recursive: true });
+  await backupExistingPath(dest, {
+    family: "hook-package",
+    label: "Claude Code global hook package",
+  });
   await fs.rm(dest, { recursive: true, force: true });
   await fs.mkdir(dest, { recursive: true });
   for (const fileName of GLOBAL_HOOK_PACKAGE_FILES) {
@@ -594,6 +621,10 @@ async function copyCanonicalHooksToCodexGlobal() {
   const dest = codexGlobalMetaKimHooksDir();
   assertHomeBound(dest);
   await fs.mkdir(path.dirname(dest), { recursive: true });
+  await backupExistingPath(dest, {
+    family: "hook-package",
+    label: "Codex global hook package",
+  });
   await fs.rm(dest, { recursive: true, force: true });
   await fs.mkdir(dest, { recursive: true });
   for (const fileName of GLOBAL_HOOK_PACKAGE_FILES) {
@@ -697,10 +728,10 @@ async function syncClaudeGlobalSettingsHooks() {
   }
 
   if (prev !== null) {
-    const bak = `${settingsPath}.meta-kim.bak`;
-    assertHomeBound(bak);
-    await fs.copyFile(settingsPath, bak);
-    console.log(`Backed up previous settings to ${bak}`);
+    await backupExistingPath(settingsPath, {
+      family: "settings",
+      label: "Claude Code settings",
+    });
   }
 
   await fs.writeFile(settingsPath, out, "utf8");
@@ -847,10 +878,10 @@ async function syncCodexGlobalHooksJson() {
 
   await fs.mkdir(path.dirname(hooksJsonPath), { recursive: true });
   if (prev !== null) {
-    const bak = `${hooksJsonPath}.meta-kim.bak`;
-    assertHomeBound(bak);
-    await fs.copyFile(hooksJsonPath, bak);
-    console.log(`Backed up previous Codex hooks.json to ${bak}`);
+    await backupExistingPath(hooksJsonPath, {
+      family: "settings",
+      label: "Codex hooks.json",
+    });
   }
 
   await fs.writeFile(hooksJsonPath, out, "utf8");

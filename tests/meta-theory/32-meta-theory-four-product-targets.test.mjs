@@ -200,6 +200,27 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         report.defaultRuntimePath.productExperiencePacket.agentTeamsPlaybookGate.status,
         "pass"
       );
+      assert.equal(
+        report.defaultRuntimePath.productExperiencePacket.automationDecisionBoundary.status,
+        "pass"
+      );
+      assert.equal(
+        report.defaultRuntimePath.productExperiencePacket.automationDecisionBoundary.decisionAuthority,
+        "human_required"
+      );
+      assert.deepEqual(
+        report.defaultRuntimePath.productExperiencePacket.automationDecisionBoundary.humanJudgmentStages,
+        ["Critical", "Fetch", "Thinking", "Review"]
+      );
+      assert.ok(
+        report.defaultRuntimePath.productExperiencePacket.automationDecisionBoundary.automationForbidden.includes(
+          "route_selection_without_human_evidence"
+        )
+      );
+      assert.equal(
+        report.defaultRuntimePath.userPerceptionPacket.humanDecisionControl.automationRole,
+        "assistive_only"
+      );
       assert.equal(report.coreLoop.executionResult.actualWorkerExecution, true);
       assert.equal(report.coreLoop.traceEvalControlPlane.coverage.coverageStatus, "pass");
       assert.equal(report.coreLoop.agUiStageEvents.events.every((event) => event.packetDumpPrevented === true), true);
@@ -496,12 +517,22 @@ describe("32 — Meta-theory three product goals and support gates", () => {
     );
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const output = JSON.parse(result.stdout);
-    assert.equal(output.status, "partial");
+    assert.equal(output.status, "pass");
     assert.equal(output.validationStatus, "pass");
-    assert.equal(output.evidenceTier, "partial");
-    assert.deepEqual(output.goals.map((goal) => goal.id), ["P-102", "P-103", "P-104"]);
-    assert.deepEqual(output.supportGates.map((gate) => gate.id), ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"]);
-    assert.equal(output.nativeChoiceSurface, "needs-host-invocation");
+    assert.equal(output.evidenceMode, "default-boundary-plus-trusted-self-test");
+    assert.equal(output.noPopupDuringSelfTest, true);
+    assert.equal(output.defaultBoundaryRun.status, "partial");
+    assert.equal(output.defaultBoundaryRun.evidenceTier, "partial");
+    assert.deepEqual(output.defaultBoundaryRun.goals.map((goal) => goal.id), ["P-102", "P-103", "P-104"]);
+    assert.deepEqual(output.defaultBoundaryRun.supportGates.map((gate) => gate.id), ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"]);
+    assert.equal(output.defaultBoundaryRun.nativeChoiceSurface, "needs-host-invocation");
+    assert.equal(output.selfTestEvidenceRun.status, "pass");
+    assert.equal(output.selfTestEvidenceRun.productExperience, "product_experience_pass");
+    assert.equal(output.selfTestEvidenceRun.nativeChoiceSurface, "native_choice_answered");
+    assert.equal(
+      output.selfTestEvidenceRun.capabilityInvocationTruth.realInvocationCoverage.status,
+      "pass",
+    );
     assert.equal(output.repeatFailureDesign, "bottom_design_failure_return_to_critical_fetch_thinking");
     assert.equal(output.generalizationGate, "pass");
     assert.ok(output.langGraph.nodes >= 8);
@@ -512,14 +543,20 @@ describe("32 — Meta-theory three product goals and support gates", () => {
     assert.equal(output.dynamicWorkflow.tools, true);
     assert.equal(output.dynamicWorkflow.hooks, true);
     assert.ok(output.peers > 0);
-    assert.equal(output.capabilityInvocationTruth.status, "partial");
-    assert.equal(output.capabilityInvocationTruth.states.invoked >= 1, true);
-    assert.equal(output.capabilityInvocationTruth.appVisibleSubagentState, "not_required");
-    assert.equal(output.capabilityInvocationTruth.callableInvocationCoverage.status, "pass");
-    assert.equal(output.capabilityInvocationTruth.agentTeamsPlaybookState, "selected_not_invoked");
+    assert.equal(output.defaultBoundaryRun.capabilityInvocationTruth.status, "partial");
+    assert.equal(output.defaultBoundaryRun.capabilityInvocationTruth.states.invoked >= 1, true);
+    assert.equal(output.defaultBoundaryRun.capabilityInvocationTruth.appVisibleSubagentState, "not_required");
+    assert.equal(
+      output.defaultBoundaryRun.capabilityInvocationTruth.callableInvocationCoverage.status,
+      "pass",
+    );
+    assert.equal(
+      output.defaultBoundaryRun.capabilityInvocationTruth.agentTeamsPlaybookState,
+      "selected_not_invoked",
+    );
     assert.equal(output.agentTeamsPlaybook.status, "pass");
     assert.equal(output.agentTeamsPlaybook.selected, true);
-    assert.equal(output.visibleMetaTheorySurface, "partial");
+    assert.equal(output.defaultBoundaryRun.visibleMetaTheorySurface, "partial");
     assert.ok(output.userPerceptionCues >= 6);
   });
 
@@ -740,6 +777,14 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.deepEqual(
         report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingFamilies,
         [],
+      );
+      assert.equal(
+        report.coreLoop.productExperiencePacket.automationDecisionBoundary.status,
+        "pass",
+      );
+      assert.equal(
+        report.coreLoop.productExperiencePacket.automationDecisionBoundary.decisionAuthority,
+        "human_required",
       );
       assert.equal(report.coreLoop.productExperiencePacket.status, "product_experience_pass");
     } finally {

@@ -229,6 +229,8 @@ flowchart LR
 
 Meta_Kim 不只是 8 阶段。它会先识别治理触发条件，再查平台能力、OS 兼容、依赖项目能力，接着分离 owner 与 weapon，根据 Win/Mac/工具端过滤可执行路径，只在关键分叉点给用户选择项，自动执行确定性部分，再验证用户目标是否真的落地，最后把经验写回供下次复用。只作为参考的项目会被吸收成 Meta_Kim 自己的数据，不会被悄悄升级成依赖；见 `config/governance/decision-pattern-catalog.json`。
 
+自动化是辅助，不是决策者。它可以收集证据、草拟候选项、跑确定性检查、暴露阻塞和生成可读状态，但 Critical、Fetch、Thinking、Review 中会改变路线的判断必须保留为人的决策点。已选择的能力、hook 匹配、报告或 validator pass，不能被改口成用户接受或原生 runtime 证据。
+
 **Thinking — 定义边界、owner、顺序、交付物、风险和停机条件**
 
 把任务拆成子任务，给每个子任务指定 owner，明确依赖关系和并行分组。这一步产出 `dispatchBoard`（分派看板）——谁干什么、哪些可以并行跑、最终谁负责合并。同时要探索至少 2 条方案路径，不能只走一条路。
@@ -724,14 +726,16 @@ Meta_Kim 的记忆不是单一的。它有三层，各有分工，共同保障 a
   - **Codex**：`~/.codex/hooks.json` 自动写入 SessionStart、UserPromptSubmit、Stop 桥接，调用 `meta-kim-memory-save.mjs`，覆盖开始 / 提示提交 / 结束。
   - **OpenClaw**：`~/.openclaw/hooks/mcp-memory-service` 自动安装 managed hook，覆盖 `command:new`、`command:reset`、`session:compact:after`、`command:stop`。
   - **Cursor**：`~/.cursor/hooks.json` 自动写入 `beforeSubmitPrompt` 和 `stop` 桥接，复用共享记忆 hook。
-- **启动服务器**：`memory server --http`（macOS/Linux 需设置 `MCP_ALLOW_ANONYMOUS_ACCESS=true`；Windows PowerShell 使用 `$env:MCP_ALLOW_ANONYMOUS_ACCESS="true"`），然后访问 `http://localhost:8000`。
-- **端口**：服务器和 Meta_Kim hooks 统一使用 `http://localhost:8000`。
+- **启动服务器**：`memory server --http`（macOS/Linux 需设置 `MCP_ALLOW_ANONYMOUS_ACCESS=true`；Windows PowerShell 使用 `$env:MCP_ALLOW_ANONYMOUS_ACCESS="true"`），然后检查 `http://127.0.0.1:8000/api/health`。
+- **端口**：health check 示例使用 `http://127.0.0.1:8000`；随包 hook 默认使用 `http://localhost:8000`，除非通过 `MCP_MEMORY_URL` 或运行时 memory 配置覆盖端点。两个 loopback 地址都被允许。
 - **Hook**：Claude Code、Codex、Cursor、OpenClaw 都会自动注册；各工具端使用自己的 hook 格式，但共享同一个 MCP Memory HTTP 端点。
 - **MCP 注册与写入区别**：`.mcp.json` 只注册 MCP Memory server（`memory server`）供客户端访问；自动写入会话记忆由 lifecycle hooks 单独完成：Claude Code 使用 `stop-memory-save.mjs`，Codex/Cursor 使用 `meta-kim-memory-save.mjs`，OpenClaw 使用 managed `mcp-memory-service` hook。
+- **证据边界**：`.mcp.json` 已配置、hook 已安装、HTTP health 成功、写入成功、读取成功、跨会话召回成功是不同证据层。不能只凭 setup 或 health check 就宣称跨会话记忆已经真实跑通。
 - **查询**：`npm run meta:query:runs -- --owner <agent>`——按 agent 查找历史 run，或 `npm run meta:index:runs -- <artifact>` 手动索引 run 产物
 - **故障排除**：
   - **Windows 上 Python hook 失败**：如果 SessionStart hook 返回退出码 49 或无输出，可能是 Python 命令指向 Windows Store 占位符。运行 `node scripts/install-mcp-memory-hooks.mjs` 可自动检测并修复。安装程序现在会跳过 WindowsApps 占位符，优先使用 `LOCALAPPDATA\Programs\Python*` 下的真实 Python。使用 `--force` 参数可强制重新注册。
   - **检查安装状态**：运行 `node scripts/install-mcp-memory-hooks.mjs --check` 验证 hook 状态和 Python 路径有效性。
+  - **检查 HTTP health**：启动后运行 `curl -fsS --max-time 3 http://127.0.0.1:8000/api/health`。`npm run meta:test:mcp` 检查的是 Meta_Kim 自己的 runtime MCP server，不等于外部 MCP Memory HTTP 服务连通。
   - **手动验证**：用 `python --version` 或检测到的路径（如 `"C:/Users/你的用户名/AppData/Local/Programs/Python/Python311/python.exe" --version`）测试 Python 命令。
 
 ### 三层协同

@@ -1760,6 +1760,47 @@ describe("Part F2: choice surface runtime gate", async () => {
     assert.doesNotMatch(result.stdout, /permissionDecision/);
   });
 
+  test("Verification stage allows read-only inspection even when choice evidence is incomplete", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      currentStage: "verification",
+    };
+
+    const result = runEnforceHook(state, {
+      tool_name: "Bash",
+      tool_input: {
+        command: "git status --short",
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.doesNotMatch(result.stdout, /permissionDecision/);
+  });
+
+  test("Verification stage still denies mutation when choice evidence is incomplete", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      currentStage: "verification",
+    };
+
+    const result = runEnforceHook(state, {
+      tool_name: "Bash",
+      tool_input: {
+        command: "npm install left-pad",
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /permissionDecision/);
+    assert.match(result.stdout, /Execution cannot start before Fetch evidence/);
+  });
+
   test("Critical stage setup does not force meta-warden dispatch", () => {
     assert.deepEqual(STAGE_META_AGENT_MAP.critical.required, []);
     assert.doesNotMatch(STAGE_META_AGENT_MAP.critical.label, /Warden/i);

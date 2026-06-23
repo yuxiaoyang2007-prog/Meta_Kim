@@ -3,6 +3,7 @@
 import { existsSync, readFileSync, promises as fs } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -1822,6 +1823,30 @@ function normalizeRouteBindingType(type) {
   return normalized[type] ?? type ?? "capability_index_query";
 }
 
+function businessLaneCapabilityNeed(packet, laneId) {
+  const candidates = [];
+  for (const value of [
+    packet.capabilityNeed,
+    packet.capabilityRequirements,
+    packet.coreProblem,
+  ]) {
+    if (Array.isArray(value)) {
+      candidates.push(
+        value
+          .map((item) => String(item ?? "").trim())
+          .filter(Boolean)
+          .join("; "),
+      );
+    } else {
+      candidates.push(String(value ?? "").trim());
+    }
+  }
+  return (
+    candidates.find(Boolean) ??
+    `${laneId} capability-first route execution and verification`
+  );
+}
+
 function buildBusinessFlowBlueprintPacket({ businessPhasePlanPacket, orchestrationReport = null }) {
   const triggerCoveragePass = businessPhasePlanPacket.triggerStandard?.coveragePass === true;
   const routeWorkerTasks = orchestrationReport?.workerTaskPackets ?? [];
@@ -1879,11 +1904,7 @@ function buildBusinessFlowBlueprintPacket({ businessPhasePlanPacket, orchestrati
       packet.providerMatch?.selectedProvider ??
       null;
     const selectedBindingType = normalizeRouteBindingType(selectedProvider?.type);
-    const capabilityNeed = Array.isArray(packet.capabilityNeed)
-      ? packet.capabilityNeed.join("; ")
-      : Array.isArray(packet.capabilityRequirements)
-        ? packet.capabilityRequirements.join("; ")
-        : String(packet.capabilityNeed ?? packet.capabilityRequirements ?? packet.coreProblem ?? laneId);
+    const capabilityNeed = businessLaneCapabilityNeed(packet, laneId);
     return {
       laneId,
       businessLane: laneId,
@@ -2173,6 +2194,11 @@ function buildUserExperienceNotice({
     {
       label: labels.cardVisibleSummary.signalLabel,
       detail: buildUserFacingCardSummary(cardPlanPacket, labels).dealtLine,
+    },
+    {
+      label: "谁做决策",
+      detail:
+        "自动化只收集证据、草拟选项、运行确定性检查并提示风险；Critical / Fetch / Thinking / Review 的判断权保留给人。",
     },
     labels.userExperienceNotice.signals.verification(runtimeEvidence.status),
   ];
@@ -2468,6 +2494,29 @@ function buildUserReadableRunReport({
     ),
     `| ${labels.userExperienceNotice.internalOnly} | ${labels.userExperienceNotice.internalOnlySummary} |`,
     "",
+    "## 自动化与人工决策边界",
+    "",
+    `- 状态: ${productExperiencePacket?.automationDecisionBoundary?.status ?? "missing"}`,
+    `- 原则: ${productExperiencePacket?.automationDecisionBoundary?.principle ?? "Automation assists; humans decide."}`,
+    `- 决策权: ${productExperiencePacket?.automationDecisionBoundary?.decisionAuthority ?? "missing"}`,
+    `- 人工判断阶段: ${(productExperiencePacket?.automationDecisionBoundary?.humanJudgmentStages ?? []).join(" -> ")}`,
+    `- 自动化角色: ${productExperiencePacket?.automationDecisionBoundary?.automationRole ?? "missing"}`,
+    "",
+    "| 自动化可以做 | 自动化不能做 |",
+    "|---|---|",
+    ...Array.from({
+      length: Math.max(
+        productExperiencePacket?.automationDecisionBoundary?.automationAllowed?.length ?? 0,
+        productExperiencePacket?.automationDecisionBoundary?.automationForbidden?.length ?? 0
+      ),
+    }).map((_, index) => {
+      const allowed =
+        productExperiencePacket?.automationDecisionBoundary?.automationAllowed?.[index] ?? "";
+      const forbidden =
+        productExperiencePacket?.automationDecisionBoundary?.automationForbidden?.[index] ?? "";
+      return `| ${String(allowed).replaceAll("|", "\\|")} | ${String(forbidden).replaceAll("|", "\\|")} |`;
+    }),
+    "",
     "## Meta-Theory 可见编排面",
     "",
     `- 状态: ${visibleMetaTheorySurfacePacket?.status ?? "missing"}`,
@@ -2747,6 +2796,7 @@ function buildRunReportPanelContract({
       productExperiencePacket?.status
     ) &&
     productExperiencePacket?.noOverclaimGate?.status === "pass" &&
+    productExperiencePacket?.automationDecisionBoundary?.status === "pass" &&
     visibleSurfaceAllowed &&
     capabilityInvocationTruthAllowed &&
     runtimeRows.every((row) =>
@@ -2809,6 +2859,8 @@ function buildRunReportPanelContract({
         productExperiencePacket?.capabilityInvocationTruthGate ?? null,
       agentTeamsPlaybookGate:
         productExperiencePacket?.agentTeamsPlaybookGate ?? null,
+      automationDecisionBoundary:
+        productExperiencePacket?.automationDecisionBoundary ?? null,
     },
     visibleMetaTheorySurface: {
       status: visibleMetaTheorySurfacePacket?.status ?? "missing",
@@ -5631,6 +5683,12 @@ function buildUserPerceptionPacket({
       example:
         "报告必须直接展示编排、Dynamic Workflow、能力发现、真实调用状态、Peer Agent Mesh 和 LangGraph-style 控制图。",
     },
+    {
+      cue: "谁做决策",
+      evidenceRef: "userPerceptionPacket.humanDecisionControl",
+      example:
+        "自动化只能整理证据、草拟选项和跑确定性验证；Critical、Fetch、Thinking、Review 的判断权留给人。",
+    },
   ];
   const surfaces = [
     {
@@ -5673,6 +5731,32 @@ function buildUserPerceptionPacket({
     surfaces,
     plainLanguageCues: cues,
     stageNames,
+    humanDecisionControl: {
+      status: "pass",
+      decisionAuthority: "human_required",
+      humanJudgmentStages: ["Critical", "Fetch", "Thinking", "Review"],
+      automationRole: "assistive_only",
+      automationAllowed: [
+        "collect evidence",
+        "draft candidate options",
+        "run deterministic validation",
+        "surface risk and blockers",
+        "prepare user-visible status summaries",
+      ],
+      automationForbidden: [
+        "choose branch-changing route without human evidence",
+        "approve accepted risk",
+        "claim public-ready",
+        "turn selected_not_invoked into invoked",
+        "replace native choice evidence with a report or hook warning",
+      ],
+      evidenceRefs: [
+        "coreLoop.cardPlanPacket",
+        "coreLoop.dynamicWorkflowDecisionRecord",
+        "coreLoop.capabilityInvocationTruthPacket",
+        "coreLoop.productExperiencePacket.automationDecisionBoundary",
+      ],
+    },
     productExperienceGoals,
     antiPacketDump: {
       internalOnlySignals: userExperienceNotice?.internalOnlySignals ?? [],
@@ -5931,6 +6015,60 @@ function buildAgentTeamsPlaybookGate({ agentTeamsPlaybookPacket }) {
   };
 }
 
+function buildAutomationDecisionBoundary({ userPerceptionPacket, capabilityInvocationTruthPacket }) {
+  const humanJudgmentStages = ["Critical", "Fetch", "Thinking", "Review"];
+  const automationAllowed = [
+    "evidence_collection",
+    "candidate_option_drafting",
+    "deterministic_validation",
+    "risk_and_blocker_surfacing",
+    "user_visible_status_summary",
+  ];
+  const automationForbidden = [
+    "route_selection_without_human_evidence",
+    "acceptance_or_risk_approval",
+    "public_ready_claim_without_user_goal_done",
+    "native_choice_evidence_substitution",
+    "selected_not_invoked_relabel",
+    "review_judgment_replacement",
+  ];
+  const humanDecisionControl = userPerceptionPacket?.humanDecisionControl ?? {};
+  const truthAssertions = capabilityInvocationTruthPacket?.truthAssertions ?? {};
+  const status =
+    humanDecisionControl.decisionAuthority === "human_required" &&
+    humanJudgmentStages.every((stage) =>
+      (humanDecisionControl.humanJudgmentStages ?? []).includes(stage)
+    ) &&
+    truthAssertions.selectedIsNotInvoked === true &&
+    truthAssertions.configuredIsNotInvoked === true &&
+    truthAssertions.hostVisibleIsNotInvoked === true
+      ? "pass"
+      : "partial";
+  return {
+    schemaVersion: "automation-decision-boundary-v0.1",
+    status,
+    evidenceKind: "product_support_boundary",
+    principle: "Automation assists; humans decide.",
+    decisionAuthority: "human_required",
+    humanJudgmentStages,
+    automationRole: "assistive_only",
+    automationAllowed,
+    automationForbidden,
+    userVisibleRequirement:
+      "Readable reports and conversation notices must show where automation stops and where human judgment is required.",
+    evidenceRefs: [
+      "coreLoop.userPerceptionPacket.humanDecisionControl",
+      "coreLoop.capabilityInvocationTruthPacket.truthAssertions",
+      "coreLoop.nativeChoiceSurfaceGate",
+      "canonical/skills/meta-theory/references/runtime-codex.md",
+    ],
+    passIf:
+      "Automation only prepares evidence, options, deterministic checks, and user-visible summaries while Critical, Fetch, Thinking, and Review decisions remain human-governed.",
+    failIf:
+      "Automation selects a branch-changing route, approves risk, claims public-ready, replaces native choice evidence, or relabels selected/configured/visible capability states as invoked.",
+  };
+}
+
 function buildProductExperiencePacket({
   goalContractPacket,
   langGraphRunPacket,
@@ -6030,6 +6168,10 @@ function buildProductExperiencePacket({
     buildCapabilityInvocationTruthGate({ capabilityInvocationTruthPacket }),
     buildAgentTeamsPlaybookGate({ agentTeamsPlaybookPacket }),
   ];
+  const automationDecisionBoundary = buildAutomationDecisionBoundary({
+    userPerceptionPacket,
+    capabilityInvocationTruthPacket,
+  });
   const noOverclaimGate = {
     status: "pass",
     forbiddenAsProductPass: [
@@ -6047,11 +6189,13 @@ function buildProductExperiencePacket({
       "hook_file_or_match_as_triggered_hook",
       "run_scoped_worker_as_live_subagent",
       "agent_teams_playbook_selected_as_live_agent_team",
+      "automation_assistance_as_human_decision",
     ],
     acceptedEvidenceTier: "product_experience_pass",
   };
   const status = goals.every((goal) => goal.status === "pass") &&
     supportGates.every((gate) => gate.status === "pass") &&
+    automationDecisionBoundary.status === "pass" &&
     noOverclaimGate.status === "pass"
     ? "product_experience_pass"
     : "partial";
@@ -6071,6 +6215,7 @@ function buildProductExperiencePacket({
     generalizationGate: supportGates.find((gate) => gate.id === "P-108"),
     capabilityInvocationTruthGate: supportGates.find((gate) => gate.id === "P-109"),
     agentTeamsPlaybookGate: supportGates.find((gate) => gate.id === "P-110"),
+    automationDecisionBoundary,
     noOverclaimGate,
     requiredCompletionEvidence: [
       "goalContractPacket.status=pass",
@@ -6082,6 +6227,7 @@ function buildProductExperiencePacket({
       "capabilityInvocationTruthPacket.callableInvocationCoverage.status=pass",
       "visibleMetaTheorySurfacePacket.status=pass",
       "userPerceptionPacket.status=pass",
+      "automationDecisionBoundary.status=pass",
       "productExperiencePacket.supportGates[].status=pass",
     ],
   };
@@ -8760,6 +8906,10 @@ function argValue(name, fallback = null) {
   return index >= 0 ? process.argv[index + 1] : fallback;
 }
 
+async function createTemporaryOutputRoot() {
+  return fs.mkdtemp(path.join(os.tmpdir(), "meta-kim-governed-execution-"));
+}
+
 function truthyEnvFlag(value) {
   return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
 }
@@ -8827,8 +8977,18 @@ async function main() {
   const stateDirArg = argValue("--state-dir", null);
   const artifactDirArg = argValue("--artifact-dir", null);
   const dbArg = argValue("--db", null);
-  const stateDir = path.resolve(stateDirArg ?? (taskArg ? DEFAULT_STATE_DIR : positional[2] ?? DEFAULT_STATE_DIR));
-  const artifactDir = artifactDirArg ? path.resolve(artifactDirArg) : null;
+  const useTemporaryOutput = process.argv.includes("--temp-output");
+  const temporaryOutputRoot = useTemporaryOutput ? await createTemporaryOutputRoot() : null;
+  const stateDir = path.resolve(
+    temporaryOutputRoot
+      ? path.join(temporaryOutputRoot, "state")
+      : stateDirArg ?? (taskArg ? DEFAULT_STATE_DIR : positional[2] ?? DEFAULT_STATE_DIR)
+  );
+  const artifactDir = temporaryOutputRoot
+    ? path.join(temporaryOutputRoot, "artifacts")
+    : artifactDirArg
+      ? path.resolve(artifactDirArg)
+      : null;
   if (process.argv.includes("--classify-entry")) {
     const task = taskArg ?? positionalTask("");
     process.stdout.write(`${JSON.stringify(classifyMetaTheoryEntry(task), null, 2)}\n`);
@@ -8863,7 +9023,11 @@ async function main() {
     runId: runIdArg ?? (taskArg ? null : positional[1] ?? null),
     stateDir,
     artifactDir,
-    dbPath: path.resolve(dbArg ?? (taskArg ? DEFAULT_DB_PATH : positional[3] ?? DEFAULT_DB_PATH)),
+    dbPath: path.resolve(
+      temporaryOutputRoot
+        ? path.join(temporaryOutputRoot, "runs.sqlite")
+        : dbArg ?? (taskArg ? DEFAULT_DB_PATH : positional[3] ?? DEFAULT_DB_PATH)
+    ),
     approvalEvidence: argValue("--approval-evidence", null),
     approvalPacket,
     applyWriteback: process.argv.includes("--apply-writeback"),
@@ -8904,6 +9068,14 @@ async function main() {
         runtimeProjection: report.runtimeProjectionEvidence.status,
         writeback: report.wardenWritebackFlow.status,
         report: relative(report.paths.markdown),
+        temporaryOutput: temporaryOutputRoot
+          ? {
+              root: temporaryOutputRoot,
+              stateDir,
+              artifactDir,
+              dbPath: path.join(temporaryOutputRoot, "runs.sqlite"),
+            }
+          : null,
       },
       null,
       2

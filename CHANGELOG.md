@@ -6,6 +6,93 @@ This file is the reader-facing release history for Meta_Kim.
 
 The changelog explains the user-facing problem or risk each release solved, what changed to solve it, and why the change matters. It intentionally avoids long internal task ledgers, low-signal backlog ids, and implementation trivia. When exact evidence is needed, use the repository history, tests, generated reports, and PRD artifacts.
 
+## [2.8.52] - 2026-06-23
+
+### Solved Problem
+
+After the governed-execution hardening work, Meta_Kim still needed a release pass that tied the merged cleanup back to concrete maintainer risks: maintainers should be able to run the right verification chain without relying on scattered commands, the MCP runtime server should have its required SDK declared explicitly, stale helper scripts should not look like supported public entry points, and fuzzy natural-language acceptance should not be mistaken for live Codex-native proof.
+
+The release also needed the canonical capability index refreshed after the merged source changes, so capability discovery would describe the current source tree instead of the previous release snapshot.
+
+### Changed
+
+- **Staged Verification Runner** - Added the `meta:verify:stages` runner so maintainers can run or resume the release-grade verification chain by named stages from the main working tree.
+- **MCP Runtime Dependency** - Declared `@modelcontextprotocol/sdk` as a package dependency so `scripts/mcp/meta-runtime-server.mjs` can self-test on a fresh install instead of depending on an undeclared local package.
+- **Governed Runner Evidence Repair** - Hardened `--temp-output` coverage and capability-need reporting so generated governed-run artifacts validate while still keeping public-ready and host-invocation evidence boundaries honest.
+- **Dead Script Cleanup** - Removed former cleanup/reporting scripts that no longer had source references, and documented the script-removal rule so obsolete CLIs do not become accidental public API.
+- **Release Evidence Refresh** - Refreshed the canonical capability index, Graphify graph, global hooks, and release checks against the merged `main` state.
+
+### Verification
+
+- `node scripts/mcp/meta-runtime-server.mjs --self-test`
+- `npm run meta:test:meta-theory`
+- `npm run meta:release:smoke`
+- `npm run meta:verify:all`
+- `npm run meta:graphify:check`
+- `npm run meta:check:global:release`
+- Temp-output governed run with a plain fuzzy Chinese release-audit request; artifact validated, spine reached Fetch/Thinking/Review/Verification, and host evidence correctly stayed `partial`.
+- `git diff --check`
+
+## [2.8.51] - 2026-06-22
+
+### Solved Problem
+
+Meta_Kim could still self-lock during a governed run after entering later spine stages such as Verification. The operator could be blocked from running read-only Fetch or diagnostic commands like `git status` and `Get-Content` because the execution-tool hook checked the choice surface gate before it allowed read-only Bash inspection.
+
+That created a governance contradiction: the run needed Fetch evidence to continue, but the hook could deny the very commands needed to collect or repair that evidence.
+
+### Changed
+
+- **Read-Only Inspection Before Choice Gate** - The dispatch enforcement hook now lets safe read-only Bash inspection run before `checkChoiceSurfaceGate`, preserving the ability to inspect and repair state without weakening mutation controls.
+- **Mutation Still Blocked** - The same incomplete-state path still denies mutating commands such as `npm install`, so the fix restores Fetch access without turning off capability-first enforcement.
+- **Verification-Stage Regression Coverage** - The eight-stage spine tests now cover the exact self-lock shape: Verification stage with incomplete choice evidence allows `git status --short` but still denies mutation.
+- **Global Hook Refresh** - The fixed canonical hook was synced into the global Claude Code and Codex hook packages so the active runtime receives the same behavior as the source tree.
+
+### Verification
+
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `npm run meta:sync`
+- `npm run discover:global`
+- `node scripts/graphify-cli.mjs rebuild --force`
+- `npm run meta:graphify:check`
+- `npm run meta:check`
+- `node scripts/sync-global-meta-theory.mjs --with-global-hooks`
+- `node scripts/sync-global-meta-theory.mjs --check --with-global-hooks`
+- `npm run meta:check:global`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
+## [2.8.50] - 2026-06-22
+
+### Solved Problem
+
+Meta_Kim had enough rules, validators, and architecture language to look governed, but a maintainer still could not quickly tell which mechanisms were truly running, which ones were structural-only, and where user-visible evidence stopped. That created a product risk: Dynamic Workflow, LangGraph-style control, Graphify, MCP Memory, evolution writeback, automation, and open-source readiness could be discussed as if they were all equally proven.
+
+The project also needed a clearer release boundary for automation. Automation should help gather evidence and reduce repeat work, but release decisions, Critical/Fetch/Thinking/Review judgment, and public-ready claims must stay human-governed and evidence-backed.
+
+### Changed
+
+- **Product Governance Evidence** - Governed execution now keeps automation assistance, human decision stages, self-test evidence, host/native evidence, and product-experience status in separate layers.
+- **Honest Product Validator** - Product-experience validation can pass trusted self-tests without opening a native popup, while the default host/native boundary remains `partial` when live host evidence is absent.
+- **Dynamic Workflow And LangGraph-Style Coverage** - Meta-theory tests now cover graph-shaped state, nodes, edges, checkpoint/replay behavior, dynamic lane binding, agent-team packet parsing, and dispatch envelope evidence.
+- **Graphify Productization** - Graphify CLI support now better exposes query, path, explain, check, and rebuild flows so the graph works as a navigation and verification aid instead of a context dump.
+- **Evolution Writeback Gate** - Evolution writeback now distinguishes real writeback targets from explicit `none-with-reason`, reducing the chance that a temporary record is mistaken for a sustainable learning loop.
+- **Global Hooks And MCP Memory Boundaries** - Global hook sync and MCP Memory guidance now separate registration, lifecycle hooks, service health, and local memory writes more clearly.
+- **Open-Source Health** - Added GitHub community health and maintenance files, including contribution, security, ownership, and dependency update surfaces, without requiring a GitHub Actions workflow.
+
+### Verification
+
+- `npm run meta:verify:all` before merge
+- `node scripts/graphify-cli.mjs rebuild --force`
+- `npm run meta:graphify:check`
+- `node scripts/validate-product-experience-core-goals.mjs`
+- `npm run meta:release:smoke`
+- Codex App observer thread with one-sentence fuzzy release-audit prompt
+- `npm run meta:capabilities:smoke`
+- `npm run meta:test:meta-theory`
+- `npm run meta:test:integration`
+- `git diff --check`
+
 ## [2.8.49] - 2026-06-21
 
 ### Solved Problem

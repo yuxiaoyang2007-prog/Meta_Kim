@@ -152,6 +152,61 @@ describe("sync-global-meta-theory hook policy", () => {
     });
   });
 
+  test("--with-global-hooks backs up existing managed hook package dirs before replacement", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      const claudePackageDir = path.join(root, "claude", "hooks", "meta-kim");
+      const codexPackageDir = path.join(root, "codex", "hooks", "meta-kim");
+      await mkdir(claudePackageDir, { recursive: true });
+      await mkdir(codexPackageDir, { recursive: true });
+      await writeFile(
+        path.join(claudePackageDir, "local-note.mjs"),
+        "// local claude hook package note\n",
+        "utf8",
+      );
+      await writeFile(
+        path.join(codexPackageDir, "local-note.mjs"),
+        "// local codex hook package note\n",
+        "utf8",
+      );
+
+      await runScript(["--targets", "claude,codex", "--with-global-hooks"], env);
+
+      await assert.rejects(() => readFile(path.join(claudePackageDir, "local-note.mjs")));
+      await assert.rejects(() => readFile(path.join(codexPackageDir, "local-note.mjs")));
+
+      const claudeBackupRoot = path.join(
+        root,
+        "claude",
+        "hooks",
+        ".meta-kim-hook-package-backup",
+      );
+      const codexBackupRoot = path.join(
+        root,
+        "codex",
+        "hooks",
+        ".meta-kim-hook-package-backup",
+      );
+      const claudeBackupDirs = await readdir(claudeBackupRoot);
+      const codexBackupDirs = await readdir(codexBackupRoot);
+      assert.ok(claudeBackupDirs.length > 0);
+      assert.ok(codexBackupDirs.length > 0);
+      assert.equal(
+        await readFile(
+          path.join(claudeBackupRoot, claudeBackupDirs[0], "meta-kim", "local-note.mjs"),
+          "utf8",
+        ),
+        "// local claude hook package note\n",
+      );
+      assert.equal(
+        await readFile(
+          path.join(codexBackupRoot, codexBackupDirs[0], "meta-kim", "local-note.mjs"),
+          "utf8",
+        ),
+        "// local codex hook package note\n",
+      );
+    });
+  });
+
   test("--with-global-hooks backs up and removes legacy root Meta_Kim hook files", async () => {
     await withTempRuntimeHomes(async ({ env, root }) => {
       const rootHookDir = path.join(root, "claude", "hooks");

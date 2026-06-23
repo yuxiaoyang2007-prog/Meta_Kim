@@ -996,6 +996,9 @@ function shouldSkipHook(state, userPrompt) {
 
   // Priority 1: Explicit environment variable (user override)
   if (envSkip && envSkip !== "empty" && envSkip !== "0" && envSkip !== "false") {
+    process.stderr.write(
+      `[meta-kim] META_KIM_HOOK_SKIP active — governance hooks bypassed (source=env_var)\n`,
+    );
     return {
       shouldSkip: true,
       reason: formatSkipReason("env_var"),
@@ -1309,22 +1312,6 @@ if (isExecutionTool(toolName)) {
     process.exit(0);
   }
 
-  if (isHookObservedState(state)) {
-    if (isHighRiskObservedExecution(toolName, toolInput)) {
-      exitAfterDeny(
-        observedModeHighRiskReason(state, String(toolInput?.command || "")),
-      );
-    }
-    await allowObservedModeExecution(state);
-  }
-
-  const choiceSurfaceGate = checkChoiceSurfaceGate(state);
-  if (!choiceSurfaceGate.met) {
-    exitAfterDeny(
-      `${choiceSurfaceGate.reason} Missing: ${choiceSurfaceGate.missing.join(", ")}.`,
-    );
-  }
-
   const stage = state.currentStage;
   const stageOrder = [
     "critical",
@@ -1338,7 +1325,6 @@ if (isExecutionTool(toolName)) {
   ];
   const currentIdx = stageOrder.indexOf(stage);
   const execIdx = stageOrder.indexOf("execution");
-
 
   // Read-only inspection must remain available even when execution readiness is
   // incomplete; otherwise the operator cannot inspect state to return upstream.
@@ -1356,6 +1342,22 @@ if (isExecutionTool(toolName)) {
     if (allowedByStage || isReadOnlyBash(cmd)) {
       process.exit(0);
     }
+  }
+
+  if (isHookObservedState(state)) {
+    if (isHighRiskObservedExecution(toolName, toolInput)) {
+      exitAfterDeny(
+        observedModeHighRiskReason(state, String(toolInput?.command || "")),
+      );
+    }
+    await allowObservedModeExecution(state);
+  }
+
+  const choiceSurfaceGate = checkChoiceSurfaceGate(state);
+  if (!choiceSurfaceGate.met) {
+    exitAfterDeny(
+      `${choiceSurfaceGate.reason} Missing: ${choiceSurfaceGate.missing.join(", ")}.`,
+    );
   }
 
   if (

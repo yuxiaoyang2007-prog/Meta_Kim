@@ -24,6 +24,8 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 // 从evolution-contract.json加载配置
 let EVOLUTION_CONFIG = null;
 
+const NO_WRITEBACK_DECISIONS = new Set(['none', 'none-with-reason']);
+
 async function loadEvolutionConfig() {
   if (EVOLUTION_CONFIG) return EVOLUTION_CONFIG;
 
@@ -33,9 +35,44 @@ async function loadEvolutionConfig() {
   return EVOLUTION_CONFIG;
 }
 
+function getWritebacks(packet) {
+  return Array.isArray(packet.writebacks) ? packet.writebacks : [];
+}
+
+function getWritebackTarget(writeback) {
+  if (typeof writeback === 'string') return writeback;
+  if (!writeback || typeof writeback !== 'object') return null;
+  return writeback.target ?? writeback.owner ?? writeback.agent ?? writeback.id ?? null;
+}
+
+function getWritebackTargets(packet) {
+  return getWritebacks(packet)
+    .map(getWritebackTarget)
+    .filter((target) => typeof target === 'string' && target.length > 0);
+}
+
+function isNoWritebackDecision(packet) {
+  return NO_WRITEBACK_DECISIONS.has(packet.writebackDecision);
+}
+
+function hasDecisionReason(packet) {
+  return typeof packet.decisionReason === 'string' && packet.decisionReason.trim().length > 0;
+}
+
+function allChecksPass(results) {
+  return Object.entries(results)
+    .filter(([key]) => key !== 'all')
+    .every(([, result]) => result?.pass === true);
+}
+
 // Five Criteria验证
 export async function validateFiveCriteria(packet) {
   const config = await loadEvolutionConfig();
+  const writebacks = getWritebacks(packet);
+  const targets = getWritebackTargets(packet);
+  const hasTargets = targets.length > 0;
+  const noWriteback = isNoWritebackDecision(packet);
+  const noWritebackHasTargets = noWriteback && writebacks.length > 0;
   const results = {
     independent: null,
     smallEnough: null,
@@ -47,21 +84,22 @@ export async function validateFiveCriteria(packet) {
 
   // 1. Independent - 产出不依赖其他meta输出
   results.independent = {
-    pass: packet.writebackDecision === 'writeback' ||
-           (packet.writebacks && packet.writebacks.length > 0),
-    reason: "Packet must contain concrete writeback targets"
+    pass: noWriteback
+      ? !noWritebackHasTargets && hasDecisionReason(packet)
+      : hasTargets,
+    reason: "Writeback packets need targets; no-writeback packets need a reason and no writeback targets"
   };
 
   // 2. Small Enough - 职责单一
   results.smallEnough = {
-    pass: !packet.writebacks || packet.writebacks.length <= 3,
+    pass: writebacks.length <= 3,
     reason: "Writeback should target ≤3 agents to maintain focus"
   };
 
   // 3. Clear Boundaries - Own/Do Not Touch清晰
   results.clearBoundaries = {
-    pass: packet.writebacks && packet.writebacks.every(w => typeof w === 'string'),
-    reason: "Each writeback must reference specific agent/skill"
+    pass: noWriteback ? writebacks.length === 0 : targets.length === writebacks.length,
+    reason: "Each writeback must reference a specific agent/skill; no-writeback packets must not include targets"
   };
 
   // 4. Replaceable - 可替换
@@ -72,18 +110,20 @@ export async function validateFiveCriteria(packet) {
 
   // 5. Reusable - 可复用
   results.reusable = {
-    pass: packet.signalSummary &&
-           (packet.signalSummary.totalSignals > 0 || packet.writebacks),
+    pass: noWriteback
+      ? !noWritebackHasTargets && hasDecisionReason(packet)
+      : hasTargets && Boolean(packet.signalSummary?.totalSignals > 0 || hasTargets),
     reason: "Triggered by recurring evolution signals"
   };
 
-  results.all = Object.values(results).every(r => r.pass);
+  results.all = allChecksPass(results);
   return results;
 }
 
 // PRIN-ST验证
 export async function validatePrinStPrinciples(packet) {
   const config = await loadEvolutionConfig();
+  const targets = getWritebackTargets(packet);
   const results = {
     prinSt01: null,
     prinSt02: null,
@@ -101,7 +141,7 @@ export async function validatePrinStPrinciples(packet) {
 
   // PRIN-ST-02: Single Source
   results.prinSt02 = {
-    pass: packet.writebacks && new Set(packet.writebacks).size === packet.writebacks.length,
+    pass: new Set(targets).size === targets.length,
     reason: "No duplicate writeback targets"
   };
 
@@ -120,16 +160,17 @@ export async function validatePrinStPrinciples(packet) {
   // PRIN-ST-05: i18n
   results.prinSt05 = {
     pass: true,
-    reason: "User-facing messages use i18n system"
+    reason: "Gate returns structured results; CLI status is diagnostic"
   };
 
-  results.all = Object.values(results).every(r => r.pass);
+  results.all = allChecksPass(results);
   return results;
 }
 
 // 递归风险检查
 export async function checkRecursiveRisk(packet) {
   const config = await loadEvolutionConfig();
+  const targets = getWritebackTargets(packet);
   const risks = {
     selfEvolution: null,
     circularDependency: null,
@@ -141,7 +182,7 @@ export async function checkRecursiveRisk(packet) {
 
   // 1. Self-Evolution检查
   risks.selfEvolution = {
-    detected: packet.writebacks && packet.writebacks.includes('meta-chrysalis'),
+    detected: targets.includes('meta-chrysalis'),
     action: 'reject',
     reason: config.gate.recursiveProtection.selfEvolutionBlock.reason
   };
@@ -164,8 +205,8 @@ export async function checkRecursiveRisk(packet) {
   risks.thresholdGaming = {
     detected: packet.signalSummary &&
                    packet.signalSummary.totalSignals > 5 &&
-                   packet.writebacks &&
-                   new Set(packet.writebacks).size === 1,
+                   targets.length > 0 &&
+                   new Set(targets).size === 1,
     action: 'merge',
     reason: config.gate.recursiveProtection.thresholdGaming.reason
   };
@@ -177,7 +218,9 @@ export async function checkRecursiveRisk(packet) {
     reason: config.gate.recursiveProtection.identityDrift.reason
   };
 
-  risks.detected = Object.values(risks).some(r => r.detected);
+  risks.detected = Object.entries(risks)
+    .filter(([key]) => key !== 'detected')
+    .some(([, risk]) => risk?.detected === true);
   return risks;
 }
 
@@ -186,10 +229,24 @@ export async function gateDecision(packet, options = {}) {
   const fiveCriteria = await validateFiveCriteria(packet);
   const prinSt = await validatePrinStPrinciples(packet);
   const recursiveRisk = await checkRecursiveRisk(packet);
+  const writebacks = getWritebacks(packet);
+  const noWritebackDecision = isNoWritebackDecision(packet);
+  const noWriteback = noWritebackDecision && writebacks.length === 0;
+
+  if (noWritebackDecision && writebacks.length > 0) {
+    return {
+      decision: 'reject',
+      riskLevel: 'high',
+      fiveCriteria,
+      prinSt,
+      recursiveRisk,
+      reason: 'No-writeback decisions cannot include writeback targets'
+    };
+  }
 
   let decision = 'approve';
   let riskLevel = 'low';
-  let reason = '';
+  let reason = noWriteback ? 'No durable writeback requested; none-with-reason accepted' : '';
 
   // 检查递归风险
   if (recursiveRisk.detected) {
@@ -266,6 +323,11 @@ export async function processEvolutionPacket(packet, options = {}) {
   if (decision.decision === 'escalate') {
     console.log('[Evolution Gate] Escalated to Warden + Genesis review');
     return { ...decision, escalated: true };
+  }
+
+  if (isNoWritebackDecision(packet) && getWritebackTargets(packet).length === 0) {
+    console.log('[Evolution Gate] Approved - no writeback requested');
+    return { ...decision, approved: true, noWriteback: true };
   }
 
   console.log('[Evolution Gate] Approved - proceeding with writeback');

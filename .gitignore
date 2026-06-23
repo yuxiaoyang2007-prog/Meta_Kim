@@ -4,6 +4,11 @@ npm-debug.log*
 pnpm-lock.yaml
 package-lock.json
 
+# ========== Secrets (never commit; preventive — project has no .env yet) ==========
+.env
+.env.*
+!.env.example
+
 # ========== Local-only Claude skills (not synced via sync:runtimes; optional personal overlay) ==========
 canonical/skills/commit-review/
 

@@ -259,7 +259,9 @@ function startMemoryServiceBackground(endpoint) {
       windowsHide: true,
       env: {
         ...process.env,
-        MCP_ALLOW_ANONYMOUS_ACCESS: "true",
+        // SECURITY: defaults to "true" for local-loopback autostart compatibility.
+        // Set MCP_ALLOW_ANONYMOUS_ACCESS=false in env on shared machines to require auth.
+        MCP_ALLOW_ANONYMOUS_ACCESS: process.env.MCP_ALLOW_ANONYMOUS_ACCESS || "true",
         HF_HUB_OFFLINE: "1",
         TRANSFORMERS_OFFLINE: "1",
       },

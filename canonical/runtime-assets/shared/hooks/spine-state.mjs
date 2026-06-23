@@ -73,7 +73,6 @@ const DEFAULT_READ_ONLY_VERIFIER_COMMANDS = [
   "npm run meta:check:sync-coverage",
   "npm run meta:validate",
   "node --check",
-  "node -e",
   "node --test",
   "gh release view",
   "gh pr view",

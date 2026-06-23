@@ -6,6 +6,93 @@
 
 更新说明先解释本次解决的用户痛点或风险，再说明为了解决它改了什么、为什么重要。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
+## [2.8.52] - 2026-06-23
+
+### 解决的问题
+
+governed execution 强化合并后，Meta_Kim 还需要一次发布收口，把这批 cleanup 和维护者真实风险对齐：维护者应该能从 main 工作区跑正确的验证链，不再依赖散落命令；MCP runtime server 需要显式声明 SDK 依赖；过期 helper scripts 不应该继续像公开入口一样留在仓库里；普通自然语言模糊验收也不能被误报成 Codex native live proof。
+
+这次发布还需要刷新 canonical capability index，让能力发现描述当前合并后的源码树，而不是上一个 release 的快照。
+
+### 变更
+
+- **分阶段验证 runner** - 新增 `meta:verify:stages`，维护者可以直接在 main 工作区按阶段运行或续跑发布级验证链。
+- **MCP runtime 依赖显式化** - 将 `@modelcontextprotocol/sdk` 声明为 package dependency，使 `scripts/mcp/meta-runtime-server.mjs` 在 fresh install 后也能 self-test，不再依赖本机偶然存在的包。
+- **governed runner 证据修复** - 加固 `--temp-output` 覆盖和 capability-need 输出，保证 governed-run artifact 能通过验证，同时继续诚实区分 public-ready 与 host-invocation 证据边界。
+- **死脚本清理** - 移除已无源码引用的旧 cleanup/reporting scripts，并在脚本文档中写清删除规则，避免过期 CLI 变成意外的公开 API。
+- **发布证据刷新** - 基于合并后的 `main` 刷新 canonical capability index、Graphify 图谱、global hooks 和 release checks。
+
+### 验证
+
+- `node scripts/mcp/meta-runtime-server.mjs --self-test`
+- `npm run meta:test:meta-theory`
+- `npm run meta:release:smoke`
+- `npm run meta:verify:all`
+- `npm run meta:graphify:check`
+- `npm run meta:check:global:release`
+- 使用普通中文模糊发布审计请求跑 temp-output governed run；artifact 已验证，spine 到达 Fetch/Thinking/Review/Verification，同时 host evidence 按真实情况保持 `partial`。
+- `git diff --check`
+
+## [2.8.51] - 2026-06-22
+
+### 解决的问题
+
+Meta_Kim 在 governed run 进入 Verification 等后置阶段后，仍可能发生自锁。维护者想运行 `git status`、`Get-Content` 这类只读 Fetch 或诊断命令时，会先被 execution-tool hook 送进 choice surface gate；如果当前 state 缺 Fetch evidence 或 Thinking option frame，这些只读命令也会被拒绝。
+
+这会形成治理悖论：运行需要 Fetch 证据才能继续，但 hook 又拦住了收集或修复证据所需的只读命令。
+
+### 变更
+
+- **只读检查先于 choice gate** - dispatch enforcement hook 现在会在 `checkChoiceSurfaceGate` 前放行安全的只读 Bash inspection，恢复取证和状态修复能力，同时不削弱变更控制。
+- **变更命令仍然被拦** - 同一条 incomplete-state 路径下，`npm install` 等 mutation 命令仍会被拒绝；本次修复恢复的是 Fetch 访问，不是关闭 capability-first gate。
+- **Verification 阶段回归覆盖** - eight-stage spine 测试新增复现：Verification 阶段 choice evidence 不完整时，`git status --short` 可通过，但 mutation 仍拒绝。
+- **全局 Hook 刷新** - fixed canonical hook 已同步到全局 Claude Code 和 Codex hook 包，使当前运行时和源码树行为一致。
+
+### 验证
+
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `npm run meta:sync`
+- `npm run discover:global`
+- `node scripts/graphify-cli.mjs rebuild --force`
+- `npm run meta:graphify:check`
+- `npm run meta:check`
+- `node scripts/sync-global-meta-theory.mjs --with-global-hooks`
+- `node scripts/sync-global-meta-theory.mjs --check --with-global-hooks`
+- `npm run meta:check:global`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
+## [2.8.50] - 2026-06-22
+
+### 解决的问题
+
+Meta_Kim 已经有规则、validator 和架构说明，但维护者仍然不容易一眼看清：哪些机制真的跑起来了，哪些只是结构或文档，用户可见证据到哪里为止。这样会带来产品风险：Dynamic Workflow、LangGraph-style 控制、Graphify、MCP Memory、evolution 写回、自动化和开源健康，可能被说成同一层“已完成”。
+
+本次还修清了自动化发布边界。自动化可以帮忙收集证据、减少重复动作，但发布判断、Critical/Fetch/Thinking/Review 质量判断和 public-ready 声明，必须继续由人基于证据作决定。
+
+### 变更
+
+- **产品治理证据分层** - governed execution 现在把自动化辅助、人类决策阶段、自测证据、host/native 证据和产品体验状态分层记录。
+- **诚实的产品体验 validator** - 产品体验校验可以在不弹出 native choice 的情况下通过可信自测；但默认 host/native 边界没有 live host 证据时仍保持 `partial`。
+- **Dynamic Workflow 与 LangGraph-style 覆盖** - meta-theory 测试覆盖图式 state、nodes、edges、checkpoint/replay、动态 lane 绑定、agent-team packet 解析和 dispatch envelope 证据。
+- **Graphify 产品化** - Graphify CLI 更清楚地暴露 query、path、explain、check、rebuild 流程，使图谱成为导航和验证辅助，而不是上下文倾倒。
+- **Evolution 写回门** - evolution writeback 现在区分真实写回目标和明确的 `none-with-reason`，避免把临时记录误说成可持续学习闭环。
+- **Global hooks 与 MCP Memory 边界** - 全局 hook 同步和 MCP Memory 说明更清楚地区分注册、生命周期 hook、服务健康和本地记忆写入。
+- **开源健康** - 新增 GitHub community health 与维护文件，包括贡献、安全、代码归属和依赖更新入口，不要求 GitHub Actions workflow。
+
+### 验证
+
+- 合并前 `npm run meta:verify:all`
+- `node scripts/graphify-cli.mjs rebuild --force`
+- `npm run meta:graphify:check`
+- `node scripts/validate-product-experience-core-goals.mjs`
+- `npm run meta:release:smoke`
+- Codex App 新对话一句话模糊发布审计
+- `npm run meta:capabilities:smoke`
+- `npm run meta:test:meta-theory`
+- `npm run meta:test:integration`
+- `git diff --check`
+
 ## [2.8.49] - 2026-06-21
 
 ### 解决的问题

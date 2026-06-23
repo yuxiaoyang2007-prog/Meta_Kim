@@ -65,14 +65,6 @@ test("script registry classifies scripts and protects cleanup candidates", () =>
     assert.ok(scriptsReadme.includes(bucket), `scripts README missing bucket ${bucket}`);
   }
 
-  for (const candidate of [
-    "scripts/agent-health-report.mjs",
-    "scripts/check-release-notes-consistency.mjs",
-    "scripts/meta-kim-aggregate.mjs",
-  ]) {
-    assert.ok(scriptsReadme.includes(candidate), `scripts README missing cleanup candidate ${candidate}`);
-  }
-
   assert.match(scriptsReadme, /Do not prune scripts by filename count alone/);
-  assert.match(scriptsReadme, /Before removing one, check changelog history, release notes/);
+  assert.match(scriptsReadme, /Before removing any script, check changelog history, release notes/);
 });

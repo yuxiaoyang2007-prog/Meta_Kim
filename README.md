@@ -231,6 +231,8 @@ Search whether existing agents, skills, tools, or MCP integrations already cover
 
 Meta_Kim is not only the 8-stage spine. It first identifies the governance trigger, checks runtime and OS capability, checks dependency capability, separates owner from weapon, filters by Win/Mac/runtime support, asks the user only for branch-changing choices, executes deterministic parts, verifies whether the user goal actually landed, and writes reusable learning back. Reference-only projects are absorbed into Meta_Kim data, not silently promoted into dependencies; see `config/governance/decision-pattern-catalog.json`.
 
+Automation is assistive, not authoritative. It may gather evidence, draft options, run deterministic checks, surface blockers, and prepare readable status, but branch-changing judgment in Critical, Fetch, Thinking, and Review remains a human decision point. A selected capability, hook match, report, or validator pass must not be relabeled as human acceptance or native runtime evidence.
+
 **Thinking - define boundaries, owners, sequence, deliverables, risks, and stop conditions**
 
 Break the task into subtasks, assign owners, and make dependencies and parallel groups explicit. This stage produces a `dispatchBoard`: who does what, what can run in parallel, and who is responsible for merging the result. At least two solution paths should be explored; do not lock into a single route too early.
@@ -674,7 +676,7 @@ Meta_Kim does not use a single memory layer. It uses three, each with a differen
 Each layer has different activation requirements:
 - **Layer 1** is built into Claude Code — requires Claude Code runtime (auto-memory at `~/.claude/projects/*/memory/`)
 - **Layer 2** is installed automatically by `node setup.mjs`
-- **Layer 3** is installed by `node setup.mjs` but requires manual server startup (see Layer 3 activation below)
+- **Layer 3** is installed by `node setup.mjs`; setup attempts a background HTTP start, and manual startup is the fallback when the health endpoint is unavailable (see Layer 3 activation below)
 
 ### Layer 1: Memory (agent upgrade memory)
 
@@ -730,14 +732,16 @@ For multi-platform setups, run `node setup.mjs` — it loops through all selecte
   - For **Codex**: `~/.codex/hooks.json` receives SessionStart, UserPromptSubmit, and Stop bridges to `meta-kim-memory-save.mjs`, so start/prompt/end checkpoints are automatic.
   - For **OpenClaw**: `~/.openclaw/hooks/mcp-memory-service` receives a managed hook for `command:new`, `command:reset`, `session:compact:after`, and `command:stop`.
   - For **Cursor**: `~/.cursor/hooks.json` receives `beforeSubmitPrompt` and `stop` bridges to the shared memory hook.
-- **Start server**: `memory server --http` (with `MCP_ALLOW_ANONYMOUS_ACCESS=true` on macOS/Linux, or `$env:MCP_ALLOW_ANONYMOUS_ACCESS="true"` in Windows PowerShell), then access at `http://localhost:8000`.
-- **Port**: the server and Meta_Kim hooks use `http://localhost:8000`.
+- **Start server**: `memory server --http` (with `MCP_ALLOW_ANONYMOUS_ACCESS=true` on macOS/Linux, or `$env:MCP_ALLOW_ANONYMOUS_ACCESS="true"` in Windows PowerShell), then verify `http://127.0.0.1:8000/api/health`.
+- **Port**: health-check examples use `http://127.0.0.1:8000`; shipped hooks default to `http://localhost:8000` unless `MCP_MEMORY_URL` or runtime memory config overrides the endpoint. Both loopback hosts are accepted.
 - **Hooks**: auto-registered for Claude Code, Codex, Cursor, and OpenClaw; each runtime uses its native hook format while sharing the same MCP Memory HTTP endpoint.
 - **MCP registration vs writes**: `.mcp.json` registers the MCP Memory server (`memory server`) for client access. Automatic session writes are separate lifecycle hooks: Claude Code uses `stop-memory-save.mjs`, Codex/Cursor use `meta-kim-memory-save.mjs`, and OpenClaw uses its managed `mcp-memory-service` hook.
+- **Evidence boundary**: a configured `.mcp.json`, installed hook, HTTP health response, successful write, successful read, and cross-session recall are different evidence layers. Do not claim cross-session recall from setup or health checks alone.
 - **Query**: `npm run meta:query:runs -- --owner <agent>` — find past runs by agent, or `npm run meta:index:runs -- <artifact>` for manual indexing of validated run artifacts
 - **Troubleshooting**:
   - **Python hook fails on Windows**: If the SessionStart hook fails with exit code 49 or shows no output, the Python command may point to the Windows Store shim. Run `node scripts/install-mcp-memory-hooks.mjs` to auto-detect and fix. The installer now skips WindowsApps shims and prefers explicit Python executables from `LOCALAPPDATA\Programs\Python*`. Use `--force` flag to re-register even if current path appears valid.
   - **Check installation**: Run `node scripts/install-mcp-memory-hooks.mjs --check` to verify hook status and Python path validity.
+  - **Check HTTP health**: Run `curl -fsS --max-time 3 http://127.0.0.1:8000/api/health` after startup. `npm run meta:test:mcp` checks Meta_Kim's runtime MCP server, not this external MCP Memory HTTP service.
   - **Manual verification**: Test your Python command with `python --version` or the detected path with `"C:/Users/YOUR_USER/AppData/Local/Programs/Python/Python311/python.exe" --version`.
 
 ### How the three layers work together
@@ -825,10 +829,9 @@ Interactive update flow:
 | `npm run meta:sync` | Sync from canonical sources to all four runtimes |
 | `npm run meta:check:runtimes` | Check whether the four runtimes are in sync |
 | `npm run meta:validate` | Validate repository integrity |
-| `npm run meta:install-scope:verify` | Verify global/project install boundaries |
-| `npm run meta:project-cache:verify` | Verify global hooks generate project-local cache files |
 | `npm run meta:verify:all` | Full validation, including runtime smoke checks |
-| `npm run meta:doctor:governance` | Governance health check |
+
+Additional governance and scope checks (`meta:install-scope:verify`, `meta:project-cache:verify`, `meta:doctor:governance`) are listed in `AGENTS.md`.
 
 ### Where the active rules live
 
@@ -885,14 +888,10 @@ Sparse-checkout fallback trees land in `~/.<runtime>/skills/<id>/`; native ECC i
 
 | Command | Purpose |
 | --- | --- |
-| `npm run meta:validate:run -- <file.json>` | Validate governed run artifacts |
-| `npm run meta:eval:agents` | Lightweight runtime smoke test |
-| `npm run meta:eval:agents:live` | Live prompt-backed acceptance |
 | `npm run meta:probe:clis` | Probe local CLI tools |
 | `npm run meta:test:mcp` | MCP self-test |
-| `npm run meta:index:runs -- <dir>` | Index validated run artifacts |
-| `npm run meta:query:runs -- --owner <agent>` | Query the run index |
-| `npm run migrate:meta-kim -- <dir> --apply` | Import an older prompt pack |
+
+More advanced commands (`meta:validate:run`, `meta:eval:agents`, `meta:eval:agents:live`, `meta:index:runs`, `meta:query:runs`, `migrate:meta-kim`) are in `AGENTS.md`.
 
 ---
 

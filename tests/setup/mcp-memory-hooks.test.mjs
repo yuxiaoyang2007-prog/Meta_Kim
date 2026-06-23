@@ -1595,4 +1595,19 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.doesNotMatch(installerSource, /python -m mcp_memory_service/);
     assert.doesNotMatch(installerSource, /uv run memory server -s hybrid/);
   });
+
+  test("README separates MCP Memory health, writes, reads, and cross-session recall evidence", () => {
+    const english = readRepoFile("README.md");
+    const chinese = readRepoFile("README.zh-CN.md");
+
+    for (const source of [english, chinese]) {
+      assert.match(source, /http:\/\/127\.0\.0\.1:8000\/api\/health/);
+      assert.match(source, /curl -fsS --max-time 3 http:\/\/127\.0\.0\.1:8000\/api\/health/);
+      assert.match(source, /\.mcp\.json/);
+      assert.match(source, /hook/);
+      assert.match(source, /cross-session recall|跨会话召回/);
+      assert.match(source, /health checks alone|health check 就宣称/);
+      assert.match(source, /meta:test:mcp/);
+    }
+  });
 });

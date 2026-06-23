@@ -8,7 +8,7 @@ If you only keep six rules in mind:
 
 - `meta-warden` is the public front door; the other meta agents are backstage specialists.
 - `canonical/agents/`, `canonical/skills/meta-theory/`, `canonical/runtime-assets/`, `config/contracts/`, and `config/capability-index/` are the durable sources of truth.
-- `.claude/` is a runtime projection generated from canonical assets. Sync it instead of hand-forking it.
+- `.claude/` is a runtime projection generated from canonical assets. It is gitignored — run `npm run meta:sync` after clone to generate hooks/agents/skills locally. Sync it instead of hand-forking it.
 - When `meta-theory` is active, the main Claude thread dispatches; it does not execute complex work directly.
 - Critical, Fetch, Thinking, and Review must make the run executable before mutation; hooks are final safeguards, not the primary design path.
 - Capability-first dispatch is **mechanically enforced** in Claude Code via the `enforce-agent-dispatch.mjs` PreToolUse hook (deny payload). Codex and Cursor v1.7+ use the same projected hook; OpenClaw remains declarative. The current matrix lives in `AGENTS.md` under Mechanical Enforcement.

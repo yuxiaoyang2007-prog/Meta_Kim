@@ -8,7 +8,6 @@ This directory is intentionally large because Meta_Kim exposes most maintenance 
 - MCP server scripts: 1 (`scripts/mcp/meta-runtime-server.mjs`)
 - Direct `package.json` entries: 106
 - Referenced helper scripts: 21
-- Cleanup candidates with no current external reference evidence: 3
 
 ## Core Loop And Discovery Bus
 
@@ -29,15 +28,9 @@ This directory is intentionally large because Meta_Kim exposes most maintenance 
 | Doctor/status utilities | Human-facing diagnostics, status, compaction, migration, and next-iteration prompts | `doctor-*.mjs`, `footprint.mjs`, `write-compaction.mjs`, `prompt-next-iteration.mjs` | Keep if exposed in `package.json`; otherwise inspect before cleanup. |
 | Shared helpers | Imported by package entries, tests, hooks, or setup flows | `governance-lib.mjs`, `meta-kim-local-state.mjs`, `runtime-hook-mapping.mjs`, `node-spawn-config.mjs` | Keep when referenced by imports, tests, config, or hooks. |
 
-## Cleanup Candidates
+## Before Removing Any Script
 
-These had no current external reference evidence in the 2026-06-05 inventory pass:
-
-- `scripts/agent-health-report.mjs`
-- `scripts/check-release-notes-consistency.mjs`
-- `scripts/meta-kim-aggregate.mjs`
-
-Treat them as **cleanup candidates**, not automatic deletes. Before removing one, check changelog history, release notes, and whether it was intended as a manual one-off CLI.
+Before removing any script, check changelog history, release notes, and whether it was a manual one-off CLI. The 2026-06-22 pass removed three former cleanup candidates (`agent-health-report.mjs`, `check-release-notes-consistency.mjs`, `meta-kim-aggregate.mjs`) after confirming zero source references outside gitignored state caches.
 
 ## Why There Are Many Report Scripts
 

@@ -318,6 +318,31 @@ function runRebuild() {
   }
 }
 
+function runGraphifyPassthrough() {
+  const graphifyArgs = process.argv.slice(2);
+  const direct = spawnSync("graphify", graphifyArgs, {
+    stdio: "inherit",
+    shell: false,
+  });
+  if (!direct.error) {
+    process.exitCode = direct.status ?? 1;
+    return;
+  }
+
+  const python = ensurePython({ requirePip: true });
+  if (!python) {
+    return;
+  }
+
+  const result = runPythonModule(
+    python,
+    ["-m", "graphify", ...graphifyArgs],
+    undefined,
+    { stdio: "inherit" },
+  );
+  process.exitCode = result.status ?? 1;
+}
+
 switch (command) {
   case "check":
     runCheck();
@@ -330,6 +355,11 @@ switch (command) {
     break;
   case "rebuild":
     runRebuild();
+    break;
+  case "query":
+  case "path":
+  case "explain":
+    runGraphifyPassthrough();
     break;
   default:
     fail(`Unknown graphify command: ${command}`);
