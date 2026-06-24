@@ -1185,7 +1185,7 @@ export function checkStageRequirements(state) {
     missing,
     reason:
       missing.length > 0
-        ? `Stage "${stage}" requires meta-agent(s): ${missing.join(", ")}. Dispatch them via Agent tool first.`
+        ? `Stage "${stage}" requires stage owner record(s): ${missing.join(", ")}. Record the missing stage evidence before advancing.`
         : "requirements met",
   };
 }

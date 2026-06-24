@@ -35,6 +35,10 @@ describe("Claude settings hook command rendering", () => {
       true,
     );
     assert.equal(
+      commands.some((entry) => entry.includes("stop-memory-save.mjs")),
+      true,
+    );
+    assert.equal(
       commands.some((entry) => entry.includes("stop-compaction.mjs")),
       true,
     );

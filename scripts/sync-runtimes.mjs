@@ -898,22 +898,20 @@ const canonicalClaudeMcpPath = path.join(
   "claude",
   "mcp.json",
 );
-const canonicalClaudeCommandPath = path.join(
+const canonicalClaudeCommandsDir = path.join(
   canonicalRuntimeAssetsDir,
   "claude",
   "commands",
-  "meta-theory.md",
 );
 const canonicalCodexConfigExamplePath = path.join(
   canonicalRuntimeAssetsDir,
   "codex",
   "config.toml.example",
 );
-const canonicalCodexCommandPath = path.join(
+const canonicalCodexCommandsDir = path.join(
   canonicalRuntimeAssetsDir,
   "codex",
   "commands",
-  "meta-theory.md",
 );
 const canonicalSharedSpineHookPath = path.join(
   canonicalRuntimeAssetsDir,
@@ -1361,6 +1359,35 @@ async function collectSkillFiles(rootDir, currentDir = rootDir, bucket = []) {
   return bucket.sort((left, right) =>
     left.relativePath.localeCompare(right.relativePath),
   );
+}
+
+async function collectCommandFiles(commandsDir) {
+  let entries = [];
+  try {
+    entries = await fs.readdir(commandsDir, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+
+  const files = [];
+  for (const entry of entries) {
+    if (
+      !entry.isFile() ||
+      !entry.name.endsWith(".md") ||
+      entry.name.includes(".tmp.") ||
+      entry.name.endsWith(".tmp")
+    ) {
+      continue;
+    }
+    files.push({
+      name: entry.name,
+      content: await fs.readFile(path.join(commandsDir, entry.name), "utf8"),
+    });
+  }
+  return files.sort((left, right) => left.name.localeCompare(right.name));
 }
 
 async function loadCanonicalSkills() {
@@ -2336,19 +2363,17 @@ async function syncClaudeProjection(
     changedFiles,
   );
 
-  const claudeMetaTheoryCommand = await tryReadCanonical(
-    canonicalClaudeCommandPath,
-  );
-  if (
-    claudeMetaTheoryCommand &&
-    (
-      await writeGeneratedFile(
-        path.join(claudeCommandsDir, "meta-theory.md"),
-        claudeMetaTheoryCommand,
-      )
-    ).changed
-  ) {
-    changedFiles.push(`${displayPaths.claudeCommands}/meta-theory.md`);
+  for (const command of await collectCommandFiles(canonicalClaudeCommandsDir)) {
+    if (
+      (
+        await writeGeneratedFile(
+          path.join(claudeCommandsDir, command.name),
+          command.content,
+        )
+      ).changed
+    ) {
+      changedFiles.push(`${displayPaths.claudeCommands}/${command.name}`);
+    }
   }
 
   if (!globalScope) {
@@ -2808,19 +2833,17 @@ Examples:
       }
     }
 
-    const codexMetaTheoryCommand = await tryReadCanonical(
-      canonicalCodexCommandPath,
-    );
-    if (
-      codexMetaTheoryCommand &&
-      (
-        await writeGeneratedFile(
-          path.join(dirs.codexCommandsDir, "meta-theory.md"),
-          codexMetaTheoryCommand,
-        )
-      ).changed
-    ) {
-      changedFiles.push(`${dp.codexCommands}/meta-theory.md`);
+    for (const command of await collectCommandFiles(canonicalCodexCommandsDir)) {
+      if (
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexCommandsDir, command.name),
+            command.content,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexCommands}/${command.name}`);
+      }
     }
 
     if (dirs.codexHooksDir && dirs.codexHooksFile) {

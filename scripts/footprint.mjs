@@ -144,6 +144,8 @@ const MSG = {
       "Shared deps (pip packages, .git/hooks) are informational only.",
     noteGlobal:
       "Global settings.json merge only lists hook entries Meta_Kim is known to manage.",
+    noteLocalStatePortable:
+      "machine-portable: no — .meta-kim/state can contain local profile, host, and absolute-path history; exclude it from zip/package handoff.",
     noteUninstall:
       "To clean up, run: npm run meta:uninstall (dry-run) then npm run meta:uninstall:yes",
   },
@@ -164,6 +166,8 @@ const MSG = {
     notes: "说明",
     noteShared: "共享依赖（pip 包、.git/hooks）仅供参考。",
     noteGlobal: "全局 settings.json 合并只列出 Meta_Kim 管理的 hook 条目。",
+    noteLocalStatePortable:
+      "machine-portable: no — .meta-kim/state 可能包含本机 profile、host 和绝对路径历史；打包/迁移时请排除。",
     noteUninstall:
       "需清理时：先 npm run meta:uninstall（dry-run）再 npm run meta:uninstall:yes",
   },
@@ -188,6 +192,8 @@ const MSG = {
     noteShared: "共有依存（pip パッケージ、.git/hooks）は参考情報のみ。",
     noteGlobal:
       "グローバル settings.json マージは Meta_Kim 管理の hook エントリのみ表示。",
+    noteLocalStatePortable:
+      "machine-portable: no — .meta-kim/state にはローカル profile、host、絶対パス履歴が含まれる場合があります。zip/package 共有時は除外してください。",
     noteUninstall:
       "クリーンアップ：npm run meta:uninstall（dry-run）→ npm run meta:uninstall:yes",
   },
@@ -209,6 +215,8 @@ const MSG = {
     noteShared: "공유 의존성(pip 패키지, .git/hooks)은 참고용입니다.",
     noteGlobal:
       "전역 settings.json 병합은 Meta_Kim 관리 hook 항목만 표시합니다.",
+    noteLocalStatePortable:
+      "machine-portable: no — .meta-kim/state에는 로컬 profile, host, 절대 경로 기록이 포함될 수 있습니다. zip/package 전달 시 제외하세요.",
     noteUninstall:
       "정리: npm run meta:uninstall (dry-run) → npm run meta:uninstall:yes",
   },
@@ -491,8 +499,22 @@ function scanProject(repoRoot) {
   return findings;
 }
 
+function machinePortableStatus(findings) {
+  const hasLocalState = findings.some((f) => {
+    const normalized = String(f.path || "").replace(/\\/g, "/");
+    return f.category === CATEGORIES.H && normalized.includes("/.meta-kim/state");
+  });
+  return {
+    portable: !hasLocalState,
+    reason: hasLocalState
+      ? ".meta-kim/state can contain local profile, host, and absolute-path history"
+      : "no project-local Meta_Kim state directory found",
+  };
+}
+
 function renderTree(findings, t, scopeLabel) {
   const grouped = {};
+  const machinePortable = machinePortableStatus(findings);
   for (const k of Object.keys(CATEGORY_LABELS)) grouped[k] = [];
   for (const f of findings) (grouped[f.category] ||= []).push(f);
 
@@ -526,6 +548,9 @@ function renderTree(findings, t, scopeLabel) {
   lines.push("");
   lines.push(`${C.dim}${t.notes}: ${t.noteShared}${C.reset}`);
   lines.push(`${C.dim}${t.notes}: ${t.noteGlobal}${C.reset}`);
+  if (!machinePortable.portable) {
+    lines.push(`${C.yellow}${t.notes}: ${t.noteLocalStatePortable}${C.reset}`);
+  }
   lines.push(`${C.dim}${t.notes}: ${t.noteUninstall}${C.reset}`);
   return lines.join("\n");
 }
@@ -629,10 +654,12 @@ async function main() {
   }
 
   if (json) {
+    const machinePortable = machinePortableStatus(findings);
     const payload = {
       scope,
       lang,
       repoRoot,
+      machinePortable,
       manifest: manifest
         ? {
             path: "(resolved)",

@@ -39,6 +39,10 @@ const PROJECT_UNDERSTANDING_RE =
   /\b(?:project|repo|repository|codebase|architecture|commerciali[sz]e|market|competitor|business model|strategy|roadmap)\b|(?:项目|仓库|代码库|架构|怎么玩|干啥|做什么|商业化|市场|竞品|商业模式|发展|路线图|战略)/iu;
 const SUBJECTIVE_QUALITY_RE =
   /\b(?:good|bad|beautiful|ugly|smooth|professional|premium|advanced|clean|simple|fast|slow|feels off|hard to use)\b|(?:好看|不好看|顺畅|不顺|高级|专业|简洁|太慢|太快|难用|怪|不对劲)/iu;
+const EXPLICIT_EXTERNAL_PUBLISH_RE =
+  /\b(?:git\s+push|gh\s+release|publish|release|ship|tag)\b|(?:推送|发布|发版|打\s*tag)/iu;
+const RELEASE_CONTEXT_RE =
+  /\b(?:commit|version|release\s+notes?|changelog|tag)\b|(?:提交|版本|新版本|更新说明|更新日志)/iu;
 
 const DEFAULT_STALE_MINUTES = 360;
 
@@ -152,6 +156,31 @@ function detectPromptLanguage(promptText) {
 function fingerprintPrompt(promptText) {
   if (!promptText) return null;
   return createHash("sha256").update(promptText, "utf8").digest("hex").slice(0, 16);
+}
+
+function buildExternalPublishIntent(promptText, promptFingerprint) {
+  const raw = String(promptText || "");
+  if (!raw.trim()) return null;
+  const explicitPublish = EXPLICIT_EXTERNAL_PUBLISH_RE.test(raw);
+  const releaseContext = RELEASE_CONTEXT_RE.test(raw);
+  const exactRemoteCommand = /\b(?:git\s+push|gh\s+release)\b/iu.test(raw);
+  if (!explicitPublish || (!releaseContext && !exactRemoteCommand)) return null;
+
+  return {
+    status: "user_explicit",
+    source: "prompt_intake",
+    scope: "git_remote_and_github_release",
+    promptFingerprint,
+    createdAt: new Date().toISOString(),
+    expiresAfterMinutes: 240,
+    allowedCommandFamilies: ["git_push", "github_release"],
+    deniedCommandFamilies: [
+      "npm_publish",
+      "package_install",
+      "destructive_git",
+      "force_push",
+    ],
+  };
 }
 
 function staleMinutes() {
@@ -284,6 +313,10 @@ const state = createInitialState({
   factGatePolicy: "managed_gate_required_for_public_ready",
   executionLeasePolicy: "advisory_until_managed_stage_driver",
 });
+const externalPublishIntent = buildExternalPublishIntent(rawPromptText, promptFingerprint);
+if (externalPublishIntent) {
+  state.stageRuntimeControl.externalPublishIntent = externalPublishIntent;
+}
 
 const continuationBoundary = buildContinuationBoundary(rawExisting, rawPromptText);
 if (continuationBoundary) {

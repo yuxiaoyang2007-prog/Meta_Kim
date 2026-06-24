@@ -6,6 +6,116 @@ This file is the reader-facing release history for Meta_Kim.
 
 The changelog explains the user-facing problem or risk each release solved, what changed to solve it, and why the change matters. It intentionally avoids long internal task ledgers, low-signal backlog ids, and implementation trivia. When exact evidence is needed, use the repository history, tests, generated reports, and PRD artifacts.
 
+## [2.8.56] - 2026-06-23
+
+### Solved Problem
+
+The audit found three remaining governance-runtime hazards: observed-mode hooks could still block read-only `node -e` Fetch inspections from global hook homes, runtime projection failure classes still depended on words inside human-readable prose, and Graphify could not show Meta_Kim agent-to-agent governance edges even though those edges matter for review.
+
+### Changed
+
+- **Observed Read-Only Node Eval Safety** - `node -e` inspections that only read/parse/print local files are now classified as read-only, while file writes, child processes, network calls, imports, and eval-like execution remain blocked.
+- **Global Hook Sync Proof** - The fixed hook package was synced into local Claude Code and Codex global hook homes with `--with-global-hooks`, so the active runtime hook no longer keeps using a stale read-only whitelist.
+- **Structured Runtime Failure Reasons** - Governed runtime projection evidence now records `failureReasonCode`; failure classes no longer substring-match prose such as `native` or `live`.
+- **Capability Count Semantics** - The repo capability index now separates canonical inventory totals from local runtime projection actual counts, so `totalHooks` / `totalCommands` are not mistaken for mounted hook/command counts.
+- **Graphify Governance Enrichment** - Graphify rebuilds now add Meta_Kim agent-governance edges and a `type` alias for `file_type`, making agent relations and node type consumers auditable.
+
+### Verification
+
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `node --test tests/meta-theory/32-meta-theory-four-product-targets.test.mjs`
+- `node --test tests/setup/capability-index-inheritance-chain.test.mjs`
+- `node --test tests/setup/graphify-wiring-contract.test.mjs`
+- `npm run meta:release:smoke`
+- `npm run meta:check`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
+## [2.8.55] - 2026-06-23
+
+### Solved Problem
+
+The observed-mode release fix still had one text-payload edge case: PowerShell here-strings used to write release notes could contain words like `git push` or `gh release`, and the hook could still treat that release-note text as if it were a real shell command.
+
+### Changed
+
+- **Here-String Text Safety** - Observed-mode high-risk detection now strips PowerShell here-string bodies before matching command verbs, so release-note or search text is not mistaken for an executable publish command.
+- **Executable Here-String Guard** - `Invoke-Expression` / `iex` remain high-risk, so a here-string piped into shell execution is still blocked.
+
+### Verification
+
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `npm run meta:release:smoke`
+- `node scripts/run-verify-all.mjs --no-report`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
+## [2.8.54] - 2026-06-23
+
+### Solved Problem
+
+Observed-mode hooks still made maintainer releases feel self-locking. After a user explicitly asked to commit, push, publish a new version, and update release notes, the same run could still block `git push` or GitHub Release commands because the hook only saw a high-risk external side effect, not the user's release authorization. The hook could also misread quoted search text such as a Graphify query containing `git push` or `gh release` as if the command itself were trying to publish.
+
+### Changed
+
+- **Explicit Observed Release Intent** - Prompt activation now records a short-lived, user-explicit external publish intent when the user's wording clearly asks for commit / push / release / version publication.
+- **Narrow Release Allowance** - Observed mode can now allow only non-force `git push` and GitHub Release `view/create/edit/upload` commands under that intent; `npm publish`, installs, force pushes, and destructive commands remain blocked.
+- **Quoted Search Safety** - Read-only search and graph queries no longer become high-risk just because the quoted search text mentions `git push` or `gh release`.
+- **Global Hook Sync Proof** - The fixed hook package was synced into the local Claude Code and Codex global hook homes with `--with-global-hooks`, and release-grade global hook checks verify those files.
+
+### Verification
+
+- `node --check canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs`
+- `node --check canonical/runtime-assets/claude/hooks/activate-meta-theory-spine.mjs`
+- `node --check canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs`
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `npm run meta:prd:stage-runtime-control:validate`
+- `npm run meta:sync`
+- `node scripts/sync-global-meta-theory.mjs --with-global-hooks`
+- `npm run meta:check`
+- `npm run meta:check:global:release`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
+## [2.8.53] - 2026-06-23
+
+### Solved Problem
+
+Meta_Kim's runtime hook could still make the design-time stages feel like they required Agent dispatch. During Fetch, a real business-file write was correctly blocked, but the denial text told the operator to dispatch an Agent even though Critical, Fetch, and Thinking are allowed to proceed in the main thread. The same gate could also block Claude plan-mode updates, making `/plan` look like another forbidden business mutation.
+
+That created the wrong repair loop: the operator needed to finish Fetch and Thinking evidence before Execution, but the hook implied the next step was mandatory Agent dispatch.
+
+The release audit also found several first-run and maintainer-release hazards: `npx github:...` could fail before dependencies were installed, global setup could silently update user-home hook wiring, Codex/Cursor hook runtime detection still relied on path sniffing, MCP Memory failures around port `8000` and Windows Python shims were hard to diagnose, and `meta:verify:all` was still too opaque when a nested validator failed.
+
+### Changed
+
+- **First-Run Setup Fallback** - `setup.mjs` now falls back to numbered terminal menus when `@inquirer/prompts` is not installed yet, so a fresh GitHub/npx setup can still reach the dependency install path.
+- **Global Hooks Opt-In** - Global reusable capability install no longer treats hooks as default-global. `--with-global-hooks` is now the explicit setup/sync switch for updating Claude/Codex/Cursor hook wiring, and docs/tests keep that boundary visible.
+- **Explicit Hook Runtime Selection** - Generated Claude, Codex, and Cursor hook commands pass explicit runtime arguments; the canonical dispatcher still supports detection as a fallback, but normal projections no longer depend on path sniffing.
+- **Capability Gate Visibility** - Progressive capability gating now exposes grace-window status in hook output, and setup tells maintainers how to choose `warn`, `block`, or `off`.
+- **MCP Memory Diagnostics** - MCP Memory hooks and installer paths honor `MCP_MEMORY_URL` / `META_KIM_MEMORY_PORT`, report likely port owners when startup health checks fail, and keep Windows Python shim failures diagnosable.
+- **Staged Verify Runner** - `meta:verify:all` now uses the staged runner by default, with `--json`, `--from`, report output, per-stage duration, and resumable failure context; the old one-line chain remains as `meta:verify:all:chain`.
+- **State Portability Warning** - `meta:status` reports machine-portability risk for `.meta-kim/state/` so local absolute-path state is not mistaken for shareable project material.
+- **Projection Tier Clarity** - Public docs now describe Claude Code and Codex as default projections while OpenClaw and Cursor remain compatibility projections that require maintainer handshake and native self-test evidence.
+- **Design-Time Stage Semantics** - Critical, Fetch, and Thinking denial messages now say business mutation waits for Execution, while the main thread may continue with read/search, capability discovery, planning/control-plane updates, and spine-state packet writes.
+- **Execution-Only Dispatch Requirement** - The stage runtime control contract now records that Fetch and Thinking in progress do not require Agent dispatch; execution owner/loadout and dispatch evidence remain Execution-stage gates.
+- **Planning Control Plane Allowance** - Claude plan-mode surfaces, task/todo bookkeeping, `.claude/plans/*.md`, and Meta_Kim planning files can update during Fetch without a `fetchRecord`, while ordinary business files remain blocked.
+- **Observed Local Publish Step** - Auto-triggered observed mode now allows local `git add` and `git commit` checkpoints and ignores risky words inside quoted search text, while continuing to block external publish/destructive commands such as `git push`, package installs, and resets.
+- **Hook Payload Path Compatibility** - Hook file-path extraction now handles camelCase and target path variants so runtime planning surfaces are classified by their real target.
+- **Run-Scoped Worker Execution Regression Coverage** - Eight-stage spine, setup, MCP Memory, hook-runtime, release-doc, and staged-verify tests cover the no-Agent design-stage rule, planning control-plane allowance, opt-in global hooks, explicit runtime selection, and the exact business-mutation denial wording that must not tell users to dispatch an Agent.
+
+### Verification
+
+- `npm run meta:prd:stage-runtime-control:validate`
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `npm run meta:sync`
+- `npm run discover:global`
+- `npm run meta:check`
+- `npm run meta:check:global`
+- `node scripts/run-verify-all.mjs --no-report`
+- `git diff --check`
+
 ## [2.8.52] - 2026-06-23
 
 ### Solved Problem

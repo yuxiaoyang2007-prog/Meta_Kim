@@ -280,6 +280,11 @@ describe("sync-runtimes / Codex project hooks", () => {
       ),
     );
     assert(enforceEntry, "enforce-agent-dispatch should be registered");
+    assert.match(
+      JSON.stringify(enforceEntry.hooks),
+      /--runtime codex/,
+      "Codex hook command must pass explicit runtime instead of relying on path sniffing",
+    );
     assert.equal(
       preToolUse[0],
       enforceEntry,
@@ -707,6 +712,11 @@ describe("sync-runtimes / Cursor project hooks", () => {
       entry.command?.includes("enforce-agent-dispatch.mjs"),
     );
     assert(enforceEntry, "enforce-agent-dispatch should be registered");
+    assert.match(
+      enforceEntry.command,
+      /--runtime cursor/,
+      "Cursor hook command must pass explicit runtime instead of relying on path sniffing",
+    );
     assert.equal(
       preToolUse[0],
       enforceEntry,

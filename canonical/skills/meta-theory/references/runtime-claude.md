@@ -20,6 +20,8 @@ Claude Code `UserPromptSubmit` / HookPrompt context can help Claude decide what 
 
 Therefore every governed Claude Code run must render localized assistant-message notices for run start, route selected before Execution, blocker/degraded state when present, and closure. Use `AskUserQuestion` only for branch-changing decisions; do not use it for routine progress.
 
+Claude Code task/todo bookkeeping is not a progress surface. During Critical and pre-evidence Fetch, do not open with `TaskCreate`, `TaskUpdate`, or `TodoWrite`, and do not announce "I will create a task list, then continue Fetch." Continue with a compact assistant-message status plus batch read/search evidence first. Task/todo bookkeeping may be used after Fetch evidence exists when it preserves continuity, but it is not required for governance readiness.
+
 Use `AskUserQuestion` in exactly these cases:
 
 - Critical clarification: only when the missing answer changes deliverable, scope, permission, safety, owner, capability, acceptance, or non-goal, and Fetch cannot safely proceed.

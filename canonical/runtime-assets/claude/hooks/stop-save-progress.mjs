@@ -61,12 +61,17 @@ const REMAINING_PATTERNS = [
   /(?:再|然后|接着|继续)\s*(?:Critical|Fetch|Thinking|Execution|Review|Meta-Review|Verification|Evolution|执行|推进|处理|做)[^\n]{0,80}/gi,
 ];
 
-// Patterns that indicate an unfinished handoff: "I'll list tasks first, then continue"
+const VISIBLE_PROGRESS_HANDOFF_RE =
+  /(?:已|已经|刚才|本轮)[^\n。]{1,60}(?:完成|读完|查完|检查完|确认|验证)[^\n。]{0,60}(?:下一步|接下来|继续|还需要)/i;
+const TASK_BOOKKEEPING_HANDOFF_RE =
+  /(?:任务清单|任务列表|任务单|todo\s*list|task\s*list)[^\n。]{0,80}(?:再|然后|接着|继续|fetch|执行|推进|跑|做)/i;
+
+// Patterns that indicate an unfinished handoff after visible progress.
 // The assistant announced a continuation but the turn is ending — flag it for the next turn.
 const HANDOFF_PATTERNS = [
-  /(?:建|列|先列|先建|创建)?(?:一个|一份|个)?(?:任务清单|任务列表|任务单|todo\s*list|task\s*list)/i,
-  /我先[^\n。]{1,30}(?:再|然后|继续|接着)/,
-  /(?:再|然后|接着|继续)\s*(?:fetch|执行|推进|跑|做)/i,
+  VISIBLE_PROGRESS_HANDOFF_RE,
+  /我先(?![^\n。]{0,40}(?:任务清单|任务列表|任务单|todo\s*list|task\s*list))[^\n。]{1,30}(?:再|然后|继续|接着)/i,
+  /(?:接下来|下一步|再|然后|接着|继续)\s*(?:fetch|执行|推进|跑|做)/i,
 ];
 
 // Patterns that describe what was just done
@@ -279,7 +284,10 @@ async function main() {
     process.exit(0);
     return;
   }
-  const handoffMatched = HANDOFF_PATTERNS.some((re) => re.test(text));
+  const taskBookkeepingOnlyHandoff =
+    TASK_BOOKKEEPING_HANDOFF_RE.test(text) && !VISIBLE_PROGRESS_HANDOFF_RE.test(text);
+  const handoffMatched =
+    !taskBookkeepingOnlyHandoff && HANDOFF_PATTERNS.some((re) => re.test(text));
 
   // Only save if there's meaningful work done
   const hasMeaningfulContent = (
@@ -290,8 +298,6 @@ async function main() {
     text.includes("save-progress") ||
     text.includes("进度") ||
     text.includes("继续") ||
-    text.includes("任务单") ||
-    text.includes("任务清单") ||
     handoffMatched
   );
 
@@ -334,7 +340,7 @@ async function main() {
   }
 
   // ── Continuation handoff flag ────────────────────────────────────────
-  // If the assistant announced an unfinished handoff (e.g. "建任务清单，再继续 Fetch")
+  // If the assistant announced an unfinished handoff after visible progress
   // and there are remaining tasks, write a continuationRequired flag into the
   // project's .claude/project-task-state.json so the next turn can auto-resume.
   // Scoped to cwd: when the hook runs outside a project, this is a no-op.

@@ -41,7 +41,10 @@ if sys.stdout and sys.stdout.encoding != "utf-8":
 if sys.stderr and sys.stderr.encoding != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-MEMORY_SERVICE_URL = os.environ.get("MCP_MEMORY_URL", "http://localhost:8000")
+MEMORY_SERVICE_URL = os.environ.get(
+    "MCP_MEMORY_URL",
+    f"http://localhost:{os.environ.get('META_KIM_MEMORY_PORT', '8000')}",
+)
 MEMORY_LIMIT = int(os.environ.get("MCP_MEMORY_LIMIT", "10"))
 TIMEOUT = 3
 HEALTH_TIMEOUT = 0.5

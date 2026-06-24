@@ -1693,12 +1693,16 @@ async function validateSyncConfiguration() {
     projectPolicy.defaultAssetMode === "global_reusable_by_default",
     "config/sync.json projectMaterializationPolicy.defaultAssetMode must keep reusable assets global by default.",
   );
-  for (const assetType of ["agents", "commands", "mcp", "hooks", "skills"]) {
+  for (const assetType of ["agents", "commands", "mcp", "skills"]) {
     assert(
       projectPolicy.globalByDefault?.includes(assetType),
       `config/sync.json projectMaterializationPolicy.globalByDefault must include ${assetType}.`,
     );
   }
+  assert(
+    !projectPolicy.globalByDefault?.includes("hooks"),
+    "config/sync.json projectMaterializationPolicy.globalByDefault must keep hooks opt-in, not default-global.",
+  );
   assert(
     projectPolicy.projectMaterializationTrigger ===
       "project_specific_customization_or_iteration_innovation",

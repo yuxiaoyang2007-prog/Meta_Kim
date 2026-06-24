@@ -7,6 +7,7 @@ import path from "node:path";
 import process from "node:process";
 import {
   buildRuntimeProjectionEvidence,
+  classifyProjectionFailure,
   readGovernedExecutionRun,
   runMetaTheoryGovernedExecution,
 } from "../../scripts/run-meta-theory-governed-execution.mjs";
@@ -297,6 +298,30 @@ describe("32 — Meta-theory three product goals and support gates", () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  test("T-002a projection failure classification uses reason codes, not prose substrings", () => {
+    const proseOnly = classifyProjectionFailure({
+      status: "partial",
+      unsupportedWithReason:
+        "Cursor native live evidence still needs a future harness, but this row failed because a projection file is missing.",
+    });
+    assert.equal(proseOnly, "structural_failure");
+
+    const structuredNative = classifyProjectionFailure({
+      status: "partial",
+      failureReasonCode: "native_harness_missing",
+      unsupportedWithReason: "Missing native live-turn harness.",
+    });
+    assert.equal(structuredNative, "native_harness_missing");
+
+    const smokeBoundary = classifyProjectionFailure({
+      status: "smoke_pass",
+      failureReasonCode: "projection_smoke_only",
+      unsupportedWithReason:
+        "Projection smoke is not native/live evidence; release-grade proof needs live evaluation.",
+    });
+    assert.equal(smokeBoundary, "projection_only");
   });
 
   test("T-002b uses canonical source projection only when runtime mirrors are absent", async () => {

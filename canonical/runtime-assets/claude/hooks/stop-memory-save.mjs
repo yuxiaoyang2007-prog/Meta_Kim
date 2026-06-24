@@ -31,7 +31,15 @@ try {
 }
 
 // ── Config ──────────────────────────────────────────────
-const DEFAULT_ENDPOINT = process.env.MCP_MEMORY_URL || "http://localhost:8000";
+function endpointFromMemoryPort() {
+  const port = String(process.env.META_KIM_MEMORY_PORT || "").trim();
+  return /^\d{1,5}$/u.test(port) ? `http://localhost:${port}` : null;
+}
+
+const DEFAULT_ENDPOINT =
+  process.env.MCP_MEMORY_URL ||
+  endpointFromMemoryPort() ||
+  "http://localhost:8000";
 const TIMEOUT_MS = 4000;
 const HEALTH_TIMEOUT_MS = 500;
 const REMOTE_MEMORY_ALLOWED = process.env.META_KIM_ALLOW_REMOTE_MEMORY === "1";

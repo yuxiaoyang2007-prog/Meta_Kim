@@ -323,7 +323,12 @@ export function buildCodexHooksJson({
       // PreToolUse logic so it can short-circuit unsafe dispatches.
       {
         matcher: "Bash|apply_patch|Edit|Write|MultiEdit|NotebookEdit|Agent|spawn_agent",
-        hooks: [hookCommand(nodeHookCommand(enforceAgentDispatchHookPath), 10)],
+        hooks: [
+          hookCommand(
+            nodeHookCommand(enforceAgentDispatchHookPath, ["--runtime", "codex"]),
+            10,
+          ),
+        ],
       },
       {
         matcher: "Bash",
@@ -400,7 +405,7 @@ export function buildCursorHooksJson({
       // Capability-first + meta-readonly deny gate. failClosed=true ensures
       // Cursor honors the deny payload even if the hook crashes.
       {
-        command: nodeHookCommand(enforceAgentDispatchHookPath),
+        command: nodeHookCommand(enforceAgentDispatchHookPath, ["--runtime", "cursor"]),
         timeout: 10,
         failClosed: true,
       },

@@ -29,7 +29,6 @@
       "agents",
       "commands",
       "mcp",
-      "hooks",
       "skills"
     ],
     "projectMaterializationTrigger": "project_specific_customization_or_iteration_innovation",

@@ -155,9 +155,13 @@ describe("release documentation semantics", () => {
     for (const file of readmeFiles) {
       const raw = readFileSync(path.join(root, file), "utf8");
 
-      assert.match(raw, /alt="Formal projections"/, file);
+      assert.match(raw, /alt="Projection tiers"/, file);
       assert.match(raw, /alt="Candidate compatibility probes"/, file);
-      assert.match(raw, /Claude%20Code%20%7C%20Codex%20%7C%20OpenClaw%20%7C%20Cursor/, file);
+      assert.match(
+        raw,
+        /default-Claude%20Code%20%7C%20Codex%20%2B%20compat-OpenClaw%20%7C%20Cursor/,
+        file,
+      );
       assert.match(raw, /Qoder%20%7C%20Trae%20%7C%20Kiro%20%7C%20Cascade%20%7C%20Cline%20%7C%20Roo%20%7C%20Continue/, file);
       assert.doesNotMatch(raw, /alt="Runtime"/, file);
       assert.doesNotMatch(raw, /runtime-Claude%20Code%20%7C%20Codex%20%7C%20OpenClaw%20%7C%20Cursor/, file);
@@ -174,10 +178,10 @@ describe("release documentation semantics", () => {
     }
 
     assert.match(readFileSync(path.join(root, "README.md"), "utf8"), /Default formal projections/);
-    assert.match(readFileSync(path.join(root, "README.md"), "utf8"), /Non-default formal projections/);
+    assert.match(readFileSync(path.join(root, "README.md"), "utf8"), /Non-default compatibility projections/);
     assert.match(readFileSync(path.join(root, "README.md"), "utf8"), /Candidate compatibility probes/);
     assert.match(readFileSync(path.join(root, "README.zh-CN.md"), "utf8"), /默认正式投影/);
-    assert.match(readFileSync(path.join(root, "README.zh-CN.md"), "utf8"), /非默认但正式投影/);
+    assert.match(readFileSync(path.join(root, "README.zh-CN.md"), "utf8"), /非默认兼容投影/);
     assert.match(readFileSync(path.join(root, "README.zh-CN.md"), "utf8"), /候选兼容 probe/);
   });
 

@@ -15,6 +15,7 @@
  *
  * Coverage:
  *   - META_KIM_HOOK_RUNTIME env override (claude / codex / cursor)
+ *   - --runtime CLI override projected by hook config
  *   - process.argv[1] path inspection on Windows (backslash, mixed case)
  *   - process.argv[1] path inspection on POSIX (forward slash)
  *   - Forward-slash variant on Windows (Node sometimes preserves verbatim path)
@@ -226,6 +227,28 @@ describe("detectHookRuntime() — META_KIM_HOOK_RUNTIME env override", () => {
 });
 
 describe("detectHookRuntime() — process.argv[1] path inspection", () => {
+  test("CLI --runtime override beats path fallback", () => {
+    const detect = buildDetectFor({
+      platform: "linux",
+      argv: ["node", "/tmp/enforce-agent-dispatch.mjs", "--runtime", "codex"],
+      env: {},
+    });
+    assert.equal(detect(), "codex");
+  });
+
+  test("CLI --meta-kim-hook-runtime=cursor override is accepted", () => {
+    const detect = buildDetectFor({
+      platform: "linux",
+      argv: [
+        "node",
+        "/tmp/enforce-agent-dispatch.mjs",
+        "--meta-kim-hook-runtime=cursor",
+      ],
+      env: {},
+    });
+    assert.equal(detect(), "cursor");
+  });
+
   test("Windows backslash argv with .codex segment → 'codex'", () => {
     const detect = buildDetectFor({
       platform: "win32",

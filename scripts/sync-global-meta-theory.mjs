@@ -123,17 +123,15 @@ const RETIRED_HOOK_FILES = ["pre-git-push-confirm.mjs"];
 const legacyHookBackupStamp = new Date()
   .toISOString()
   .replace(/[:.]/g, "-");
-const codexMetaTheoryCommandSource = path.join(
+const codexCommandsSourceDir = path.join(
   canonicalRuntimeAssetsDir,
   "codex",
   "commands",
-  "meta-theory.md",
 );
-const claudeMetaTheoryCommandSource = path.join(
+const claudeCommandsSourceDir = path.join(
   canonicalRuntimeAssetsDir,
   "claude",
   "commands",
-  "meta-theory.md",
 );
 
 let runtimeHomes = {};
@@ -417,54 +415,79 @@ function renderGlobalCommandContent(raw) {
   return raw.replaceAll("__META_KIM_PACKAGE_ROOT__", repoRoot.replace(/\\/g, "/"));
 }
 
-async function copyCodexMetaTheoryCommand() {
-  const commandsDir = path.join(runtimeHomes.codex.dir, "commands");
-  const targetPath = path.join(commandsDir, "meta-theory.md");
-  assertHomeBound(targetPath);
-  if (!(await pathExists(codexMetaTheoryCommandSource))) {
-    throw new Error(
-      `Missing canonical Codex command source: ${codexMetaTheoryCommandSource}`,
-    );
+async function collectCanonicalCommands(sourceDir) {
+  const entries = await fs.readdir(sourceDir, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    if (
+      !entry.isFile() ||
+      !entry.name.endsWith(".md") ||
+      entry.name.includes(".tmp.") ||
+      entry.name.endsWith(".tmp")
+    ) {
+      continue;
+    }
+    files.push({
+      name: entry.name,
+      content: renderGlobalCommandContent(
+        await fs.readFile(path.join(sourceDir, entry.name), "utf8"),
+      ),
+    });
   }
-  await fs.mkdir(commandsDir, { recursive: true });
-  await fs.writeFile(
-    targetPath,
-    renderGlobalCommandContent(await fs.readFile(codexMetaTheoryCommandSource, "utf8")),
-    "utf8",
-  );
-  recordSafe((rec) =>
-    rec.recordFile(targetPath, {
-      source: "sync-global-meta-theory",
-      purpose: "codex-global-command",
-      category: CATEGORIES.A,
-    }),
-  );
-  return targetPath;
+  return files.sort((left, right) => left.name.localeCompare(right.name));
 }
 
-async function copyClaudeMetaTheoryCommand() {
-  const commandsDir = path.join(runtimeHomes.claude.dir, "commands");
-  const targetPath = path.join(commandsDir, "meta-theory.md");
-  assertHomeBound(targetPath);
-  if (!(await pathExists(claudeMetaTheoryCommandSource))) {
-    throw new Error(
-      `Missing canonical Claude Code command source: ${claudeMetaTheoryCommandSource}`,
+async function copyRuntimeCommands(targetId, sourceDir) {
+  const commandsDir = path.join(runtimeHomes[targetId].dir, "commands");
+  assertHomeBound(commandsDir);
+  const commands = await collectCanonicalCommands(sourceDir);
+  await fs.mkdir(commandsDir, { recursive: true });
+
+  const targetPaths = [];
+  for (const command of commands) {
+    const targetPath = path.join(commandsDir, command.name);
+    assertHomeBound(targetPath);
+    await fs.writeFile(targetPath, command.content, "utf8");
+    targetPaths.push(targetPath);
+    recordSafe((rec) =>
+      rec.recordFile(targetPath, {
+        source: "sync-global-meta-theory",
+        purpose: `${targetId}-global-command`,
+        category: CATEGORIES.A,
+      }),
     );
   }
-  await fs.mkdir(commandsDir, { recursive: true });
-  await fs.writeFile(
-    targetPath,
-    renderGlobalCommandContent(await fs.readFile(claudeMetaTheoryCommandSource, "utf8")),
-    "utf8",
+  return targetPaths;
+}
+
+async function checkRuntimeCommands(targetId, sourceDir) {
+  const commandsDir = path.join(runtimeHomes[targetId].dir, "commands");
+  assertHomeBound(commandsDir);
+  const commands = await collectCanonicalCommands(sourceDir);
+  const outOfSync = [];
+
+  for (const command of commands) {
+    const targetPath = path.join(commandsDir, command.name);
+    assertHomeBound(targetPath);
+    const targetRaw = (await pathExists(targetPath))
+      ? await fs.readFile(targetPath, "utf8")
+      : null;
+    if (targetRaw !== command.content) {
+      outOfSync.push(command.name);
+    }
+  }
+
+  const inSync = outOfSync.length === 0;
+  const label = targetId === "claude" ? "Claude Code" : "Codex";
+  console.log(
+    `${inSync ? `${C.green}✓${C.reset}` : `${C.yellow}⊘${C.reset}`} ${C.dim}${label} commands: ${commandsDir} (${commands.length} files)${C.reset}`,
   );
-  recordSafe((rec) =>
-    rec.recordFile(targetPath, {
-      source: "sync-global-meta-theory",
-      purpose: "claude-global-command",
-      category: CATEGORIES.A,
-    }),
-  );
-  return targetPath;
+  if (!inSync) {
+    console.log(
+      `${C.yellow}⊘${C.reset} ${C.dim}Out-of-sync ${label} commands: ${outOfSync.join(", ")}${C.reset}`,
+    );
+  }
+  return { inSync, outOfSync, commands };
 }
 
 async function ensureCodexGlobalConfigChoiceSurface() {
@@ -1108,45 +1131,13 @@ async function runCheck() {
   }
 
   if (selectedTargetIds.includes("claude")) {
-    const commandPath = path.join(
-      runtimeHomes.claude.dir,
-      "commands",
-      "meta-theory.md",
-    );
-    const sourceRaw = renderGlobalCommandContent(
-      await fs.readFile(claudeMetaTheoryCommandSource, "utf8"),
-    );
-    const targetRaw = (await pathExists(commandPath))
-      ? await fs.readFile(commandPath, "utf8")
-      : null;
-    const commandInSync = targetRaw === sourceRaw;
-    console.log(
-      `${commandInSync ? `${C.green}✓${C.reset}` : `${C.yellow}⊘${C.reset}`} ${C.dim}Claude Code /meta-theory command: ${commandPath}${C.reset}`,
-    );
-    if (!commandInSync) {
-      failed = true;
-    }
+    const commandResults = await checkRuntimeCommands("claude", claudeCommandsSourceDir);
+    if (!commandResults.inSync) failed = true;
   }
 
   if (selectedTargetIds.includes("codex")) {
-    const commandPath = path.join(
-      runtimeHomes.codex.dir,
-      "commands",
-      "meta-theory.md",
-    );
-    const sourceRaw = renderGlobalCommandContent(
-      await fs.readFile(codexMetaTheoryCommandSource, "utf8"),
-    );
-    const targetRaw = (await pathExists(commandPath))
-      ? await fs.readFile(commandPath, "utf8")
-      : null;
-    const commandInSync = targetRaw === sourceRaw;
-    console.log(
-      `${commandInSync ? `${C.green}✓${C.reset}` : `${C.yellow}⊘${C.reset}`} ${C.dim}Codex /meta-theory command: ${commandPath}${C.reset}`,
-    );
-    if (!commandInSync) {
-      failed = true;
-    }
+    const commandResults = await checkRuntimeCommands("codex", codexCommandsSourceDir);
+    if (!commandResults.inSync) failed = true;
 
     const configPath = path.join(runtimeHomes.codex.dir, "config.toml");
     const configRaw = (await pathExists(configPath))
@@ -1230,16 +1221,16 @@ async function runSync() {
   }
 
   if (selectedTargetIds.includes("claude")) {
-    const commandPath = await copyClaudeMetaTheoryCommand();
+    const commandPaths = await copyRuntimeCommands("claude", claudeCommandsSourceDir);
     console.log(
-      `${C.green}✓${C.reset} ${C.dim}Synced Claude Code /meta-theory command: ${commandPath}${C.reset}`,
+      `${C.green}✓${C.reset} ${C.dim}Synced Claude Code commands: ${path.join(runtimeHomes.claude.dir, "commands")} (${commandPaths.length} files)${C.reset}`,
     );
   }
 
   if (selectedTargetIds.includes("codex")) {
-    const commandPath = await copyCodexMetaTheoryCommand();
+    const commandPaths = await copyRuntimeCommands("codex", codexCommandsSourceDir);
     console.log(
-      `${C.green}✓${C.reset} ${C.dim}Synced Codex /meta-theory command: ${commandPath}${C.reset}`,
+      `${C.green}✓${C.reset} ${C.dim}Synced Codex commands: ${path.join(runtimeHomes.codex.dir, "commands")} (${commandPaths.length} files)${C.reset}`,
     );
     await ensureCodexGlobalConfigChoiceSurface();
   }
@@ -1282,10 +1273,10 @@ function printTargets() {
   console.log("");
   console.log("Runtime slash commands:");
   console.log(
-    `- ${path.join(runtimeHomes.claude.dir, "commands", "meta-theory.md")}`,
+    `- ${path.join(runtimeHomes.claude.dir, "commands")} (Claude Code)`,
   );
   console.log(
-    `- ${path.join(runtimeHomes.codex.dir, "commands", "meta-theory.md")}`,
+    `- ${path.join(runtimeHomes.codex.dir, "commands")} (Codex)`,
   );
   console.log(
     `- ${path.join(runtimeHomes.codex.dir, "config.toml")} ([features].${CODEX_REQUEST_USER_INPUT_FEATURE} = true)`,

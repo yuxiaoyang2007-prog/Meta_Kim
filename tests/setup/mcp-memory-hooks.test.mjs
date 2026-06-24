@@ -86,6 +86,18 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.doesNotMatch(source, /message:\s*context/);
     assert.match(source, /node:https/);
     assert.match(source, /url\.protocol === "https:" \? https : http/);
+    assert.match(source, /META_KIM_MEMORY_PORT/);
+    assert.match(source, /endpointFromMemoryPort/);
+  });
+
+  test("installer reports configurable endpoints and port owners", () => {
+    const source = readRepoFile("scripts", "install-mcp-memory-hooks.mjs");
+
+    assert.match(source, /configuredMemoryEndpoint/);
+    assert.match(source, /META_KIM_MEMORY_PORT/);
+    assert.match(source, /findProcessUsingPort/);
+    assert.match(source, /netstat/);
+    assert.match(source, /Port \$\{port\} is already used by PID/);
   });
 
   test("shared hook redacts saved secrets and quotes sanitized recall as untrusted", async () => {
@@ -1123,7 +1135,7 @@ describe("MCP memory cross-runtime hooks", () => {
         transcriptPath,
         [
           "用户要求继续处理 Meta_Kim 的 critical and fetch thinking and review 问题。",
-          "我先建一个任务列表来跟踪本次诊断，再继续 Fetch。",
+          "我已经读完 stop-save-progress 的关键证据，接下来继续 Fetch。",
           "接下来继续 Fetch runtime 状态、HookPrompt 边界和 active-run 证据。",
           "还需要检查 stop-save-progress 与 stop-compaction 的续跑记录。",
           "这是真实 assistant handoff，不是 HookPrompt 前台优化块。",
@@ -1161,6 +1173,54 @@ describe("MCP memory cross-runtime hooks", () => {
     }
   });
 
+  test("Claude stop save progress ignores task-list-only Fetch preambles as continuation handoff", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-stop-save-task-preamble-"));
+    const transcriptPath = path.join(tempDir, "transcript.jsonl");
+    const statePath = path.join(tempDir, ".claude", "project-task-state.json");
+
+    try {
+      writeFileSync(path.join(tempDir, "AGENTS.md"), "test project marker\n", "utf8");
+      writeFileSync(
+        transcriptPath,
+        [
+          "用户要求继续处理 Meta_Kim 的 critical and fetch thinking and review 问题。",
+          "我先建一个任务列表来跟踪本次诊断，再继续 Fetch。",
+          "这里还没有真实 Fetch 证据，也没有已完成的读取或验证。",
+          "这只是任务列表前置语，不应该写成 continuationRequired。",
+          "保持足够 transcript 行数以经过 stop-save-progress 的长度阈值。",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const hookPath = path.join(
+        repoRoot,
+        "canonical",
+        "runtime-assets",
+        "claude",
+        "hooks",
+        "stop-save-progress.mjs",
+      );
+      const result = spawnSync(
+        process.execPath,
+        [hookPath],
+        {
+          input: JSON.stringify({ transcript_path: transcriptPath }),
+          encoding: "utf8",
+          cwd: tempDir,
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      if (existsSync(statePath)) {
+        const state = JSON.parse(readFileSync(statePath, "utf8"));
+        assert.notEqual(state.continuationRequired, true);
+        assert.equal(state.continuationHandoff, undefined);
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("Claude stop save progress preserves real handoff after one-line HookPrompt JSONL block", () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-stop-save-jsonl-"));
     const transcriptPath = path.join(tempDir, "transcript.jsonl");
@@ -1177,7 +1237,7 @@ describe("MCP memory cross-runtime hooks", () => {
               "MANDATORY_FORMAT_INSTRUCTION\\n📝 原始输入：critical and fetch thinking and review\\n✅ 优化后的完整提示词：继续当前 active run，先建任务清单，再继续 Fetch。\\n---\\n",
           }),
           "用户要求继续处理 Meta_Kim 的 critical and fetch thinking and review 问题。",
-          "我先建一个任务列表来跟踪本次诊断，再继续 Fetch。",
+          "我已经读完 stop-save-progress 的关键证据，接下来继续 Fetch。",
           "接下来继续 Fetch runtime 状态、HookPrompt 边界和 active-run 证据。",
           "还需要检查 stop-save-progress 与 stop-compaction 的续跑记录。",
           "这是真实 assistant handoff，不是 HookPrompt 前台优化块。",

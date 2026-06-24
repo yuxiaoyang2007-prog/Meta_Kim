@@ -26,7 +26,8 @@ function tailFile(filePath: string, maxLines = 80): string {
 }
 
 function endpoint(): string {
-  return process.env.MCP_MEMORY_URL || "http://localhost:8000";
+  const port = process.env.META_KIM_MEMORY_PORT || "8000";
+  return process.env.MCP_MEMORY_URL || `http://localhost:${port}`;
 }
 
 const REMOTE_MEMORY_ALLOWED = process.env.META_KIM_ALLOW_REMOTE_MEMORY === "1";

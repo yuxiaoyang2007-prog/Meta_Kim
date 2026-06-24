@@ -132,6 +132,7 @@ export function buildMetaKimHooksTemplate(
           cmd("stop-compaction.mjs"),
           cmd("stop-console-log-audit.mjs"),
           cmd("stop-completion-guard.mjs"),
+          cmd("stop-memory-save.mjs"),
           cmd("stop-save-progress.mjs"),
           cmd("stop-spine-cleanup.mjs"),
         ],

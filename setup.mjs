@@ -9,6 +9,8 @@
  *   node setup.mjs --check      # Environment check only
  *   node setup.mjs --silent     # Non-interactive (CI / scripts)
  *   node setup.mjs --skills a,b # Limit global skill repos (non-interactive / CI)
+ *   node setup.mjs --with-global-hooks
+ *                                # Opt in to global hook wiring for selected runtimes
  *   node setup.mjs --project-dir <dir> [--project-dir <dir>]
  *                                # Also export project-level runtime files to one or more projects
  *   node setup.mjs --all-projects # Reuse saved project directories for export/update
@@ -96,6 +98,9 @@ const silentMode = args.includes("--silent") || !process.stdout.isTTY;
 const useSavedProjectDirsMode =
   args.includes("--all-projects") || args.includes("--update-projects");
 const saveProjectDirsMode = args.includes("--save-project-dirs");
+const setupWithGlobalHooks =
+  args.includes("--with-global-hooks") ||
+  process.env.META_KIM_WITH_GLOBAL_HOOKS === "1";
 
 function writeUtf8BomFileSync(path, content) {
   writeFileSync(
@@ -368,6 +373,10 @@ ${r ? `Raw error: ${r}` : ""}
     postInstallNotesHeading: "Post-install notes:",
     postInstallNotesIntro:
       "After installation, here is what is available and how each layer activates:",
+    capabilityGateNotice:
+      "Capability gate default: progressive (warn for 7 days, then block). Set META_KIM_CAPABILITY_GATE=warn|block|off to override.",
+    globalHooksOptInNotice:
+      "Global hooks are opt-in: run node setup.mjs --with-global-hooks when you want Meta_Kim to update Claude/Codex/Cursor hook wiring.",
     postInstallNotesPlatformSync: "Platform capability sync:",
     platformClauleCode: "Claude Code",
     platformClauleCodeCap: "agents + skills + hooks",
@@ -406,6 +415,8 @@ ${r ? `Raw error: ${r}` : ""}
     /** Shown under @inquirer checkbox — space / a / i match default shortcuts. */
     inquirerMultiHotkeys:
       "↑↓ move · space toggle · ⏎ confirm · a all · i invert",
+    inquirerUnavailableFallback:
+      "@inquirer/prompts is not installed yet; using numbered prompts. Run npm install to restore arrow-key prompts.",
     globalInstallPrompt:
       "Meta_Kim skills install to ~/.claude/skills/ (global). Install globally?",
     globalDirReady: (p) => `Global skills dir ready: ${p}`,
@@ -424,7 +435,7 @@ ${r ? `Raw error: ${r}` : ""}
     installScopeProject:
       "Project directories — explicit project runtime update",
     installScopeGlobal:
-      "Global — reusable agents, commands, MCP, hooks, and skills where the runtime supports them",
+      "Global — reusable agents, commands, MCP, and skills where the runtime supports them",
     installScopeProjectLabel: "Project directory updates",
     installScopeGlobalLabel: "Global capabilities (recommended)",
     installScopeProjectDesc:
@@ -438,7 +449,8 @@ ${r ? `Raw error: ${r}` : ""}
     installScopeGlobalDesc:
       "Install reusable runtime capabilities; project-local files are created only for customization.",
     installScopeGlobalDescDetail: `Creates global-level features:
-• Agents / commands / MCP / hooks / skills — installed into each selected runtime's official global/home locations when supported
+• Agents / commands / MCP / skills — installed into each selected runtime's official global/home locations when supported
+• Global hook wiring is opt-in: pass --with-global-hooks when you want Meta_Kim to update runtime hook settings
 • Project directories reuse these capabilities directly unless a project-specific extension is proven
 • Other projects get discovery/dry-run first; local files are written only after customization/bootstrap confirmation`,
     askProjectRedundantCleanup:
@@ -462,7 +474,7 @@ ${r ? `Raw error: ${r}` : ""}
   Stores run history, compacts sessions, enables cross-session recovery
 
 • .claude/.codex/.cursor/openclaw/ — Tool-specific project context/config/overrides
-  Reusable agents, commands, MCP, hooks, and skills stay global unless the project needs a custom variant`,
+  Reusable agents, commands, MCP, and skills stay global unless the project needs a custom variant; hooks are explicit opt-in`,
     directoryExplanationGlobal: "Global-level (in home directory):",
     directoryExplanationGlobalDetail: `• ~/.claude/skills/ — Skills shared across ALL projects
   Install once, discover everywhere. Project files are written only for confirmed customization/state.
@@ -619,7 +631,7 @@ Possible causes:
     updateSkillsDone: "Global skills updated",
     globalSkillsSkipped: "Global skills skipped",
     askMetaTheoryUpdate:
-      "Sync the Meta_Kim global governance layer to the selected runtimes for reuse across projects? Includes agents, skills, MCP, Commands, hooks, etc.; supported items are checked automatically. (recommended)",
+      "Sync the Meta_Kim global governance layer to the selected runtimes for reuse across projects? Includes agents, skills, MCP, and Commands; global hooks require --with-global-hooks. Supported items are checked automatically. (recommended)",
     updateMetaTheoryDone: "Meta_Kim global capabilities synced",
     metaTheorySkipped: "Meta_Kim global capability sync skipped",
     globalHooksMigrationHeading:
@@ -979,6 +991,10 @@ ${r ? `原始错误：${r}` : ""}
     // 安装后注意事项
     postInstallNotesHeading: "安装后注意事项：",
     postInstallNotesIntro: "安装完成后，各层能力的使用方式如下：",
+    capabilityGateNotice:
+      "Capability gate 默认是 progressive：前 7 天只警告，之后阻断。可设置 META_KIM_CAPABILITY_GATE=warn|block|off 覆盖。",
+    globalHooksOptInNotice:
+      "全局 hooks 默认不改写：需要 Meta_Kim 更新 Claude/Codex/Cursor hook 配置时，请显式运行 node setup.mjs --with-global-hooks。",
     postInstallNotesPlatformSync: "各平台能力同步情况：",
     platformClauleCode: "Claude Code",
     platformClauleCodeCap: "agents + skills + hooks",
@@ -1014,6 +1030,8 @@ ${r ? `原始错误：${r}` : ""}
     choose: (n) => `选择 (1-${n})`,
     inquirerSingleHotkeys: "↑↓ 移动选项 · ⏎ 确认",
     inquirerMultiHotkeys: "↑↓ 移动 · 空格 勾选/取消 · ⏎ 确认 · a 全选 · i 反选",
+    inquirerUnavailableFallback:
+      "@inquirer/prompts 尚未安装，已退回数字菜单。安装完成后运行 npm install 可恢复方向键菜单。",
     globalInstallPrompt:
       "Meta_Kim 技能安装到 ~/.claude/skills/（全局）。是否全局安装？",
     globalDirReady: (p) => `全局技能目录就绪：${p}`,
@@ -1031,7 +1049,7 @@ ${r ? `原始错误：${r}` : ""}
     installScopeProject:
       "当前项目 — 仅项目专用定制",
     installScopeGlobal:
-      "全局 — 按各 runtime 支持安装 agents、Commands、MCP、hooks、skills 等通用能力",
+      "全局 — 按各 runtime 支持安装 agents、Commands、MCP、skills 等通用能力",
     installScopeProjectLabel: "批量项目更新",
     installScopeGlobalLabel: "全局通用能力（推荐）",
     installScopeProjectDesc: "进入批量项目目录更新；不安装全局通用能力。",
@@ -1043,7 +1061,8 @@ ${r ? `原始错误：${r}` : ""}
     installScopeGlobalDesc:
       "自动安装/更新全局通用能力；可选清理项目内冗余资产。",
     installScopeGlobalDescDetail: `创建全局级功能：
-• agents / Commands / MCP / hooks / skills — 在所选 runtime 支持的官方全局/用户目录中安装
+• agents / Commands / MCP / skills — 在所选 runtime 支持的官方全局/用户目录中安装
+• 全局 hooks 需要显式传入 --with-global-hooks，才会更新 runtime hook 配置
 • 安装后会询问是否清理项目内冗余 Meta_Kim 项目级资产
 • 清理只删除 manifest 能证明由 Meta_Kim 生成的旧项目级文件，并清空空目录`,
     askProjectRedundantCleanup:
@@ -1067,7 +1086,7 @@ ${r ? `原始错误：${r}` : ""}
   存储运行历史、压缩会话、支持跨会话恢复
 
 • .claude/.codex/.cursor/openclaw/ — 各工具的项目上下文/配置/覆盖层
-  可复用 agents、Commands、MCP、hooks、skills 默认留在全局，除非项目需要定制版本`,
+  可复用 agents、Commands、MCP、skills 默认留在全局；hooks 需要显式 opt-in，除非项目需要定制版本`,
     directoryExplanationGlobal: "全局级（用户目录内）：",
     directoryExplanationGlobalDetail: `• ~/.claude/skills/ — 所有项目共享的技能
   一次安装，处处可发现。项目文件只在确认需要定制/状态记录时写入。
@@ -1214,7 +1233,7 @@ ${r ? `原始错误：${r}` : ""}
     updateSkillsDone: "全局技能已更新",
     globalSkillsSkipped: "全局技能已跳过",
     askMetaTheoryUpdate:
-      "把 Meta_Kim 全局治理层同步到已选平台，供各项目复用？包含 agents、skills、MCP、Commands、hooks 等；实际支持项会自动检查后同步。（推荐）",
+      "把 Meta_Kim 全局治理层同步到已选平台，供各项目复用？包含 agents、skills、MCP、Commands；全局 hooks 需要 --with-global-hooks。实际支持项会自动检查后同步。（推荐）",
     updateMetaTheoryDone: "Meta_Kim 全局能力已同步",
     metaTheorySkipped: "Meta_Kim 全局能力同步已跳过",
     globalHooksMigrationHeading:
@@ -1566,6 +1585,10 @@ ${r ? `生エラー：${r}` : ""}
     // インストール後の注意事項
     postInstallNotesHeading: "インストール後の注意事項：",
     postInstallNotesIntro: "インストール完了後、各層の使い方は以下の通りです：",
+    capabilityGateNotice:
+      "Capability gate の既定値は progressive です：7 日間は警告、その後はブロック。META_KIM_CAPABILITY_GATE=warn|block|off で変更できます。",
+    globalHooksOptInNotice:
+      "グローバル hooks は既定では変更しません。Meta_Kim で Claude/Codex/Cursor の hook 設定を更新する場合は node setup.mjs --with-global-hooks を明示してください。",
     postInstallNotesPlatformSync: "各プラットフォームの同期状況：",
     platformClauleCode: "Claude Code",
     platformClauleCodeCap: "agents + skills + hooks",
@@ -1602,6 +1625,8 @@ ${r ? `生エラー：${r}` : ""}
     choose: (n) => `選択 (1-${n})`,
     inquirerSingleHotkeys: "↑↓ 移動 · ⏎ 確定",
     inquirerMultiHotkeys: "↑↓ 移動 · Space 切替 · ⏎ 確定 · a 全選択 · i 反転",
+    inquirerUnavailableFallback:
+      "@inquirer/prompts が未インストールのため番号メニューに切り替えます。npm install 後は矢印キーメニューを使えます。",
     globalInstallPrompt:
       "Meta_Kim スキルは ~/.claude/skills/（グローバル）にインストールされます。グローバルインストールしますか？",
     globalDirReady: (p) => `グローバルスキルディレクトリ準備完了：${p}`,
@@ -1621,7 +1646,7 @@ ${r ? `生エラー：${r}` : ""}
     installScopeProject:
       "プロジェクトディレクトリ — 明示的なプロジェクト runtime 更新",
     installScopeGlobal:
-      "グローバル — runtime が対応する agents、Commands、MCP、hooks、skills の再利用能力",
+      "グローバル — runtime が対応する agents、Commands、MCP、skills の再利用能力",
     installScopeProjectLabel: "プロジェクトディレクトリ更新",
     installScopeGlobalLabel: "グローバル能力（推奨）",
     installScopeProjectDesc:
@@ -1635,7 +1660,8 @@ ${r ? `生エラー：${r}` : ""}
     installScopeGlobalDesc:
       "再利用 runtime 能力をインストール。プロジェクトローカルファイルはカスタム時のみ作成。",
     installScopeGlobalDescDetail: `グローバルレベル機能を作成：
-• agents / Commands / MCP / hooks / skills — 選択 runtime の公式グローバル/ユーザー場所へインストール
+• agents / Commands / MCP / skills — 選択 runtime の公式グローバル/ユーザー場所へインストール
+• グローバル hooks は --with-global-hooks を明示した場合だけ runtime hook 設定を更新
 • 各プロジェクトは、専用拡張が証明されない限りグローバル能力を直接再利用
 • 他プロジェクトはまず discovery/dry-run；カスタム/bootstrap 確認後のみローカルファイルを書く`,
     askProjectRedundantCleanup:
@@ -1659,7 +1685,7 @@ ${r ? `生エラー：${r}` : ""}
   実行履歴、セッション圧縮、クロスセッション回復を保存
 
 • .claude/.codex/.cursor/openclaw/ — 各ツールのプロジェクト context/config/override
-  再利用 agents、Commands、MCP、hooks、skills は、プロジェクト専用版が必要な場合以外はグローバル`,
+  再利用 agents、Commands、MCP、skills は、プロジェクト専用版が必要な場合以外はグローバル；hooks は明示 opt-in`,
     directoryExplanationGlobal: "グローバルレベル（ホームディレクトリ内）：",
     directoryExplanationGlobalDetail: `• ~/.claude/skills/ — 全プロジェクト共有スキル
   一度のインストールでどこでも発見可能。プロジェクトファイルは確認済みカスタム/state の場合のみ書く。
@@ -1825,7 +1851,7 @@ ${r ? `生エラー：${r}` : ""}
     updateSkillsDone: "グローバルスキルが更新されました",
     globalSkillsSkipped: "グローバルスキルをスキップしました",
     askMetaTheoryUpdate:
-      "選択した runtime に Meta_Kim グローバル治理レイヤーを同期し、各プロジェクトで再利用しますか？agents、skills、MCP、Commands、hooks などを含み、対応項目は自動確認されます。（推奨）",
+      "選択した runtime に Meta_Kim グローバル治理レイヤーを同期し、各プロジェクトで再利用しますか？agents、skills、MCP、Commands を含みます。グローバル hooks は --with-global-hooks が必要です。対応項目は自動確認されます。（推奨）",
     updateMetaTheoryDone: "Meta_Kim グローバル能力を同期しました",
     metaTheorySkipped: "Meta_Kim グローバル能力同期をスキップしました",
     globalHooksMigrationHeading:
@@ -2191,6 +2217,10 @@ ${r ? `원본 오류：${r}` : ""}
     // 설치 후 주의사항
     postInstallNotesHeading: "설치 후 주의사항:",
     postInstallNotesIntro: "설치 완료 후 각 층의 사용 방식은 다음과 같습니다:",
+    capabilityGateNotice:
+      "Capability gate 기본값은 progressive입니다: 7일간 경고 후 차단합니다. META_KIM_CAPABILITY_GATE=warn|block|off로 변경할 수 있습니다.",
+    globalHooksOptInNotice:
+      "전역 hooks는 기본으로 변경하지 않습니다. Meta_Kim이 Claude/Codex/Cursor hook 설정을 업데이트해야 할 때 node setup.mjs --with-global-hooks를 명시적으로 실행하세요.",
     postInstallNotesPlatformSync: "각 플랫폼 동기화 현황:",
     platformClauleCode: "Claude Code",
     platformClauleCodeCap: "agents + skills + hooks",
@@ -2227,6 +2257,8 @@ ${r ? `원본 오류：${r}` : ""}
     inquirerSingleHotkeys: "↑↓ 이동 · ⏎ 확인",
     inquirerMultiHotkeys:
       "↑↓ 이동 · Space 선택 토글 · ⏎ 확인 · a 전체 · i 반전",
+    inquirerUnavailableFallback:
+      "@inquirer/prompts가 아직 설치되지 않아 번호 메뉴로 전환합니다. npm install 후 화살표 메뉴를 사용할 수 있습니다.",
     globalInstallPrompt:
       "Meta_Kim 스킬을 ~/.claude/skills/ (전역)에 설치합니다. 전역 설치할까요?",
     globalDirReady: (p) => `전역 스킬 디렉토리 준비됨: ${p}`,
@@ -2244,7 +2276,7 @@ ${r ? `원본 오류：${r}` : ""}
     installScopeProject:
       "프로젝트 디렉터리 — 명시적 프로젝트 runtime 업데이트",
     installScopeGlobal:
-      "글로벌 — runtime 이 지원하는 agents, Commands, MCP, hooks, skills 재사용 능력",
+      "글로벌 — runtime 이 지원하는 agents, Commands, MCP, skills 재사용 능력",
     installScopeProjectLabel: "프로젝트 디렉터리 업데이트",
     installScopeGlobalLabel: "글로벌 능력 (권장)",
     installScopeProjectDesc:
@@ -2258,7 +2290,8 @@ ${r ? `원본 오류：${r}` : ""}
     installScopeGlobalDesc:
       "재사용 runtime 능력 설치. 프로젝트 로컬 파일은 커스터마이징 때만 생성.",
     installScopeGlobalDescDetail: `글로벌 레벨 기능 생성：
-• agents / Commands / MCP / hooks / skills — 선택 runtime 의 공식 글로벌/사용자 위치에 설치
+• agents / Commands / MCP / skills — 선택 runtime 의 공식 글로벌/사용자 위치에 설치
+• 글로벌 hooks 는 --with-global-hooks 를 명시한 경우에만 runtime hook 설정을 업데이트
 • 각 프로젝트는 전용 확장이 증명되지 않는 한 글로벌 능력을 직접 재사용
 • 다른 프로젝트는 discovery/dry-run 먼저；커스터마이징/bootstrap 확인 후에만 로컬 파일 작성`,
     askProjectRedundantCleanup:
@@ -2282,7 +2315,7 @@ ${r ? `원본 오류：${r}` : ""}
   실행 기록，세션 압축，크로스 세션 복구 저장
 
 • .claude/.codex/.cursor/openclaw/ — 각 도구의 프로젝트 context/config/override
-  재사용 agents, Commands, MCP, hooks, skills 는 프로젝트 전용 버전이 필요할 때 외에는 글로벌`,
+  재사용 agents, Commands, MCP, skills 는 프로젝트 전용 버전이 필요할 때 외에는 글로벌；hooks 는 명시 opt-in`,
     directoryExplanationGlobal: "글로벌 레벨（홈 디렉토리 내）：",
     directoryExplanationGlobalDetail: `• ~/.claude/skills/ — 모든 프로젝트 공유 스킬
   한 번 설치로 어디서든 발견 가능. 프로젝트 파일은 확인된 커스터마이징/state 일 때만 작성.
@@ -2439,7 +2472,7 @@ ${r ? `원본 오류：${r}` : ""}
     updateSkillsDone: "전역 스킬 업데이트 완료",
     globalSkillsSkipped: "전역 스킬 건너뜀",
     askMetaTheoryUpdate:
-      "선택한 runtime 에 Meta_Kim 글로벌 거버넌스 레이어를 동기화해 각 프로젝트에서 재사용할까요? agents, skills, MCP, Commands, hooks 등을 포함하며 지원 항목은 자동 확인됩니다. (권장)",
+      "선택한 runtime 에 Meta_Kim 글로벌 거버넌스 레이어를 동기화해 각 프로젝트에서 재사용할까요? agents, skills, MCP, Commands 를 포함합니다. 글로벌 hooks 는 --with-global-hooks 가 필요합니다. 지원 항목은 자동 확인됩니다. (권장)",
     updateMetaTheoryDone: "Meta_Kim 글로벌 능력 동기화 완료",
     metaTheorySkipped: "Meta_Kim 글로벌 능력 동기화 건너뜀",
     globalHooksMigrationHeading:
@@ -2860,6 +2893,34 @@ function inquirerThemeMulti() {
   };
 }
 
+let warnedInquirerFallback = false;
+
+function isMissingInquirerPromptsError(error) {
+  const message = String(error?.message || "");
+  return (
+    (error?.code === "ERR_MODULE_NOT_FOUND" &&
+      message.includes("@inquirer/prompts")) ||
+    message.includes("Cannot find package '@inquirer/prompts'")
+  );
+}
+
+function warnInquirerFallbackOnce() {
+  if (warnedInquirerFallback) return;
+  warnedInquirerFallback = true;
+  warn(t.inquirerUnavailableFallback);
+}
+
+async function importInquirerPrompt(name) {
+  try {
+    const mod = await import("@inquirer/prompts");
+    return mod[name] ?? null;
+  } catch (error) {
+    if (!isMissingInquirerPromptsError(error)) throw error;
+    warnInquirerFallbackOnce();
+    return null;
+  }
+}
+
 function formatSelectChoiceLabel(option) {
   const text =
     typeof option === "string" ? option : option.label || option.toString();
@@ -2894,17 +2955,44 @@ function printMultiMenu(question, choices, focused, selected) {
   }
 }
 
+async function numberedSelectFallback(question, options) {
+  printSelectMenu(question, options, 0);
+  const answer = await ask(t.choose(options.length));
+  const idx = parseInt(answer, 10) - 1;
+  return idx >= 0 && idx < options.length ? idx : 0;
+}
+
+function parseMultiSelectAnswer(answer, choices, defaultIds) {
+  if (!answer) return defaultIds;
+  const parts = answer
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (!parts.length) return defaultIds;
+  return parts.map((part) => {
+    if (/^\d+$/.test(part)) {
+      const index = parseInt(part, 10) - 1;
+      return choices[index]?.id ?? part;
+    }
+    return part.toLowerCase();
+  });
+}
+
+async function numberedMultiSelectFallback(question, choices, defaultIds, hintText) {
+  printMultiMenu(question, choices, 0, new Set(defaultIds));
+  const answer = await ask(`${hintText(`${C.dim}${defaultIds.join(", ")}${C.reset}`)}`);
+  return parseMultiSelectAnswer(answer, choices, defaultIds);
+}
+
 async function keyboardSelect(question, options) {
   if (silentMode) return 0;
 
   if (!process.stdin.isTTY) {
-    printSelectMenu(question, options, 0);
-    const answer = await ask(t.choose(options.length));
-    const idx = parseInt(answer, 10) - 1;
-    return idx >= 0 && idx < options.length ? idx : 0;
+    return numberedSelectFallback(question, options);
   }
 
-  const { select } = await import("@inquirer/prompts");
+  const select = await importInquirerPrompt("select");
+  if (!select) return numberedSelectFallback(question, options);
 
   const choices = options.map((o, i) => ({
     name: formatSelectChoiceLabel(o),
@@ -2929,26 +3017,11 @@ async function keyboardMultiSelect(question, choices, defaultIds, hintText) {
   if (silentMode) return defaultIds;
 
   if (!process.stdin.isTTY) {
-    printMultiMenu(question, choices, 0, new Set(defaultIds));
-    const answer = await ask(
-      `${hintText(`${C.dim}${defaultIds.join(", ")}${C.reset}`)}`,
-    );
-    if (!answer) return defaultIds;
-    const parts = answer
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (!parts.length) return defaultIds;
-    return parts.map((part) => {
-      if (/^\d+$/.test(part)) {
-        const index = parseInt(part, 10) - 1;
-        return choices[index]?.id ?? part;
-      }
-      return part.toLowerCase();
-    });
+    return numberedMultiSelectFallback(question, choices, defaultIds, hintText);
   }
 
-  const { checkbox } = await import("@inquirer/prompts");
+  const checkbox = await importInquirerPrompt("checkbox");
+  if (!checkbox) return numberedMultiSelectFallback(question, choices, defaultIds, hintText);
 
   const cbChoices = choices.map((c) => ({
     name: stripAnsi(`${c.label || ""} (${c.id || ""})`),
@@ -6875,14 +6948,17 @@ function refreshGlobalCapabilityInventory(activeTargets = []) {
   return false;
 }
 
-function metaTheoryGlobalSyncArgs(targets) {
+function metaTheoryGlobalSyncArgs(targets, withGlobalHooks = false) {
   const targetList = Array.isArray(targets) ? targets.join(",") : String(targets);
   const syncArgs = ["--targets", targetList];
   const hookTargets = targetList
     .split(",")
     .map((target) => target.trim())
     .filter(Boolean);
-  if (hookTargets.some((target) => ["claude", "codex"].includes(target))) {
+  if (
+    withGlobalHooks &&
+    hookTargets.some((target) => ["claude", "codex"].includes(target))
+  ) {
     syncArgs.push("--with-global-hooks");
   }
   return syncArgs;
@@ -6904,7 +6980,8 @@ function formatRuntimeTargetLabels(targets) {
   return targets.map((target) => labels.get(target) || target).join(", ");
 }
 
-function syncNonClaudeGlobalRuntimeHooks(targets) {
+function syncNonClaudeGlobalRuntimeHooks(targets, withGlobalHooks = false) {
+  if (!withGlobalHooks) return true;
   const hookTargets = nonClaudeGlobalRuntimeHookTargets(targets);
   if (hookTargets.length === 0) return true;
   const syncResult = runNodeScript("scripts/sync-runtimes.mjs", [
@@ -8345,6 +8422,8 @@ function showNextSteps(runtimes) {
   console.log("");
   console.log(`${C.bold}${t.postInstallNotesHeading}${C.reset}`);
   console.log(`${C.dim}${t.postInstallNotesIntro}${C.reset}`);
+  console.log(`${C.dim}${t.capabilityGateNotice}${C.reset}`);
+  console.log(`${C.dim}${t.globalHooksOptInNotice}${C.reset}`);
   console.log("");
   console.log(
     `${C.bold}${C.cyan}● ${t.postInstallNotesPlatformSync}${C.reset}`,
@@ -8899,9 +8978,12 @@ async function runInstall() {
     await withProgress(t.stepLabel(stepNum, t.progressSyncMeta), () => {
       const syncResult = runNodeScript(
         "scripts/sync-global-meta-theory.mjs",
-        metaTheoryGlobalSyncArgs(activeTargets),
+        metaTheoryGlobalSyncArgs(activeTargets, setupWithGlobalHooks),
       );
-      const runtimeHooksOk = syncNonClaudeGlobalRuntimeHooks(activeTargets);
+      const runtimeHooksOk = syncNonClaudeGlobalRuntimeHooks(
+        activeTargets,
+        setupWithGlobalHooks,
+      );
       if (syncResult.status !== 0 || !runtimeHooksOk) {
         warn(t.warnMetaTheorySyncFailed);
       }
@@ -9068,9 +9150,12 @@ async function runUpdate() {
   if (needGlobal) {
     const updateSyncResult = runNodeScript(
       "scripts/sync-global-meta-theory.mjs",
-      metaTheoryGlobalSyncArgs(activeTargets),
+      metaTheoryGlobalSyncArgs(activeTargets, setupWithGlobalHooks),
     );
-    const runtimeHooksOk = syncNonClaudeGlobalRuntimeHooks(activeTargets);
+    const runtimeHooksOk = syncNonClaudeGlobalRuntimeHooks(
+      activeTargets,
+      setupWithGlobalHooks,
+    );
     if (updateSyncResult.status === 0 && runtimeHooksOk)
       ok(t.updateMetaTheoryDone);
     else warn(t.warnMetaTheoryUpdateFailed);

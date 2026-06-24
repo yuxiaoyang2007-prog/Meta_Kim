@@ -21,7 +21,8 @@
   "stageChecks": {
     "actionPolicy": {
       "description": "Checks whether the current tool action is allowed while a stage is in progress.",
-      "mustNotRequireCommitPackets": true
+      "mustNotRequireCommitPackets": true,
+      "designStagesMayProceedWithoutAgentDispatch": true
     },
     "commitRequirements": {
       "description": "Checks whether a stage can be marked completed and the next stage entered.",
@@ -56,6 +57,7 @@
   "factGatePolicy": {
     "singleExecutionLease": true,
     "observedMode": "advisory_not_blocking",
+    "observedExplicitPublishIntent": "allows_narrow_git_push_and_github_release_only",
     "managedMode": "required_before_mutation",
     "mustNotBecomeIndependentHookLoop": true,
     "fileChangeFactCardBelongsTo": "Fetch/Thinking execution lease"
@@ -69,12 +71,18 @@
       "capability_scan",
       "dependency_discovery",
       "validator_dry_run",
-      "spine_state_write"
+      "spine_state_write",
+      "planning_file_update",
+      "visible_status_notice"
+    ],
+    "inProgressMustDelay": [
+      "task_bookkeeping_control_plane_until_fetch_evidence"
     ],
     "inProgressMustNotRequire": [
       "fetchRecord",
       "businessFlowBlueprintPacket",
-      "workerTaskPackets"
+      "workerTaskPackets",
+      "agentDispatch"
     ],
     "commitRequires": [
       "fetchRecord",
@@ -82,6 +90,9 @@
     ]
   },
   "thinkingPolicy": {
+    "inProgressMustNotRequire": [
+      "agentDispatch"
+    ],
     "commitRequires": [
       "owner",
       "ownerLoadout",
@@ -92,13 +103,20 @@
   },
   "regressionRequirements": [
     "fetch_in_progress_does_not_require_fetchRecord_until_commit",
+    "fetch_and_thinking_in_progress_do_not_require_agent_dispatch",
     "read_only_hook_allowance_does_not_auto_advance_stage",
     "fetch_stage_allows_spine_state_write_before_fetchRecord",
+    "fetch_stage_allows_planning_files_before_fetchRecord",
+    "fetch_stage_delays_task_bookkeeping_before_fetch_evidence",
+    "fetch_business_mutation_denial_does_not_instruct_agent_dispatch",
     "fetch_self_lock_allows_repair_only_fetchRecord_write",
     "business_mutation_still_denied_without_execution_readiness",
     "auto_prompt_activation_creates_hook_observed_advisory_state",
     "observed_state_allows_ordinary_local_mutation",
+    "observed_state_allows_local_git_stage_commit",
     "observed_state_denies_high_risk_external_side_effects",
+    "observed_state_ignores_high_risk_words_inside_quoted_readonly_search_text",
+    "observed_state_allows_explicit_user_authorized_git_release_commands_only",
     "stale_legacy_active_state_rotates_on_new_prompt"
   ],
   "verificationCommand": "npm run meta:prd:stage-runtime-control:validate"

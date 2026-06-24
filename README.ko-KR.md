@@ -12,7 +12,7 @@
 </p>
 
 <p>
-  <img alt="Formal projections" src="https://img.shields.io/badge/formal-Claude%20Code%20%7C%20Codex%20%7C%20OpenClaw%20%7C%20Cursor-111827"/>
+  <img alt="Projection tiers" src="https://img.shields.io/badge/default-Claude%20Code%20%7C%20Codex%20%2B%20compat-OpenClaw%20%7C%20Cursor-111827"/>
   <img alt="Candidate compatibility probes" src="https://img.shields.io/badge/candidate-Qoder%20%7C%20Trae%20%7C%20Kiro%20%7C%20Cascade%20%7C%20Cline%20%7C%20Roo%20%7C%20Continue-475569"/>
   <img alt="Stars" src="https://img.shields.io/github/stars/KimYx0207/Meta_Kim?style=flat&logo=github"/>
   <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-green"/>
@@ -73,7 +73,7 @@ Meta_Kim은 호환 가능한 표면을 모두 "완전 지원"이라고 부르지
 | 계층 | 제품 | 의미 |
 |---|---|---|
 | default formal projection | Claude Code, Codex | canonical 거버넌스를 기본 runtime 파일로 투영하고 `npm run meta:sync` / `npm run meta:check`로 검증합니다. |
-| explicit formal compatibility projection | OpenClaw, Cursor | 명시적으로 선택한 경우에만 project projection을 생성합니다. runtime 변경은 해당 tool-side self-test evidence가 필요합니다. |
+| non-default compatibility projection | OpenClaw, Cursor | 명시적으로 선택한 경우에만 project projection을 생성합니다. runtime 변경은 maintainer handshake와 해당 tool-side self-test evidence가 필요합니다. |
 | candidate compatibility probe | Qoder CLI, Trae, Kiro, Windsurf / Devin Desktop Cascade, Cline, Roo Code, Continue | 공식 문서에서 rules / instructions, skills, agents / modes, hooks, MCP, commands, memory, permission controls 같은 호환 primitive를 확인했습니다. Meta_Kim은 후보로 추적하며 공식 지원으로 보지 않습니다. |
 
 사실 소스: `config/runtime-compatibility-catalog.json`.
@@ -487,8 +487,8 @@ Meta_Kim은 현재 4개의 공식 projection target을 가집니다:
 | --- | --- | --- |
 | **Claude Code** | default formal projection | `.claude/agents/*.md` + `SKILL.md` + hooks + MCP |
 | **Codex** | default formal projection | generated local `.codex/agents/*.toml` + `.agents/skills/` + commands + hooks |
-| **OpenClaw** | explicit formal compatibility projection | `openclaw/` workspaces + skills + internal hooks |
-| **Cursor** | explicit formal compatibility projection | `.cursor/agents/*.md` + `.cursor/rules/*.mdc` + skills + hooks + MCP |
+| **OpenClaw** | non-default compatibility projection; maintainer handshake required | `openclaw/` workspaces + skills + internal hooks |
+| **Cursor** | non-default compatibility projection; maintainer handshake required | `.cursor/agents/*.md` + `.cursor/rules/*.mdc` + skills + hooks + MCP |
 
 Meta_Kim은 Qoder CLI, Trae, Kiro, Windsurf / Devin Desktop Cascade, Cline, Roo Code, Continue도 candidate compatibility probe로 추적합니다. 이들은 공식 문서에서 호환 primitives를 확인했지만 setup은 project projection을 생성하지 않습니다. promotion에는 runtime profile, projection layout, generated paths, sync tests, install policy, live 또는 official probe evidence가 필요합니다.
 
@@ -517,7 +517,7 @@ flowchart TB
 
 새 platform은 계속 추가할 수 있지만, 후보에서 공식 projection으로 승격하려면 adapter 형태와 검증 가능성이 먼저 갖춰져야 합니다.
 
-4개의 formal target은 같은 canonical source에서 생성되지만 native surface는 다릅니다. Claude Code와 Codex는 default formal projection이고, OpenClaw와 Cursor는 explicit formal compatibility projection입니다.
+4개의 projection family는 같은 canonical source에서 생성되지만 native surface는 다릅니다. Claude Code와 Codex는 default formal projection이고, OpenClaw와 Cursor는 maintainer handshake와 native self-test evidence가 필요한 non-default compatibility projection입니다.
 
 | 역량 표면 | Claude Code | Codex | OpenClaw | Cursor |
 | --- | --- | --- | --- | --- |
@@ -814,7 +814,7 @@ Meta_Kim은 3 곳에 기록합니다:
 
 ### 어떤 플랫폼을 지원하나요?
 
-공식 runtime projection은 Claude Code, Codex, OpenClaw, Cursor입니다. Qoder CLI, Trae, Kiro, Windsurf / Devin Desktop Cascade, Cline, Roo Code, Continue는 candidate probe입니다. 공식 문서에서 호환 primitive를 확인했지만 아직 Meta_Kim의 공식 runtime projection은 아닙니다. 의존 프로젝트의 install target은 upstream project에서 관리되며 Meta_Kim의 support claim으로 반복하지 않습니다. 정확한 경계는 `config/runtime-compatibility-catalog.json`에 있습니다.
+Claude Code와 Codex는 default formal runtime projection입니다. OpenClaw와 Cursor는 maintainer handshake와 native self-test evidence가 필요한 non-default compatibility projection입니다. Qoder CLI, Trae, Kiro, Windsurf / Devin Desktop Cascade, Cline, Roo Code, Continue는 candidate probe입니다. 공식 문서에서 호환 primitive를 확인했지만 아직 Meta_Kim의 공식 runtime projection은 아닙니다. 의존 프로젝트의 install target은 upstream project에서 관리되며 Meta_Kim의 support claim으로 반복하지 않습니다. 정확한 경계는 `config/runtime-compatibility-catalog.json`에 있습니다.
 
 ### 설치가 복잡한가요?
 

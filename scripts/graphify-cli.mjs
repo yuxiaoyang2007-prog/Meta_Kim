@@ -14,6 +14,7 @@ import {
   readProcessText,
   runPythonModule,
 } from "./graphify-runtime.mjs";
+import { enrichMetaKimGraph } from "./graphify-enrichment.mjs";
 
 const command = process.argv[2] || "check";
 
@@ -190,7 +191,11 @@ function stampGraphFreshness(cwd = process.cwd()) {
 
   if (existsSync(graphPath)) {
     const graph = JSON.parse(readFileSync(graphPath, "utf8"));
-    if (!commitsMatch(String(graph.built_at_commit ?? ""), currentHead)) {
+    const enrichment = enrichMetaKimGraph(graph);
+    if (
+      enrichment.changed ||
+      !commitsMatch(String(graph.built_at_commit ?? ""), currentHead)
+    ) {
       graph.built_at_commit = currentHead;
       writeFileSync(graphPath, `${JSON.stringify(graph, null, 2)}\n`, "utf8");
       changed = true;

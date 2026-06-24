@@ -6,6 +6,116 @@
 
 更新说明先解释本次解决的用户痛点或风险，再说明为了解决它改了什么、为什么重要。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
+## [2.8.56] - 2026-06-23
+
+### 解决的问题
+
+这次审计确认还有三类治理运行时风险：观察态 hook 仍可能从全局 hook 目录拦住只读 `node -e` Fetch 检查；runtime projection 的失败分类仍会被人类可读文案里的词影响；Graphify 看不到 Meta_Kim agent 之间的治理边，导致 review 只能看到文件引用，缺少治理关系。
+
+### 变更
+
+- **只读 Node eval 不再误拦** - 只读读取、解析、打印本地文件的 `node -e` 检查现在会被识别为 read-only；写文件、起子进程、网络调用、动态 import 和 eval 类执行仍继续拦截。
+- **全局 hook 同步证据** - 修复后的 hook package 已用 `--with-global-hooks` 同步到本机 Claude Code 和 Codex 全局 hook 目录，当前实际运行的 hook 不再沿用旧 read-only whitelist。
+- **结构化 runtime 失败原因** - governed runtime projection evidence 现在记录 `failureReasonCode`；失败分类不再从 `native` / `live` 这类文案词里猜。
+- **能力数字语义拆开** - repo capability index 现在把 canonical inventory totals 和本机 runtime projection actual counts 分开，避免把 `totalHooks` / `totalCommands` 误读成已挂载 hook/command 数。
+- **Graphify 治理边增强** - Graphify rebuild 会补 Meta_Kim agent-governance edges，并给 `file_type` 补 `type` 兼容字段，让 agent 关系和节点类型消费者都可审计。
+
+### 验证
+
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `node --test tests/meta-theory/32-meta-theory-four-product-targets.test.mjs`
+- `node --test tests/setup/capability-index-inheritance-chain.test.mjs`
+- `node --test tests/setup/graphify-wiring-contract.test.mjs`
+- `npm run meta:release:smoke`
+- `npm run meta:check`
+- `npm run meta:graphify:rebuild`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
+## [2.8.55] - 2026-06-23
+
+### 解决的问题
+
+观察态发布修复还剩一个文本载荷边缘：用 PowerShell here-string 写 release notes 时，正文里如果出现 `git push` 或 `gh release`，hook 仍可能把 release-note 文本误判成真实 shell 发布命令。
+
+### 变更
+
+- **Here-string 文本安全** - 观察态高风险检测现在会先剥离 PowerShell here-string 正文，再匹配命令动词，release-note 或搜索文本不会再被误认为可执行发布命令。
+- **可执行 here-string 继续拦截** - `Invoke-Expression` / `iex` 仍被视为高风险，所以把 here-string 管道给 shell 执行仍会被拦。
+
+### 验证
+
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `npm run meta:release:smoke`
+- `node scripts/run-verify-all.mjs --no-report`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
+## [2.8.54] - 2026-06-23
+
+### 解决的问题
+
+观察态 hook 仍会让维护发布变成“自己锁自己”。用户已经明确要求提交、推送、发布新版本并更新说明时，同一轮 run 里 `git push` 或 GitHub Release 命令仍可能被拦，因为 hook 只看到高风险外部副作用，没有看到用户的发布授权。它还会把 Graphify / 搜索命令里引号包住的 `git push`、`gh release` 搜索词误判成真实发布命令。
+
+### 变更
+
+- **显式观察态发布意图** - prompt 激活时，如果用户 wording 明确包含提交 / 推送 / 发布 / 版本发布，会写入短期的 user-explicit external publish intent。
+- **窄发布放行** - 在这个 intent 下，观察态只放行非强推的 `git push` 和 GitHub Release `view/create/edit/upload`；`npm publish`、安装、强推和破坏性命令仍继续拦截。
+- **搜索词误伤修复** - read-only 搜索和 Graphify 查询不会再因为引号里的搜索文本提到 `git push` 或 `gh release` 而被当成高风险命令。
+- **全局 hook 同步证据** - 修复后的 hook package 已用 `--with-global-hooks` 同步到本机 Claude Code 和 Codex 全局 hook 目录，并用 release 版全局检查确认。
+
+### 验证
+
+- `node --check canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs`
+- `node --check canonical/runtime-assets/claude/hooks/activate-meta-theory-spine.mjs`
+- `node --check canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs`
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `npm run meta:prd:stage-runtime-control:validate`
+- `npm run meta:sync`
+- `node scripts/sync-global-meta-theory.mjs --with-global-hooks`
+- `npm run meta:check`
+- `npm run meta:check:global:release`
+- `npm run meta:graphify:check`
+- `git diff --check`
+
+## [2.8.53] - 2026-06-23
+
+### 解决的问题
+
+Meta_Kim 的 runtime hook 仍可能把设计期阶段表现得像是必须先派 Agent。Fetch 阶段真实业务文件写入被拦是正确的，但拒绝文案会提示维护者去 dispatch Agent；这和当前设定冲突，因为 Critical、Fetch、Thinking 都允许主线程推进。相同 gate 还可能拦住 Claude `/plan` 的计划更新，让计划面动作看起来也像被禁止的业务写入。
+
+这会制造错误修复循环：维护者真正需要补的是 Fetch / Thinking 证据，再进入 Execution；但 hook 暗示下一步必须派 Agent。
+
+本次发布审计还发现几类首跑和维护发布风险：`npx github:...` 可能在依赖安装前就失败；全局安装可能静默改用户 home hook 配置；Codex/Cursor hook runtime 仍依赖路径嗅探；MCP Memory 在 `8000` 端口冲突和 Windows Python shim 场景下诊断不清；`meta:verify:all` 的嵌套命令失败时仍不够好定位。
+
+### 变更
+
+- **首跑 setup fallback** - `setup.mjs` 在 `@inquirer/prompts` 尚未安装时会退回数字菜单，让 GitHub/npx fresh setup 能继续走到依赖安装流程。
+- **全局 hooks 显式 opt-in** - 全局通用能力安装不再把 hooks 当成默认全局能力；只有传入 `--with-global-hooks` 时才更新 Claude/Codex/Cursor hook wiring，文档和测试同步锁住这个边界。
+- **Hook runtime 显式选择** - 生成的 Claude、Codex、Cursor hook 命令会传入明确 runtime 参数；canonical dispatcher 仍保留 fallback detection，但正常投影不再依赖路径嗅探。
+- **Capability gate 可见性** - progressive capability gate 的 hook 输出会暴露 grace-window 状态，setup 也会提示维护者如何选择 `warn`、`block` 或 `off`。
+- **MCP Memory 诊断增强** - MCP Memory hooks 和安装路径支持 `MCP_MEMORY_URL` / `META_KIM_MEMORY_PORT`，健康检查失败时提示可能占用端口的进程，并让 Windows Python shim 问题更容易定位。
+- **分阶段 verify runner** - `meta:verify:all` 默认改用 staged runner，支持 `--json`、`--from`、报告输出、每阶段耗时和失败续跑；旧单行链保留为 `meta:verify:all:chain`。
+- **state 可移植性提示** - `meta:status` 会提示 `.meta-kim/state/` 的 machine-portability 风险，避免把含本机绝对路径的 state 当成可分享项目材料。
+- **投影层级文案收紧** - 公开文档现在把 Claude Code 和 Codex 描述为默认投影；OpenClaw 和 Cursor 是兼容投影，需要维护者握手和 native self-test evidence。
+- **设计期阶段语义修正** - Critical、Fetch、Thinking 的拒绝文案现在明确说明：业务 mutation 要等 Execution；主线程仍可继续 read/search、capability discovery、planning/control-plane 更新和 spine-state packet 写入。
+- **Agent 要求只属于 Execution** - stage runtime control contract 现在记录 Fetch 和 Thinking 进行中不要求 Agent dispatch；execution owner/loadout 与 dispatch evidence 仍保留为 Execution 阶段门。
+- **计划控制面放行** - Claude plan-mode surface、task/todo bookkeeping、`.claude/plans/*.md` 和 Meta_Kim planning files 可在 Fetch 阶段、没有 `fetchRecord` 时更新；普通业务文件仍然会被拦。
+- **观察态本地发布步骤放行** - 自动触发的观察态现在允许本地 `git add` 和 `git commit` 检查点，也不会因为搜索文本里出现高风险词而误拦；`git push`、包安装、reset 等外部发布或破坏性命令仍继续拦截。
+- **Hook 路径字段兼容** - hook 的 file-path 提取支持 camelCase 和 target path 变体，确保 runtime planning surface 按真实目标路径分类。
+- **Run-scoped Worker 实机执行回归覆盖** - eight-stage spine、setup、MCP Memory、hook runtime、release docs 和 staged verify 测试覆盖设计期不强制 Agent、planning control-plane 放行、全局 hooks opt-in、显式 runtime 选择，以及业务 mutation 被拦时不得提示用户 dispatch Agent 的精确文案。
+
+### 验证
+
+- `npm run meta:prd:stage-runtime-control:validate`
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `npm run meta:sync`
+- `npm run discover:global`
+- `npm run meta:check`
+- `npm run meta:check:global`
+- `node scripts/run-verify-all.mjs --no-report`
+- `git diff --check`
+
 ## [2.8.52] - 2026-06-23
 
 ### 解决的问题

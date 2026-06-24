@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .codex/hooks/enforce-agent-dispatch.mjs",
+            "command": "node .codex/hooks/enforce-agent-dispatch.mjs --runtime codex",
             "timeout": 10
           }
         ]

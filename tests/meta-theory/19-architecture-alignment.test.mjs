@@ -105,11 +105,13 @@ describe("architecture alignment contracts", () => {
   });
 
   test("meta:verify:all includes graphify contract checking", async () => {
-    const pkg = await readJson("package.json");
-    const verifyAll = pkg.scripts?.["meta:verify:all"] ?? "";
+    const verifyRunner = await fs.readFile(
+      path.join(REPO_ROOT, "scripts", "run-verify-all.mjs"),
+      "utf8",
+    );
 
     assert.match(
-      verifyAll,
+      verifyRunner,
       /npm run meta:graphify:check/,
       "meta:verify:all must include npm run meta:graphify:check",
     );

@@ -44,11 +44,19 @@ export function readJsonFromStdinSync() {
 export function extractFilePath(input) {
   return (
     input.file_path ||
+    input.filePath ||
     input.path ||
+    input.target_path ||
+    input.targetPath ||
     input.tool_input?.file_path ||
+    input.tool_input?.filePath ||
     input.tool_input?.path ||
+    input.tool_input?.target_path ||
+    input.tool_input?.targetPath ||
     input.tool_response?.filePath ||
     input.tool_response?.file_path ||
+    input.tool_response?.target_path ||
+    input.tool_response?.targetPath ||
     ""
   );
 }

@@ -43,6 +43,16 @@ describe("setup update default flow", () => {
     );
   });
 
+  test("interactive prompts fall back before npm dependencies are installed", () => {
+    assert.match(source, /function isMissingInquirerPromptsError/);
+    assert.match(source, /async function importInquirerPrompt/);
+    assert.match(source, /numberedSelectFallback\(question, options\)/);
+    assert.match(
+      source,
+      /numberedMultiSelectFallback\(question, choices, defaultIds, hintText\)/,
+    );
+  });
+
   test("install/update direct-enter defaults stay on Claude Code and Codex", () => {
     assert.deepEqual(syncManifest.defaultTargets, ["claude", "codex"]);
     assert.match(
@@ -216,7 +226,6 @@ describe("setup update default flow", () => {
       "agents",
       "commands",
       "mcp",
-      "hooks",
       "skills",
     ]);
     assert.equal(
@@ -411,10 +420,24 @@ describe("setup update default flow", () => {
     );
   });
 
-  test("install and update do not ask a second Claude-only global governance question", () => {
-    assert.match(source, /function metaTheoryGlobalSyncArgs\(targets\)/);
+  test("install and update keep global hooks opt-in without a second Claude-only question", () => {
+    assert.match(
+      source,
+      /const setupWithGlobalHooks =[\s\S]*?args\.includes\("--with-global-hooks"\)[\s\S]*?META_KIM_WITH_GLOBAL_HOOKS/,
+      "setup must expose an explicit global hook opt-in",
+    );
+    assert.match(source, /function metaTheoryGlobalSyncArgs\(targets, withGlobalHooks = false\)/);
     assert.match(source, /\["claude", "codex"\]\.includes\(target\)/);
-    assert.match(source, /syncArgs\.push\("--with-global-hooks"\)/);
+    assert.match(
+      source,
+      /if \(\s*withGlobalHooks &&[\s\S]*?syncArgs\.push\("--with-global-hooks"\);/,
+      "sync-global-meta-theory must receive --with-global-hooks only after setup opt-in",
+    );
+    assert.match(
+      source,
+      /function syncNonClaudeGlobalRuntimeHooks\(targets, withGlobalHooks = false\) \{[\s\S]*?if \(!withGlobalHooks\) return true;/,
+      "Cursor/OpenClaw global runtime hooks must also be gated by the setup opt-in",
+    );
     assert.doesNotMatch(source, /askAdvancedGlobalControls\(activeTargets\)/);
     assert.doesNotMatch(source, /askYesNo\(t\.askAdvancedGlobalControls/);
     assert.doesNotMatch(source, /announceGlobalRuntimeHooksPlan\(activeTargets\)/);
@@ -425,11 +448,17 @@ describe("setup update default flow", () => {
     );
     assert.match(
       source,
-      /把 Meta_Kim 全局治理层同步到已选平台，供各项目复用？包含 agents、skills、MCP、Commands、hooks 等；实际支持项会自动检查后同步。（推荐）/,
-      "global sync prompt must name the Meta_Kim governance layer and capability families",
+      /把 Meta_Kim 全局治理层同步到已选平台，供各项目复用？包含 agents、skills、MCP、Commands；全局 hooks 需要 --with-global-hooks。实际支持项会自动检查后同步。（推荐）/,
+      "global sync prompt must name hooks as explicit opt-in",
     );
-    assert.match(source, /metaTheoryGlobalSyncArgs\(activeTargets\)/);
-    assert.match(source, /syncNonClaudeGlobalRuntimeHooks\(activeTargets\)/);
+    assert.doesNotMatch(
+      source,
+      /包含 agents、skills、MCP、Commands、hooks 等/,
+      "setup copy must not present hooks as part of the default global capability sync",
+    );
+    assert.match(source, /metaTheoryGlobalSyncArgs\(activeTargets, setupWithGlobalHooks\)/);
+    assert.match(source, /syncNonClaudeGlobalRuntimeHooks\(\s*activeTargets,\s*setupWithGlobalHooks,\s*\)/);
+    assert.match(source, /globalHooksOptInNotice/);
     assert.match(source, /\["cursor", "openclaw"\]\.includes\(target\)/);
     assert.doesNotMatch(
       source,

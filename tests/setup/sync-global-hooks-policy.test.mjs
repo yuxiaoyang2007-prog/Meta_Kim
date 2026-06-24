@@ -38,12 +38,29 @@ async function runScript(args, env) {
 
 describe("sync-global-meta-theory hook policy", () => {
   test("default global sync/check does not require Claude global hooks", async () => {
-    await withTempRuntimeHomes(async ({ env }) => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
       const sync = await runScript(["--targets", "claude"], env);
       assert.match(sync.stdout, /Skipped Claude Code global hooks/);
 
+      for (const commandName of [
+        "meta-theory.md",
+        "meta-theory-report.md",
+        "meta-theory-verify.md",
+      ]) {
+        const command = await readFile(
+          path.join(root, "claude", "commands", commandName),
+          "utf8",
+        );
+        assert.ok(
+          command.includes(REPO_ROOT.replace(/\\/g, "/")),
+          `${commandName} must render the installed Meta_Kim package root`,
+        );
+        assert.doesNotMatch(command, /__META_KIM_PACKAGE_ROOT__/);
+      }
+
       const check = await runScript(["--check", "--targets", "claude"], env);
       assert.match(check.stdout, /global hooks skipped/);
+      assert.match(check.stdout, /Claude Code commands/);
     });
   });
 
@@ -144,6 +161,10 @@ describe("sync-global-meta-theory hook policy", () => {
       assert.ok(
         stopHooks.some((hook) => hook.command.includes("stop-save-progress.mjs")),
         "global Claude settings must register the continuation progress Stop hook",
+      );
+      assert.ok(
+        stopHooks.some((hook) => hook.command.includes("stop-memory-save.mjs")),
+        "global Claude settings must register the MCP memory Stop hook",
       );
       assert.ok(
         stopHooks.some((hook) => hook.command.includes("stop-compaction.mjs")),
@@ -312,9 +333,21 @@ describe("sync-global-meta-theory hook policy", () => {
       assert.doesNotMatch(command, /__META_KIM_PACKAGE_ROOT__/);
       assert.match(command, /run-meta-theory-governed-execution\.mjs/);
       assert.match(command, /--emit-conversation-notice/);
+      for (const commandName of ["meta-theory-report.md", "meta-theory-verify.md"]) {
+        const extraCommand = await readFile(
+          path.join(root, "codex", "commands", commandName),
+          "utf8",
+        );
+        assert.ok(
+          extraCommand.includes(REPO_ROOT.replace(/\\/g, "/")),
+          `global Codex ${commandName} must render the installed Meta_Kim package root`,
+        );
+        assert.doesNotMatch(extraCommand, /__META_KIM_PACKAGE_ROOT__/);
+      }
 
       const check = await runScript(["--check", "--targets", "codex"], env);
       assert.match(check.stdout, /Codex global skill/);
+      assert.match(check.stdout, /Codex commands/);
       assert.match(check.stdout, /Codex global hooks skipped/);
 
       await runScript(["--targets", "codex", "--with-global-hooks"], env);
@@ -497,6 +530,7 @@ describe("sync-global-meta-theory hook policy", () => {
       const repairedStop = JSON.stringify(repaired.hooks.Stop ?? []);
       assert.doesNotMatch(repairedStop, /missing-retired-hook\.mjs/);
       assert.match(repairedStop, /stop-save-progress\.mjs/);
+      assert.match(repairedStop, /stop-memory-save\.mjs/);
     });
   });
 
@@ -504,11 +538,16 @@ describe("sync-global-meta-theory hook policy", () => {
     const pkg = JSON.parse(
       await readFile(path.join(REPO_ROOT, "package.json"), "utf8"),
     );
+    const verifyRunner = await readFile(
+      path.join(REPO_ROOT, "scripts", "run-verify-all.mjs"),
+      "utf8",
+    );
     assert.match(
       pkg.scripts["meta:check:global:release"],
       /--check.*--with-global-hooks|--with-global-hooks.*--check/,
     );
-    assert.match(pkg.scripts["meta:verify:all"], /meta:check:global:release/);
+    assert.match(pkg.scripts["meta:verify:all"], /run-verify-all\.mjs/);
+    assert.match(verifyRunner, /meta:check:global:release/);
     assert.match(pkg.scripts["meta:verify:all:live"], /eval-meta-agents\.mjs/);
     assert.match(pkg.scripts["meta:verify:all:live"], /--require-all-runtimes/);
     assert.match(pkg.scripts["meta:verify:all:live"], /--live/);

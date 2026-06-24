@@ -305,6 +305,10 @@ describe("Part B: Runtime MCP Integration", async () => {
       content.includes("get_meta_runtime_capabilities"),
       "meta-runtime-server.mjs must implement get_meta_runtime_capabilities tool",
     );
+    assert.ok(
+      content.includes("dispatch_meta_agent"),
+      "meta-runtime-server.mjs must implement dispatch_meta_agent tool",
+    );
   });
 
   test("list_meta_agents returns all expected meta-agents", async () => {
@@ -344,6 +348,10 @@ describe("Part B: Runtime MCP Integration", async () => {
       assert.ok(
         result.tools.includes("get_meta_agent"),
         "self-test must expose get_meta_agent tool",
+      );
+      assert.ok(
+        result.tools.includes("dispatch_meta_agent"),
+        "self-test must expose dispatch_meta_agent tool",
       );
     } catch (err) {
       assert.fail(`meta-runtime-server.mjs self-test failed: ${err.message}`);
@@ -566,6 +574,23 @@ describe("Part E: MCP Tool Discovery", async () => {
       toolCount >= 3,
       `meta-runtime-server.mjs must register at least 3 tools/resources (found ${toolCount})`,
     );
+  });
+
+  test("dispatch_meta_agent is guarded by explicit execution approval", async () => {
+    const serverPath = path.join(
+      REPO_ROOT,
+      "scripts",
+      "mcp",
+      "meta-runtime-server.mjs",
+    );
+    const content = await fs.readFile(serverPath, "utf8");
+
+    assert.match(content, /dispatch_meta_agent/);
+    assert.match(content, /executionApproved/);
+    assert.match(content, /blocked_pending_execution_approval/);
+    assert.match(content, /--temp-output/);
+    assert.match(content, /spawn\(process\.execPath/);
+    assert.doesNotMatch(content, /shell:\s*true/);
   });
 
   test("SKILL.md mentions MCP integration for tool discovery", async () => {

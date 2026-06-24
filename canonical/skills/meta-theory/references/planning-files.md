@@ -87,6 +87,7 @@ Use when task_plan.md, findings.md, and progress.md planning state affects route
 - Bind pass/fail to evidence, threshold, or command output.
 - Treat planning files as update-only continuity state. Append, refine, or mark superseded items; preserve the existing phases, evidence, and user decisions while a run is active.
 - Preserve existing foundational and native runtime capabilities.
+- During Critical and early Fetch, prefer a short visible chat status plus batched read/search evidence. Do not create or update host task/todo boards before useful Fetch evidence exists.
 
 ## Do not
 
@@ -95,6 +96,7 @@ Use when task_plan.md, findings.md, and progress.md planning state affects route
 - Do not route reference-only or unknown dependencies into execution.
 - Do not overwrite `task_plan.md`, `findings.md`, or `progress.md` with a fresh plan while they contain active continuity state.
 - Do not reset prior completed, blocked, superseded, or user-accepted planning entries; update their status and add a new entry instead.
+- Do not treat host task/todo control-plane bookkeeping as Fetch progress, evidence, or a required first step.
 
 ## Required packet
 

@@ -1,4 +1,5 @@
 import { promises as fs } from "node:fs";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -22,6 +23,8 @@ const preferredOrder = [
   "meta-chrysalis",
 ];
 const metaAgentFilePattern = /^meta-[\w-]+\.md$/i;
+const dispatchModes = new Set(["plan", "execute"]);
+const maxDispatchOutputChars = 12000;
 
 function parseFrontmatter(raw, filePath) {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
@@ -136,6 +139,92 @@ async function loadRuntimeData() {
   return { agents, metaTheory, runtimeMatrix, openclawSkill };
 }
 
+function jsonText(payload) {
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(payload, null, 2),
+      },
+    ],
+  };
+}
+
+function trimOutput(text, maxLength = maxDispatchOutputChars) {
+  if (typeof text !== "string") return "";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}\n...[trimmed ${text.length - maxLength} chars]`;
+}
+
+function payloadToText(payload) {
+  if (payload === undefined || payload === null) return "";
+  if (typeof payload === "string") return payload;
+  return JSON.stringify(payload, null, 2);
+}
+
+function buildDispatchTask({ agent, scope, payload }) {
+  const payloadText = payloadToText(payload);
+  return [
+    `MCP dispatch requested for Meta_Kim agent ${agent.id}.`,
+    `Agent title: ${agent.title}`,
+    `Scope: ${scope}`,
+    payloadText ? `Payload:\n${payloadText}` : "Payload: none",
+    "Run through the governed Meta_Kim route; keep execution evidence and verification boundaries explicit.",
+  ].join("\n\n");
+}
+
+async function runGovernedDispatch({ agent, scope, payload }) {
+  const runner = path.join(
+    repoRoot,
+    "scripts",
+    "run-meta-theory-governed-execution.mjs",
+  );
+  const task = buildDispatchTask({ agent, scope, payload });
+  const args = [runner, "--task", task, "--temp-output"];
+
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, args, {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        META_KIM_MCP_DISPATCH_AGENT_ID: agent.id,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      child.kill("SIGTERM");
+      stderr += "\nTimed out after 60000ms.";
+    }, 60000);
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      resolve({
+        exitCode: null,
+        signal: null,
+        stdout: trimOutput(stdout),
+        stderr: trimOutput(`${stderr}\n${error.message}`),
+      });
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(timeout);
+      resolve({
+        exitCode: code,
+        signal,
+        stdout: trimOutput(stdout),
+        stderr: trimOutput(stderr),
+      });
+    });
+  });
+}
+
 const runtimeData = await loadRuntimeData();
 
 if (process.argv.includes("--self-test")) {
@@ -154,6 +243,7 @@ if (process.argv.includes("--self-test")) {
           "list_meta_agents",
           "get_meta_agent",
           "get_meta_runtime_capabilities",
+          "dispatch_meta_agent",
         ],
       },
       null,
@@ -256,7 +346,10 @@ server.registerTool(
         .string()
         .min(1)
         .max(100)
-        .regex(/^[a-zA-Z0-9_-]+$/, "agentId must contain only alphanumeric/underscore/dash"),
+        .regex(
+          /^[a-zA-Z0-9_-]+$/,
+          "agentId must contain only alphanumeric/underscore/dash",
+        ),
       includePrompt: z.boolean().optional(),
     },
   },
@@ -311,6 +404,97 @@ server.registerTool(
       },
     ],
   }),
+);
+
+server.registerTool(
+  "dispatch_meta_agent",
+  {
+    description:
+      "Create a governed Meta_Kim dispatch packet for a meta-agent; execute only when explicitly approved.",
+    inputSchema: {
+      agentId: z
+        .string()
+        .min(1)
+        .max(100)
+        .regex(/^[a-zA-Z0-9_-]+$/, "agentId must contain only alphanumeric/underscore/dash"),
+      scope: z.string().min(1).max(4000),
+      payload: z.unknown().optional(),
+      mode: z.enum(["plan", "execute"]).optional(),
+      executionApproved: z.boolean().optional(),
+    },
+  },
+  async ({
+    agentId,
+    scope,
+    payload = null,
+    mode = "plan",
+    executionApproved = false,
+  }) => {
+    const agent = runtimeData.agents.find((item) => item.id === agentId);
+    if (!agent) {
+      return jsonText({
+        ok: false,
+        status: "unknown_agent",
+        error: `Unknown agentId: ${agentId}`,
+        availableAgentIds: runtimeData.agents.map((item) => item.id),
+      });
+    }
+
+    if (!dispatchModes.has(mode)) {
+      return jsonText({
+        ok: false,
+        status: "invalid_mode",
+        error: `Unsupported dispatch mode: ${mode}`,
+        allowedModes: [...dispatchModes],
+      });
+    }
+
+    const packet = {
+      ok: true,
+      status: mode === "execute" ? "execution_requested" : "planned",
+      tool: "dispatch_meta_agent",
+      agentId: agent.id,
+      title: agent.title,
+      sourceFile: agent.sourceFile,
+      scope,
+      payload,
+      route: {
+        runner: "scripts/run-meta-theory-governed-execution.mjs",
+        args: ["--task", "<MCP dispatch task>", "--temp-output"],
+        outputPolicy: "temp-output",
+      },
+      safety: {
+        defaultMode: "plan",
+        executionRequires: ["mode=execute", "executionApproved=true"],
+        commandPolicy:
+          "fixed node runner path, no shell interpolation, no arbitrary command string",
+      },
+    };
+
+    if (mode !== "execute") {
+      return jsonText({
+        ...packet,
+        nextAction:
+          "Review this dispatch packet; call again with mode=execute and executionApproved=true to run the governed route.",
+      });
+    }
+
+    if (!executionApproved) {
+      return jsonText({
+        ...packet,
+        ok: false,
+        status: "blocked_pending_execution_approval",
+        error: "Execution mode requires executionApproved=true.",
+      });
+    }
+
+    const execution = await runGovernedDispatch({ agent, scope, payload });
+    return jsonText({
+      ...packet,
+      status: execution.exitCode === 0 ? "executed" : "execution_failed",
+      execution,
+    });
+  },
 );
 
 const transport = new StdioServerTransport();

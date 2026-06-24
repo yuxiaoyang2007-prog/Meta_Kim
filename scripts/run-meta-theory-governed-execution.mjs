@@ -62,6 +62,39 @@ const RUNTIME_FAILURE_TAXONOMY = Object.freeze({
   unknownFailure: "unknown_failure",
 });
 
+const RUNTIME_PROJECTION_FAILURE_REASON_CODES = Object.freeze({
+  projectionSmokeOnly: "projection_smoke_only",
+  nativeHarnessMissing: "native_harness_missing",
+  authMissing: "auth_missing",
+  timeout: "timeout",
+  structuralFailure: "structural_failure",
+  toolUnsupported: "tool_unsupported",
+  runtimeUnavailable: "runtime_unavailable",
+  liveIncomplete: "live_incomplete",
+  unknownFailure: "unknown_failure",
+});
+
+const RUNTIME_PROJECTION_REASON_TO_FAILURE_CLASS = Object.freeze({
+  [RUNTIME_PROJECTION_FAILURE_REASON_CODES.projectionSmokeOnly]:
+    RUNTIME_FAILURE_TAXONOMY.projectionOnly,
+  [RUNTIME_PROJECTION_FAILURE_REASON_CODES.nativeHarnessMissing]:
+    RUNTIME_FAILURE_TAXONOMY.nativeHarnessMissing,
+  [RUNTIME_PROJECTION_FAILURE_REASON_CODES.authMissing]:
+    RUNTIME_FAILURE_TAXONOMY.authMissing,
+  [RUNTIME_PROJECTION_FAILURE_REASON_CODES.timeout]:
+    RUNTIME_FAILURE_TAXONOMY.timeout,
+  [RUNTIME_PROJECTION_FAILURE_REASON_CODES.structuralFailure]:
+    RUNTIME_FAILURE_TAXONOMY.structuralFailure,
+  [RUNTIME_PROJECTION_FAILURE_REASON_CODES.toolUnsupported]:
+    RUNTIME_FAILURE_TAXONOMY.toolUnsupported,
+  [RUNTIME_PROJECTION_FAILURE_REASON_CODES.runtimeUnavailable]:
+    RUNTIME_FAILURE_TAXONOMY.runtimeUnavailable,
+  [RUNTIME_PROJECTION_FAILURE_REASON_CODES.liveIncomplete]:
+    RUNTIME_FAILURE_TAXONOMY.liveIncomplete,
+  [RUNTIME_PROJECTION_FAILURE_REASON_CODES.unknownFailure]:
+    RUNTIME_FAILURE_TAXONOMY.unknownFailure,
+});
+
 const RUNTIME_SMOKE_PROJECTIONS = {
   claude: {
     entry: ".claude/skills/meta-theory/SKILL.md",
@@ -820,23 +853,48 @@ function homeDir() {
   return process.env.HOME || process.env.USERPROFILE || "";
 }
 
-function classifyProjectionFailure({ runtime, status, unsupportedWithReason }) {
-  const reason = String(unsupportedWithReason ?? "").toLowerCase();
+function normalizeProjectionFailureReasonCode(value) {
+  const normalized = String(value ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return Object.values(RUNTIME_PROJECTION_FAILURE_REASON_CODES).includes(normalized)
+    ? normalized
+    : null;
+}
+
+export function classifyProjectionFailure({
+  status,
+  failureReasonCode,
+  reasonCode,
+  unsupportedWithReason,
+}) {
+  const structuredReason =
+    normalizeProjectionFailureReasonCode(failureReasonCode) ??
+    normalizeProjectionFailureReasonCode(reasonCode);
   if (status === "smoke_pass") {
     return RUNTIME_FAILURE_TAXONOMY.projectionOnly;
   }
-  if (
-    runtime === "cursor" &&
-    (reason.includes("native") || reason.includes("live"))
-  ) {
-    return RUNTIME_FAILURE_TAXONOMY.nativeHarnessMissing;
+
+  if (structuredReason) {
+    return (
+      RUNTIME_PROJECTION_REASON_TO_FAILURE_CLASS[structuredReason] ??
+      RUNTIME_FAILURE_TAXONOMY.unknownFailure
+    );
   }
-  if (reason.includes("auth")) {
-    return RUNTIME_FAILURE_TAXONOMY.authMissing;
+
+  // Legacy fallback: accept an exact reason-code token only. Human-readable
+  // prose such as unsupportedWithReason must not be substring-parsed because
+  // words like "native" or "live" can describe release boundaries, not causes.
+  const exactLegacyReason = normalizeProjectionFailureReasonCode(unsupportedWithReason);
+  if (exactLegacyReason) {
+    return (
+      RUNTIME_PROJECTION_REASON_TO_FAILURE_CLASS[exactLegacyReason] ??
+      RUNTIME_FAILURE_TAXONOMY.unknownFailure
+    );
   }
-  if (reason.includes("timeout")) {
-    return RUNTIME_FAILURE_TAXONOMY.timeout;
-  }
+
   if (status === "partial") {
     return RUNTIME_FAILURE_TAXONOMY.structuralFailure;
   }
@@ -1122,9 +1180,13 @@ export async function buildRuntimeProjectionEvidence({
         : runtimeProjectionMaterialized
           ? "Projection smoke is not native/live evidence; release-grade runtime proof still needs live evaluation."
           : "Canonical source projection smoke is not native/live evidence; project install/update must materialize runtime files before live release evidence.";
+    const failureReasonCode =
+      status === "partial"
+        ? RUNTIME_PROJECTION_FAILURE_REASON_CODES.structuralFailure
+        : RUNTIME_PROJECTION_FAILURE_REASON_CODES.projectionSmokeOnly;
     const failureClass = classifyProjectionFailure({
-      runtime,
       status,
+      failureReasonCode,
       unsupportedWithReason,
     });
     results.push({
@@ -1157,6 +1219,7 @@ export async function buildRuntimeProjectionEvidence({
           : runtime === "openclaw"
             ? "OpenClaw projection remains declarative for blocking policy; typed plugin enforcement is not installed."
             : "Projection has direct skill or command entry for governed execution.",
+      failureReasonCode,
       unsupportedWithReason,
     });
   }

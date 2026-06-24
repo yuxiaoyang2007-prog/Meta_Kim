@@ -265,6 +265,37 @@ describe("capability index inheritance chain", () => {
     );
   });
 
+  test("capability index separates canonical totals from runtime actual counts", async () => {
+    const index = await readJson("config/capability-index/meta-kim-capabilities.json");
+    assert.equal(
+      index.summary?.countSemantics?.totalHooks,
+      "canonical_inventory_entries",
+    );
+    assert.equal(
+      index.summary?.countSemantics?.totalCommands,
+      "canonical_inventory_entries",
+    );
+    assert.equal(
+      index.summary?.runtimeActualCounts?.scope,
+      "local_project_projection_when_present",
+    );
+    assert.equal(
+      index.summary?.runtimeActualCounts?.canonicalInventory?.hooks,
+      index.summary?.totalHooks,
+    );
+    assert.equal(
+      index.summary?.runtimeActualCounts?.canonicalInventory?.commands,
+      index.summary?.totalCommands,
+    );
+    for (const runtime of ["claude", "codex", "cursor", "openclaw"]) {
+      const counts = index.summary?.runtimeActualCounts?.[runtime];
+      assert.equal(typeof counts?.projectionPresent, "boolean", runtime);
+      assert.equal(typeof counts?.hookCommandEntries, "number", runtime);
+      assert.equal(typeof counts?.hookFiles, "number", runtime);
+      assert.equal(typeof counts?.commandFiles, "number", runtime);
+    }
+  });
+
   test("sync configuration projects only runtime-approved skills", async () => {
     const manifest = await readJson("config/sync.json");
     assert.equal(manifest.canonicalRoots?.skills, "canonical/skills");
@@ -327,7 +358,11 @@ describe("capability index inheritance chain", () => {
 
   test("release verification refreshes global capability discovery before checks while live eval stays live-only", async () => {
     const pkg = await readJson("package.json");
-    const releaseScript = pkg.scripts?.["meta:verify:all"] ?? "";
+    const releaseScript = await fs.readFile(
+      path.join(repoRoot, "scripts", "run-verify-all.mjs"),
+      "utf8",
+    );
+    assert.match(pkg.scripts?.["meta:verify:all"] ?? "", /run-verify-all\.mjs/);
     assert.match(releaseScript, /npm run discover:global/);
     assert.ok(
       releaseScript.indexOf("npm run discover:global") < releaseScript.indexOf("npm run meta:check"),

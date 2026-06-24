@@ -10,6 +10,7 @@ const changelogZh = readFileSync("CHANGELOG.zh-CN.md", "utf8");
 const gitignore = readFileSync(".gitignore", "utf8");
 const scriptsReadme = readFileSync("scripts/README.md", "utf8");
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+const verifyRunnerSource = readFileSync("scripts/run-verify-all.mjs", "utf8");
 
 test("core-loop release public evidence maps the default governed path", () => {
   assert.deepEqual(CORE_LOOP_CONTRACT.defaultEntry.spine, [
@@ -46,10 +47,11 @@ test("docs PDR stays local-private and public fixtures avoid private paths", () 
 });
 
 test("release verification path includes governance tests", () => {
-  assert.match(packageJson.scripts["meta:verify:all"], /npm run meta:verify:governance/);
+  assert.match(packageJson.scripts["meta:verify:all"], /node scripts\/run-verify-all\.mjs/);
+  assert.match(verifyRunnerSource, /npm run meta:verify:governance/);
   assert.match(packageJson.scripts["meta:verify:governance"], /npm run meta:test:governance/);
-  assert.match(packageJson.scripts["meta:verify:all"], /npm run meta:graphify:check/);
-  assert.match(packageJson.scripts["meta:verify:all"], /node scripts\/eval-meta-agents\.mjs --require-all-runtimes/);
+  assert.match(verifyRunnerSource, /npm run meta:graphify:check/);
+  assert.match(verifyRunnerSource, /node scripts\/eval-meta-agents\.mjs --require-all-runtimes/);
 });
 
 test("script registry classifies scripts and protects cleanup candidates", () => {

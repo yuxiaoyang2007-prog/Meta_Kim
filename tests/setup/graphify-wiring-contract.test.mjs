@@ -13,6 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { enrichMetaKimGraph } from "../../scripts/graphify-enrichment.mjs";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -92,8 +93,49 @@ describe("graphify idempotent wiring (contract)", () => {
 
     assert.match(src, /function stampGraphFreshness\(/);
     assert.match(src, /graph\.built_at_commit = currentHead/);
+    assert.match(src, /enrichMetaKimGraph\(graph\)/);
     assert.ok(src.includes("Built from commit:\\s*`?([0-9a-f]{7,40})`?"));
     assert.match(rebuildBody, /stampGraphFreshness\(\)/);
+  });
+
+  test("graphify enrichment adds Meta_Kim agent governance edges and node type aliases", () => {
+    const graph = {
+      nodes: [
+        {
+          id: "agents_meta_warden",
+          source_file: "canonical/agents/meta-warden.md",
+          file_type: "document",
+        },
+        {
+          id: "agents_meta_conductor",
+          source_file: "canonical/agents/meta-conductor.md",
+          file_type: "document",
+        },
+        { id: "canonical/agents/meta-prism.md", file_type: "document" },
+        { id: "canonical/agents/meta-chrysalis.md", file_type: "document" },
+        { id: "canonical/agents/meta-artisan.md", file_type: "document" },
+        { id: "canonical/agents/meta-librarian.md", file_type: "document" },
+        { id: "canonical/agents/meta-sentinel.md", file_type: "document" },
+        { id: "canonical/agents/meta-genesis.md", file_type: "document" },
+        { id: "canonical/agents/meta-scout.md", file_type: "document" },
+      ],
+      links: [],
+    };
+
+    const result = enrichMetaKimGraph(graph);
+
+    assert.equal(result.changed, true);
+    assert.ok(result.addedAgentGovernanceEdges >= 8);
+    assert.equal(graph.nodes[0].type, "document");
+    assert.ok(
+      graph.links.some(
+        (edge) =>
+          edge.source === "agents_meta_warden" &&
+          edge.target === "agents_meta_conductor" &&
+          edge.relation === "governs" &&
+          edge.kind === "agent_governance",
+      ),
+    );
   });
 
   test("package exposes a cross-platform graphify rebuild script", () => {
@@ -446,15 +488,16 @@ describe("graphify idempotent wiring (contract)", () => {
 
   test("install uses scoped validation and release validation keeps graphify check", () => {
     const setupSrc = readFileSync(path.join(root, "setup.mjs"), "utf8");
-    const pkg = JSON.parse(
-      readFileSync(path.join(root, "package.json"), "utf8"),
+    const verifyRunner = readFileSync(
+      path.join(root, "scripts", "run-verify-all.mjs"),
+      "utf8",
     );
 
     assert.match(
       setupSrc,
       /"scripts\/validate-project\.mjs"[\s\S]*\["--context", "install"\]/,
     );
-    assert.match(pkg.scripts["meta:verify:all"], /meta:graphify:check/);
+    assert.match(verifyRunner, /meta:graphify:check/);
   });
 
   test("graphify-out remains a local generated artifact, not a package file", () => {

@@ -71,11 +71,11 @@
  *   META_KIM_CAPABILITY_GATE_GRACE_DAYS
  *     Integer day count for the capability-gate progressive grace window. Default 7.
  *
- *   META_KIM_HOOK_RUNTIME
+ *   META_KIM_HOOK_RUNTIME or --runtime claude|codex|cursor
  *     Override runtime detection for cross-runtime deny() output schema.
  *     Accepted values: "claude" | "codex" | "cursor". If unset, the hook
- *     inspects process.argv[1] for ".codex/", ".cursor/", or ".claude/"
- *     and falls back to Claude.
+ *     checks explicit CLI args, then inspects process.argv[1] for ".codex/",
+ *     ".cursor/", or ".claude/", and falls back to Claude.
  *
  *   CLAUDE_SUBAGENT_TYPE
  *     Runtime-injected hint for the current subagent's type. When this starts
@@ -124,6 +124,23 @@ const SPINE_STATE_DIR =
   process.env.META_KIM_SPINE_STATE_DIR || ".meta-kim/state/default/spine";
 const targetPath = extractFilePath(payload) || "";
 const PLANNING_FILES = ["task_plan.md", "findings.md", "progress.md"];
+const PASSIVE_CONTROL_PLANE_TOOLS = new Set([
+  "EnterPlanMode",
+  "ExitPlanMode",
+  "TaskList",
+  "TaskGet",
+  "TaskOutput",
+  "TaskStop",
+]);
+const TASK_BOOKKEEPING_TOOLS = new Set([
+  "TaskCreate",
+  "TaskUpdate",
+  "TodoWrite",
+]);
+const CONTROL_PLANE_TOOLS = new Set([
+  ...PASSIVE_CONTROL_PLANE_TOOLS,
+  ...TASK_BOOKKEEPING_TOOLS,
+]);
 
 function normalizeHookPath(value) {
   const raw = String(value || "").trim();
@@ -356,14 +373,30 @@ function nodeWriteFileSyncTargetsSpineState(scriptText) {
 }
 
 function isPlanningFile() {
-  if (touchesPlanningFilePath(targetPath)) return true;
+  if (touchesPlanningSurfacePath(targetPath)) return true;
   if (toolName !== "Bash") return false;
   return isBashPlanningFileWrite(String(toolInput?.command || ""));
 }
 
 function touchesPlanningFilePath(value) {
+  return touchesPlanningSurfacePath(value);
+}
+
+function touchesPlanningSurfacePath(value) {
   const normalized = normalizeHookPath(value);
-  return PLANNING_FILES.some((file) => normalized.endsWith(file));
+  if (!normalized) return false;
+  return (
+    PLANNING_FILES.some((file) => normalized.endsWith(file)) ||
+    /(^|\/)\.claude\/plans\/[^/]+\.md$/.test(normalized)
+  );
+}
+
+function shellPlanningSurfaceTargetPattern() {
+  const planningFileAlternatives = PLANNING_FILES.map(escapeRegExp).join("|");
+  return (
+    `[^"'\\s;&|]*(?:(?:${planningFileAlternatives})|` +
+    `(?:\\.claude/plans/[^"'\\s;&|]+\\.md))`
+  );
 }
 
 function isBashPlanningFileWrite(command) {
@@ -390,26 +423,82 @@ function isBashPlanningFileWrite(command) {
 function isPlanningFileWriteSegment(segment) {
   if (!hasShellWritePrimitive(segment)) return false;
   const normalized = segment.replace(/\\/g, "/");
-  return PLANNING_FILES.some((file) => {
-    const escaped = escapeRegExp(file);
-    const explicitPath = new RegExp(
-      `(?:^|[\\s;&|])(?:-Path|-LiteralPath|-Destination|-FilePath)\\s+["']?[^"'\\s;&|]*${escaped}(?=["'\\s;&|]|$)`,
-      "i",
-    );
-    const positionalPath = new RegExp(
-      `(?:^|[\\s;&|])(?:set-content|out-file|add-content|new-item|remove-item)\\s+["']?[^"'\\s;&|]*${escaped}(?=["'\\s;&|]|$)`,
-      "i",
-    );
-    const redirectionPath = new RegExp(
-      `[>]{1,2}\\s*["']?[^"'\\s;&|]*${escaped}(?=["'\\s;&|]|$)`,
-      "i",
-    );
-    return (
-      explicitPath.test(normalized) ||
-      positionalPath.test(normalized) ||
-      redirectionPath.test(normalized)
-    );
-  });
+  const planningTarget = shellPlanningSurfaceTargetPattern();
+  const explicitPath = new RegExp(
+    `(?:^|[\\s;&|])(?:-Path|-LiteralPath|-Destination|-FilePath)\\s+["']?${planningTarget}(?=["'\\s;&|]|$)`,
+    "i",
+  );
+  const positionalPath = new RegExp(
+    `(?:^|[\\s;&|])(?:set-content|out-file|add-content|new-item|remove-item)\\s+["']?${planningTarget}(?=["'\\s;&|]|$)`,
+    "i",
+  );
+  const redirectionPath = new RegExp(
+    `[>]{1,2}\\s*["']?${planningTarget}(?=["'\\s;&|]|$)`,
+    "i",
+  );
+  return (
+    explicitPath.test(normalized) ||
+    positionalPath.test(normalized) ||
+    redirectionPath.test(normalized)
+  );
+}
+
+function formatDesignStageMutationDeny(label, req, state) {
+  const missing = req?.missing?.length
+    ? ` Missing: ${req.missing.join(", ")}.`
+    : "";
+  const reason = req?.reason ? ` ${req.reason}` : "";
+  return (
+    `Stage "${label}" is a design-time stage; business mutation is blocked until Execution.` +
+    `${missing}${reason} Critical, Fetch, and Thinking can be completed by the main thread; ` +
+    "Agent dispatch is not required before Execution. Allowed next actions: continue " +
+    "read/search Fetch evidence, capability discovery, a brief visible chat status, " +
+    "planning-file updates when already useful, or spine-state packet writes. Do not start " +
+    "Fetch by creating or updating a task/todo board before evidence is collected. " +
+    `Dispatch chain so far: ${JSON.stringify(state.dispatchChain || {})}`
+  );
+}
+
+function hasFetchEvidenceForTaskBookkeeping(state) {
+  const fetchRecord = state?.fetchRecord;
+  if (!fetchRecord || typeof fetchRecord !== "object") return false;
+  if (fetchRecord.repairOnly || fetchRecord.status === "repair_only_fetch_record") {
+    return false;
+  }
+  return (
+    fetchRecord.capabilitySearchPerformed === true ||
+    (Array.isArray(fetchRecord.evidence) && fetchRecord.evidence.length > 0) ||
+    (Array.isArray(fetchRecord.capabilityMatches) && fetchRecord.capabilityMatches.length > 0)
+  );
+}
+
+function shouldDelayTaskBookkeeping(state) {
+  const stage = String(state?.currentStage || "").toLowerCase();
+  if (stage === "critical") return true;
+  if (stage === "fetch" && !hasFetchEvidenceForTaskBookkeeping(state)) return true;
+  return false;
+}
+
+function formatTaskBookkeepingDelayDeny(toolName, state) {
+  const stage = state?.currentStage || "current design stage";
+  return (
+    `Task/todo bookkeeping via "${toolName}" is delayed during ${stage} until Fetch evidence exists. ` +
+    "Continue Fetch with read/search/capability discovery and a brief visible chat status; " +
+    "write spine-state or planning files only when needed. Do not start by creating or updating " +
+    "a task list before evidence is collected."
+  );
+}
+
+function formatPostExecutionStageDeny(label, req, state) {
+  const missing = req?.missing?.length
+    ? ` Missing: ${req.missing.join(", ")}.`
+    : "";
+  const reason = req?.reason ? ` ${req.reason}` : "";
+  return (
+    `Stage "${label}" requirements are not met.${missing}${reason} ` +
+    "Return to the responsible stage and record the missing evidence before continuing. " +
+    `Dispatch chain: ${JSON.stringify(state.dispatchChain || {})}`
+  );
 }
 
 function matchesStageReadOnlyCommand(command, prefixes) {
@@ -543,9 +632,10 @@ function shouldAdvanceCriticalToFetch(state, toolName, input) {
  * Detect which runtime is hosting this hook so that deny() can emit the right
  * payload schema. Priority:
  *   1. META_KIM_HOOK_RUNTIME env var (explicit override).
- *   2. Inspect process.argv[1] for a runtime-specific path segment, using
+ *   2. --runtime / --meta-kim-hook-runtime CLI arg (projected hook config).
+ *   3. Inspect process.argv[1] for a runtime-specific path segment, using
  *      path.sep so the check works on both POSIX and Windows.
- *   3. Default to "claude".
+ *   4. Default to "claude".
  *
  * @returns {"claude" | "codex" | "cursor"}
  */
@@ -553,6 +643,23 @@ export function detectHookRuntime() {
   const override = (process.env.META_KIM_HOOK_RUNTIME || "").toLowerCase().trim();
   if (override === "claude" || override === "codex" || override === "cursor") {
     return override;
+  }
+
+  for (let i = 2; i < process.argv.length; i += 1) {
+    const arg = String(process.argv[i] || "").toLowerCase().trim();
+    const next = String(process.argv[i + 1] || "").toLowerCase().trim();
+    const inlineRuntime =
+      arg.startsWith("--runtime=")
+        ? arg.slice("--runtime=".length)
+        : arg.startsWith("--meta-kim-hook-runtime=")
+          ? arg.slice("--meta-kim-hook-runtime=".length)
+          : "";
+    const value =
+      inlineRuntime ||
+      (arg === "--runtime" || arg === "--meta-kim-hook-runtime" ? next : "");
+    if (value === "claude" || value === "codex" || value === "cursor") {
+      return value;
+    }
   }
 
   const scriptPath = normalize(process.argv[1] || "");
@@ -658,24 +765,157 @@ function observedModeHighRiskReason(state, command = "") {
   );
 }
 
+function observedModeAuthorizedReleaseNotice(state) {
+  if (isZh(state)) {
+    return (
+      "[Meta_Kim] 已识别到本轮用户明确要求提交/推送/发布；观察态只放行 git push 和 GitHub Release，" +
+      "不放行 npm publish、强推、安装或破坏性命令。"
+    );
+  }
+  return (
+    "[Meta_Kim] Explicit user release intent detected for this run; observed mode only allows " +
+    "git push and GitHub Release commands, not npm publish, force push, installs, or destructive commands."
+  );
+}
+
+function stripQuotedShellText(value) {
+  const raw = String(value || "")
+    .replace(/@'[\s\S]*?'@/g, " @''@ ")
+    .replace(/@"[\s\S]*?"@/g, ' @""@ ');
+  let result = "";
+  let quote = null;
+  let escaped = false;
+
+  for (const ch of raw) {
+    if (escaped) {
+      if (!quote) result += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      if (!quote) result += ch;
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      result += " ";
+      continue;
+    }
+    result += ch;
+  }
+
+  return result;
+}
+
+function isQuotedInspectionSegment(segment) {
+  const stripped = stripQuotedShellText(segment).trim().toLowerCase();
+  if (!stripped) return true;
+  return /^(?:graphify\s+query|rg\b|grep\b|egrep\b|fgrep\b|select-string\b|sls\b|find\b|git\s+grep\b|npm\s+search\b|npm\s+view\b)/i.test(
+    stripped,
+  );
+}
+
+function isHighRiskObservedSegment(segment) {
+  if (isReadOnlyBash(segment)) return false;
+  const lower = stripQuotedShellText(segment).trim().toLowerCase();
+  if (!lower) return false;
+  const highRiskCommandPattern =
+    /^(?:(?:bash|sh|zsh|pwsh|powershell)(?:\.exe)?\s+(?:-c|-lc|-command|\/c)\b|(?:node|node\.exe)\s+(?:-e|--eval)\b|python(?:3|\.exe)?\s+-c\b|npm\s+(?:install|i|publish)|pnpm\s+(?:install|i|add)|yarn\s+(?:install|add)|cargo\s+(?:install|publish|run)|pip\s+(?:install|uninstall)|git\s+(?:push|pull|fetch|reset|checkout|restore|clean|rebase|merge|rm|mv)\b|gh\s+(?:release|pr\s+merge)|curl\b|wget\b|invoke-webrequest\b|invoke-restmethod\b|invoke-expression\b|iwr\b|irm\b|iex\b|remove-item\b|rm\s+-|del\b|rmdir\b|setx\b|set-item\s+env)\b/i;
+  return highRiskCommandPattern.test(lower);
+}
+
+function isSafeAfterRemovingQuotedText(segment) {
+  const stripped = stripQuotedShellText(segment).trim();
+  if (!stripped) return true;
+  return !isHighRiskObservedSegment(stripped) || isQuotedInspectionSegment(segment);
+}
+
 function isHighRiskObservedBash(command) {
   const normalized = String(command || "").trim();
   if (!normalized) return false;
-  const lower = normalized.toLowerCase();
-  const highRiskPattern =
-    /\b(?:npm\s+(?:install|i|publish)|pnpm\s+(?:install|i|add)|yarn\s+(?:install|add)|cargo\s+(?:install|publish|run)|pip\s+(?:install|uninstall)|git\s+(?:push|pull|fetch|reset|checkout|restore|clean|rebase|merge|commit|add|rm|mv)|gh\s+(?:release|pr\s+merge)|curl\b|wget\b|invoke-webrequest\b|invoke-restmethod\b|iwr\b|irm\b|remove-item\b|rm\s+-|del\b|rmdir\b|setx\b|set-item\s+env)\b/i;
-  if (highRiskPattern.test(lower)) return true;
+  const segments = bashReadonlyInternals
+    .splitSegments(normalized)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (segments.some(isHighRiskObservedSegment)) return true;
   const classification = classifyBashCommand(normalized);
   if (classification.readOnly) return false;
   if (!/^dangerous pattern:/i.test(classification.reason || "")) return false;
-  return /install|publish|push|merge|rebase|reset|delete|remove|credential|token|secret|http|curl|wget|invoke-webrequest|invoke-restmethod/i.test(
+  if (segments.every(isSafeAfterRemovingQuotedText)) return false;
+  return /install|publish|push|merge|rebase|reset|delete|remove|credential|token|secret|http|curl|wget|invoke-webrequest|invoke-restmethod|invoke-expression|iex/i.test(
     classification.reason,
   );
+}
+
+function getObservedExternalPublishIntent(state) {
+  const control = state?.stageRuntimeControl || {};
+  const intent = control.externalPublishIntent || state?.externalPublishIntent || null;
+  if (!intent || intent.status !== "user_explicit") return null;
+
+  const createdAt = Date.parse(intent.createdAt || control.createdAt || state?.triggeredAt || "");
+  const ttlMinutes = Number(intent.expiresAfterMinutes ?? 240);
+  if (
+    Number.isFinite(createdAt) &&
+    Number.isFinite(ttlMinutes) &&
+    ttlMinutes > 0 &&
+    Date.now() - createdAt > ttlMinutes * 60 * 1000
+  ) {
+    return null;
+  }
+  return intent;
+}
+
+function isAuthorizedObservedReleaseSegment(segment) {
+  const lower = stripQuotedShellText(segment).trim().toLowerCase();
+  if (!lower) return true;
+  if (isReadOnlyBash(lower)) return true;
+  if (/^git\s+push\b/.test(lower)) {
+    return !/(?:^|\s)(?:--force|-f|--mirror|--delete)\b/.test(lower);
+  }
+  return /^gh\s+release\s+(?:view|create|edit|upload)\b/.test(lower);
+}
+
+function isAuthorizedObservedExternalPublish(state, toolName, toolInput) {
+  if (toolName !== "Bash") return false;
+  if (!getObservedExternalPublishIntent(state)) return false;
+  const segments = bashReadonlyInternals
+    .splitSegments(String(toolInput?.command || ""))
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  return segments.length > 0 && segments.every(isAuthorizedObservedReleaseSegment);
 }
 
 function isHighRiskObservedExecution(toolName, toolInput) {
   if (toolName !== "Bash") return false;
   return isHighRiskObservedBash(toolInput?.command || "");
+}
+
+async function allowObservedExternalPublishExecution(state) {
+  const control = state?.stageRuntimeControl || {};
+  const now = new Date().toISOString();
+  const nextState = {
+    ...state,
+    stageRuntimeControl: {
+      ...control,
+      observedNoticeEmittedAt: control.observedNoticeEmittedAt || now,
+      observedNoticePolicy: "emit_once_per_active_state",
+      externalPublishIntent: {
+        ...(control.externalPublishIntent || state?.externalPublishIntent || {}),
+        lastUsedAt: now,
+      },
+    },
+  };
+  await writeSpineState(cwd, nextState);
+  if (!control.observedNoticeEmittedAt) {
+    process.stderr.write(`${observedModeNotice(state)}\n`);
+  }
+  process.stderr.write(`${observedModeAuthorizedReleaseNotice(state)}\n`);
+  process.exit(0);
 }
 
 async function allowObservedModeExecution(state) {
@@ -874,6 +1114,34 @@ function resolveGracedMode(modeRaw, graceDaysEnvVar, defaultGraceDays, state) {
   }
   const elapsedDays = (Date.now() - startedMs) / (1000 * 60 * 60 * 24);
   return elapsedDays < graceDays ? "warn" : "block";
+}
+
+function describeGracedMode(modeRaw, graceDaysEnvVar, defaultGraceDays, state) {
+  const effectiveMode = resolveGracedMode(modeRaw, graceDaysEnvVar, defaultGraceDays, state);
+  if (modeRaw === "warn" || modeRaw === "block" || modeRaw === "off") {
+    return `effective: "${effectiveMode}"; graceDaysRemaining: n/a`;
+  }
+
+  const graceDaysRaw = parseInt(
+    process.env[graceDaysEnvVar] || String(defaultGraceDays),
+    10,
+  );
+  const graceDays =
+    Number.isFinite(graceDaysRaw) && graceDaysRaw >= 0
+      ? graceDaysRaw
+      : defaultGraceDays;
+  const startedAt =
+    state?.runStartTimestamp || state?.triggeredAt || state?.startedAt || null;
+  if (!startedAt) {
+    return `effective: "${effectiveMode}"; graceDaysRemaining: unknown; graceDays: ${graceDays}; anchor: missing`;
+  }
+  const startedMs = Date.parse(startedAt);
+  if (!Number.isFinite(startedMs)) {
+    return `effective: "${effectiveMode}"; graceDaysRemaining: unknown; graceDays: ${graceDays}; anchor: invalid`;
+  }
+  const elapsedDays = (Date.now() - startedMs) / (1000 * 60 * 60 * 24);
+  const graceDaysRemaining = Math.max(0, Math.ceil(graceDays - elapsedDays));
+  return `effective: "${effectiveMode}"; graceDaysRemaining: ${graceDaysRemaining}; graceDays: ${graceDays}`;
 }
 
 /**
@@ -1166,13 +1434,18 @@ if (isAgentDispatchTool(toolName)) {
           7,
           state,
         );
+        const graceStatus = describeGracedMode(
+          capabilityGateModeRaw,
+          "META_KIM_CAPABILITY_GATE_GRACE_DAYS",
+          7,
+          state,
+        );
 
         const reason =
           `Capability-first violation: fetchRecord.capabilitySearchPerformed must be true ` +
           `before Agent dispatch in stage "${stage}". Search config/capability-index/ + ` +
           `canonical/agents/ first, then update spine state fetchRecord. ` +
-          `Capability gate mode: "${capabilityGateModeRaw}" (effective: "${effectiveMode}"; ` +
-          `default is "progressive"). ` +
+          `Capability gate mode: "${capabilityGateModeRaw}" (${graceStatus}; default is "progressive"). ` +
           `Override with META_KIM_CAPABILITY_GATE=block (immediate), =warn (log only), ` +
           `or =off (disabled, not recommended).`;
 
@@ -1251,15 +1524,19 @@ if (isAgentDispatchTool(toolName)) {
   process.exit(0);
 }
 
-// Task tools: always allow
-if (
-  toolName === "TaskCreate" ||
-  toolName === "TaskUpdate" ||
-  toolName === "TaskList" ||
-  toolName === "TaskGet" ||
-  toolName === "TaskOutput" ||
-  toolName === "TaskStop"
-) {
+// Passive control-plane tools remain allowed. Task/todo bookkeeping is delayed
+// during Critical and pre-evidence Fetch because Claude Code can otherwise
+// churn on native task-list maintenance instead of continuing visible Fetch.
+if (TASK_BOOKKEEPING_TOOLS.has(toolName)) {
+  if (shouldDelayTaskBookkeeping(state)) {
+    exitAfterDeny(formatTaskBookkeepingDelayDeny(toolName, state));
+  }
+  process.exit(0);
+}
+
+// Other control-plane tools are allowed. The fuse is about business mutation
+// and external side effects, not passive native planning surfaces.
+if (CONTROL_PLANE_TOOLS.has(toolName)) {
   process.exit(0);
 }
 
@@ -1346,6 +1623,9 @@ if (isExecutionTool(toolName)) {
 
   if (isHookObservedState(state)) {
     if (isHighRiskObservedExecution(toolName, toolInput)) {
+      if (isAuthorizedObservedExternalPublish(state, toolName, toolInput)) {
+        await allowObservedExternalPublishExecution(state);
+      }
       exitAfterDeny(
         observedModeHighRiskReason(state, String(toolInput?.command || "")),
       );
@@ -1382,16 +1662,9 @@ if (isExecutionTool(toolName)) {
     const label = stageInfo?.label || stage;
 
     if (!req.met) {
-      exitAfterDeny(
-        `Stage "${label}" requires: ${req.missing.join(", ")}. ` +
-          `Dispatch them via Agent tool (description must contain the meta-agent name). ` +
-          `Dispatch chain so far: ${JSON.stringify(state.dispatchChain || {})}`,
-      );
+      exitAfterDeny(formatDesignStageMutationDeny(label, req, state));
     } else {
-      exitAfterDeny(
-        `You are in stage "${label}". Complete this stage before executing. ` +
-          `Dispatch chain: ${JSON.stringify(state.dispatchChain || {})}`,
-      );
+      exitAfterDeny(formatDesignStageMutationDeny(label, req, state));
     }
   }
 
@@ -1411,15 +1684,14 @@ if (isExecutionTool(toolName)) {
     if (!req.met) {
       const stageInfo = STAGE_META_AGENT_MAP[stage];
       exitAfterDeny(
-        `Stage "${stageInfo?.label || stage}" requires: ${req.missing.join(", ")}. ` +
-          `Dispatch them via Agent tool (description must contain the meta-agent name). ` +
-          `Dispatch chain so far: ${JSON.stringify(state.dispatchChain || {})}`,
+        formatDesignStageMutationDeny(stageInfo?.label || stage, req, state),
       );
     }
     exitAfterDeny(
       "Current stage: Critical. This stage is for understanding the request and reading project evidence. " +
         "Use repo-inspection commands to enter Fetch, then run baseline verification from Fetch. " +
-        "Allowed now: planning files, spine state writes, and read-only inspection. " +
+        "Allowed now: visible chat status, planning files when already useful, spine state writes, and read-only inspection. " +
+        "Do not create or update task/todo boards before evidence is collected. " +
         `Dispatch chain so far: ${JSON.stringify(state.dispatchChain || {})}`,
     );
   }
@@ -1441,11 +1713,7 @@ if (isExecutionTool(toolName)) {
     const req = checkStageRequirements(state);
     if (!req.met) {
       const stageInfo = STAGE_META_AGENT_MAP[stage];
-      exitAfterDeny(
-        `Stage "${stageInfo?.label || stage}" requires: ${req.missing.join(", ")}. ` +
-          `Dispatch them via Agent tool first. ` +
-          `Dispatch chain: ${JSON.stringify(state.dispatchChain || {})}`,
-      );
+      exitAfterDeny(formatPostExecutionStageDeny(stageInfo?.label || stage, req, state));
     }
   }
 }

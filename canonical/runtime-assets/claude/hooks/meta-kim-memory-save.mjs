@@ -151,9 +151,15 @@ function endpointFromClaudeConfig() {
   return null;
 }
 
+function endpointFromMemoryPort() {
+  const port = String(process.env.META_KIM_MEMORY_PORT || "").trim();
+  return /^\d{1,5}$/u.test(port) ? `http://localhost:${port}` : null;
+}
+
 function getEndpoint() {
   return (
     process.env.MCP_MEMORY_URL ||
+    endpointFromMemoryPort() ||
     endpointFromClaudeConfig() ||
     "http://localhost:8000"
   );

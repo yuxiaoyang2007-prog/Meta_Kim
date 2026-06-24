@@ -44,6 +44,10 @@ function assertContract() {
     "action policy must not require commit packets",
   );
   assert(
+    contract.stageChecks?.actionPolicy?.designStagesMayProceedWithoutAgentDispatch === true,
+    "Critical/Fetch/Thinking action policy must not require Agent dispatch",
+  );
+  assert(
     contract.stageChecks?.commitRequirements?.requiresExplicitTransitionIntent === true,
     "commit requirements must require explicit transition intent",
   );
@@ -69,8 +73,23 @@ function assertContract() {
   );
   hasAll(
     contract.fetchPolicy?.inProgressMustAllow ?? [],
-    ["repo_search", "capability_scan", "spine_state_write"],
+    ["repo_search", "capability_scan", "spine_state_write", "planning_file_update", "visible_status_notice"],
     "fetchPolicy.inProgressMustAllow",
+  );
+  hasAll(
+    contract.fetchPolicy?.inProgressMustDelay ?? [],
+    ["task_bookkeeping_control_plane_until_fetch_evidence"],
+    "fetchPolicy.inProgressMustDelay",
+  );
+  hasAll(
+    contract.fetchPolicy?.inProgressMustNotRequire ?? [],
+    ["fetchRecord", "agentDispatch"],
+    "fetchPolicy.inProgressMustNotRequire",
+  );
+  hasAll(
+    contract.thinkingPolicy?.inProgressMustNotRequire ?? [],
+    ["agentDispatch"],
+    "thinkingPolicy.inProgressMustNotRequire",
   );
   hasAll(contract.fetchPolicy?.commitRequires ?? [], ["fetchRecord"], "fetchPolicy.commitRequires");
 }
@@ -167,12 +186,18 @@ function assertRegressionTests() {
     tests,
     [
       "Fetch in progress does not require fetchRecord until stage commit",
+      "Fetch and Thinking in progress do not require Agent dispatch",
       "read-only hook allowance does not auto-advance Critical to Fetch",
       "Fetch stage allows Bash spine-state writes even before fetchRecord exists",
+      "Fetch stage allows planning files before fetchRecord exists",
+      "Fetch stage delays task bookkeeping before Fetch evidence exists",
+      "Fetch business mutation denial does not instruct Agent dispatch",
       "Fetch self-lock allows repair-only Node fetchRecord spine-state write",
       `${deprecatedModeMarker} residue in spine state cannot skip dispatch governance`,
       "auto prompt activation creates observed advisory state instead of managed hard-gate state",
       "observed hook state allows ordinary local file mutation with one readable notice",
+      "observed hook state allows local git stage and commit but not push",
+      "observed hook state ignores high-risk words inside quoted search text",
       "observed hook state still denies high-risk external side-effect commands",
       "auto prompt activation rotates stale legacy active state for a new prompt",
     ],
