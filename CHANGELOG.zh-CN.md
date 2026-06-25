@@ -6,6 +6,29 @@
 
 更新说明先解释本次解决的用户痛点或风险，再说明为了解决它改了什么、为什么重要。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
+## [2.8.57] - 2026-06-25
+
+### 解决的问题
+
+Review follow-up 里真正暴露的风险不是“还缺更多清单”，而是默认路线选择还不够稳：命令目标、runtime 证据、用户本地状态都需要同一个保守规则先发生在 Execution 之前。只要路线关键类型不清楚，Meta_Kim 就应该降级、阻断、返回 `null` 或保持 reference-only，而不是先猜一个路线，再靠 validator 或 hook 事后补洞。
+
+### 变更
+
+- **Type-first route policy** - `select-execution-route` 现在会输出机器可读的 `typeFirstRoutePolicy` 和每轮实际计算的 `routeTypeClassification`，覆盖对象类型、证据类型、归属类型和保守 disposition。
+- **不新增 gate 的契约** - Stage runtime control 只把该 policy 作为路线选择不变量引用，明确它不是新的验收门或 hook loop。
+- **可执行回归覆盖** - Capability routing validator 和测试现在会检查未知对象、证据、归属类型必须保守降级，而不能靠形状猜。
+- **Meta-theory 提示收紧** - canonical meta-theory skill 现在要求 Fetch / Thinking 先分类路线关键类型，再决定是否需要 checklist 或 validator 机制。
+
+### 验证
+
+- `node scripts/select-execution-route.mjs --task "missing dependency task" --runtime codex --os windows --json --compact-json`
+- `npm run meta:route:validate`
+- `npm run meta:prd:stage-runtime-control:validate`
+- `node --test tests/governance/capability-routing.test.mjs`
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
 ## [2.8.56] - 2026-06-23
 
 ### 解决的问题

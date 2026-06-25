@@ -1465,6 +1465,24 @@ describe("Part F2: choice surface runtime gate", async () => {
     }
   });
 
+  test("Type-first route policy is a route selection invariant, not another gate", async () => {
+    const contract = await readJson(
+      "config/contracts/stage-runtime-control-contract.json",
+    );
+
+    assert.equal(
+      contract.routeSelectionPolicy?.typeFirstRouteRef,
+      "scripts/select-execution-route.mjs#typeFirstRoutePolicy",
+    );
+    assert.equal(contract.routeSelectionPolicy?.kind, "route_selection_invariant");
+    assert.equal(contract.routeSelectionPolicy?.mustNotBecomeNewGate, true);
+    assert.equal(
+      contract.routeSelectionPolicy?.unclearTypeDisposition,
+      "degrade_or_block_not_guess",
+    );
+    assert.equal(contract.controlPlaneRules?.hookRole, "last_resort_fuse");
+  });
+
   test("observed hook state allows ordinary local file mutation with one readable notice", () => {
     const state = {
       ...createInitialState({

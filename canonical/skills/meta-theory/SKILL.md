@@ -43,6 +43,10 @@ Decision information is responsibility-scoped. Fetch is not the only stage that 
 
 Important: Architecture Type Distinction. Meta Architecture means agent governance, collaboration relationships, and responsibility boundaries. Project Technical Architecture means code organization, tech stack, and design patterns; redirect that lane to an architect or backend-architect capability when the needed owner is technical implementation rather than Meta_Kim governance.
 
+## Type-First Route Invariant
+
+Before adding another checklist, hook rule, or validator gate, classify the route-critical type. The minimum axes are object type, evidence type, and ownership type. Unknown object type returns `null`, `capabilityGapPacket`, or `reference_only`; unknown evidence type must not be promoted from structural/validator pass into runtime truth; unknown ownership preserves or blocks instead of overwriting user-owned local state. This is a route-selection invariant for Fetch and Thinking, not a new stage or acceptance matrix.
+
 ## Dynamic Flow Selection
 
 - Type A: prompt/reference/contract hardening.

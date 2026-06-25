@@ -158,6 +158,43 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     /~\/\.codex.*~\/\.claude.*~\/\.cursor.*~\/\.openclaw.*~\/\.agents/i,
     "reportable source refs must use a cross-runtime home-relative policy",
   );
+  assert.equal(
+    subjectiveQuality.typeFirstRoutePolicy?.policyKind,
+    "route_selection_invariant",
+    "route output must expose type-first classification as an invariant",
+  );
+  assert.equal(
+    subjectiveQuality.typeFirstRoutePolicy?.mustNotBecomeChecklist,
+    true,
+    "type-first routing must not become another acceptance checklist",
+  );
+  assert.equal(
+    subjectiveQuality.typeFirstRoutePolicy?.axes?.objectType?.forbiddenFallback,
+    "guess_executable_route_from_shape_only",
+    "route-critical object types must not be guessed from shape alone",
+  );
+  assert.equal(
+    subjectiveQuality.typeFirstRoutePolicy?.axes?.evidenceType?.forbiddenFallback,
+    "validator_pass_as_runtime_truth",
+    "evidence typing must keep validator pass separate from runtime truth",
+  );
+  assert.equal(
+    subjectiveQuality.typeFirstRoutePolicy?.axes?.ownershipType?.unclearAction,
+    "preserve_or_block_until_owner_is_known",
+    "unknown ownership must preserve or block instead of overwriting local state",
+  );
+  assert.equal(subjectiveQuality.routeExecutionGate?.typeFirstPolicyRef, "typeFirstRoutePolicy");
+  assert.equal(subjectiveQuality.routeTypeClassification?.policyRef, "typeFirstRoutePolicy");
+  assert.equal(
+    subjectiveQuality.routeTypeClassification?.evidenceType?.claimLimit,
+    "route_preview_not_runtime_truth",
+    "structural route output must not claim runtime truth",
+  );
+  assert.equal(
+    subjectiveQuality.routeTypeClassification?.objectType?.forbiddenFallbackAvoided,
+    true,
+    "route type classification must avoid object-shape guessing",
+  );
   assert.ok(subjectiveQuality.decisionCheckpoints?.length >= 3);
   assert.ok(
     subjectiveQuality.decisionCheckpoints.some((checkpoint) => checkpoint.stage === "Thinking"),
@@ -385,4 +422,15 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
 
   const missing = route("missing dependency task");
   assert.ok(missing.recommendedRoute || missing.capabilityGapPacket);
+  assert.ok(
+    ["classified_route_can_be_scored", "blocked_with_reason", "capabilityGapPacket"].includes(
+      missing.routeExecutionGate?.typeFirstDisposition,
+    ),
+    "missing providers must classify or degrade instead of guessing an executable route",
+  );
+  assert.equal(
+    missing.routeTypeClassification?.gapDecisionRef,
+    "capabilityGapDecision",
+    "capability-gap routing must link type classification to the blocking decision",
+  );
 });

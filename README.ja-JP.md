@@ -53,6 +53,14 @@ node setup.mjs
 
 > 💡 **インストール後**：`setup.mjs` が成果物の場所を出力します。いつでも再確認（または前回との差分表示）したいときは、インストール先のディレクトリで `npm run meta:status` を実行してください。
 
+新規 clone 直後は、Meta_Kim がソースファイル、生成される projection、ローカル状態を意図的に分けていると見てください。
+
+| レイヤー | 例 | 見えるタイミング |
+| --- | --- | --- |
+| GitHub source | `README.md`、`AGENTS.md`、`CLAUDE.md`、`canonical/`、`config/`、`scripts/` | `git clone` 直後からリポジトリに存在します。該当する場合は `package.json` の `files` whitelist にも入ります |
+| 生成される runtime projection | `.claude/`、`.codex/`、`.agents/`、`.cursor/`、`openclaw/`、`.mcp.json`、`codex/` | `node setup.mjs` または `npm run meta:sync` によりローカル生成されます。gitignored で、GitHub source ではありません |
+| ローカル実行状態とグラフ出力 | `.meta-kim/`、`graphify-out/`、`tests/output/`、`task_plan.md`、`findings.md`、`progress.md` | setup、graphify、tests、governed run が必要なときだけ作られます。local-only で再生成可能です |
+
 リポジトリを保守する場合は、まず `canonical/` と `config/contracts/workflow-contract.json` を編集し、そのあとで同期と検証を実行します（Node.js >= 22.13.0 が必要）。
 
 ```bash

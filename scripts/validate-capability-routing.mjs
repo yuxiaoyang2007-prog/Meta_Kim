@@ -84,6 +84,36 @@ assert(
   /~\/\.codex.*~\/\.claude.*~\/\.cursor.*~\/\.openclaw.*~\/\.agents/i.test(fuzzy.autonomousCapabilityDiscovery?.sourceRefPolicy ?? ""),
   "Reportable sourceRef policy must be cross-runtime and home-relative",
 );
+assert(fuzzy.typeFirstRoutePolicy?.policyKind === "route_selection_invariant", "Route output must expose type-first route policy");
+assert(fuzzy.typeFirstRoutePolicy?.mustNotBecomeChecklist === true, "Type-first route policy must not become another checklist");
+assert(
+  fuzzy.typeFirstRoutePolicy?.axes?.objectType?.unclearAction === "return_null_or_capabilityGapPacket_or_reference_only",
+  "Unknown object types must return null, capability gap, or reference-only instead of guessing",
+);
+assert(
+  fuzzy.typeFirstRoutePolicy?.axes?.evidenceType?.forbiddenFallback === "validator_pass_as_runtime_truth",
+  "Evidence typing must forbid promoting validator pass into runtime truth",
+);
+assert(
+  fuzzy.typeFirstRoutePolicy?.axes?.ownershipType?.unclearAction === "preserve_or_block_until_owner_is_known",
+  "Unknown ownership must preserve or block instead of overwriting state",
+);
+assert(
+  fuzzy.routeExecutionGate?.typeFirstPolicyRef === "typeFirstRoutePolicy",
+  "Execution gate must point to the route type policy instead of adding a separate gate",
+);
+assert(
+  fuzzy.routeTypeClassification?.policyRef === "typeFirstRoutePolicy",
+  "Route output must classify current route types from the executable policy",
+);
+assert(
+  fuzzy.routeTypeClassification?.evidenceType?.claimLimit === "route_preview_not_runtime_truth",
+  "Route type classification must limit structural evidence claims",
+);
+assert(
+  fuzzy.routeTypeClassification?.objectType?.forbiddenFallbackAvoided === true,
+  "Route type classification must record that object fallback guessing was avoided",
+);
 assert(fuzzy.routeExecutionGate?.canPreviewRoute === true, "Stale cache may still allow route preview");
 assert(typeof fuzzy.routeExecutionGate?.canEnterExecution === "boolean", "Route output must expose whether Execution may start");
 assert(fuzzy.ownerDiscoveryPacket?.candidateReusableCapabilityProviders?.length > 0, "Route output must expose reusable capability providers before agent creation");
@@ -203,6 +233,14 @@ assert(missing.capabilityGapDecision?.decisionEvidence?.status === "pass", "Capa
 assert(missing.capabilityGapDecision?.decisionEvidence?.missingEvidence?.length === 0, "Capability-gap route decision must not miss required evidence");
 assert(missing.routeExecutionGate?.canEnterExecution === false, "Blocked capability-gap decision must close the Execution gate");
 assert(missing.routeExecutionGate?.blockedBy?.includes("capability_gap_decision_blocks_execution"), "Execution gate must name the capability-gap blocker");
+assert(
+  ["classified_route_can_be_scored", "blocked_with_reason", "capabilityGapPacket"].includes(missing.routeExecutionGate?.typeFirstDisposition),
+  "Explicit capability gap route must classify or degrade instead of guessing",
+);
+assert(
+  missing.routeTypeClassification?.gapDecisionRef === "capabilityGapDecision",
+  "Explicit capability gap route must connect type classification to capabilityGapDecision",
+);
 
 const claudeAgentSearch = route("在 Claude Code 里运行 agent 搜索不对 critical and fetch thinking and review", "claude_code", "windows");
 assert(

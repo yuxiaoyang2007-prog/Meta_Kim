@@ -89,6 +89,14 @@ node setup.mjs
 
 > 💡 **安装之后**：`setup.mjs` 结尾会打印产物位置。任何时候想再看一眼（或对比上次安装），在安装目录里跑 `npm run meta:status` 即可。
 
+刚 clone 下来时，先按这三层看，避免把“主源”“生成物”和“本地状态”混在一起：
+
+| 层级 | 例子 | 什么时候应该看到 |
+| --- | --- | --- |
+| GitHub 主源 | `README.md`、`AGENTS.md`、`CLAUDE.md`、`canonical/`、`config/`、`scripts/` | `git clone` 后就应该在仓库里；适用时也会进入 `package.json` 的 `files` 白名单 |
+| 生成的 runtime projection | `.claude/`、`.codex/`、`.agents/`、`.cursor/`、`openclaw/`、`.mcp.json`、`codex/` | 由 `node setup.mjs` 或 `npm run meta:sync` 在本地生成；受 `.gitignore` 保护，不是 GitHub source |
+| 本地运行状态与图谱产物 | `.meta-kim/`、`graphify-out/`、`tests/output/`、`task_plan.md`、`findings.md`、`progress.md` | 只有 setup、graphify、测试或 governed run 需要时才会出现；属于本地状态，可重新生成 |
+
 ### 安装范围
 
 默认直接回车的路径是：**全局通用能力**。agents、Commands、MCP、skills 等可复用能力，会安装到各 runtime 官方支持的全局/用户目录。全局 hook wiring 是显式开关：只有传入 `--with-global-hooks` 时，Meta_Kim 才会更新 Claude/Codex/Cursor 的 hook 配置。项目默认直接复用这些全局能力；只有 Fetch/Thinking 证明某个项目确实需要定制、迭代创新或专用覆盖层时，才在项目内创建 agents、Commands、MCP、hooks、skills 等文件。

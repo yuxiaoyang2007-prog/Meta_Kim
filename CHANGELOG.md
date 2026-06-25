@@ -6,6 +6,29 @@ This file is the reader-facing release history for Meta_Kim.
 
 The changelog explains the user-facing problem or risk each release solved, what changed to solve it, and why the change matters. It intentionally avoids long internal task ledgers, low-signal backlog ids, and implementation trivia. When exact evidence is needed, use the repository history, tests, generated reports, and PRD artifacts.
 
+## [2.8.57] - 2026-06-25
+
+### Solved Problem
+
+Review follow-up showed the next risk was not missing more checklists, but weak default route selection: command targets, runtime proof, and user-owned state all needed the same conservative rule before Execution. When the route-critical type is unclear, Meta_Kim should degrade, block, return `null`, or keep reference-only evidence instead of guessing and relying on validators or hooks to catch it later.
+
+### Changed
+
+- **Type-First Route Policy** - `select-execution-route` now emits a machine-readable `typeFirstRoutePolicy` plus per-run `routeTypeClassification` covering object type, evidence type, ownership type, and conservative disposition.
+- **No New Gate Contract** - Stage runtime control now references that policy as a route-selection invariant, explicitly not another acceptance gate or hook loop.
+- **Executable Regression Coverage** - Capability routing validation and tests now assert that unknown object, evidence, and ownership types use conservative dispositions instead of shape-based guessing.
+- **Meta-Theory Prompt Guidance** - The canonical meta-theory skill now tells Fetch and Thinking to classify route-critical types before adding checklist or validator machinery.
+
+### Verification
+
+- `node scripts/select-execution-route.mjs --task "missing dependency task" --runtime codex --os windows --json --compact-json`
+- `npm run meta:route:validate`
+- `npm run meta:prd:stage-runtime-control:validate`
+- `node --test tests/governance/capability-routing.test.mjs`
+- `node --test tests/meta-theory/11-eight-stage-spine.test.mjs`
+- `npm run meta:release:smoke`
+- `git diff --check`
+
 ## [2.8.56] - 2026-06-23
 
 ### Solved Problem

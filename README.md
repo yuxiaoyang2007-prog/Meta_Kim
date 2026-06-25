@@ -91,6 +91,14 @@ node setup.mjs
 
 > 💡 **After install**: `setup.mjs` prints where every artifact lives. To revisit that summary anytime (or diff vs. the previous install), run `npm run meta:status` in the directory where you installed.
 
+At a fresh clone, Meta_Kim intentionally separates source files, generated projections, and local state:
+
+| Layer | Examples | When you should see it |
+| --- | --- | --- |
+| GitHub source | `README.md`, `AGENTS.md`, `CLAUDE.md`, `canonical/`, `config/`, `scripts/` | Immediately after `git clone`; also included by the package `files` whitelist when applicable |
+| Generated runtime projections | `.claude/`, `.codex/`, `.agents/`, `.cursor/`, `openclaw/`, `.mcp.json`, `codex/` | Created locally by `node setup.mjs` or `npm run meta:sync`; gitignored and not GitHub source |
+| Local run state and graph output | `.meta-kim/`, `graphify-out/`, `tests/output/`, `task_plan.md`, `findings.md`, `progress.md` | Created only by setup, graphify, tests, or governed runs; local-only and safe to regenerate |
+
 ### Install scope
 
 The default Enter path is **global reusable capabilities**. Agents, commands, MCP, and skills are installed into each selected runtime's official global/home locations when that runtime supports them. Global hook wiring is opt-in: pass `--with-global-hooks` when you intentionally want Meta_Kim to update Claude/Codex/Cursor hook settings. Projects reuse global capabilities directly; project-local agents, commands, MCP, hooks, or skills are created only when Fetch/Thinking proves project-specific customization, iteration, or a dedicated override is needed.

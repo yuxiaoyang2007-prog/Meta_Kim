@@ -623,6 +623,57 @@ const autonomousCapabilityDiscovery = {
   sourceRefPolicy:
     "Reportable provider refs use repo-relative paths, runtime ids, or home-relative refs like ~/.codex, ~/.claude, ~/.cursor, ~/.openclaw, and ~/.agents instead of machine absolute home paths.",
 };
+const typeFirstRoutePolicy = {
+  status: "active",
+  policyKind: "route_selection_invariant",
+  mustNotBecomeChecklist: true,
+  principle:
+    "Classify route-critical object, evidence, and ownership types before scoring or adding gates; unknown types degrade or block instead of guessing.",
+  axes: {
+    objectType: {
+      question: "What kind of thing is being routed or parsed?",
+      knownTypes: [
+        "script_target",
+        "runner_or_wrapper",
+        "wrapper_payload",
+        "directory_path",
+        "proposal_or_reference",
+        "runtime_claim",
+        "capability_provider",
+      ],
+      unclearAction: "return_null_or_capabilityGapPacket_or_reference_only",
+      forbiddenFallback: "guess_executable_route_from_shape_only",
+    },
+    evidenceType: {
+      question: "Which proof layer supports the claim?",
+      knownTypes: [
+        "structural",
+        "host_visible",
+        "native_surface",
+        "runtime_live",
+        "release_truth",
+      ],
+      unclearAction: "do_not_promote_claim",
+      forbiddenFallback: "validator_pass_as_runtime_truth",
+    },
+    ownershipType: {
+      question: "Who owns the file, state, provider, or runtime surface?",
+      knownTypes: [
+        "canonical_source",
+        "global_home",
+        "project_mirror",
+        "user_owned_local_state",
+        "external_dependency",
+      ],
+      unclearAction: "preserve_or_block_until_owner_is_known",
+      forbiddenFallback: "overwrite_unknown_local_state",
+    },
+  },
+  executionRule:
+    "If any route-critical type is unknown, use null, reference_only, capabilityGapPacket, or blocked-with-reason before Execution; do not add another acceptance gate to compensate for a weak route.",
+  validatorRole:
+    "Validators and hooks confirm the route invariant and regressions; they do not rescue a route that failed to classify types during Fetch and Thinking.",
+};
 const governanceStagePolicy = workflowContract.protocols?.agentBlueprintPacket?.governanceStageCoveragePolicy ?? {};
 const governanceStages = Object.fromEntries(
   ["Critical", "Fetch", "Thinking", "Review"].map((stage) => [
@@ -1927,6 +1978,61 @@ const capabilityGapBlocksExecution = Boolean(
     (capabilityGapDecision.decision === "blocked_or_needs_approval" ||
       capabilityGapDecision.decisionEvidence?.status !== "pass"),
 );
+function routeOwnershipType(route) {
+  const selectedAgent = route?.selectedCapabilityProviders?.agent;
+  const source = String(selectedAgent?.source ?? route?.ownerBinding?.source ?? "");
+  if (route?.dependencyProject) return "external_dependency";
+  if (source.includes("project_runtime")) return "project_mirror";
+  if (source.includes("local_global")) return "global_home";
+  if (route?.owner?.startsWith("meta-")) return "canonical_source";
+  return "unknown";
+}
+
+function classifyRouteTypes(route, { gapDecision, gapPacket, gapBlocksExecution }) {
+  const overallDisposition = !route
+    ? "capabilityGapPacket"
+    : gapBlocksExecution
+      ? "blocked_with_reason"
+      : route.score < 85
+        ? "confirm_or_fetch_more"
+        : "classified_route_can_be_scored";
+  return {
+    policyRef: "typeFirstRoutePolicy",
+    objectType: {
+      selected: route?.dependencyProject
+        ? "external_dependency"
+        : route?.weapon
+          ? "capability_provider"
+          : "unknown",
+      source: route ? "recommendedRoute" : "capabilityGapPacket",
+      disposition: !route ? "capabilityGapPacket" : overallDisposition,
+      unclearAction: !route ? "capabilityGapPacket" : null,
+      forbiddenFallbackAvoided: true,
+    },
+    evidenceType: {
+      selected: "structural",
+      source: route?.verificationMethod ? "recommendedRoute.verificationMethod" : "routeExecutionGate",
+      claimLimit: "route_preview_not_runtime_truth",
+      disposition: overallDisposition,
+      forbiddenFallbackAvoided: true,
+    },
+    ownershipType: {
+      selected: routeOwnershipType(route),
+      source: route?.ownerBinding?.ownerDiscoveryRef ?? "ownerDiscoveryPacket",
+      disposition: routeOwnershipType(route) === "unknown" ? "preserve_or_block_until_owner_is_known" : overallDisposition,
+      forbiddenFallbackAvoided: routeOwnershipType(route) !== "unknown",
+    },
+    gapDecisionRef: gapDecision ? "capabilityGapDecision" : null,
+    gapPacketRef: gapPacket ? "capabilityGapPacket" : null,
+    overallDisposition,
+  };
+}
+
+const routeTypeClassification = classifyRouteTypes(recommendedRoute, {
+  gapDecision: capabilityGapDecision,
+  gapPacket: capabilityGapPacket,
+  gapBlocksExecution: capabilityGapBlocksExecution,
+});
 const userChoiceNeeded = Boolean(recommendedRoute && recommendedRoute.score >= 70 && recommendedRoute.score < 85);
 const decisionCard = userChoiceNeeded ? {
   recommendedDefault: recommendedRoute.id,
@@ -1985,6 +2091,8 @@ const routeExecutionGate = {
         : "Cached provider evidence is fresh enough and the route has execution-grade owner/provider/verification binding.",
   entryClassification,
   choicePolicy,
+  typeFirstPolicyRef: "typeFirstRoutePolicy",
+  typeFirstDisposition: routeTypeClassification.overallDisposition,
   nativeChoiceSurface: {
     required: choicePolicy === "must_ask",
     primarySurface: "request_user_input",
@@ -2009,6 +2117,8 @@ const output = {
     reason: "Route may change based on real intent, success criteria, and userGoalDone evidence.",
   },
   entryClassification,
+  typeFirstRoutePolicy,
+  routeTypeClassification,
   ownerDiscoveryPacket,
   autonomousCapabilityDiscovery,
   candidateOwners: [...new Set([...candidateWeapons.flatMap((weapon) => weapon.ownerCandidates ?? []), ...ownerDiscoveryPacket.candidateExistingExecutionOwners])],

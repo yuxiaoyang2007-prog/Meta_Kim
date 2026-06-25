@@ -62,6 +62,13 @@
     "mustNotBecomeIndependentHookLoop": true,
     "fileChangeFactCardBelongsTo": "Fetch/Thinking execution lease"
   },
+  "routeSelectionPolicy": {
+    "typeFirstRouteRef": "scripts/select-execution-route.mjs#typeFirstRoutePolicy",
+    "kind": "route_selection_invariant",
+    "mustNotBecomeNewGate": true,
+    "unclearTypeDisposition": "degrade_or_block_not_guess",
+    "purpose": "Make the best route default by classifying object, evidence, and ownership types during Fetch/Thinking instead of adding validator or hook rescue loops."
+  },
   "fetchPolicy": {
     "inProgressMustAllow": [
       "read_file",

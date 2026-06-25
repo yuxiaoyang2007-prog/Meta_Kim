@@ -71,6 +71,22 @@ function assertContract() {
     contract.factGatePolicy?.mustNotBecomeIndependentHookLoop === true,
     "fact gate must not become an independent hook loop",
   );
+  assert(
+    contract.routeSelectionPolicy?.kind === "route_selection_invariant",
+    "type-first route policy must stay a route selection invariant",
+  );
+  assert(
+    contract.routeSelectionPolicy?.mustNotBecomeNewGate === true,
+    "type-first route policy must not become another gate",
+  );
+  assert(
+    contract.routeSelectionPolicy?.unclearTypeDisposition === "degrade_or_block_not_guess",
+    "unclear route-critical types must degrade or block instead of guessing",
+  );
+  assert(
+    contract.routeSelectionPolicy?.typeFirstRouteRef === "scripts/select-execution-route.mjs#typeFirstRoutePolicy",
+    "stage runtime control must point to the executable route policy",
+  );
   hasAll(
     contract.fetchPolicy?.inProgressMustAllow ?? [],
     ["repo_search", "capability_scan", "spine_state_write", "planning_file_update", "visible_status_notice"],
@@ -200,6 +216,7 @@ function assertRegressionTests() {
       "observed hook state ignores high-risk words inside quoted search text",
       "observed hook state still denies high-risk external side-effect commands",
       "auto prompt activation rotates stale legacy active state for a new prompt",
+      "Type-first route policy is a route selection invariant, not another gate",
     ],
     "stage runtime regression tests",
   );

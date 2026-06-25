@@ -53,6 +53,14 @@ node setup.mjs
 
 > 💡 **설치 후**: `setup.mjs`가 산출물 위치를 출력합니다. 언제든 다시 확인(또는 이전 설치와 비교)하려면 설치한 디렉터리에서 `npm run meta:status`를 실행하세요.
 
+새로 clone한 직후에는 Meta_Kim이 source files, generated projections, local state를 의도적으로 분리한다고 보면 됩니다.
+
+| 계층 | 예시 | 언제 보여야 하나 |
+| --- | --- | --- |
+| GitHub source | `README.md`, `AGENTS.md`, `CLAUDE.md`, `canonical/`, `config/`, `scripts/` | `git clone` 직후 저장소에 있어야 합니다. 해당되는 경우 `package.json`의 `files` whitelist에도 포함됩니다 |
+| Generated runtime projections | `.claude/`, `.codex/`, `.agents/`, `.cursor/`, `openclaw/`, `.mcp.json`, `codex/` | `node setup.mjs` 또는 `npm run meta:sync`가 로컬에서 생성합니다. gitignored이며 GitHub source가 아닙니다 |
+| Local run state and graph output | `.meta-kim/`, `graphify-out/`, `tests/output/`, `task_plan.md`, `findings.md`, `progress.md` | setup, graphify, tests, governed run이 필요할 때만 생깁니다. local-only이며 다시 생성할 수 있습니다 |
+
 저장소를 유지보수할 계획이라면, 먼저 `canonical/`과 `config/contracts/workflow-contract.json`을 수정한 뒤 다음을 실행하세요 (Node.js >= 22.13.0 필요):
 
 ```bash
