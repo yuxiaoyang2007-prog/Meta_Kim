@@ -6,6 +6,113 @@ This file is the reader-facing release history for Meta_Kim.
 
 The changelog explains the user-facing problem or risk each release solved, what changed to solve it, and why the change matters. It intentionally avoids long internal task ledgers, low-signal backlog ids, and implementation trivia. When exact evidence is needed, use the repository history, tests, generated reports, and PRD artifacts.
 
+## [2.8.62] - 2026-06-29
+
+### Solved Problem
+
+`scripts/discover-global-capabilities.mjs` exported its `OUTPUT_I18N` with only English and Chinese translation blocks, even though the wider project advertises `en / zh / ja / ko` as the supported language set in `setup.mjs` (`LANG_ARG_ALIASES`). Passing `--lang ja` or `--lang ko` therefore fell back to English silently, and the `Skills by family` truncation marker read `+N more` in both English and Chinese but had no Japanese or Korean translation. This was an oversight from v2.8.60 (truncation wording) and v2.8.61 (setup i18n extraction) — neither release finished the 4-language coverage.
+
+### Changes
+
+- **`OUTPUT_I18N` now covers all 4 supported languages** — Japanese (`ja-JP`) and Korean (`ko-KR`) blocks added with the same 16 keys as English and Chinese: title, byPlatform, hooksByCategory, skillsByFamily, detailsHidden, noMatchingCapabilities, noMatchingCapabilityType, warnings, more, none, scanning, scanningPlatform, errors, detailedInventory, governanceRules, canonicalIndexWritten, localInventoryWritten, canonicalIndexMirrored, searchIndexWritten.
+- **`normalizeOutputLang` routes ja and ko prefixes to the new blocks** — `ja*` maps to `"ja-JP"`, `ko*` maps to `"ko-KR"`; previously both fell back to English.
+- **Truncation wording localized** — the Japanese `more` reads `等、残り {n} 件は篇幅の都合により非表示`; the Korean `more` reads `등, 나머지 {n}개 항목은 분량상 표시되지 않음`. `{n}` is still substituted by `formatCounts`.
+- **Regression coverage** — `tests/meta-theory/52-discover-i18n-truncate-format.test.mjs` adds two cases that pin (a) all four language blocks exist in the source and (b) `normalizeOutputLang` has `ja → "ja-JP"` and `ko → "ko-KR"` branches.
+
+### Verification
+
+- Live run: `node scripts/discover-global-capabilities.mjs --lang ja | head -5` now shows `🔍 グローバル能力をスキャン中...` and `  Claude Code をスキャン中...`; the equivalent `--lang ko` shows the Korean scan banner.
+- `node --test tests/meta-theory/*.test.mjs` → 1071 pass / 0 fail.
+- Other suites → 638 pass / 0 fail.
+- `npm run meta:doctor:governance` → `All governance doctor checks passed`.
+
+### Note on prior release
+
+v2.8.60 introduced the truncation marker and v2.8.61 extracted the setup i18n block, but neither shipped 4-language coverage for `discover-global-capabilities.mjs`. v2.8.62 finishes that work. No v2.8.61 release is amended; the GitHub release for v2.8.61 is left as-is for traceability.
+
+## [2.8.61] - 2026-06-29
+
+### Solved Problem
+
+`setup.mjs` had grown to 9 204 lines and embedded a 2 463-line I18N object literal (4 languages × hundreds of keys) directly inside the script. The same translation data effectively lived in two places (`scripts/meta-kim-i18n.mjs` and `setup.mjs`) and the bulk of the script file was a translation table, not orchestration logic. The setup flow's own `LANG_ARG_ALIASES` advertises `en / zh / ja / ko` as the supported language set, but the inline I18N object was the only place the strings actually lived, with no file-level test pinning the single-source-of-truth contract.
+
+### Changes
+
+- **I18N strings extracted to `config/i18n/setup-strings.mjs`** — the 2 463-line 4-language block now lives in its own file. The function is exposed as `export function buildI18N({ MIN_NODE_VERSION })` so the existing `(v) => ... template literals` can still reference `MIN_NODE_VERSION` via closure capture.
+- **`setup.mjs` imports the strings** — the 2 463-line inline object is replaced with `import { buildI18N } from "./config/i18n/setup-strings.mjs"; const I18N = buildI18N({ MIN_NODE_VERSION });`. `setup.mjs` drops from 9 204 to 6 741 lines.
+- **Single source of truth restored** — changing a translation now requires editing exactly one file. `scripts/meta-kim-i18n.mjs` continues to serve other scripts; `config/i18n/setup-strings.mjs` now serves setup.mjs.
+- **Regression coverage** — `tests/meta-theory/53-setup-i18n-extracted.test.mjs` pins the single-source contract: the strings file exists and exports `buildI18N`, `setup.mjs` imports it and contains no inline `const I18N = {`, all 4 languages (`en` / `zh-CN` / `ja-JP` / `ko-KR`) are present, and `setup.mjs` shrank below 7 500 lines.
+
+### Verification
+
+- `node setup.mjs --help` loads cleanly through the new import + closure.
+- `node --test tests/meta-theory/*.test.mjs` → 1071 pass / 0 fail (added 4 cases in suite 53).
+- Other suites → 638 pass / 0 fail.
+- `npm run meta:doctor:governance` → `All governance doctor checks passed`.
+
+## [2.8.60] - 2026-06-29
+
+### Solved Problem
+
+`meta:deps:install` / `discover-global-capabilities.mjs` printed a Skills-by-family line that hid everything past the 8 most popular families behind a terse suffix. The English version read `+N more`, the Chinese version read `项未显示` — both easily mistaken for a missing-data warning rather than a truncation marker. The behaviour itself was not a bug (the missing families were still discoverable via `--verbose`), but the phrasing made it look like one.
+
+### Changes
+
+- **Default visible families raised from 8 to 20** — `formatCounts(counts, maxItems = 20, ...)` and the two `formatCounts(...)` call sites now use 20 instead of 8.
+- **Truncation marker is self-describing** — both English and Chinese labels were rewritten to spell out the hidden count and the reason. English: `more, remaining {n} hidden due to length`. Chinese: `等，剩余 {n} 项因篇幅关系未显示`. The `{n}` placeholder is substituted by `formatCounts` itself.
+- **Regression coverage** — `tests/meta-theory/52-discover-i18n-truncate-format.test.mjs` pins the new wording and asserts at least 10 visible families per platform before truncation.
+
+### Verification
+
+- Live run: `node scripts/discover-global-capabilities.mjs --zh | grep "Skills 家族统计" -A 4` shows lines like `Claude Code: vercel 4, agent-browser 1, ..., django-security 1, 等，剩余 56 项因篇幅关系未显示`.
+- `node --test tests/meta-theory/*.test.mjs` → 1067 pass / 0 fail (added 3 cases in suite 52).
+- Other suites → 638 pass / 0 fail.
+- `npm run meta:doctor:governance` → `All governance doctor checks passed`.
+
+### Note
+
+This release only ships the two i18n strings that are present in the source today (`en` + `zh`). Other locales will continue to fall back to English. If a translation pass for additional languages is wanted, ship them in a follow-up release alongside a translator review.
+
+## [2.8.59] - 2026-06-28
+
+### Solved Problem
+
+v2.8.58 only exposed a single owner class (execution agent). Meta_Kim actually has nine owner classes (agent / skill / MCP / command / runtime tool / hook / plugin / memory-graph / dependency), but lane resolution only searched the agent pool, so a lane that wanted a real command, MCP server, or runtime tool had to fall back to a fake agent owner. The fan-out orchestrator stayed one-dimensional: any `>=2 workers` fan-out was forced through `agent-teams-playbook` even when the lanes were skill, MCP, or command workers, which the playbook cannot dispatch.
+
+### Changes
+
+- **Owner resolution now covers all nine capability classes** — `findOwnerForLaneTerms` is replaced by `resolveProvider({ kind, terms })` over a typed `PROVIDER_POOL_SOURCES` map. Lanes walk the priority chain `agent → skill → mcp → command → runtimeTool → hook → plugin → memory → dependency` and adopt the first kind that yields a real provider.
+- **Lanes carry an `ownerKind` field** — every parallel-execution lane now records which capability class its owner came from, so dispatchers can pick the right host tool (Task / Skill / Bash / apply_patch / MCP call etc.) instead of guessing.
+- **Orchestrator-kind bucketing replaces the single-playbook gate** — `classifyOrchestratorKinds` groups lanes by owner kind and emits up to six parallel orchestrators: `agentTeamsPlaybook` (>=2 agent lanes), `skillComposition` / `mcpComposition` / `commandSequence` / `runtimeToolSequence` (other buckets reaching the >=2 threshold), plus `mixedParallelism` whenever more than one kind is present. The dispatch board reports the triggered set; `agent-teams-playbook` is no longer asked to dispatch non-agent lanes.
+- **Worker packets propagate `ownerKind` and `orchestratorKinds`** — `run-meta-theory-governed-execution.mjs` copies `ownerKind` through every `workerTaskPacket`, so the host dispatcher can drive each lane with the matching tool.
+- **Regression coverage** — `tests/meta-theory/50-parallel-execution-lanes.test.mjs` now asserts by `ownerKind` bucket and `tests/meta-theory/51-orchestrator-kind-bucketing.test.mjs` pins the orchestrator-kind trigger logic.
+
+### Verification
+
+- Live run: `node scripts/run-meta-theory-governed-execution.mjs --runtime claude_code "refactor frontend in src/ui, rebuild backend api in src/api, migrate database schema, deploy config ci"` → `orchestratorKinds: ["agentTeamsPlaybook","mixedParallelism"]`, 5 workers with `ownerKind` distribution `[agent, agent, agent, command, agent]`; the `migrate database schema` lane is now resolved to a real command provider (`package-script:migrate:meta-kim`) instead of a fake agent.
+- `node --test tests/meta-theory/*.test.mjs` → 1064 pass / 0 fail.
+- Other suites → 638 pass / 0 fail.
+- `npm run meta:doctor:governance` → `All governance doctor checks passed`.
+
+## [2.8.58] - 2026-06-28
+
+### Solved Problem
+
+Under `/meta-theory`, engineering tasks never actually selected `agent-teams-playbook` as a fan-out adapter, so the multi-worker parallel pattern was effectively dead. Route analysis kept collapsing to a single-worker fallback branch, and the playbook stayed pinned at `not_required`. At the same time, `workerTaskPacketDrafts` and the upper-layer sourceTasks only consumed `subjectiveUiCapabilityAmplification.lanes`, so engineering work had no second door into multi-lane fan-out. A separate Windows-specific bug in `meta:doctor:governance` made the governance doctor report a false-positive hook mismatch for any project whose `.claude/settings.json` carried the canonical `--runtime` flag on the dispatch-enforcement hook.
+
+### Changes
+
+- **Engineering tasks can split into multiple lanes** - `select-execution-route.mjs` adds `buildParallelExecutionLanes`, which temporarily recognizes independent work units from the task text (paths, explicit `lane` markers, sentence segments) and splits when two or more are present. Worker output and the dispatch board now also recognize this lane source.
+- **Owners must come from runtime-scoped discovery** - `findOwnerForLaneTerms` uses the lane description as a query string and matches against `candidateExecutionAgents` `id + description + own + boundary + trigger`; a match is required, no hard-coded `frontend / backend / test / docs` shortcuts. `compactAgent` now also preserves `description / own / boundary / trigger` so semantic matching has real evidence.
+- **No real owner means skip the lane, never invent one** - When a lane cannot resolve a real owner, it does not enter `workerTaskPacketDrafts`; the route gate naturally downgrades.
+- **Doctor normalizeHookName is platform-correct** - `doctor-governance.mjs` now strips trailing CLI args before basename matching and removes the `.mjs` extension explicitly, so Windows `path.basename(p, ".mjs")` no longer leaks the suffix into the comparison.
+
+### Verification
+
+- Live run: `node scripts/run-meta-theory-governed-execution.mjs --runtime claude_code --emit-conversation-notice "refactor frontend components in src/ui, rebuild backend api routes in src/api, and migrate database schema."` shows `Agent Teams Playbook: status=pass / selected=是 / waves=1` and `Peer Agent Mesh: peers=4 / handoffs=10` with owners that are real runtime agents (`build-error-resolver / ai-engineer-* / api-documenter-* / database-admin-*`).
+- Tests: `node --test tests/meta-theory/*.test.mjs` → 1058 pass / 0 fail; other suites → 638 pass / 0 fail; `npm run meta:doctor:governance` → `All governance doctor checks passed`.
+- Regression coverage: new file `tests/meta-theory/50-parallel-execution-lanes.test.mjs` pins the no-fake-owner and multi-lane contract.
+
 ## [2.8.57] - 2026-06-25
 
 ### Solved Problem

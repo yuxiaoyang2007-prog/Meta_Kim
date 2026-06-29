@@ -20,13 +20,13 @@ Default product runtime path:
 For explicit `/meta-theory` governed execution, the first operational step is to create the auditable run artifact and a user-visible notice from the installed Meta_Kim package root:
 
 ```bash
-node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --emit-conversation-notice "$ARGUMENTS"
+node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --runtime codex --emit-conversation-notice "$ARGUMENTS"
 ```
 
 If this command file has not been rendered by global sync and the placeholder is still present, fall back only when the current project is the Meta_Kim source checkout or provides the package script:
 
 ```bash
-npm run meta:theory:run:notice -- "$ARGUMENTS"
+npm run meta:theory:run:notice -- --runtime codex "$ARGUMENTS"
 ```
 
 Then relay the compact stdout notice and the returned report path in chat. Use `node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --read latest` from the rendered package root, or `npm run meta:theory:report -- latest` in the source checkout, to reopen the user-readable report when more detail is needed. This is the default artifact path for `/meta-theory` governed execution: Warden entry gate -> Conductor orchestration -> CapabilityGap decisions -> workerTaskPackets -> runtime projection evidence -> Warden writeback decision -> visible run report. The `:notice` fallback keeps `--emit-conversation-notice` inside `package.json` because some Windows/npm paths strip forwarded flags. Keep the user request as the first positional argument; do not switch to `--task` unless calling the Node script directly.

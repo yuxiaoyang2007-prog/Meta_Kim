@@ -6,6 +6,113 @@
 
 更新说明先解释本次解决的用户痛点或风险，再说明为了解决它改了什么、为什么重要。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
+## [2.8.62] - 2026-06-29
+
+### 解决的问题
+
+`scripts/discover-global-capabilities.mjs` 导出的 `OUTPUT_I18N` 只有英文和中文两块翻译，但项目其它地方（如 `setup.mjs` 的 `LANG_ARG_ALIASES`）宣传支持 `en / zh / ja / ko` 4 个语言。传 `--lang ja` 或 `--lang ko` 实际静默 fallback 到英文，Skills 家族统计的截断提示在英文和中文下都有对应文案，日文和韩文完全没有翻译。这是 v2.8.60（截断文案）和 v2.8.61（setup i18n 抽取）都没补完的缺口。
+
+### 变更
+
+- **`OUTPUT_I18N` 现在覆盖全部 4 个语言** - 增补日文（`ja-JP`）和韩文（`ko-KR`）两块，包含和英文中文同样的 16 个 key：title、byPlatform、hooksByCategory、skillsByFamily、detailsHidden、noMatchingCapabilities、noMatchingCapabilityType、warnings、more、none、scanning、scanningPlatform、errors、detailedInventory、governanceRules、canonicalIndexWritten、localInventoryWritten、canonicalIndexMirrored、searchIndexWritten。
+- **`normalizeOutputLang` 把 ja 和 ko 前缀路由到新块** - `ja*` 映射到 `"ja-JP"`，`ko*` 映射到 `"ko-KR"`；之前两者都 fallback 到英文。
+- **截断文案本地化** - 日文 `more` 写 `等、残り {n} 件は篇幅の都合により非表示`；韩文 `more` 写 `등, 나머지 {n}개 항목은 분량상 표시되지 않음`。`{n}` 仍由 `formatCounts` 替换。
+- **回归保护** - `tests/meta-theory/52-discover-i18n-truncate-format.test.mjs` 加 2 个 case 守护 (a) 源码里有全部 4 语言块；(b) `normalizeOutputLang` 有 `ja → "ja-JP"` 和 `ko → "ko-KR"` 分支。
+
+### 验证
+
+- 实测：`node scripts/discover-global-capabilities.mjs --lang ja | head -5` 现在显示 `🔍 グローバル能力をスキャン中...` 和 `  Claude Code をスキャン中...`；`--lang ko` 显示对应韩文扫描标题。
+- `node --test tests/meta-theory/*.test.mjs` → 1071 pass / 0 fail。
+- 其它 suite → 638 pass / 0 fail。
+- `npm run meta:doctor:governance` → `All governance doctor checks passed`。
+
+### 关于上一版的说明
+
+v2.8.60 引入了截断文案，v2.8.61 抽取了 setup i18n 块，但两个版本都没补完 `discover-global-capabilities.mjs` 的 4 语言覆盖。v2.8.62 把这个收尾。**不 amend v2.8.61 release**——v2.8.61 的 GitHub release 保持原样可追溯。
+
+## [2.8.61] - 2026-06-29
+
+### 解决的问题
+
+`setup.mjs` 已经长到 9204 行，里面嵌了 2463 行的 4 语言 I18N 字符串对象（4 语言 × 几百个 key）。同一份翻译数据实际上散在两个地方（`scripts/meta-kim-i18n.mjs` 和 `setup.mjs`），脚本文件大部分体积是翻译表而不是流程逻辑。`LANG_ARG_ALIASES` 自称支持 `en / zh / ja / ko`，但实际字符串只在那 2463 行里活着，没有文件级测试守护单一源契约。
+
+### 变更
+
+- **I18N 字符串抽到 `config/i18n/setup-strings.mjs`** - 2463 行 4 语言块独立成文件。函数以 `export function buildI18N({ MIN_NODE_VERSION })` 暴露，原 `(v) => ... 模板字面量` 还能通过闭包引用 `MIN_NODE_VERSION`。
+- **`setup.mjs` 改为 import** - 2463 行内联对象换成 `import { buildI18N } from "./config/i18n/setup-strings.mjs"; const I18N = buildI18N({ MIN_NODE_VERSION });`。`setup.mjs` 从 9204 → 6741 行。
+- **单一源恢复** - 改翻译现在只需改一个文件。`scripts/meta-kim-i18n.mjs` 继续服务其它脚本；`config/i18n/setup-strings.mjs` 服务 setup.mjs。
+- **回归保护** - 新增 `tests/meta-theory/53-setup-i18n-extracted.test.mjs`，守护单一源契约：strings 文件存在 + export `buildI18N`；setup.mjs import 它 + 不再有内联 `const I18N = {`；4 语言块全在；setup.mjs 行数 < 7500。
+
+### 验证
+
+- `node setup.mjs --help` 走新 import + 闭包无语法错误。
+- `node --test tests/meta-theory/*.test.mjs` → 1071 pass / 0 fail（53 号加 4 个 case）。
+- 其它 suite → 638 pass / 0 fail。
+- `npm run meta:doctor:governance` → `All governance doctor checks passed`。
+
+## [2.8.60] - 2026-06-29
+
+### 解决的问题
+
+`meta:deps:install` / `discover-global-capabilities.mjs` 在 Skills 家族统计那行里只显示前 8 个家族，剩下的折成一个简短后缀。英文版本是 `+N more`，中文版本是 `项未显示` —— 两个都容易被误读成「数据缺失」而不是「截断提示」。行为本身不是 bug（缺的家族用 `--verbose` 还能看到），但措辞让它看着像 bug。
+
+### 变更
+
+- **默认可见家族数从 8 提到 20** - `formatCounts(counts, maxItems = 20, ...)` 函数默认值改为 20，两个调用点同步改。
+- **截断提示自解释** - 英中文案重写，明示隐藏数和原因。英文：`more, remaining {n} hidden due to length`；中文：`等，剩余 {n} 项因篇幅关系未显示`。`{n}` 占位符由 `formatCounts` 实际替换。
+- **回归保护** - 新增 `tests/meta-theory/52-discover-i18n-truncate-format.test.mjs`，守护新文案 + 断言每个平台至少有 10 个可见家族。
+
+### 验证
+
+- 实测：`node scripts/discover-global-capabilities.mjs --zh | grep "Skills 家族统计" -A 4` 输出形如 `Claude Code: vercel 4, agent-browser 1, ..., django-security 1, 等，剩余 56 项因篇幅关系未显示`。
+- `node --test tests/meta-theory/*.test.mjs` → 1067 pass / 0 fail（52 号加 3 个 case）。
+- 其它 suite → 638 pass / 0 fail。
+- `npm run meta:doctor:governance` → `All governance doctor checks passed`。
+
+### 说明
+
+本次只覆盖源码里现有的 2 个语言字符串（en + zh）。其它 locale 继续 fallback 到英文。如果需要加更多语言，下次发版和翻译 review 一起出。
+
+## [2.8.59] - 2026-06-28
+
+### 解决的问题
+
+v2.8.58 只暴露一类 owner（execution agent）。Meta_Kim 实际有 9 类 owner（agent / skill / MCP / command / runtime tool / hook / plugin / memory-graph / dependency），但 lane 解析只在 agent 池里搜，所以想用真 command / MCP / runtime tool 的 lane 会拿到假 agent owner。fan-out orchestrator 也是一维的：≥2 worker 一律走 `agent-teams-playbook`，即使 lane 都是 skill / MCP / command worker（playbook 派不了）。
+
+### 变更
+
+- **owner 解析覆盖全部 9 类** - `findOwnerForLaneTerms` 换成 `resolveProvider({ kind, terms })`，底层是 `PROVIDER_POOL_SOURCES` 类型化 map。lane 按优先级链 `agent → skill → mcp → command → runtimeTool → hook → plugin → memory → dependency` 探测，第一个命中的 kind 即用。
+- **lane 带 `ownerKind` 字段** - 每条 parallel-execution lane 都记录 owner 的能力类目，dispatcher 据此选 host 工具（Task / Skill / Bash / apply_patch / MCP call 等）而不是猜。
+- **orchestrator-kind 分桶取代单 playbook 闸** - `classifyOrchestratorKinds` 按 ownerKind 把 lane 分组，触发最多 6 类并行 orchestrator：`agentTeamsPlaybook`（≥2 agent lane）、`skillComposition` / `mcpComposition` / `commandSequence` / `runtimeToolSequence`（其它桶达 ≥2）、`mixedParallelism`（多种 kind 同时存在）。dispatchBoard 报告触发的集合，`agent-teams-playbook` 不再被强派去管非 agent lane。
+- **workerTaskPacket 透传 `ownerKind` 与 `orchestratorKinds`** - `run-meta-theory-governed-execution.mjs` 把 `ownerKind` 透到每个 workerTaskPacket，host dispatcher 知道每条 lane 用什么工具。
+- **回归保护** - `tests/meta-theory/50-parallel-execution-lanes.test.mjs` 改按 `ownerKind` 分桶断言，`tests/meta-theory/51-orchestrator-kind-bucketing.test.mjs` 守护 orchestrator-kind 触发逻辑。
+
+### 验证
+
+- 实测：`node scripts/run-meta-theory-governed-execution.mjs --runtime claude_code "refactor frontend in src/ui, rebuild backend api in src/api, migrate database schema, deploy config ci"` → `orchestratorKinds: ["agentTeamsPlaybook","mixedParallelism"]`，5 个 worker 的 `ownerKind` 分布 `[agent, agent, agent, command, agent]`；`migrate database schema` lane 现在匹配到真 command provider（`package-script:migrate:meta-kim`），不再是假 agent。
+- `node --test tests/meta-theory/*.test.mjs` → 1064 pass / 0 fail。
+- 其它 suite → 638 pass / 0 fail。
+- `npm run meta:doctor:governance` → `All governance doctor checks passed`。
+
+## [2.8.58] - 2026-06-28
+
+### 解决的问题
+
+`/meta-theory` 在工程类任务下从来不会真正把 `agent-teams-playbook` 当成 fan-out 适配器选中，所以多 worker 并行模式实际上从未生效。route 分析总是收敛到单 worker 兜底分支，playbook 永远停在 `not_required`。同时，`workerTaskPacketDrafts` 和上层 sourceTasks 也只消费 `subjectiveUiCapabilityAmplification.lanes`，根本没有给工程任务开第二扇门。另外 `meta:doctor:governance` 在 Windows 上对带 `--runtime` 参数的 hook command 会报假阳性 hook mismatch。
+
+### 变更
+
+- **工程任务也能拆多 lane** - `select-execution-route.mjs` 新增 `buildParallelExecutionLanes`，从 task 文本里临时识别路径、显式 lane 标记、句子分段等独立工作单元，≥2 个就拆。worker 产出和 dispatchBoard 现在也认这条 lane 源。
+- **owner 必须来自 runtime-scoped discovery** - 新增 `findOwnerForLaneTerms`，把 lane 描述当查询串，去 `candidateExecutionAgents` 的 `id + description + own + boundary + trigger` 里做关键词匹配；命中才用，不硬编码 `frontend/backend/test/docs`。`compactAgent` 同步补齐 description / own / boundary / trigger 字段，语义匹配才有依据。
+- **找不到真 owner 就跳过 lane** - 找不到就不再兜底写假 owner，直接让这条 lane 不进 workerTaskPacketDrafts，由 route gate 自然降级。
+- **Doctor normalizeHookName 跨平台正确** - `doctor-governance.mjs` 在 basename 匹配前先剥掉 trailing CLI 参数，再显式去 `.mjs` 后缀，避免 Windows `path.basename(p, ".mjs")` 把后缀漏进比对。
+
+### 验证
+
+- 实测：`node scripts/run-meta-theory-governed-execution.mjs --runtime claude_code --emit-conversation-notice "refactor frontend components in src/ui, rebuild backend api routes in src/api, and migrate database schema."`，playbook 从 `not_required` 变 `pass / selected=是 / waves=1`，peer mesh 从 1 变 4 peers / 10 handoffs，owner 都是 runtime 真 agent（如 `build-error-resolver / ai-engineer-* / api-documenter-* / database-admin-*`）。
+- 测试：`node --test tests/meta-theory/*.test.mjs` 1058 pass / 0 fail；其它 suite 638 pass / 0 fail；`npm run meta:doctor:governance` 输出 `All governance doctor checks passed`。
+- 回归保护：新增 `tests/meta-theory/50-parallel-execution-lanes.test.mjs` 守护「无假 owner + 多 lane 触发」契约。
+
 ## [2.8.57] - 2026-06-25
 
 ### 解决的问题

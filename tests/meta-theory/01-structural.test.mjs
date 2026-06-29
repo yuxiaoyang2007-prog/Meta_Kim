@@ -239,13 +239,38 @@ describe("SKILL.md structural integrity", async () => {
       const command = await readFile("canonical/runtime-assets/codex/commands/meta-theory.md");
       const pkg = await readJson("package.json");
       assert.match(command, /__META_KIM_PACKAGE_ROOT__\/scripts\/run-meta-theory-governed-execution\.mjs/);
-      assert.match(command, /meta:theory:run:notice -- "\$ARGUMENTS"/);
+      assert.match(command, /--runtime codex/);
+      assert.match(command, /meta:theory:run:notice -- --runtime codex "\$ARGUMENTS"/);
       assert.match(command, /relay the compact stdout notice/i);
       assert.match(command, /Windows\/npm paths strip forwarded flags/i);
       assert.match(pkg.scripts["meta:theory:run:notice"], /--emit-conversation-notice/);
       assert.match(command, /tool discovery/i);
       assert.match(command, /multi_agent_v1\.spawn_agent/);
       assert.match(command, /Record the exact tool name and returned agent id/i);
+    });
+
+    test("Claude Code /meta-theory command passes Claude runtime and requires live Agent Task dispatch", async () => {
+      const command = await readFile("canonical/runtime-assets/claude/commands/meta-theory.md");
+      assert.match(command, /__META_KIM_PACKAGE_ROOT__\/scripts\/run-meta-theory-governed-execution\.mjs/);
+      assert.match(command, /--runtime claude_code/);
+      assert.match(command, /meta:theory:run:notice -- --runtime claude_code "\$ARGUMENTS"/);
+      assert.match(command, /DISPATCH IS MANDATORY/i);
+      assert.match(command, /hostInvocationRequestPacket/);
+      assert.match(command, /agent-teams-playbook/);
+      assert.ok(command.includes("real `Agent` / Task surface"));
+      assert.ok(command.includes("workerTaskPackets[].taskPacketId"));
+      assert.match(command, /tool-call id/i);
+      assert.match(command, /do not silently continue as main-thread execution/i);
+    });
+
+    test("governed runner routes through the requested runtime instead of hardcoding Codex", async () => {
+      const runner = await readFile("scripts/run-meta-theory-governed-execution.mjs");
+      assert.match(runner, /argValue\("--runtime"/);
+      assert.match(runner, /normalizeRouteRuntime\(runtimeArg\)/);
+      assert.match(runner, /selectExecutionRoute\(\{ task, runtime: routeRuntime, os: routeOs \}\)/);
+      assert.match(runner, /runtimeFamily: routeRuntime/);
+      assert.match(runner, /The Node governed runner cannot call the active host Agent\/Task or spawn_agent tool directly/);
+      assert.doesNotMatch(runner, /cannot call the Codex App\/CLI spawn_agent host tool directly/);
     });
 
     test("SKILL.md preserves product reasoning, ten-x path challenge, and user-facing closure", () => {

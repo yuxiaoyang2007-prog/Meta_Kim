@@ -67,8 +67,9 @@ function normalizeHookName(command) {
   const withoutNode = trimmed
     .replace(/^node\s+/, "")
     .replace(/^["']|["']$/g, "");
-  // Strip leading dots and slashes, then extract the filename without .mjs
-  const normalized = path.normalize(withoutNode);
+  // Drop trailing args (e.g. "--runtime claude") first so path.basename is not confused by them
+  const pathOnly = withoutNode.split(/\s+/)[0];
+  const normalized = path.normalize(pathOnly);
   const basename = path.basename(normalized, ".mjs");
   return basename;
 }

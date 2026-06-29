@@ -124,6 +124,25 @@ const RUNTIME_SMOKE_PROJECTIONS = {
 
 const AGENT_TEAMS_PLAYBOOK_ID = "agent-teams-playbook";
 const CODEX_DEFAULT_AGENT_MAX_THREADS = 6;
+const ROUTE_RUNTIME_ALIASES = Object.freeze({
+  claude: "claude_code",
+  claude_code: "claude_code",
+  claudecode: "claude_code",
+  codex: "codex",
+  cursor: "cursor",
+  openclaw: "openclaw",
+});
+
+function normalizeRouteRuntime(value, fallback = "codex") {
+  const normalized = String(value ?? fallback).trim().toLowerCase();
+  if (!normalized || normalized === "auto") return fallback;
+  return ROUTE_RUNTIME_ALIASES[normalized] ?? normalized;
+}
+
+function normalizeOsTarget(value, fallback = "windows") {
+  const normalized = String(value ?? fallback).trim().toLowerCase();
+  return normalized && normalized !== "auto" ? normalized : fallback;
+}
 
 const CARD_TYPE_CATALOG = Object.freeze([
   {
@@ -3941,6 +3960,8 @@ function buildAgentTeamsPlaybookPacket({
       runnerCanCallHostSpawnAgent: false,
       hostSpawnAgentEvidenceAttached: externalAgentSpawned,
       claimLiveSubagentOnlyWithExternalAgentSpawned: true,
+      hostRule:
+        "Live subagent claims require a successful active-host Agent/Task, spawn_agent/custom-agent, or Agent Team tool call outside this Node runner.",
       codexRule:
         "Codex live subagent claims require a successful host spawn_agent/custom-agent tool call outside this Node runner.",
     },
@@ -4021,16 +4042,16 @@ function buildRuntimeSubagentInvocationPacket({
       0,
     degradationReason:
       status === "unavailable"
-        ? "The Node governed runner cannot call the Codex App/CLI spawn_agent host tool directly; host-layer evidence must be attached by the runtime adapter."
+        ? "The Node governed runner cannot call the active host Agent/Task or spawn_agent tool directly; host-layer evidence must be attached by the runtime adapter."
         : status === "not_authorized"
-          ? "Codex subagent dispatch needs direct parallel-agent wording, explicit /meta-theory authorization, or a completed native choice surface before Execution."
+          ? "Subagent dispatch needs direct parallel-agent wording, explicit /meta-theory authorization, or a completed native choice surface before Execution."
           : null,
     requiredHostEvidence:
       status === "invoked"
         ? []
         : [
-            "spawn_agent tool-call id",
-            "wait_agent completed status",
+            "Agent/Task, Agent Team, or spawn_agent tool-call id",
+            "host worker completion status",
             "worker task packet id to spawned agent id mapping",
           ],
     evidenceRefs: [
@@ -5664,6 +5685,7 @@ function buildVisibleMetaTheorySurfacePacket({
       capacitySource: agentTeamsPlaybookPacket?.capacitySource ?? null,
       waveCount: agentTeamsPlaybookPacket?.waves?.length ?? 0,
       liveRuntimeBoundary:
+        agentTeamsPlaybookPacket?.runtimeInvocationBoundary?.hostRule ??
         agentTeamsPlaybookPacket?.runtimeInvocationBoundary?.codexRule ??
         "Live subagent claims require host tool-call evidence.",
     },
@@ -6421,7 +6443,11 @@ function buildCoreLoopArtifact({
   nativeChoiceEvidenceTrusted,
   agentTeamsPlaybookProvider,
   invokeCapabilityProbes = false,
+  runtime = "codex",
+  osTarget = "windows",
 }) {
+  const routeRuntime = normalizeRouteRuntime(runtime);
+  const routeOs = normalizeOsTarget(osTarget);
   const entryClassification = classifyMetaTheoryEntry(task);
   const workerTaskPackets = orchestrationReport.workerTaskPackets ?? [];
   const capabilityInventory =
@@ -6832,6 +6858,10 @@ function buildCoreLoopArtifact({
       task,
       entry: "meta:theory:run",
       requestType: "ordinary natural-language durable task or explicit meta-theory shortcut",
+      runtimeContext: {
+        runtimeFamily: routeRuntime,
+        os: routeOs,
+      },
       entryClassification,
       permissionBoundary: "local run artifact and repo-local state writes unless explicit approval is supplied",
     },
@@ -7199,7 +7229,11 @@ function buildWorkflowContractPackets({
   writebackFlow,
   cardPlanPacket,
   businessFlowBlueprintPacket,
+  runtime = "codex",
+  osTarget = "windows",
 }) {
+  const routeRuntime = normalizeRouteRuntime(runtime);
+  const routeOs = normalizeOsTarget(osTarget);
   const projectRef = `meta-kim-governed-execution-${runId}`;
   const primaryDeliverable = `governed-execution-${runId}`;
   const timestamp = nowIso();
@@ -7272,8 +7306,8 @@ function buildWorkflowContractPackets({
         ? ["web_search", "docs_lookup", "capability_index"]
         : ["local_only", "capability_index"],
       runtimeContext: {
-        os: "windows",
-        runtimeFamily: "codex",
+        os: routeOs,
+        runtimeFamily: routeRuntime,
       },
       toolInventorySources: ["active_tools", "skills", "commands", "capability_index"],
       availableRetrievalCapabilities: [
@@ -8074,19 +8108,23 @@ async function readLatestRunId(stateDir) {
 }
 
 function selectExecutionRouteArgs({ task, runtime = "codex", os = "windows" }) {
+  const routeRuntime = normalizeRouteRuntime(runtime);
+  const routeOs = normalizeOsTarget(os);
   return [
     "--task",
     task,
     "--runtime",
-    runtime,
+    routeRuntime,
     "--os",
-    os,
+    routeOs,
     "--json",
     "--runner-compact",
   ];
 }
 
 async function selectExecutionRouteInProcess({ task, runtime = "codex", os = "windows", spawnError = null }) {
+  const routeRuntime = normalizeRouteRuntime(runtime);
+  const routeOs = normalizeOsTarget(os);
   const originalArgv = process.argv;
   const originalLog = console.log;
   const originalError = console.error;
@@ -8096,7 +8134,7 @@ async function selectExecutionRouteInProcess({ task, runtime = "codex", os = "wi
     process.argv = [
       process.execPath,
       SELECT_EXECUTION_ROUTE_SCRIPT,
-      ...selectExecutionRouteArgs({ task, runtime, os }),
+      ...selectExecutionRouteArgs({ task, runtime: routeRuntime, os: routeOs }),
     ];
     console.log = (...args) => stdout.push(args.join(" "));
     console.error = (...args) => stderr.push(args.join(" "));
@@ -8134,7 +8172,9 @@ async function selectExecutionRouteInProcess({ task, runtime = "codex", os = "wi
 }
 
 async function selectExecutionRoute({ task, runtime = "codex", os = "windows" }) {
-  const args = selectExecutionRouteArgs({ task, runtime, os });
+  const routeRuntime = normalizeRouteRuntime(runtime);
+  const routeOs = normalizeOsTarget(os);
+  const args = selectExecutionRouteArgs({ task, runtime: routeRuntime, os: routeOs });
   const result = spawnSync(
     process.execPath,
     [SELECT_EXECUTION_ROUTE_SCRIPT, ...args],
@@ -8148,8 +8188,8 @@ async function selectExecutionRoute({ task, runtime = "codex", os = "windows" })
   if (result.error) {
     return selectExecutionRouteInProcess({
       task,
-      runtime,
-      os,
+      runtime: routeRuntime,
+      os: routeOs,
       spawnError: result.error,
     });
   }
@@ -8266,6 +8306,7 @@ function buildRouteDrivenWorkerTasks({ runId, routeResult, task }) {
   const route = routeResult.recommendedRoute;
   const routeId = route?.id ?? "unresolved-route";
   const lanes = route?.subjectiveUiCapabilityAmplification?.lanes ?? [];
+  const parallelLanes = route?.parallelExecutionLanes ?? [];
   const drafts = routeResult.workerTaskPacketDrafts ?? [];
   const durableRequests = durableCapabilityRequestsFromTask(task, runId);
   const sourceTasks = lanes.length > 0
@@ -8273,6 +8314,11 @@ function buildRouteDrivenWorkerTasks({ runId, routeResult, task }) {
         lane,
         draft: drafts.find((draft) => draft.roleInstanceId === lane.laneId) ?? {},
       }))
+    : parallelLanes.length > 0
+      ? parallelLanes.map((lane) => ({
+          lane,
+          draft: drafts.find((draft) => draft.roleInstanceId === lane.laneId) ?? {},
+        }))
     : durableRequests.length > 1
       ? durableRequests.map((request) => ({
           lane: {
@@ -8318,6 +8364,7 @@ function buildRouteDrivenWorkerTasks({ runId, routeResult, task }) {
     const taskPacketId = `${runId}-${lane.laneId ?? `route-${index + 1}`}`;
     const roleDisplayName = lane.roleDisplayName ?? draft.roleDisplayName ?? "operations";
     const ownerAgent = lane.ownerAgent ?? draft.ownerAgent ?? route?.owner ?? "meta-conductor";
+    const ownerKind = lane.ownerKind ?? draft.ownerKind ?? "agent";
     const isVerification = ["test", "review"].includes(roleDisplayName);
     const isEvolution = lane.laneId === "evolution-signal";
     return {
@@ -8328,6 +8375,7 @@ function buildRouteDrivenWorkerTasks({ runId, routeResult, task }) {
       routeId,
       owner: ownerAgent,
       ownerAgent,
+      ownerKind,
       ownerMode: "existing-owner",
       executionMode: isVerification || isEvolution ? "verification_execution" : "primary_execution",
       businessRoleId: roleDisplayName,
@@ -8435,8 +8483,10 @@ function buildRouteDrivenWorkerTasks({ runId, routeResult, task }) {
   });
 }
 
-async function buildRouteDrivenOrchestration({ task, runId }) {
-  const routeResult = await selectExecutionRoute({ task });
+async function buildRouteDrivenOrchestration({ task, runId, runtime = "codex", osTarget = "windows" }) {
+  const routeRuntime = normalizeRouteRuntime(runtime);
+  const routeOs = normalizeOsTarget(osTarget);
+  const routeResult = await selectExecutionRoute({ task, runtime: routeRuntime, os: routeOs });
   const route = routeResult.recommendedRoute;
   const providerList = providerListFromRoute(routeResult);
   const workerTaskPackets = buildRouteDrivenWorkerTasks({ runId, routeResult, task });
@@ -8487,6 +8537,10 @@ async function buildRouteDrivenOrchestration({ task, runId }) {
   };
   return {
     status: route && !blocked ? "pass" : "partial",
+    runtimeContext: {
+      runtimeFamily: routeRuntime,
+      os: routeOs,
+    },
     selectedExecutionRoute: routeResult,
     criticalSummary: {
       realGoal: `Run Meta_Kim through the selected route for: ${task}`,
@@ -8594,6 +8648,8 @@ export async function runMetaTheoryGovernedExecution({
   stateDir = DEFAULT_STATE_DIR,
   artifactDir = null,
   dbPath = DEFAULT_DB_PATH,
+  runtime = "codex",
+  osTarget = "windows",
   approvalEvidence = null,
   approvalPacket = null,
   applyWriteback = false,
@@ -8613,9 +8669,13 @@ export async function runMetaTheoryGovernedExecution({
     throw new Error("Missing task for governed meta-theory execution.");
   }
   const effectiveRunId = runId ?? stableId("meta-run", normalizedTask);
+  const routeRuntime = normalizeRouteRuntime(runtime);
+  const routeOs = normalizeOsTarget(osTarget);
   const orchestrationReport = await buildRouteDrivenOrchestration({
     task: normalizedTask,
     runId: effectiveRunId,
+    runtime: routeRuntime,
+    osTarget: routeOs,
   });
   const capabilityInventoryBus = await writeCapabilityInventory(
     path.join(stateDir, "capability-inventory.json"),
@@ -8725,6 +8785,8 @@ export async function runMetaTheoryGovernedExecution({
     nativeChoiceEvidenceTrusted,
     agentTeamsPlaybookProvider,
     invokeCapabilityProbes,
+    runtime: routeRuntime,
+    osTarget: routeOs,
   });
   artifactStatus =
     artifactStatus === "pass" &&
@@ -8783,6 +8845,8 @@ export async function runMetaTheoryGovernedExecution({
     writebackFlow,
     cardPlanPacket,
     businessFlowBlueprintPacket,
+    runtime: routeRuntime,
+    osTarget: routeOs,
   });
   const artifact = {
     schemaVersion: 1,
@@ -8994,6 +9058,8 @@ function positionalTask(fallback = null) {
         "--host-visible-subagents",
         "--host-invocation-evidence",
         "--native-choice-evidence",
+        "--runtime",
+        "--os",
       ].includes(value)
     ) {
       index += 1;
@@ -9022,6 +9088,8 @@ function rawPositionals() {
         "--host-visible-subagents",
         "--host-invocation-evidence",
         "--native-choice-evidence",
+        "--runtime",
+        "--os",
       ].includes(value)
     ) {
       index += 1;
@@ -9040,6 +9108,10 @@ async function main() {
   const stateDirArg = argValue("--state-dir", null);
   const artifactDirArg = argValue("--artifact-dir", null);
   const dbArg = argValue("--db", null);
+  const runtimeArg = argValue("--runtime", process.env.META_KIM_RUNTIME ?? "codex");
+  const osArg = argValue("--os", process.env.META_KIM_OS ?? "windows");
+  const runtime = normalizeRouteRuntime(runtimeArg);
+  const osTarget = normalizeOsTarget(osArg);
   const useTemporaryOutput = process.argv.includes("--temp-output");
   const temporaryOutputRoot = useTemporaryOutput ? await createTemporaryOutputRoot() : null;
   const stateDir = path.resolve(
@@ -9091,6 +9163,8 @@ async function main() {
         ? path.join(temporaryOutputRoot, "runs.sqlite")
         : dbArg ?? (taskArg ? DEFAULT_DB_PATH : positional[3] ?? DEFAULT_DB_PATH)
     ),
+    runtime,
+    osTarget,
     approvalEvidence: argValue("--approval-evidence", null),
     approvalPacket,
     applyWriteback: process.argv.includes("--apply-writeback"),

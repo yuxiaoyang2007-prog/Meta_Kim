@@ -12,13 +12,13 @@ Default product runtime path:
 When this command is installed globally, run the installed Meta_Kim package root directly:
 
 ```bash
-node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --emit-conversation-notice "$ARGUMENTS"
+node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --runtime claude_code --emit-conversation-notice "$ARGUMENTS"
 ```
 
 If this command file has not been rendered by global sync and the placeholder is still present, fall back only when the current project is the Meta_Kim source checkout or provides the package script:
 
 ```bash
-npm run meta:theory:run:notice -- "$ARGUMENTS"
+npm run meta:theory:run:notice -- --runtime claude_code "$ARGUMENTS"
 ```
 
 Then reopen the report with:
@@ -44,6 +44,34 @@ Minimum route:
    available retrieval path or return blocked to Fetch.
 4. Use the run artifact and report as the evidence surface. Do not replace the
    machine route with a short manual summary.
+
+Claude Code execution rule:
+
+**DISPATCH IS MANDATORY.** The main thread is the dispatcher, never the
+execution worker. The governed runner produces route evidence,
+`workerTaskPackets`, and `hostInvocationRequestPacket`; it does not by itself
+prove live Claude Code `Agent` / Task execution.
+
+- This `/meta-theory` invocation is explicit user authorization to use Claude
+  Code Agent/Task delegation and parallel worker lanes when Thinking proves
+  the lanes are independent and safe.
+- Use `agent-teams-playbook` after Thinking and before Execution when the plan
+  has 2+ executable worker lanes whose DAG dependencies, collision boundaries,
+  workspace isolation, and external-write policy prove safe fan-out; record
+  `not_required` for fewer lanes and partial/degraded for unsafe fan-out.
+  Resolve it from the first available skill root (`~/.claude/skills/agent-teams-playbook/SKILL.md`,
+  `.claude/skills/agent-teams-playbook/SKILL.md`, `.agents/skills/agent-teams-playbook/SKILL.md`,
+  or a configured dependency root). Treat it as a selected fan-out adapter
+  unless a live Skill/Agent Team/Task call is attached.
+- Then call the active Claude Code host's real `Agent` / Task surface for each
+  selected execution worker lane. Every Agent/Task prompt must cite the
+  corresponding `workerTaskPackets[].taskPacketId`, selected owner/role,
+  output schema, write scope, collision boundary, verification owner, and
+  expected evidence shape.
+- Record the returned Agent/Task tool-call id, completion status, and
+  worker-task-to-agent mapping as trusted host invocation evidence. If no
+  callable Agent/Task surface is available, record the checked tool/capability
+  names and blocked reason; do not silently continue as main-thread execution.
 
 If the rendered package-root runner is unavailable and the current directory
 does not provide the fallback package script, say that the machine entry is

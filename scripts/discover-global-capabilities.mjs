@@ -1634,7 +1634,7 @@ const OUTPUT_I18N = {
     noMatchingCapabilities: "no matching capabilities",
     noMatchingCapabilityType: "No matching capability type",
     warnings: "warnings",
-    more: "more",
+    more: "more, remaining {n} hidden due to length",
     none: "none",
     scanning: "Scanning global capabilities across platforms...",
     scanningPlatform: (name) => `  Scanning ${name}...`,
@@ -1658,7 +1658,7 @@ const OUTPUT_I18N = {
     noMatchingCapabilities: "没有匹配的能力",
     noMatchingCapabilityType: "没有匹配的能力类型",
     warnings: "警告",
-    more: "项未显示",
+    more: "等，剩余 {n} 项因篇幅关系未显示",
     none: "无",
     scanning: "正在扫描全局能力...",
     scanningPlatform: (name) => `  正在扫描 ${name}...`,
@@ -1672,11 +1672,61 @@ const OUTPUT_I18N = {
     searchIndexWritten: (count) =>
       `搜索索引已写入 capability-search-index.tsv（${count} 条）`,
   },
+  "ja-JP": {
+    title: "Meta_Kim グローバル能力サマリ",
+    byPlatform: "プラットフォーム別",
+    hooksByCategory: "フックカテゴリ別",
+    skillsByFamily: "スキルファミリ別",
+    detailsHidden:
+      "デフォルトは分類統計のみ表示。--verbose または --details で各能力 id を確認できます。",
+    noMatchingCapabilities: "一致する能力なし",
+    noMatchingCapabilityType: "一致する能力タイプなし",
+    warnings: "警告",
+    more: "等、残り {n} 件は篇幅の都合により非表示",
+    none: "なし",
+    scanning: "グローバル能力をスキャン中...",
+    scanningPlatform: (name) => `  ${name} をスキャン中...`,
+    errors: "エラー",
+    detailedInventory: "詳細インベントリ",
+    governanceRules: "ガバナンスルール",
+    canonicalIndexWritten: (target) => `canonical 能力インデックスを ${target} に書き込み`,
+    localInventoryWritten: (target) => `ローカルグローバル能力インベントリを ${target} に書き込み`,
+    canonicalIndexMirrored: (count) =>
+      `${count} 個の runtime ミラーディレクトリに canonical インデックスを反映（今回のスキャン対象外）:`,
+    searchIndexWritten: (count) =>
+      `検索インデックスを capability-search-index.tsv に書き込み（${count} 件）`,
+  },
+  "ko-KR": {
+    title: "Meta_Kim 전역 능력 요약",
+    byPlatform: "플랫폼별",
+    hooksByCategory: "훅 카테고리별",
+    skillsByFamily: "스킬 패밀리별",
+    detailsHidden:
+      "기본은 분류 통계만 표시합니다. --verbose 또는 --details 로 각 능력 id 를 확인하세요.",
+    noMatchingCapabilities: "일치하는 능력 없음",
+    noMatchingCapabilityType: "일치하는 능력 유형 없음",
+    warnings: "경고",
+    more: "등, 나머지 {n}개 항목은 분량상 표시되지 않음",
+    none: "없음",
+    scanning: "전역 능력 스캔 중...",
+    scanningPlatform: (name) => `  ${name} 스캔 중...`,
+    errors: "오류",
+    detailedInventory: "상세 인벤토리",
+    governanceRules: "거버넌스 규칙",
+    canonicalIndexWritten: (target) => `canonical 능력 인덱스를 ${target} 에 기록`,
+    localInventoryWritten: (target) => `로컬 전역 능력 인벤토리를 ${target} 에 기록`,
+    canonicalIndexMirrored: (count) =>
+      `${count} 개 runtime 미러 디렉토리에 canonical 인덱스 반영 (이번 스캔 대상 아님):`,
+    searchIndexWritten: (count) =>
+      `검색 인덱스를 capability-search-index.tsv 에 기록 (${count} 건)`,
+  },
 };
 
 function normalizeOutputLang(lang = "en") {
   const raw = String(lang || "en").toLowerCase();
   if (raw.startsWith("zh")) return "zh";
+  if (raw.startsWith("ja")) return "ja-JP";
+  if (raw.startsWith("ko")) return "ko-KR";
   return "en";
 }
 
@@ -1684,14 +1734,18 @@ function outputText(lang) {
   return OUTPUT_I18N[normalizeOutputLang(lang)] ?? OUTPUT_I18N.en;
 }
 
-function formatCounts(counts, maxItems = 8, labels = OUTPUT_I18N.en) {
+function formatCounts(counts, maxItems = 20, labels = OUTPUT_I18N.en) {
   if (counts.length === 0) return labels.none;
   const shown = counts
     .slice(0, maxItems)
     .map(([label, count]) => `${label} ${count}`)
     .join(", ");
   const hidden = counts.length - maxItems;
-  return hidden > 0 ? `${shown}, +${hidden} ${labels.more}` : shown;
+  if (hidden > 0) {
+    const suffix = typeof labels.more === "string" ? labels.more.replace("{n}", String(hidden)) : `${hidden} ${labels.more}`;
+    return `${shown}, ${suffix}`;
+  }
+  return shown;
 }
 
 function flattenCapabilitiesByType(index, type) {
@@ -1732,7 +1786,7 @@ function formatDefaultSummary(index, { filterType, lang } = {}) {
         (cap) => cap.platformId === data.platformId,
       );
       if (platformHooks.length === 0) continue;
-      output += `  ${data.platform}: ${formatCounts(countBy(platformHooks, classifyHookCapability), 8, labels)}\n`;
+      output += `  ${data.platform}: ${formatCounts(countBy(platformHooks, classifyHookCapability), 20, labels)}\n`;
     }
   }
 
@@ -1744,7 +1798,7 @@ function formatDefaultSummary(index, { filterType, lang } = {}) {
         (cap) => cap.platformId === data.platformId,
       );
       if (platformSkills.length === 0) continue;
-      output += `  ${data.platform}: ${formatCounts(countBy(platformSkills, skillFamily), 8, labels)}\n`;
+      output += `  ${data.platform}: ${formatCounts(countBy(platformSkills, skillFamily), 20, labels)}\n`;
     }
   }
 
