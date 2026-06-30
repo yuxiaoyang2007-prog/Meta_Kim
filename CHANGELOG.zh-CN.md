@@ -6,6 +6,21 @@
 
 更新说明先解释本次解决的用户痛点或风险，再说明为了解决它改了什么、为什么重要。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
+## [2.8.63] - 2026-06-30
+
+### 解决的问题
+
+8 阶段脊柱的关卡存在 stage key 漂移：`enforce-agent-dispatch.mjs` 本地 stage order 用的是 `meta_review`（下划线），而 `spine-state.mjs` 和 canonical 标签用的是 `meta-review`（连字符），导致 `indexOf` 在 Meta-Review 阶段静默失败。Fetch 阶段也缺少与 Critical 对称的业务文件 mutation deny 分支，导致 `npm install` 和业务文件写入在 `fetchRecord` 提交前不被拦截。另外，SubagentStart hook 对所有 spawn 的 agent 触发（`matcher: "*"`）、MCP-memory 安装脚本未经确认就写用户全局 `~/.claude/settings.json`、缺少一条同步全局 hooks 的命令、新增的 `global-owner-discovery.md` reference 缺少 prompt-executability 校验器要求的标准 section 结构——这些让产品体验测试链路报错。
+
+### 改动
+
+- 将 stage key 统一为 `meta-review`，覆盖 `enforce-agent-dispatch.mjs`、`spine-state.mjs`（claude + shared 源）以及全部 runtime 投影（`.claude` / `.codex` / `.cursor` 加全局 `~/.claude/hooks/meta-kim` 和 `~/.codex/hooks/meta-kim`），让 Meta-Review 关卡在每个平台都正确解析。
+- 新增 Fetch 阶段业务 mutation deny 分支，与 Critical 对称：能力发现必须先写 `fetchRecord`，才能进行业务文件写入或包安装。
+- 把 Claude 和 Codex 投影的 SubagentStart hook matcher 从 `*` 收窄为 `meta-*`，让上下文注入只针对 meta 治理 subagent。
+- 给 `install-mcp-memory-hooks.mjs` 加 `META_KIM_CONFIRM_GLOBAL` 确认关卡，用户全局 `~/.claude/settings.json` 不再在无显式 flag 时被改写。
+- 新增 `meta:sync:global:release` npm 脚本（与 `meta:check:global:release` 对称），一条命令同时同步全局 skill + commands + hooks + settings。
+- 新增 `canonical/skills/meta-theory/references/global-owner-discovery.md`（完整 12 section 结构），并在 `SKILL.md` 和 `dev-governance.md` 中链接。
+
 ## [2.8.62] - 2026-06-29
 
 ### 解决的问题

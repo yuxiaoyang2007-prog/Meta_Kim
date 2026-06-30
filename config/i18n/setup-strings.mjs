@@ -109,8 +109,8 @@ ${r ? `Raw error: ${r}` : ""}
     globalHooksOptInNotice:
       "Global hooks are opt-in: run node setup.mjs --with-global-hooks when you want Meta_Kim to update Claude/Codex/Cursor hook wiring.",
     postInstallNotesPlatformSync: "Platform capability sync:",
-    platformClauleCode: "Claude Code",
-    platformClauleCodeCap: "agents + skills + hooks",
+    platformClaudeCode: "Claude Code",
+    platformClaudeCodeCap: "agents + skills + hooks",
     platformCodex: "Codex",
     platformCodexCap: "agents + skills",
     platformOpenClaw: "OpenClaw",
@@ -533,7 +533,6 @@ Possible causes:
     proxySkip: "No proxy — using direct connection",
     proxySkipDeclined: "Proxy declined — using direct connection",
     proxySaved: (url) => `Proxy saved: ${url}`,
-    stepLabel: (n, label) => `Step ${n}: ${label}`,
     progressInstallPython: "Install Python graphify tool",
     progressInstallMcpMemory: "Configure Meta_Kim cross-session memory (optional)",
     checkTargets: (active, supported) =>
@@ -727,8 +726,8 @@ ${r ? `原始错误：${r}` : ""}
     globalHooksOptInNotice:
       "全局 hooks 默认不改写：需要 Meta_Kim 更新 Claude/Codex/Cursor hook 配置时，请显式运行 node setup.mjs --with-global-hooks。",
     postInstallNotesPlatformSync: "各平台能力同步情况：",
-    platformClauleCode: "Claude Code",
-    platformClauleCodeCap: "agents + skills + hooks",
+    platformClaudeCode: "Claude Code",
+    platformClaudeCodeCap: "agents + skills + hooks",
     platformCodex: "Codex",
     platformCodexCap: "agents + skills",
     platformOpenClaw: "OpenClaw",
@@ -1131,7 +1130,6 @@ ${r ? `原始错误：${r}` : ""}
     proxySkip: "未检测到代理 — 直连",
     proxySkipDeclined: "已拒绝代理 — 直连",
     proxySaved: (url) => `已保存代理：${url}`,
-    stepLabel: (n, label) => `步骤 ${n}：${label}`,
     progressInstallPython: "安装 Python graphify 工具",
     progressInstallMcpMemory: "配置 Meta_Kim 跨会话记忆（可选）",
     checkTargets: (active, supported) =>
@@ -1321,8 +1319,8 @@ ${r ? `生エラー：${r}` : ""}
     globalHooksOptInNotice:
       "グローバル hooks は既定では変更しません。Meta_Kim で Claude/Codex/Cursor の hook 設定を更新する場合は node setup.mjs --with-global-hooks を明示してください。",
     postInstallNotesPlatformSync: "各プラットフォームの同期状況：",
-    platformClauleCode: "Claude Code",
-    platformClauleCodeCap: "agents + skills + hooks",
+    platformClaudeCode: "Claude Code",
+    platformClaudeCodeCap: "agents + skills + hooks",
     platformCodex: "Codex",
     platformCodexCap: "agents + skills",
     platformOpenClaw: "OpenClaw",
@@ -1752,7 +1750,6 @@ ${r ? `生エラー：${r}` : ""}
     proxySkip: "プロキシ未検出 — 直接接続",
     proxySkipDeclined: "プロキシ辞退 — 直接接続",
     proxySaved: (url) => `プロキシを保存：${url}`,
-    stepLabel: (n, label) => `ステップ ${n}：${label}`,
     progressInstallPython: "Python graphify ツールをインストール",
     progressInstallMcpMemory: "Meta_Kim クロスセッション記憶を設定（任意）",
     checkTargets: (active, supported) =>
@@ -1953,8 +1950,8 @@ ${r ? `원본 오류：${r}` : ""}
     globalHooksOptInNotice:
       "전역 hooks는 기본으로 변경하지 않습니다. Meta_Kim이 Claude/Codex/Cursor hook 설정을 업데이트해야 할 때 node setup.mjs --with-global-hooks를 명시적으로 실행하세요.",
     postInstallNotesPlatformSync: "각 플랫폼 동기화 현황:",
-    platformClauleCode: "Claude Code",
-    platformClauleCodeCap: "agents + skills + hooks",
+    platformClaudeCode: "Claude Code",
+    platformClaudeCodeCap: "agents + skills + hooks",
     platformCodex: "Codex",
     platformCodexCap: "agents + skills",
     platformOpenClaw: "OpenClaw",
@@ -2370,7 +2367,6 @@ ${r ? `원본 오류：${r}` : ""}
     proxySkip: "프록시 미감지 — 직접 연결",
     proxySkipDeclined: "프록시 거절됨 — 직접 연결",
     proxySaved: (url) => `프록시 저장됨: ${url}`,
-    stepLabel: (n, label) => `단계 ${n}：${label}`,
     progressInstallPython: "Python graphify 도구 설치",
     progressInstallMcpMemory: "Meta_Kim 크로스세션 메모리 설정 (선택)",
     checkTargets: (active, supported) =>

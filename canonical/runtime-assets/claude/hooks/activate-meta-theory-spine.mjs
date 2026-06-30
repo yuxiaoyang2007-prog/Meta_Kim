@@ -234,6 +234,14 @@ function shouldReplaceActiveState(existing, promptFingerprint) {
   return !isManagedStageState(existing) && ageMs(existing) > staleCutoffMs;
 }
 
+// ── EXECUTION_DELTA ─────────────────────────────────────────────────────────
+// The block below this marker is the spine-activator's top-level flow. It is
+// the only place that consumes the helpers above (isMetaTheoryTrigger,
+// shouldReplaceActiveState, buildContinuationBoundary, etc.). Keep helper
+// definitions and the EXECUTION_DELTA block in the same file so projection
+// stays in sync; do not move shouldReplaceActiveState or its dependents
+// across this boundary without re-running meta:sync + meta:validate.
+
 function buildContinuationBoundary(previousState, promptText) {
   if (!previousState || previousState.active !== false) return null;
   if (!CONTINUATION_REQUEST_RE.test(promptText || "")) return null;

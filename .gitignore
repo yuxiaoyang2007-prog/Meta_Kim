@@ -68,6 +68,7 @@ findings.md
 
 # ========== Backup / Temporary ==========
 .backup/
+tmp/
 
 # ========== Terminal / Shell Cache Files ==========
 *.omp.cache

@@ -1,0 +1,86 @@
+# Global-First Owner Discovery
+
+Capability discovery is **global-first**, not project-local-first. Before Fetch can name an owner, the run must look in every layer where a reusable owner can live. Named dispatch without a discovery step is a design shortcut, not the canonical method. The main thread is the discovery orchestrator; the discovery itself may fan out across the sources below in parallel.
+
+This reference is the long-form companion to `SKILL.md` § **Global-First Owner Discovery** and the **4-Stage Parallel Fan-out Protocol** in `dev-governance.md`. SKILL.md keeps the section short and links here for detail.
+
+## Use when
+
+Use this reference on every non-query meta-theory run, before Thinking names an owner. It applies whenever the route needs an agent, skill, command, MCP tool, runtime tool, hook, plugin, or dependency owner. It does not apply to pure read-only queries where no owner is dispatched.
+
+## Required inputs
+
+Discovery requires: the **capability needed** (e.g. "frontend Next.js", "graph code review", "i18n string extraction"); the **runtime** in scope (claude / codex / cursor / openclaw); the **architecture type** (Meta vs project-technical); and the **project profile** (canonical assets present, active targets, local overrides). Without a capability statement, discovery cannot start.
+
+## Do
+
+Search the six global discovery sources in locality order. Match by **capability and boundary**, not by agent title. Record every source checked (including empty results) into `dispatchEnvelopePacket.capabilityInventory`. Prefer a global owner that already fits over creating a project-local copy. When multiple candidates match, prefer the most local durable owner, then the one whose scope already includes the architecture type.
+
+## Do not
+
+Do not hardcode an agent name before discovery. Do not skip a source because it "probably" has nothing. Do not silently synthesize a new owner when a global one fits. Do not copy a reusable global asset into the project when `use_global_directly` applies. Do not emit local absolute home paths in route reports.
+
+## The six global discovery sources
+
+Searched in order of locality then priority:
+
+1. **Local canonical assets** — `canonical/agents/`, `canonical/skills/`, `canonical/runtime-assets/shared/`, `canonical/runtime-assets/<runtime>/`. These are the durable sources of truth for Meta_Kim and must be searched first for any meta-owned capability.
+2. **Capability indexes** — `config/capability-index/` and the runtime capability-index mirrors under `.claude/capability-index/`, `.codex/capability-index/`, `.cursor/capability-index/`. These are query-first indices that resolve capability → owner without reading every agent file.
+3. **Global runtime homes** — `~/.claude/agents/`, `~/.claude/skills/`, `~/.codex/agents/`, `~/.cursor/agents/`, `~/.openclaw/`, `~/.agents/`. A reusable global owner that already matches the boundary wins over creating a project-local copy.
+4. **Package scripts and local inventory** — `package.json` `scripts`, `bin/`, `scripts/`, and the local runtime inventory inside the project root. These often expose registered tools, MCP providers, and shell entry points that are themselves owners.
+5. **MCP / runtime configs** — `.mcp.json`, `~/.mcp.json`, `.codex/config.toml`, `.cursor/mcp.json`, runtime adapter templates. MCP tools are first-class owners; capability matching must enumerate them.
+6. **External discovery** — `findskill` / `meta-scout` / third-party registries, package indexes, and web research. Used only when sources 1-5 have no fit; the result must surface a `capabilityGapPacket` and a proposed owner creation/upgrade, not silent synthesis.
+
+## Capability-first matching
+
+The search query is the **capability needed** (e.g. "frontend Next.js", "graph code review", "i18n string extraction"), not the agent name. Match by boundary, not by title. The result of discovery is a shortlist of owner candidates with file refs, never a hardcoded dispatch.
+
+When multiple candidates match:
+
+- Prefer the most local durable owner (canonical asset > capability index > global home > local).
+- Among ties, prefer the agent whose scope statement already includes the current architecture type.
+- If a global owner fits without modification, dispatch to it. Do not copy it into the project.
+
+## Cross-runtime portability
+
+Discovery must be cross-runtime portable. Use repo-relative refs, runtime ids, or home-relative refs such as `~/.codex`, `~/.claude`, `~/.cursor`, `~/.openclaw`, `~/.agents`. Do not emit local absolute home paths in route reports. See `dev-governance.md` § **Capability Discovery And Owner Resolution** for the runtime-portable reporting contract.
+
+## When the gap is real
+
+If no source 1-5 returns a fit:
+
+- Source 6 (external discovery) is consulted only with recorded reason and routing impact.
+- The result is a `capabilityGapPacket` with `capabilityNeed`, `globalCandidateChecked[]`, `recommendedAction` (`create` / `upgrade` / `accept_reference_only`), and `ownerCandidate`.
+- The run does not silently synthesize a new agent. Owner creation is governed by Type B (see `SKILL.md` § **Type B: Agent / Skill / Owner Creation Or Upgrade**).
+
+## Required packet
+
+The dispatcher writes `dispatchEnvelopePacket.capabilityInventory` before any Wave 1 fan-out. Required fields: `searchLog[]` (each of the six sources with checked-at, result count, top candidates), `capabilityInventory` (agents / skills / commands / hooks / mcp / runtime-tools / plugins / dependencies), `ownerCandidates[]` per capability need, and `selectedOwner` with boundary-fit reason. A `capabilityGapPacket` is emitted when no source 1-5 owner fits.
+
+## Pass
+
+Discovery passes when `capabilityInventory` is written, every one of the six sources appears in `searchLog` (empty results recorded explicitly), each capability need has at least one candidate or a recorded gap, and the selected owner is a real provider (not `general-purpose`, not a governance agent acting as implementation worker, not a runtime alias).
+
+## Fail
+
+Discovery fails when the inventory is missing, when `searchLog` omits a source without a recorded reason, when an owner is named without any search evidence (hardcoded dispatch), or when a selected owner is `general-purpose` / a runtime alias / a governance agent used as an implementation worker. Review rejects fake discovery on the same chain, not via a separate gate.
+
+## Block
+
+Block (return upstream, do not advance to Execution) when sources 1-5 return no fit and source 6 is unavailable or `blocked`. Emit a `capabilityGapPacket` with `recommendedAction` and surface the blocker to the user through the native choice surface. Do not guess an owner to unblock.
+
+## Return to stage
+
+On fake discovery or missing inventory: return to **Fetch** to complete the six-source scan. On a real capability gap: return to **Thinking** with the `capabilityGapPacket` to decide `create` / `upgrade` / `accept_reference_only`. On a `general-purpose` or alias owner: return to **Thinking** to re-resolve against the inventory.
+
+## Verification
+
+Verification confirms the inventory file exists, `searchLog` lists all six sources with timestamps, each `ownerCandidate` resolves to a real file or provider, and the selected owner's boundary fits the capability need. A `capabilityInvocationProbePacket` may be required for callable local families (MCP / command-script / runtime-tool) before product-experience pass.
+
+## Writeback
+
+When discovery surfaces a recurring new owner class that no existing provider owns, write the gap through the Type B pipeline (`GapDecision = create_agent` + `GeneratedAgentSpec` review). When a global owner is repeatedly partial, write an `upgrade_existing_owner` signal. Stale inventory older than 14 days triggers a refresh on the next run.
+
+## Preserve
+
+Preserve global runtime homes (`~/.claude`, `~/.codex`, `~/.cursor`, `~/.openclaw`, `~/.agents`) — discovery reads them, never deletes them. Preserve foundational capabilities (Skills, WebSearch, browser, MCP, memory, graph, hooks, commands, runtime tools) even if risky or unavailable; mark them instead. Preserve runtime-native abilities for every runtime; discovery may add boundaries but never replaces native surfaces.

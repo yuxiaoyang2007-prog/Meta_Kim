@@ -6,6 +6,21 @@ This file is the reader-facing release history for Meta_Kim.
 
 The changelog explains the user-facing problem or risk each release solved, what changed to solve it, and why the change matters. It intentionally avoids long internal task ledgers, low-signal backlog ids, and implementation trivia. When exact evidence is needed, use the repository history, tests, generated reports, and PRD artifacts.
 
+## [2.8.63] - 2026-06-30
+
+### Solved Problem
+
+The 8-stage spine gate had a stage-key drift: `enforce-agent-dispatch.mjs` used `meta_review` (underscore) in its local stage order while `spine-state.mjs` and the canonical labels used `meta-review` (hyphen), so `indexOf` silently failed at the Meta-Review stage. The Fetch stage also lacked the symmetric business-mutation deny branch that Critical had, so `npm install` and business-file writes were not blocked before `fetchRecord` was committed. Separately, the SubagentStart hook fired for every spawned agent (`matcher: "*"`), the MCP-memory installer wrote to the user-global `~/.claude/settings.json` without consent, there was no single command to sync global hooks, and the new `global-owner-discovery.md` reference missed the standard section structure the prompt-executability validator requires — which broke the product-experience test chain.
+
+### Changes
+
+- Unified the stage key to `meta-review` across `enforce-agent-dispatch.mjs`, `spine-state.mjs` (claude + shared sources), and every runtime projection (`.claude` / `.codex` / `.cursor` plus the global `~/.claude/hooks/meta-kim` and `~/.codex/hooks/meta-kim` packages), so the Meta-Review gate resolves correctly on every platform.
+- Added a Fetch-stage business-mutation deny branch symmetric to the existing Critical branch, so capability discovery must commit `fetchRecord` before any business-file write or package install.
+- Narrowed the SubagentStart hook matcher from `*` to `meta-*` in the Claude and Codex projections, so context injection targets only meta-governance subagents.
+- Added a `META_KIM_CONFIRM_GLOBAL` consent gate to `install-mcp-memory-hooks.mjs`, so user-global `~/.claude/settings.json` is no longer mutated without an explicit flag.
+- Added the `meta:sync:global:release` npm script (mirrors `meta:check:global:release`) as the single command that syncs global skill + commands + hooks + settings in one step.
+- Added `canonical/skills/meta-theory/references/global-owner-discovery.md` with the full 12-section reference structure, and linked it from `SKILL.md` and `dev-governance.md`.
+
 ## [2.8.62] - 2026-06-29
 
 ### Solved Problem
@@ -39,7 +54,7 @@ v2.8.60 introduced the truncation marker and v2.8.61 extracted the setup i18n bl
 ### Changes
 
 - **I18N strings extracted to `config/i18n/setup-strings.mjs`** — the 2 463-line 4-language block now lives in its own file. The function is exposed as `export function buildI18N({ MIN_NODE_VERSION })` so the existing `(v) => ... template literals` can still reference `MIN_NODE_VERSION` via closure capture.
-- **`setup.mjs` imports the strings** — the 2 463-line inline object is replaced with `import { buildI18N } from "./config/i18n/setup-strings.mjs"; const I18N = buildI18N({ MIN_NODE_VERSION });`. `setup.mjs` drops from 9 204 to 6 741 lines.
+- **`setup.mjs` imports the strings** — the 2 463-line inline object is replaced with `import { buildI18N } from "./config/i18n/setup-strings.mjs"; const I18N = buildI18N({ MIN_NODE_VERSION });`. `setup.mjs` drops from 9 204 to 6 745 lines.
 - **Single source of truth restored** — changing a translation now requires editing exactly one file. `scripts/meta-kim-i18n.mjs` continues to serve other scripts; `config/i18n/setup-strings.mjs` now serves setup.mjs.
 - **Regression coverage** — `tests/meta-theory/53-setup-i18n-extracted.test.mjs` pins the single-source contract: the strings file exists and exports `buildI18N`, `setup.mjs` imports it and contains no inline `const I18N = {`, all 4 languages (`en` / `zh-CN` / `ja-JP` / `ko-KR`) are present, and `setup.mjs` shrank below 7 500 lines.
 

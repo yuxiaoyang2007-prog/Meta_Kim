@@ -1634,6 +1634,48 @@ function renderCodexConfigExample(content, rootDir) {
   return content.replaceAll("REPLACE_WITH_REPO_ROOT", normalizedRoot);
 }
 
+/**
+ * Additive merge: take a rendered canonical MCP config (already containing
+ * the meta_kim-runtime server) and union it with any user-added servers
+ * already present at the projection path. User-added servers (anything that
+ * is not meta-kim-runtime) are preserved across syncs so the user can keep
+ * local helper MCPs (memory, sqlite, etc.) registered without re-adding
+ * them after every `npm run meta:sync`.
+ *
+ * Preserves canonical entries when both sides define the same server name.
+ */
+function mergeUserMcpServers(canonicalRendered, existingRaw) {
+  let parsedCanonical = {};
+  let parsedExisting = {};
+  try {
+    parsedCanonical = JSON.parse(canonicalRendered);
+  } catch {
+    parsedCanonical = {};
+  }
+  try {
+    parsedExisting = JSON.parse(existingRaw);
+  } catch {
+    parsedExisting = {};
+  }
+  const canonicalServers =
+    parsedCanonical && typeof parsedCanonical === "object" && parsedCanonical.mcpServers
+      ? parsedCanonical.mcpServers
+      : {};
+  const existingServers =
+    parsedExisting && typeof parsedExisting === "object" && parsedExisting.mcpServers
+      ? parsedExisting.mcpServers
+      : {};
+  const merged = {};
+  for (const [name, def] of Object.entries(canonicalServers)) {
+    merged[name] = def;
+  }
+  for (const [name, def] of Object.entries(existingServers)) {
+    if (Object.prototype.hasOwnProperty.call(merged, name)) continue;
+    merged[name] = def;
+  }
+  return `${JSON.stringify({ mcpServers: merged }, null, 2)}\n`;
+}
+
 export function buildCodexProjectConfig(
   currentContent,
   configExampleContent,
@@ -2494,8 +2536,19 @@ async function syncClaudeProjection(
     // server script; writing that command elsewhere breaks MCP startup.
     if (targetHasMetaRuntimeServer) {
       const renderedMcpContent = renderMetaKimRuntimeMcp(mcpContent, repoRoot);
+      let existingMcpRaw = null;
+      try {
+        existingMcpRaw = await fs.readFile(claudeMcpProjectionPath, "utf8");
+      } catch (error) {
+        if (error.code !== "ENOENT") {
+          throw error;
+        }
+      }
+      const finalMcpContent = existingMcpRaw
+        ? mergeUserMcpServers(renderedMcpContent, existingMcpRaw)
+        : renderedMcpContent;
       if (
-        (await writeGeneratedFile(claudeMcpProjectionPath, renderedMcpContent))
+        (await writeGeneratedFile(claudeMcpProjectionPath, finalMcpContent))
           .changed
       ) {
         changedFiles.push(displayPaths.claudeMcp);
@@ -2821,15 +2874,27 @@ Examples:
           throw error;
         }
       }
-      const nextCodexConfig = buildCodexProjectConfig(
-        currentCodexConfig,
-        codexConfigExample,
-      );
+      // Respect user-local override: if the local .codex/config.toml
+      // carries a `# meta-kim: local-override` marker comment, the file
+      // is intentionally divergent from the canonical template and
+      // sync must not silently rewrite it. To regenerate from canonical,
+      // remove the marker line.
       if (
-        (await writeGeneratedFile(dirs.codexConfigPath, nextCodexConfig))
-          .changed
+        currentCodexConfig &&
+        /meta-kim:\s*local-override/.test(currentCodexConfig)
       ) {
-        changedFiles.push(dp.codexConfig);
+        // skip — file is intentionally divergent
+      } else {
+        const nextCodexConfig = buildCodexProjectConfig(
+          currentCodexConfig,
+          codexConfigExample,
+        );
+        if (
+          (await writeGeneratedFile(dirs.codexConfigPath, nextCodexConfig))
+            .changed
+        ) {
+          changedFiles.push(dp.codexConfig);
+        }
       }
     }
 

@@ -1735,7 +1735,30 @@ function prepareProjectDeployJson(relPath, srcPath, targetDir) {
   return parsed;
 }
 
+function backupBeforeMerge(destPath, label = "pre-merge") {
+  if (!destPath) return null;
+  if (!existsSync(destPath)) return null;
+  try {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupRoot = join(
+      PROJECT_DIR,
+      ".meta-kim",
+      "backups",
+      `${label}-${stamp}`,
+    );
+    const safeBase = String(destPath).replace(/[\\/]+/g, "__");
+    const backupPath = join(backupRoot, safeBase);
+    mkdirSync(dirname(backupPath), { recursive: true });
+    cpSync(destPath, backupPath);
+    return backupPath;
+  } catch (err) {
+    warn(t?.warnBackupFailed?.(destPath, err.message) || `Backup failed for ${destPath}: ${err.message}`);
+    return null;
+  }
+}
+
 function mergeProtectedProjectDeployFile(srcPath, destPath, relPath, targetDir) {
+  backupBeforeMerge(destPath, "pre-merge");
   writeJsonObject(
     destPath,
     plannedProtectedProjectDeployJson(srcPath, destPath, relPath, targetDir),
@@ -1744,6 +1767,7 @@ function mergeProtectedProjectDeployFile(srcPath, destPath, relPath, targetDir) 
 }
 
 function mergeProtectedProjectDeployTextFile(srcPath, destPath, relPath, targetDir) {
+  backupBeforeMerge(destPath, "pre-merge");
   writeFileSync(
     destPath,
     plannedProtectedProjectDeployText(srcPath, destPath, relPath, targetDir),
@@ -2674,6 +2698,7 @@ function cleanupRedundantProjectConfigs(targetDir, activeTargets, currentFilePla
         skipped.push({ relPath: rel, reason: "git_tracked_preserved" });
         continue;
       }
+      backupBeforeMerge(absPath, "pre-strip");
       writeJsonObject(absPath, stripped);
     }
   }
@@ -2767,6 +2792,7 @@ function stripStaleProjectHookConfigs(targetDir, currentFilePlans) {
     const stripped = stripProjectMetaKimHooksFromHookConfig(current);
     if (jsonEquivalent(current, stripped)) continue;
     if (isGitTrackedProjectPath(targetDir, relPath)) continue;
+    backupBeforeMerge(configPath, "pre-strip-hooks");
     writeJsonObject(configPath, stripped);
     changed.push(relPath);
   }
@@ -3683,6 +3709,7 @@ function cleanupProjectHookConfigs(activeTargets, targetDir) {
     const stripped = stripProjectMetaKimHooksFromHookConfig(current);
     if (jsonEquivalent(current, stripped)) continue;
     if (isGitTrackedProjectPath(targetDir, relPath)) continue;
+    backupBeforeMerge(configPath, "pre-strip-hooks");
     writeJsonObject(configPath, stripped);
     changed.push(relPath);
   }
@@ -5970,7 +5997,7 @@ function showNextSteps(runtimes) {
     `${C.bold}${C.cyan}● ${t.postInstallNotesPlatformSync}${C.reset}`,
   );
   const platformRows = [
-    { name: t.platformClauleCode, cap: t.platformClauleCodeCap },
+    { name: t.platformClaudeCode, cap: t.platformClaudeCodeCap },
     { name: t.platformCodex, cap: t.platformCodexCap },
     { name: t.platformOpenClaw, cap: t.platformOpenClawCap },
     { name: t.platformCursor, cap: t.platformCursorCap },
@@ -5980,8 +6007,8 @@ function showNextSteps(runtimes) {
         r.name
           .replace("platform", "")
           .toLowerCase()
-          .replace("claulecode", "claude")
-      ] || r.name === t.platformClauleCode,
+          .replace("claudecode", "claude")
+      ] || r.name === t.platformClaudeCode,
   );
   for (const row of platformRows) {
     console.log(`${C.dim}• ${row.name}: ${row.cap}${C.reset}`);

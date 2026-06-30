@@ -372,6 +372,9 @@ function planActions({
           f.path.endsWith(path.sep + "meta-kim") ||
           f.path.endsWith("/meta-kim")
         ) {
+          if (scope === "project") {
+            break;
+          }
           actions.push({
             kind: "remove",
             path: f.path,

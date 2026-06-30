@@ -20,6 +20,12 @@ Run Meta_Kim as an executable governance system, not a theory essay. The main th
 
 Machine contract: `config/contracts/core-loop-contract.json` is the compact default-path contract for this skill. It binds ordinary durable work and explicit meta-theory shortcuts to `npm run meta:theory:run`, requires the eight-stage spine, and defines which gates block, warn, or stay progressive.
 
+## Global-First Owner Discovery
+
+Discovery is **global-first, capability-first**: not project-local, not agent-name-first. The run searches six sources in order — local canonical assets, capability indexes, global runtime homes, package scripts, MCP / runtime configs, and external discovery (`findskill` / `meta-scout`). A reusable global owner that already matches the boundary wins over creating a project-local copy. Full source-by-source rules and parallel-discovery merge contract live in `references/global-owner-discovery.md`; the wave structure that wires discovery into Critical/Fetch/Thinking/Review parallelism lives in `references/dev-governance.md` § **4-Stage Parallel Fan-out Protocol**.
+
+The dispatcher (main thread or `meta-conductor`) is the **single owner** of writing the `dispatchEnvelopePacket.capabilityInventory` before any Wave 1 fan-out. This is a main-flow step, not a hook. The inventory is the durable record of which sources were actually scanned, which owners were considered, and why one was selected. Discovery without a recorded inventory is fake discovery and is rejected by Review on the same chain, not by a separate gate.
+
 ## Trigger
 Activate from ordinary natural-language durable work, not only from command words. If the user asks to plan and start work, organize priorities, produce repair suggestions, build a verification checklist, fix a non-trivial issue, handle multi-file execution, run review/verification, or resolve subjective/taste-dependent quality, classify the entry and choose the governed route automatically. Explicit `/meta-theory`, `meta-theory`, or `元理论` mentions are maintainer shortcuts, not required human behavior.
 
@@ -80,6 +86,10 @@ When fan-out eligible, Thinking must produce `workerTaskPackets` before Executio
 | 8 | Evolution | after Warden approval, directly edit the target agent definition or SOUL.md for meta-agent lessons; execution-agent gaps use `capabilityGapPacket` + Type B pipeline | No interaction. Record writeback decision. |
 
 Autonomous discovery rule: for natural-language durable work, Fetch starts capability discovery from the entry classification itself. The user must not need to say "Critical", "Fetch", "Thinking", "Review", agent, skill, MCP, command, or tool for Meta_Kim to search local/global agents, skills, commands, MCP providers, runtime tools, plugins, hooks, and verification owners. Native choice gates may pause branch-changing execution, but they must not be the mechanism that first reveals missing discovery.
+
+### Parallelism Boundaries
+
+The 8-stage spine is the canonical order, but the governance stages (Critical, Fetch, Thinking, Review) have a DAG allowing safe parallelism when evidence is independent. Execution, Meta-Review, Verification, and Evolution remain strict-serial. The full wave structure — Wave 1 (Critical+Fetch), Wave 2 (Thinking+Plan), Wave 3 (Execution), Wave 4 (Review+Meta-Review) — lives in `references/dev-governance.md` § **4-Stage Parallel Fan-out Protocol**. Hard rule: no Wave 1-4 parallelism may skip Meta-Review or Verification; Warden gate and Verification stage remain single-point authorities that close the run.
 
 ## User Interaction
 

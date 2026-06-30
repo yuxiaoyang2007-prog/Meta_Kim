@@ -293,6 +293,27 @@ function ensureDir(dir) {
   }
 }
 
+function backupBeforeForce(filePath) {
+  if (!filePath || !existsSync(filePath)) return null;
+  try {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupRoot = join(
+      homedir(),
+      ".meta-kim",
+      "backups",
+      `pre-force-${stamp}`,
+    );
+    const safeBase = String(filePath).replace(/[\\/]+/g, "__");
+    const backupPath = join(backupRoot, safeBase);
+    mkdirSync(dirname(backupPath), { recursive: true });
+    copyFileSync(filePath, backupPath);
+    return backupPath;
+  } catch (err) {
+    warn(`Backup failed for ${filePath}: ${err.message}`);
+    return null;
+  }
+}
+
 function filesEqual(a, b) {
   if (!existsSync(a) || !existsSync(b)) return false;
   try {
@@ -593,6 +614,16 @@ function registerSessionStartHook() {
     return false;
   }
 
+  // F4 fix: require explicit --force (FORCE_UPDATE) or META_KIM_CONFIRM_GLOBAL to write to user-global settings
+  if (!FORCE_UPDATE && !process.env.META_KIM_CONFIRM_GLOBAL) {
+    warn(
+      "Refusing to write to user-global settings without explicit consent. " +
+      "Pass --force or set META_KIM_CONFIRM_GLOBAL=1 to allow global mutation. " +
+      `Target: ${CLAUDE_SETTINGS}`,
+    );
+    return false;
+  }
+
   try {
     const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
     const pythonCmd = pickPythonCommand();
@@ -657,6 +688,9 @@ function registerSessionStartHook() {
     }
 
     // Need to update the existing entry
+    if (FORCE_UPDATE) {
+      backupBeforeForce(CLAUDE_SETTINGS);
+    }
     const updatedBlocks = [...existingBlocks];
     updatedBlocks[existingBlockIndex] = {
       ...updatedBlocks[existingBlockIndex],
@@ -932,6 +966,7 @@ function registerCodexMemoryHook(hookPath) {
     },
     ...withoutMemoryBlocks("Stop"),
   ];
+  backupBeforeForce(hooksJson);
   writeFileSync(hooksJson, JSON.stringify(settings, null, 2) + "\n");
   ok(`Codex lifecycle memory hooks registered first in ${hooksJson}`);
   return true;
@@ -964,6 +999,7 @@ function registerCursorMemoryHook(hookPath) {
     },
     ...withoutMemoryHooks("stop"),
   ];
+  backupBeforeForce(hooksJson);
   writeFileSync(hooksJson, JSON.stringify(settings, null, 2) + "\n");
   ok(`Cursor prompt/stop memory hooks registered first in ${hooksJson}`);
   return true;
@@ -1028,6 +1064,7 @@ function removeCrossRuntimeMemoryHooks(targets) {
       if (settings.hooks[eventName].length === 0)
         delete settings.hooks[eventName];
     }
+    backupBeforeForce(hooksJson);
     writeFileSync(hooksJson, JSON.stringify(settings, null, 2) + "\n");
   }
 

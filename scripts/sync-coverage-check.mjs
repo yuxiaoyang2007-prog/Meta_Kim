@@ -319,6 +319,32 @@ async function main() {
     process.exit(1);
   }
 
+  // ── Runtime local-override marker symmetry (soft reminder) ───────────
+  //
+  // Invariant: if one writable runtime config carries `meta-kim: local-override`
+  // so sync-runtimes skips it, every other writable runtime config must carry
+  // the same marker, OR the asymmetry must be declared here. Prevents a user's
+  // local divergence on one runtime from being silently overwritten on another.
+  const runtimeMarkerConfigs = [
+    { runtime: "codex", file: path.join(repoRoot, ".codex", "config.toml") },
+    { runtime: "cursor", file: path.join(repoRoot, ".cursor", "hooks.json") },
+  ];
+  const markedRuntimes = [];
+  for (const rc of runtimeMarkerConfigs) {
+    try {
+      const txt = await fs.readFile(rc.file, "utf8");
+      if (txt.includes("meta-kim: local-override")) markedRuntimes.push(rc.runtime);
+    } catch {
+      /* unreadable or absent — treat as no marker */
+    }
+  }
+  if (markedRuntimes.length === 1) {
+    console.log("");
+    console.log("[sync-coverage-check] local-override marker asymmetry reminder:");
+    console.log(`  only ${markedRuntimes[0]} carries the marker;`);
+    console.log("  invariant: every writable runtime config must carry it or be declared asymmetric here.");
+  }
+
   console.log("");
   console.log("[sync-coverage-check] PASS — all canonical assets covered.");
   process.exit(0);

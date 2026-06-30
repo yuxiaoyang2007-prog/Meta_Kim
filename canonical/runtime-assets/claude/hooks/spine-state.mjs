@@ -13,7 +13,7 @@ export const STAGE_ORDER = [
   "thinking",
   "execution",
   "review",
-  "meta_review",
+  "meta-review",
   "verification",
   "evolution",
 ];
@@ -24,7 +24,7 @@ export const STAGE_PUBLIC_LABELS = {
   thinking: "Thinking",
   execution: "Execution",
   review: "Review",
-  meta_review: "Meta-Review",
+  "meta-review": "Meta-Review",
   verification: "Verification",
   evolution: "Evolution",
 };
@@ -42,7 +42,7 @@ const STAGE_PROGRESS_PERCENT = {
   thinking: 38,
   execution: 50,
   review: 63,
-  meta_review: 75,
+  "meta-review": 75,
   verification: 88,
   evolution: 100,
 };
@@ -139,7 +139,7 @@ export const STAGE_META_AGENT_MAP = {
     readOnlyVerifierEnabled: true,
     readOnlyVerifierCommands: DEFAULT_READ_ONLY_VERIFIER_COMMANDS,
   },
-  meta_review: {
+  "meta-review": {
     required: [],
     label: "Meta-Review (standards check)",
     readOnlyVerifierEnabled: true,
@@ -351,7 +351,7 @@ export function createInitialState({
       thinking: { status: "pending", completedAt: null },
       execution: { status: "pending", completedAt: null },
       review: { status: "pending", completedAt: null },
-      meta_review: { status: "pending", completedAt: null },
+      "meta-review": { status: "pending", completedAt: null },
       verification: { status: "pending", completedAt: null },
       evolution: { status: "pending", completedAt: null },
     },

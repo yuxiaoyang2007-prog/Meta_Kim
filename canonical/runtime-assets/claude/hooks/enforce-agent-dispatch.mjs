@@ -1596,7 +1596,7 @@ if (isExecutionTool(toolName)) {
     "thinking",
     "execution",
     "review",
-    "meta_review",
+    "meta-review",
     "verification",
     "evolution",
   ];
@@ -1657,26 +1657,38 @@ if (isExecutionTool(toolName)) {
   // Pre-execution stages: block + check meta-agent requirements
   // Exception: critical stage is for setup (spine state + planning files), defer checks
   if (currentIdx < execIdx && stage !== "critical") {
+    if (stage === "fetch" && !isSpineStateWrite() && !isPlanningFile()) {
+      exitAfterDeny(
+        "Current stage: Fetch. Write fetchRecord in spine state before " +
+          "any business mutation. Use repo-inspection / capability-scan to " +
+          "continue read/search Fetch evidence. Agent dispatch is not " +
+          "required before Execution. business-file mutations and package " +
+          "installs must wait until the run commits Fetch and advances to " +
+          "Execution.",
+      );
+    }
     const req = checkStageRequirements(state);
     const stageInfo = STAGE_META_AGENT_MAP[stage];
     const label = stageInfo?.label || stage;
 
     if (!req.met) {
       exitAfterDeny(formatDesignStageMutationDeny(label, req, state));
-    } else {
-      exitAfterDeny(formatDesignStageMutationDeny(label, req, state));
     }
   }
 
   // Critical stage: allow only spine-state/planning-file writes and read-only
   // inspection. Warden is an escalation owner, not a mandatory setup dispatch.
-  // Skip ALL checks if spine is inactive (allows normal work after session ends)
+  // Skip ALL checks if spine is inactive AND the deactivation was a clean
+  // session_stop (allows normal work after the previous run ended).
   if (stage === "critical" && currentIdx < execIdx) {
     if (isSpineStateWrite() || isPlanningFile()) {
       process.exit(0); // Allow spine state and planning file writes during critical
     }
-    // If spine is inactive, skip critical stage requirements (normal work mode)
-    if (!state.active) {
+    // Inactive spine: bypass critical requirements ONLY when the previous run
+    // was cleanly stopped by the stop hook. Any other deactivation reason
+    // (manual override, malformed state, missing reason) keeps the gate
+    // closed and forces a new governed run to be opened.
+    if (!state.active && state.deactivationReason === "session_stop") {
       process.exit(0);
     }
     // For other execution tools in critical with active spine, check requirements

@@ -1,0 +1,77 @@
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+
+const SKILL_FILE = "canonical/skills/meta-theory/SKILL.md";
+const DEV_GOVERNANCE_FILE = "canonical/skills/meta-theory/references/dev-governance.md";
+
+describe("54 — Owner Global-First Discovery (meta-theory SKILL.md)", () => {
+  test("SKILL.md exists at canonical path", () => {
+    assert.ok(existsSync(SKILL_FILE), `${SKILL_FILE} must exist`);
+  });
+
+  test("SKILL.md contains the 'Global-First Owner Discovery' section header", () => {
+    const src = readFileSync(SKILL_FILE, "utf8");
+    assert.match(
+      src,
+      /^##\s+Global-First Owner Discovery\s*$/m,
+      "SKILL.md must contain a level-2 section titled 'Global-First Owner Discovery'"
+    );
+  });
+
+  test("SKILL.md lists at least 6 global owner discovery sources", () => {
+    const src = readFileSync(SKILL_FILE, "utf8");
+    const markers = [
+      "canonical/agents/",
+      "config/capability-index/",
+      "~/.claude/agents/",
+      "package.json",
+      ".mcp.json",
+      "meta-scout",
+    ];
+    for (const marker of markers) {
+      assert.ok(
+        src.includes(marker),
+        `Global-First Owner Discovery must reference ${marker}`
+      );
+    }
+  });
+
+  test("SKILL.md states capability-first rather than agent-name-first", () => {
+    const src = readFileSync(SKILL_FILE, "utf8");
+    assert.match(
+      src,
+      /capability[-\s]first|capability.*not.*agent[-\s]name/i,
+      "SKILL.md must state that discovery is capability-first, not agent-name-first"
+    );
+  });
+
+  test("SKILL.md references dev-governance.md 4-Stage Parallel Fan-out Protocol", () => {
+    const src = readFileSync(SKILL_FILE, "utf8");
+    assert.match(
+      src,
+      /dev-governance\.md/,
+      "SKILL.md must reference dev-governance.md"
+    );
+    assert.match(
+      src,
+      /4-Stage Parallel Fan-out Protocol/,
+      "SKILL.md must reference the '4-Stage Parallel Fan-out Protocol' by name"
+    );
+  });
+});
+
+describe("54b — Owner Global-First Discovery (dev-governance.md cross-link)", () => {
+  test("dev-governance.md exists at canonical path", () => {
+    assert.ok(existsSync(DEV_GOVERNANCE_FILE), `${DEV_GOVERNANCE_FILE} must exist`);
+  });
+
+  test("dev-governance.md mentions global discovery sources or cross-links SKILL.md", () => {
+    const src = readFileSync(DEV_GOVERNANCE_FILE, "utf8");
+    const linked =
+      src.includes("Global-First Owner Discovery") ||
+      src.includes("canonical/agents/") ||
+      src.includes("capabilityDiscovery");
+    assert.ok(linked, "dev-governance.md must reference global discovery / capability sources");
+  });
+});
