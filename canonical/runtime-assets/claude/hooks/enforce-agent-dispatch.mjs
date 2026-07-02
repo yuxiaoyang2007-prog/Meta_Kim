@@ -105,6 +105,7 @@ import {
   extractMetaAgentName,
   recordSkippedHook,
   getGovernanceFlow,
+  evaluateFanoutGate,
 } from "./spine-state.mjs";
 import {
   getSkipRule,
@@ -1708,16 +1709,39 @@ if (isExecutionTool(toolName)) {
     );
   }
 
-  // Execution stage: the hard gate is capability-bound owner/loadout evidence,
-  // already checked above by checkCapabilityNodeBindings. Do not also require
-  // the host to have emitted a prior Agent dispatch event; Codex/Cursor/OpenClaw
-  // hook coverage and delegation surfaces differ by runtime and OS.
-  if (stage === "execution" && state.dispatchedAgents.length === 0) {
-    process.stderr.write(
-      "\n[Meta_Kim dispatch:warn] Execution has no recorded Agent dispatch yet. " +
-        "Continuing because minimum owner/loadout evidence is present; Review " +
-        "must confirm the work did not collapse into an unbounded self-execution.\n",
-    );
+  // Execution-stage fan-out gate (META_KIM_FANOUT_GATE, default progressive).
+  // Root-cause fix for "/meta-theory triggers but main thread self-executes
+  // without dispatching any Agent": the legacy code only stderr-warned here and
+  // allowed the self-execution to continue. The trigger condition lives in the
+  // pure evaluateFanoutGate() in spine-state.mjs, shared across runtime hooks
+  // and unit-tested directly. Single-lane work (workerTaskPackets < 2) is
+  // unaffected, so Codex/Cursor/OpenClaw hook-coverage differences no longer
+  // force a blanket warn-only path. =block opts into hard enforcement; =off
+  // restores legacy warn-only. The degraded exit (write spine state
+  // degradedMode=true) stays open because spine-state writes are exempt above
+  // (isSpineStateWrite), so a blocked run is never deadlocked.
+  const fanoutGate = evaluateFanoutGate(state);
+  if (fanoutGate.triggered) {
+    const fanoutModeRaw = (process.env.META_KIM_FANOUT_GATE || "progressive")
+      .trim()
+      .toLowerCase();
+    const fanoutOff =
+      fanoutModeRaw === "off" || fanoutModeRaw === "0" || fanoutModeRaw === "false";
+    const effective = fanoutOff
+      ? "off"
+      : resolveGracedMode(
+          fanoutModeRaw,
+          "META_KIM_FANOUT_GATE_GRACE_DAYS",
+          7,
+          state,
+        );
+    const reason =
+      `${fanoutGate.reason} META_KIM_FANOUT_GATE effective mode: ` +
+      `"${effective}" (raw: "${fanoutModeRaw || "progressive"}").`;
+    if (effective === "block") {
+      exitAfterDeny(reason);
+    }
+    process.stderr.write(`\n⚠️  [Meta_Kim fanout-gate:${effective}] ${reason}\n`);
   }
 
   // Post-execution stages: require correct meta-agent

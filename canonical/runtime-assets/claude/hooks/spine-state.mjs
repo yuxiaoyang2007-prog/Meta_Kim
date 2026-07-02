@@ -623,6 +623,54 @@ export function recordIntentConfirmation(state, confirmationState, correctionPay
  * @param {object} [toolInput] - The raw tool input (Agent dispatch payload).
  * @returns {object} New state with dispatch recorded.
  */
+/**
+ * Evaluate the execution-stage fan-out gate (META_KIM_FANOUT_GATE).
+ *
+ * Pure function: reads spine-state fields only, no env, no I/O. The hook layer
+ * (enforce-agent-dispatch.mjs) calls this and then applies the env-resolved
+ * mode (block / warn / progressive / off) to decide deny vs stderr-warn. Tests
+ * import this directly so fan-out gate coverage does not depend on spawning the
+ * full hook (which would require satisfying every upstream pre-execution gate).
+ *
+ * Triggered when: execution stage ∧ zero recorded dispatches ∧ ≥2 worker lanes
+ * ∧ not explicitly degraded. Single-lane work is exempt (Codex/Cursor/OpenClaw
+ * dispatch-event coverage differences must not block legitimate single-owner
+ * runs). Degraded mode is the explicit, auditable exit: a run that declares
+ * degraded is marked internal-ready and never public-ready.
+ *
+ * @param {object|null} state - Spine state.
+ * @returns {{ triggered: boolean, dispatched: number, workerCount: number,
+ *            stage: string|null, degraded: boolean, reason: string|null }}
+ */
+export function evaluateFanoutGate(state) {
+  const s = state || {};
+  const dispatched = Array.isArray(s.dispatchedAgents)
+    ? s.dispatchedAgents.length
+    : 0;
+  const workerCount = Array.isArray(s.workerTaskPackets)
+    ? s.workerTaskPackets.length
+    : 0;
+  const stage = typeof s.currentStage === "string" ? s.currentStage : null;
+  const degraded = s.degradedMode === true;
+  const triggered =
+    stage === "execution" && dispatched === 0 && workerCount >= 2 && !degraded;
+  return {
+    triggered,
+    dispatched,
+    workerCount,
+    stage,
+    degraded,
+    reason: triggered
+      ? "Execution-stage fan-out run has 0 recorded Agent dispatches " +
+        `(dispatched=${dispatched}, workerLanes=${workerCount}, stage=${stage}). ` +
+        "Dispatch an Agent (spawn_agent / Agent tool) for the worker lanes, " +
+        "or explicitly declare degraded by writing spine state " +
+        "`degradedMode: true` (then this run is marked internal-ready, not " +
+        "public-ready)."
+      : null,
+  };
+}
+
 export function recordDispatch(state, agentName, metaName, toolInput) {
   const META_AGENT_NAME_SET = new Set(META_AGENT_NAMES);
   const newState = { ...state };

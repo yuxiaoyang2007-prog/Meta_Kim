@@ -6,6 +6,30 @@
 
 更新说明先解释本次解决的用户痛点或风险，再说明为了解决它改了什么、为什么重要。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
+## [2.8.64] - 2026-07-02
+
+### 解决的问题
+
+有三个相互关联的根因，导致"fan-out 不发生"问题在多次发版里反复出现，即使项目早就在更早的 patch 里发过 fan-out 关卡：(1) `enforce-agent-dispatch.mjs` 在 Execution 阶段检测到主线程零 Agent dispatch 自干，却只 `process.stderr.write` 一行 warn 然后放行——就是这个软约束导致"主线程还是会自干"的现象；(2) `scripts/sync-runtimes.mjs` 在 `local.overrides.json` 是 `projectProjectionMode: "global_only"` 时跳过 canonical hook 投影到 runtime 镜像（因为该模式强制 `selectedTargets = []`，per-runtime `syncClaudeProjection` 根本没被调），canonical hook 改动就这么静默地脱同步，必须手动 `cp` 才能追平；(3) `setup.mjs` 让全局 hook 投影在初次安装时是 opt-in（`--with-global-hooks`），所以 `npx meta-kim` 首次安装的人**根本收不到后续发版里加的治理能力**，除非他们显式重跑 setup。三者都是机制层面的独立缺陷，不是文档问题；只修一个，用户可见的症状会再次复发。
+
+### 改动
+
+- **Execution 阶段 fan-out 关卡现在是真 block，不再是 warn**——`enforce-agent-dispatch.mjs` 把长期 warn-only 的路径换成调用 `spine-state.mjs` 里的新纯函数 `evaluateFanoutGate(state)`，再按 `META_KIM_FANOUT_GATE`（block | warn | progressive | off，默认 progressive + 7 天 grace）决策。当 run 是真 fan-out（≥2 worker packets、0 记录的 Agent dispatch、未显式 `degradedMode: true`）时，关卡 deny 下一次 mutation 并报告 `META_KIM_FANOUT_GATE effective mode`；唯一合法的出口是 dispatch Agent 或写 `degradedMode: true` 到 spine state。单 lane run（`workerTaskPackets.length < 2`）豁免，避免 Codex / Cursor / OpenClaw dispatch 事件覆盖差异误伤合法单 owner run。
+- **`spine-state.mjs` 新增纯函数 `evaluateFanoutGate(state)`**——返回 `{ triggered, dispatched, workerCount, stage, degraded, reason }`。跨 runtime hook 共享，**不 spawn 完整 PreToolUse hook 就能直接单测**。reason 字段是挂给每次 deny / warn 事件的人话说明。
+- **`tests/governance/fanout-completion-gate.test.mjs` 回归覆盖**——6 个 case：triggered（execution + 0 dispatch + ≥2 worker + 未 degraded）、有 Agent dispatch 时不触发、`degradedMode: true` 时不触发、单 lane（<2 worker packets）不触发、非 Execution 阶段不触发、null/缺字段安全（不抛）。
+- **修 `meta:sync` 在 `global_only` 下静默跳过 hook 投影的根因**——`scripts/sync-runtimes.mjs` 在主函数加一段（`scope !== "global"` 守卫），把 canonical `claude/hooks/*`（按 `PROJECT_CLAUDE_HOOK_FILES` + shared 依赖 `activate-meta-theory-spine.mjs` + `skip-reminder.mjs` 过滤）无条件投到 `.claude/hooks/`、`.codex/hooks/`、`.cursor/hooks/` 三个镜像。同一段也跑 `REMOVED_PROJECT_CLAUDE_HOOK_FILES` 清理，避免老 hook 在重命名/删除后回流。
+- **修 `npx meta-kim` 首次安装静默跳过全局 hook 的根因**——`setup.mjs` 重定义 `setupWithGlobalHooks`：初次安装（`npx meta-kim`、`node setup.mjs` 不带 `--update`）默认装全局 hook；`--update` 仍 opt-in（不覆盖用户改过的 hook）。显式 `--with-global-hooks`（强制开，含 update）和 `--without-global-hooks`（强制关，含初次安装）覆盖两个默认。意思是下游用户升到这个版本能自动拿到 fan-out 关卡，不用额外 flag。
+- **`shared/hooks/spine-state.mjs` 也加了同一份 `evaluateFanoutGate`**——test helper `runEnforceHookWithState`（`tests/meta-theory/11-eight-stage-spine.test.mjs`）在临时 cwd 里**先复制** canonical/spine-state.mjs、**再复制** shared/spine-state.mjs 覆盖，hook `import './spine-state.mjs'` 解析到最后写的 shared 版。不在这里加同一函数，test 会在 Execution 阶段第一次 mutation 时 ReferenceError。canonical 和 shared 各保留一份是 test fixture 复制顺序决定的，不删任一份。
+
+### 验证
+
+- `node --test tests/governance/fanout-completion-gate.test.mjs` → 6 pass / 0 fail。
+- `npm run meta:test:governance` → 76 pass / 0 fail（无回归）。
+- `npm run meta:check` → 7/7 过，含 `meta:open-source-boundary:validate`（canonical-only `package.json` `files` 白名单完整，没有 runtime 镜像或 test fixture 漏进发布集）。
+- **`meta:sync` 反向测试**：手动把 `.claude/hooks/enforce-agent-dispatch.mjs` 里的 `evaluateFanoutGate` 块删掉（3 → 2 匹配），跑 `npm run meta:sync`；输出报告"已更新 2 个文件 / 已更新 10 个文件 / 已更新 10 个文件"，镜像恢复到 3 匹配。canonical 没动（diff 干净），`.codex` 和 `.cursor` 镜像也跟着恢复。
+- Windows + Node 22.16.0 实机：`npm run meta:setup:check` 和 `npm run meta:setup:update` 都过。`Skipped global hooks (opt in with --with-global-hooks)` 通知在 `setup.mjs --update` 下仍出现（保留的 opt-in 行为）；新默认在下次 `npx meta-kim` 初次安装时生效。
+- `npm run meta:release:smoke` → 1108 tests / 1103 pass / 0 fail / 5 skipped（v2.8.63 baseline 一致）。
+
 ## [2.8.63] - 2026-06-30
 
 ### 解决的问题

@@ -6,6 +6,28 @@ This file is the reader-facing release history for Meta_Kim.
 
 The changelog explains the user-facing problem or risk each release solved, what changed to solve it, and why the change matters. It intentionally avoids long internal task ledgers, low-signal backlog ids, and implementation trivia. When exact evidence is needed, use the repository history, tests, generated reports, and PRD artifacts.
 
+## [2.8.64] - 2026-07-02
+
+### Solved Problem
+
+Three related root causes kept the "fan-out does not happen" problem recurring across releases even though the project had shipped a fan-out gate in earlier patches: (1) `enforce-agent-dispatch.mjs` detected the main thread self-executing with zero Agent dispatches in the Execution stage but only emitted a `process.stderr.write` warn and let the self-execution continue — a soft constraint that explained the "main thread self-executes anyway" symptom; (2) `scripts/sync-runtimes.mjs` skipped canonical hook projection to runtime mirrors whenever `local.overrides.json` had `projectProjectionMode: "global_only"` (because that mode forces `selectedTargets = []`, so the per-runtime `syncClaudeProjection` was never called), so any new canonical hook changes silently drifted out of sync until a manual `cp`; (3) `setup.mjs` made global hook projection opt-in (`--with-global-hooks`) on fresh install, so `npx meta-kim` first-time installers never received new governance surface from later releases until they re-ran setup explicitly. Each was a separate mechanism defect, not a documentation issue; fixing only one would have re-recured the user-visible symptom.
+
+### Changes
+
+- **Execution-stage fan-out gate is now a real block, not a warn** — `enforce-agent-dispatch.mjs` replaces the long-standing warn-only path at the Execution stage with a call to a new pure function `evaluateFanoutGate(state)` (in `spine-state.mjs`) followed by `META_KIM_FANOUT_GATE` (block | warn | progressive | off, default `progressive` with 7-day grace). When the run is a real fan-out run (≥2 worker packets, 0 recorded Agent dispatches, not explicitly `degradedMode: true`), the gate denies the next mutation with `META_KIM_FANOUT_GATE effective mode` reported; the only legitimate way out is to dispatch an Agent or write `degradedMode: true` into spine state. Single-lane work (`workerTaskPackets.length < 2`) is exempt so Codex / Cursor / OpenClaw dispatch-event coverage differences do not block legitimate single-owner runs.
+- **New pure function `evaluateFanoutGate(state)` in `spine-state.mjs`** — returns `{ triggered, dispatched, workerCount, stage, degraded, reason }`. Shared across runtime hooks and unit-tested directly without needing to spawn the full PreToolUse hook. The reason text is the human-readable explanation attached to every deny / warn event.
+- **Regression coverage in `tests/governance/fanout-completion-gate.test.mjs`** — 6 cases pin: triggered (execution + 0 dispatch + ≥2 worker + not degraded), not triggered when an Agent dispatch is recorded, not triggered when `degradedMode: true`, not triggered for single-lane work (`<2` worker packets), not triggered outside the Execution stage, and null-safe (no throw on missing / empty state).
+- **Root-cause fix for `meta:sync` silently skipping hook projection under `global_only`** — `scripts/sync-runtimes.mjs` now has a main-scope block (gated by `scope !== "global"`) that projects the canonical `claude/hooks/*` (intersected with `PROJECT_CLAUDE_HOOK_FILES` and the shared-hook dependencies `activate-meta-theory-spine.mjs` + `skip-reminder.mjs`) to `.claude/hooks/`, `.codex/hooks/`, and `.cursor/hooks/` unconditionally. The block also performs the same `REMOVED_PROJECT_CLAUDE_HOOK_FILES` cleanup in all three runtime mirrors, so legacy hooks do not leak back after rename or removal.
+- **Root-cause fix for `npx meta-kim` first-time install silently skipping global hooks** — `setup.mjs` redefines `setupWithGlobalHooks` so fresh install (`npx meta-kim`, `node setup.mjs` without `--update`) defaults to installing global hooks. `--update` remains opt-in (avoid overwriting hand-edited hooks between releases). Explicit `--with-global-hooks` (force on, even during update) and `--without-global-hooks` (force off, even during install) override either default. This means downstream users upgrading to this release get the fan-out gate in their global hook surface without any extra flag.
+
+### Verification
+
+- `node --test tests/governance/fanout-completion-gate.test.mjs` → 6 pass / 0 fail.
+- `npm run meta:test:governance` → 76 pass / 0 fail (no regression in any existing test).
+- `npm run meta:check` → 7/7 pass, including `meta:open-source-boundary:validate` (canonical-only `package.json` `files` whitelist is intact; no per-runtime mirror or test fixture leaked into the publish set).
+- **Reverse-test for `meta:sync`**: corrupted `.claude/hooks/enforce-agent-dispatch.mjs` by removing the `evaluateFanoutGate` block (3 → 2 matches), then ran `npm run meta:sync`; output reported "已更新 2 个文件" / "已更新 10 个文件" / "已更新 10 个文件" and the mirror recovered to 3 matches. Canonical unchanged (diff clean), `.codex` and `.cursor` mirrors also restored.
+- Real-machine run on Windows + Node 22.16.0: `npm run meta:setup:check` and `npm run meta:setup:update` both pass. The `Skipped global hooks (opt in with --with-global-hooks)` notice still appears for `setup.mjs --update` (correct opt-in behaviour preserved); the new default will apply on the next `npx meta-kim` install.
+
 ## [2.8.63] - 2026-06-30
 
 ### Solved Problem

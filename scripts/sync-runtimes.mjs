@@ -2654,6 +2654,70 @@ Examples:
 
   await syncCapabilityIndexMirrors(dirs, selectedTargets, changedFiles);
 
+  // Root-cause fix for "meta:sync reports 0 changes and never projects hook
+  // updates to runtime mirrors": when `local.overrides.json` has
+  // `projectProjectionMode: "global_only"`, `selectedTargets` is forced to [],
+  // so the per-runtime `syncClaudeProjection` (which hosts the hook
+  // projection) is skipped, and `enforce-agent-dispatch.mjs` /
+  // `spine-state.mjs` (and any other canonical hook) silently drift out of
+  // sync until a manual `cp`. Canonical hooks are governance infrastructure
+  // (not user-level agent/skill/command), so they must be projected to all
+  // three runtime mirrors regardless of `selectedTargets` and
+  // `projectProjectionMode`. This block runs unconditionally (still gated by
+  // `scope !== "global"` so global-only users are not double-written).
+  if (scope !== "global") {
+    const canonicalHookFiles = (
+      await fs.readdir(canonicalClaudeHooksDir, { withFileTypes: true })
+    )
+      .filter(
+        (entry) =>
+          entry.isFile() &&
+          entry.name.endsWith(".mjs") &&
+          PROJECT_CLAUDE_HOOK_FILES.has(entry.name),
+      )
+      .map((entry) => entry.name);
+    const sharedHookDeps = [
+      "activate-meta-theory-spine.mjs",
+      "skip-reminder.mjs",
+    ];
+    for (const hookName of sharedHookDeps) {
+      if (await tryReadCanonical(
+        path.join(canonicalRuntimeAssetsDir, "shared", "hooks", hookName),
+      )) canonicalHookFiles.push(hookName);
+    }
+    const runtimeHookTargets = [
+      { hooksDir: dirs.claudeHooksProjectionDir, display: dirs.displayPaths.claudeHooks, runtime: "claude" },
+      { hooksDir: dirs.codexHooksDir, display: dirs.displayPaths.codexHooks, runtime: "codex" },
+      { hooksDir: dirs.cursorHooksDir, display: dirs.displayPaths.cursorHooks, runtime: "cursor" },
+    ];
+    for (const target of runtimeHookTargets) {
+      for (const hookName of canonicalHookFiles) {
+        const hookContent = await tryReadCanonical(
+          path.join(canonicalClaudeHooksDir, hookName),
+        );
+        if (
+          hookContent &&
+          (
+            await writeGeneratedFile(
+              path.join(target.hooksDir, hookName),
+              hookContent,
+            )
+          ).changed
+        ) {
+          changedFiles.push(`${target.display}/${hookName}`);
+        }
+      }
+      for (const hookName of REMOVED_PROJECT_CLAUDE_HOOK_FILES) {
+        if (
+          (await removeGeneratedPath(path.join(target.hooksDir, hookName)))
+            .changed
+        ) {
+          changedFiles.push(`${target.display}/${hookName}`);
+        }
+      }
+    }
+  }
+
   if (selectedTargets.includes("claude")) {
     await syncClaudeProjection(
       dirs,

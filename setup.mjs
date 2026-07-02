@@ -98,9 +98,20 @@ const silentMode = args.includes("--silent") || !process.stdout.isTTY;
 const useSavedProjectDirsMode =
   args.includes("--all-projects") || args.includes("--update-projects");
 const saveProjectDirsMode = args.includes("--save-project-dirs");
+// Global hook projection policy:
+//   - Fresh install (`npx meta-kim`, `node setup.mjs` without --update):
+//     install global hooks by default so first-time users get the full
+//     governance surface (enforce-agent-dispatch, stop-completion-guard,
+//     fan-out gate, etc.) without needing to know an opt-in flag.
+//   - Update (`--update` / `-u`): keep opt-in to avoid silently
+//     overwriting a user-local hook that was hand-edited between releases.
+//   - Explicit overrides win: `--with-global-hooks` (force on, including
+//     during update) or `--without-global-hooks` (force off, including
+//     during install).
 const setupWithGlobalHooks =
   args.includes("--with-global-hooks") ||
-  process.env.META_KIM_WITH_GLOBAL_HOOKS === "1";
+  process.env.META_KIM_WITH_GLOBAL_HOOKS === "1" ||
+  (!args.includes("--without-global-hooks") && !updateMode);
 
 function writeUtf8BomFileSync(path, content) {
   writeFileSync(
