@@ -6,6 +6,39 @@ This file is the reader-facing release history for Meta_Kim.
 
 The changelog explains the user-facing problem or risk each release solved, what changed to solve it, and why the change matters. It intentionally avoids long internal task ledgers, low-signal backlog ids, and implementation trivia. When exact evidence is needed, use the repository history, tests, generated reports, and PRD artifacts.
 
+## Unreleased
+
+### Solved Problem
+
+`agent-teams-playbook` is an external skill dependency, not a Meta_Kim runtime projection. Meta_Kim previously treated generic git skill installs as one repo tree copied to every runtime, so it could not consume upstream skill repos that publish native package directories such as `.claude/skills/<id>` for Claude Code and `.agents/skills/<id>` for Codex.
+
+### Changes
+
+- Added `runtimeSubdirs` to the skills manifest contract so dependencies can declare runtime-specific package subdirectories without changing their identity as external skill repos.
+- Updated the global skill installer so single-runtime install/update and compatibility-root repair use the subdir selected for the active runtime.
+- Updated multi-runtime dependency install to fall back to per-runtime installation when any selected skill declares runtime-specific package directories, avoiding a one-clone-fits-all deployment of the wrong package tree.
+- Configured `agent-teams-playbook` to install Claude Code from `.claude/skills/agent-teams-playbook` and Codex from `.agents/skills/agent-teams-playbook`, while leaving OpenClaw and Cursor on the previous root-repo fallback until their package directories are declared.
+
+## [2.8.65] - 2026-07-03
+
+### Solved Problem
+
+The `enforce-agent-dispatch` fan-out gate tried to force the main thread to dispatch a Claude Code `Agent` before mutating files, but the gate ran inside a Node hook while the real dispatch must happen on the host side. The runner also declared that live subagent claims required an external host spawn, yet never wrote the worker lanes into spine state, so the gate never fired and the main thread kept self-executing. Each prior patch added another soft constraint; the underlying design fought the host's native fan-out ability.
+
+### Changes
+
+- **Removed the fan-out gate from `enforce-agent-dispatch.mjs`** — host-native `Agent` / `spawn_agent` is now the orchestrator; the hook no longer denies main-thread mutation for lack of Agent dispatch.
+- **Preserved the degraded-declaration guard as an independent check** — a run that claims `degradedMode: true` still needs `fetchRecord.capabilitySearchPerformed` plus at least 3 `capabilityMatches`, otherwise the hook denies.
+- **Softened `runtimeInvocationBoundary` in the runner** — the Node runner records evidence and suggests lanes; it no longer claims to enforce host dispatch.
+- **Claude / Codex command adapters switched from `DISPATCH IS MANDATORY` to `HOST-NATIVE FAN-OUT PREFERRED`**, and the Codex adapter now recommends a named subagent over a fork when the worker lane needs its own agent type.
+- **`validateDegradedDeclaration` is now exported from `shared/hooks/spine-state.mjs`** (it was only in the Claude copy), fixing the 44-test regression where the hook import failed under `runEnforceHook`.
+- **`tests/governance/degraded-declaration-guard.test.mjs`** added (11 cases) and `tests/meta-theory/01-structural.test.mjs` updated to match the new command wording.
+
+### Verification
+
+- `npm run meta:release:smoke` → 1108 tests, 1103 pass, 0 fail, 5 skipped.
+- `npm run meta:test:governance` → 87/87 pass.
+
 ## [2.8.64] - 2026-07-02
 
 ### Solved Problem

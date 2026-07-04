@@ -6,6 +6,26 @@
 
 更新说明先解释本次解决的用户痛点或风险，再说明为了解决它改了什么、为什么重要。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
+## [2.8.65] - 2026-07-03
+
+### 解决的问题
+
+`enforce-agent-dispatch` 的 fan-out 关卡想强制主线程在改文件前先派 Claude Code `Agent`，但关卡跑在 Node hook 里，而真正的派发必须由 host 完成。runner 还一边声明"live subagent 声明必须由 host 外部 spawn"，一边又从不把 worker lane 写进 spine state，结果关卡从不触发，主线程继续自干。每次之前的补丁都是再加一层软约束；根因是这套设计和 host 原生的 fan-out 能力打架。
+
+### 改动
+
+- **从 `enforce-agent-dispatch.mjs` 移除 fan-out 关卡**——host 原生 `Agent` / `spawn_agent` 现在是编排者；hook 不再因为"没派 Agent"而 deny 主线程 mutation。
+- **降级声明护栏保留为独立检查**——声明 `degradedMode: true` 的 run 仍需 `fetchRecord.capabilitySearchPerformed` 且至少 3 个 `capabilityMatches`，否则 hook deny。
+- **软化 runner 的 `runtimeInvocationBoundary`**——Node runner 只记录证据、建议 lane，不再声称强制 host 派发。
+- **Claude / Codex 命令 adapter 从 `DISPATCH IS MANDATORY` 改为 `HOST-NATIVE FAN-OUT PREFERRED`**；Codex adapter 新增建议：worker lane 需要自己的 agent 类型时优先用 named subagent，不用 fork。
+- **`validateDegradedDeclaration` 现在从 `shared/hooks/spine-state.mjs` 导出**（之前只在 Claude 副本里），修复了 `runEnforceHook` 下 hook import 失败导致的 44 个测试回归。
+- **新增 `tests/governance/degraded-declaration-guard.test.mjs`**（11 个 case），并更新 `tests/meta-theory/01-structural.test.mjs` 匹配新命令措辞。
+
+### 验证
+
+- `npm run meta:release:smoke` → 1108 tests，1103 pass，0 fail，5 skipped。
+- `npm run meta:test:governance` → 87/87 pass。
+
 ## [2.8.64] - 2026-07-02
 
 ### 解决的问题

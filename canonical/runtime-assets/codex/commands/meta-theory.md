@@ -33,9 +33,10 @@ Then relay the compact stdout notice and the returned report path in chat. Use `
 
 Codex execution rule:
 
-**DISPATCH IS MANDATORY.** The main thread is the dispatcher, never the executor. Before producing >3 sentences of execution-layer analysis yourself, STOP and dispatch via `spawn_agent` instead.
+**HOST-NATIVE FAN-OUT PREFERRED.** The main thread is the dispatcher, never the executor. Use Codex's native `spawn_agent` directly to fan out independent worker lanes — the governed runner only records evidence, discovers capabilities, and suggests lanes; it does not enforce dispatch.
 
 - This `/meta-theory` invocation is explicit user authorization to use Codex sub-agent delegation and parallel agent work.
+- Prefer a **named subagent** over a **fork** when the worker lane needs its own agent type, system prompt, or tool set. A fork inherits the parent context and cannot change agent type mid-run; a named subagent starts from its own definition and can. If you only need to continue the same context, fork is fine.
 - Use `agent-teams-playbook` after Thinking and before Execution when the plan has 2+ executable worker lanes whose DAG dependencies, collision boundaries, workspace isolation, and external-write policy prove safe fan-out; record `not_required` for fewer lanes and partial/degraded for unsafe fan-out. Resolve it from the first available skill root (`~/.codex/skills/agent-teams-playbook/SKILL.md`, `.agents/skills/agent-teams-playbook/SKILL.md`, or a configured dependency root). Treat it as a selected fan-out adapter unless a live Skill/Agent Team/spawn_agent tool call is attached.
 - Then use the active Codex host's real subagent tool with capability-matched Meta_Kim agents. If no plain `spawn_agent` tool is visible, call tool discovery for `spawn_agent subagent multi-agent` and use the exposed callable tool name, for example `multi_agent_v1.spawn_agent`. Record the exact tool name and returned agent id in host invocation evidence. The main thread clarifies, routes, verifies, and synthesizes; it must not do multi-agent execution work by itself.
 - If no callable subagent tool is available after discovery, record the checked tool names and blocked reason; do not silently continue as main-thread execution.

@@ -624,6 +624,70 @@ export function recordIntentConfirmation(state, confirmationState, correctionPay
  * @returns {object} New state with dispatch recorded.
  */
 /**
+ * Minimum agent / provider coverage required for a valid Degraded Mode
+ * declaration. SKILL.md:480-495 requires capabilityGapPacket evidence before
+ * degraded is allowed; this constant pins the minimum to a hard number that
+ * the hook can enforce (same-type failure fix for the agent-misjudgment
+ * escape hatch).
+ */
+const DEGRADED_MIN_AGENT_CHECKS = 3;
+
+/**
+ * Validate a Degraded Mode declaration. Returns `{ valid, reason, missing }`
+ * so the caller can deny / warn uniformly. The check is intentionally cheap
+ * and pure — it reads `state.fetchRecord` only.
+ *
+ * Failure modes (all return valid=false):
+ *   - degradedMode !== true          → valid (declaration absent, nothing to check)
+ *   - fetchRecord missing            → invalid (no evidence was recorded)
+ *   - capabilitySearchPerformed !== true → invalid (no search was done)
+ *   - capabilityMatches / matchedCapabilities length < 3 → invalid
+ *
+ * @param {object|null} state - Spine state.
+ * @returns {{ valid: boolean, reason: string|null, missing: string[] }}
+ */
+export function validateDegradedDeclaration(state) {
+  const s = state || {};
+  if (s.degradedMode !== true) {
+    return { valid: true, reason: null, missing: [] };
+  }
+
+  const missing = [];
+  const fetchRecord = s.fetchRecord;
+  if (!fetchRecord || typeof fetchRecord !== "object") {
+    missing.push("fetchRecord");
+  } else {
+    if (fetchRecord.capabilitySearchPerformed !== true) {
+      missing.push("fetchRecord.capabilitySearchPerformed=true");
+    }
+    const matches = Array.isArray(fetchRecord.capabilityMatches)
+      ? fetchRecord.capabilityMatches
+      : Array.isArray(fetchRecord.matchedCapabilities)
+        ? fetchRecord.matchedCapabilities
+        : [];
+    if (matches.length < DEGRADED_MIN_AGENT_CHECKS) {
+      missing.push(
+        `fetchRecord.capabilityMatches>=${DEGRADED_MIN_AGENT_CHECKS}`,
+      );
+    }
+  }
+
+  if (missing.length === 0) {
+    return { valid: true, reason: null, missing: [] };
+  }
+  return {
+    valid: false,
+    reason:
+      `Degraded declaration rejected: missing evidence [${missing.join(", ")}]. ` +
+      `Per SKILL.md Degraded Mode, declaring degradedMode=true requires a prior ` +
+      `capability search with capabilitySearchPerformed=true and at least ` +
+      `${DEGRADED_MIN_AGENT_CHECKS} capabilityMatches recorded. ` +
+      `Either perform the capability search first or set degradedMode=false.`,
+    missing,
+  };
+}
+
+/**
  * Evaluate the execution-stage fan-out gate (META_KIM_FANOUT_GATE).
  *
  * Pure function: reads spine-state fields only, no env, no I/O. The hook layer
@@ -651,23 +715,42 @@ export function evaluateFanoutGate(state) {
     ? s.workerTaskPackets.length
     : 0;
   const stage = typeof s.currentStage === "string" ? s.currentStage : null;
-  const degraded = s.degradedMode === true;
+  const declaredDegraded = s.degradedMode === true;
+  // Same-type failure fix: a degraded declaration is only an auditable exit
+  // when the supporting capability-search evidence is present. Without it,
+  // treat the run as not-degraded so the fan-out gate still fires.
+  const degradationCheck = declaredDegraded
+    ? validateDegradedDeclaration(state)
+    : { valid: true, reason: null };
+  const degraded = declaredDegraded && degradationCheck.valid;
   const triggered =
     stage === "execution" && dispatched === 0 && workerCount >= 2 && !degraded;
+  let reason = null;
+  if (triggered) {
+    if (declaredDegraded && !degraded) {
+      reason =
+        `Execution-stage fan-out run has 0 recorded Agent dispatches ` +
+        `(dispatched=${dispatched}, workerLanes=${workerCount}, stage=${stage}) ` +
+        `and declared degraded but without valid evidence: ` +
+        `${degradationCheck.reason} ` +
+        `Provide the missing evidence, dispatch an Agent, or clear degradedMode.`;
+    } else {
+      reason =
+        "Execution-stage fan-out run has 0 recorded Agent dispatches " +
+        `(dispatched=${dispatched}, workerLanes=${workerCount}, stage=${stage}). ` +
+        "Dispatch an Agent (spawn_agent / Agent tool) for the worker lanes, " +
+        "or explicitly declare degraded by writing spine state " +
+        "`degradedMode: true` (then this run is marked internal-ready, not " +
+        "public-ready).";
+    }
+  }
   return {
     triggered,
     dispatched,
     workerCount,
     stage,
     degraded,
-    reason: triggered
-      ? "Execution-stage fan-out run has 0 recorded Agent dispatches " +
-        `(dispatched=${dispatched}, workerLanes=${workerCount}, stage=${stage}). ` +
-        "Dispatch an Agent (spawn_agent / Agent tool) for the worker lanes, " +
-        "or explicitly declare degraded by writing spine state " +
-        "`degradedMode: true` (then this run is marked internal-ready, not " +
-        "public-ready)."
-      : null,
+    reason,
   };
 }
 

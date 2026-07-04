@@ -254,7 +254,7 @@ describe("SKILL.md structural integrity", async () => {
       assert.match(command, /__META_KIM_PACKAGE_ROOT__\/scripts\/run-meta-theory-governed-execution\.mjs/);
       assert.match(command, /--runtime claude_code/);
       assert.match(command, /meta:theory:run:notice -- --runtime claude_code "\$ARGUMENTS"/);
-      assert.match(command, /DISPATCH IS MANDATORY/i);
+      assert.match(command, /HOST-NATIVE FAN-OUT PREFERRED/i);
       assert.match(command, /hostInvocationRequestPacket/);
       assert.match(command, /agent-teams-playbook/);
       assert.ok(command.includes("real `Agent` / Task surface"));

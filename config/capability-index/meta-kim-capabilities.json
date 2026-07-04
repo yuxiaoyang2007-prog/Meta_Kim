@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-29T08:26:15.013Z",
+  "generatedAt": "2026-07-03T13:28:35.654Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -45,13 +45,13 @@
       "codex": {
         "projectionPresent": true,
         "hookCommandEntries": 12,
-        "hookFiles": 7,
+        "hookFiles": 15,
         "commandFiles": 3
       },
       "cursor": {
         "projectionPresent": true,
         "hookCommandEntries": 11,
-        "hookFiles": 7,
+        "hookFiles": 15,
         "commandFiles": 0
       },
       "openclaw": {
@@ -244,8 +244,8 @@
         "type": "skills",
         "namespace": "canonical",
         "path": "canonical/skills/meta-theory/SKILL.md",
-        "size": 70117,
-        "modified": "2026-06-28T22:48:05.310Z"
+        "size": 70574,
+        "modified": "2026-06-29T08:26:41.730Z"
       },
       "repo:canonical:same-set-reusable-flow-for-project-file-inventor": {
         "id": "same-set-reusable-flow-for-project-file-inventor",
@@ -288,8 +288,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/global-owner-discovery.md",
         "relativePath": "global-owner-discovery.md",
-        "size": 4337,
-        "modified": "2026-06-28T22:35:36.269Z"
+        "size": 8265,
+        "modified": "2026-06-29T17:20:01.916Z"
       },
       "repo:canonical-reference:intent-amplification": {
         "id": "intent-amplification",
@@ -425,8 +425,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/spine-state.mjs",
         "relativePath": "spine-state.mjs",
-        "size": 41651,
-        "modified": "2026-06-23T06:09:03.708Z"
+        "size": 47052,
+        "modified": "2026-07-03T10:26:24.616Z"
       },
       "repo:canonical-runtime-assets:utils.mjs": {
         "id": "utils.mjs",
@@ -470,8 +470,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
         "relativePath": "enforce-agent-dispatch.mjs",
-        "size": 61552,
-        "modified": "2026-06-28T22:48:05.308Z"
+        "size": 62591,
+        "modified": "2026-07-03T11:44:44.050Z"
       },
       "repo:canonical-runtime-assets:graphify-context.mjs": {
         "id": "graphify-context.mjs",
@@ -723,8 +723,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/codex/commands/meta-theory.md",
         "relativePath": "meta-theory.md",
-        "size": 6381,
-        "modified": "2026-06-27T16:27:55.780Z"
+        "size": 6787,
+        "modified": "2026-07-03T11:49:45.268Z"
       },
       "repo:canonical-runtime-assets:save-progress": {
         "id": "save-progress",

@@ -106,6 +106,7 @@ import {
   recordSkippedHook,
   getGovernanceFlow,
   evaluateFanoutGate,
+  validateDegradedDeclaration,
 } from "./spine-state.mjs";
 import {
   getSkipRule,
@@ -1709,39 +1710,36 @@ if (isExecutionTool(toolName)) {
     );
   }
 
-  // Execution-stage fan-out gate (META_KIM_FANOUT_GATE, default progressive).
-  // Root-cause fix for "/meta-theory triggers but main thread self-executes
-  // without dispatching any Agent": the legacy code only stderr-warned here and
-  // allowed the self-execution to continue. The trigger condition lives in the
-  // pure evaluateFanoutGate() in spine-state.mjs, shared across runtime hooks
-  // and unit-tested directly. Single-lane work (workerTaskPackets < 2) is
-  // unaffected, so Codex/Cursor/OpenClaw hook-coverage differences no longer
-  // force a blanket warn-only path. =block opts into hard enforcement; =off
-  // restores legacy warn-only. The degraded exit (write spine state
-  // degradedMode=true) stays open because spine-state writes are exempt above
-  // (isSpineStateWrite), so a blocked run is never deadlocked.
-  const fanoutGate = evaluateFanoutGate(state);
-  if (fanoutGate.triggered) {
-    const fanoutModeRaw = (process.env.META_KIM_FANOUT_GATE || "progressive")
-      .trim()
-      .toLowerCase();
-    const fanoutOff =
-      fanoutModeRaw === "off" || fanoutModeRaw === "0" || fanoutModeRaw === "false";
-    const effective = fanoutOff
-      ? "off"
-      : resolveGracedMode(
-          fanoutModeRaw,
-          "META_KIM_FANOUT_GATE_GRACE_DAYS",
-          7,
-          state,
+  // Degraded declaration guard (Phase 3, native-handoff refactor).
+  // Fan-out gate removed: host-native Agent/spawn_agent is the orchestrator
+  // (see docs/goals/meta-kim-native-handoff.md). The boundary check against
+  // unsupported degraded claims stays independent so a run cannot silently
+  // claim degraded without capability-search evidence.
+  if (state?.degradedMode === true) {
+    const degradationCheck = validateDegradedDeclaration(state);
+    if (!degradationCheck.valid) {
+      const guardModeRaw = (process.env.META_KIM_FANOUT_GATE || "progressive")
+        .trim()
+        .toLowerCase();
+      const guardOff =
+        guardModeRaw === "off" ||
+        guardModeRaw === "0" ||
+        guardModeRaw === "false";
+      const guardEffective = guardOff
+        ? "off"
+        : resolveGracedMode(
+            guardModeRaw,
+            "META_KIM_FANOUT_GATE_GRACE_DAYS",
+            7,
+            state,
+          );
+      if (guardEffective !== "off") {
+        exitAfterDeny(
+          `[Meta_Kim degraded-guard] ${degradationCheck.reason} ` +
+            `mode: "${guardEffective}".`,
         );
-    const reason =
-      `${fanoutGate.reason} META_KIM_FANOUT_GATE effective mode: ` +
-      `"${effective}" (raw: "${fanoutModeRaw || "progressive"}").`;
-    if (effective === "block") {
-      exitAfterDeny(reason);
+      }
     }
-    process.stderr.write(`\n⚠️  [Meta_Kim fanout-gate:${effective}] ${reason}\n`);
   }
 
   // Post-execution stages: require correct meta-agent

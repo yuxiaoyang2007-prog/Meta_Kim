@@ -47,10 +47,13 @@ Minimum route:
 
 Claude Code execution rule:
 
-**DISPATCH IS MANDATORY.** The main thread is the dispatcher, never the
-execution worker. The governed runner produces route evidence,
+**HOST-NATIVE FAN-OUT PREFERRED.** The main thread is the dispatcher, never
+the execution worker. The governed runner produces route evidence,
 `workerTaskPackets`, and `hostInvocationRequestPacket`; it does not by itself
-prove live Claude Code `Agent` / Task execution.
+prove live Claude Code `Agent` / Task execution. Use Claude Code's native
+Agent/Task tool directly to fan out independent worker lanes — the runner
+only records evidence, discovers capabilities, and suggests lanes; it does
+not enforce dispatch.
 
 - This `/meta-theory` invocation is explicit user authorization to use Claude
   Code Agent/Task delegation and parallel worker lanes when Thinking proves

@@ -34,12 +34,20 @@ test("evaluateFanoutGate: not triggered once an Agent dispatch is recorded", () 
   assert.equal(r.reason, null);
 });
 
-test("evaluateFanoutGate: not triggered when degraded is declared (auditable exit stays open)", () => {
+test("evaluateFanoutGate: not triggered when degraded is declared with valid evidence (auditable exit stays open)", () => {
   const r = evaluateFanoutGate({
     currentStage: "execution",
     dispatchedAgents: [],
     workerTaskPackets: [{ id: "w1" }, { id: "w2" }],
     degradedMode: true,
+    fetchRecord: {
+      capabilitySearchPerformed: true,
+      capabilityMatches: [
+        { agent: "a" },
+        { agent: "b" },
+        { agent: "c" },
+      ],
+    },
   });
   assert.equal(r.triggered, false);
   assert.equal(r.degraded, true);

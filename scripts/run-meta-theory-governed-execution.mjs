@@ -3959,11 +3959,11 @@ function buildAgentTeamsPlaybookPacket({
     runtimeInvocationBoundary: {
       runnerCanCallHostSpawnAgent: false,
       hostSpawnAgentEvidenceAttached: externalAgentSpawned,
-      claimLiveSubagentOnlyWithExternalAgentSpawned: true,
+      claimLiveSubagentOnlyWithExternalAgentSpawned: false,
       hostRule:
-        "Live subagent claims require a successful active-host Agent/Task, spawn_agent/custom-agent, or Agent Team tool call outside this Node runner.",
+        "Host-native fan-out is preferred and is the orchestrator. Use Claude Code Agent/Task or Agent Teams directly; this Node runner only records evidence, discovers capabilities, and suggests worker lanes — it does not enforce dispatch.",
       codexRule:
-        "Codex live subagent claims require a successful host spawn_agent/custom-agent tool call outside this Node runner.",
+        "For Codex prefer named subagent over fork so agent-type can change; this Node runner only records evidence and does not enforce spawn.",
     },
     acceptance: {
       selectedWhenParallelLanes: !triggered || selected,

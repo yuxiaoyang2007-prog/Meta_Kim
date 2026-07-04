@@ -200,6 +200,49 @@ function isWithin(parent, target) {
  * @returns {{ triggered: boolean, dispatched: number, workerCount: number,
  *            stage: string|null, degraded: boolean, reason: string|null }}
  */
+const DEGRADED_MIN_AGENT_CHECKS = 3;
+
+export function validateDegradedDeclaration(state) {
+  const s = state || {};
+  if (s.degradedMode !== true) {
+    return { valid: true, reason: null, missing: [] };
+  }
+
+  const missing = [];
+  const fetchRecord = s.fetchRecord;
+  if (!fetchRecord || typeof fetchRecord !== "object") {
+    missing.push("fetchRecord");
+  } else {
+    if (fetchRecord.capabilitySearchPerformed !== true) {
+      missing.push("fetchRecord.capabilitySearchPerformed=true");
+    }
+    const matches = Array.isArray(fetchRecord.capabilityMatches)
+      ? fetchRecord.capabilityMatches
+      : Array.isArray(fetchRecord.matchedCapabilities)
+        ? fetchRecord.matchedCapabilities
+        : [];
+    if (matches.length < DEGRADED_MIN_AGENT_CHECKS) {
+      missing.push(
+        `fetchRecord.capabilityMatches>=${DEGRADED_MIN_AGENT_CHECKS}`,
+      );
+    }
+  }
+
+  if (missing.length === 0) {
+    return { valid: true, reason: null, missing: [] };
+  }
+  return {
+    valid: false,
+    reason:
+      `Degraded declaration rejected: missing evidence [${missing.join(", ")}]. ` +
+      `Per SKILL.md Degraded Mode, declaring degradedMode=true requires a prior ` +
+      `capability search with capabilitySearchPerformed=true and at least ` +
+      `${DEGRADED_MIN_AGENT_CHECKS} capabilityMatches recorded. ` +
+      `Either perform the capability search first or set degradedMode=false.`,
+    missing,
+  };
+}
+
 export function evaluateFanoutGate(state) {
   const s = state || {};
   const dispatched = Array.isArray(s.dispatchedAgents)
