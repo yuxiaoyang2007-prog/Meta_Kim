@@ -1,0 +1,77 @@
+{
+  "$schema": "../contracts/agent-eligibility-contract.json",
+  "version": 1,
+  "updatedAt": "2026-07-05",
+  "purpose": "Three-tier agent eligibility registry consumed by enforce-agent-dispatch.mjs and capability-first routing. Mirrors oh-my-openagent's AGENT_ELIGIBILITY_REGISTRY so capability search returns a single verdict per agent rather than free-form ownerCandidates.",
+  "tiers": {
+    "eligible": {
+      "description": "Agent can be invoked directly via Agent/spawn_agent in any governed stage once capability gate is satisfied.",
+      "agents": [
+        {
+          "id": "meta-warden",
+          "role": "governance-coordinator",
+          "owns": ["final-synthesis", "warden-gate", "cross-runtime-approval"]
+        },
+        {
+          "id": "meta-conductor",
+          "role": "governance-orchestrator",
+          "owns": ["workflow-blueprint", "lane-dispatch", "rhythm-control"]
+        },
+        {
+          "id": "meta-artisan",
+          "role": "capability-loadout",
+          "owns": ["skill-fit", "mcp-fit", "tool-fit"]
+        },
+        {
+          "id": "meta-genesis",
+          "role": "identity-architect",
+          "owns": ["SOUL.md", "prompt-architecture", "durable-agent-definition"]
+        },
+        {
+          "id": "meta-prism",
+          "role": "review-quality",
+          "owns": ["quality-review", "drift-detection", "anti-slop"]
+        },
+        {
+          "id": "meta-librarian",
+          "role": "memory-continuity",
+          "owns": ["memory-strategy", "knowledge-persistence", "context-policy"]
+        },
+        {
+          "id": "meta-sentinel",
+          "role": "safety-guard",
+          "owns": ["permission-boundary", "rollback", "hook-policy"]
+        },
+        {
+          "id": "meta-scout",
+          "role": "external-discovery",
+          "owns": ["external-tool-discovery", "capability-gap-probe"]
+        },
+        {
+          "id": "meta-chrysalis",
+          "role": "evolution-writeback",
+          "owns": ["writeback-coordination", "scar-tracking"]
+        }
+      ]
+    },
+    "conditional": {
+      "description": "Agent can be invoked only when an explicit patch or runtime flag elevates it. Rejection carries a reason string so capability search can surface the fix path.",
+      "agents": [],
+      "commonReasons": [
+        "missing teammate:allow permission in tool-config-handler",
+        "requires explicit user approval per turn",
+        "runtime-gated — only available in claude|codex|cursor mode X"
+      ]
+    },
+    "hard_reject": {
+      "description": "Agent must never be invoked via Agent/spawn_agent dispatch in a governed run. Use alternative route (manual command, hook, or external write) instead.",
+      "agents": [],
+      "rejectionPolicy": "capability-first gate denies dispatch with hard_reject verdict + reason string. Caller must fall back to non-agent route."
+    }
+  },
+  "consumers": [
+    "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
+    "canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs",
+    "scripts/sync-runtimes.mjs"
+  ]
+}

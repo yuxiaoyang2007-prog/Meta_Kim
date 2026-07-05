@@ -33,7 +33,7 @@ import {
   incrementCriticalFetchLoop,
   recordIntentConfirmation,
   STAGE_META_AGENT_MAP,
-} from "../../canonical/runtime-assets/claude/hooks/spine-state.mjs";
+} from "../../canonical/runtime-assets/shared/hooks/spine-state.mjs";
 import {
   checkChoiceSurfaceGate as checkSharedChoiceSurfaceGate,
   createInitialState as createSharedInitialState,

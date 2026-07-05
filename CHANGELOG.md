@@ -10,14 +10,106 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ### Solved Problem
 
-`agent-teams-playbook` is an external skill dependency, not a Meta_Kim runtime projection. Meta_Kim previously treated generic git skill installs as one repo tree copied to every runtime, so it could not consume upstream skill repos that publish native package directories such as `.claude/skills/<id>` for Claude Code and `.agents/skills/<id>` for Codex.
+_Reserved for the next release._
+
+## [2.8.70] - 2026-07-05
+
+### Solved Problem
+
+Users wanted Claude Code and Codex to both support a "fan-out / team" workflow — main agent spawns multiple sub-agents in parallel — but Meta_Kim's trigger and dispatch gates made the flow impossible to actually run. `activate-meta-theory-spine.mjs` only matched on `meta-theory` / `critical + fetch + thinking + review` / `元理论`, so a request like "开 3 个 agent 扫全量发布差距" never entered the multi-agent path. Once entered, `enforce-agent-dispatch.mjs` denied any `Agent` / `spawn_agent` call in execution / review / meta_review / verification / evolution unless `fetchRecord.capabilitySearchPerformed === true`, and that flag was never auto-set, so the main thread got stuck. `spine-state.mjs` also wrote the JSON state file directly, racing when fan-out forked multiple agents that each transitioned the same run. None of this had a documented hook for `team` / `fan-out` / `军团` / `并行` keywords, no agent eligibility tier, no atomic state transition, and no auto-progress from `critical` to `fetch` once a multi-agent run was actually requested.
 
 ### Changes
 
-- Added `runtimeSubdirs` to the skills manifest contract so dependencies can declare runtime-specific package subdirectories without changing their identity as external skill repos.
-- Updated the global skill installer so single-runtime install/update and compatibility-root repair use the subdir selected for the active runtime.
-- Updated multi-runtime dependency install to fall back to per-runtime installation when any selected skill declares runtime-specific package directories, avoiding a one-clone-fits-all deployment of the wrong package tree.
-- Configured `agent-teams-playbook` to install Claude Code from `.claude/skills/agent-teams-playbook` and Codex from `.agents/skills/agent-teams-playbook`, while leaving OpenClaw and Cursor on the previous root-repo fallback until their package directories are declared.
+- **Multi-agent trigger keywords + auto capability search + stage pre-progression.** `canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs` (and its `claude` mirror) now matches `team` / `fan-out` / `multi-agent` / `agent teams` / `军团` / `分队` / `并行` / `并发` / `多 agent` / `开 N 个`. On hit it auto-runs a capability search that reads `config/capability-index/agent-eligibility.json` plus `canonical/agents/`, populates `fetchRecord.capabilitySearchPerformed = true` + `capabilityMatches`, pre-progresses `currentStage` from `critical` to `fetch`, and records `linkedCommands` / `linkedSkills` / `dispatchMode = "fan_out_ready"` so the main thread can fork immediately.
+- **Capability gate exemption for fan-out runs.** `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` (projected to `.codex/hooks/` and `.cursor/hooks/`) treats `stageRuntimeControl.dispatchMode ∈ {fan_out_ready, fan_out_in_progress}` as a discovery-equivalent stage for the capability gate, so an Agent / `spawn_agent` dispatch during a multi-agent run no longer denies on missing `capabilitySearchPerformed`.
+- **Three-tier agent eligibility registry.** `config/capability-index/agent-eligibility.json` enumerates `eligible` (the nine meta-* agents with role + owns[]), `conditional`, and `hard_reject` tiers with rejection-reason strings, mirroring `oh-my-openagent`'s `AGENT_ELIGIBILITY_REGISTRY` so capability search returns a single verdict per agent rather than free-form ownerCandidates.
+- **Atomic spine-state writes with file lock.** `canonical/runtime-assets/shared/hooks/spine-state-utils.mjs` provides `atomicWriteJson` (temp-file + rename) and `withFileLock` (`open` + `wx` + jittered retry). `spine-state.mjs` `writeSpineState` now wraps both, so concurrent fan-out agents cannot corrupt the run JSON.
+- **Command + skill auto-link on multi-agent trigger.** Triggered runs extract `/slash-command` names and `skill:xxx` references from the prompt into `stageRuntimeControl.linkedCommands` / `linkedSkills`, so the dispatch board can show what each lane should load.
+
+### Verification
+
+- `node --check` on all touched canonical sources → SYNTAX OK.
+- `npm run meta:validate` → 7/7 pass.
+- `node --test tests/setup/graphify-wiring-contract.test.mjs tests/setup/sync-runtimes-manifest.test.mjs` → 71/71 pass.
+- `npm run meta:check:runtimes` → runtime mirrors up to date across Claude Code + Codex + Cursor.
+- `npm run meta:sync` → 2 files updated in `.claude/hooks/`, then mirrored to `.codex/` + `.cursor/`.
+
+## [2.8.69] - 2026-07-05
+
+### Solved Problem
+
+Open-source users who installed Meta_Kim and then ran the spine hook in a different project or on a different machine hit a silent dead path. `setup.mjs` and `sync-runtimes.mjs` render the canonical `__REPO_ROOT__` placeholder into an absolute path at install time, so the `--package-root <absolute-path>` argument baked into global and project hook registrations pointed at a directory that did not exist on the user's machine. The spine activator swallowed the mismatch silently (EXIT=0), so `startPostCopyAutoInit` never found `scripts/project-post-copy-init.mjs` and the global post-copy initializer was unreachable for anyone who was not the original author.
+
+### Changes
+
+- **Spine activator resolves the package root at runtime instead of trusting the baked-in path.** `canonical/runtime-assets/claude/hooks/activate-meta-theory-spine.mjs` and `canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs` add `resolvePackageRoot(candidate)`. If the `--package-root` argument or `META_KIM_PACKAGE_ROOT` env var points at a directory that actually exists, it is used as-is; otherwise the script walks up from its own location (`import.meta.url`) until it finds a directory containing `scripts/project-post-copy-init.mjs`, and falls back to `null` only when no Meta_Kim root is reachable. The `.claude/hooks`, `.codex/hooks`, and `.cursor/hooks` mirrors and the global `~/.claude/hooks/meta-kim` and `~/.codex/hooks/meta-kim` copies all carry the same resolver.
+
+### Verification
+
+- `node --check` on both canonical sources → SYNTAX OK.
+- `npm run meta:validate` → 7/7 pass.
+- `node --test tests/setup/graphify-wiring-contract.test.mjs tests/setup/sync-runtimes-manifest.test.mjs` → 71/71 pass.
+- `npm run meta:check:runtimes` → runtime mirrors up to date.
+- `npm run meta:sync:global:release` → Claude Code and Codex global hooks/skills/commands synced; `resolvePackageRoot` present in both `~/.claude/hooks/meta-kim/activate-meta-theory-spine.mjs` and `~/.codex/hooks/meta-kim/activate-meta-theory-spine.mjs`.
+
+## [2.8.68] - 2026-07-04
+
+### Solved Problem
+
+Codex users could see multiple Meta_Kim entries for the same governed route after installing or upgrading across several historical releases. Old global skill aliases such as `meta_kim`, legacy report/verify commands, agent-calling-gap notes, and `critical/fetch/thinking/review` route aliases could remain in `~/.agents`, `~/.codex`, or `~/.claude`, so `/meta` surfaced several confusing choices instead of one canonical `meta-theory` entry. During release verification, `npm run meta:graphify:rebuild` could also fail after source changes because Graphify refused to overwrite a smaller regenerated graph, leaving `meta:graphify:check` stale even when the rebuild was intentional.
+
+### Changes
+
+- **Global sync now removes stale Meta_Kim skill aliases safely.** `scripts/sync-global-meta-theory.mjs` checks known legacy alias directories by content signature, backs them up under `.meta-kim/backups/stale-skill-aliases`, and removes only Meta_Kim-managed stale aliases. User-created skills with similar names are preserved.
+- **Codex shared skill cleanup is covered.** The sync path now checks the legacy shared `~/.agents/skills` root when Codex is selected, including the old duplicate `meta-theory` mirror once the canonical `~/.codex/skills/meta-theory` exists.
+- **Graphify rebuild recovers from the smaller-graph guard.** `scripts/graphify-cli.mjs rebuild` now detects Graphify's specific "Refusing to overwrite" guard, retries with `--force`, and stamps the rebuilt graph to the current HEAD. The wrapper also supports `META_KIM_GRAPHIFY_BIN` and `META_KIM_GRAPHIFY_BIN_ARGS` for deterministic tests and diagnostics.
+- **Capability discovery language flags work.** `discover-global-capabilities.mjs` now honors short language flags such as `--zh`, `--en`, `--ja`, and `--ko`, matching the existing test and CLI expectation.
+
+### Verification
+
+- `npm run meta:graphify:rebuild` recovered from the smaller graph guard and stamped the graph to HEAD.
+- `npm run meta:graphify:check` → graph matches the current HEAD after rebuild.
+- `node --test tests/setup/graphify-wiring-contract.test.mjs tests/setup/sync-global-hooks-policy.test.mjs` → 41/41 pass.
+- `npm run meta:release:smoke` → 1108 tests, 1103 pass, 0 fail, 5 skipped; integration 6/6 pass.
+- `git diff --check` → pass.
+
+## [2.8.67] - 2026-07-04
+
+### Solved Problem
+
+`npm run meta:check` 对 `projectProjectionMode: global_only` 的项目会在第一步静默放过——`meta:check:runtimes` 默认什么 target 都不传,直接拿到一个"工具端镜像已是最新"的绿灯,其实啥也没对比。这条路径上的项目看上去是健康的,但实际从未走过 `claude` / `codex` 项目投影的对照检查。
+
+### Changes
+
+- **`meta:check:runtimes` 默认显式选 target。** `package.json` 里这条 script 现在固定传 `--scope project --targets claude,codex`。对 global_only 项目,跑 `npm run meta:check` 会真的去对比两边镜像,silent skip 不再发生。
+
+### Verification
+
+- `npm run meta:check` 退出码 0,7/7 通过
+- `npm run meta:graphify:check` 报 `graphify graph matches HEAD a6dc5734`(rebuild 后)
+- `npm run meta:doctor:governance` 报 `run index ready`(rebuild 后)
+
+## [2.8.66] - 2026-07-04
+
+### Solved Problem
+
+Open-source users running `meta-kim` had no way to know the runtime projection was actually healthy. `meta:check:runtimes` returned "工具端镜像已是最新" even when no runtime target was selected — `global_only` projects hit a silent skip, got no warning, and looked like sync worked when it had not. On a different lane, every `weapon-registry.json` owner was governance-layer (`meta-*`), but `select-execution-route.mjs` filter-stripped `layer === "meta"` from `candidateExecutionAgents`, so every weapon's `ownerCandidates` always missed the available set and all six routes were blocked — `fuzzy_strategy` tasks emitted `capabilityGapPacket` even though the right governance owners were sitting right there. A third class lived in tests written before v2.8.61's i18n extraction refactor moved all localized prompts into `config/i18n/setup-strings.mjs`: three setup tests (`i18n`, `mcp-memory-hooks`, `setup-update-default-flow`) still called `readFileSync("setup.mjs")` and asserted literal Chinese / Japanese / Korean phrases — the strings moved but the tests did not, so 28 setup tests reported stale i18n coverage that had been complete since the refactor.
+
+### Changes
+
+- **`sync-runtimes.mjs` no longer lies when there is nothing to check.** The `check` branch now distinguishes "no runtime target selected because `global_only`" from "all selected runtimes up to date." With no `--targets` argument and `projectProjectionMode: global_only`, the script prints an explicit "未选定 runtime target — 未检查任何镜像" message and the suggested `--targets claude,codex` command instead of a green "最新" stamp that implies work was done.
+- **`select-execution-route.mjs` accepts governance owners for governance work without allowing them as implementation workers.** The `routeForWeapon` available set now unions `ownerDiscoveryPacket.candidateExistingExecutionOwners` with `governanceStageOwners` whenever the task shape is not `engineering_execution`. The `engineering_execution` arm keeps the existing execution-only filter, so the `meta-*` agents can satisfy `meta-kim-decision-patterns` / `runtime-capability-matrix` routing while still being blocked from becoming implementation workers.
+- **`build-capability-inventory.mjs` no longer collapses the global inventory to meta-only.** The `global-capabilities.json` cache now emits every agent the global plugin installs, not only `meta-*` ones; each record's `ownerCandidates` is the actual agent id (instead of a `["meta-artisan"]` fallback for non-meta agents). `selectExecutionOwner` was rewritten to fuzzy-match preference-group terms against the available owner ids, so "test" / "smoke" / "verify" style tasks in a global-only project land on `test-automator` / `e2e-runner` style real agents instead of an empty `available` set.
+- **Setup tests follow the i18n extraction.** `tests/setup/i18n.test.mjs`, `tests/setup/mcp-memory-hooks.test.mjs`, and `tests/setup/setup-update-default-flow.test.mjs` now read from `config/i18n/setup-strings.mjs` (or use `readRepoFile`) for any literal localized assertion. `setup.mjs` exports the i18n block via `buildI18N({ MIN_NODE_VERSION })`; tests stay aligned with the actual source-of-truth after the v2.8.61 refactor.
+- **`sync-runtimes.mjs` no longer writes a 1.7 MB full JSON dump to stdout.** The CLI entry now prints a one-line summary (`capability inventory written: N records (projectProjectionMode=...)`). Tests that `spawnSync` the script (e.g. `capability-inventory-bus.test.mjs`) no longer hit Node's default 1 MB `maxBuffer` ceiling and falsely report `result.status = null`.
+- **Stable spine-state projection for hook imports.** The single-`shared` strategy from earlier in this work stream was over-eager — multiple `claude/hooks/*.mjs` files (`stop-compaction`, `stop-spine-cleanup`, `enforce-agent-dispatch`, ...) `import "./spine-state.mjs"` relative to their own directory. `canonical/runtime-assets/claude/hooks/spine-state.mjs` and `shared/hooks/spine-state.mjs` are both kept in sync (verified identical bytes), `activate-meta-theory-spine.mjs` and `skip-reminder.mjs` likewise stay in both places. `PROJECT_CLAUDE_HOOK_FILES` keeps `spine-state` so the universal loop still emits the Claude-side copy; the codex projection now comes only from the codex-specific block. Hooks that `import "./spine-state.mjs"` continue to resolve.
+
+### Verification
+
+- `npm run meta:verify:all` → 1108 tests, 1103 pass, 0 fail, 5 skipped. All 8 steps green.
+- `npm run meta:check:runtimes -- --scope project --targets claude,codex` → "工具端镜像已是最新".
+- `npm install @inquirer/prompts` (env refresh) + `npm run meta:test:setup` → 502/0.
+- Manual `node scripts/select-execution-route.mjs --task "<fuzzy strategy>"` → produces `recommendedRoute` with `meta-kim-decision-patterns` worker selection.
 
 ## [2.8.65] - 2026-07-03
 

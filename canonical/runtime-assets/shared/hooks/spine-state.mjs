@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join, dirname, resolve, relative, isAbsolute } from "node:path";
+import { atomicWriteJson, withFileLock } from "./spine-state-utils.mjs";
 
 const META_KIM_STATE_ROOT = ".meta-kim/state";
 const DEFAULT_SPINE_STATE_DIR = ".meta-kim/state/default/spine";
@@ -174,104 +175,6 @@ function isWithin(parent, target) {
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
-/**
- * Evaluate the execution-stage fan-out gate (META_KIM_FANOUT_GATE).
- *
- * Pure function: reads spine-state fields only, no env, no I/O. The hook layer
- * (enforce-agent-dispatch.mjs and any runtime hook that imports this shared
- * spine-state) calls this and then applies the env-resolved mode
- * (block / warn / progressive / off) to decide deny vs stderr-warn.
- *
- * Lives in BOTH canonical/runtime-assets/claude/hooks/spine-state.mjs and
- * shared/hooks/spine-state.mjs because the test helper `runEnforceHookWithState`
- * (tests/meta-theory/11-eight-stage-spine.test.mjs) copies the shared copy on
- * top of the canonical copy when staging the hook under a temp cwd, and the
- * hook imports `./spine-state.mjs` which resolves to the last-copied file.
- * Removing this duplicate would break the 8-stage-spine test suite with
- * ReferenceError on the first Execution-stage mutation attempt.
- *
- * Triggered when: execution stage ∧ zero recorded dispatches ∧ ≥2 worker lanes
- * ∧ not explicitly degraded. Single-lane work is exempt (Codex/Cursor/OpenClaw
- * dispatch-event coverage differences must not block legitimate single-owner
- * runs). Degraded mode is the explicit, auditable exit: a run that declares
- * degraded is marked internal-ready and never public-ready.
- *
- * @param {object|null} state - Spine state.
- * @returns {{ triggered: boolean, dispatched: number, workerCount: number,
- *            stage: string|null, degraded: boolean, reason: string|null }}
- */
-const DEGRADED_MIN_AGENT_CHECKS = 3;
-
-export function validateDegradedDeclaration(state) {
-  const s = state || {};
-  if (s.degradedMode !== true) {
-    return { valid: true, reason: null, missing: [] };
-  }
-
-  const missing = [];
-  const fetchRecord = s.fetchRecord;
-  if (!fetchRecord || typeof fetchRecord !== "object") {
-    missing.push("fetchRecord");
-  } else {
-    if (fetchRecord.capabilitySearchPerformed !== true) {
-      missing.push("fetchRecord.capabilitySearchPerformed=true");
-    }
-    const matches = Array.isArray(fetchRecord.capabilityMatches)
-      ? fetchRecord.capabilityMatches
-      : Array.isArray(fetchRecord.matchedCapabilities)
-        ? fetchRecord.matchedCapabilities
-        : [];
-    if (matches.length < DEGRADED_MIN_AGENT_CHECKS) {
-      missing.push(
-        `fetchRecord.capabilityMatches>=${DEGRADED_MIN_AGENT_CHECKS}`,
-      );
-    }
-  }
-
-  if (missing.length === 0) {
-    return { valid: true, reason: null, missing: [] };
-  }
-  return {
-    valid: false,
-    reason:
-      `Degraded declaration rejected: missing evidence [${missing.join(", ")}]. ` +
-      `Per SKILL.md Degraded Mode, declaring degradedMode=true requires a prior ` +
-      `capability search with capabilitySearchPerformed=true and at least ` +
-      `${DEGRADED_MIN_AGENT_CHECKS} capabilityMatches recorded. ` +
-      `Either perform the capability search first or set degradedMode=false.`,
-    missing,
-  };
-}
-
-export function evaluateFanoutGate(state) {
-  const s = state || {};
-  const dispatched = Array.isArray(s.dispatchedAgents)
-    ? s.dispatchedAgents.length
-    : 0;
-  const workerCount = Array.isArray(s.workerTaskPackets)
-    ? s.workerTaskPackets.length
-    : 0;
-  const stage = typeof s.currentStage === "string" ? s.currentStage : null;
-  const degraded = s.degradedMode === true;
-  const triggered =
-    stage === "execution" && dispatched === 0 && workerCount >= 2 && !degraded;
-  return {
-    triggered,
-    dispatched,
-    workerCount,
-    stage,
-    degraded,
-    reason: triggered
-      ? "Execution-stage fan-out run has 0 recorded Agent dispatches " +
-        `(dispatched=${dispatched}, workerLanes=${workerCount}, stage=${stage}). ` +
-        "Dispatch an Agent (spawn_agent / Agent tool) for the worker lanes, " +
-        "or explicitly declare degraded by writing spine state " +
-        "`degradedMode: true` (then this run is marked internal-ready, not " +
-        "public-ready)."
-      : null,
-  };
-}
-
 export function sanitizeStateProfile(input) {
   const value =
     typeof input === "string" && input.trim() ? input.trim() : "default";
@@ -402,7 +305,12 @@ export async function readSpineStateIncludingInactive(cwd) {
 export async function writeSpineState(cwd, state) {
   const filePath = spineStatePath(cwd);
   await ensureDir(filePath);
-  await writeFile(filePath, JSON.stringify(state, null, 2), "utf-8");
+  // 多 agent fan-out 时多个进程可能并发写同一 spine state — 用 atomic temp+rename
+  // 加 file lock 兜底并发。lock 仅短暂持有，写完即释放。
+  const lockPath = `${filePath}.lock`;
+  await withFileLock(lockPath, async () => {
+    await atomicWriteJson(filePath, state);
+  });
   await writeMetaRunStatus(cwd, state);
 }
 
@@ -721,6 +629,137 @@ export function recordIntentConfirmation(state, confirmationState, correctionPay
  * @param {object} [toolInput] - The raw tool input (Agent dispatch payload).
  * @returns {object} New state with dispatch recorded.
  */
+/**
+ * Minimum agent / provider coverage required for a valid Degraded Mode
+ * declaration. SKILL.md:480-495 requires capabilityGapPacket evidence before
+ * degraded is allowed; this constant pins the minimum to a hard number that
+ * the hook can enforce (same-type failure fix for the agent-misjudgment
+ * escape hatch).
+ */
+const DEGRADED_MIN_AGENT_CHECKS = 3;
+
+/**
+ * Validate a Degraded Mode declaration. Returns `{ valid, reason, missing }`
+ * so the caller can deny / warn uniformly. The check is intentionally cheap
+ * and pure — it reads `state.fetchRecord` only.
+ *
+ * Failure modes (all return valid=false):
+ *   - degradedMode !== true          → valid (declaration absent, nothing to check)
+ *   - fetchRecord missing            → invalid (no evidence was recorded)
+ *   - capabilitySearchPerformed !== true → invalid (no search was done)
+ *   - capabilityMatches / matchedCapabilities length < 3 → invalid
+ *
+ * @param {object|null} state - Spine state.
+ * @returns {{ valid: boolean, reason: string|null, missing: string[] }}
+ */
+export function validateDegradedDeclaration(state) {
+  const s = state || {};
+  if (s.degradedMode !== true) {
+    return { valid: true, reason: null, missing: [] };
+  }
+
+  const missing = [];
+  const fetchRecord = s.fetchRecord;
+  if (!fetchRecord || typeof fetchRecord !== "object") {
+    missing.push("fetchRecord");
+  } else {
+    if (fetchRecord.capabilitySearchPerformed !== true) {
+      missing.push("fetchRecord.capabilitySearchPerformed=true");
+    }
+    const matches = Array.isArray(fetchRecord.capabilityMatches)
+      ? fetchRecord.capabilityMatches
+      : Array.isArray(fetchRecord.matchedCapabilities)
+        ? fetchRecord.matchedCapabilities
+        : [];
+    if (matches.length < DEGRADED_MIN_AGENT_CHECKS) {
+      missing.push(
+        `fetchRecord.capabilityMatches>=${DEGRADED_MIN_AGENT_CHECKS}`,
+      );
+    }
+  }
+
+  if (missing.length === 0) {
+    return { valid: true, reason: null, missing: [] };
+  }
+  return {
+    valid: false,
+    reason:
+      `Degraded declaration rejected: missing evidence [${missing.join(", ")}]. ` +
+      `Per SKILL.md Degraded Mode, declaring degradedMode=true requires a prior ` +
+      `capability search with capabilitySearchPerformed=true and at least ` +
+      `${DEGRADED_MIN_AGENT_CHECKS} capabilityMatches recorded. ` +
+      `Either perform the capability search first or set degradedMode=false.`,
+    missing,
+  };
+}
+
+/**
+ * Evaluate the execution-stage fan-out gate (META_KIM_FANOUT_GATE).
+ *
+ * Pure function: reads spine-state fields only, no env, no I/O. The hook layer
+ * (enforce-agent-dispatch.mjs) calls this and then applies the env-resolved
+ * mode (block / warn / progressive / off) to decide deny vs stderr-warn. Tests
+ * import this directly so fan-out gate coverage does not depend on spawning the
+ * full hook (which would require satisfying every upstream pre-execution gate).
+ *
+ * Triggered when: execution stage ∧ zero recorded dispatches ∧ ≥2 worker lanes
+ * ∧ not explicitly degraded. Single-lane work is exempt (Codex/Cursor/OpenClaw
+ * dispatch-event coverage differences must not block legitimate single-owner
+ * runs). Degraded mode is the explicit, auditable exit: a run that declares
+ * degraded is marked internal-ready and never public-ready.
+ *
+ * @param {object|null} state - Spine state.
+ * @returns {{ triggered: boolean, dispatched: number, workerCount: number,
+ *            stage: string|null, degraded: boolean, reason: string|null }}
+ */
+export function evaluateFanoutGate(state) {
+  const s = state || {};
+  const dispatched = Array.isArray(s.dispatchedAgents)
+    ? s.dispatchedAgents.length
+    : 0;
+  const workerCount = Array.isArray(s.workerTaskPackets)
+    ? s.workerTaskPackets.length
+    : 0;
+  const stage = typeof s.currentStage === "string" ? s.currentStage : null;
+  const declaredDegraded = s.degradedMode === true;
+  // Same-type failure fix: a degraded declaration is only an auditable exit
+  // when the supporting capability-search evidence is present. Without it,
+  // treat the run as not-degraded so the fan-out gate still fires.
+  const degradationCheck = declaredDegraded
+    ? validateDegradedDeclaration(state)
+    : { valid: true, reason: null };
+  const degraded = declaredDegraded && degradationCheck.valid;
+  const triggered =
+    stage === "execution" && dispatched === 0 && workerCount >= 2 && !degraded;
+  let reason = null;
+  if (triggered) {
+    if (declaredDegraded && !degraded) {
+      reason =
+        `Execution-stage fan-out run has 0 recorded Agent dispatches ` +
+        `(dispatched=${dispatched}, workerLanes=${workerCount}, stage=${stage}) ` +
+        `and declared degraded but without valid evidence: ` +
+        `${degradationCheck.reason} ` +
+        `Provide the missing evidence, dispatch an Agent, or clear degradedMode.`;
+    } else {
+      reason =
+        "Execution-stage fan-out run has 0 recorded Agent dispatches " +
+        `(dispatched=${dispatched}, workerLanes=${workerCount}, stage=${stage}). ` +
+        "Dispatch an Agent (spawn_agent / Agent tool) for the worker lanes, " +
+        "or explicitly declare degraded by writing spine state " +
+        "`degradedMode: true` (then this run is marked internal-ready, not " +
+        "public-ready).";
+    }
+  }
+  return {
+    triggered,
+    dispatched,
+    workerCount,
+    stage,
+    degraded,
+    reason,
+  };
+}
+
 export function recordDispatch(state, agentName, metaName, toolInput) {
   const META_AGENT_NAME_SET = new Set(META_AGENT_NAMES);
   const newState = { ...state };

@@ -18,6 +18,16 @@ import { enrichMetaKimGraph } from "./graphify-enrichment.mjs";
 
 const command = process.argv[2] || "check";
 
+function graphifyLauncher() {
+  return {
+    command: process.env.META_KIM_GRAPHIFY_BIN || "graphify",
+    args: (process.env.META_KIM_GRAPHIFY_BIN_ARGS || "")
+      .trim()
+      .split(/\s+/u)
+      .filter(Boolean),
+  };
+}
+
 function fail(message) {
   console.error(message);
   process.exitCode = 1;
@@ -220,6 +230,70 @@ function stampGraphFreshness(cwd = process.cwd()) {
   return true;
 }
 
+function processOutputText(result) {
+  return `${result?.stdout ?? ""}\n${result?.stderr ?? ""}`;
+}
+
+function isGraphifySmallerGraphRefusal(result) {
+  return /Refusing to overwrite/i.test(processOutputText(result));
+}
+
+function runGraphifyUpdate(graphifyArgs, options = {}) {
+  const launcher = graphifyLauncher();
+  const direct = spawnSync(launcher.command, [...launcher.args, ...graphifyArgs], {
+    stdio: options.stdio ?? "inherit",
+    encoding: options.encoding,
+    shell: false,
+  });
+  if (!direct.error) {
+    return { result: direct, usedDirect: true };
+  }
+
+  const python = ensurePython({ requirePip: true });
+  if (!python) {
+    return { result: { status: process.exitCode || 1 }, usedDirect: false };
+  }
+
+  const result = runPythonModule(
+    python,
+    ["-m", "graphify", ...graphifyArgs],
+    undefined,
+    { stdio: options.stdio ?? "inherit", encoding: options.encoding },
+  );
+  return { result, usedDirect: false };
+}
+
+function runGraphifyUpdateForRebuild(graphifyArgs) {
+  if (graphifyArgs.includes("--force")) {
+    return runGraphifyUpdate(graphifyArgs, { stdio: "inherit" }).result;
+  }
+
+  const first = runGraphifyUpdate(graphifyArgs, {
+    stdio: "pipe",
+    encoding: "utf8",
+  }).result;
+  if ((first.status || 0) === 0) {
+    process.stdout.write(first.stdout ?? "");
+    process.stderr.write(first.stderr ?? "");
+    return first;
+  }
+
+  if (!isGraphifySmallerGraphRefusal(first)) {
+    process.stdout.write(first.stdout ?? "");
+    process.stderr.write(first.stderr ?? "");
+    return first;
+  }
+
+  process.stdout.write(first.stdout ?? "");
+  process.stderr.write(first.stderr ?? "");
+  console.warn(
+    "graphify rebuild produced fewer nodes; retrying with --force and stamping the new graph to current HEAD.",
+  );
+  return runGraphifyUpdate([...graphifyArgs, "--force"], {
+    stdio: "inherit",
+  }).result;
+}
+
 function runCheck() {
   const python = ensurePython({ requirePip: true });
   if (!python) {
@@ -294,29 +368,7 @@ function runRebuild() {
   if (process.argv.includes("--force")) {
     graphifyArgs.push("--force");
   }
-  const direct = spawnSync("graphify", graphifyArgs, {
-    stdio: "inherit",
-    shell: false,
-  });
-  if (!direct.error) {
-    process.exitCode = direct.status || 0;
-    if ((direct.status || 0) === 0) {
-      stampGraphFreshness();
-    }
-    return;
-  }
-
-  const python = ensurePython({ requirePip: true });
-  if (!python) {
-    return;
-  }
-
-  const result = runPythonModule(
-    python,
-    ["-m", "graphify", ...graphifyArgs],
-    undefined,
-    { stdio: "inherit" },
-  );
+  const result = runGraphifyUpdateForRebuild(graphifyArgs);
   process.exitCode = result.status || 0;
   if ((result.status || 0) === 0) {
     stampGraphFreshness();
@@ -325,7 +377,8 @@ function runRebuild() {
 
 function runGraphifyPassthrough() {
   const graphifyArgs = process.argv.slice(2);
-  const direct = spawnSync("graphify", graphifyArgs, {
+  const launcher = graphifyLauncher();
+  const direct = spawnSync(launcher.command, [...launcher.args, ...graphifyArgs], {
     stdio: "inherit",
     shell: false,
   });

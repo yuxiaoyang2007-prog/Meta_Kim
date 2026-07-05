@@ -54,7 +54,7 @@ describe("graphify idempotent wiring (contract)", () => {
 
     assert.match(src, /function runRebuild\(\)/);
     assert.match(src, /const graphifyArgs = \["update", "\."\]/);
-    assert.match(src, /spawnSync\("graphify", graphifyArgs/);
+    assert.match(src, /spawnSync\(launcher\.command, \[\.\.\.launcher\.args, \.\.\.graphifyArgs\]/);
     assert.match(src, /\["-m", "graphify", \.\.\.graphifyArgs\]/);
     assert.match(src, /case "rebuild":/);
   });
@@ -64,7 +64,7 @@ describe("graphify idempotent wiring (contract)", () => {
 
     assert.match(src, /function runGraphifyPassthrough\(\)/);
     assert.match(src, /const graphifyArgs = process\.argv\.slice\(2\)/);
-    assert.match(src, /spawnSync\("graphify", graphifyArgs/);
+    assert.match(src, /spawnSync\(launcher\.command, \[\.\.\.launcher\.args, \.\.\.graphifyArgs\]/);
     assert.match(src, /direct\.status \?\? 1/);
     assert.match(src, /\["-m", "graphify", \.\.\.graphifyArgs\]/);
     assert.match(src, /case "query":/);
@@ -80,6 +80,111 @@ describe("graphify idempotent wiring (contract)", () => {
 
     assert.match(src, /process\.argv\.includes\("--force"\)/);
     assert.match(src, /graphifyArgs\.push\("--force"\)/);
+  });
+
+  test("graphify rebuild retries with --force when graphify refuses a smaller graph", () => {
+    const tmp = mkdtempSync(path.join(os.tmpdir(), "meta-kim-graphify-"));
+    const bin = path.join(tmp, "bin");
+    const repo = path.join(tmp, "repo");
+    mkdirSync(bin);
+    mkdirSync(path.join(repo, "graphify-out"), { recursive: true });
+
+    const fakeGraphify = `
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+
+const args = process.argv.slice(2);
+const statePath = path.join(process.cwd(), ".fake-graphify-state");
+const forced = args.includes("--force");
+if (args[0] !== "update" || args[1] !== ".") {
+  process.exit(9);
+}
+if (!forced && !existsSync(statePath)) {
+  writeFileSync(statePath, "refused");
+  console.error("Refusing to overwrite — you may be missing chunk files from a previous session. Pass --force to override.");
+  process.exit(1);
+}
+mkdirSync(path.join(process.cwd(), "graphify-out"), { recursive: true });
+const head = readFileSync(path.join(process.cwd(), ".git", "HEAD"), "utf8").trim();
+writeFileSync(
+  path.join(process.cwd(), "graphify-out", "GRAPH_REPORT.md"),
+  "# Graph Report\\n\\n## Graph Freshness\\n- Built from commit: \`0000000\`\\n",
+);
+writeFileSync(
+  path.join(process.cwd(), "graphify-out", "graph.json"),
+  JSON.stringify({ nodes: [], links: [], built_at_commit: head }) + "\\n",
+);
+console.log("forced rebuild ok");
+`;
+    writeFakeExecutable(bin, "graphify", fakeGraphify);
+    const graphifyScript = path.join(bin, "graphify.mjs");
+
+    for (const args of [
+      ["init"],
+      ["config", "user.email", "test@example.invalid"],
+      ["config", "user.name", "Test User"],
+    ]) {
+      const result = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+      assert.equal(result.status, 0, result.stderr);
+    }
+    writeFileSync(path.join(repo, "tracked.txt"), "fresh head\n");
+    for (const args of [
+      ["add", "tracked.txt"],
+      ["commit", "-m", "seed"],
+    ]) {
+      const result = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+      assert.equal(result.status, 0, result.stderr);
+    }
+    writeFileSync(
+      path.join(repo, "graphify-out", "GRAPH_REPORT.md"),
+      "# Graph Report\n\n## Graph Freshness\n- Built from commit: `aaaaaaaa`\n",
+    );
+    writeFileSync(
+      path.join(repo, "graphify-out", "graph.json"),
+      JSON.stringify({
+        nodes: [{ id: "old" }],
+        links: [],
+        built_at_commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      }),
+    );
+
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [path.join(root, "scripts", "graphify-cli.mjs"), "rebuild"],
+        {
+          cwd: repo,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            META_KIM_GRAPHIFY_BIN: process.execPath,
+            META_KIM_GRAPHIFY_BIN_ARGS: graphifyScript,
+            PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
+            Path: `${bin}${path.delimiter}${process.env.Path ?? ""}`,
+          },
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stderr, /Refusing to overwrite/);
+      assert.match(result.stderr, /retrying with --force/);
+      assert.match(result.stdout, /forced rebuild ok/);
+
+      const head = spawnSync("git", ["rev-parse", "HEAD"], {
+        cwd: repo,
+        encoding: "utf8",
+      }).stdout.trim();
+      const graph = JSON.parse(
+        readFileSync(path.join(repo, "graphify-out", "graph.json"), "utf8"),
+      );
+      assert.equal(graph.built_at_commit, head);
+      assert.match(
+        readFileSync(path.join(repo, "graphify-out", "GRAPH_REPORT.md"), "utf8"),
+        new RegExp(head),
+      );
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 
   test("graphify-cli.mjs stamps freshness metadata after successful rebuild", () => {

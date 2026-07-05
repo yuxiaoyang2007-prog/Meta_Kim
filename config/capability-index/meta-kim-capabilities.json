@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-03T13:28:35.654Z",
+  "generatedAt": "2026-07-03T19:34:28.903Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -399,7 +399,7 @@
         "path": "canonical/runtime-assets/claude/hooks/activate-meta-theory-spine.mjs",
         "relativePath": "activate-meta-theory-spine.mjs",
         "size": 12904,
-        "modified": "2026-06-28T22:48:05.308Z"
+        "modified": "2026-07-03T19:18:38.261Z"
       },
       "repo:canonical-runtime-assets:meta-kim-memory-save.mjs": {
         "id": "meta-kim-memory-save.mjs",
@@ -417,7 +417,7 @@
         "path": "canonical/runtime-assets/claude/hooks/skip-reminder.mjs",
         "relativePath": "skip-reminder.mjs",
         "size": 6932,
-        "modified": "2026-06-17T19:51:12.184Z"
+        "modified": "2026-07-03T19:34:11.336Z"
       },
       "repo:canonical-runtime-assets:spine-state.mjs": {
         "id": "spine-state.mjs",
@@ -426,7 +426,7 @@
         "path": "canonical/runtime-assets/claude/hooks/spine-state.mjs",
         "relativePath": "spine-state.mjs",
         "size": 47052,
-        "modified": "2026-07-03T10:26:24.616Z"
+        "modified": "2026-07-03T18:12:35.846Z"
       },
       "repo:canonical-runtime-assets:utils.mjs": {
         "id": "utils.mjs",

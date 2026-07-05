@@ -299,10 +299,7 @@ async function globalRuntimeCapabilities(projectProjectionMode) {
       const recordType =
         GLOBAL_INVENTORY_TYPE_TO_RECORD_TYPE[capabilityType] ?? "external";
       for (const entry of entries) {
-        if (
-          capabilityType !== "agents" ||
-          !String(entry?.id ?? "").startsWith("meta-")
-        ) {
+        if (capabilityType !== "agents") {
           continue;
         }
         const sourcePath =
@@ -320,9 +317,7 @@ async function globalRuntimeCapabilities(projectProjectionMode) {
             capabilityType,
             platformId,
           ].filter(Boolean),
-          ownerCandidates: String(entry?.id ?? "").startsWith("meta-")
-            ? [entry.id]
-            : ["meta-artisan"],
+          ownerCandidates: [entry?.id].filter(Boolean),
           weaponCandidates: [],
           dependencyCandidates: [],
           verificationMethod: "npm run discover:global",
@@ -599,5 +594,5 @@ export async function writeCapabilityInventory(targetPath = outputPath) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const result = await writeCapabilityInventory();
-  console.log(JSON.stringify(result, null, 2));
+  console.log(`capability inventory written: ${result.capabilities?.length ?? 0} records (projectProjectionMode=${result.projectProjectionMode ?? "unknown"})`);
 }

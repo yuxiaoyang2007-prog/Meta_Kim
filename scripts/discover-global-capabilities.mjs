@@ -198,6 +198,13 @@ function argValue(args, name) {
   return null;
 }
 
+function argLangFlag(args) {
+  for (const lang of ["zh", "en", "ja", "ja-JP", "ko", "ko-KR"]) {
+    if (args.includes(`--${lang}`)) return lang;
+  }
+  return null;
+}
+
 function normalizePlatformTargets(rawValue) {
   if (!rawValue) return [];
   return [
@@ -1889,7 +1896,11 @@ async function main() {
   const writeRepoIndex = !runtimeInventoryOnly;
   const langArg = argValue(args, "--lang");
   const outputLang = normalizeOutputLang(
-    langArg || process.env.META_KIM_LANG || process.env.LANG || "en",
+    langArg ||
+      argLangFlag(args) ||
+      process.env.META_KIM_LANG ||
+      process.env.LANG ||
+      "en",
   );
   const labels = outputText(outputLang);
   const filterTargets = normalizePlatformTargets(

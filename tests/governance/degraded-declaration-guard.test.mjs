@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   evaluateFanoutGate,
   validateDegradedDeclaration,
-} from "../../canonical/runtime-assets/claude/hooks/spine-state.mjs";
+} from "../../canonical/runtime-assets/shared/hooks/spine-state.mjs";
 
 // Same-type failure fix: SKILL.md Degraded Mode requires capabilityGapPacket,
 // but no hook enforces it. This guard closes the escape hatch so a run cannot

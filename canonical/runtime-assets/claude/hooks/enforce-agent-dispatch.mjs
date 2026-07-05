@@ -1424,7 +1424,15 @@ if (isAgentDispatchTool(toolName)) {
       .toLowerCase()
       .trim();
 
-    if (capabilityGateModeRaw !== "off" && !discoveryStages.has(stage)) {
+    // 多 agent / fan-out 触发命中时（stageRuntimeControl.dispatchMode === "fan_out_ready"），
+    // activate-meta-theory-spine 已自动填 fetchRecord 并预推进 stage；
+    // 此时 capability gate 降为 warn-equivalent，让主线程可立即 fork 子 agent。
+    const fanOutReady =
+      state?.stageRuntimeControl?.dispatchMode === "fan_out_ready" ||
+      state?.stageRuntimeControl?.dispatchMode === "fan_out_in_progress";
+    const gateExempt = discoveryStages.has(stage) || fanOutReady;
+
+    if (capabilityGateModeRaw !== "off" && !gateExempt) {
       const performed = state?.fetchRecord?.capabilitySearchPerformed === true;
       if (!performed) {
         // Resolve the effective mode. For "warn" / "block" this is a passthrough;

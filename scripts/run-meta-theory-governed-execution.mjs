@@ -4169,7 +4169,7 @@ function buildHookMatchesForPacket(packet) {
       status: "matched_not_planner",
       stages: ["Critical", "Fetch", "Thinking", "Execution", "Review"],
       evidenceRefs: [
-        "canonical/runtime-assets/claude/hooks/spine-state.mjs",
+        "canonical/runtime-assets/shared/hooks/spine-state.mjs",
         ".codex/hooks/spine-state.mjs",
         ".cursor/hooks/spine-state.mjs",
       ],

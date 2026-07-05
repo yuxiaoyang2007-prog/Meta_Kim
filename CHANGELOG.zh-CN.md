@@ -6,6 +6,89 @@
 
 更新说明先解释本次解决的用户痛点或风险，再说明为了解决它改了什么、为什么重要。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
+## Unreleased
+
+### 解决的问题
+
+_留给下个版本。_
+
+## [2.8.69] - 2026-07-05
+
+### 解决的问题
+
+开源用户装好 Meta_Kim 后，去别的项目或别的机器跑 spine hook 时会撞上一条写死的死路径。`setup.mjs` 和 `sync-runtimes.mjs` 在安装时把 canonical 模板里的 `__REPO_ROOT__` 占位符渲染成绝对路径，所以全局和项目 hook 注册里的 `--package-root <绝对路径>` 在用户自己机器上根本不存在。spine 激活脚本又把这个对不上静默吞掉（EXIT=0），`startPostCopyAutoInit` 永远找不到 `scripts/project-post-copy-init.mjs`，全局 post-copy 初始化对除原作者以外的所有人都不可达。
+
+### 改动
+
+- **spine 激活脚本改为运行时解析 package root，不再盲目信任写死的路径。** `canonical/runtime-assets/claude/hooks/activate-meta-theory-spine.mjs` 与 `canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs` 新增 `resolvePackageRoot(candidate)`：若 `--package-root` 参数或 `META_KIM_PACKAGE_ROOT` 环境变量指向的目录确实存在，照用；否则从脚本自身位置（`import.meta.url`）逐层往上找，直到命中含 `scripts/project-post-copy-init.mjs` 的目录；找不到任何 Meta_Kim 根时才回退到 `null`。`.claude/hooks`、`.codex/hooks`、`.cursor/hooks` 镜像和全局 `~/.claude/hooks/meta-kim`、`~/.codex/hooks/meta-kim` 副本现在都带同一个解析器。
+
+### 验证
+
+- 两个 canonical 源 `node --check` → 语法 OK。
+- `npm run meta:validate` → 7/7 通过。
+- `node --test tests/setup/graphify-wiring-contract.test.mjs tests/setup/sync-runtimes-manifest.test.mjs` → 71/71 通过。
+- `npm run meta:check:runtimes` → 工具端镜像已是最新。
+- `npm run meta:sync:global:release` → Claude Code 和 Codex 的全局 hook/skill/command 已同步；`~/.claude/hooks/meta-kim/activate-meta-theory-spine.mjs` 与 `~/.codex/hooks/meta-kim/activate-meta-theory-spine.mjs` 均含 `resolvePackageRoot`。
+
+## [2.8.68] - 2026-07-04
+
+### 解决的问题
+
+用户在 Codex 里输入 `/meta` 时，可能会看到好几个看起来都像 Meta_Kim / Meta Theory 的入口。根因不是用户装错了，而是历史版本留下的全局 skill 别名没有被同步器收走：`meta_kim`、旧 report/verify source command、agent-calling-gap 记录，以及 `critical/fetch/thinking/review` 这类路线别名可能同时留在 `~/.agents`、`~/.codex`、`~/.claude`。这样开源用户升级后也会和维护者一样困惑，不知道应该选哪个入口。另一个发布阻塞点是 Graphify：源码改动后 `npm run meta:graphify:rebuild` 可能因为“新图节点数更少”被 Graphify 拒绝覆盖，导致 `meta:graphify:check` 一直报旧 HEAD。
+
+### 改动
+
+- **全局同步器会安全清理旧 Meta_Kim skill 别名。** `scripts/sync-global-meta-theory.mjs` 现在按内容签名识别历史别名，先备份到 `.meta-kim/backups/stale-skill-aliases`，再删除确认属于 Meta_Kim 管理的旧入口；用户自己创建的同名 skill 会保留。
+- **Codex 的共享 skill 根目录也纳入清理。** 选择 Codex 目标时，同步器会检查旧的 `~/.agents/skills`，并在 canonical `~/.codex/skills/meta-theory` 存在时清掉共享目录里的旧 `meta-theory` 重复镜像。
+- **Graphify rebuild 能从 smaller-graph guard 自动恢复。** `scripts/graphify-cli.mjs rebuild` 现在识别 Graphify 特定的 `Refusing to overwrite` 保护，自动用 `--force` 重跑并把图谱 stamp 到当前 HEAD；同时支持 `META_KIM_GRAPHIFY_BIN` 和 `META_KIM_GRAPHIFY_BIN_ARGS`，方便测试和诊断固定使用哪个 Graphify 可执行入口。
+- **能力发现脚本支持短语言参数。** `discover-global-capabilities.mjs` 现在识别 `--zh`、`--en`、`--ja`、`--ko`，和已有测试及 CLI 预期对齐。
+
+### 验证
+
+- `npm run meta:graphify:rebuild` 从 smaller graph guard 自动恢复，并 stamp 到当前 HEAD。
+- `npm run meta:graphify:check` → rebuild 后图谱匹配当前 HEAD。
+- `node --test tests/setup/graphify-wiring-contract.test.mjs tests/setup/sync-global-hooks-policy.test.mjs` → 41/41 pass。
+- `npm run meta:release:smoke` → 1108 tests，1103 pass，0 fail，5 skipped；integration 6/6 pass。
+- `git diff --check` → pass。
+
+## [2.8.67] - 2026-07-04
+
+### 解决的问题
+
+`npm run meta:check` 对 `projectProjectionMode: global_only` 的项目会在第一步静默放过——`meta:check:runtimes` 默认什么 target 都不传,直接拿到一个"工具端镜像已是最新"的绿灯,其实啥也没对比。这条路径上的项目看上去是健康的,但实际从未走过 `claude` / `codex` 项目投影的对照检查。
+
+### 改动
+
+- **`meta:check:runtimes` 默认显式选 target。** `package.json` 里这条 script 现在固定传 `--scope project --targets claude,codex`。对 global_only 项目,跑 `npm run meta:check` 会真的去对比两边镜像,silent skip 不再发生。
+
+### 验证
+
+- `npm run meta:check` 退出码 0,7/7 通过
+- `npm run meta:graphify:check` 报 `graphify graph matches HEAD a6dc5734`(rebuild 后)
+- `npm run meta:doctor:governance` 报 `run index ready`(rebuild 后)
+
+## [2.8.66] - 2026-07-04
+
+### 解决的问题
+
+开源用户跑 `meta-kim` 时没法判断运行时投影其实是否健康。`meta:check:runtimes` 即便没选 runtime target 也返回"工具端镜像已是最新"——`global_only` 项目静默跳过、没警告,看起来像同步过实际没动。另一条线,每个 `weapon-registry.json` owner 都是 governance 层(`meta-*`),但 `select-execution-route.mjs` 从 `candidateExecutionAgents` 显式过滤掉 `layer === "meta"` 的 owner,导致每个武器的 `ownerCandidates` 都落空、所有 6 条 route 都被 block——`fuzzy_strategy` 任务明明对着正确的 governance owner,却吐出 `capabilityGapPacket`。第三类更隐蔽:v2.8.61 的 i18n 抽离重构把所有本地化字符串搬进了 `config/i18n/setup-strings.mjs`,而三个 setup 测试(`i18n` / `mcp-memory-hooks` / `setup-update-default-flow`)还在用 `readFileSync("setup.mjs")` 断言中/日/韩字面量——字符串搬走了,测试没跟,28 条 setup 测试一直报"i18n 覆盖 stale",但从 v2.8.61 重构起就一直是齐的。
+
+### 改动
+
+- **`sync-runtimes.mjs` 不再在没东西查的时候撒谎。** `check` 分支现在能区分两种情况:一是 `global_only` 没选 runtime target,二是选了 target 且都已最新。无 `--targets` 且 `projectProjectionMode: global_only` 时,脚本显式打"未选定 runtime target — 未检查任何镜像",并提示用 `--targets claude,codex`,不再发绿色的"最新"让人误以为真做了事。
+- **`select-execution-route.mjs` 让 governance owner 接 governance 武器,但不让它当实现工人。** `routeForWeapon` 的 available 集合在 taskShape 不是 `engineering_execution` 时,把 `ownerDiscoveryPacket.candidateExistingExecutionOwners` 与 `governanceStageOwners` 取并集。`engineering_execution` 分支保持原来的执行层过滤不变,所以 `meta-*` agent 能满足 `meta-kim-decision-patterns` / `runtime-capability-matrix` 这类武器的 routing,但仍然被拦着不当 implementation worker。
+- **`build-capability-inventory.mjs` 不再把全局 inventory 压缩成只发 meta。** `global-capabilities.json` 缓存现在会把全局插件装的所有 agent 都发出来,不只是 `meta-*`;每条记录的 `ownerCandidates` 是该 agent 真正的 id(不再对非 meta fallback 成 `["meta-artisan"]`)。`selectExecutionOwner` 改成对 available owner id 做关键词模糊匹配,所以 global_only 项目里 "test" / "smoke" / "verify" 这种任务能落到 `test-automator` / `e2e-runner` 这种真实 agent 上,不再落到空的 available 集上。
+- **setup 测试跟上 i18n 抽离。** `tests/setup/i18n.test.mjs`、`tests/setup/mcp-memory-hooks.test.mjs`、`tests/setup/setup-update-default-flow.test.mjs` 凡是断言本地化字面量,改成从 `config/i18n/setup-strings.mjs`(或 `readRepoFile`)读。`setup.mjs` 通过 `buildI18N({ MIN_NODE_VERSION })` 导出 i18n 块;测试和 v2.8.61 重构后的真实源对齐。
+- **`sync-runtimes.mjs` 不再往 stdout 灌 1.7 MB 全量 JSON。** CLI 入口改成输出一行摘要(`capability inventory written: N records (projectProjectionMode=...)`)。用 `spawnSync` 跑脚本的测试(如 `capability-inventory-bus.test.mjs`)不再踩 Node 默认 1 MB `maxBuffer` 的天花板、误报 `result.status = null`。
+- **稳定 spine-state 投影,让 hook import 不会断。** 这条工作流早期"统一到 shared"做得太激进——多个 `claude/hooks/*.mjs`(`stop-compaction`、`stop-spine-cleanup`、`enforce-agent-dispatch` 等)`import "./spine-state.mjs"` 是相对路径。`canonical/runtime-assets/claude/hooks/spine-state.mjs` 与 `shared/hooks/spine-state.mjs` 两边都保留(字节级一致),`activate-meta-theory-spine.mjs` 与 `skip-reminder.mjs` 同理。`PROJECT_CLAUDE_HOOK_FILES` 保留 `spine-state`,通用循环仍会写出 Claude 端副本;codex 端副本只走 codex 专属块。`import "./spine-state.mjs"` 的 hook 都能 resolve。
+
+### 验证
+
+- `npm run meta:verify:all` → 1108 测试,1103 pass,0 fail,5 skipped。8 步全绿。
+- `npm run meta:check:runtimes -- --scope project --targets claude,codex` → "工具端镜像已是最新"。
+- `npm install @inquirer/prompts`(env 刷新)+ `npm run meta:test:setup` → 502/0。
+- 手动 `node scripts/select-execution-route.mjs --task "<fuzzy strategy>"` → 出 `recommendedRoute`,worker 选到 `meta-kim-decision-patterns`。
+
 ## [2.8.65] - 2026-07-03
 
 ### 解决的问题

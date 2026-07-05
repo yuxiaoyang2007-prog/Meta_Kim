@@ -6,6 +6,7 @@
 
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -133,11 +134,59 @@ const claudeCommandsSourceDir = path.join(
   "claude",
   "commands",
 );
+const STALE_META_KIM_SKILL_ALIAS_SPECS = [
+  {
+    name: "meta_kim",
+    label: "legacy Meta Arsenal skill package",
+    required: [/Meta Arsenal/i, /Smallest Governable Unit/i],
+  },
+  {
+    name: "meta-theory-agent-calling-gap",
+    label: "fixed Meta Theory agent-calling gap skill",
+    required: [/Meta-Theory Agent Calling Gap/i, /Status:\s*.*FIXED/i],
+  },
+  {
+    name: "source-command-meta-theory-report",
+    label: "legacy Meta Theory report source-command skill",
+    required: [/source-command-meta-theory-report/i, /run-meta-theory-governed-execution\.mjs/i],
+  },
+  {
+    name: "source-command-meta-theory-verify",
+    label: "legacy Meta Theory verify source-command skill",
+    required: [/source-command-meta-theory-verify/i, /meta:(release:smoke|verify:all|check:global:release)/i],
+  },
+  {
+    name: "critical-fetch-thinking-review",
+    label: "legacy Critical/Fetch/Thinking/Review Meta_Kim alias",
+    required: [/Meta[_ -]?Kim|Meta Theory/i, /Critical[\s\S]*Fetch[\s\S]*Thinking[\s\S]*Review/i],
+  },
+  {
+    name: "critical-fetch-thinking-and-review",
+    label: "legacy Critical/Fetch/Thinking/Review Meta_Kim alias",
+    required: [/Meta[_ -]?Kim|Meta Theory/i, /Critical[\s\S]*Fetch[\s\S]*Thinking[\s\S]*Review/i],
+  },
+  {
+    name: "critical-and-fetch-thinking-review",
+    label: "legacy Critical/Fetch/Thinking/Review Meta_Kim alias",
+    required: [/Meta[_ -]?Kim|Meta Theory/i, /Critical[\s\S]*Fetch[\s\S]*Thinking[\s\S]*Review/i],
+  },
+  {
+    name: "critical-and-fetch-thinking-and-review",
+    label: "legacy Critical/Fetch/Thinking/Review Meta_Kim alias",
+    required: [/Meta[_ -]?Kim|Meta Theory/i, /Critical[\s\S]*Fetch[\s\S]*Thinking[\s\S]*Review/i],
+  },
+];
+const CODEX_LEGACY_SHARED_SKILL_ROOT = path.join(
+  os.homedir(),
+  ".agents",
+  "skills",
+);
 
 let runtimeHomes = {};
 let allowedRoots = [];
 let activeTargets = [];
 let cleanupTargets = [];
+let staleSkillCleanupTargets = [];
 let selectedTargetIds = [];
 
 function assertHomeBound(targetPath) {
@@ -198,6 +247,9 @@ async function resolveTargets() {
   allowedRoots = Object.values(runtimeHomes).map(({ dir }) =>
     path.resolve(dir),
   );
+  if (selectedTargetIds.includes("codex")) {
+    allowedRoots.push(path.resolve(path.dirname(CODEX_LEGACY_SHARED_SKILL_ROOT)));
+  }
 
   activeTargets = selectedTargetIds.map((targetId) => ({
     targetId,
@@ -217,6 +269,37 @@ async function resolveTargets() {
       `legacy ${targetContext.profiles[targetId]?.label ?? targetId} flat skill`,
     dir: path.join(runtimeHomes[targetId].dir, "skills", "meta-theory.md"),
   }));
+
+  staleSkillCleanupTargets = [];
+  for (const targetId of selectedTargetIds) {
+    const roots = [path.join(runtimeHomes[targetId].dir, "skills")];
+    if (targetId === "codex") {
+      roots.push(CODEX_LEGACY_SHARED_SKILL_ROOT);
+    }
+    for (const skillsRoot of roots) {
+      for (const aliasSpec of STALE_META_KIM_SKILL_ALIAS_SPECS) {
+        staleSkillCleanupTargets.push({
+          ...aliasSpec,
+          runtimeId: targetId,
+          dir: path.join(skillsRoot, aliasSpec.name),
+        });
+      }
+    }
+  }
+  if (selectedTargetIds.includes("codex")) {
+    staleSkillCleanupTargets.push({
+      name: "meta-theory",
+      label: "legacy shared Codex global meta-theory duplicate",
+      runtimeId: "codex",
+      dir: path.join(CODEX_LEGACY_SHARED_SKILL_ROOT, "meta-theory"),
+      required: [/name:\s*meta-theory/i, /Meta_Kim executable governance dispatcher/i],
+      removeOnlyWhenPathExists: path.join(
+        runtimeHomes.codex.dir,
+        "skills",
+        "meta-theory",
+      ),
+    });
+  }
 }
 
 async function* walkFiles(rootDir) {
@@ -549,6 +632,82 @@ async function removeIfExists(targetPath) {
     return false;
   }
   await fs.rm(targetPath, { recursive: true, force: true });
+  return true;
+}
+
+async function readSkillSignatureText(targetPath) {
+  if (!(await pathExists(targetPath))) {
+    return "";
+  }
+  const stat = await fs.lstat(targetPath);
+  if (stat.isFile()) {
+    return fs.readFile(targetPath, "utf8");
+  }
+  if (!stat.isDirectory()) {
+    return "";
+  }
+
+  const chunks = [];
+  for await (const filePath of walkFiles(targetPath)) {
+    if (path.basename(filePath) !== "SKILL.md") continue;
+    chunks.push(await fs.readFile(filePath, "utf8"));
+    if (chunks.length >= 8) break;
+  }
+  return chunks.join("\n\n");
+}
+
+async function isStaleMetaKimSkillAlias(target) {
+  if (!(await pathExists(target.dir))) {
+    return false;
+  }
+  if (
+    target.removeOnlyWhenPathExists &&
+    !(await pathExists(target.removeOnlyWhenPathExists))
+  ) {
+    return false;
+  }
+  const signatureText = await readSkillSignatureText(target.dir);
+  if (!signatureText) {
+    return false;
+  }
+  return target.required.every((pattern) => pattern.test(signatureText));
+}
+
+async function backupAndRemoveStaleSkillAlias(target) {
+  assertHomeBound(target.dir);
+  if (!(await isStaleMetaKimSkillAlias(target))) {
+    return false;
+  }
+
+  const backupRoot = path.join(
+    runtimeHomes[target.runtimeId].dir,
+    ".meta-kim",
+    "backups",
+    "stale-skill-aliases",
+    legacyHookBackupStamp,
+  );
+  assertHomeBound(backupRoot);
+  await fs.mkdir(backupRoot, { recursive: true });
+  const backupPath = path.join(
+    backupRoot,
+    `${path.basename(target.dir)}-${path
+      .resolve(target.dir)
+      .replace(/^[A-Za-z]:/, "")
+      .replace(/[^A-Za-z0-9_.-]+/g, "_")}`,
+  );
+  assertHomeBound(backupPath);
+  await fs.cp(target.dir, backupPath, {
+    recursive: true,
+    force: true,
+    errorOnExist: false,
+  });
+  await fs.rm(target.dir, { recursive: true, force: true });
+  console.log(
+    `${C.green}✓${C.reset} ${C.dim}Removed ${target.label}: ${target.dir}${C.reset}`,
+  );
+  console.log(
+    `${C.dim}  backup: ${backupPath}${C.reset}`,
+  );
   return true;
 }
 
@@ -1080,6 +1239,17 @@ async function runCheck() {
     }
   }
 
+  for (const target of staleSkillCleanupTargets) {
+    const exists = await pathExists(target.dir);
+    const isStale = exists && (await isStaleMetaKimSkillAlias(target));
+    console.log(
+      `${isStale ? `${C.yellow}⊘${C.reset}` : `${C.green}✓${C.reset}`} ${C.dim}${target.label}: ${target.dir}${C.reset}`,
+    );
+    if (isStale) {
+      failed = true;
+    }
+  }
+
   if (selectedTargetIds.includes("claude") && withGlobalHooks) {
     const repoHooksFp = await fingerprintGlobalHookSources();
     const globalHooksPath = globalMetaKimHooksDir();
@@ -1191,6 +1361,10 @@ async function runSync() {
     console.log(
       `${C.green}✓${C.reset} ${C.dim}Synced ${target.label}: ${target.dir}${C.reset}`,
     );
+  }
+
+  for (const target of staleSkillCleanupTargets) {
+    await backupAndRemoveStaleSkillAlias(target);
   }
 
   if (selectedTargetIds.includes("claude") && withGlobalHooks) {

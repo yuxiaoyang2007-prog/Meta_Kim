@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateFanoutGate } from "../../canonical/runtime-assets/claude/hooks/spine-state.mjs";
+import { evaluateFanoutGate } from "../../canonical/runtime-assets/shared/hooks/spine-state.mjs";
 
 // Fan-out gate root-cause fix for "/meta-theory triggers but main thread
 // self-executes without dispatching any Agent". The trigger condition is a pure

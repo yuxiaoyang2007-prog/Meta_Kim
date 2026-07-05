@@ -862,7 +862,12 @@ function routeForWeapon(weapon) {
   const dep = dependencyIds.length ? candidateDependencies.find((candidate) => dependencyIds.includes(candidate.id)) ?? null : null;
   const runtimeValue = weapon.runtimeSupport?.[runtime] ?? "unknown";
   const osValue = weapon.osSupport?.[osTarget] ?? "unknown";
-  const available = new Set(ownerDiscoveryPacket.candidateExistingExecutionOwners);
+  const available = new Set([
+    ...ownerDiscoveryPacket.candidateExistingExecutionOwners,
+    ...(taskShape !== "engineering_execution"
+      ? (ownerDiscoveryPacket.governanceStageOwners ?? [])
+      : []),
+  ]);
   const executionOwner = weapon.ownerCandidates?.find((owner) => available.has(owner)) ?? null;
   const selectedOwner = weapon.ownerCandidates?.[0] ?? null;
   const existingOwnerMatched = selectedOwner
@@ -1377,12 +1382,15 @@ function selectExecutionOwner() {
     { terms: ["backend", "api", "server", "后端"], owners: ["backend", "worker"] },
     { terms: ["review", "审查"], owners: ["review", "code-reviewer", "worker"] },
   ];
+  const findInAvailable = (prefs) => [...available].find((id) =>
+    prefs.some((pref) => typeof id === "string" && id.includes(pref)),
+  );
   for (const group of preferenceGroups) {
     if (!group.terms.some((term) => taskText.includes(term))) continue;
-    const owner = group.owners.find((candidate) => available.has(candidate));
+    const owner = findInAvailable(group.owners);
     if (owner) return owner;
   }
-  return [
+  return findInAvailable([
     "worker",
     "analysis",
     "backend",
@@ -1392,7 +1400,7 @@ function selectExecutionOwner() {
     "search-specialist",
     "docs-researcher",
     "reviewer",
-  ].find((candidate) => available.has(candidate)) ?? null;
+  ]) ?? null;
 }
 
 function capabilityDiscoveryTaskRequested() {

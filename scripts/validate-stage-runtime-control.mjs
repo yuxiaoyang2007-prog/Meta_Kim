@@ -154,7 +154,6 @@ function assertPrdAndPackage() {
 function assertRuntimeSources() {
   for (const sourcePath of [
     "canonical/runtime-assets/shared/hooks/spine-state.mjs",
-    "canonical/runtime-assets/claude/hooks/spine-state.mjs",
   ]) {
     const source = readText(sourcePath);
     assert(

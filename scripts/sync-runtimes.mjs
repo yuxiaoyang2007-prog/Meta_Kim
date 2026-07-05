@@ -2687,14 +2687,13 @@ Examples:
     }
     const runtimeHookTargets = [
       { hooksDir: dirs.claudeHooksProjectionDir, display: dirs.displayPaths.claudeHooks, runtime: "claude" },
-      { hooksDir: dirs.codexHooksDir, display: dirs.displayPaths.codexHooks, runtime: "codex" },
-      { hooksDir: dirs.cursorHooksDir, display: dirs.displayPaths.cursorHooks, runtime: "cursor" },
     ];
     for (const target of runtimeHookTargets) {
       for (const hookName of canonicalHookFiles) {
-        const hookContent = await tryReadCanonical(
-          path.join(canonicalClaudeHooksDir, hookName),
-        );
+        const hookSource = sharedHookDeps.includes(hookName)
+          ? path.join(canonicalRuntimeAssetsDir, "shared", "hooks", hookName)
+          : path.join(canonicalClaudeHooksDir, hookName);
+        const hookContent = await tryReadCanonical(hookSource);
         if (
           hookContent &&
           (
@@ -3566,6 +3565,13 @@ Examples:
   }
 
   if (checkOnly) {
+    if (selectedTargets.length === 0) {
+      console.log(
+        t.syncRuntimesCheckNoTargets ||
+          "[meta:sync] 未选定 runtime target — projectProjectionMode=global_only 且未传 --targets。\n本次未检查任何镜像，\"已是最新\"结论不成立。\n检查项目投影：npm run meta:check:runtimes -- --scope project --targets claude,codex\n检查全局镜像：npm run meta:check:runtimes -- --scope global",
+      );
+      return;
+    }
     console.log(t.syncRuntimesCheckOk);
     return;
   }

@@ -374,6 +374,169 @@ describe("sync-global-meta-theory hook policy", () => {
     });
   });
 
+  test("Codex global sync removes stale shared Meta_Kim skill aliases", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      const sharedSkills = path.join(root, ".agents", "skills");
+      await mkdir(path.join(sharedSkills, "meta_kim", "meta-theory"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(sharedSkills, "meta_kim", "meta-theory", "SKILL.md"),
+        `---
+name: meta-theory
+description: Meta Arsenal dispatcher
+---
+
+# Meta Arsenal - Smallest Governable Unit Methodology
+`,
+        "utf8",
+      );
+      await mkdir(path.join(sharedSkills, "meta-theory-agent-calling-gap"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(sharedSkills, "meta-theory-agent-calling-gap", "SKILL.md"),
+        `---
+name: meta-theory-agent-calling-gap
+description: old gap
+---
+
+# Meta-Theory Agent Calling Gap
+
+## Status: FIXED
+`,
+        "utf8",
+      );
+      await mkdir(path.join(sharedSkills, "source-command-meta-theory-report"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(sharedSkills, "source-command-meta-theory-report", "SKILL.md"),
+        `---
+name: source-command-meta-theory-report
+description: Reopen a Meta_Kim governed run report
+---
+
+node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --read latest
+`,
+        "utf8",
+      );
+      await mkdir(path.join(sharedSkills, "source-command-meta-theory-verify"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(sharedSkills, "source-command-meta-theory-verify", "SKILL.md"),
+        `---
+name: source-command-meta-theory-verify
+description: Run the appropriate Meta_Kim verification path
+---
+
+npm run meta:release:smoke
+`,
+        "utf8",
+      );
+      await mkdir(path.join(sharedSkills, "meta-theory"), { recursive: true });
+      await writeFile(
+        path.join(sharedSkills, "meta-theory", "SKILL.md"),
+        `---
+name: meta-theory
+description: Meta_Kim executable governance dispatcher
+---
+`,
+        "utf8",
+      );
+      await mkdir(path.join(sharedSkills, "critical-fetch-thinking-review"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(sharedSkills, "critical-fetch-thinking-review", "SKILL.md"),
+        `---
+name: critical-fetch-thinking-review
+description: User-owned workflow notes
+---
+`,
+        "utf8",
+      );
+      await mkdir(
+        path.join(root, "codex", "skills", "critical-fetch-thinking-review"),
+        {
+          recursive: true,
+        },
+      );
+      await writeFile(
+        path.join(
+          root,
+          "codex",
+          "skills",
+          "critical-fetch-thinking-review",
+          "SKILL.md",
+        ),
+        `---
+name: critical-fetch-thinking-review
+description: Meta_Kim legacy governed route alias
+---
+
+# Meta Theory
+
+Critical -> Fetch -> Thinking -> Review
+`,
+        "utf8",
+      );
+
+      await assert.rejects(
+        () => runScript(["--check", "--targets", "codex"], env),
+        (error) => {
+          assert.match(error.stdout, /legacy Meta Arsenal skill package/);
+          assert.match(error.stdout, /legacy shared Codex global meta-theory duplicate/);
+          assert.match(
+            error.stdout,
+            /legacy Critical\/Fetch\/Thinking\/Review Meta_Kim alias/,
+          );
+          return true;
+        },
+      );
+
+      await runScript(["--targets", "codex"], env);
+
+      for (const staleName of [
+        "meta_kim",
+        "meta-theory-agent-calling-gap",
+        "source-command-meta-theory-report",
+        "source-command-meta-theory-verify",
+        "meta-theory",
+      ]) {
+        await assert.rejects(() =>
+          readdir(path.join(sharedSkills, staleName)),
+        );
+      }
+      await assert.rejects(() =>
+        readdir(
+          path.join(root, "codex", "skills", "critical-fetch-thinking-review"),
+        ),
+      );
+
+      await readFile(
+        path.join(sharedSkills, "critical-fetch-thinking-review", "SKILL.md"),
+        "utf8",
+      );
+      await readFile(
+        path.join(root, "codex", "skills", "meta-theory", "SKILL.md"),
+        "utf8",
+      );
+      const backupRoot = path.join(
+        root,
+        "codex",
+        ".meta-kim",
+        "backups",
+        "stale-skill-aliases",
+      );
+      assert.ok((await readdir(backupRoot)).length > 0);
+
+      const check = await runScript(["--check", "--targets", "codex"], env);
+      assert.doesNotMatch(check.stdout, /legacy Meta Arsenal skill package.*⊘/);
+    });
+  });
+
   test("Codex global hooks merge preserves user hooks and repairs stale Meta_Kim entries", async () => {
     await withTempRuntimeHomes(async ({ env, root }) => {
       const codexHome = path.join(root, "codex");

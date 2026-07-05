@@ -8,7 +8,7 @@ import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const SETUP_PATH = resolve(import.meta.dirname, "../../setup.mjs");
+const SETUP_PATH = resolve(import.meta.dirname, "../../config/i18n/setup-strings.mjs");
 const source = readFileSync(SETUP_PATH, "utf8");
 
 // setup.mjs uses: const I18N = { en: {...}, "zh-CN": {...}, "ja-JP": {...}, "ko-KR": {...} }

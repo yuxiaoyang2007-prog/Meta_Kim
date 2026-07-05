@@ -1283,7 +1283,7 @@ describe("MCP memory cross-runtime hooks", () => {
     try {
       process.env.META_KIM_SPINE_STATE_DIR = path.join(outsideDir, "spine");
       const spine = await import(
-        `../../canonical/runtime-assets/claude/hooks/spine-state.mjs?test=${Date.now()}`
+        `../../canonical/runtime-assets/shared/hooks/spine-state.mjs?test=${Date.now()}`
       );
 
       await spine.writeSpineState(tempDir, {
@@ -1602,9 +1602,10 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.match(source, /mcpMemoryAutoStartFailureMessage/);
     assert.match(source, /HF_HUB_OFFLINE/);
     assert.match(source, /TRANSFORMERS_OFFLINE/);
-    assert.match(source, /启动失败/);
-    assert.match(source, /起動に失敗/);
-    assert.match(source, /시작하지 못했거나/);
+    const autostartI18nSource = readRepoFile("config", "i18n", "setup-strings.mjs");
+    assert.match(autostartI18nSource, /启动失败/);
+    assert.match(autostartI18nSource, /起動に失敗/);
+    assert.match(autostartI18nSource, /시작하지 못했거나/);
     assert.match(source, /const metaKimDir = join\(homedir\(\), "\.meta-kim"\)/);
     assert.match(source, /const psPath = join\(metaKimDir, "mcp-memory-start\.ps1"\)/);
     assert.match(source, /writeUtf8BomFileSync\(\s*psPath,/);
@@ -1650,8 +1651,8 @@ describe("MCP memory cross-runtime hooks", () => {
 
     assert.match(setupSource, /memory server --http/);
     assert.match(installerSource, /memory server --http/);
-    assert.match(setupSource, /MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http/);
-    assert.match(installerSource, /MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http/);
+    const manualHintI18n = readRepoFile("config", "i18n", "setup-strings.mjs");
+    assert.match(manualHintI18n, /MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http/);
     assert.doesNotMatch(installerSource, /python -m mcp_memory_service/);
     assert.doesNotMatch(installerSource, /uv run memory server -s hybrid/);
   });

@@ -16,6 +16,7 @@ const readmeZh = readFileSync(path.join(repoRoot, "README.zh-CN.md"), "utf8");
 
 describe("setup update default flow", () => {
   const source = readFileSync(path.join(repoRoot, "setup.mjs"), "utf8");
+  const i18nStrings = readFileSync(path.join(repoRoot, "config", "i18n", "setup-strings.mjs"), "utf8");
 
   test("--update takes precedence over non-TTY silent install mode", () => {
     const mainSource = source.slice(source.indexOf("async function main()"));
@@ -203,12 +204,12 @@ describe("setup update default flow", () => {
       "setup copy must not claim global install automatically governs every existing project",
     );
     assert.match(
-      source,
+      i18nStrings,
       /Global capabilities \(recommended\)/,
       "English setup copy must name global capabilities as the recommended default",
     );
     assert.match(
-      source,
+      i18nStrings,
       /全局通用能力（推荐）/,
       "Chinese setup copy must name global capabilities as the recommended default",
     );
@@ -303,7 +304,7 @@ describe("setup update default flow", () => {
     assert.match(source, /projectDeployProtectionNote/);
     assert.match(source, /projectCleanupProtectionNote/);
     assert.match(
-      source,
+      i18nStrings,
       /askProjectRedundantCleanup:\s*"[^"]*\\n[^"]*\\n[^"]*"/,
       "project cleanup prompt must be line-broken instead of one long terminal line",
     );
@@ -447,7 +448,7 @@ describe("setup update default flow", () => {
       "global sync must not show a redundant Claude Code-only confirmation",
     );
     assert.match(
-      source,
+      i18nStrings,
       /把 Meta_Kim 全局治理层同步到已选平台，供各项目复用？包含 agents、skills、MCP、Commands；全局 hooks 需要 --with-global-hooks。实际支持项会自动检查后同步。（推荐）/,
       "global sync prompt must name hooks as explicit opt-in",
     );
