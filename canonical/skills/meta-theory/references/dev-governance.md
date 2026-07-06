@@ -116,7 +116,7 @@ This protocol is referenced from `SKILL.md` § **Global-First Owner Discovery** 
 
 ### Wave 3 — Execution (bounded fan-out)
 
-- **Execution** dispatches `workerTaskPackets` in parallel. Each packet must carry `shardKey`, `shardScope`, `workspaceIsolation`, `artifactNamespace`, `collisionPolicy`, shared `parallelGroup`, and one `mergeOwner`. Missing shard or merge evidence is fake parallelism.
+- **Execution** dispatches `workerTaskPackets` in parallel. Each packet must carry `shardKey`, `shardScope`, `workspaceIsolation`, `artifactNamespace`, `collisionPolicy`, shared `parallelGroup`, and one `mergeOwner`. Missing shard or merge evidence is fake parallelism. All packets sharing a `parallelGroup` MUST be dispatched as concurrent Task/Agent tool calls in a single assistant message — splitting them across messages fails Meta-Review as fake parallelism.
 - **mergeOwner** is the single authority that resolves collisions and produces the final deliverable chain. The main thread may also be the mergeOwner, but only when it has not also held the worker role for the same packet.
 
 ### Wave 4 — Review + Meta-Review (skeptic fan-out + Warden gate)
@@ -157,7 +157,7 @@ These assignments are the **default** for any run that triggers the Fan-out Trig
 
 The protocol activates when any of these signals appear:
 
-- explicit `/meta-theory`, `critical and fetch thinking and review`, "并行", "多个 agent", "review + fix + verify"
+- explicit `/meta-theory`, `meta-theory`, `元理论`, natural-language governed execution, `critical and fetch thinking and review`, `Critical Thinking -> Fetch -> Deep Thinking -> Review`, "并行", "多个 agent", "review + fix + verify"
 - 2+ independent files, runtimes, platforms, capability families, or verification lanes
 - cross-runtime behavior, release/update/sync, hook/security/sandbox, or repeated same-type failure work
 - user feedback that the current Meta_Kim route is slow, serial, missing agents, or repeatedly corrected

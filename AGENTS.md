@@ -160,7 +160,7 @@ That means:
 - Review checks whether Critical, Fetch, and Thinking were good enough before judging final output polish
 - Execution work is dispatched to agents, skills, commands, MCP capabilities, runtime tools, or workers selected by Thinking instead of collapsing into the main thread
 
-For Codex, explicit meta-theory activation is also user-visible permission to use subagents when Thinking finds multiple independent worker lanes and proves DAG/collision/workspace/external-write safety. The main thread scopes, delegates, reviews, and synthesizes; it does not become the all-purpose executor for complex work. Without an explicit `/meta-theory` mention or a direct subagent/parallel-agent request, Codex can still reach the same route by presenting a native choice surface that names the parallel-agent fan-out before Execution.
+For Codex, meta-theory activation is user-visible permission to enter governed routing, but live subagent fan-out still requires direct subagent/delegation/parallel-agent wording or a completed native choice surface that names the parallel-agent route. When Thinking finds multiple independent worker lanes and proves DAG/collision/workspace/external-write safety, the main thread scopes, delegates, reviews, and synthesizes; it does not become the all-purpose executor for complex work. Without direct subagent/parallel-agent wording, Codex can still reach the same route by presenting a native choice surface before Execution.
 
 ### Production Correctness Before Execution
 
@@ -202,7 +202,7 @@ Hard rules before Execution:
 - Multi-lens judgment uses dynamic lens discovery; user-mentioned books, people, or theories are seeds/fallbacks, not a fixed list.
 - Execution requires owner + weapon + verification owner.
 - Dependency projects require input/output contracts before use.
-- Codex subagents require a user-visible authorization source: direct subagent/parallel-agent wording, explicit `/meta-theory`, or a completed native choice surface for a route that names parallel-agent fan-out. Hooks require trust review.
+- Codex subagents require a user-visible authorization source: direct subagent/delegation/parallel-agent wording or a completed native choice surface for a route that names parallel-agent fan-out. A `meta-theory` trigger alone authorizes governed routing, not live subagent dispatch. Hooks require trust review.
 - OpenClaw skills require third-party risk and sandbox review.
 - Cursor capabilities remain unknown/partial until verified; do not mark them native from projection files alone.
 - Public-ready requires verification plus intent acceptance; workflow completion alone is not user-goal completion.

@@ -182,7 +182,7 @@ function assertRuntimeSources() {
   assert(!/advanceStage\(state,\s*'fetch'\)/.test(hook), "hook must not auto-advance to Fetch");
   hasAll(
     hook,
-    ["isHookObservedState", "observedModeNotice", "isHighRiskObservedExecution"],
+    ["isHookObservedState", "observedModeNotice", "allowObservedModeExecution"],
     "enforce-agent-dispatch.mjs",
   );
 
@@ -211,9 +211,9 @@ function assertRegressionTests() {
       `${deprecatedModeMarker} residue in spine state cannot skip dispatch governance`,
       "auto prompt activation creates observed advisory state instead of managed hard-gate state",
       "observed hook state allows ordinary local file mutation with one readable notice",
-      "observed hook state allows local git stage and commit but not push",
-      "observed hook state ignores high-risk words inside quoted search text",
-      "observed hook state still denies high-risk external side-effect commands",
+      "observed hook state does not block commands by keyword or command class",
+      "observed hook state keeps command execution advisory even when text contains high-risk words",
+      "auto prompt activation does not create command-class publish approvals",
       "auto prompt activation rotates stale legacy active state for a new prompt",
       "Type-first route policy is a route selection invariant, not another gate",
     ],

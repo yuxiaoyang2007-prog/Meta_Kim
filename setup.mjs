@@ -366,6 +366,29 @@ function run(cmd, opts = {}) {
   }
 }
 
+function quoteCliArgForShell(value) {
+  const text = String(value);
+  if (text === "") return '""';
+  if (!/[^\w@%+=:,./\\-]/.test(text)) return text;
+  return `"${text.replace(/(["^&|<>])/g, "^$1")}"`;
+}
+
+function spawnCliSync(command, commandArgs = [], options = {}) {
+  if (isWin) {
+    return spawnSync(
+      [command, ...commandArgs].map(quoteCliArgForShell).join(" "),
+      {
+        ...options,
+        shell: true,
+      },
+    );
+  }
+  return spawnSync(command, commandArgs, {
+    ...options,
+    shell: false,
+  });
+}
+
 // Cross-platform CLI detection: tries direct, .exe, then where/which fallback
 function detectCli(name) {
   for (const cmd of [name, `${name}.exe`]) {
@@ -1023,6 +1046,7 @@ const PROJECT_HOOK_SOURCE_CANDIDATES = {
     "post-typecheck.mjs",
     "skip-reminder.mjs",
     "spine-state.mjs",
+    "spine-state-utils.mjs",
     "stop-compaction.mjs",
     "stop-completion-guard.mjs",
     "stop-console-log-audit.mjs",
@@ -1040,6 +1064,7 @@ const PROJECT_HOOK_SOURCE_CANDIDATES = {
     "post-typecheck.mjs",
     "skip-reminder.mjs",
     "spine-state.mjs",
+    "spine-state-utils.mjs",
     "stop-compaction.mjs",
     "stop-completion-guard.mjs",
     "stop-console-log-audit.mjs",
@@ -3185,6 +3210,7 @@ const PROJECT_HOOK_FILE_WHITELIST_BY_PLATFORM = {
     "stop-spine-cleanup.mjs",
     "utils.mjs",
     "spine-state.mjs",
+    "spine-state-utils.mjs",
   ]),
   codex: new Set([
     "activate-meta-theory-spine.mjs",
@@ -3215,6 +3241,7 @@ const PROJECT_HOOK_FILE_WHITELIST_BY_PLATFORM = {
     "resolve-plan-dir.sh",
     "skip-reminder.mjs",
     "spine-state.mjs",
+    "spine-state-utils.mjs",
     "stop-compaction.mjs",
     "stop-console-log-audit.mjs",
     "stop-completion-guard.mjs",
@@ -3244,6 +3271,7 @@ const PROJECT_HOOK_FILE_WHITELIST_BY_PLATFORM = {
     "user-prompt-submit.sh",
     "skip-reminder.mjs",
     "spine-state.mjs",
+    "spine-state-utils.mjs",
     "stop-compaction.mjs",
     "stop-console-log-audit.mjs",
     "stop-completion-guard.mjs",
@@ -3872,10 +3900,9 @@ async function runQuickDeploy() {
       return true;
     }
     info(t.runningNpm);
-    const result = spawnSync("npm", ["install"], {
+    const result = spawnCliSync("npm", ["install"], {
       cwd: PROJECT_DIR,
       stdio: "inherit",
-      shell: isWin,
     });
     return result.status === 0;
   });
@@ -4763,10 +4790,9 @@ function installDeps() {
     }
   }
   info(t.runningNpm);
-  const result = spawnSync("npm", ["install"], {
+  const result = spawnCliSync("npm", ["install"], {
     cwd: PROJECT_DIR,
     stdio: "inherit",
-    shell: isWin,
   });
   if (result.status === 0) {
     ok(t.npmDone);
@@ -4939,7 +4965,7 @@ async function downloadAndInstallPython() {
     if (wingetAvailable) {
       info(t.pythonInstallWinget);
       console.log(`${C.dim}  ${t.pythonInstallWingetHint}${C.reset}`);
-      const result = spawnSync(
+      const result = spawnCliSync(
         "winget",
         [
           "install",
@@ -4948,7 +4974,7 @@ async function downloadAndInstallPython() {
           "--accept-package-agreements",
           "--accept-source-agreements",
         ],
-        { stdio: "inherit", shell: true },
+        { stdio: "inherit" },
       );
       // winget returns non-zero for "package already installed, no upgrade
       // available" and for genuine failures alike — re-run detection either
@@ -5386,9 +5412,8 @@ function findMemoryBinPath(resolved) {
   // Strategy 2: search system PATH (handles cross-install pip --user case)
   const whichCmd = plat === "win32" ? "where" : "which";
   try {
-    const result = spawnSync(whichCmd, [binName], {
+    const result = spawnCliSync(whichCmd, [binName], {
       encoding: "utf8",
-      shell: true,
     });
     if (result.status === 0 && result.stdout.trim()) {
       const found = result.stdout.trim().split(/\r?\n/)[0];
@@ -6477,10 +6502,9 @@ async function runInstall() {
         return true;
       }
       info(t.runningNpm);
-      const result = spawnSync("npm", ["install"], {
+      const result = spawnCliSync("npm", ["install"], {
         cwd: PROJECT_DIR,
         stdio: "inherit",
-        shell: isWin,
       });
       if (result.status === 0) {
         ok(t.npmDone);
@@ -6653,10 +6677,9 @@ async function runUpdate() {
 
   // ── 1. npm install (always — new code may have new deps) ────────────
   info(t.updateNpm);
-  const npmResult = spawnSync("npm", ["install"], {
+  const npmResult = spawnCliSync("npm", ["install"], {
     cwd: PROJECT_DIR,
     stdio: "inherit",
-    shell: isWin,
   });
   if (npmResult.status === 0) ok(t.npmDone);
   else warn(t.npmFailed);

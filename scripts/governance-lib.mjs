@@ -68,16 +68,27 @@ export async function writeJson(filePath, value) {
   await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function quoteWindowsCommand(value) {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
 export function commandProbe(command) {
   const whereCommand = process.platform === "win32" ? "where.exe" : "which";
   const where = spawnSync(whereCommand, [command], { encoding: "utf8" });
   const source = where.status === 0 ? where.stdout.split(/\r?\n/)[0] : null;
   let version = null;
   if (source) {
-    const result = spawnSync(command, ["--version"], {
-      encoding: "utf8",
-      shell: process.platform === "win32",
-    });
+    const result =
+      process.platform === "win32"
+        ? spawnSync(
+            process.env.ComSpec || "cmd.exe",
+            ["/d", "/s", "/c", `${quoteWindowsCommand(source)} --version`],
+            { encoding: "utf8", shell: false },
+          )
+        : spawnSync(source, ["--version"], {
+            encoding: "utf8",
+            shell: false,
+          });
     version =
       result.status === 0
         ? (result.stdout || result.stderr).split(/\r?\n/).find(Boolean) ?? null

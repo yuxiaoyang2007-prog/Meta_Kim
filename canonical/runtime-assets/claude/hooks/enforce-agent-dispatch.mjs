@@ -741,183 +741,15 @@ function observedModeNotice(state) {
   if (isZh(state)) {
     return (
       "[Meta_Kim] 提醒：当前是自动触发的观察态。Hook 不会把自己当阶段驱动器反复拦截普通本地修改；" +
-      "发布、公示或严格验收仍需要 managed runner 写入 Fetch、Thinking、fileChangeFactCard 和 executionLease。"
+      "删除、Git、GitHub API、安装或发布由运行时/用户意图处理；公示和严格验收仍看 managed runner 的 Fetch、Thinking、fileChangeFactCard 和 executionLease。"
     );
   }
   return (
     "[Meta_Kim] Notice: auto-triggered observed mode is active. The hook will not act as the " +
-    "stage driver or repeatedly hard-block ordinary local edits; release/public-ready claims " +
-    "still require the managed runner to record Fetch, Thinking, fileChangeFactCard, and executionLease."
+    "stage driver or hard-block commands by class; delete, Git, GitHub API, install, and publish " +
+    "commands remain runtime/user-intent concerns, while release/public-ready claims still require " +
+    "the managed runner to record Fetch, Thinking, fileChangeFactCard, and executionLease."
   );
-}
-
-function observedModeHighRiskReason(state, command = "") {
-  if (isZh(state)) {
-    return (
-      "当前是自动触发的观察态，但该操作像高风险或外部副作用命令。先进入 managed stage driver，" +
-      "写入 owner/loadout、fileChangeFactCard、permission/rollback 和 executionLease 后再执行。" +
-      (command ? ` Command: ${command}` : "")
-    );
-  }
-  return (
-    "Auto-triggered observed mode cannot approve high-risk or external side-effect commands. " +
-    "Enter a managed stage driver first, then record owner/loadout, fileChangeFactCard, " +
-    "permission/rollback, and executionLease before retrying." +
-    (command ? ` Command: ${command}` : "")
-  );
-}
-
-function observedModeAuthorizedReleaseNotice(state) {
-  if (isZh(state)) {
-    return (
-      "[Meta_Kim] 已识别到本轮用户明确要求提交/推送/发布；观察态只放行 git push 和 GitHub Release，" +
-      "不放行 npm publish、强推、安装或破坏性命令。"
-    );
-  }
-  return (
-    "[Meta_Kim] Explicit user release intent detected for this run; observed mode only allows " +
-    "git push and GitHub Release commands, not npm publish, force push, installs, or destructive commands."
-  );
-}
-
-function stripQuotedShellText(value) {
-  const raw = String(value || "")
-    .replace(/@'[\s\S]*?'@/g, " @''@ ")
-    .replace(/@"[\s\S]*?"@/g, ' @""@ ');
-  let result = "";
-  let quote = null;
-  let escaped = false;
-
-  for (const ch of raw) {
-    if (escaped) {
-      if (!quote) result += ch;
-      escaped = false;
-      continue;
-    }
-    if (ch === "\\") {
-      if (!quote) result += ch;
-      escaped = true;
-      continue;
-    }
-    if (quote) {
-      if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      result += " ";
-      continue;
-    }
-    result += ch;
-  }
-
-  return result;
-}
-
-function isQuotedInspectionSegment(segment) {
-  const stripped = stripQuotedShellText(segment).trim().toLowerCase();
-  if (!stripped) return true;
-  return /^(?:graphify\s+query|rg\b|grep\b|egrep\b|fgrep\b|select-string\b|sls\b|find\b|git\s+grep\b|npm\s+search\b|npm\s+view\b)/i.test(
-    stripped,
-  );
-}
-
-function isHighRiskObservedSegment(segment) {
-  if (isReadOnlyBash(segment)) return false;
-  const lower = stripQuotedShellText(segment).trim().toLowerCase();
-  if (!lower) return false;
-  const highRiskCommandPattern =
-    /^(?:(?:bash|sh|zsh|pwsh|powershell)(?:\.exe)?\s+(?:-c|-lc|-command|\/c)\b|(?:node|node\.exe)\s+(?:-e|--eval)\b|python(?:3|\.exe)?\s+-c\b|npm\s+(?:install|i|publish)|pnpm\s+(?:install|i|add)|yarn\s+(?:install|add)|cargo\s+(?:install|publish|run)|pip\s+(?:install|uninstall)|git\s+(?:push|pull|fetch|reset|checkout|restore|clean|rebase|merge|rm|mv)\b|gh\s+(?:release|pr\s+merge)|curl\b|wget\b|invoke-webrequest\b|invoke-restmethod\b|invoke-expression\b|iwr\b|irm\b|iex\b|remove-item\b|rm\s+-|del\b|rmdir\b|setx\b|set-item\s+env)\b/i;
-  return highRiskCommandPattern.test(lower);
-}
-
-function isSafeAfterRemovingQuotedText(segment) {
-  const stripped = stripQuotedShellText(segment).trim();
-  if (!stripped) return true;
-  return !isHighRiskObservedSegment(stripped) || isQuotedInspectionSegment(segment);
-}
-
-function isHighRiskObservedBash(command) {
-  const normalized = String(command || "").trim();
-  if (!normalized) return false;
-  const segments = bashReadonlyInternals
-    .splitSegments(normalized)
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-  if (segments.some(isHighRiskObservedSegment)) return true;
-  const classification = classifyBashCommand(normalized);
-  if (classification.readOnly) return false;
-  if (!/^dangerous pattern:/i.test(classification.reason || "")) return false;
-  if (segments.every(isSafeAfterRemovingQuotedText)) return false;
-  return /install|publish|push|merge|rebase|reset|delete|remove|credential|token|secret|http|curl|wget|invoke-webrequest|invoke-restmethod|invoke-expression|iex/i.test(
-    classification.reason,
-  );
-}
-
-function getObservedExternalPublishIntent(state) {
-  const control = state?.stageRuntimeControl || {};
-  const intent = control.externalPublishIntent || state?.externalPublishIntent || null;
-  if (!intent || intent.status !== "user_explicit") return null;
-
-  const createdAt = Date.parse(intent.createdAt || control.createdAt || state?.triggeredAt || "");
-  const ttlMinutes = Number(intent.expiresAfterMinutes ?? 240);
-  if (
-    Number.isFinite(createdAt) &&
-    Number.isFinite(ttlMinutes) &&
-    ttlMinutes > 0 &&
-    Date.now() - createdAt > ttlMinutes * 60 * 1000
-  ) {
-    return null;
-  }
-  return intent;
-}
-
-function isAuthorizedObservedReleaseSegment(segment) {
-  const lower = stripQuotedShellText(segment).trim().toLowerCase();
-  if (!lower) return true;
-  if (isReadOnlyBash(lower)) return true;
-  if (/^git\s+push\b/.test(lower)) {
-    return !/(?:^|\s)(?:--force|-f|--mirror|--delete)\b/.test(lower);
-  }
-  return /^gh\s+release\s+(?:view|create|edit|upload)\b/.test(lower);
-}
-
-function isAuthorizedObservedExternalPublish(state, toolName, toolInput) {
-  if (toolName !== "Bash") return false;
-  if (!getObservedExternalPublishIntent(state)) return false;
-  const segments = bashReadonlyInternals
-    .splitSegments(String(toolInput?.command || ""))
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-  return segments.length > 0 && segments.every(isAuthorizedObservedReleaseSegment);
-}
-
-function isHighRiskObservedExecution(toolName, toolInput) {
-  if (toolName !== "Bash") return false;
-  return isHighRiskObservedBash(toolInput?.command || "");
-}
-
-async function allowObservedExternalPublishExecution(state) {
-  const control = state?.stageRuntimeControl || {};
-  const now = new Date().toISOString();
-  const nextState = {
-    ...state,
-    stageRuntimeControl: {
-      ...control,
-      observedNoticeEmittedAt: control.observedNoticeEmittedAt || now,
-      observedNoticePolicy: "emit_once_per_active_state",
-      externalPublishIntent: {
-        ...(control.externalPublishIntent || state?.externalPublishIntent || {}),
-        lastUsedAt: now,
-      },
-    },
-  };
-  await writeSpineState(cwd, nextState);
-  if (!control.observedNoticeEmittedAt) {
-    process.stderr.write(`${observedModeNotice(state)}\n`);
-  }
-  process.stderr.write(`${observedModeAuthorizedReleaseNotice(state)}\n`);
-  process.exit(0);
 }
 
 async function allowObservedModeExecution(state) {
@@ -1632,14 +1464,6 @@ if (isExecutionTool(toolName)) {
   }
 
   if (isHookObservedState(state)) {
-    if (isHighRiskObservedExecution(toolName, toolInput)) {
-      if (isAuthorizedObservedExternalPublish(state, toolName, toolInput)) {
-        await allowObservedExternalPublishExecution(state);
-      }
-      exitAfterDeny(
-        observedModeHighRiskReason(state, String(toolInput?.command || "")),
-      );
-    }
     await allowObservedModeExecution(state);
   }
 

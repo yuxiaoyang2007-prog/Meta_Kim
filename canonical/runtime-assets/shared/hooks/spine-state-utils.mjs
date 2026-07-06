@@ -2,8 +2,8 @@
 //
 // Why: spine-state.mjs writeSpineState currently uses a direct write, which can
 // race when the host fan-out pattern forks multiple agents that each transition
-// the same run. team-core in oh-my-openagent uses temp-file + rename + file
-// lock to make state transitions atomic across concurrent subagents.
+// the same run. Temp-file + rename + file lock make state transitions atomic
+// across concurrent subagents.
 //
 // Usage:
 //   import { atomicWriteJson, withFileLock } from "./spine-state-utils.mjs";

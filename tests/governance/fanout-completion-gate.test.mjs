@@ -23,6 +23,41 @@ test("evaluateFanoutGate: triggered for execution + 0 dispatches + >=2 worker la
   assert.ok(r.reason && r.reason.includes("0 recorded Agent dispatches"));
 });
 
+test("evaluateFanoutGate: Codex selected spawn lanes cannot silently serialize without valid degraded evidence", () => {
+  const r = evaluateFanoutGate({
+    currentStage: "execution",
+    runtime: "codex",
+    dispatchedAgents: [],
+    workerTaskPackets: [
+      {
+        id: "w1",
+        codexSpawnBinding: {
+          hostSurface: "multi_agent_v1.spawn_agent",
+          spawnMode: "typed_spawn",
+        },
+      },
+      {
+        id: "w2",
+        codexSpawnBinding: {
+          hostSurface: "multi_agent_v1.spawn_agent",
+          spawnMode: "typed_spawn",
+        },
+      },
+    ],
+    runtimeSubagentInvocationPacket: {
+      status: "not_authorized",
+      fanoutEligible: true,
+      authorizationSource: "native_choice_surface_required",
+    },
+  });
+
+  assert.equal(r.triggered, true);
+  assert.equal(r.dispatched, 0);
+  assert.equal(r.workerCount, 2);
+  assert.equal(r.degraded, false);
+  assert.ok(r.reason && r.reason.includes("0 recorded Agent dispatches"));
+});
+
 test("evaluateFanoutGate: not triggered once an Agent dispatch is recorded", () => {
   const r = evaluateFanoutGate({
     currentStage: "execution",

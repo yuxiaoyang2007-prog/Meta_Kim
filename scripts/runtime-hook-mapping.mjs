@@ -133,6 +133,7 @@ const PROJECT_META_KIM_HOOK_FILES = new Set([
   "session_start.py",
   "skip-reminder.mjs",
   "spine-state.mjs",
+  "spine-state-utils.mjs",
   "stop-compaction.mjs",
   "stop-completion-guard.mjs",
   "stop-console-log-audit.mjs",

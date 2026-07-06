@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-03T19:34:28.903Z",
+  "generatedAt": "2026-07-05T06:17:40.691Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -20,7 +20,7 @@
   "summary": {
     "totalAgents": 9,
     "totalSkills": 17,
-    "totalHooks": 25,
+    "totalHooks": 26,
     "totalMcpServers": 1,
     "totalMcpTools": 4,
     "totalPlugins": 4,
@@ -33,7 +33,7 @@
       "scope": "local_project_projection_when_present",
       "note": "Canonical totals count source inventory entries; runtimeActualCounts counts generated local projection files/settings when those gitignored runtime folders exist.",
       "canonicalInventory": {
-        "hooks": 25,
+        "hooks": 26,
         "commands": 7
       },
       "claude": {
@@ -45,13 +45,13 @@
       "codex": {
         "projectionPresent": true,
         "hookCommandEntries": 12,
-        "hookFiles": 15,
+        "hookFiles": 16,
         "commandFiles": 3
       },
       "cursor": {
         "projectionPresent": true,
         "hookCommandEntries": 11,
-        "hookFiles": 15,
+        "hookFiles": 16,
         "commandFiles": 0
       },
       "openclaw": {
@@ -244,8 +244,8 @@
         "type": "skills",
         "namespace": "canonical",
         "path": "canonical/skills/meta-theory/SKILL.md",
-        "size": 70574,
-        "modified": "2026-06-29T08:26:41.730Z"
+        "size": 70838,
+        "modified": "2026-07-05T06:08:54.966Z"
       },
       "repo:canonical:same-set-reusable-flow-for-project-file-inventor": {
         "id": "same-set-reusable-flow-for-project-file-inventor",
@@ -270,8 +270,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/dev-governance.md",
         "relativePath": "dev-governance.md",
-        "size": 33886,
-        "modified": "2026-06-29T08:00:59.816Z"
+        "size": 34083,
+        "modified": "2026-07-05T06:09:15.736Z"
       },
       "repo:canonical-reference:evolution-writeback": {
         "id": "evolution-writeback",
@@ -360,8 +360,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/runtime-codex.md",
         "relativePath": "runtime-codex.md",
-        "size": 20681,
-        "modified": "2026-06-20T11:17:23.893Z"
+        "size": 21778,
+        "modified": "2026-07-05T06:09:02.008Z"
       },
       "repo:canonical-reference:spine-state": {
         "id": "spine-state",
@@ -398,8 +398,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/activate-meta-theory-spine.mjs",
         "relativePath": "activate-meta-theory-spine.mjs",
-        "size": 12904,
-        "modified": "2026-07-03T19:18:38.261Z"
+        "size": 17916,
+        "modified": "2026-07-04T21:50:59.525Z"
       },
       "repo:canonical-runtime-assets:meta-kim-memory-save.mjs": {
         "id": "meta-kim-memory-save.mjs",
@@ -418,6 +418,15 @@
         "relativePath": "skip-reminder.mjs",
         "size": 6932,
         "modified": "2026-07-03T19:34:11.336Z"
+      },
+      "repo:canonical-runtime-assets:spine-state-utils.mjs": {
+        "id": "spine-state-utils.mjs",
+        "type": "hooks",
+        "namespace": "canonical-runtime-assets",
+        "path": "canonical/runtime-assets/shared/hooks/spine-state-utils.mjs",
+        "relativePath": "spine-state-utils.mjs",
+        "size": 2720,
+        "modified": "2026-07-04T21:44:16.794Z"
       },
       "repo:canonical-runtime-assets:spine-state.mjs": {
         "id": "spine-state.mjs",
@@ -470,8 +479,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
         "relativePath": "enforce-agent-dispatch.mjs",
-        "size": 62591,
-        "modified": "2026-07-03T11:44:44.050Z"
+        "size": 63090,
+        "modified": "2026-07-04T21:43:37.756Z"
       },
       "repo:canonical-runtime-assets:graphify-context.mjs": {
         "id": "graphify-context.mjs",

@@ -411,6 +411,128 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     "Claude Code agent search must not select .codex/agents adapters as callable Claude agents",
   );
 
+  const codexAgentReuseComplaint = route(
+    "Critical Thinking Fetch Deep Thinking Review 为什么 Codex 一直创建 agent 而不是找全局 agent",
+    "codex",
+    "windows",
+  );
+  assert.equal(
+    codexAgentReuseComplaint.recommendedRoute?.id,
+    "execution-capability-discovery:codex:windows",
+    "Codex agent-creation complaints must route to execution capability discovery before dependency/project registry",
+  );
+  assert.equal(
+    codexAgentReuseComplaint.recommendedRoute?.selectedCapabilityProviders?.agent?.platformId,
+    "codex",
+    "Codex owner discovery must bind a Codex-callable global/project agent provider",
+  );
+  assert.equal(
+    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.spawnMode,
+    "typed_spawn",
+    "Codex global agent reuse must produce a typed spawn binding",
+  );
+  assert.equal(
+    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.agent_type,
+    codexAgentReuseComplaint.recommendedRoute?.owner,
+    "Codex typed spawn must use the selected owner as agent_type",
+  );
+  assert.equal(
+    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.fork_context,
+    false,
+    "Codex typed global agent reuse must not request a full-context fork",
+  );
+  assert.equal(
+    codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.codexSpawnBinding?.agent_type,
+    codexAgentReuseComplaint.recommendedRoute?.owner,
+    "Worker task packets must carry the same Codex typed agent binding",
+  );
+  assert.equal(
+    codexAgentReuseComplaint.capabilityGapDetected,
+    false,
+    "A complaint about repeated agent creation must not be misread as a create-agent capability gap request",
+  );
+
+  const codexExplicitParallelDispatch = route(
+    "我要的是派发啊 并行啊：检查 meta-theory 规则、Codex runtime、测试缺口",
+    "codex",
+    "windows",
+  );
+  assert.equal(
+    codexExplicitParallelDispatch.recommendedRoute?.id,
+    "execution-capability-discovery:codex:windows",
+    "Direct parallel dispatch requests must route to execution capability discovery",
+  );
+  assert.ok(
+    codexExplicitParallelDispatch.workerTaskPacketDrafts.length >= 2,
+    "Direct parallel dispatch requests with separable scopes must produce multiple worker task packets",
+  );
+  assert.ok(
+    codexExplicitParallelDispatch.workerTaskPacketDrafts.every((packet) => packet.ownerKind === "agent"),
+    "Direct parallel dispatch worker lanes must bind reusable agent owners instead of replacing owners with skills",
+  );
+  assert.ok(
+    codexExplicitParallelDispatch.workerTaskPacketDrafts.every(
+      (packet) => packet.codexSpawnBinding?.spawnMode === "typed_spawn" && packet.codexSpawnBinding?.agent_type === packet.ownerAgent,
+    ),
+    "Every Codex parallel dispatch worker must carry a typed spawn_agent binding for its selected owner",
+  );
+  assert.ok(
+    codexExplicitParallelDispatch.dispatchBoardDraft?.orchestratorKinds?.includes("agentTeamsPlaybook"),
+    "Multiple Codex agent lanes must select the agent teams fan-out adapter",
+  );
+
+  const codexStructuredChainFanout = route(
+    "Critical Thinking → Fetch → Deep Thinking → Review 检查 meta-theory 规则、Codex runtime、测试缺口",
+    "codex",
+    "windows",
+  );
+  assert.equal(
+    codexStructuredChainFanout.entryClassification?.subagentAuthorizationSource,
+    "meta_theory_trigger_request",
+    "Structured Critical/Fetch/Thinking/Review chains are meta-theory activations that must authorize safe fan-out without extra dispatch wording",
+  );
+  assert.equal(
+    codexStructuredChainFanout.recommendedRoute?.id,
+    "execution-capability-discovery:codex:windows",
+    "Structured chain fan-out must route through execution capability discovery",
+  );
+  assert.ok(
+    codexStructuredChainFanout.workerTaskPacketDrafts.length >= 2,
+    "Structured chain fan-out with separable scopes must produce multiple worker task packets",
+  );
+  assert.ok(
+    codexStructuredChainFanout.workerTaskPacketDrafts.every(
+      (packet) => packet.ownerKind === "agent" && packet.codexSpawnBinding?.agent_type === packet.ownerAgent,
+    ),
+    "Structured chain fan-out worker lanes must bind reusable Codex agent owners",
+  );
+
+  const codexMetaTriggerFanout = route(
+    "meta-theory 检查 meta-theory 规则、Codex runtime、测试缺口",
+    "codex",
+    "windows",
+  );
+  assert.equal(
+    codexMetaTriggerFanout.entryClassification?.subagentAuthorizationSource,
+    "meta_theory_trigger_request",
+    "A meta-theory trigger itself must authorize safe fan-out once scopes are separable",
+  );
+  assert.equal(
+    codexMetaTriggerFanout.recommendedRoute?.id,
+    "execution-capability-discovery:codex:windows",
+    "Meta-theory fan-out must route through execution capability discovery when there are separable scopes",
+  );
+  assert.ok(
+    codexMetaTriggerFanout.workerTaskPacketDrafts.length >= 2,
+    "Meta-theory fan-out with separable scopes must produce multiple worker task packets",
+  );
+  assert.ok(
+    codexMetaTriggerFanout.workerTaskPacketDrafts.every(
+      (packet) => packet.ownerKind === "agent" && packet.codexSpawnBinding?.agent_type === packet.ownerAgent,
+    ),
+    "Meta-theory fan-out worker lanes must bind reusable Codex agent owners",
+  );
+
   const hook = route("platform hook install");
   assert.ok(hook.candidateWeapons.includes("runtime-capability-matrix"));
 

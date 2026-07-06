@@ -256,6 +256,30 @@ assert(
   "Claude Code agent search must not select .codex/agents adapters as callable Claude agents",
 );
 
+const codexAgentReuseComplaint = route("Critical Thinking Fetch Deep Thinking Review 为什么 Codex 一直创建 agent 而不是找全局 agent", "codex", "windows");
+assert(
+  codexAgentReuseComplaint.recommendedRoute?.id === "execution-capability-discovery:codex:windows",
+  "Codex agent-creation complaints must route to execution capability discovery before dependency/project registry",
+);
+assert(
+  codexAgentReuseComplaint.recommendedRoute?.selectedCapabilityProviders?.agent?.platformId === "codex",
+  "Codex agent-creation complaints must bind a Codex-callable global/project agent provider",
+);
+assert(
+  codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.spawnMode === "typed_spawn" &&
+    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.agent_type === codexAgentReuseComplaint.recommendedRoute?.owner &&
+    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.fork_context === false,
+  "Codex global agent reuse must emit typed spawn_agent binding instead of full-context fork",
+);
+assert(
+  codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.codexSpawnBinding?.agent_type === codexAgentReuseComplaint.recommendedRoute?.owner,
+  "Worker task packets must carry the Codex typed spawn binding",
+);
+assert(
+  codexAgentReuseComplaint.capabilityGapDetected === false,
+  "Agent reuse complaints must not be misread as create-agent capability-gap requests",
+);
+
 const createAgentGap = route("create agent for long-term test coverage strategy owner");
 assert(createAgentGap.capabilityGapDetected === true, "Explicit create agent request must trigger capability-gap detection");
 assert(createAgentGap.capabilityGapDecision?.decision === "create_agent", "Long-term coverage owner gap must route to create_agent");

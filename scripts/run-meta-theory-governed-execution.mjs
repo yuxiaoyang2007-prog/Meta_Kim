@@ -4007,20 +4007,18 @@ function buildRuntimeSubagentInvocationPacket({
   const fanoutEligible =
     entryClassification?.fanoutEligible === true ||
     agentTeamsPlaybookPacket?.triggered === true;
+  const entryAuthorizationSource = entryClassification?.subagentAuthorizationSource;
   const authorizationSource =
-    agentTeamsPlaybookPacket?.triggered &&
-    !["explicit_meta_theory", "direct_parallel_agent_request"].includes(
-      entryClassification?.subagentAuthorizationSource,
-    )
-      ? "meta_theory_run_entry"
-      : entryClassification?.subagentAuthorizationSource !== "not_required"
-        ? entryClassification?.subagentAuthorizationSource
-        : agentTeamsPlaybookPacket?.triggered
-          ? "meta_theory_run_entry"
-          : "not_required";
+    entryAuthorizationSource && entryAuthorizationSource !== "not_required"
+      ? entryAuthorizationSource
+      : agentTeamsPlaybookPacket?.triggered
+        ? "native_choice_surface_required"
+        : "not_required";
   const authorized =
-    authorizationSource !== "not_required" &&
-    authorizationSource !== "native_choice_surface_required";
+    authorizationSource === "direct_parallel_agent_request" ||
+    authorizationSource === "meta_theory_trigger_request" ||
+    authorizationSource === "structured_governance_chain_request" ||
+    authorizationSource === "native_choice_surface_completed";
   const status = externalAgentSpawned
     ? "invoked"
     : !fanoutEligible
@@ -4044,7 +4042,7 @@ function buildRuntimeSubagentInvocationPacket({
       status === "unavailable"
         ? "The Node governed runner cannot call the active host Agent/Task or spawn_agent tool directly; host-layer evidence must be attached by the runtime adapter."
         : status === "not_authorized"
-          ? "Subagent dispatch needs direct parallel-agent wording, explicit /meta-theory authorization, or a completed native choice surface before Execution."
+          ? "Subagent dispatch needs a governed meta-theory activation, direct subagent/delegation/parallel-agent wording, or a completed native choice surface before Execution."
           : null,
     requiredHostEvidence:
       status === "invoked"
@@ -4599,6 +4597,7 @@ const CAPABILITY_INVOCATION_STATES = [
   "selected_not_invoked",
   "discovered_not_selected",
   "unavailable",
+  "not_authorized",
   "blocked",
   "not_required",
 ];
@@ -5195,8 +5194,8 @@ function buildCapabilityInvocationTruthPacket({
         ? "invoked"
         : runtimeSubagentInvocationPacket?.status === "unavailable"
           ? "unavailable"
-          : runtimeSubagentInvocationPacket?.status === "not_authorized"
-            ? "blocked"
+        : runtimeSubagentInvocationPacket?.status === "not_authorized"
+            ? "not_authorized"
             : runtimeSubagentInvocationPacket?.status === "not_required"
               ? "not_required"
               : "selected_not_invoked",

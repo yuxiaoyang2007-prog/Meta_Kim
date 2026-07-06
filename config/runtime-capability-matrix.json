@@ -1631,7 +1631,7 @@
             "lastVerifiedAt": "2026-06-18",
             "verificationCommand": "codex --version"
           },
-          "notes": "Codex support depends on host mode; subagents require explicit request and hooks require trust review."
+          "notes": "Codex support depends on host mode; subagents require meta-theory/governed activation or explicit request, and hooks require trust review."
         },
         {
           "platform": "codex",
@@ -1639,8 +1639,8 @@
           "support": "native",
           "confidence": "verified_docs",
           "trigger": {
-            "userTrigger": "Subagents must be explicitly requested by the user, authorized by explicit /meta-theory, or confirmed through a native choice surface that names parallel-agent fan-out.",
-            "autoTrigger": "Do not hidden-auto-spawn by default; meta-architecture may fan out only after a user-visible authorization source and Thinking proves independent worker lanes.",
+            "userTrigger": "Subagents are authorized by meta-theory/governed Meta_Kim activation, direct subagent/delegation/parallel-agent wording, or native choice confirmation for a branch-changing parallel-agent route.",
+            "autoTrigger": "Do not hidden-auto-spawn by default; meta-theory activation authorizes safe fan-out only after Thinking proves independent worker lanes and the host surface is callable. Native choice remains required for branch-changing route, scope, risk, or acceptance decisions.",
             "configTrigger": "codex runtime projection and registry configuration.",
             "hookTrigger": "None unless the runtime maps it to a lifecycle event."
           },
@@ -6572,7 +6572,7 @@
   ],
   "knownConstraints": {
     "codex": [
-      "Subagents require direct subagent/parallel-agent wording, explicit /meta-theory, or native choice confirmation before fan-out; do not hidden-auto-spawn by default.",
+      "Subagents require meta-theory/governed Meta_Kim activation, direct subagent/delegation/parallel-agent wording, or native choice confirmation before fan-out; do not hidden-auto-spawn by default. Meta-theory activation authorizes safe fan-out after Thinking proves independent worker lanes and the host surface is callable; native choice remains required for branch-changing route, scope, risk, or acceptance decisions.",
       "Subagents inherit current sandbox policy.",
       "Inactive subagent approval may surface in interactive sessions.",
       "Non-interactive sessions fail fresh approval actions that cannot present UI.",

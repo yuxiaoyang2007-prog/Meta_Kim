@@ -1,6 +1,6 @@
 # Codex Runtime Adapter
 
-In Codex, `/meta-theory` is user-visible authorization to use available subagent/delegation tools when the task has multiple independent worker lanes. A prompt that explicitly asks for subagents, parallel agents, one-agent-per-point review, or `/meta-theory` may satisfy Codex's explicit subagent trigger; a hidden governance-only inference does not. Only claim delegation when a real tool was called successfully.
+In Codex, `meta-theory` / governed Meta_Kim activation is user-visible authorization for safe automatic fan-out when Thinking proves separable lanes and the host exposes a callable subagent surface. Direct subagent/delegation/parallel-agent wording, one-agent-per-point review, and structured governance-chain requests such as `Critical Thinking -> Fetch -> Deep Thinking -> Review` are strong activation examples, not exclusive gates. A native choice surface is required for branch-changing route, scope, risk, or acceptance choices; it is not required solely to permit safe parallelism after meta-theory activation. Only claim delegation when a real tool was called successfully.
 
 Codex must not self-degrade to "single-thread dispatcher" merely because it is running in Codex App. If `spawn_agent` / subagent tooling is exposed, Thinking may select it after Fetch evidence and the dispatcher must show which temporary workers were spawned. If the tool is absent or fails, record `subagentCapabilityStatus=unavailable` and a concrete `degradationReason`.
 
@@ -23,9 +23,13 @@ If `spawn_agent` / `Agent` equivalent is unavailable:
 - record the blocked reason
 - continue only for read-only degraded analysis or ask before degraded executable work
 
-If `spawn_agent` is available and the user explicitly authorized subagents:
+If `spawn_agent` is available and meta-theory / governed Meta_Kim activation authorized safe fan-out:
 
 - use it for independent, bounded worker or review lanes after Thinking creates `workerTaskPackets`
+- treat explicit `meta-theory`, `/meta-theory`, `元理论`, and natural-language governed execution entries as fan-out authorization when the task has separable safe lanes
+- treat direct "dispatch / parallel / multiple agents" corrections as explicit fan-out authorization; enter owner discovery and build multiple agent-owned worker packets when the task has separable scopes
+- treat structured governance-chain requests such as `Critical Thinking -> Fetch -> Deep Thinking -> Review` as meta-theory activation examples; they do not need an extra "dispatch" word before Thinking can select parallel lanes
+- bind explicit fan-out worker lanes to reusable Codex global or project `agent_type` owners first; skills, commands, MCP tools, and runtime tools are loadout/dependency bindings, not replacements for the lane owner
 - keep each worker's write scope disjoint when it edits files
 - size fan-out from Codex host/config capacity such as `[agents].max_threads`, current runtime capacity, task DAG, and collision boundaries instead of a fixed Meta_Kim cap
 - show the dispatch board before or alongside dispatch
@@ -33,6 +37,20 @@ If `spawn_agent` is available and the user explicitly authorized subagents:
 - do not describe the temporary subagent prompt as the created/iterated project agent
 
 `agent-teams-playbook` is the Codex fan-out adapter after Thinking, not a substitute for Thinking. Select it when there are 2+ executable `workerTaskPackets` with proven DAG, collision, workspace-isolation, and external-write safety; record `not_required` for single-lane work and partial/degraded for unsafe fan-out. A selected playbook provider is `agent_teams_playbook=selected_not_invoked` until a live Skill/Agent Team/spawn_agent call is actually attached as host evidence. Meta_Kim must not set its own maximum lower than Codex host/config capacity.
+
+## Codex spawn_agent Fork Rules
+
+Codex `spawn_agent` has a hard parameter rule the dispatcher must follow:
+
+- **Full-context fork** (worker inherits main context): do NOT pass `agent_type`. The runner rejects typed agents in full-context fork with errors like "agent parameter invalid" or "fork full context requires no type".
+- **Typed spawn** (separate agent identity): pass `agent_type`, but the worker does NOT inherit full main context.
+- These two modes are mutually exclusive. Mixing them is the most common Codex fan-out failure.
+
+If Fetch/Thinking selected an existing Codex global or project owner, that owner is a typed-spawn binding: call `multi_agent_v1.spawn_agent` with `agent_type=<selected owner>` and pass only the bounded context in the worker packet. A full-context fork is not the normal way to reuse a global agent; it is for same-context continuation or for the retry after a typed-spawn parameter/fork error.
+
+Recovery rule: if a `spawn_agent` call fails with a parameter/fork error, retry without `agent_type` (full-context mode) before declaring `subagentCapabilityStatus=unavailable`. Record the retry in `runtimeInvocationPlanPacket` so Meta-Review can see the runner was respected, not worked around.
+
+When `spawn_agent` is available and the run is fan-out authorized through meta-theory / governed Meta_Kim activation, direct subagent/delegation/parallel-agent wording, or a completed native choice surface, the Codex main thread MUST spawn all independent workers (same `parallelGroup`) in one assistant turn — not one per turn. Per-turn serial spawning in authorized `fan_out_ready` state is fake parallelism. If the route is fan-out eligible but runtime authorization or the callable host surface is missing, stop before live subagent dispatch and record the degraded/blocked state instead of silently serializing.
 
 ## Codex Durable Agent Projection
 

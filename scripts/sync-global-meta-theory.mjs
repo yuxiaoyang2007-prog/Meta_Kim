@@ -115,6 +115,7 @@ const GLOBAL_HOOK_PACKAGE_FILES = new Set([
   "meta-kim-memory-save.mjs",
   "skip-reminder.mjs",
   "spine-state.mjs",
+  "spine-state-utils.mjs",
 ]);
 const GLOBAL_HOOK_PACKAGE_FILES_LEGACY = new Set([
   // Files that were shipped historically but are no longer in canonical.

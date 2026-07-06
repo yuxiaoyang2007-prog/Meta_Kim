@@ -57,7 +57,9 @@
   "factGatePolicy": {
     "singleExecutionLease": true,
     "observedMode": "advisory_not_blocking",
-    "observedExplicitPublishIntent": "allows_narrow_git_push_and_github_release_only",
+    "nativeCommandPolicy": "observed_mode_does_not_block_user_command_execution_by_command_class",
+    "gitPolicy": "never_block_git_commands",
+    "observedExternalSideEffects": "not_hook_blocked_review_and_verification_judge_claims",
     "managedMode": "required_before_mutation",
     "mustNotBecomeIndependentHookLoop": true,
     "fileChangeFactCardBelongsTo": "Fetch/Thinking execution lease"
@@ -120,10 +122,8 @@
     "business_mutation_still_denied_without_execution_readiness",
     "auto_prompt_activation_creates_hook_observed_advisory_state",
     "observed_state_allows_ordinary_local_mutation",
-    "observed_state_allows_local_git_stage_commit",
-    "observed_state_denies_high_risk_external_side_effects",
-    "observed_state_ignores_high_risk_words_inside_quoted_readonly_search_text",
-    "observed_state_allows_explicit_user_authorized_git_release_commands_only",
+    "observed_state_does_not_block_commands_by_keyword_or_command_class",
+    "observed_state_allows_explicit_user_command_execution",
     "stale_legacy_active_state_rotates_on_new_prompt"
   ],
   "verificationCommand": "npm run meta:prd:stage-runtime-control:validate"

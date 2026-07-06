@@ -12,6 +12,7 @@
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
+import process from "node:process";
 import path from "node:path";
 
 export const STAGES = [
@@ -63,10 +64,34 @@ if (fromIdx >= 0) {
   startIndex = idx;
 }
 
+function parseStageCommand(cmd) {
+  const parts = cmd.trim().split(/\s+/);
+  if (parts[0] === "npm" && parts[1] === "run" && parts[2]) {
+    if (process.platform === "win32") {
+      return {
+        command: process.env.ComSpec || "cmd.exe",
+        args: ["/d", "/s", "/c", ["npm", "run", ...parts.slice(2)].join(" ")],
+      };
+    }
+    return { command: "npm", args: ["run", ...parts.slice(2)] };
+  }
+  if (parts[0] === "node" && parts[1]) {
+    return { command: process.execPath, args: parts.slice(1) };
+  }
+  if (process.platform === "win32") {
+    return {
+      command: process.env.ComSpec || "cmd.exe",
+      args: ["/d", "/s", "/c", cmd],
+    };
+  }
+  return { command: "sh", args: ["-lc", cmd] };
+}
+
 function runWithTimeout(cmd, timeoutMs) {
-  const result = spawnSync(cmd, {
+  const { command, args: commandArgs } = parseStageCommand(cmd);
+  const result = spawnSync(command, commandArgs, {
     cwd: process.cwd(),
-    shell: true,
+    shell: false,
     stdio: "inherit",
     timeout: timeoutMs,
   });

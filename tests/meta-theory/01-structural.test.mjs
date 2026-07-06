@@ -247,6 +247,21 @@ describe("SKILL.md structural integrity", async () => {
       assert.match(command, /tool discovery/i);
       assert.match(command, /multi_agent_v1\.spawn_agent/);
       assert.match(command, /Record the exact tool name and returned agent id/i);
+      assert.match(command, /fork_context: true/);
+      assert.match(command, /omit `agent_type`/);
+      assert.match(command, /Never pass `fork_context: true` together with `agent_type`/);
+      assert.match(command, /retry once without `agent_type`/);
+      assert.match(command, /owner discovery selects an existing Codex global or project `agent_type`/);
+      assert.match(command, /bounded context from the worker packet/);
+      assert.match(command, /Do not choose a full-context fork merely to preserve context/);
+    });
+
+    test("Codex runtime reference makes global agent reuse a typed-spawn binding", async () => {
+      const reference = await readFile("canonical/skills/meta-theory/references/runtime-codex.md");
+      assert.match(reference, /existing Codex global or project owner/);
+      assert.match(reference, /typed-spawn binding/);
+      assert.match(reference, /agent_type=<selected owner>/);
+      assert.match(reference, /A full-context fork is not the normal way to reuse a global agent/);
     });
 
     test("Claude Code /meta-theory command passes Claude runtime and requires live Agent Task dispatch", async () => {
@@ -261,6 +276,21 @@ describe("SKILL.md structural integrity", async () => {
       assert.ok(command.includes("workerTaskPackets[].taskPacketId"));
       assert.match(command, /tool-call id/i);
       assert.match(command, /do not silently continue as main-thread execution/i);
+    });
+
+    test("Codex fork_context parameter stays out of shared and non-Codex runtime surfaces", async () => {
+      const nonCodexSurfaces = [
+        "canonical/skills/meta-theory/SKILL.md",
+        "canonical/skills/meta-theory/references/dev-governance.md",
+        "canonical/runtime-assets/claude/commands/meta-theory.md",
+        "canonical/runtime-assets/cursor/rules/meta-theory-dispatch.mdc",
+        "canonical/runtime-assets/openclaw/DECLARED_GAP.md",
+      ];
+      for (const rel of nonCodexSurfaces) {
+        const text = await readFile(rel);
+        assert.doesNotMatch(text, /fork_context/);
+        assert.doesNotMatch(text, /Never pass `fork_context: true` together with `agent_type`/);
+      }
     });
 
     test("governed runner routes through the requested runtime instead of hardcoding Codex", async () => {

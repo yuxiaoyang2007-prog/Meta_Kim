@@ -90,6 +90,43 @@ const AMBER_BRIGHT = "\x1b[38;2;200;160;80m";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 
+function quoteCliArgForShell(value) {
+  const text = String(value);
+  if (text === "") return '""';
+  if (!/[^\w@%+=:,./\\-]/.test(text)) return text;
+  return `"${text.replace(/(["^&|<>])/g, "^$1")}"`;
+}
+
+function spawnCliWithShellOptionSync(
+  command,
+  commandArgs = [],
+  options = {},
+  useShell = shouldUseCliShell(os.platform()),
+) {
+  if (useShell) {
+    return spawnSync(
+      [command, ...commandArgs].map(quoteCliArgForShell).join(" "),
+      {
+        ...options,
+        shell: true,
+      },
+    );
+  }
+  return spawnSync(command, commandArgs, {
+    ...options,
+    shell: false,
+  });
+}
+
+function spawnCliSync(command, commandArgs = [], options = {}) {
+  return spawnCliWithShellOptionSync(
+    command,
+    commandArgs,
+    options,
+    shouldUseCliShell(os.platform()),
+  );
+}
+
 function refreshGlobalCapabilityInventory(activeTargets = []) {
   if (dryRun) {
     console.log(
@@ -1944,10 +1981,9 @@ async function installUpstreamCliSpecs(runtimeHomes, activeTargets) {
       );
       await backupCodexConfigBeforeUpstream(codexConfigSnapshot);
       await backupCodexGlobalAgentsBeforeUpstream(codexGlobalAgentsSnapshot);
-      const result = spawnSync("npx", args, {
+      const result = spawnCliSync("npx", args, {
         cwd: os.homedir(),
         encoding: "utf8",
-        shell: shouldUseCliShell(os.platform()),
         stdio: "inherit",
       });
       await restoreCodexConfigAfterUpstream(codexConfigSnapshot, runtimeHome);
@@ -2025,9 +2061,8 @@ function printNativePluginInstallHint(runtimeId, pluginId) {
 }
 
 function codexPluginInstalled(pluginId, marketplaceId = "openai-curated") {
-  const result = spawnSync("codex", ["plugin", "list"], {
+  const result = spawnCliSync("codex", ["plugin", "list"], {
     encoding: "utf8",
-    shell: shouldUseCliShell(os.platform()),
   });
   if (result.status !== 0) return false;
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
@@ -2046,9 +2081,8 @@ function installCodexNativePlugin(pluginId) {
     return true;
   }
 
-  const versionProbe = spawnSync("codex", ["--version"], {
+  const versionProbe = spawnCliSync("codex", ["--version"], {
     encoding: "utf8",
-    shell: shouldUseCliShell(os.platform()),
   });
   if (versionProbe.status !== 0) {
     printNativePluginInstallHint("codex", pluginId);
@@ -2062,17 +2096,15 @@ function installCodexNativePlugin(pluginId) {
     return true;
   }
 
-  spawnSync("codex", ["plugin", "marketplace", "upgrade", marketplaceId], {
+  spawnCliSync("codex", ["plugin", "marketplace", "upgrade", marketplaceId], {
     encoding: "utf8",
-    shell: shouldUseCliShell(os.platform()),
     stdio: "pipe",
   });
-  const result = spawnSync(
+  const result = spawnCliSync(
     "codex",
     ["plugin", "add", `${pluginId}@${marketplaceId}`],
     {
       encoding: "utf8",
-      shell: shouldUseCliShell(os.platform()),
       stdio: "pipe",
     },
   );
@@ -2332,7 +2364,7 @@ async function installClaudePlugins() {
   // standalone .exe.  We try direct spawn first (skips .cmd), then
   // shell spawn (finds .cmd).  Whichever works is reused below.
   const isWin = os.platform() === "win32";
-  const useShell = shouldUseCliShell(isWin);
+  const useShell = shouldUseCliShell(os.platform());
 
   let claudeShellOpt = false;
   let claudeFound = false;
@@ -2346,9 +2378,8 @@ async function installClaudePlugins() {
 
   // Strategy 2: shell spawn (finds .cmd wrappers for npm installs)
   if (!claudeFound && useShell) {
-    const viaShell = spawnSync("claude", ["--version"], {
+    const viaShell = spawnCliSync("claude", ["--version"], {
       encoding: "utf8",
-      shell: true,
     });
     if (viaShell.status === 0) {
       claudeShellOpt = true;
@@ -2372,10 +2403,11 @@ async function installClaudePlugins() {
     console.log(`\n${C.dim}  ${t.checkingPluginMarketplaces}${C.reset}`);
 
     // Probe currently-registered marketplaces
-    const mktListOut = spawnSync(
+    const mktListOut = spawnCliWithShellOptionSync(
       "claude",
       ["plugin", "marketplace", "list", "--json"],
-      { encoding: "utf8", shell: claudeShellOpt },
+      { encoding: "utf8" },
+      claudeShellOpt,
     );
     let registeredMarketplaces = new Set();
     if (mktListOut.status === 0 && mktListOut.stdout) {
@@ -2403,10 +2435,11 @@ async function installClaudePlugins() {
       console.log(
         `${C.cyan}→${C.reset} ${C.dim}Registering marketplace "${mktId}" from ${url}${C.reset}`,
       );
-      const addOut = spawnSync(
+      const addOut = spawnCliWithShellOptionSync(
         "claude",
         ["plugin", "marketplace", "add", url],
-        { encoding: "utf8", shell: claudeShellOpt },
+        { encoding: "utf8" },
+        claudeShellOpt,
       );
       if (addOut.status === 0) {
         console.log(
@@ -2429,10 +2462,11 @@ async function installClaudePlugins() {
       console.log(
         `${C.cyan}→${C.reset} ${C.dim}Refreshing marketplace "${mktId}"${C.reset}`,
       );
-      const updateOut = spawnSync(
+      const updateOut = spawnCliWithShellOptionSync(
         "claude",
         ["plugin", "marketplace", "update", mktId],
-        { encoding: "utf8", shell: claudeShellOpt },
+        { encoding: "utf8" },
+        claudeShellOpt,
       );
       if (updateOut.status === 0) {
         console.log(
@@ -2509,10 +2543,12 @@ async function installClaudePlugins() {
   }
 
   // Probe currently-active plugins via CLI (for bare-name dedup in non-update mode)
-  const listOut = spawnSync("claude", ["plugins", "list", "--json"], {
-    encoding: "utf8",
-    shell: claudeShellOpt,
-  });
+  const listOut = spawnCliWithShellOptionSync(
+    "claude",
+    ["plugins", "list", "--json"],
+    { encoding: "utf8" },
+    claudeShellOpt,
+  );
   let installedNames = new Set();
   if (listOut.status === 0 && listOut.stdout) {
     try {
@@ -2629,10 +2665,12 @@ async function installClaudePlugins() {
           : t.installingPlugin(spec)
       }`,
     );
-    const p = spawnSync("claude", ["plugin", pluginCommand, spec], {
-      stdio: "inherit",
-      shell: claudeShellOpt,
-    });
+    const p = spawnCliWithShellOptionSync(
+      "claude",
+      ["plugin", pluginCommand, spec],
+      { stdio: "inherit" },
+      claudeShellOpt,
+    );
     if (p.status !== 0) {
       console.warn(
         `${C.yellow}⚠${C.reset} ${t.warnPluginFailed(spec, p.status)}`,

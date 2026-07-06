@@ -2,7 +2,7 @@
   "$schema": "../contracts/agent-eligibility-contract.json",
   "version": 1,
   "updatedAt": "2026-07-05",
-  "purpose": "Three-tier agent eligibility registry consumed by enforce-agent-dispatch.mjs and capability-first routing. Mirrors oh-my-openagent's AGENT_ELIGIBILITY_REGISTRY so capability search returns a single verdict per agent rather than free-form ownerCandidates.",
+  "purpose": "Three-tier agent eligibility registry consumed by enforce-agent-dispatch.mjs and capability-first routing. Returns a single verdict per agent rather than free-form ownerCandidates.",
   "tiers": {
     "eligible": {
       "description": "Agent can be invoked directly via Agent/spawn_agent in any governed stage once capability gate is satisfied.",

@@ -206,21 +206,6 @@ const DANGEROUS_PATTERNS = [
   "pip install",
   "pip uninstall",
 
-  // Git mutation
-  "git push",
-  "git pull",
-  "git fetch",
-  "git reset --hard",
-  "git checkout --",
-  "git restore .",
-  "git clean -f",
-  "git rebase",
-  "git merge",
-  "git commit",
-  "git add ",
-  "git rm",
-  "git mv",
-
   // HTTP mutation
   "curl -x post",
   "curl --data",
@@ -506,6 +491,15 @@ function classifySegment(segment) {
   const trimmed = (segment || "").trim();
   if (!trimmed) return { readOnly: true, reason: "empty segment", match: null };
 
+  const tokens = stripEnvPrefix(trimmed);
+  if ((tokens[0] || "").toLowerCase() === "git") {
+    return {
+      readOnly: true,
+      reason: "git is runtime/developer-native; hooks do not block git commands",
+      match: "git",
+    };
+  }
+
   if (isReadOnlyNodeEval(trimmed)) {
     return {
       readOnly: true,
@@ -523,7 +517,6 @@ function classifySegment(segment) {
     };
   }
 
-  const tokens = stripEnvPrefix(trimmed);
   const matched = matchesAllowlist(tokens);
   if (!matched) {
     return {

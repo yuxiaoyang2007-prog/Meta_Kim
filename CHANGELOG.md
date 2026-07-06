@@ -12,6 +12,122 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 _Reserved for the next release._
 
+## [2.8.75] - 2026-07-06
+
+### Solved Problem
+
+`2.8.74` fixed explicit "dispatch / parallel" corrections, but the design was still too narrow. Meta_Kim / `meta-theory` activation itself should authorize safe automatic fan-out when Thinking proves separable lanes. Users should not need to add another "dispatch" word, a special structured chain, or a native choice panel after already entering governed execution.
+
+### Changes
+
+- **Meta activation now authorizes safe fan-out.** Explicit `meta-theory`, `/meta-theory`, `元理论`, natural-language governed execution, and structured chain variants now produce `meta_theory_trigger_request` when scopes are separable, instead of waiting for a native choice surface.
+- **Automatic fan-out still respects specific business routes.** Subjective UI requests keep the `subjective-ui-design-orchestration` route and its required native choices; meta activation adds fan-out metadata without stealing the route.
+- **Codex route selection treats meta activation like auto fan-out.** When scopes are separable, route selection produces multiple agent-owned worker packets with typed Codex `spawn_agent` bindings and the agent-teams fan-out adapter.
+- **Canonical docs now remove the false "plain meta-theory is not authorization" rule.** Native choice remains required for branch-changing route, scope, risk, or acceptance decisions, but not just to permit safe parallelism after Meta_Kim activation.
+
+### Verification
+
+- `node --test tests/meta-theory/47-meta-theory-entry-classifier.test.mjs tests/governance/capability-routing.test.mjs` -> 20 entry-classifier tests plus capability-routing fixtures pass.
+- `npm run meta:route:validate` -> pass.
+- `npm run meta:sync` -> project runtime projection manifest refreshed.
+- `npm run meta:release:smoke` -> 1106 pass, 0 fail, 5 skipped; integration pass.
+
+## [2.8.74] - 2026-07-06
+
+### Solved Problem
+
+After the `2.8.73` authorization split, Codex still had a practical fan-out failure: a direct correction such as "我要的是派发 / 并行" was detected as a fan-out signal, but the entry classifier could still leave it on `fast_path`. Even when a route was selected, separable Chinese scopes could collapse into one worker or bind lanes to skills instead of reusable Codex agent owners, so users saw protocol explanations instead of real parallel dispatch.
+
+### Changes
+
+- **Direct dispatch/parallel wording is now a governed execution entry.** Chinese corrections such as "派发" and "并行" enter the standard governed path, become fan-out eligible, and count as direct Codex subagent authorization.
+- **Explicit fan-out routes now prefer agent owners.** When users ask for agent fan-out, worker lanes bind reusable Codex global/project agent owners first; skills, commands, MCP tools, and runtime tools stay as loadout or dependency bindings.
+- **Chinese scoped fan-out splits correctly.** Route selection now treats Chinese commas, enumeration marks, semicolons, and colons as lane separators so prompts like "规则、runtime、测试缺口" can produce multiple worker packets.
+- **Regression coverage locks the real route shape.** Tests now require direct parallel dispatch to produce multiple agent-owned worker packets with typed Codex `spawn_agent` bindings and the agent-teams fan-out adapter.
+
+### Verification
+
+- `node --test tests/meta-theory/47-meta-theory-entry-classifier.test.mjs tests/governance/capability-routing.test.mjs` -> 18 entry-classifier tests plus capability-routing fixtures pass.
+- `npm run meta:route:validate` -> pass.
+- `npm run meta:sync` -> project runtime projection manifest refreshed.
+- `npm run meta:release:smoke` -> 1105 pass, 0 fail, 5 skipped; integration pass.
+
+## [2.8.73] - 2026-07-05
+
+### Solved Problem
+
+`meta-theory` could enter a governed run and produce parallel worker lanes, but Codex could still execute the work serially in the main thread because the docs and tests treated a `meta-theory` trigger as if it were live `spawn_agent` authorization. In real Codex sessions this made "multi-agent orchestration" look present in protocol text while no host subagent call actually happened.
+
+### Changes
+
+- **Governed routing and live subagent authorization are now separate.** `meta-theory` triggers governed routing and fan-out candidacy; live Codex subagent fan-out now requires direct subagent/delegation/parallel-agent wording or a completed native choice surface.
+- **Silent serial fallback is guarded.** Codex-selected `spawn_agent` lanes with zero recorded dispatches now trip the fan-out completion gate unless a valid degraded state is recorded.
+- **Invocation truth has a distinct `not_authorized` state.** Capability truth packets, contracts, reports, and product-goal validation now distinguish "not authorized" from "host tool unavailable" and "blocked".
+- **Codex command and runtime docs no longer overclaim `/meta-theory`.** The command adapter now says `/meta-theory` authorizes governed routing only, and live delegation still depends on explicit authorization plus a callable host tool.
+
+### Verification
+
+- `node --test tests/meta-theory/32-meta-theory-four-product-targets.test.mjs tests/meta-theory/34-run-deliverables.test.mjs tests/governance/fanout-completion-gate.test.mjs tests/meta-theory/47-meta-theory-entry-classifier.test.mjs` -> 48/48 pass.
+- `node scripts/validate-product-experience-core-goals.mjs` -> pass; default run shows `not_authorized`, trusted self-test reaches product-experience pass.
+- `node scripts/validate-runtime-matrix.mjs` -> pass.
+- `npm run meta:sync -- --targets claude,codex,cursor,openclaw` -> project runtime mirrors updated.
+- `npm run meta:sync:global:release` and `npm run meta:check:global:release` -> Claude Code and Codex global skills, hooks, and commands synced and checked.
+- `npm run meta:check` -> pass.
+- `npm run meta:release:smoke` -> 1104 pass, 0 fail, 5 skipped; integration pass.
+- `npm run meta:graphify:check` -> graph matches HEAD.
+- `git diff --check` -> pass.
+
+## [2.8.72] - 2026-07-05
+
+### Solved Problem
+
+Codex execution dispatch still felt like it was creating new agents repeatedly instead of finding and reusing the global/project agent inventory. At the same time, Meta_Kim's observed hook mode had grown into a second high-risk keyword gate: user-explicit Git, delete, GitHub API, install, publish, and release commands could be blocked by Meta_Kim even though generic keyword safety belongs to the host/runtime safety layer, not the Meta_Kim flow gate.
+
+### Changes
+
+- **Codex dispatch is global-first and typed-spawn aware.** The Codex `/meta-theory` route and runtime reference now prefer discovered global/project owners, bind typed `spawn_agent` calls with `agent_type`, and keep `fork_context` only for full-context forks where no durable agent type is being requested.
+- **Execution owner fallback is stricter.** Capability routing now avoids arbitrary "first candidate" ownership and records fit evidence for implementation, verification, research, provider, and test lanes before selecting an owner.
+- **Observed hooks no longer duplicate keyword safety.** `enforce-agent-dispatch.mjs` removed the observed-mode command blacklist and the GitHub Git Data API release-approval side path. In observed mode, Meta_Kim no longer blocks commands by class; Review and Verification judge release truth, rollback evidence, policy adherence, and public-ready claims.
+- **Meta_Kim flow gates stay intact.** Managed-stage readiness, choice/capability/owner evidence, meta-agent direct mutation boundaries, `queryBypass` mutation limits, and known unsupported runtime/OS checks still block because they are Meta_Kim flow-design concerns.
+
+### Verification
+
+- `npm run meta:setup:update` -> global update completed; global skills, dependencies, MCP memory hooks, and capability inventory refreshed.
+- `npm run meta:sync:global:release` -> Claude Code and Codex global skills, commands, and hooks synced.
+- `git fetch --tags origin` -> succeeds after global hook sync, confirming Git is no longer blocked by Meta_Kim observed hook policy.
+- `node --test tests/governance/capability-routing.test.mjs tests/meta-theory/01-structural.test.mjs tests/meta-theory/11-eight-stage-spine.test.mjs` -> 199/199 pass.
+- `node scripts/validate-stage-runtime-control.mjs` -> pass.
+- `npm run meta:route:validate` -> pass.
+- `npm run meta:release:smoke` -> 1103 pass, 0 fail, 5 skipped; integration pass.
+- `npm run meta:graphify:check` -> graph matches HEAD.
+- `git diff --check` -> pass.
+
+## [2.8.71] - 2026-07-05
+
+### Solved Problem
+
+Windows installs and release checks could show Node's `[DEP0190]` warning because setup, global dependency installation, release verification, and OS probing still had child-process paths that combined argument arrays with shell execution. At the same time, the Codex fan-out path still had practical failure edges: execution routing could fall back to an arbitrary first agent, Codex `spawn_agent` fork mode could mix `fork_context: true` with `agent_type`, and the shared spine-state helper was not projected everywhere that imported it.
+
+### Changes
+
+- **Install and release commands no longer trigger DEP0190.** `setup.mjs`, `scripts/install-global-skills-all-runtimes.mjs`, `scripts/run-verify-all.mjs`, and `scripts/governance-lib.mjs` now avoid Node's `shell: true` + args warning path while preserving Windows `.cmd` compatibility through explicit `cmd.exe /d /s /c` handoff where needed.
+- **Execution owner selection avoids arbitrary fallback.** `scripts/select-execution-route.mjs` now evaluates the full existing execution-owner inventory with semantic preference groups for test, verification, provider, research, and implementation work, returning `null` instead of guessing when no fit exists.
+- **Codex fork rules are Codex-only.** The Codex command adapter and runtime reference now document that full-context forks use `fork_context: true` without `agent_type`, while typed spawns use `agent_type` without full-context fork. Structural coverage prevents this Codex-specific rule from leaking into shared, Claude, Cursor, or OpenClaw surfaces.
+- **Shared spine-state imports resolve across projected hook targets.** `spine-state-utils.mjs` is included in project and global Codex/Cursor hook copy paths and their sync/discovery tests, matching the shared `spine-state.mjs` import graph.
+
+### Verification
+
+- `node --trace-deprecation setup.mjs --check --silent` -> no DEP0190 warning.
+- `node --trace-deprecation scripts/install-global-skills-all-runtimes.mjs --dry-run --plugins-only --targets claude` -> no DEP0190 warning.
+- `NODE_OPTIONS=--trace-deprecation node scripts/run-verify-all.mjs` -> 8/8 stages pass, no DEP0190 warning.
+- `node scripts/probe-os-compatibility.mjs --check` -> pass.
+- `npm run meta:test:setup` -> 504/504 pass.
+- `npm run meta:test:meta-theory` -> 1104 pass, 0 fail, 5 skipped.
+- `npm run meta:route:validate` -> pass.
+- `node --test tests/meta-theory/01-structural.test.mjs` -> 63/63 pass.
+- `npm run meta:prompt:validate` -> pass.
+- `git diff --check` -> pass.
+
 ## [2.8.70] - 2026-07-05
 
 ### Solved Problem
@@ -22,7 +138,7 @@ Users wanted Claude Code and Codex to both support a "fan-out / team" workflow �
 
 - **Multi-agent trigger keywords + auto capability search + stage pre-progression.** `canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs` (and its `claude` mirror) now matches `team` / `fan-out` / `multi-agent` / `agent teams` / `军团` / `分队` / `并行` / `并发` / `多 agent` / `开 N 个`. On hit it auto-runs a capability search that reads `config/capability-index/agent-eligibility.json` plus `canonical/agents/`, populates `fetchRecord.capabilitySearchPerformed = true` + `capabilityMatches`, pre-progresses `currentStage` from `critical` to `fetch`, and records `linkedCommands` / `linkedSkills` / `dispatchMode = "fan_out_ready"` so the main thread can fork immediately.
 - **Capability gate exemption for fan-out runs.** `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs` (projected to `.codex/hooks/` and `.cursor/hooks/`) treats `stageRuntimeControl.dispatchMode ∈ {fan_out_ready, fan_out_in_progress}` as a discovery-equivalent stage for the capability gate, so an Agent / `spawn_agent` dispatch during a multi-agent run no longer denies on missing `capabilitySearchPerformed`.
-- **Three-tier agent eligibility registry.** `config/capability-index/agent-eligibility.json` enumerates `eligible` (the nine meta-* agents with role + owns[]), `conditional`, and `hard_reject` tiers with rejection-reason strings, mirroring `oh-my-openagent`'s `AGENT_ELIGIBILITY_REGISTRY` so capability search returns a single verdict per agent rather than free-form ownerCandidates.
+- **Three-tier agent eligibility registry.** `config/capability-index/agent-eligibility.json` enumerates `eligible` (the nine meta-* agents with role + owns[]), `conditional`, and `hard_reject` tiers with rejection-reason strings, so capability search returns a single verdict per agent rather than free-form ownerCandidates.
 - **Atomic spine-state writes with file lock.** `canonical/runtime-assets/shared/hooks/spine-state-utils.mjs` provides `atomicWriteJson` (temp-file + rename) and `withFileLock` (`open` + `wx` + jittered retry). `spine-state.mjs` `writeSpineState` now wraps both, so concurrent fan-out agents cannot corrupt the run JSON.
 - **Command + skill auto-link on multi-agent trigger.** Triggered runs extract `/slash-command` names and `skill:xxx` references from the prompt into `stageRuntimeControl.linkedCommands` / `linkedSkills`, so the dispatch board can show what each lane should load.
 

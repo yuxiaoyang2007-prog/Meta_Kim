@@ -12,6 +12,144 @@
 
 _留给下个版本。_
 
+## [2.8.75] - 2026-07-06
+
+### 解决的问题
+
+`2.8.74` 修的是用户明确说“派发 / 并行”时的纠偏，但设计仍然太窄。Meta_Kim / `meta-theory` 触发本身就应该代表“进入治理执行，并在 Thinking 证明可拆、安全时自动 fan-out”。用户不应该在已经进入治理执行后，还要再补一句“派发”、特定结构化链路，或再过一个 native choice panel。
+
+### 改动
+
+- **Meta 触发现在授权 safe fan-out。** 显式 `meta-theory`、`/meta-theory`、`元理论`、自然语言治理执行入口，以及结构化链路变体，在 scope 可拆时都会产生 `meta_theory_trigger_request`，不再等待 native choice surface 才能并行。
+- **自动 fan-out 不抢具体业务路由。** 主观 UI 请求仍走 `subjective-ui-design-orchestration` 并保留必要 native choice；Meta 触发只附加 fan-out 元数据，不覆盖更具体的业务路线。
+- **Codex route selection 把 Meta 触发当自动 fan-out。** 当 scope 可拆时，route 会产出多个 agent-owned worker packets，并带 typed Codex `spawn_agent` 绑定和 agent-teams fan-out adapter。
+- **canonical 文档删掉“普通 meta-theory 不算授权”的错误规则。** Native choice 仍用于会改变路线、范围、风险或验收标准的决策，但不再作为 Meta_Kim 触发后允许安全并行的前置许可。
+
+### 验证
+
+- `node --test tests/meta-theory/47-meta-theory-entry-classifier.test.mjs tests/governance/capability-routing.test.mjs` -> 20 个入口分类测试和 capability-routing fixtures 通过。
+- `npm run meta:route:validate` -> 通过。
+- `npm run meta:sync` -> 项目 runtime 投影 manifest 已刷新。
+- `npm run meta:release:smoke` -> 1106 通过，0 失败，5 跳过；integration 通过。
+
+## [2.8.74] - 2026-07-06
+
+### 解决的问题
+
+`2.8.73` 把治理路由和 live subagent 授权分开后，Codex 里仍有一个实际 fan-out 缺陷：用户直接纠正“我要的是派发 / 并行”时，入口分类器虽然识别到了 fan-out 信号，却仍可能把它留在 `fast_path`。即使进入路由，中文里的“规则、runtime、测试缺口”这类可拆范围也可能合并成一个 worker，或者把 lane 绑定到 skill，而不是可复用的 Codex agent owner，结果用户看到的还是协议解释，不是真并行派发。
+
+### 改动
+
+- **直接“派发/并行”现在就是治理执行入口。** “派发”“并行”等中文纠偏会进入标准治理路径，成为 fan-out eligible，并作为 Codex subagent 的直接授权来源。
+- **显式 fan-out 优先绑定 agent owner。** 用户要求 agent fan-out 时，每个 worker lane 先绑定可复用的 Codex 全局/项目 agent owner；skill、command、MCP tool、runtime tool 只作为 loadout 或依赖，不替代 lane owner。
+- **中文范围能正确拆并行 lane。** route selection 现在把中文逗号、顿号、分号、冒号也当成 lane 分隔符，所以“规则、runtime、测试缺口”能产出多个 worker packets。
+- **测试锁住真实派发形状。** 回归测试要求直接并行派发必须产出多个 agent-owned worker packets，且每个 Codex worker 都带 typed `spawn_agent` 绑定，并选择 agent-teams fan-out adapter。
+
+### 验证
+
+- `node --test tests/meta-theory/47-meta-theory-entry-classifier.test.mjs tests/governance/capability-routing.test.mjs` -> 18 个入口分类测试和 capability-routing fixtures 通过。
+- `npm run meta:route:validate` -> 通过。
+- `npm run meta:sync` -> 项目 runtime 投影 manifest 已刷新。
+- `npm run meta:release:smoke` -> 1105 通过，0 失败，5 跳过；integration 通过。
+
+## [2.8.73] - 2026-07-05
+
+### 解决的问题
+
+`meta-theory` 能进入治理 run，也能产出并行 worker lanes，但 Codex 里仍可能由主线程串行执行，因为文档和测试把 `meta-theory` 触发误当成了 live `spawn_agent` 授权。真实 Codex 会话里，这会让“多 agent 编排”只出现在协议文本里，实际没有任何宿主 subagent 调用。
+
+### 改动
+
+- **治理路由和 live subagent 授权分开。** `meta-theory` 只代表进入治理路由和可并行候选；Codex live subagent fan-out 现在必须有明确 subagent / delegation / parallel-agent 措辞，或已经完成命名 parallel-agent route 的 native choice。
+- **静默串行兜底会被 gate 抓住。** Codex 已选 `spawn_agent` lane 但 0 个实际 dispatch 时，除非有有效 degraded state，否则 fan-out completion gate 会触发。
+- **调用真值新增 `not_authorized` 状态。** capability truth packets、contracts、reports 和产品目标校验现在区分“未授权”“宿主工具不可用”和“被阻断”。
+- **Codex command/runtime 文档不再过度承诺 `/meta-theory`。** command adapter 现在明确：`/meta-theory` 授权的是治理路由；live delegation 仍取决于明确授权和可调用宿主工具。
+
+### 验证
+
+- `node --test tests/meta-theory/32-meta-theory-four-product-targets.test.mjs tests/meta-theory/34-run-deliverables.test.mjs tests/governance/fanout-completion-gate.test.mjs tests/meta-theory/47-meta-theory-entry-classifier.test.mjs` -> 48/48 通过。
+- `node scripts/validate-product-experience-core-goals.mjs` -> 通过；默认 run 显示 `not_authorized`，trusted self-test 达到 product-experience pass。
+- `node scripts/validate-runtime-matrix.mjs` -> 通过。
+- `npm run meta:sync -- --targets claude,codex,cursor,openclaw` -> 项目运行时镜像已更新。
+- `npm run meta:sync:global:release` 和 `npm run meta:check:global:release` -> Claude Code 和 Codex 全局 skills、hooks、commands 已同步并检查通过。
+- `npm run meta:check` -> 通过。
+- `npm run meta:release:smoke` -> 1104 通过，0 失败，5 跳过；integration 通过。
+- `npm run meta:graphify:check` -> graph matches HEAD。
+- `git diff --check` -> 通过。
+
+## [2.8.72] - 2026-07-05
+
+### 解决的问题
+
+Codex 执行派发仍然像是在不断新建 agent，而不是先从全局/项目 agent 清单里找可复用 owner。同时，Meta_Kim 的 observed hook 模式也不该再承担第二套“高风险关键词拦截”：用户明确要求的 Git、删除、GitHub API、安装、发布、release 命令，不应该因为 Meta_Kim 自己的流程 hook 又被挡一次。通用 keyword 风险拦截属于宿主/运行时安全层，Meta_Kim 只应该管自己的流程闸门。
+
+### 改动
+
+- **Codex 派发改为 global-first，并区分 typed spawn。** Codex `/meta-theory` 路由和 runtime reference 现在优先复用已发现的全局/项目 owner；指定类型派发用 `agent_type`，完整上下文 fork 才用 `fork_context`，两者不再混用。
+- **执行 owner 兜底更严格。** 能力路由不再拿第一个候选硬顶，而是为 implementation、verification、research、provider、test 等 lane 记录匹配证据后再选 owner。
+- **observed hook 不再重复 keyword 安全拦截。** `enforce-agent-dispatch.mjs` 删除 observed 模式下的命令黑名单，也删除 GitHub Git Data API 发布特批支路。observed 模式下，Meta_Kim 不再按命令类别拦截；release 是否真实、rollback 证据是否够、策略是否遵守、公示是否达标，交给 Review 和 Verification 判断。
+- **Meta_Kim 流程 gate 仍保留。** managed 阶段 readiness、choice/capability/owner evidence、meta-agent 直接改业务文件、`queryBypass` 写入、已知 unsupported runtime/OS 等仍会拦，因为它们是 Meta_Kim 流程设计本身的问题。
+
+### 验证
+
+- `npm run meta:setup:update` -> 全局更新完成；全局 skills、依赖、MCP memory hooks、能力索引已刷新。
+- `npm run meta:sync:global:release` -> Claude Code 和 Codex 全局 skills、commands、hooks 已同步。
+- `git fetch --tags origin` -> 全局 hook 同步后成功，确认 Git 不再被 Meta_Kim observed hook 策略阻拦。
+- `node --test tests/governance/capability-routing.test.mjs tests/meta-theory/01-structural.test.mjs tests/meta-theory/11-eight-stage-spine.test.mjs` -> 199/199 通过。
+- `node scripts/validate-stage-runtime-control.mjs` -> 通过。
+- `npm run meta:route:validate` -> 通过。
+- `npm run meta:release:smoke` -> 1103 通过，0 失败，5 跳过；integration 通过。
+- `npm run meta:graphify:check` -> graph matches HEAD。
+- `git diff --check` -> 通过。
+
+## [2.8.71] - 2026-07-05
+
+### 解决的问题
+
+Windows 本地安装和发布级校验时，可能会出现 Node 的 `[DEP0190]` 警告。原因是 setup、全局依赖安装、release verify runner 和 OS probe 里还有子进程路径把 args 数组和 shell 执行混在一起，Node 会把它判为有安全风险的调用方式。同时，Codex 多 agent fan-out 路径还有几个真实使用中的坑：执行路由可能退回到“第一个候选 agent”，Codex `spawn_agent` 可能把 `fork_context: true` 和 `agent_type` 混用，shared `spine-state.mjs` 引入的工具文件也没有投影到所有会用到它的 hook 目录。
+
+### 改动
+
+- **安装和发布命令不再触发 DEP0190。** `setup.mjs`、`scripts/install-global-skills-all-runtimes.mjs`、`scripts/run-verify-all.mjs` 和 `scripts/governance-lib.mjs` 避开 Node 的 `shell: true` + args warning 路径；需要兼容 Windows `.cmd` 的地方改为显式 `cmd.exe /d /s /c` handoff。
+- **执行 owner 选择不再随便兜底。** `scripts/select-execution-route.mjs` 现在基于完整 execution-owner 清单和语义偏好组选择 test、verify、provider、research、implementation 等任务 owner；没有合适匹配时返回 `null`，不再拿第一个候选硬顶。
+- **Codex fork 规则只留在 Codex 面。** Codex command adapter 和 Codex runtime reference 现在明确：完整上下文 fork 用 `fork_context: true` 且不传 `agent_type`；指定类型派发用 `agent_type` 且不启用完整上下文 fork。结构测试保证这条 Codex 专属规则不会污染 shared、Claude、Cursor 或 OpenClaw 表面。
+- **shared spine-state 依赖在投影 hook 中可解析。** `spine-state-utils.mjs` 进入 Codex/Cursor 项目与全局 hook copy 路径，并补上 sync/discovery 测试，和 shared `spine-state.mjs` 的 import 图保持一致。
+
+### 验证
+
+- `node --trace-deprecation setup.mjs --check --silent` -> 无 DEP0190 警告。
+- `node --trace-deprecation scripts/install-global-skills-all-runtimes.mjs --dry-run --plugins-only --targets claude` -> 无 DEP0190 警告。
+- `NODE_OPTIONS=--trace-deprecation node scripts/run-verify-all.mjs` -> 8/8 阶段通过，无 DEP0190 警告。
+- `node scripts/probe-os-compatibility.mjs --check` -> 通过。
+- `npm run meta:test:setup` -> 504/504 通过。
+- `npm run meta:test:meta-theory` -> 1104 通过，0 失败，5 跳过。
+- `npm run meta:route:validate` -> 通过。
+- `node --test tests/meta-theory/01-structural.test.mjs` -> 63/63 通过。
+- `npm run meta:prompt:validate` -> 通过。
+- `git diff --check` -> 通过。
+
+## [2.8.70] - 2026-07-05
+
+### 解决的问题
+
+用户希望 Claude Code 和 Codex 都支持"fan-out / 团队"工作流——主 agent 并行派出多个子 agent——但 Meta_Kim 的触发与派发门让这套流程实际跑不起来。`activate-meta-theory-spine.mjs` 只匹配 `meta-theory` / `critical + fetch + thinking + review` / `元理论`，所以像"开 3 个 agent 扫全量发布差距"这样的请求根本进不了多 agent 路径。进入之后，`enforce-agent-dispatch.mjs` 在 execution / review / meta_review / verification / evolution 阶段对任何 `Agent` / `spawn_agent` 调用都要求 `fetchRecord.capabilitySearchPerformed === true`，而这个 flag 从不自动置位，主线程卡死。`spine-state.mjs` 还直接写 JSON 状态文件，fan-out 多 agent 各自切换同一 run 时存在竞争。整套机制没有为 `team` / `fan-out` / `军团` / `并行` 关键词文档化触发，没有 agent 资格分级，没有原子状态切换，多 agent run 真正发起后也没法自动从 `critical` 推进到 `fetch`。
+
+### 改动
+
+- **多 agent 触发关键词 + 自动能力检索 + 阶段预推进。** `canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs`（及其 `claude` 镜像）现匹配 `team` / `fan-out` / `multi-agent` / `agent teams` / `军团` / `分队` / `并行` / `并发` / `多 agent` / `开 N 个`。命中后自动跑能力检索，读 `config/capability-index/agent-eligibility.json` + `canonical/agents/`，填 `fetchRecord.capabilitySearchPerformed = true` + `capabilityMatches`，把 `currentStage` 从 `critical` 预推进到 `fetch`，并记录 `linkedCommands` / `linkedSkills` / `dispatchMode = "fan_out_ready"`，主线程可立即 fork。
+- **fan-out run 的 capability gate 免检。** `canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs`（投影到 `.codex/hooks/` 和 `.cursor/hooks/`）把 `stageRuntimeControl.dispatchMode ∈ {fan_out_ready, fan_out_in_progress}` 当作 discovery 等价阶段，多 agent run 期间的 Agent / `spawn_agent` 派发不再因缺 `capabilitySearchPerformed` 被 deny。
+- **三层 agent 资格注册表。** `config/capability-index/agent-eligibility.json` 列出 `eligible`（九个 meta-* agent，含 role + owns[]）、`conditional`、`hard_reject` 三层，带拒绝原因串，能力检索对每个 agent 返回单一裁决而非自由形态 ownerCandidates。
+- **原子 spine-state 写入 + 文件锁。** `canonical/runtime-assets/shared/hooks/spine-state-utils.mjs` 提供 `atomicWriteJson`（临时文件 + rename）和 `withFileLock`（`open` + `wx` + 抖动重试）。`spine-state.mjs` 的 `writeSpineState` 套上两者，并发 fan-out agent 不会写坏 run JSON。
+- **多 agent 触发时自动 link command + skill。** 被触发的 run 从 prompt 提取 `/slash-command` 名和 `skill:xxx` 引用，填进 `stageRuntimeControl.linkedCommands` / `linkedSkills`，派发板能展示每条 lane 该加载什么。
+
+### 验证
+
+- 所有触及的 canonical 源跑 `node --check` → SYNTAX OK。
+- `npm run meta:validate` → 7/7 通过。
+- `node --test tests/setup/graphify-wiring-contract.test.mjs tests/setup/sync-runtimes-manifest.test.mjs` → 71/71 通过。
+- `npm run meta:check:runtimes` → Claude Code + Codex + Cursor 镜像一致。
+- `npm run meta:sync` → `.claude/hooks/` 更新 2 个文件，再镜像到 `.codex/` + `.cursor/`。
+
 ## [2.8.69] - 2026-07-05
 
 ### 解决的问题

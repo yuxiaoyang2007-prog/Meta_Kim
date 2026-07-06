@@ -97,6 +97,7 @@ describe("sync-global-meta-theory hook policy", () => {
         "activate-meta-theory-spine.mjs",
         "block-dangerous-bash.mjs",
         "spine-state.mjs",
+        "spine-state-utils.mjs",
         "stop-save-progress.mjs",
         "stop-memory-save.mjs",
         "utils.mjs",

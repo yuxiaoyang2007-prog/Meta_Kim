@@ -980,6 +980,7 @@ const GLOBAL_META_KIM_HOOK_PACKAGE_FILES = new Set([
   "meta-kim-memory-save.mjs",
   "skip-reminder.mjs",
   "spine-state.mjs",
+  "spine-state-utils.mjs",
 ]);
 
 const PROJECT_CLAUDE_HOOK_FILES = new Set([
@@ -992,6 +993,7 @@ const PROJECT_CLAUDE_HOOK_FILES = new Set([
   "post-typecheck.mjs",
   "skip-reminder.mjs",
   "spine-state.mjs",
+  "spine-state-utils.mjs",
   "stop-compaction.mjs",
   "stop-completion-guard.mjs",
   "stop-console-log-audit.mjs",
@@ -2209,6 +2211,7 @@ const CLAUDE_PROJECT_HOOK_FILES = new Set([
   "stop-spine-cleanup.mjs",
   "utils.mjs",
   "spine-state.mjs",
+  "spine-state-utils.mjs",
 ]);
 
 // Codex uses an adapter pattern (.mjs script + .py wrapper). Project-level
@@ -2239,6 +2242,7 @@ const CODEX_PROJECT_HOOK_FILES = new Set([
   "resolve-plan-dir.sh",
   "skip-reminder.mjs",
   "spine-state.mjs",
+  "spine-state-utils.mjs",
   "utils.mjs",
 ]);
 
@@ -2252,6 +2256,7 @@ const CODEX_ACTIVE_PROJECT_HOOK_FILES = new Set([
   "post-typecheck.mjs",
   "skip-reminder.mjs",
   "spine-state.mjs",
+  "spine-state-utils.mjs",
   "stop-compaction.mjs",
   "stop-completion-guard.mjs",
   "stop-console-log-audit.mjs",
@@ -2280,6 +2285,7 @@ const CURSOR_PROJECT_HOOK_FILES = new Set([
   "user-prompt-submit.sh",
   "skip-reminder.mjs",
   "spine-state.mjs",
+  "spine-state-utils.mjs",
   "utils.mjs",
 ]);
 
@@ -2293,6 +2299,7 @@ const CURSOR_ACTIVE_PROJECT_HOOK_FILES = new Set([
   "post-typecheck.mjs",
   "skip-reminder.mjs",
   "spine-state.mjs",
+  "spine-state-utils.mjs",
   "stop-compaction.mjs",
   "stop-completion-guard.mjs",
   "stop-console-log-audit.mjs",
@@ -3056,7 +3063,7 @@ Examples:
       ) {
         changedFiles.push(`${dp.codexHooks}/bash-readonly-whitelist.mjs`);
       }
-      // Sync shared hook dependencies (utils.mjs, spine-state.mjs, skip-reminder.mjs)
+      // Sync shared hook dependencies (utils.mjs, spine-state.mjs, spine-state-utils.mjs, skip-reminder.mjs)
       const utilsHookContent = await tryReadCanonical(
         path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "utils.mjs"),
       );
@@ -3084,6 +3091,20 @@ Examples:
         ).changed
       ) {
         changedFiles.push(`${dp.codexHooks}/spine-state.mjs`);
+      }
+      const spineStateUtilsHookContent = await tryReadCanonical(
+        path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "spine-state-utils.mjs"),
+      );
+      if (
+        spineStateUtilsHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexHooksDir, "spine-state-utils.mjs"),
+            spineStateUtilsHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexHooks}/spine-state-utils.mjs`);
       }
       const skipReminderHookContent = await tryReadCanonical(
         path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "skip-reminder.mjs"),
@@ -3348,7 +3369,7 @@ Examples:
         changedFiles.push(`${dp.cursorHooks}/bash-readonly-whitelist.mjs`);
       }
       // Shared dependencies required by enforce-agent-dispatch.mjs: utils.mjs,
-      // spine-state.mjs and skip-reminder.mjs. Without these the
+      // spine-state.mjs, spine-state-utils.mjs, and skip-reminder.mjs. Without these the
       // dispatch gate cannot resolve its imports.
       const cursorUtilsHookContent = await tryReadCanonical(
         path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "utils.mjs"),
@@ -3377,6 +3398,20 @@ Examples:
         ).changed
       ) {
         changedFiles.push(`${dp.cursorHooks}/spine-state.mjs`);
+      }
+      const cursorSpineStateUtilsHookContent = await tryReadCanonical(
+        path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "spine-state-utils.mjs"),
+      );
+      if (
+        cursorSpineStateUtilsHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.cursorHooksDir, "spine-state-utils.mjs"),
+            cursorSpineStateUtilsHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.cursorHooks}/spine-state-utils.mjs`);
       }
       const cursorSkipReminderHookContent = await tryReadCanonical(
         path.join(canonicalRuntimeAssetsDir, "shared", "hooks", "skip-reminder.mjs"),

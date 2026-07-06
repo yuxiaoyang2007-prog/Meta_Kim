@@ -35,11 +35,13 @@ Codex execution rule:
 
 **HOST-NATIVE FAN-OUT PREFERRED.** The main thread is the dispatcher, never the executor. Use Codex's native `spawn_agent` directly to fan out independent worker lanes — the governed runner only records evidence, discovers capabilities, and suggests lanes; it does not enforce dispatch.
 
-- This `/meta-theory` invocation is explicit user authorization to use Codex sub-agent delegation and parallel agent work.
+- This `/meta-theory` invocation authorizes governed routing. Live Codex sub-agent delegation still requires direct subagent/delegation/parallel-agent wording in the user request, or a completed native choice surface that names the parallel-agent route.
 - Prefer a **named subagent** over a **fork** when the worker lane needs its own agent type, system prompt, or tool set. A fork inherits the parent context and cannot change agent type mid-run; a named subagent starts from its own definition and can. If you only need to continue the same context, fork is fine.
+- When owner discovery selects an existing Codex global or project `agent_type`, use typed `multi_agent_v1.spawn_agent` with that `agent_type` and bounded context from the worker packet. Do not choose a full-context fork merely to preserve context; only use a full-context fork for same-context generic continuation or as the retry after a typed-spawn parameter/fork error.
+- Codex `spawn_agent` fork rule: full-context fork and typed spawn are mutually exclusive. For full-context fork, call `multi_agent_v1.spawn_agent` with `fork_context: true` and omit `agent_type`. For typed spawn, pass `agent_type` and omit `fork_context` or set it false. Never pass `fork_context: true` together with `agent_type`; if the host returns a fork/parameter error, retry once without `agent_type` before marking subagent dispatch unavailable.
 - Use `agent-teams-playbook` after Thinking and before Execution when the plan has 2+ executable worker lanes whose DAG dependencies, collision boundaries, workspace isolation, and external-write policy prove safe fan-out; record `not_required` for fewer lanes and partial/degraded for unsafe fan-out. Resolve it from the first available skill root (`~/.codex/skills/agent-teams-playbook/SKILL.md`, `.agents/skills/agent-teams-playbook/SKILL.md`, or a configured dependency root). Treat it as a selected fan-out adapter unless a live Skill/Agent Team/spawn_agent tool call is attached.
-- Then use the active Codex host's real subagent tool with capability-matched Meta_Kim agents. If no plain `spawn_agent` tool is visible, call tool discovery for `spawn_agent subagent multi-agent` and use the exposed callable tool name, for example `multi_agent_v1.spawn_agent`. Record the exact tool name and returned agent id in host invocation evidence. The main thread clarifies, routes, verifies, and synthesizes; it must not do multi-agent execution work by itself.
-- If no callable subagent tool is available after discovery, record the checked tool names and blocked reason; do not silently continue as main-thread execution.
+- When authorization exists, use the active Codex host's real subagent tool with capability-matched Meta_Kim agents. If no plain `spawn_agent` tool is visible, call tool discovery for `spawn_agent subagent multi-agent` and use the exposed callable tool name, for example `multi_agent_v1.spawn_agent`. Record the exact tool name and returned agent id in host invocation evidence. The main thread clarifies, routes, verifies, and synthesizes; it must not do multi-agent execution work by itself.
+- If authorization or a callable subagent tool is missing after discovery, record the checked tool names and blocked/degraded reason; do not silently continue as main-thread execution or claim live fan-out.
 
 ## Prompt Acceptance
 
@@ -49,7 +51,7 @@ This command adapter binds `governance-orchestration`, `capability-discovery-and
 
 - User request from `$ARGUMENTS`.
 - The project `meta-theory` skill from a configured skill root.
-- Codex agent delegation capability or an explicit blocked reason when unavailable.
+- Codex agent delegation authorization and capability, or an explicit blocked/degraded reason when unavailable.
 - Rendered installed Meta_Kim package root, or source-checkout `package.json` with `meta:theory:run:notice` for auditable artifact generation.
 
 ## Pass

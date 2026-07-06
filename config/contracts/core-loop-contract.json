@@ -486,8 +486,8 @@
       "workerResultPackets"
     ],
     "capabilityInvocationTruthRequirements": [
-      "stateTaxonomy includes invoked, applied, host_visible_observed, selected_not_invoked, discovered_not_selected, unavailable, blocked, not_required",
-      "agent/subagent live invocation is invoked only with external agent spawn evidence; otherwise use unavailable, blocked, not_required, or selected_not_invoked according to host-tool availability and authorization evidence",
+      "stateTaxonomy includes invoked, applied, host_visible_observed, selected_not_invoked, discovered_not_selected, unavailable, not_authorized, blocked, not_required",
+      "agent/subagent live invocation is invoked only with external agent spawn evidence; otherwise use unavailable, not_authorized, blocked, not_required, or selected_not_invoked according to host-tool availability and authorization evidence",
       "app-visible host UI subagents are recorded separately from runner Agent/spawn_agent tool invocation",
       "agent-teams-playbook is selected for 2+ executable parallel lanes but is not relabeled as a live Skill/Agent Team/spawn_agent call",
       "MCP binding is not relabeled as MCP tool call without invocation evidence",
@@ -555,7 +555,7 @@
       "P-109": [
         "capabilityInvocationTruthPacket.rows covers agent/subagent, app-visible host subagent, worker task, skill, MCP, hook, prompt/rule, command/script, and runtime tool families",
         "capabilityInvocationTruthPacket.rows also records agent_teams_playbook when fan-out orchestration is selected",
-        "each family records invoked, applied, host_visible_observed, selected_not_invoked, discovered_not_selected, unavailable, blocked, or not_required",
+        "each family records invoked, applied, host_visible_observed, selected_not_invoked, discovered_not_selected, unavailable, not_authorized, blocked, or not_required",
         "selected, discovered, configured, or matched capabilities cannot be displayed as invoked without attached invocation evidence",
         "run-scoped worker execution and app-visible host subagent UI evidence cannot be displayed as live runner Agent/spawn_agent invocation",
         "MCP config/binding and hook file/match cannot be displayed as MCP call or hook trigger",

@@ -211,6 +211,7 @@ function assertCapabilityInvocationTruth(report) {
     "selected_not_invoked",
     "discovered_not_selected",
     "unavailable",
+    "not_authorized",
     "blocked",
     "not_required",
   ]) {

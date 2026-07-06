@@ -285,13 +285,16 @@ test("governed execution emits a coreLoop artifact summary", () => {
   const invocationByFamily = new Map(
     artifact.coreLoop.capabilityInvocationTruthPacket.rows.map((row) => [row.family, row]),
   );
+  const expectedSubagentState = artifact.coreLoop.runtimeSubagentInvocationPacket.fanoutEligible
+    ? "unavailable"
+    : "not_required";
   assert.equal(
     artifact.coreLoop.runtimeSubagentInvocationPacket.status,
-    artifact.coreLoop.agentTeamsPlaybookPacket.status === "pass" ? "unavailable" : "not_required",
+    expectedSubagentState,
   );
   assert.equal(
     invocationByFamily.get("agent_subagent").state,
-    artifact.coreLoop.agentTeamsPlaybookPacket.status === "pass" ? "unavailable" : "not_required",
+    expectedSubagentState,
   );
   assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
   assert.equal(invocationByFamily.get("worker_task").state, "invoked");

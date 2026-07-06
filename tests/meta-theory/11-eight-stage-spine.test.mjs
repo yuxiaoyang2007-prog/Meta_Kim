@@ -322,7 +322,7 @@ function runEnforceHook(state, payload, options = {}) {
         join(hookDir, fileName),
       );
     }
-    for (const fileName of ["utils.mjs", "skip-reminder.mjs", "spine-state.mjs"]) {
+    for (const fileName of ["utils.mjs", "skip-reminder.mjs", "spine-state-utils.mjs", "spine-state.mjs"]) {
       copyFileSync(
         join(REPO_ROOT, "canonical/runtime-assets/shared/hooks", fileName),
         join(hookDir, fileName),
@@ -372,7 +372,7 @@ function runEnforceHookWithState(state, payload, options = {}) {
         join(hookDir, fileName),
       );
     }
-    for (const fileName of ["utils.mjs", "skip-reminder.mjs", "spine-state.mjs"]) {
+    for (const fileName of ["utils.mjs", "skip-reminder.mjs", "spine-state-utils.mjs", "spine-state.mjs"]) {
       copyFileSync(
         join(REPO_ROOT, "canonical/runtime-assets/shared/hooks", fileName),
         join(hookDir, fileName),
@@ -418,6 +418,12 @@ function runActivateHook(existingState, payload, options = {}) {
       copyFileSync(
         join(REPO_ROOT, sourceDir, fileName),
         join(hookDir, fileName),
+      );
+    }
+    if (runtime !== "claude") {
+      copyFileSync(
+        join(REPO_ROOT, "canonical/runtime-assets/shared/hooks/spine-state-utils.mjs"),
+        join(hookDir, "spine-state-utils.mjs"),
       );
     }
     const spineDir = join(cwd, ".meta-kim", "state", "test", "spine");
@@ -1298,7 +1304,7 @@ describe("Part F2: choice surface runtime gate", async () => {
     assert.equal(nextState.stageRuntimeControl?.factGatePolicy, "managed_gate_required_for_public_ready");
   });
 
-  test("auto prompt activation records explicit external publish intent for release wording", () => {
+  test("auto prompt activation does not create command-class publish approvals", () => {
     for (const runtime of ["shared", "claude"]) {
       const { result, nextState } = runActivateHook(
         null,
@@ -1310,15 +1316,8 @@ describe("Part F2: choice surface runtime gate", async () => {
       );
 
       assert.equal(result.status, 0, `${runtime}: ${result.stderr}`);
-      assert.equal(
-        nextState.stageRuntimeControl?.externalPublishIntent?.status,
-        "user_explicit",
-      );
-      assert.deepEqual(
-        nextState.stageRuntimeControl?.externalPublishIntent?.allowedCommandFamilies,
-        ["git_push", "github_release"],
-      );
-      assert.ok(nextState.stageRuntimeControl?.externalPublishIntent?.promptFingerprint);
+      assert.equal(nextState.stageRuntimeControl?.activationMode, "hook_observed");
+      assert.equal(nextState.stageRuntimeControl?.externalPublishIntent, undefined);
     }
   });
 
@@ -1510,32 +1509,7 @@ describe("Part F2: choice surface runtime gate", async () => {
     assert.ok(updatedState.stageRuntimeControl?.observedNoticeEmittedAt);
   });
 
-  test("observed hook state still denies high-risk external side-effect commands", () => {
-    const state = {
-      ...createInitialState({
-        taskClassification: "meta_theory_auto",
-        triggerReason: "test",
-        activationMode: "hook_observed",
-        driverMode: "hook_observed",
-        hookGateMode: "advisory",
-        latestUserInputLanguage: "zh-CN",
-      }),
-      currentStage: "critical",
-    };
-
-    const result = runEnforceHook(state, {
-      tool_name: "Bash",
-      tool_input: {
-        command: "npm install left-pad",
-      },
-    });
-
-    assert.equal(result.status, 0);
-    assert.match(result.stdout, /permissionDecision/);
-    assert.match(result.stdout, /高风险|external side-effect/);
-  });
-
-  test("observed hook state allows local git stage and commit but not push", () => {
+  test("observed hook state does not block commands by keyword or command class", () => {
     const state = {
       ...createInitialState({
         taskClassification: "meta_theory_auto",
@@ -1551,6 +1525,29 @@ describe("Part F2: choice surface runtime gate", async () => {
     for (const command of [
       "git add CHANGELOG.md",
       "git commit -m \"test local publication checkpoint\"",
+      "git tag v2.8.99",
+      "git fetch origin",
+      "git pull --rebase origin main",
+      "git push origin main",
+      "git push --force origin main",
+      "git merge feature/example",
+      "git rebase main",
+      "git checkout -- README.md",
+      "git restore .",
+      "git reset --hard HEAD",
+      "git clean -fdx",
+      "git rm stale.txt",
+      "git mv old.txt new.txt",
+      "bash -lc \"git push origin main\"",
+      "npm install left-pad",
+      "npm publish",
+      "Remove-Item -LiteralPath tmp -Recurse -Force",
+      "rm -rf tmp",
+      "gh release create v2.8.54 --title v2.8.54 --notes-file CHANGELOG.md",
+      "gh api repos/KimYx0207/Meta_Kim/git/refs/heads/main -X DELETE",
+      "Invoke-RestMethod -Method Delete -Uri \"https://api.github.com/repos/KimYx0207/Meta_Kim/git/refs/heads/main\"",
+      "Invoke-Expression \"Write-Output hello\"",
+      "curl -X POST https://example.com",
     ]) {
       const result = runEnforceHook(state, {
         tool_name: "Bash",
@@ -1559,18 +1556,9 @@ describe("Part F2: choice surface runtime gate", async () => {
       assert.equal(result.status, 0);
       assert.doesNotMatch(result.stdout, /permissionDecision/);
     }
-
-    const pushResult = runEnforceHook(state, {
-      tool_name: "Bash",
-      tool_input: { command: "git push origin main" },
-    });
-
-    assert.equal(pushResult.status, 0);
-    assert.match(pushResult.stdout, /permissionDecision/);
-    assert.match(pushResult.stdout, /高风险|external side-effect/);
   });
 
-  test("observed hook state ignores high-risk words inside quoted search text", () => {
+  test("observed hook state keeps command execution advisory even when text contains high-risk words", () => {
     const state = {
       ...createInitialState({
         taskClassification: "meta_theory_auto",
@@ -1598,64 +1586,7 @@ describe("Part F2: choice surface runtime gate", async () => {
     }
   });
 
-  test("observed hook state allows explicit user-authorized release commands only", () => {
-    const state = {
-      ...createInitialState({
-        taskClassification: "meta_theory_auto",
-        triggerReason: "test",
-        activationMode: "hook_observed",
-        driverMode: "hook_observed",
-        hookGateMode: "advisory",
-        latestUserInputLanguage: "zh-CN",
-      }),
-      currentStage: "critical",
-    };
-    state.stageRuntimeControl.externalPublishIntent = {
-      status: "user_explicit",
-      source: "prompt_intake",
-      scope: "git_remote_and_github_release",
-      createdAt: new Date().toISOString(),
-      expiresAfterMinutes: 240,
-      allowedCommandFamilies: ["git_push", "github_release"],
-      deniedCommandFamilies: [
-        "npm_publish",
-        "package_install",
-        "destructive_git",
-        "force_push",
-      ],
-    };
-
-    for (const command of [
-      "git push origin main",
-      "git push origin v2.8.54",
-      "gh release create v2.8.54 --title v2.8.54 --notes-file CHANGELOG.md",
-      "gh release view v2.8.54 --json tagName",
-    ]) {
-      const result = runEnforceHook(state, {
-        tool_name: "Bash",
-        tool_input: { command },
-      });
-      assert.equal(result.status, 0, command);
-      assert.doesNotMatch(result.stdout, /permissionDecision/, command);
-      assert.match(result.stderr, /明确要求提交|Explicit user release intent/, command);
-    }
-
-    for (const command of [
-      "git push --force origin main",
-      "npm publish",
-      "npm install left-pad",
-    ]) {
-      const result = runEnforceHook(state, {
-        tool_name: "Bash",
-        tool_input: { command },
-      });
-      assert.equal(result.status, 0, command);
-      assert.match(result.stdout, /permissionDecision/, command);
-      assert.match(result.stdout, /高风险|external side-effect/, command);
-    }
-  });
-
-  test("observed hook state ignores high-risk words inside PowerShell here-string data", () => {
+  test("observed hook state allows PowerShell here-string and execution-shaped commands", () => {
     const state = {
       ...createInitialState({
         taskClassification: "meta_theory_auto",
@@ -1687,8 +1618,7 @@ describe("Part F2: choice surface runtime gate", async () => {
     });
 
     assert.equal(executionResult.status, 0);
-    assert.match(executionResult.stdout, /permissionDecision/);
-    assert.match(executionResult.stdout, /高风险|external side-effect/);
+    assert.doesNotMatch(executionResult.stdout, /permissionDecision/);
 
     const shellWrapperResult = runEnforceHook(state, {
       tool_name: "Bash",
@@ -1698,8 +1628,7 @@ describe("Part F2: choice surface runtime gate", async () => {
     });
 
     assert.equal(shellWrapperResult.status, 0);
-    assert.match(shellWrapperResult.stdout, /permissionDecision/);
-    assert.match(shellWrapperResult.stdout, /高风险|external side-effect/);
+    assert.doesNotMatch(shellWrapperResult.stdout, /permissionDecision/);
   });
 
   test("observed hook state allows PowerShell read-only pipelines", () => {
@@ -1727,7 +1656,7 @@ describe("Part F2: choice surface runtime gate", async () => {
     assert.doesNotMatch(result.stdout, /permissionDecision/);
   });
 
-  test("observed hook state allows read-only Node eval inspection", () => {
+  test("observed hook state keeps Node eval scripts advisory", () => {
     const state = {
       ...createInitialState({
         taskClassification: "meta_theory_auto",
@@ -1760,11 +1689,10 @@ describe("Part F2: choice surface runtime gate", async () => {
     });
 
     assert.equal(writeResult.status, 0);
-    assert.match(writeResult.stdout, /permissionDecision/);
-    assert.match(writeResult.stdout, /高风险|external side-effect/);
+    assert.doesNotMatch(writeResult.stdout, /permissionDecision/);
   });
 
-  test("observed hook state does not treat install in a file path as high risk", () => {
+  test("observed hook state treats install-looking paths as ordinary command text", () => {
     const state = {
       ...createInitialState({
         taskClassification: "meta_theory_auto",
@@ -2123,7 +2051,7 @@ describe("Part F2: choice surface runtime gate", async () => {
           join(hookDir, fileName),
         );
       }
-      for (const fileName of ["utils.mjs", "skip-reminder.mjs", "spine-state.mjs"]) {
+      for (const fileName of ["utils.mjs", "skip-reminder.mjs", "spine-state-utils.mjs", "spine-state.mjs"]) {
         copyFileSync(
           join(REPO_ROOT, "canonical/runtime-assets/shared/hooks", fileName),
           join(hookDir, fileName),
@@ -2197,7 +2125,7 @@ describe("Part F2: choice surface runtime gate", async () => {
           join(hookDir, fileName),
         );
       }
-      for (const fileName of ["utils.mjs", "skip-reminder.mjs", "spine-state.mjs"]) {
+      for (const fileName of ["utils.mjs", "skip-reminder.mjs", "spine-state-utils.mjs", "spine-state.mjs"]) {
         copyFileSync(
           join(REPO_ROOT, "canonical/runtime-assets/shared/hooks", fileName),
           join(hookDir, fileName),
@@ -2271,7 +2199,7 @@ describe("Part F2: choice surface runtime gate", async () => {
           join(hookDir, fileName),
         );
       }
-      for (const fileName of ["utils.mjs", "skip-reminder.mjs", "spine-state.mjs"]) {
+      for (const fileName of ["utils.mjs", "skip-reminder.mjs", "spine-state-utils.mjs", "spine-state.mjs"]) {
         copyFileSync(
           join(REPO_ROOT, "canonical/runtime-assets/shared/hooks", fileName),
           join(hookDir, fileName),

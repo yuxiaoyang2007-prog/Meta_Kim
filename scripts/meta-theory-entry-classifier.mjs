@@ -32,6 +32,9 @@ const PROJECT_UNDERSTANDING_RE =
 const PARALLEL_AGENT_RE =
   /\b(?:parallel|subagents?|agent team|multi-agent|fan[- ]?out|delegate|spawn|review\s*\+\s*fix\s*\+\s*verify)\b|(?:并行|子智能体|子agent|多个\s*agent|多智能体|编排|分工|派发|噼里啪啦)/iu;
 
+const STRUCTURED_GOVERNANCE_CHAIN_RE =
+  /critical(?:\s+thinking)?(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)fetch(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)(?:deep\s+)?thinking(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)review|critical\s+and\s+fetch\s+thinking\s+and\s+review/iu;
+
 const COMPLEXITY_COMPLAINT_RE =
   /\b(?:too slow|slow|serial|not using agents?|missing agents?|no agents?)\b|(?:太慢|慢|不用\s*agent|没用\s*agent|没有\s*agent|没看到.*agent|串行|不会判断.*复杂|做的.*差)/iu;
 
@@ -70,6 +73,12 @@ function estimateIndependentLaneCount(text, {
   if (/review\s*\+\s*fix\s*\+\s*verify|审查.*修复.*验证|修复.*测试.*发布/iu.test(text)) {
     return Math.max(base, 3);
   }
+  if (PARALLEL_AGENT_RE.test(text)) {
+    return Math.max(base, 2);
+  }
+  if (STRUCTURED_GOVERNANCE_CHAIN_RE.test(text)) {
+    return Math.max(base, 2);
+  }
   if (explicitMetaTheory && (durableOutputIntent || fileOrMutationIntent || base >= 2)) {
     return Math.max(base, 2);
   }
@@ -78,8 +87,9 @@ function estimateIndependentLaneCount(text, {
 
 function buildFanoutSignals(text, context) {
   const signals = [];
-  if (context.explicitMetaTheory) signals.push("explicit_meta_theory_authorization");
-  if (/critical\s+and\s+fetch\s+thinking\s+and\s+review/iu.test(text)) {
+  if (context.explicitMetaTheory) signals.push("explicit_meta_theory_trigger");
+  if (context.governedMetaTrigger) signals.push("governed_meta_theory_activation");
+  if (STRUCTURED_GOVERNANCE_CHAIN_RE.test(text)) {
     signals.push("critical_fetch_thinking_review_requested");
   }
   if (PARALLEL_AGENT_RE.test(text)) signals.push("parallel_agent_or_fanout_requested");
@@ -97,6 +107,11 @@ function buildFanoutSignals(text, context) {
 function buildFanoutMetadata(text, context) {
   const expectedIndependentLaneCount = estimateIndependentLaneCount(text, context);
   const directParallelAgentRequest = PARALLEL_AGENT_RE.test(text);
+  const structuredGovernanceChainRequest = STRUCTURED_GOVERNANCE_CHAIN_RE.test(text);
+  const metaTheoryTriggerRequest =
+    context.governedMetaTrigger === true ||
+    context.explicitMetaTheory === true ||
+    structuredGovernanceChainRequest;
   const signals = buildFanoutSignals(text, {
     ...context,
     expectedIndependentLaneCount,
@@ -104,21 +119,21 @@ function buildFanoutMetadata(text, context) {
   const fanoutEligible = expectedIndependentLaneCount >= 2 && (
     signals.length >= 2 ||
     directParallelAgentRequest ||
-    (context.explicitMetaTheory && signals.length >= 1)
+    (metaTheoryTriggerRequest && signals.length >= 1)
   );
   return {
     fanoutEligible,
-    fanoutSignals: fanoutEligible ? signals : signals.filter((signal) => signal !== "explicit_meta_theory_authorization"),
+    fanoutSignals: fanoutEligible ? signals : signals.filter((signal) => signal !== "explicit_meta_theory_trigger"),
     expectedIndependentLaneCount,
     requiresSubagentAuthorization:
-      fanoutEligible && !context.explicitMetaTheory && !directParallelAgentRequest,
+      fanoutEligible && !directParallelAgentRequest && !metaTheoryTriggerRequest,
     subagentAuthorizationSource: !fanoutEligible
       ? "not_required"
-      : context.explicitMetaTheory
-        ? "explicit_meta_theory"
-        : directParallelAgentRequest
+      : directParallelAgentRequest
           ? "direct_parallel_agent_request"
-          : "native_choice_surface_required",
+          : metaTheoryTriggerRequest
+            ? "meta_theory_trigger_request"
+            : "native_choice_surface_required",
   };
 }
 
@@ -175,8 +190,20 @@ export function classifyMetaTheoryEntry(prompt) {
   const productBuildIntent = actionIntent && PRODUCT_BUILD_OBJECT_RE.test(text);
   const projectUnderstandingIntent = PROJECT_UNDERSTANDING_RE.test(text);
   const pureQuery = hasQuestionOnlyShape(text);
+  const directParallelAgentRequest = PARALLEL_AGENT_RE.test(text);
+  const structuredGovernanceChainRequest = STRUCTURED_GOVERNANCE_CHAIN_RE.test(text);
+  const serialAgentRouteComplaint = COMPLEXITY_COMPLAINT_RE.test(text);
+  const governedMetaTrigger =
+    explicitMetaTheory ||
+    structuredGovernanceChainRequest ||
+    directParallelAgentRequest ||
+    serialAgentRouteComplaint ||
+    (subjectiveQuality && actionIntent) ||
+    (actionIntent && (durableOutputIntent || fileOrMutationIntent || productBuildIntent)) ||
+    projectUnderstandingIntent;
   const fanoutContext = {
     explicitMetaTheory,
+    governedMetaTrigger,
     productBuildIntent,
     durableOutputIntent,
     fileOrMutationIntent,
@@ -208,6 +235,20 @@ export function classifyMetaTheoryEntry(prompt) {
     }, text, fanoutContext);
   }
 
+  if (directParallelAgentRequest || serialAgentRouteComplaint) {
+    return withFanoutMetadata({
+      governedEntry: true,
+      path: "standard_path",
+      taskClassification: "meta_theory_auto",
+      triggerReason: directParallelAgentRequest
+        ? "direct_parallel_dispatch_request"
+        : "serial_agent_route_complaint",
+      choiceSurfaceState: "not_allowed",
+      shouldAskBeforeFetch: false,
+      confidence: directParallelAgentRequest ? 0.9 : 0.82,
+    }, text, fanoutContext);
+  }
+
   if (subjectiveQuality && actionIntent) {
     return withFanoutMetadata({
       governedEntry: true,
@@ -216,6 +257,18 @@ export function classifyMetaTheoryEntry(prompt) {
       triggerReason: "subjective_quality_ambiguous",
       choiceSurfaceState: "critical_clarification_allowed",
       shouldAskBeforeFetch: buildAmbiguityPacket(text, fanoutContext).choicePolicy === "must_ask",
+      confidence: 0.9,
+    }, text, fanoutContext);
+  }
+
+  if (structuredGovernanceChainRequest) {
+    return withFanoutMetadata({
+      governedEntry: true,
+      path: "standard_path",
+      taskClassification: "meta_theory_auto",
+      triggerReason: "critical_fetch_thinking_review_requested",
+      choiceSurfaceState: "not_allowed",
+      shouldAskBeforeFetch: false,
       confidence: 0.9,
     }, text, fanoutContext);
   }

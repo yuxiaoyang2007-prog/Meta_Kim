@@ -26,6 +26,15 @@ const taskText = String(task ?? "").toLowerCase();
 const entryClassification = classifyMetaTheoryEntry(task);
 const choicePolicy = entryClassification.ambiguityPacket?.choicePolicy ?? "no_choice_needed";
 const subjectiveRouteChoice = entryClassification.triggerReason === "subjective_quality_ambiguous";
+const autoFanoutDispatchRequested =
+  entryClassification.fanoutEligible === true &&
+  [
+    "direct_parallel_agent_request",
+    "meta_theory_trigger_request",
+    "structured_governance_chain_request",
+  ].includes(
+    entryClassification.subagentAuthorizationSource,
+  );
 const nativeChoiceEvidenceRaw =
   argValue("--native-choice-evidence", null) ??
   process.env.META_KIM_NATIVE_CHOICE_EVIDENCE ??
@@ -171,7 +180,23 @@ function implicitScriptCapabilityGapRequested() {
   return recurrenceSignal && deterministicSignal && noAgentSignal;
 }
 
+function agentProviderReuseConcernRequested() {
+  const agentTarget = /agent|subagent|owner|智能体|代理/.test(taskText);
+  if (!agentTarget) return false;
+  const creationComplaint =
+    /一直创建|反复创建|不断创建|重复创建|老是创建|总是创建|创建.*太多|keeps?\s+creating|creating\s+agents?|always\s+creates?/.test(taskText);
+  const globalReuseSignal =
+    /global|全局|已有|现有|复用|reuse|existing|找/.test(taskText);
+  return creationComplaint || globalReuseSignal;
+}
+
 function explicitCapabilityGapRequested() {
+  if (
+    agentProviderReuseConcernRequested() &&
+    !/capability gap|missing capability|missing dependency|缺能力|能力缺口|缺少能力|缺少依赖/.test(taskText)
+  ) {
+    return false;
+  }
   return [
     "capability gap",
     "missing capability",
@@ -502,7 +527,11 @@ const repoCanonicalCapabilityProviders = [
 const projectRuntimeCapabilityProviders = [
   ...projectRuntimeSkillProviders,
   ...await projectCapabilityProviders(),
-];
+].sort((a, b) => {
+  const aPs = typeof a?.id === "string" && a.id.startsWith("package-script:") ? 0 : 1;
+  const bPs = typeof b?.id === "string" && b.id.startsWith("package-script:") ? 0 : 1;
+  return aPs - bPs;
+});
 const localGlobalCapabilityProvidersAll = ["skills", "commands", "hooks", "plugins", "mcpServers", "mcpTools", "rules", "prompts"].flatMap((type) =>
   capabilityEntries(globalCapabilityInventory, type)
     .map((entry) => compactCapabilityProvider(entry, `local_global_${type}_inventory`, type)),
@@ -1356,11 +1385,14 @@ function buildCapabilityTeamBlueprint(lanes, omittedLanesWithReason, evidence) {
       ownerFamily: lane.roleDisplayName,
       selectedOwner: lane.ownerAgent,
       providerBindingPolicy: "capability_need_runtime_match",
+      codexSpawnBinding: lane.codexSpawnBinding ?? codexSpawnBindingForOwner(lane.ownerAgent, lane.ownerKind),
       dependsOn: lane.dependsOn,
       parallelGroup: lane.parallelGroup,
       runtimeExecutionSurface:
-        lanes.length >= 2
-          ? "host subagent/custom-agent when available; otherwise workerTaskPacket"
+        runtime === "codex" && (lane.codexSpawnBinding ?? codexSpawnBindingForOwner(lane.ownerAgent, lane.ownerKind))
+          ? "Codex typed spawn_agent with selectedOwner as agent_type; full-context fork only after parameter/fork error"
+          : lanes.length >= 2
+            ? "host subagent/custom-agent when available; otherwise workerTaskPacket"
           : "single workerTaskPacket",
     })),
     omittedCapabilitySlots: omittedLanesWithReason,
@@ -1372,41 +1404,107 @@ function selectOwner(preferredOwners = []) {
   return preferredOwners.find((owner) => available.has(owner)) ?? null;
 }
 
+function codexSpawnBindingForOwner(ownerId, ownerKind = "agent") {
+  if (runtime !== "codex" || ownerKind !== "agent" || !ownerId) return null;
+  const provider = [
+    ...runtimeScopedProjectExecutionAgents,
+    ...runtimeScopedLocalGlobalAgents,
+  ].find((agent) => agent.id === ownerId);
+  if (!provider) return null;
+  return {
+    hostSurface: "multi_agent_v1.spawn_agent",
+    spawnMode: "typed_spawn",
+    agent_type: ownerId,
+    fork_context: false,
+    ownerSource: provider.source,
+    sourceRef: provider.sourceRef,
+    fallbackMode: "full_context_fork_without_agent_type",
+    fallbackRule:
+      "Prefer typed spawn for a selected Codex global/project agent_type; retry as full-context fork only after a spawn parameter/fork error or when no typed owner is selected.",
+  };
+}
+
 function selectExecutionOwner() {
-  const available = new Set(ownerDiscoveryPacket.candidateExistingExecutionOwners);
-  const preferenceGroups = [
-    { terms: ["agent", "subagent", "owner", "search", "discover", "find", "智能体", "代理", "搜索", "寻找", "发现"], owners: ["codebase-search", "search-specialist", "analysis", "worker"] },
-    { terms: ["test", "smoke", "verify", "validation", "测试", "验证"], owners: ["test", "verify", "e2e-runner", "pr-test-analyzer", "worker"] },
-    { terms: ["doc", "docs", "readme", "文档"], owners: ["docs", "api-documenter", "worker"] },
-    { terms: ["frontend", "ui", "react", "前端"], owners: ["frontend", "worker"] },
-    { terms: ["backend", "api", "server", "后端"], owners: ["backend", "worker"] },
-    { terms: ["review", "审查"], owners: ["review", "code-reviewer", "worker"] },
-  ];
-  const findInAvailable = (prefs) => [...available].find((id) =>
-    prefs.some((pref) => typeof id === "string" && id.includes(pref)),
+  const candidates = [...new Set(candidateExistingExecutionOwners)].filter(
+    (id) =>
+      typeof id === "string" &&
+      !id.includes("general-purpose") &&
+      !/runtimeInstanceAlias|nickname/i.test(id),
   );
+  if (candidates.length === 0) return null;
+  const taskLower = String(taskText || "").toLowerCase();
+  const findInAvailable = (prefs) => {
+    for (const pref of prefs) {
+      const exact = candidates.find((id) => id === pref);
+      if (exact) return exact;
+      const partial = candidates.find((id) => id.includes(pref));
+      if (partial) return partial;
+    }
+    return null;
+  };
+  const preferenceGroups = [
+    {
+      terms: ["agent", "subagent", "owner", "search", "discover", "find", "智能体", "代理", "搜索", "寻找", "发现"],
+      owners: ["codebase-search", "search-specialist", "analysis", "worker", "backend"],
+    },
+    {
+      terms: ["test", "smoke", "verify", "validation", "qa", "测试", "验证"],
+      owners: ["test", "verify", "qa", "e2e-runner", "pr-test-analyzer", "build-error-resolver", "worker"],
+    },
+    {
+      terms: ["doc", "docs", "readme", "文档"],
+      owners: ["docs", "api-documenter", "content-specialist", "worker"],
+    },
+    {
+      terms: ["frontend", "ui", "react", "前端", "页面"],
+      owners: ["frontend", "ui", "react", "accessibility-specialist", "worker"],
+    },
+    {
+      terms: ["backend", "api", "server", "后端"],
+      owners: ["backend", "api", "server", "worker"],
+    },
+    {
+      terms: ["review", "审查", "reviewer"],
+      owners: ["code-reviewer", "architect-review", "review", "worker"],
+    },
+  ];
   for (const group of preferenceGroups) {
-    if (!group.terms.some((term) => taskText.includes(term))) continue;
+    if (!group.terms.some((term) => taskLower.includes(term))) continue;
     const owner = findInAvailable(group.owners);
     if (owner) return owner;
   }
-  return findInAvailable([
+  const genericOwner = findInAvailable([
     "worker",
-    "analysis",
     "backend",
-    "test",
-    "verify",
-    "codebase-search",
-    "search-specialist",
-    "docs-researcher",
-    "reviewer",
-  ]) ?? null;
+    "code-reviewer",
+    "build-error-resolver",
+    "api-documenter",
+    "architect-review",
+  ]);
+  if (genericOwner) return genericOwner;
+  const scored = candidates.map((id) => {
+    const idLower = id.toLowerCase();
+    let score = 0;
+    for (const part of idLower.split(/[-_./]/)) {
+      if (part && part.length >= 3 && taskLower.includes(part)) score += 1;
+    }
+    return { id, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0]?.score > 0 ? scored[0].id : null;
 }
 
 function capabilityDiscoveryTaskRequested() {
-  const discoveryVerb = /find|discover|search|match|route|寻找|发现|搜索|检索|匹配|路由/.test(taskText);
+  const discoveryVerb = /find|discover|search|match|route|寻找|找|发现|搜索|检索|匹配|路由/.test(taskText);
   const discoveryTarget = /agent|subagent|owner|skill|provider|capability|mcp|tool|智能体|代理|技能|能力|工具/.test(taskText);
-  return discoveryVerb && discoveryTarget;
+  const executionFanoutDiscovery =
+    autoFanoutDispatchRequested && (
+      taskShape === "engineering_execution" ||
+      entryClassification.subagentAuthorizationSource === "direct_parallel_agent_request" ||
+      entryClassification.triggerReason === "explicit_meta_theory" ||
+      entryClassification.triggerReason === "critical_fetch_thinking_review_requested"
+    );
+  return (discoveryVerb && discoveryTarget) || agentProviderReuseConcernRequested() || executionFanoutDiscovery;
 }
 
 // 9 类 owner 池（agent / skill / mcp / command / runtimeTool / hook / plugin / memory / dependency）。
@@ -1516,8 +1614,8 @@ function buildParallelExecutionLanes() {
     }
   }
 
-  // 3. 句子分段：逗号/分号/「and」/「与」断句
-  for (const segment of taskText.split(/[,;]|\band\b|与|和|以及/)) {
+  // 3. 句子分段：中英文逗号/顿号/冒号/分号/「and」/「与」断句
+  for (const segment of taskText.split(/[,;，、；:：]|\band\b|与|和|以及/)) {
     const trimmed = segment.trim();
     if (trimmed.length < 4) continue;
     const key = `seg:${trimmed}`;
@@ -1532,9 +1630,22 @@ function buildParallelExecutionLanes() {
   const lanes = [];
   for (const [, segment] of laneSegments) {
     let provider = null;
-    for (const kind of KIND_PRIORITY) {
-      provider = resolveProvider({ kind, terms: segment.terms });
-      if (provider) break;
+    let capabilityProvider = null;
+    if (autoFanoutDispatchRequested) {
+      provider = resolveProvider({ kind: "agent", terms: segment.terms });
+      if (!provider) {
+        const fallbackOwner = selectExecutionOwner();
+        provider = fallbackOwner ? { id: fallbackOwner, kind: "agent", metadata: null } : null;
+      }
+      for (const kind of KIND_PRIORITY.filter((item) => item !== "agent")) {
+        capabilityProvider = resolveProvider({ kind, terms: segment.terms });
+        if (capabilityProvider) break;
+      }
+    } else {
+      for (const kind of KIND_PRIORITY) {
+        provider = resolveProvider({ kind, terms: segment.terms });
+        if (provider) break;
+      }
     }
     if (!provider) continue;
     lanes.push({
@@ -1542,8 +1653,9 @@ function buildParallelExecutionLanes() {
       roleDisplayName: segment.laneHint,
       ownerKind: provider.kind,
       ownerAgent: provider.id,
+      codexSpawnBinding: codexSpawnBindingForOwner(provider.id, provider.kind),
       purpose: `并行执行 "${segment.terms.trim().slice(0, 60)}"；独立交付，由 ${provider.kind}/${provider.id} owner 负责`,
-      capabilityProvider: null,
+      capabilityProvider,
       decisionImpact: `${provider.kind}/${provider.id} 是 runtime-scoped 真 owner，匹配到 lane terms：${segment.terms.trim().slice(0, 40)}`,
       dependsOn: [],
       parallelGroup: "parallel-execution",
@@ -1588,6 +1700,7 @@ function classifyOrchestratorKinds(lanes) {
 function executionCapabilityDiscoveryRoute() {
   const parallelExecutionLanes = buildParallelExecutionLanes();
   const explicitDiscoveryRoute = capabilityDiscoveryTaskRequested();
+  if (subjectiveRouteChoice) return null;
   if (taskShape !== "engineering_execution" && !explicitDiscoveryRoute) return null;
   const selectedOwner = selectExecutionOwner();
   const selectedAgentProvider = [
@@ -1651,6 +1764,7 @@ function executionCapabilityDiscoveryRoute() {
       providerEvidenceRef: "ownerDiscoveryPacket.candidateReusableCapabilityProviders",
       ownerDiscoveryRef: "ownerDiscoveryPacket",
     },
+    codexSpawnBinding: codexSpawnBindingForOwner(selectedOwner, "agent"),
     selectedCapabilityProviders: {
       agentOwner: selectedOwner,
       agent: selectedAgentProvider,
@@ -2360,6 +2474,7 @@ const output = {
         mergeOwner: "meta-conductor",
         purpose: lane.purpose,
         decisionImpact: lane.decisionImpact,
+        codexSpawnBinding: lane.codexSpawnBinding ?? codexSpawnBindingForOwner(lane.ownerAgent, lane.ownerKind ?? "agent"),
       }))
     : recommendedRoute ? [{
         ownerAgent: recommendedRoute.owner,
@@ -2371,6 +2486,12 @@ const output = {
         verificationOwner: recommendedRoute.verificationOwner,
         dependsOn: [],
         mergeOwner: "meta-conductor",
+        codexSpawnBinding:
+          recommendedRoute.codexSpawnBinding ??
+          codexSpawnBindingForOwner(
+            recommendedRoute.selectedCapabilityProviders?.agent?.id ?? recommendedRoute.owner,
+            "agent",
+          ),
       }] : [],
   capabilityGapPacket,
   verificationPlan: {
