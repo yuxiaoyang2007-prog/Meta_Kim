@@ -12,6 +12,25 @@
 
 _留给下个版本。_
 
+## [2.8.76] - 2026-07-06
+
+### 解决的问题
+
+Codex 里仍然会看起来像是在“创建智能体”，更关键的是：当治理 fan-out 请求使用空格串联的能力锚点，或使用中文句号/换行而不是逗号时，路由仍可能塌成过少的 worker lane。这样从可见运行结果上很难相信它真的在复用全局 agent。
+
+### 改动
+
+- **空格串联的能力锚点现在会拆成复用全局 agent 的 lane。** Meta-governed Codex 任务里，平台 adapter、能力账本、路由、上传证据等工作会产出多个 worker packet，不再只落到一个宽泛 worker。
+- **自然句子边界也算 lane 边界。** 换行、中英文句号/问号/感叹号都会进入 lane 提取；如果自然分段已经覆盖了某个能力，锚点补拆不会再重复生成额外 lane。
+- **回归测试检查 typed 全局 owner 复用。** 新测试断言 Codex fan-out worker 通过 `typed_spawn` 绑定已有发现到的 agent owner，而不是发明临时 owner 或创建持久投影 agent。
+
+### 验证
+
+- `node --test tests/meta-theory/50-parallel-execution-lanes.test.mjs tests/governance/capability-routing.test.mjs`
+- `node --test tests/meta-theory/26-core-mvp-acceptance.test.mjs tests/meta-theory/30-capability-gap-complete-product.test.mjs tests/meta-theory/32-meta-theory-four-product-targets.test.mjs`
+- `npm run meta:route:validate`
+- `npm run meta:release:smoke`
+
 ## [2.8.75] - 2026-07-06
 
 ### 解决的问题

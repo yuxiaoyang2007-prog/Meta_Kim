@@ -108,4 +108,25 @@ describe("50 — Parallel execution lanes (engineering fan-out)", () => {
     assert.ok(lanes.length >= 2, "multi-segment task must produce >=2 parallel lanes");
     assert.ok(drafts.length >= 2, "multi-segment task must produce >=2 worker drafts");
   });
+
+  test("meta-governed whitespace capability anchors still split into reusable global-agent lanes", () => {
+    const result = route(
+      "Critical Thinking → Fetch → Deep Thinking → Review 检查平台 key adapter 注册 能力账本 第二批平台路由 上传证据",
+      "codex",
+      "windows",
+    );
+    const lanes = result.recommendedRoute.parallelExecutionLanes ?? [];
+    const drafts = result.workerTaskPacketDrafts;
+    const available = new Set(result.ownerDiscoveryPacket.candidateExistingExecutionOwners);
+
+    assert.equal(result.entryClassification.subagentAuthorizationSource, "meta_theory_trigger_request");
+    assert.ok(lanes.length >= 2, `expected whitespace capability anchors to produce >=2 lanes, got ${lanes.length}`);
+    assert.ok(drafts.length >= 2, `expected >=2 worker drafts, got ${drafts.length}`);
+    for (const draft of drafts) {
+      assert.equal(draft.ownerKind, "agent");
+      assert.ok(available.has(draft.ownerAgent), `worker owner "${draft.ownerAgent}" must be an existing discovered owner`);
+      assert.equal(draft.codexSpawnBinding?.spawnMode, "typed_spawn");
+      assert.equal(draft.codexSpawnBinding?.agent_type, draft.ownerAgent);
+    }
+  });
 });

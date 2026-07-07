@@ -12,6 +12,25 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 _Reserved for the next release._
 
+## [2.8.76] - 2026-07-06
+
+### Solved Problem
+
+Codex could still appear to "create agents" and, more importantly, collapse a governed fan-out request into too few worker lanes when the task used whitespace-separated capability anchors or Chinese sentence punctuation instead of commas. That made global agent reuse hard to trust from the visible run.
+
+### Changes
+
+- **Whitespace capability anchors now split into reusable global-agent lanes.** Meta-governed Codex tasks such as platform adapter, capability ledger, route, and upload-evidence work now produce multiple worker packets instead of one broad worker.
+- **Natural sentence boundaries count as lane boundaries.** Newlines and Chinese/English sentence punctuation now feed lane extraction, while duplicate anchor matches are suppressed when a natural segment already covers the capability.
+- **Regression coverage now checks typed global owner reuse.** Tests assert Codex fan-out workers use existing discovered agent owners through `typed_spawn` bindings rather than invented or durable projected agents.
+
+### Verification
+
+- `node --test tests/meta-theory/50-parallel-execution-lanes.test.mjs tests/governance/capability-routing.test.mjs`
+- `node --test tests/meta-theory/26-core-mvp-acceptance.test.mjs tests/meta-theory/30-capability-gap-complete-product.test.mjs tests/meta-theory/32-meta-theory-four-product-targets.test.mjs`
+- `npm run meta:route:validate`
+- `npm run meta:release:smoke`
+
 ## [2.8.75] - 2026-07-06
 
 ### Solved Problem

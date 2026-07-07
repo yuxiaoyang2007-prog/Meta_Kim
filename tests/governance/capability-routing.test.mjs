@@ -533,6 +533,22 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     "Meta-theory fan-out worker lanes must bind reusable Codex agent owners",
   );
 
+  const codexWhitespaceFanout = route(
+    "Critical Thinking → Fetch → Deep Thinking → Review 检查平台 key adapter 注册 能力账本 第二批平台路由 上传证据",
+    "codex",
+    "windows",
+  );
+  assert.ok(
+    codexWhitespaceFanout.workerTaskPacketDrafts.length >= 2,
+    "Structured fan-out must split whitespace-separated capability anchors instead of collapsing to one worker",
+  );
+  assert.ok(
+    codexWhitespaceFanout.workerTaskPacketDrafts.every(
+      (packet) => packet.ownerKind === "agent" && packet.codexSpawnBinding?.agent_type === packet.ownerAgent,
+    ),
+    "Whitespace fan-out worker lanes must reuse discovered Codex agent owners through typed spawn bindings",
+  );
+
   const hook = route("platform hook install");
   assert.ok(hook.candidateWeapons.includes("runtime-capability-matrix"));
 

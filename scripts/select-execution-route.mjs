@@ -26,6 +26,8 @@ const taskText = String(task ?? "").toLowerCase();
 const entryClassification = classifyMetaTheoryEntry(task);
 const choicePolicy = entryClassification.ambiguityPacket?.choicePolicy ?? "no_choice_needed";
 const subjectiveRouteChoice = entryClassification.triggerReason === "subjective_quality_ambiguous";
+const GOVERNANCE_CHAIN_PREFIX_RE =
+  /^critical(?:\s+thinking)?(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)fetch(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)(?:deep\s+)?thinking(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)review\s*/iu;
 const autoFanoutDispatchRequested =
   entryClassification.fanoutEligible === true &&
   [
@@ -1593,34 +1595,96 @@ function buildParallelExecutionLanes() {
   // → command → runtimeTool → hook → plugin → memory → dependency）优先级链探测，
   // 第一个命中的 kind 就用；都找不到就别硬塞。
   const laneSegments = new Map();
+  function addLaneSegment(key, laneHint, terms) {
+    const normalizedTerms = String(terms ?? "").trim();
+    if (!normalizedTerms || normalizedTerms.length < 3) return;
+    if (!laneSegments.has(key)) {
+      laneSegments.set(key, { laneHint, terms: normalizedTerms });
+    }
+  }
 
   // 1. 路径型 segment：src/ui、src/api、database/migrations —— 每个顶层目录一个 lane
   for (const match of taskText.matchAll(/(?:^|[\s,;:(])([a-z][\w-]*\/[\w.-]+)/g)) {
     const path = match[1];
     const top = path.split("/")[0];
     if (["the", "and", "for", "with", "under", "into", "from", "in", "on", "to"].includes(top)) continue;
-    const key = `path:${top}`;
-    if (!laneSegments.has(key)) {
-      laneSegments.set(key, { laneHint: top, terms: path.replace(/[\/_.]/g, " ") });
-    }
+    addLaneSegment(`path:${top}`, top, path.replace(/[\/_.]/g, " "));
   }
 
   // 2. 显式 lane 标记：lane A / lane B —— laneHint 当 key
   for (const match of taskText.matchAll(/lane\s+([a-z0-9]+)/gi)) {
     const label = match[1].toLowerCase();
-    const key = `lane:${label}`;
-    if (!laneSegments.has(key)) {
-      laneSegments.set(key, { laneHint: label, terms: `lane ${label}` });
-    }
+    addLaneSegment(`lane:${label}`, label, `lane ${label}`);
   }
 
-  // 3. 句子分段：中英文逗号/顿号/冒号/分号/「and」/「与」断句
-  for (const segment of taskText.split(/[,;，、；:：]|\band\b|与|和|以及/)) {
-    const trimmed = segment.trim();
+  // 3. 句子分段：换行、中英文句读、冒号/分号/「and」/「与」断句
+  for (const segment of taskText.split(/\n+|[.!?。！？,;，、；:：]|\band\b|与|和|以及/)) {
+    const trimmed = segment.trim().replace(GOVERNANCE_CHAIN_PREFIX_RE, "").trim();
     if (trimmed.length < 4) continue;
-    const key = `seg:${trimmed}`;
-    if (!laneSegments.has(key)) {
-      laneSegments.set(key, { laneHint: trimmed.slice(0, 24), terms: trimmed });
+    addLaneSegment(`seg:${trimmed}`, trimmed.slice(0, 24), trimmed);
+  }
+
+  // 4. 无显式标点时，用能力锚点拆 lane。很多真实任务会写成
+  // “平台 key adapter 注册 能力账本 路由 上传证据”，入口分类已能识别
+  // 多 lane，但句子分段会只得到一整句。这里只在 fan-out 已授权时启用，
+  // 避免把普通单句小任务误拆。
+  if (autoFanoutDispatchRequested) {
+    const anchorPatterns = [
+      {
+        key: "meta-theory-rules",
+        hint: "meta-theory",
+        re: /(?:meta-theory|元理论|治理规则|规则)/iu,
+        terms: "meta-theory rules governance",
+      },
+      {
+        key: "codex-runtime",
+        hint: "codex-runtime",
+        re: /(?:codex\s+runtime|runtime|运行时)/iu,
+        terms: "codex runtime adapter",
+      },
+      {
+        key: "test-gap",
+        hint: "test",
+        re: /(?:测试缺口|测试|test\s+gap|tests?)/iu,
+        terms: "test verification gap",
+      },
+      {
+        key: "platform-key-adapter",
+        hint: "platform-adapter",
+        re: /(?:平台.*(?:key|adapter|适配|注册)|(?:key|adapter).*(?:注册|能力账本))/iu,
+        terms: "platform key adapter registry",
+      },
+      {
+        key: "capability-ledger",
+        hint: "capability-ledger",
+        re: /(?:能力账本|能力矩阵|capability\s+(?:ledger|matrix))/iu,
+        terms: "capability ledger matrix",
+      },
+      {
+        key: "platform-route",
+        hint: "route",
+        re: /(?:平台.*路由|路由|route)/iu,
+        terms: "platform route routing",
+      },
+      {
+        key: "upload-evidence",
+        hint: "upload-evidence",
+        re: /(?:上传证据|上传|upload\s+evidence|upload)/iu,
+        terms: "upload evidence proof",
+      },
+    ];
+    for (const pattern of anchorPatterns) {
+      if (pattern.re.test(taskText)) {
+        if (
+          laneSegments.size >= 2 &&
+          [...laneSegments.values()].some((segment) =>
+            pattern.re.test(`${segment.laneHint ?? ""} ${segment.terms ?? ""}`),
+          )
+        ) {
+          continue;
+        }
+        addLaneSegment(`anchor:${pattern.key}`, pattern.hint, pattern.terms);
+      }
     }
   }
 
