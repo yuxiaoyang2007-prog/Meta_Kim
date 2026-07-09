@@ -10,7 +10,17 @@
 
 ### 解决的问题
 
-_留给下个版本。_
+像“他好像还是一直在自己创建”这种很短的中文追问，如果没有显式写 Codex、agent、全局复用，仍可能被当成低信号聊天。这样即使 typed-spawn 复用链路本身是对的，下一步路由也会不稳定。
+
+### 改动
+
+- **上下文里的“反复自己创建”抱怨现在进入 owner 复用诊断。** “他/它一直在自己创建”这类表达会走 Codex execution capability discovery，不再掉到 dependency fallback。
+- **路线仍然坚持复用优先。** 这类抱怨保持 `capabilityGapDetected=false`，并让 `codexSpawnBinding.agent_type` 绑定已选中的现有 owner，不进入 `create_agent`。
+
+### 验证
+
+- `node --test tests/meta-theory/47-meta-theory-entry-classifier.test.mjs tests/meta-theory/50-parallel-execution-lanes.test.mjs tests/meta-theory/51-orchestrator-kind-bucketing.test.mjs`
+- `npm run meta:route:validate`
 
 ## [2.8.76] - 2026-07-06
 

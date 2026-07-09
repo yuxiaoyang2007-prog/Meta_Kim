@@ -10,7 +10,17 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ### Solved Problem
 
-_Reserved for the next release._
+Short Chinese follow-up complaints such as "it still seems to keep creating by itself" could still be treated as low-signal chat unless they explicitly mentioned Codex, agent, or global reuse. That made the next route less stable even though the typed-spawn owner reuse path itself was correct.
+
+### Changes
+
+- **Contextual repeated-creation complaints now enter governed owner-reuse diagnosis.** Phrases like "it/he keeps creating by itself" are routed to Codex execution capability discovery instead of dependency fallback.
+- **The route remains reuse-first.** These complaints now keep `capabilityGapDetected=false` and bind `codexSpawnBinding.agent_type` to the selected existing owner rather than entering `create_agent`.
+
+### Verification
+
+- `node --test tests/meta-theory/47-meta-theory-entry-classifier.test.mjs tests/meta-theory/50-parallel-execution-lanes.test.mjs tests/meta-theory/51-orchestrator-kind-bucketing.test.mjs`
+- `npm run meta:route:validate`
 
 ## [2.8.76] - 2026-07-06
 

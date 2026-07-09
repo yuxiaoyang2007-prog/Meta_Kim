@@ -184,9 +184,12 @@ function implicitScriptCapabilityGapRequested() {
 
 function agentProviderReuseConcernRequested() {
   const agentTarget = /agent|subagent|owner|智能体|代理/.test(taskText);
-  if (!agentTarget) return false;
+  const contextualAgentTarget =
+    /(?:codex|meta[_ -]?kim|metakim|系统|它|他).{0,16}(?:创建|新建)/.test(taskText) &&
+    /自己|一直|反复|不断|重复|老是|总是|好像/.test(taskText);
+  if (!agentTarget && !contextualAgentTarget) return false;
   const creationComplaint =
-    /一直创建|反复创建|不断创建|重复创建|老是创建|总是创建|创建.*太多|keeps?\s+creating|creating\s+agents?|always\s+creates?/.test(taskText);
+    /一直(?:在)?(?:自己)?创建|一直.{0,12}创建|反复.{0,12}创建|不断.{0,12}创建|重复.{0,12}创建|老是.{0,12}创建|总是.{0,12}创建|自己创建|创建.*太多|keeps?\s+creating|creating\s+agents?|always\s+creates?/.test(taskText);
   const globalReuseSignal =
     /global|全局|已有|现有|复用|reuse|existing|找/.test(taskText);
   return creationComplaint || globalReuseSignal;

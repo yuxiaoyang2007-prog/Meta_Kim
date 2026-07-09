@@ -452,6 +452,27 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     "A complaint about repeated agent creation must not be misread as a create-agent capability gap request",
   );
 
+  const codexContextualCreationComplaint = route(
+    "我看他好像还是一直在自己创建",
+    "codex",
+    "windows",
+  );
+  assert.equal(
+    codexContextualCreationComplaint.recommendedRoute?.id,
+    "execution-capability-discovery:codex:windows",
+    "Contextual Chinese repeated-creation complaints must inspect Codex owner reuse instead of falling to a low-signal route",
+  );
+  assert.equal(
+    codexContextualCreationComplaint.capabilityGapDetected,
+    false,
+    "Contextual repeated-creation complaints must not become create_agent capability gaps",
+  );
+  assert.equal(
+    codexContextualCreationComplaint.recommendedRoute?.codexSpawnBinding?.agent_type,
+    codexContextualCreationComplaint.recommendedRoute?.owner,
+    "Contextual repeated-creation complaints must keep typed global/project owner binding",
+  );
+
   const codexExplicitParallelDispatch = route(
     "我要的是派发啊 并行啊：检查 meta-theory 规则、Codex runtime、测试缺口",
     "codex",

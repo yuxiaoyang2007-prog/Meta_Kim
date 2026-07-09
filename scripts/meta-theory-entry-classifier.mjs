@@ -36,7 +36,7 @@ const STRUCTURED_GOVERNANCE_CHAIN_RE =
   /critical(?:\s+thinking)?(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)fetch(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)(?:deep\s+)?thinking(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)review|critical\s+and\s+fetch\s+thinking\s+and\s+review/iu;
 
 const COMPLEXITY_COMPLAINT_RE =
-  /\b(?:too slow|slow|serial|not using agents?|missing agents?|no agents?)\b|(?:太慢|慢|不用\s*agent|没用\s*agent|没有\s*agent|没看到.*agent|串行|不会判断.*复杂|做的.*差)/iu;
+  /\b(?:too slow|slow|serial|not using agents?|missing agents?|no agents?|keeps?\s+creating|always\s+creates?)\b|(?:太慢|慢|不用\s*agent|没用\s*agent|没有\s*agent|没看到.*agent|串行|不会判断.*复杂|做的.*差|(?:codex|meta[_ -]?kim|metakim|系统|它|他).{0,16}(?:一直|反复|不断|重复|老是|总是|好像).{0,16}(?:自己)?(?:创建|新建)|(?:一直|反复|不断|重复|老是|总是).{0,16}(?:自己)?(?:创建|新建))/iu;
 
 const MULTI_LANE_WORD_RE =
   /\b(?:review|fix|verify|test|release|sync|hook|security|frontend|backend|database|api|docs|research|runtime|mcp|tool|agent|skill)\b|(?:审查|修复|验证|测试|发布|同步|钩子|安全|前端|后端|数据库|接口|文档|调研|运行时|工具|智能体|技能)/giu;

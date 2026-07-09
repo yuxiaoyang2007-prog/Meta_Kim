@@ -87,6 +87,17 @@ describe("47 - Meta-theory entry classifier", () => {
     assert.ok(result.fanoutSignals.includes("parallel_agent_or_fanout_requested"));
   });
 
+  test("contextual repeated creation complaint enters governed diagnosis", () => {
+    const result = classifyMetaTheoryEntry("我看他好像还是一直在自己创建");
+
+    assert.equal(result.governedEntry, true);
+    assert.equal(result.path, "standard_path");
+    assert.equal(result.taskClassification, "meta_theory_auto");
+    assert.equal(result.triggerReason, "serial_agent_route_complaint");
+    assert.equal(result.fanoutEligible, false);
+    assert.ok(result.fanoutSignals.includes("user_reported_serial_or_slow_agent_route"));
+  });
+
   test("critical fetch thinking review wording enters governed path without explicit meta-theory", () => {
     const result = classifyMetaTheoryEntry(
       "critical and fetch thinking and review 帮我检查项目级更新、全局能力扫描和发布验证",
