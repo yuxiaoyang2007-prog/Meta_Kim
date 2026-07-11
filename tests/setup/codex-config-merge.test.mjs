@@ -205,7 +205,7 @@ describe("Codex config merge", () => {
       "[agents.frontend]",
       'model = "gpt-5.4"',
       "",
-      '[projects."D:/KimProject/Meta_Kim"]',
+      '[projects."D:/workspace/Meta_Kim"]',
       'trust_level = "trusted"',
       "",
       "[windows]",
@@ -244,7 +244,7 @@ describe("Codex config merge", () => {
     assert.match(out, /\[mcp_servers\.github\]\ncommand = "npx"/);
     assert.match(out, /\[hooks\]\nstop = "scripts\/stop\.mjs"/);
     assert.match(out, /\[agents\.frontend\]\nmodel = "gpt-5.4"/);
-    assert.match(out, /\[projects\."D:\/KimProject\/Meta_Kim"\]\ntrust_level = "trusted"/);
+    assert.match(out, /\[projects\."D:\/workspace\/Meta_Kim"\]\ntrust_level = "trusted"/);
   });
 
   test("does not add Windows-only App plugin blocks on non-Windows platforms", () => {

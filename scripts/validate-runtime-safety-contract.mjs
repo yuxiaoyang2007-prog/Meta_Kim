@@ -381,7 +381,7 @@ const nativeControlsOut = ensureCodexAppNativeControls(
     "[hooks]",
     'stop = "scripts/stop.mjs"',
     "",
-    '[projects."D:/KimProject/Meta_Kim"]',
+    '[projects."D:/workspace/Meta_Kim"]',
     'trust_level = "trusted"',
     "",
   ].join("\n"),
@@ -401,7 +401,7 @@ hasAll(
     '[plugins."computer-use@openai-bundled"]',
     "[mcp_servers.github]",
     "[hooks]",
-    '[projects."D:/KimProject/Meta_Kim"]',
+    '[projects."D:/workspace/Meta_Kim"]',
   ],
   "Codex native controls fixture",
 );

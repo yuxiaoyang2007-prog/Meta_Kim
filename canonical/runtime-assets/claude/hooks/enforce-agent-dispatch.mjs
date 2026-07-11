@@ -476,6 +476,14 @@ function hasFetchEvidenceForTaskBookkeeping(state) {
 
 function shouldDelayTaskBookkeeping(state) {
   const stage = String(state?.currentStage || "").toLowerCase();
+  const dispatchMode = state?.stageRuntimeControl?.dispatchMode;
+  const dispatched = Array.isArray(state?.dispatchedAgents)
+    ? state.dispatchedAgents.length
+    : 0;
+  if (
+    ["fanout_eligible", "fan_out_ready", "fan_out_in_progress"].includes(dispatchMode) &&
+    dispatched === 0
+  ) return true;
   if (stage === "critical") return true;
   if (stage === "fetch" && !hasFetchEvidenceForTaskBookkeeping(state)) return true;
   return false;
@@ -484,7 +492,10 @@ function shouldDelayTaskBookkeeping(state) {
 function formatTaskBookkeepingDelayDeny(toolName, state) {
   const stage = state?.currentStage || "current design stage";
   return (
-    `Task/todo bookkeeping via "${toolName}" is delayed during ${stage} until Fetch evidence exists. ` +
+    `Task/todo bookkeeping via "${toolName}" is delayed during ${stage}. ` +
+    "For fan-out-eligible governed work, TaskCreate/TaskUpdate/TodoWrite cannot replace native Agent dispatch; " +
+    "dispatch at least one selected worker through Agent/Task before opening a bookkeeping board. " +
+    "Otherwise continue until Fetch evidence and Thinking owner bindings exist. " +
     "Continue Fetch with read/search/capability discovery and a brief visible chat status; " +
     "write spine-state or planning files only when needed. Do not start by creating or updating " +
     "a task list before evidence is collected."
@@ -770,7 +781,7 @@ async function allowObservedModeExecution(state) {
 }
 
 function isAgentDispatchTool(name) {
-  return name === "Agent" || name === "spawn_agent";
+  return name === "Agent" || name === "Task" || name === "spawn_agent";
 }
 
 function dispatchIntentText(input) {
@@ -778,6 +789,7 @@ function dispatchIntentText(input) {
     input?.description,
     input?.prompt,
     input?.message,
+    input?.task_name,
     input?.agent_type,
     input?.subagent_type,
     JSON.stringify(input?.items || []),
@@ -808,6 +820,65 @@ function isExecutionDispatchIntent(input, metaName) {
   return /\b(implement|write|create|build|test|fix|debug|execute|run|generate|produce|code)\b/i.test(
     text,
   );
+}
+
+function checkThinkingIndependentLanes(state) {
+  const packets = Array.isArray(state?.workerTaskPackets)
+    ? state.workerTaskPackets
+    : [];
+  const dispatchMode = state?.stageRuntimeControl?.dispatchMode;
+  const fanoutClaimed = ["fan_out_ready", "fan_out_in_progress"].includes(dispatchMode);
+  if (!fanoutClaimed && packets.length < 2) return { met: true, missing: [] };
+
+  const missing = [];
+  if (state?.fetchRecord?.capabilitySearchPerformed !== true) {
+    missing.push("real Fetch capability discovery");
+  }
+  const thinkingStatus = state?.stages?.thinking?.status;
+  const stageIndex = [
+    "critical", "fetch", "thinking", "execution", "review",
+    "meta_review", "verification", "evolution",
+  ].indexOf(String(state?.currentStage || "").toLowerCase());
+  if (thinkingStatus !== "completed" && stageIndex < 3) {
+    missing.push("Thinking completed");
+  }
+  if (packets.length < 2) missing.push("at least two workerTaskPackets");
+
+  const groups = new Map();
+  for (const packet of packets) {
+    for (const field of [
+      "taskPacketId", "ownerAgent", "roleInstanceId", "parallelGroup", "mergeOwner",
+    ]) {
+      if (!packet?.[field]) missing.push(`${field} on every fan-out workerTaskPacket`);
+    }
+    if (!Array.isArray(packet?.shardScope) || packet.shardScope.length === 0) {
+      missing.push("non-empty shardScope on every fan-out workerTaskPacket");
+    }
+    const group = groups.get(packet?.parallelGroup) ?? [];
+    group.push(packet);
+    groups.set(packet?.parallelGroup, group);
+  }
+  const independentGroup = [...groups.values()].some((group) => {
+    if (group.length < 2) return false;
+    const taskIds = new Set(group.map((packet) => packet.taskPacketId));
+    const scopes = new Set();
+    return group.every((packet) => {
+      const dependencies = Array.isArray(packet.dependsOn) ? packet.dependsOn : [];
+      if (dependencies.some((dependency) => taskIds.has(
+        typeof dependency === "string" ? dependency : dependency?.taskPacketId,
+      ))) return false;
+      for (const scope of packet.shardScope ?? []) {
+        const normalizedScope = String(scope).toLowerCase().replaceAll("\\", "/");
+        if (scopes.has(normalizedScope)) return false;
+        scopes.add(normalizedScope);
+      }
+      return true;
+    });
+  });
+  if (!independentGroup) {
+    missing.push("two collision-free dependency-independent lanes in one parallelGroup");
+  }
+  return { met: missing.length === 0, missing: [...new Set(missing)] };
 }
 
 /**
@@ -1186,11 +1257,12 @@ if (isAgentDispatchTool(toolName)) {
     toolInput?.description ||
     toolInput?.message?.substring(0, 80) ||
     toolInput?.prompt?.substring(0, 80) ||
+    toolInput?.task_name ||
     toolInput?.agent_type ||
     "unknown";
   const metaName = extractMetaAgentName(
     toolInput?.description,
-    [toolInput?.prompt, toolInput?.message, toolInput?.agent_type]
+    [toolInput?.prompt, toolInput?.message, toolInput?.task_name, toolInput?.agent_type]
       .filter(Boolean)
       .join(" "),
   );
@@ -1215,6 +1287,13 @@ if (isAgentDispatchTool(toolName)) {
     ["critical", "fetch", "thinking"].includes(state.currentStage) &&
     isExecutionDispatchIntent(toolInput, metaName)
   ) {
+    const independentLaneGate = checkThinkingIndependentLanes(state);
+    if (!independentLaneGate.met) {
+      exitAfterDeny(
+        `Thinking fan-out readiness violation: Agent execution dispatch requires real Fetch evidence and proven independent lanes. ` +
+          `Missing: ${independentLaneGate.missing.join(", ")}.`,
+      );
+    }
     const readinessGate = checkPreExecutionReadiness(state);
     if (!readinessGate.met) {
       exitAfterDeny(
@@ -1256,15 +1335,16 @@ if (isAgentDispatchTool(toolName)) {
       .toLowerCase()
       .trim();
 
-    // 多 agent / fan-out 触发命中时（stageRuntimeControl.dispatchMode === "fan_out_ready"），
-    // activate-meta-theory-spine 已自动填 fetchRecord 并预推进 stage；
-    // 此时 capability gate 降为 warn-equivalent，让主线程可立即 fork 子 agent。
-    const fanOutReady =
-      state?.stageRuntimeControl?.dispatchMode === "fan_out_ready" ||
-      state?.stageRuntimeControl?.dispatchMode === "fan_out_in_progress";
-    const gateExempt = discoveryStages.has(stage) || fanOutReady;
+    const gateExempt = discoveryStages.has(stage);
 
     if (capabilityGateModeRaw !== "off" && !gateExempt) {
+      const independentLaneGate = checkThinkingIndependentLanes(state);
+      if (!independentLaneGate.met) {
+        exitAfterDeny(
+          `Thinking fan-out readiness violation: Agent execution dispatch requires proven independent lanes. ` +
+            `Missing: ${independentLaneGate.missing.join(", ")}.`,
+        );
+      }
       const performed = state?.fetchRecord?.capabilitySearchPerformed === true;
       if (!performed) {
         // Resolve the effective mode. For "warn" / "block" this is a passthrough;
@@ -1321,7 +1401,9 @@ if (isAgentDispatchTool(toolName)) {
         toolInput?.prompt,
         toolInput?.description,
         toolInput?.message,
+        toolInput?.task_name,
         toolInput?.agent_type,
+        toolInput?.subagent_type,
         JSON.stringify(toolInput?.items || []),
       ]
         .filter(Boolean)

@@ -9,6 +9,32 @@ function route(task, runtime = "auto", os = "auto", extraArgs = []) {
   return JSON.parse(result.stdout);
 }
 
+function assertNativeCodexSpawn(binding, ownerAgent, packet = null) {
+  assert.equal(binding?.hostSurface, "spawn_agent");
+  assert.equal(binding?.spawnMode, "native_task");
+  assert.equal(binding?.ownerAgent, ownerAgent);
+  assert.match(binding?.task_name ?? "", /^[a-z0-9_]+$/);
+  assert.ok((binding?.task_name ?? "").length <= 64);
+  assert.equal(binding?.fork_turns, "none");
+  assert.equal(typeof binding?.message, "string");
+  const message = JSON.parse(binding.message);
+  assert.equal(message.ownerAgent, ownerAgent);
+  assert.equal(message.ownerKind, "agent");
+  assert.equal(message.outputContract.verificationOwner, packet?.verificationOwner ?? "meta-prism");
+  if (packet) {
+    assert.equal(message.taskPacketId, packet.taskPacketId);
+    assert.equal(message.roleInstanceId, packet.roleInstanceId);
+    assert.equal(message.coordination.parallelGroup, packet.parallelGroup);
+    assert.equal(message.coordination.mergeOwner, packet.mergeOwner);
+    assert.equal(message.scope.purpose, packet.purpose);
+  }
+  assert.equal(binding?.hostSurfaceProbeRequired, true);
+  assert.equal(binding?.invocationReadiness, "requires_current_host_spawn_agent_surface");
+  assert.equal(Object.hasOwn(binding ?? {}, "agent_type"), false);
+  assert.equal(Object.hasOwn(binding ?? {}, "fork_context"), false);
+  assert.equal(Object.hasOwn(binding ?? {}, "messageRef"), false);
+}
+
 test("routing fixtures recall internal patterns and platform/OS matrices", () => {
   const fuzzy = route("fuzzy strategy task");
   assert.ok(fuzzy.candidateWeapons.includes("meta-kim-decision-patterns"));
@@ -426,25 +452,14 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     "codex",
     "Codex owner discovery must bind a Codex-callable global/project agent provider",
   );
-  assert.equal(
-    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.spawnMode,
-    "typed_spawn",
-    "Codex global agent reuse must produce a typed spawn binding",
-  );
-  assert.equal(
-    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.agent_type,
+  assertNativeCodexSpawn(
+    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding,
     codexAgentReuseComplaint.recommendedRoute?.owner,
-    "Codex typed spawn must use the selected owner as agent_type",
   );
-  assert.equal(
-    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.fork_context,
-    false,
-    "Codex typed global agent reuse must not request a full-context fork",
-  );
-  assert.equal(
-    codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.codexSpawnBinding?.agent_type,
+  assertNativeCodexSpawn(
+    codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.codexSpawnBinding,
     codexAgentReuseComplaint.recommendedRoute?.owner,
-    "Worker task packets must carry the same Codex typed agent binding",
+    codexAgentReuseComplaint.workerTaskPacketDrafts?.[0],
   );
   assert.equal(
     codexAgentReuseComplaint.capabilityGapDetected,
@@ -467,10 +482,9 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     false,
     "Contextual repeated-creation complaints must not become create_agent capability gaps",
   );
-  assert.equal(
-    codexContextualCreationComplaint.recommendedRoute?.codexSpawnBinding?.agent_type,
+  assertNativeCodexSpawn(
+    codexContextualCreationComplaint.recommendedRoute?.codexSpawnBinding,
     codexContextualCreationComplaint.recommendedRoute?.owner,
-    "Contextual repeated-creation complaints must keep typed global/project owner binding",
   );
 
   const codexExplicitParallelDispatch = route(
@@ -491,11 +505,15 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     codexExplicitParallelDispatch.workerTaskPacketDrafts.every((packet) => packet.ownerKind === "agent"),
     "Direct parallel dispatch worker lanes must bind reusable agent owners instead of replacing owners with skills",
   );
-  assert.ok(
-    codexExplicitParallelDispatch.workerTaskPacketDrafts.every(
-      (packet) => packet.codexSpawnBinding?.spawnMode === "typed_spawn" && packet.codexSpawnBinding?.agent_type === packet.ownerAgent,
-    ),
-    "Every Codex parallel dispatch worker must carry a typed spawn_agent binding for its selected owner",
+  for (const packet of codexExplicitParallelDispatch.workerTaskPacketDrafts) {
+    assertNativeCodexSpawn(packet.codexSpawnBinding, packet.ownerAgent, packet);
+  }
+  assert.equal(codexExplicitParallelDispatch.dispatchBoardDraft?.dispatchMode, "fan_out_ready");
+  assert.equal(codexExplicitParallelDispatch.dispatchBoardDraft?.fanoutReadiness?.thinkingApproved, true);
+  assert.equal(
+    new Set(codexExplicitParallelDispatch.workerTaskPacketDrafts.map((packet) => packet.codexSpawnBinding.task_name)).size,
+    codexExplicitParallelDispatch.workerTaskPacketDrafts.length,
+    "Native Codex task names must remain unique after normalization",
   );
   assert.ok(
     codexExplicitParallelDispatch.dispatchBoardDraft?.orchestratorKinds?.includes("agentTeamsPlaybook"),
@@ -521,12 +539,10 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     codexStructuredChainFanout.workerTaskPacketDrafts.length >= 2,
     "Structured chain fan-out with separable scopes must produce multiple worker task packets",
   );
-  assert.ok(
-    codexStructuredChainFanout.workerTaskPacketDrafts.every(
-      (packet) => packet.ownerKind === "agent" && packet.codexSpawnBinding?.agent_type === packet.ownerAgent,
-    ),
-    "Structured chain fan-out worker lanes must bind reusable Codex agent owners",
-  );
+  for (const packet of codexStructuredChainFanout.workerTaskPacketDrafts) {
+    assert.equal(packet.ownerKind, "agent");
+    assertNativeCodexSpawn(packet.codexSpawnBinding, packet.ownerAgent, packet);
+  }
 
   const codexMetaTriggerFanout = route(
     "meta-theory 检查 meta-theory 规则、Codex runtime、测试缺口",
@@ -547,12 +563,10 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     codexMetaTriggerFanout.workerTaskPacketDrafts.length >= 2,
     "Meta-theory fan-out with separable scopes must produce multiple worker task packets",
   );
-  assert.ok(
-    codexMetaTriggerFanout.workerTaskPacketDrafts.every(
-      (packet) => packet.ownerKind === "agent" && packet.codexSpawnBinding?.agent_type === packet.ownerAgent,
-    ),
-    "Meta-theory fan-out worker lanes must bind reusable Codex agent owners",
-  );
+  for (const packet of codexMetaTriggerFanout.workerTaskPacketDrafts) {
+    assert.equal(packet.ownerKind, "agent");
+    assertNativeCodexSpawn(packet.codexSpawnBinding, packet.ownerAgent, packet);
+  }
 
   const codexWhitespaceFanout = route(
     "Critical Thinking → Fetch → Deep Thinking → Review 检查平台 key adapter 注册 能力账本 第二批平台路由 上传证据",
@@ -563,12 +577,10 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     codexWhitespaceFanout.workerTaskPacketDrafts.length >= 2,
     "Structured fan-out must split whitespace-separated capability anchors instead of collapsing to one worker",
   );
-  assert.ok(
-    codexWhitespaceFanout.workerTaskPacketDrafts.every(
-      (packet) => packet.ownerKind === "agent" && packet.codexSpawnBinding?.agent_type === packet.ownerAgent,
-    ),
-    "Whitespace fan-out worker lanes must reuse discovered Codex agent owners through typed spawn bindings",
-  );
+  for (const packet of codexWhitespaceFanout.workerTaskPacketDrafts) {
+    assert.equal(packet.ownerKind, "agent");
+    assertNativeCodexSpawn(packet.codexSpawnBinding, packet.ownerAgent, packet);
+  }
 
   const hook = route("platform hook install");
   assert.ok(hook.candidateWeapons.includes("runtime-capability-matrix"));

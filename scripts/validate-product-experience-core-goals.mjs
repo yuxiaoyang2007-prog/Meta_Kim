@@ -9,7 +9,7 @@ import process from "node:process";
 import { runMetaTheoryGovernedExecution } from "./run-meta-theory-governed-execution.mjs";
 
 const PRODUCT_EXPERIENCE_TASK =
-  "帮我做个小红书营销自动发布器，需要动态规划、平台规则研究、内容策略、前端界面、后端 API、数据模型、平台集成、权限风控、测试验收和发布运维，但不要真实发布或使用生产凭证。";
+  "帮团队做一个小红书内容工作台：成员能把零散素材整理成草稿，编辑审核后安排发布时间；失败时能看出原因并重试，不同成员权限不同。先完成可审查的方案和本地验证，不连接生产账号，也不要真实发布。";
 
 const REQUIRED_GOAL_IDS = ["P-102", "P-103", "P-104"];
 const REQUIRED_SUPPORT_GATE_IDS = ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"];
@@ -36,7 +36,7 @@ const REQUIRED_BINDING_COVERAGE = [
   "workerResults",
 ];
 
-const SELF_TEST_HOST_INVOCATION_EVIDENCE = [
+const SYNTHETIC_NEGATIVE_CONTROL = [
   {
     family: "agent_subagent",
     state: "invoked",
@@ -60,17 +60,6 @@ const SELF_TEST_HOST_INVOCATION_EVIDENCE = [
     hostSurface: "spawn_agent",
     evidenceKind: "agent_team_result",
     evidenceRef: "self-test:agent_team_result:fanout-completed",
-  },
-];
-
-const SELF_TEST_NATIVE_CHOICE_EVIDENCE = [
-  {
-    runtime: "codex",
-    stage: "Thinking",
-    state: "answered",
-    surface: "request_user_input",
-    evidenceKind: "request_user_input_answer",
-    evidenceRef: "self-test:request_user_input_answer:interactive-surface-validated",
   },
 ];
 
@@ -224,24 +213,31 @@ function assertCapabilityInvocationTruth(report) {
   assert.equal(report.coreLoop.runtimeSubagentInvocationPacket.status, "unavailable");
   assert.equal(byFamily.get("agent_subagent").state, "unavailable");
   assert.equal(byFamily.get("app_visible_subagent").state, "not_required");
-  assert.equal(byFamily.get("worker_task").state, "invoked");
-  assert.equal(byFamily.get("mcp").state, "invoked");
+  assert.equal(byFamily.get("worker_task").state, "blocked");
+  assert.equal(byFamily.get("mcp").state, "selected_not_invoked");
   assert.equal(byFamily.get("hook").state, "selected_not_invoked");
   assert.equal(byFamily.get("skill").state, "selected_not_invoked");
   assert.equal(byFamily.get("prompt_rule").state, "applied");
-  assert.equal(byFamily.get("command_script").state, "invoked");
-  assert.equal(byFamily.get("runtime_tool").state, "invoked");
+  assert.equal(byFamily.get("command_script").state, "selected_not_invoked");
+  assert.equal(byFamily.get("runtime_tool").state, "selected_not_invoked");
   assert.equal(byFamily.get("agent_teams_playbook").state, "selected_not_invoked");
   assert.equal(packet.realInvocationCoverage.status, "partial");
-  assert.deepEqual(packet.realInvocationCoverage.missingFamilies.sort(), [
+  for (const family of [
     "agent_subagent",
     "agent_teams_playbook",
     "skill",
-  ]);
+    "mcp",
+    "hook",
+    "command_script",
+    "runtime_tool",
+  ]) {
+    assert.ok(packet.realInvocationCoverage.missingFamilies.includes(family));
+  }
+  assert.ok(packet.realInvocationCoverage.missingBindings.length > 0);
   assert.deepEqual(packet.callableInvocationCoverage.missingFamilies, []);
-  assert.ok(packet.callableInvocationCoverage.invokedFamilies.includes("mcp"));
-  assert.ok(packet.callableInvocationCoverage.invokedFamilies.includes("command_script"));
-  assert.ok(packet.callableInvocationCoverage.invokedFamilies.includes("runtime_tool"));
+  assert.ok(packet.callableInvocationCoverage.callableFamilies.includes("mcp"));
+  assert.ok(packet.callableInvocationCoverage.callableFamilies.includes("command_script"));
+  assert.ok(packet.callableInvocationCoverage.callableFamilies.includes("runtime_tool"));
   assert.equal(packet.truthAssertions.noLiveSubagentOverclaim, true);
   assert.equal(packet.truthAssertions.noHostUiSubagentOverclaim, true);
   assert.equal(packet.truthAssertions.noAgentTeamsPlaybookOverclaim, true);
@@ -350,7 +346,7 @@ function assertProductExperience(report) {
   assert.equal(supportGateById.get("P-109").status, "partial");
   assert.equal(supportGateById.get("P-110").status, "pass");
   assert.equal(packet.noOverclaimGate.status, "pass");
-  assert.equal(packet.noOverclaimGate.acceptedEvidenceTier, "product_experience_pass");
+  assert.equal(packet.noOverclaimGate.acceptedEvidenceTier, "live_host_observed");
   assert.ok(packet.noOverclaimGate.forbiddenAsProductPass.includes("chat_card_as_native_popup"));
   assert.ok(packet.noOverclaimGate.forbiddenAsProductPass.includes("demo_fixture_as_framework_goal"));
   assert.ok(packet.noOverclaimGate.forbiddenAsProductPass.includes("hidden orchestration artifacts"));
@@ -454,8 +450,25 @@ function summarizeReport(report) {
       states: report.coreLoop.capabilityInvocationTruthPacket.stateCounts,
       callableInvocationCoverage:
         report.coreLoop.capabilityInvocationTruthPacket.callableInvocationCoverage,
-      realInvocationCoverage:
-        report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage,
+      realInvocationCoverage: {
+        status: report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
+        requiredFamilies:
+          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.requiredFamilies,
+        invokedFamilies:
+          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.invokedFamilies,
+        missingFamilies:
+          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingFamilies,
+        requiredBindingCount:
+          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.requiredBindings.length,
+        invokedBindingCount:
+          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.invokedBindings.length,
+        missingBindingCount:
+          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingBindings.length,
+        hostEvidenceCount:
+          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.hostEvidenceCount,
+        rejectedEvidenceCount:
+          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.rejectedEvidenceCount,
+      },
       appVisibleSubagentState:
         report.coreLoop.capabilityInvocationTruthPacket.rows.find(
           (row) => row.family === "app_visible_subagent",
@@ -492,30 +505,29 @@ async function main() {
     assertProductExperience(report);
     await assertReadableReportShowsVisibleSurface(report);
 
-    const selfTestReport = await runMetaTheoryGovernedExecution({
+    const negativeControlReport = await runMetaTheoryGovernedExecution({
       task: PRODUCT_EXPERIENCE_TASK,
-      runId: "validate-product-experience-self-test-pass",
+      runId: "validate-product-experience-synthetic-negative-control",
       stateDir: tempDir,
       dbPath: path.join(tempDir, "runs.sqlite"),
       emitConversationNotice: false,
       invokeCapabilityProbes: true,
       hostInvocationEvidenceTrusted: true,
-      hostInvocationEvidence: SELF_TEST_HOST_INVOCATION_EVIDENCE,
-      nativeChoiceEvidenceTrusted: true,
-      nativeChoiceEvidence: SELF_TEST_NATIVE_CHOICE_EVIDENCE,
+      hostInvocationEvidence: SYNTHETIC_NEGATIVE_CONTROL,
     });
-    assert.equal(selfTestReport.status, "pass");
+    assert.equal(negativeControlReport.status, "partial");
     assert.equal(
-      selfTestReport.coreLoop.productExperiencePacket.status,
-      "product_experience_pass",
+      negativeControlReport.coreLoop.productExperiencePacket.status,
+      "partial",
+    );
+    assert.ok(
+      negativeControlReport.coreLoop.runtimeInvocationPlanPacket.evidence.every(
+        (item) => item.passEligible === false,
+      ),
     );
     assert.equal(
-      selfTestReport.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.status,
-      "pass",
-    );
-    assert.equal(
-      selfTestReport.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
-      "pass",
+      negativeControlReport.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
+      "partial",
     );
 
     const mcp = assertMcpSelfTest();
@@ -524,12 +536,12 @@ async function main() {
         {
           status: "pass",
           validationStatus: "pass",
-          evidenceMode: "default-boundary-plus-trusted-self-test",
+          evidenceMode: "structural-boundary-plus-synthetic-negative-control",
           defaultBoundaryRun: summarizeReport(report),
-          selfTestEvidenceRun: summarizeReport(selfTestReport),
+          syntheticNegativeControlRun: summarizeReport(negativeControlReport),
           noPopupDuringSelfTest: true,
           selfTestEvidenceBoundary:
-            "The validator supplies trusted self-test evidence instead of opening a native choice surface; defaultBoundaryRun still proves Meta_Kim does not relabel missing live host evidence.",
+            "Synthetic/self-test evidence is deliberately rejected. This command validates structural boundaries only and never claims a live host orchestration pass.",
           repeatFailureDesign:
             report.coreLoop.productExperiencePacket.repeatFailureDesignGate.actionOnSecondOccurrence,
           generalizationGate: report.coreLoop.productExperiencePacket.generalizationGate.status,

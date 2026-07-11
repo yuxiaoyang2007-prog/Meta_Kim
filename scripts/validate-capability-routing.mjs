@@ -266,14 +266,29 @@ assert(
   "Codex agent-creation complaints must bind a Codex-callable global/project agent provider",
 );
 assert(
-  codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.spawnMode === "typed_spawn" &&
-    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.agent_type === codexAgentReuseComplaint.recommendedRoute?.owner &&
-    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.fork_context === false,
-  "Codex global agent reuse must emit typed spawn_agent binding instead of full-context fork",
+  codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.hostSurface === "spawn_agent" &&
+    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.spawnMode === "native_task" &&
+    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.ownerAgent === codexAgentReuseComplaint.recommendedRoute?.owner &&
+    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.fork_turns === "none" &&
+    !Object.hasOwn(codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding ?? {}, "agent_type") &&
+    !Object.hasOwn(codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding ?? {}, "fork_context"),
+  "Codex global agent reuse must emit an owner-bound native spawn_agent task plan",
 );
 assert(
-  codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.codexSpawnBinding?.agent_type === codexAgentReuseComplaint.recommendedRoute?.owner,
-  "Worker task packets must carry the Codex typed spawn binding",
+  /^[a-z0-9_]+$/.test(codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.codexSpawnBinding?.task_name ?? "") &&
+    codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.codexSpawnBinding?.ownerAgent === codexAgentReuseComplaint.recommendedRoute?.owner,
+  "Worker task packets must carry a valid native Codex task name and the selected owner metadata",
+);
+assert(
+  codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.codexSpawnBinding?.visibleBindingRequired === true &&
+    codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.codexSpawnBinding?.runtimeInstanceAlias === null,
+  "Codex worker packets must require visible owner binding and reserve runtimeInstanceAlias for host nicknames",
+);
+assert(
+  codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.ownerAgent === codexAgentReuseComplaint.recommendedRoute?.owner &&
+    codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.roleDisplayName &&
+    !String(codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.roleDisplayName).startsWith("agent-"),
+  "Codex reuse complaints must produce owner-first worker packets, not runtime-created agent identities",
 );
 assert(
   codexAgentReuseComplaint.capabilityGapDetected === false,

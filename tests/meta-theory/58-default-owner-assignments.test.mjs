@@ -24,7 +24,7 @@ test("58 — table names all required wave rows with the right owner", () => {
     ["Fetch — graph + memory", "meta-librarian"],
     ["Thinking — owner match", "meta-conductor"],
     ["Thinking — capability loadout", "meta-artisan"],
-    ["Execution — worker task", "general-purpose"],
+    ["Execution — worker task", "runtime-discovered professional owner"],
     ["Review — adversarial correctness", "meta-prism"],
     ["Review — adversarial security", "meta-prism"],
     ["Review — adversarial completeness", "meta-prism"],
@@ -50,18 +50,18 @@ test("58 — table names all required wave rows with the right owner", () => {
   }
 });
 
-test("58 — hard rule forbids general-purpose fallback for named-owner roles", () => {
+test("58 — hard rule forbids general-purpose fallback for every execution owner", () => {
   assert.match(
     doc,
-    /A dispatch that picks `?general-purpose`? for any role that the Default Owner Assignments table names a specific owner is a protocol violation/,
-    "Wave Hard Rules must contain the general-purpose fallback ban",
+    /A dispatch that picks `?general-purpose`? as an execution owner is a protocol violation/,
+    "Wave Hard Rules must ban general-purpose execution owners",
   );
 });
 
 test("58 — history note records the structural fix at v2.8.63", () => {
   assert.match(
     doc,
-    /From v2\.8\.63 onward the assignments above are the default/,
-    "history note must mark v2.8.63 as the fix point",
+    /From v2\.8\.63 onward named governance roles became the default/,
+    "history note must preserve v2.8.63 while documenting the current professional-owner rule",
   );
 });

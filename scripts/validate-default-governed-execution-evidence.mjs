@@ -93,8 +93,8 @@ function validateWorkerExecutionEvidence(report) {
     report.coreLoop.thinkingPacket.workerTaskPackets.length,
     "every worker task must have a worker result packet"
   );
-  assert.equal(report.coreLoop.executionResult.actualWorkerExecution, true);
-  assert.equal(report.coreLoop.executionResult.mergeResult.liveExecutionMerged, true);
+  assert.equal(report.coreLoop.executionResult.actualWorkerExecution, false);
+  assert.equal(report.coreLoop.executionResult.mergeResult.liveExecutionMerged, false);
 
   const taskById = new Map(
     report.coreLoop.thinkingPacket.workerTaskPackets.map((packet) => [packet.taskPacketId, packet])
@@ -102,8 +102,8 @@ function validateWorkerExecutionEvidence(report) {
   for (const [index, resultPacket] of report.coreLoop.executionResult.workerResultPackets.entries()) {
     const taskPacket = taskById.get(resultPacket.taskPacketId);
     assert.ok(taskPacket, `worker result ${resultPacket.taskPacketId} must match a task packet`);
-    assert.equal(resultPacket.status, "executed");
-    assert.equal(resultPacket.evidenceKind, "local_worker_execution");
+    assert.equal(resultPacket.status, "planned_not_executed");
+    assert.equal(resultPacket.evidenceKind, "structural_worker_plan");
     assert.equal(resultPacket.output.externalWritePerformed, false);
     assertPacketArray(
       resultPacket.workerExecutionEvidence,
@@ -115,14 +115,11 @@ function validateWorkerExecutionEvidence(report) {
       "nested worker evidence must cover every verify step exactly once"
     );
     for (const evidence of resultPacket.workerExecutionEvidence) {
-      assert.equal(evidence.status, "verified");
-      assert.equal(evidence.exitCode, 0);
-      assert.ok(evidence.commandRanAt);
+      assert.equal(evidence.status, "pending_execution");
+      assert.equal(evidence.exitCode, undefined);
+      assert.equal(evidence.commandRanAt, undefined);
       assert.ok(taskPacket.verifySteps.some((step) => step.id === evidence.verifyStepRef));
-      assert.ok(
-        !FORBIDDEN_EXECUTION_EVIDENCE_KINDS.has(evidence.evidenceKind),
-        `worker evidence kind ${evidence.evidenceKind} is not execution evidence`
-      );
+      assert.equal(evidence.evidenceKind, "structural_worker_plan");
     }
   }
 
@@ -201,7 +198,7 @@ function validateProductExperienceEvidence(report) {
   assert.equal(report.coreLoop.runtimeSubagentInvocationPacket.status, "unavailable");
   assert.equal(invocationByFamily.get("agent_subagent").state, "unavailable");
   assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
-  assert.equal(invocationByFamily.get("worker_task").state, "invoked");
+  assert.equal(invocationByFamily.get("worker_task").state, "blocked");
   assert.equal(invocationByFamily.get("prompt_rule").state, "applied");
   assert.equal(invocationByFamily.get("agent_teams_playbook").state, "selected_not_invoked");
   assert.equal(report.coreLoop.capabilityInvocationProbePacket.status, "not_run");

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { promises as fs } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { GOVERNANCE_OWNERS, OS_TARGETS, RUNTIMES, classifyTaskShape, exists, readJson, repoPath, scoreRoute, stateDir, supportScore, toPosix } from "./governance-lib.mjs";
 import { CAPABILITY_GAP_DECISION_CONTRACT, decideCapabilityGap } from "./capability-gap-mvp.mjs";
@@ -1374,13 +1375,22 @@ function buildCapabilityTeamBlueprint(lanes, omittedLanesWithReason, evidence) {
     inspiration: "agent-teams-playbook abstracted from agent roles to capability slots",
     scenario,
     collaborationMode,
-    fallbackChain: [
-      "local capability inventory",
-      "find-skills or equivalent capability discovery",
-      "runtime provider binding",
-      "run-scoped workerTaskPacket",
-      "degraded main-thread staged execution with reason",
-    ],
+    capabilityResolutionPolicy: {
+      mode: "stop_on_first_qualified_provider",
+      localProviderTypes: ["agent", "skill", "mcp", "command", "runtimeTool", "hook", "plugin", "memory", "dependency"],
+      externalDiscoveryTrigger: "only_after_local_multi_provider_gap_is_proven",
+      runtimeBinding: runtime === "codex"
+        ? "top_level_spawn_agent_task_name_message_fork_turns"
+        : runtime === "claude_code"
+          ? "native_agent_or_task_surface"
+          : "current_runtime_native_agent_surface",
+      degradedModeTrigger: "only_after_host_surface_permission_or_owner_gap",
+      forbidden: [
+        "continue_to_external_search_after_qualified_local_match",
+        "label_successful_native_agent_dispatch_as_fallback",
+        "silent_general_purpose_owner_fallback",
+      ],
+    },
     rows: lanes.map((lane, index) => ({
       id: index + 1,
       capabilitySlot: lane.laneId,
@@ -1390,12 +1400,16 @@ function buildCapabilityTeamBlueprint(lanes, omittedLanesWithReason, evidence) {
       ownerFamily: lane.roleDisplayName,
       selectedOwner: lane.ownerAgent,
       providerBindingPolicy: "capability_need_runtime_match",
-      codexSpawnBinding: lane.codexSpawnBinding ?? codexSpawnBindingForOwner(lane.ownerAgent, lane.ownerKind),
+      codexSpawnBinding:
+        lane.codexSpawnBinding ??
+        codexSpawnBindingForOwner(lane.ownerAgent, lane.ownerKind, lane.laneId),
       dependsOn: lane.dependsOn,
       parallelGroup: lane.parallelGroup,
       runtimeExecutionSurface:
-        runtime === "codex" && (lane.codexSpawnBinding ?? codexSpawnBindingForOwner(lane.ownerAgent, lane.ownerKind))
-          ? "Codex typed spawn_agent with selectedOwner as agent_type; full-context fork only after parameter/fork error"
+        runtime === "codex" &&
+        (lane.codexSpawnBinding ??
+          codexSpawnBindingForOwner(lane.ownerAgent, lane.ownerKind, lane.laneId))
+          ? "Codex native spawn_agent task with owner contract carried in the bounded message"
           : lanes.length >= 2
             ? "host subagent/custom-agent when available; otherwise workerTaskPacket"
           : "single workerTaskPacket",
@@ -1409,7 +1423,53 @@ function selectOwner(preferredOwners = []) {
   return preferredOwners.find((owner) => available.has(owner)) ?? null;
 }
 
-function codexSpawnBindingForOwner(ownerId, ownerKind = "agent") {
+function normalizeCodexTaskName(value) {
+  const original = String(value ?? "worker");
+  const normalized = original
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const digest = createHash("sha256").update(original).digest("hex").slice(0, 8);
+  const base = (normalized || "worker").slice(0, 55).replace(/_+$/g, "") || "worker";
+  return `${base}_${digest}`;
+}
+
+function buildCodexWorkerMessage(ownerId, ownerKind, roleInstanceId, taskPacket = null) {
+  const taskPacketId = taskPacket?.taskPacketId ?? `worker-task:${roleInstanceId ?? ownerId}`;
+  return JSON.stringify({
+    schemaVersion: "codex-native-worker-message-v0.1",
+    taskPacketId,
+    roleInstanceId: taskPacket?.roleInstanceId ?? roleInstanceId ?? ownerId,
+    ownerAgent: ownerId,
+    ownerKind,
+    ownerSource: taskPacket?.ownerSource ?? null,
+    capabilityLoadout: {
+      weapon: taskPacket?.weapon ?? null,
+      dependency: taskPacket?.dependency ?? null,
+    },
+    scope: {
+      purpose: taskPacket?.purpose ?? `Execute the bounded worker task owned by ${ownerId}.`,
+      decisionImpact: taskPacket?.decisionImpact ?? null,
+      nonGoals: ["Do not absorb sibling lanes", "Do not mutate outside the declared scope"],
+    },
+    coordination: {
+      dependsOn: taskPacket?.dependsOn ?? [],
+      parallelGroup: taskPacket?.parallelGroup ?? null,
+      mergeOwner: taskPacket?.mergeOwner ?? "meta-conductor",
+      shardScope: taskPacket?.shardScope ?? [],
+      workspaceIsolation: taskPacket?.workspaceIsolation ?? null,
+      externalWritePolicy: taskPacket?.externalWritePolicy ?? "unproven",
+      collisionPolicy: taskPacket?.collisionPolicy ?? "unproven",
+    },
+    outputContract: {
+      deliverable: "Return the scoped result, changed files or evidence, and unresolved blockers.",
+      verificationOwner: taskPacket?.verificationOwner ?? "meta-prism",
+      verification: taskPacket?.verification ?? "Run the lane-specific checks named by the work order.",
+    },
+  });
+}
+
+function codexSpawnBindingForOwner(ownerId, ownerKind = "agent", roleInstanceId = null, taskPacket = null) {
   if (runtime !== "codex" || ownerKind !== "agent" || !ownerId) return null;
   const provider = [
     ...runtimeScopedProjectExecutionAgents,
@@ -1417,15 +1477,23 @@ function codexSpawnBindingForOwner(ownerId, ownerKind = "agent") {
   ].find((agent) => agent.id === ownerId);
   if (!provider) return null;
   return {
-    hostSurface: "multi_agent_v1.spawn_agent",
-    spawnMode: "typed_spawn",
-    agent_type: ownerId,
-    fork_context: false,
+    hostSurface: "spawn_agent",
+    spawnMode: "native_task",
+    task_name: normalizeCodexTaskName(taskPacket?.taskPacketId ?? roleInstanceId ?? ownerId),
+    fork_turns: "none",
+    message: buildCodexWorkerMessage(ownerId, ownerKind, roleInstanceId, {
+      ...taskPacket,
+      ownerSource: provider.source,
+    }),
+    ownerAgent: ownerId,
+    ownerKind,
     ownerSource: provider.source,
     sourceRef: provider.sourceRef,
-    fallbackMode: "full_context_fork_without_agent_type",
-    fallbackRule:
-      "Prefer typed spawn for a selected Codex global/project agent_type; retry as full-context fork only after a spawn parameter/fork error or when no typed owner is selected.",
+    runtimeInstanceAlias: null,
+    visibleBindingRequired: true,
+    hostSurfaceProbeRequired: true,
+    invocationReadiness: "requires_current_host_spawn_agent_surface",
+    unavailablePolicy: "block_or_declare_degraded_without_legacy_fallback",
   };
 }
 
@@ -1606,6 +1674,39 @@ function buildParallelExecutionLanes() {
     }
   }
 
+  function deriveLaneSafetyEvidence(segment, laneId) {
+    const segmentText = String(segment?.terms ?? "");
+    const mutationRequested = /\b(?:fix|implement|build|refactor|rebuild|migrate|write|edit|update|delete|remove|deploy|publish|release|upload|send)\b|修复|实现|构建|重构|迁移|写入|编辑|更新|删除|移除|部署|发布|上传|发送/iu.test(taskText);
+    const inspectionRequested = /\b(?:check|review|inspect|audit|analy[sz]e|verify|investigate)\b|检查|审查|审核|分析|验证|排查/iu.test(taskText);
+    const externalWriteRequested = /\b(?:deploy|publish|release|upload|send|email)\b|部署|发布|上传|发送|邮件/iu.test(taskText);
+    const explicitPaths = [...segmentText.matchAll(/\b(?:src|test|tests|canonical|config|scripts|docs|app|apps|packages|lib|api|database)(?:[\\/][a-z0-9_.-]+)+/giu)]
+      .map((match) => match[0].replace(/\\/g, "/").toLowerCase());
+    const readOnly = inspectionRequested && !mutationRequested && !externalWriteRequested;
+    const shardScope = explicitPaths.length > 0
+      ? [...new Set(explicitPaths)]
+      : readOnly
+        ? [`read-only-capability:${laneId}`]
+        : [];
+    const proven =
+      !externalWriteRequested &&
+      (readOnly || explicitPaths.length > 0);
+    return {
+      status: proven ? "proven" : "unproven",
+      evidenceBasis: readOnly
+        ? "read_only_lane_with_unique_capability_scope"
+        : explicitPaths.length > 0
+          ? "explicit_local_path_scope"
+          : "missing_non_overlapping_shard_scope",
+      shardScope,
+      mutationPolicy: readOnly ? "read_only" : explicitPaths.length > 0 ? "scoped_local_writes_only" : "unproven",
+      workspaceIsolation: readOnly ? "shared_workspace_read_only" : explicitPaths.length > 0 ? "shared_workspace_disjoint_paths" : "unproven",
+      externalWritePolicy: externalWriteRequested ? "requested_not_parallel_safe" : "forbidden",
+      collisionPolicy: proven
+        ? "deny_writes_outside_shard_scope_and_merge_through_meta_conductor"
+        : "unproven",
+    };
+  }
+
   // 1. 路径型 segment：src/ui、src/api、database/migrations —— 每个顶层目录一个 lane
   for (const match of taskText.matchAll(/(?:^|[\s,;:(])([a-z][\w-]*\/[\w.-]+)/g)) {
     const path = match[1];
@@ -1715,17 +1816,20 @@ function buildParallelExecutionLanes() {
       }
     }
     if (!provider) continue;
+    const laneId = `exec-${segment.laneHint.replace(/[^a-z0-9一-鿿-]/gi, "-").toLowerCase()}-${lanes.length + 1}`;
+    const safetyEvidence = deriveLaneSafetyEvidence(segment, laneId);
     lanes.push({
-      laneId: `exec-${segment.laneHint.replace(/[^a-z0-9一-鿿-]/gi, "-").toLowerCase()}-${lanes.length + 1}`,
+      laneId,
       roleDisplayName: segment.laneHint,
       ownerKind: provider.kind,
       ownerAgent: provider.id,
-      codexSpawnBinding: codexSpawnBindingForOwner(provider.id, provider.kind),
+      codexSpawnBinding: codexSpawnBindingForOwner(provider.id, provider.kind, laneId),
       purpose: `并行执行 "${segment.terms.trim().slice(0, 60)}"；独立交付，由 ${provider.kind}/${provider.id} owner 负责`,
       capabilityProvider,
       decisionImpact: `${provider.kind}/${provider.id} 是 runtime-scoped 真 owner，匹配到 lane terms：${segment.terms.trim().slice(0, 40)}`,
       dependsOn: [],
       parallelGroup: "parallel-execution",
+      safetyEvidence,
     });
   }
 
@@ -2424,6 +2528,136 @@ const decisionCard = userChoiceNeeded ? {
     verification: route.verificationMethod ?? "manual review"
   }))
 } : null;
+
+const selectedWorkerLanes =
+  recommendedRoute?.subjectiveUiCapabilityAmplification?.lanes ??
+  recommendedRoute?.parallelExecutionLanes ??
+  null;
+
+const workerTaskPacketDrafts = selectedWorkerLanes
+  ? selectedWorkerLanes.map((lane, index) => {
+      const taskPacket = {
+        taskPacketId: `worker-task:${lane.laneId}:${index + 1}`,
+        ownerKind: lane.ownerKind ?? "agent",
+        ownerAgent: lane.ownerAgent,
+        roleDisplayName: lane.roleDisplayName,
+        roleInstanceId: lane.laneId,
+        weapon: recommendedRoute.weapon,
+        dependency: lane.capabilityProvider?.id ?? recommendedRoute.dependency,
+        runtime,
+        os: osTarget,
+        verificationOwner: recommendedRoute.verificationOwner,
+        verification: recommendedRoute.verificationMethod,
+        dependsOn: lane.dependsOn ?? [],
+        parallelGroup: lane.parallelGroup ?? null,
+        mergeOwner: "meta-conductor",
+        shardScope: lane.safetyEvidence?.shardScope ?? [],
+        mutationPolicy: lane.safetyEvidence?.mutationPolicy ?? "unproven",
+        workspaceIsolation: lane.safetyEvidence?.workspaceIsolation ?? "unproven",
+        externalWritePolicy: lane.safetyEvidence?.externalWritePolicy ?? "unproven",
+        collisionPolicy: lane.safetyEvidence?.collisionPolicy ?? "unproven",
+        safetyEvidence: lane.safetyEvidence ?? { status: "unproven" },
+        purpose: lane.purpose,
+        decisionImpact: lane.decisionImpact,
+      };
+      return {
+        ...taskPacket,
+        codexSpawnBinding: codexSpawnBindingForOwner(
+          lane.ownerAgent,
+          lane.ownerKind ?? "agent",
+          lane.laneId,
+          taskPacket,
+        ),
+      };
+    })
+  : recommendedRoute
+    ? (() => {
+        const selectedOwner =
+          recommendedRoute.selectedCapabilityProviders?.agent?.id ??
+          recommendedRoute.owner;
+        const roleInstanceId = `exec-${selectedOwner ?? "unknown"}-1`;
+        const taskPacket = {
+          taskPacketId: `worker-task:${roleInstanceId}:1`,
+          ownerKind: "agent",
+          ownerAgent: selectedOwner,
+          roleDisplayName: selectedOwner?.replace(/^meta-/, "") ?? "unknown",
+          roleInstanceId,
+          weapon: recommendedRoute.weapon,
+          dependency: recommendedRoute.dependency,
+          runtime,
+          os: osTarget,
+          verificationOwner: recommendedRoute.verificationOwner,
+          verification: recommendedRoute.verificationMethod,
+          dependsOn: [],
+          parallelGroup: null,
+          mergeOwner: "meta-conductor",
+          shardScope: [],
+          mutationPolicy: "single_worker",
+          workspaceIsolation: "single_worker",
+          externalWritePolicy: "bounded_by_route",
+          collisionPolicy: "single_worker_bounded_scope",
+          purpose: `Execute route ${recommendedRoute.id} within its declared scope.`,
+          decisionImpact: "Single-worker route selected by Thinking.",
+        };
+        return [{
+          ...taskPacket,
+          codexSpawnBinding: codexSpawnBindingForOwner(
+            selectedOwner,
+            "agent",
+            roleInstanceId,
+            taskPacket,
+          ),
+        }];
+      })()
+    : [];
+
+const parallelGroupIds = [...new Set(
+  workerTaskPacketDrafts
+    .map((packet) => packet.parallelGroup)
+    .filter(Boolean),
+)];
+function scopesArePairwiseDisjoint(packets) {
+  const ownedScopes = packets.flatMap((packet) =>
+    (packet.shardScope ?? []).map((scope) => ({
+      packetId: packet.taskPacketId,
+      scope: String(scope).replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase(),
+    })),
+  );
+  if (ownedScopes.length < packets.length) return false;
+  for (let leftIndex = 0; leftIndex < ownedScopes.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < ownedScopes.length; rightIndex += 1) {
+      const left = ownedScopes[leftIndex];
+      const right = ownedScopes[rightIndex];
+      if (left.packetId === right.packetId) continue;
+      if (
+        left.scope === right.scope ||
+        left.scope.startsWith(`${right.scope}/`) ||
+        right.scope.startsWith(`${left.scope}/`)
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+const safeFanoutReady =
+  workerTaskPacketDrafts.length >= 2 &&
+  new Set(workerTaskPacketDrafts.map((packet) => packet.taskPacketId)).size === workerTaskPacketDrafts.length &&
+  new Set(workerTaskPacketDrafts.map((packet) => packet.roleInstanceId)).size === workerTaskPacketDrafts.length &&
+  parallelGroupIds.length === 1 &&
+  workerTaskPacketDrafts.every(
+    (packet) =>
+      packet.ownerAgent &&
+      packet.mergeOwner === "meta-conductor" &&
+      Array.isArray(packet.dependsOn) &&
+      packet.dependsOn.length === 0 &&
+      packet.safetyEvidence?.status === "proven" &&
+      packet.externalWritePolicy === "forbidden" &&
+      packet.collisionPolicy !== "unproven" &&
+      packet.workspaceIsolation !== "unproven",
+  ) &&
+  scopesArePairwiseDisjoint(workerTaskPacketDrafts);
+
 const routeExecutionGate = {
   canPreviewRoute: true,
   canEnterExecution:
@@ -2520,46 +2754,33 @@ const output = {
     owner: "meta-conductor",
     route: recommendedRoute.id,
     mergeOwner: "meta-conductor",
-    parallelGroups: (recommendedRoute.subjectiveUiCapabilityAmplification?.lanes ?? recommendedRoute.parallelExecutionLanes)?.map((lane) => lane.parallelGroup) ?? [],
+    dispatchMode: safeFanoutReady
+      ? "fan_out_ready"
+      : workerTaskPacketDrafts.length >= 2
+        ? "fanout_eligible"
+        : "single_worker_ready",
+    fanoutReadiness: {
+      eligibleAtEntry: entryClassification.fanoutEligible === true,
+      thinkingApproved: safeFanoutReady,
+      workerCount: workerTaskPacketDrafts.length,
+      independentLanes: safeFanoutReady,
+      collisionBoundaryDeclared: workerTaskPacketDrafts.every(
+        (packet) => packet.safetyEvidence?.status === "proven" && packet.collisionPolicy !== "unproven",
+      ),
+      shardScopesPairwiseDisjoint: scopesArePairwiseDisjoint(workerTaskPacketDrafts),
+      externalWritesForbidden: workerTaskPacketDrafts.every(
+        (packet) => packet.externalWritePolicy === "forbidden",
+      ),
+      hostInvocationBoundary: runtime === "codex"
+        ? "probe current top-level spawn_agent surface before invocation"
+        : "use the current runtime native agent surface",
+    },
+    parallelGroups: parallelGroupIds,
     orchestratorKinds: classifyOrchestratorKinds(
       recommendedRoute.subjectiveUiCapabilityAmplification?.lanes ?? recommendedRoute.parallelExecutionLanes ?? []
     ),
   } : null,
-  workerTaskPacketDrafts: (recommendedRoute?.subjectiveUiCapabilityAmplification?.lanes ?? recommendedRoute?.parallelExecutionLanes)
-    ? (recommendedRoute.subjectiveUiCapabilityAmplification?.lanes ?? recommendedRoute.parallelExecutionLanes).map((lane) => ({
-        ownerKind: lane.ownerKind ?? "agent",
-        ownerAgent: lane.ownerAgent,
-        roleDisplayName: lane.roleDisplayName,
-        roleInstanceId: lane.laneId,
-        weapon: recommendedRoute.weapon,
-        dependency: lane.capabilityProvider?.id ?? recommendedRoute.dependency,
-        runtime,
-        os: osTarget,
-        verificationOwner: recommendedRoute.verificationOwner,
-        dependsOn: lane.dependsOn,
-        parallelGroup: lane.parallelGroup,
-        mergeOwner: "meta-conductor",
-        purpose: lane.purpose,
-        decisionImpact: lane.decisionImpact,
-        codexSpawnBinding: lane.codexSpawnBinding ?? codexSpawnBindingForOwner(lane.ownerAgent, lane.ownerKind ?? "agent"),
-      }))
-    : recommendedRoute ? [{
-        ownerAgent: recommendedRoute.owner,
-        roleDisplayName: recommendedRoute.owner?.replace(/^meta-/, "") ?? "unknown",
-        weapon: recommendedRoute.weapon,
-        dependency: recommendedRoute.dependency,
-        runtime,
-        os: osTarget,
-        verificationOwner: recommendedRoute.verificationOwner,
-        dependsOn: [],
-        mergeOwner: "meta-conductor",
-        codexSpawnBinding:
-          recommendedRoute.codexSpawnBinding ??
-          codexSpawnBindingForOwner(
-            recommendedRoute.selectedCapabilityProviders?.agent?.id ?? recommendedRoute.owner,
-            "agent",
-          ),
-      }] : [],
+  workerTaskPacketDrafts,
   capabilityGapPacket,
   verificationPlan: {
     command: "npm run meta:route:validate",

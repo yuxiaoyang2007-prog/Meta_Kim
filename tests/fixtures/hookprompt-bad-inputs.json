@@ -3,7 +3,7 @@
     {
       "id": "markdownFence",
       "payload": {
-        "prompt": "# Files mentioned by the user:\n\n```text\nD:/KimProject/Meta_Kim\n```"
+        "prompt": "# Files mentioned by the user:\n\n```text\nD:/workspace/Meta_Kim\n```"
       },
       "expectedPromptFragment": "# Files mentioned by the user:"
     },

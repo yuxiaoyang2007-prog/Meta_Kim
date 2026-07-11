@@ -732,7 +732,7 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(runArtifact.runtimeSubagentInvocationPacket.status, "unavailable");
       assert.equal(invocationByFamily.get("agent_subagent").state, "unavailable");
       assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
-      assert.equal(invocationByFamily.get("worker_task").state, "invoked");
+      assert.equal(invocationByFamily.get("worker_task").state, "blocked");
       assert.equal(invocationByFamily.get("prompt_rule").state, "applied");
       assert.equal(invocationByFamily.get("agent_teams_playbook").state, "selected_not_invoked");
       assert.equal(invocationByFamily.get("mcp").state, "selected_not_invoked");

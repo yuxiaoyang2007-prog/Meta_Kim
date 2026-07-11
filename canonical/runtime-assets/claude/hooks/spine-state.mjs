@@ -602,7 +602,8 @@ export function recordIntentConfirmation(state, confirmationState, correctionPay
  * Behavior matrix (HOOK-INFRA-001, v2.3.1):
  *   - When `metaName` is a known meta-agent name → append to
  *     `dispatchChain[currentStage]` (legacy/existing behavior).
- *   - When `metaName` is null but `toolInput.subagent_type` matches a
+ *   - When `metaName` is null but a runtime dispatch identity such as
+ *     `toolInput.subagent_type` or Codex `toolInput.task_name` matches a
  *     `workerTaskPackets[]` entry by `taskPacketId` / `roleInstanceId`:
  *       * If the matched packet's `ownerAgent` is a meta-agent → append to
  *         `dispatchChain[currentStage]`.
@@ -784,15 +785,19 @@ export function recordDispatch(state, agentName, metaName, toolInput) {
   if (metaName && META_AGENT_NAME_SET.has(metaName)) {
     appendToChain(metaName);
   } else {
-    const subagentType =
+    const dispatchIdentity =
       (toolInput &&
-        (toolInput.subagent_type || toolInput.agent_type || toolInput.type)) ||
+        (toolInput.subagent_type ||
+          toolInput.agent_type ||
+          toolInput.task_name ||
+          toolInput.type)) ||
       null;
     const dispatchText = toolInput
       ? [
           toolInput.description,
           toolInput.prompt,
           toolInput.message,
+          toolInput.task_name,
           toolInput.agent_type,
           toolInput.subagent_type,
           toolInput.type,
@@ -807,11 +812,11 @@ export function recordDispatch(state, agentName, metaName, toolInput) {
     const matchedPacket = workerPackets.find((packet) => {
       if (!packet || typeof packet !== "object") return false;
       if (
-        subagentType &&
-        (packet.businessRoleId === subagentType ||
-          packet.roleDisplayName === subagentType ||
-          packet.roleInstanceId === subagentType ||
-          packet.taskPacketId === subagentType)
+        dispatchIdentity &&
+        (packet.businessRoleId === dispatchIdentity ||
+          packet.roleDisplayName === dispatchIdentity ||
+          packet.roleInstanceId === dispatchIdentity ||
+          packet.taskPacketId === dispatchIdentity)
       ) {
         return true;
       }
@@ -843,7 +848,7 @@ export function recordDispatch(state, agentName, metaName, toolInput) {
         );
       }
     } else {
-      appendToSupplementary(subagentType || agentName);
+      appendToSupplementary(dispatchIdentity || agentName);
     }
   }
 

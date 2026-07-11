@@ -75,7 +75,7 @@ On fake discovery or missing inventory: return to **Fetch** to complete the six-
 
 ## Verification
 
-Verification confirms the inventory file exists, `searchLog` lists all six sources with timestamps, each `ownerCandidate` resolves to a real file or provider, and the selected owner's boundary fits the capability need. A `capabilityInvocationProbePacket` may be required for callable local families (MCP / command-script / runtime-tool) before product-experience pass.
+Verification confirms the inventory file exists, `searchLog` lists all six sources with timestamps, each `ownerCandidate` resolves to a real file or provider, and the selected owner's boundary fits the capability need. `capabilityInvocationProbePacket` may record readiness for callable local families, but it never proves that the selected provider binding was invoked and never satisfies product-experience live evidence.
 
 ## Writeback
 

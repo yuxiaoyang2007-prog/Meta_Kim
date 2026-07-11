@@ -41,9 +41,8 @@ const rawPackageRoot =
     : process.env.META_KIM_PACKAGE_ROOT || null;
 const packageRoot = resolvePackageRoot(rawPackageRoot);
 
-// 多 agent / 军团 / fan-out 触发词 — 命中时预推进 stage 到 fetch 并在
-// fetchRecord 里直接写 capabilitySearchPerformed=true，让 enforce-agent-dispatch
-// 的 capability gate 降级为 warn，主线程可立即 fork 子 agent。
+// 多 agent / 军团 / fan-out 触发词只说明任务可能适合拆分。它不能证明
+// capability discovery 已执行，也不能替 Critical/Fetch/Thinking 推进阶段。
 const MULTI_AGENT_TRIGGER_RE =
   /\b(?:team|fan-?out|multi-?agent|agent\s+teams|军团|分队|并行|并发|多\s*agent)\b|(?:开\s*\d+\s*个)/iu;
 const LINKED_COMMAND_RE =
@@ -328,33 +327,41 @@ if (continuationBoundary) {
   state.continuationBoundary = continuationBoundary;
 }
 
-// 多 agent 触发命中时：自动跑 capability search 填 fetchRecord，预推进 stage
-// 到 fetch，联动 slash command + skill，避免 enforce-agent-dispatch 在 execution
-// 阶段因 capabilitySearchPerformed=false 而 deny 主线程 fork。
-const isMultiAgent = MULTI_AGENT_TRIGGER_RE.test(rawPromptText);
-if (isMultiAgent) {
-  const matches = runAutoCapabilitySearch(packageRoot);
-  state.fetchRecord = {
-    capabilitySearchPerformed: true,
-    capabilityMatches: matches,
-    evidence: matches.map((m) => `auto-cap-search:${m.id}`),
-    sources: ["canonical/agents", "config/capability-index/agent-eligibility.json"],
-    searchReason: "multi_agent_trigger_auto_fill",
-    completedAt: new Date().toISOString(),
-  };
-  if (state.currentStage === "critical") {
-    state.currentStage = "fetch";
-    state.stages.critical = state.stages.critical || { status: "completed", completedAt: new Date().toISOString() };
-    state.stages.critical.status = "completed";
-    state.stages.critical.completedAt = new Date().toISOString();
-    state.stages.fetch = state.stages.fetch || { status: "in_progress", completedAt: null };
-    state.stages.fetch.status = "in_progress";
-  }
+// 命中可并行的入口信号时只标记 fanout_eligible。
+// 真正的 fan_out_ready 必须由 Thinking 在形成 2+ 个安全、独立且有合并边界的
+// workerTaskPacket 后再写入，入口 Hook 不能提前替 Thinking 作出派发结论。
+const isFanoutActivation =
+  MULTI_AGENT_TRIGGER_RE.test(rawPromptText) ||
+  CRITICAL_FETCH_THINKING_RE.test(rawPromptText) ||
+  EXPLICIT_META_THEORY_RE.test(rawPromptText) ||
+  (() => {
+    const natural = classifyPromptActivation(rawPromptText.toLowerCase());
+    const isDurableExecution = [
+      "natural_language_durable_work",
+      "natural_language_product_build",
+      "natural_language_execution_work",
+    ].includes(natural.triggerReason);
+    const separatorCount = (rawPromptText.match(/[、，,；;\n]/gu) || []).length;
+    const numberedWorkItems = (rawPromptText.match(/(?:^|\n)\s*\d+[.)、]/gu) || []).length;
+    return isDurableExecution && (separatorCount >= 3 || numberedWorkItems >= 2);
+  })();
+if (isFanoutActivation) {
   const linkedCommands = collectLinkedCommands(rawPromptText);
   const linkedSkills = collectLinkedSkills(rawPromptText);
   if (linkedCommands.length) state.stageRuntimeControl.linkedCommands = linkedCommands;
   if (linkedSkills.length) state.stageRuntimeControl.linkedSkills = linkedSkills;
-  state.stageRuntimeControl.dispatchMode = "fan_out_ready";
+  state.stageRuntimeControl.dispatchMode = "fanout_eligible";
+  state.stageRuntimeControl.fanoutEligibilityEvidence = "prompt_signal_only";
+  state.stageRuntimeControl.requiredBeforeFanOutReady = [
+    "fetchRecord.capabilitySearchPerformed=true from real discovery evidence",
+    "Thinking produces at least two independent workerTaskPackets with collision and merge boundaries",
+  ];
+  state.stageRuntimeControl.fanoutActivationSource =
+    MULTI_AGENT_TRIGGER_RE.test(rawPromptText)
+      ? "direct_parallel_agent_request"
+      : CRITICAL_FETCH_THINKING_RE.test(rawPromptText)
+        ? "structured_governance_chain_request"
+        : "meta_theory_trigger_request";
 }
 
 await writeSpineState(cwd, state);

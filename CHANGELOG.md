@@ -8,19 +8,60 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## Unreleased
 
+## [2.8.78] - 2026-07-11
+
 ### Solved Problem
 
-Short Chinese follow-up complaints such as "it still seems to keep creating by itself" could still be treated as low-signal chat unless they explicitly mentioned Codex, agent, or global reuse. That made the next route less stable even though the typed-spawn owner reuse path itself was correct.
+The governed runner could still make orchestration look more complete than the host evidence justified. A configured provider, a callable probe, a fixture, a generic shell call, or a runner-generated result could be promoted into an invocation claim, while supposedly clean tests could still inherit real-user skills, sibling checkouts, or temporary-state residue.
 
-### Changes
+### Fixed
 
-- **Contextual repeated-creation complaints now enter governed owner-reuse diagnosis.** Phrases like "it/he keeps creating by itself" are routed to Codex execution capability discovery instead of dependency fallback.
-- **The route remains reuse-first.** These complaints now keep `capabilityGapDetected=false` and bind `codexSpawnBinding.agent_type` to the selected existing owner rather than entering `create_agent`.
+- **Live orchestration can no longer self-certify.** Readiness probes, MCP `--self-test`, configured providers, matched hooks, fixture strings, public CLI trust flags, and runner-generated worker plans no longer count as live invocation evidence.
+- **Invocation coverage is binding-level.** Every selected family/provider/task binding needs a matching externally observed host event; one family-level claim cannot cover unrelated lanes or providers.
+- **Clean-room host observation is now available for Codex CLI and Claude Code.** The harness tests a packaged snapshot with isolated user/runtime/temp homes, no global inventory or sibling checkout, and a blind business prompt. Its parser can report observed behavior but cannot self-promote that report to the optional highest-assurance `live-certified` status; a separate private-attested exact-binding verifier is required only for that certification.
+- **MCP has a real transport acceptance probe.** The new probe performs `initialize`, `tools/list`, and `tools/call`; catalog-only self-test output remains readiness evidence.
+- **Pinned dependency fallback survives Windows Unicode archives.** Clean installs verify agent-teams-playbook v4.8.0 by commit or by GitHub archive commit prefix plus the exact Skill hash; a traversal/link-safe Python fallback handles filenames that Windows tar rejects.
+- **Archive and credential handling now fail closed.** Dependency archives are size-bounded before extraction, member paths/types/counts and expanded sizes are checked before native tar runs, extraction uses isolated staging, copied Codex auth is scrubbed before any diagnostic preservation, and Windows CLI prompts no longer pass through `cmd.exe` expansion.
+- **Release verification now has explicit assurance tiers.** `meta:verify:all` is the standard full release gate and a complete passing run permits an ordinary release. `meta:verify:live-certified` reruns that standard chain and appends the pinned Ed25519 external-observer gate; a resumed final stage cannot claim `live-certified`, caller-supplied keys cannot replace the trust root, and readiness probes remain separate from exact observed invocation coverage.
+- **Fan-out hints no longer fabricate Fetch evidence.** Natural-language scope signals may mark a run fan-out eligible, but only real capability discovery plus Thinking-proven independent lanes can permit execution dispatch.
+- **Historical examples no longer republish personal absolute paths.** Reader-facing release notes and planning-path fixtures now use portable placeholders instead of machine-specific user and project directories.
 
 ### Verification
 
-- `node --test tests/meta-theory/47-meta-theory-entry-classifier.test.mjs tests/meta-theory/50-parallel-execution-lanes.test.mjs tests/meta-theory/51-orchestrator-kind-bucketing.test.mjs`
+- `node --test tests/governance/live-evidence-boundary.test.mjs`
+- `node scripts/validate-product-experience-core-goals.mjs`
+- `node scripts/live-acceptance/probe-mcp-transport.mjs`
+- `node scripts/live-acceptance/run-clean-room-live-acceptance.mjs --preflight`
+- Focused final regressions: release/evidence `16/16`, setup/archive `28/28`, and orchestration `191/191` passed.
+- Standard full `meta:verify:all`: stages 1-8 passed on the final source and satisfy the ordinary release gate. The separate optional `meta:verify:live-certified` certification remains unavailable with `private_attested_exact_binding_report_missing`; this candidate must not be described as `live-certified`, but that missing external signature does not block standard tagging or publication.
+- Local diagnostic negative control with concurrency hints removed: neither pure read-only control invoked Agent, Skill, MCP, or a selected Command, so the control is no longer used as fan-out acceptance. This observation is diagnostic, not `live-certified` attestation.
+- Local governed-run diagnostics observed Claude Code using Agent, Skill, Hook, and runtime-tool surfaces. MCP remained callable but was not route-selected, and generic shell never became selected Command evidence. These diagnostics cannot support the optional `live-certified` label until exact selected bindings receive independent observer attestation; they are not required for the standard release tier.
+- Codex CLI clean-room now blocks before host invocation when the OS-user `~/.agents/skills` root is present, because current CLI discovery still reads that real-user root despite isolated HOME/CODEX_HOME. CLI evidence remains separate from Codex Desktop.
+
+## [2.8.77] - 2026-07-10
+
+### Solved Problem
+
+The current Codex host now exposes a top-level native `spawn_agent(task_name, fork_turns, message)` surface. The unreleased route still emitted the removed typed/namespaced parameter shape, so a correct owner-reuse plan could fail or render through the wrong host path. The migration also needed to prove that removing Codex-only legacy fields would not weaken Claude Code's independent native Agent/Task route.
+
+### Changes
+
+- **Codex now emits only the native task plan.** The route uses top-level `spawn_agent` with a sanitized `task_name`, bounded worker `message`, and minimal `fork_turns`; it no longer emits typed/namespaced fallback parameters.
+- **Owner reuse remains explicit without pretending the host loaded an agent type.** `ownerAgent`, owner source, capability loadout, lane, merge owner, and visible binding stay in the worker packet/message while the runtime task name remains only a run-scoped identifier.
+- **Stage-chain activation and Hook state now agree without skipping Thinking.** Structured Critical/Fetch/Thinking/Review activation sets `fanout_eligible` without requiring another parallel-agent keyword; only a Thinking result with 2+ independent worker packets, one parallel group, merge ownership, and collision boundaries can set `fan_out_ready`.
+- **Claude Code support is preserved independently.** Claude Code continues to use its native Agent/Task and SubagentStart surfaces, with a matrix regression test protecting agent, subagent, and custom-agent native declarations.
+- **`agent-teams-playbook` resolution no longer forces a fallback ritual.** Existing Agent/Skill/Tool/Command/MCP providers stop discovery immediately; external Skill search runs only for a proven gap, and successful native Agent dispatch is never relabeled as fallback merely because an optional Skill was not installed.
+- **Dependency checkout resolution is runtime-aware.** Local development prefers the sibling upstream checkout before stale global packages, while Claude Code scans `.claude`/`~/.claude` skill roots and Codex scans `.agents`/`~/.codex` roots.
+
+### Verification
+
+- `node --test tests/meta-theory/01-structural.test.mjs tests/meta-theory/11-eight-stage-spine.test.mjs tests/meta-theory/47-meta-theory-entry-classifier.test.mjs tests/meta-theory/50-parallel-execution-lanes.test.mjs`
+- `node --test tests/governance/capability-routing.test.mjs tests/governance/fanout-completion-gate.test.mjs tests/governance/runtime-capability-matrix.test.mjs`
 - `npm run meta:route:validate`
+- `npm run meta:verify:governance`
+- `npm run meta:release:smoke`
+- `npm run meta:check:global:release`
+- `git diff --check`
 
 ## [2.8.76] - 2026-07-06
 
@@ -787,7 +828,7 @@ This release closes the gap between Meta_Kim's Dynamic Workflow / LangGraph-styl
 
 ### Changed
 
-- **Dynamic Workflow Evidence Closure** - Verified the governed execution artifact at `C:/Users/Kim/AppData/Local/Temp/meta-kim-host-full-db9a8dd9aa5c43418aba89f7b210bd57/artifacts/goalpro-codex-host-full-proof.json`, including `fetchPacket`, `capabilityInventory`, `capabilityRoute`, `dynamicWorkflowRuntimePacket`, `langGraphRunPacket`, `workerTaskPackets`, `workerResultPackets`, and `verificationPacket`.
+- **Dynamic Workflow Evidence Closure** - Verified the governed execution artifact at `<temp>/meta-kim-host-full/artifacts/goalpro-codex-host-full-proof.json`, including `fetchPacket`, `capabilityInventory`, `capabilityRoute`, `dynamicWorkflowRuntimePacket`, `langGraphRunPacket`, `workerTaskPackets`, `workerResultPackets`, and `verificationPacket`.
 - **Host Invocation Truth** - Confirmed real Codex host evidence for `spawn_agent_result`, `agent_team_result`, and `skill_application`, plus fresh local probes for MCP, command/script, and runtime-tool families; `realInvocationCoverage.missingFamilies` is empty in the artifact.
 - **Hook Self-Lock Repair** - The Fetch-stage dispatch gate can now repair its own constrained `fetchRecord` state without opening business-file mutation before capability discovery and execution clearance exist.
 - **Open-Source Source Boundary** - Removed private manual documents from the public source tree and kept README references aligned with the supported public documentation surface.
@@ -795,7 +836,7 @@ This release closes the gap between Meta_Kim's Dynamic Workflow / LangGraph-styl
 
 ### Verification
 
-- `npm run meta:validate:run -- C:/Users/Kim/AppData/Local/Temp/meta-kim-host-full-db9a8dd9aa5c43418aba89f7b210bd57/artifacts/goalpro-codex-host-full-proof.json`
+- `npm run meta:validate:run -- <temp>/meta-kim-host-full/artifacts/goalpro-codex-host-full-proof.json`
 - `npm run meta:test:meta-theory`
 - `npm run meta:release:smoke`
 - `git diff --check`
@@ -923,8 +964,8 @@ This release addresses the stale-project problem where global Meta_Kim could be 
 - `npm run meta:sync`
 - `npm run meta:sync:global -- --with-global-hooks`
 - `npm run discover:global`
-- Claude Code global `UserPromptSubmit` smoke in `D:/KimProject/游戏策划案`
-- Codex project `UserPromptSubmit` smoke in `D:/KimProject/Meta_Kim`
+- Claude Code global `UserPromptSubmit` smoke in `<project-root>/game-design`
+- Codex project `UserPromptSubmit` smoke in `<project-root>/Meta_Kim`
 
 ## [2.8.39] - 2026-06-16
 
@@ -1528,8 +1569,8 @@ This release addresses install/update output that looked like failures or Englis
 
 ### Verification
 
-- `node --check .claude/hooks/user-prompt-submit.js; node --check .codex/hooks/user-prompt-submit.js; node --check test-hook.js` in `D:/KimProject/HookPrompt`
-- `node test-hook.js` in `D:/KimProject/HookPrompt`
+- `node --check .claude/hooks/user-prompt-submit.js; node --check .codex/hooks/user-prompt-submit.js; node --check test-hook.js` in `<project-root>/HookPrompt`
+- `node test-hook.js` in `<project-root>/HookPrompt`
 - `node scripts/install-global-skills-all-runtimes.mjs --dry-run --update --skills ecc,superpowers --targets claude,codex,cursor --lang zh-CN`
 - `node --test tests/setup/install-plugin-bundles.test.mjs tests/setup/graphify-wiring-contract.test.mjs tests/setup/install-cross-platform.test.mjs`
 - `npm run meta:test:setup`
@@ -1579,10 +1620,10 @@ This release addresses HookPrompt appearing to run in Codex while the optimized 
 
 ### Verification
 
-- `node test-hook.js` in `D:/KimProject/HookPrompt`
+- `node test-hook.js` in `<project-root>/HookPrompt`
 - `node --test tests/setup/sync-runtimes-manifest.test.mjs tests/setup/mcp-memory-hooks.test.mjs`
 - `node scripts/install-global-skills-all-runtimes.mjs --update --skills hookprompt --targets codex`
-- `codex exec --dangerously-bypass-hook-trust --skip-git-repo-check --sandbox read-only --cd D:/KimProject/课程素材 "帮我做个小红书营销自动发布器，先别改文件，先说你理解到什么"`
+- `codex exec --dangerously-bypass-hook-trust --skip-git-repo-check --sandbox read-only --cd <project-root>/course-materials "帮我做个小红书营销自动发布器，先别改文件，先说你理解到什么"`
 - `npm run meta:release:smoke`
 - `git diff --check`
 

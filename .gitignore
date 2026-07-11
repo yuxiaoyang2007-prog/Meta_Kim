@@ -26,6 +26,7 @@ canonical/skills/commit-review/
 /.cursor/
 
 # ========== Local State (Never commit) ==========
+/.planning/
 .meta-kim/
 .meta-kim/state/
 .meta-kim/local.overrides.json

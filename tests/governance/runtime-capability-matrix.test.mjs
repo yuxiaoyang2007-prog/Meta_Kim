@@ -17,6 +17,10 @@ test("runtime matrix covers platforms and critical constraints", async () => {
   }
   const capabilityMap = (platform) =>
     new Map((platform.capabilities ?? []).map((capability) => [capability.capability, capability]));
+  const claudeCode = capabilityMap(platforms.get("claude_code"));
+  assert.equal(claudeCode.get("agent")?.support, "native");
+  assert.equal(claudeCode.get("subagent")?.support, "native");
+  assert.equal(claudeCode.get("custom agent")?.support, "native");
   const cursor = capabilityMap(platforms.get("cursor"));
   assert.equal(cursor.get("hook")?.support, "native");
   assert.equal(cursor.get("hook")?.confidence, "verified_docs");

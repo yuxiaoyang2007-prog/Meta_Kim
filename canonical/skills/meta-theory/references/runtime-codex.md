@@ -13,7 +13,7 @@ Codex Execution is capability-wide, not agent-only. When Thinking selects a capa
 - runtime tools such as `apply_patch`, browser, Playwright, data widgets, or other loaded tool surfaces
 - prompt/rule providers as `applied`, not as external tool calls
 
-`runtimeInvocationPlanPacket` records the selected executable families, the real invocation evidence, and missing families. `hostInvocationRequestPacket` is the adapter handoff: for each missing selected family it states the Codex action to run, the worker task refs if relevant, and the exact trusted evidence fields to return. The Node runner must not treat the request as proof; only the active Codex host or a trusted host adapter can execute `spawn_agent`, skill activation, MCP calls, slash commands, or runtime tools and then pass `hostInvocationEvidenceTrusted=true` with fresh evidence. `capabilityInvocationTruthPacket.realInvocationCoverage.status` must be `pass` for product-experience pass. `selected_not_invoked` is valid truth, but it is never completion evidence.
+`runtimeInvocationPlanPacket` records selected executable bindings, externally observed evidence, and missing bindings. `hostInvocationRequestPacket` is the adapter handoff for missing work. The Node runner must not treat a request, readiness probe, fixture, self-test, or caller-supplied trust flag as proof. Only an external Codex event observer may promote a binding after matching the host call, result, run/session/event ids, provider/task binding, timestamp, and observation artifact hash. `capabilityInvocationTruthPacket.realInvocationCoverage.status` must be `pass` for product-experience pass. `selected_not_invoked` is valid truth, but it is never completion evidence.
 
 ## Honest Subagent Contract
 
@@ -29,7 +29,9 @@ If `spawn_agent` is available and meta-theory / governed Meta_Kim activation aut
 - treat explicit `meta-theory`, `/meta-theory`, `元理论`, and natural-language governed execution entries as fan-out authorization when the task has separable safe lanes
 - treat direct "dispatch / parallel / multiple agents" corrections as explicit fan-out authorization; enter owner discovery and build multiple agent-owned worker packets when the task has separable scopes
 - treat structured governance-chain requests such as `Critical Thinking -> Fetch -> Deep Thinking -> Review` as meta-theory activation examples; they do not need an extra "dispatch" word before Thinking can select parallel lanes
-- bind explicit fan-out worker lanes to reusable Codex global or project `agent_type` owners first; skills, commands, MCP tools, and runtime tools are loadout/dependency bindings, not replacements for the lane owner
+- bind explicit fan-out worker lanes to reusable Codex global or project owners first; skills, commands, MCP tools, and runtime tools are loadout/dependency bindings, not replacements for the lane owner
+- before the live call, show or record `ownerAgent` + owner source + capability/loadout + the native `spawn_agent` task plan; the run-scoped task is an invocation of that owner contract, while `task_name` remains only a lane identifier
+- do not use "created N agents", "派 agent", or host nickname lists as the complete user-visible explanation; if Codex UI shows a temporary nickname, map it back to `runtimeInstanceAlias` and the selected `ownerAgent` in the next dispatch/status notice
 - keep each worker's write scope disjoint when it edits files
 - size fan-out from Codex host/config capacity such as `[agents].max_threads`, current runtime capacity, task DAG, and collision boundaries instead of a fixed Meta_Kim cap
 - show the dispatch board before or alongside dispatch
@@ -38,19 +40,19 @@ If `spawn_agent` is available and meta-theory / governed Meta_Kim activation aut
 
 `agent-teams-playbook` is the Codex fan-out adapter after Thinking, not a substitute for Thinking. Select it when there are 2+ executable `workerTaskPackets` with proven DAG, collision, workspace-isolation, and external-write safety; record `not_required` for single-lane work and partial/degraded for unsafe fan-out. A selected playbook provider is `agent_teams_playbook=selected_not_invoked` until a live Skill/Agent Team/spawn_agent call is actually attached as host evidence. Meta_Kim must not set its own maximum lower than Codex host/config capacity.
 
-## Codex spawn_agent Fork Rules
+Capability resolution stops when a qualified existing provider is found. Missing an exact Skill or declining an optional external Skill install does not make the route degraded when an existing owner plus native `spawn_agent` can execute the lane. External discovery runs only for a proven local multi-provider gap; fallback/degraded labels require an actual host-surface, permission, or owner failure.
 
-Codex `spawn_agent` has a hard parameter rule the dispatcher must follow:
+## Codex Native spawn_agent Contract
 
-- **Full-context fork** (worker inherits main context): do NOT pass `agent_type`. The runner rejects typed agents in full-context fork with errors like "agent parameter invalid" or "fork full context requires no type".
-- **Typed spawn** (separate agent identity): pass `agent_type`, but the worker does NOT inherit full main context.
-- These two modes are mutually exclusive. Mixing them is the most common Codex fan-out failure.
+Current Codex native fan-out uses the top-level `spawn_agent` surface with exactly three routing inputs:
 
-If Fetch/Thinking selected an existing Codex global or project owner, that owner is a typed-spawn binding: call `multi_agent_v1.spawn_agent` with `agent_type=<selected owner>` and pass only the bounded context in the worker packet. A full-context fork is not the normal way to reuse a global agent; it is for same-context continuation or for the retry after a typed-spawn parameter/fork error.
+- `task_name`: a lowercase letters/digits/underscores lane identifier derived from `roleInstanceId` or `taskPacketId`; it is not the durable `ownerAgent`
+- `message`: the bounded worker work order, including `taskPacketId`, `ownerAgent`, owner source, capability/loadout, scope, output contract, collision boundary, and merge owner
+- `fork_turns`: the smallest sufficient context window; default to `none` when the bounded message is complete, and use `all` or a positive integer string only when the lane genuinely requires parent-turn context
 
-Recovery rule: if a `spawn_agent` call fails with a parameter/fork error, retry without `agent_type` (full-context mode) before declaring `subagentCapabilityStatus=unavailable`. Record the retry in `runtimeInvocationPlanPacket` so Meta-Review can see the runner was respected, not worked around.
+Do not pass `agent_type` or `fork_context`, and do not discover or fall back to a legacy namespaced spawn API. The professional owner remains governance metadata in the worker packet and bounded message; Codex's runtime task name or incidental nickname must never be presented as proof that a durable custom agent type was loaded. If the top-level native `spawn_agent` surface is unavailable or rejects its current schema, record `subagentCapabilityStatus=unavailable` with the exact tool/schema evidence and block or declare degraded mode instead of silently serializing.
 
-When `spawn_agent` is available and the run is fan-out authorized through meta-theory / governed Meta_Kim activation, direct subagent/delegation/parallel-agent wording, or a completed native choice surface, the Codex main thread MUST spawn all independent workers (same `parallelGroup`) in one assistant turn — not one per turn. Per-turn serial spawning in authorized `fan_out_ready` state is fake parallelism. If the route is fan-out eligible but runtime authorization or the callable host surface is missing, stop before live subagent dispatch and record the degraded/blocked state instead of silently serializing.
+When native `spawn_agent` is available and the run is fan-out authorized through meta-theory / governed Meta_Kim activation, direct subagent/delegation/parallel-agent wording, a structured governance-chain request, or a completed native choice surface, the Codex main thread MUST spawn all independent workers (same `parallelGroup`) in one assistant turn — not one per turn. Per-turn serial spawning in authorized `fan_out_ready` state is fake parallelism. If the route is fan-out eligible but runtime authorization or the callable host surface is missing, stop before live subagent dispatch and record the degraded/blocked state instead of silently serializing.
 
 ## Codex Durable Agent Projection
 
@@ -70,6 +72,12 @@ Durable Codex agent completion is a four-step lifecycle, not a file write:
 4. Invoke that durable agent through Codex and attach `durable_agent` evidence with `evidenceKind=durable_agent_live_invocation`.
 
 Until steps 3 and 4 are attached, `durableAgentLifecyclePacket.status` remains partial even if the file exists.
+
+## Live evidence boundary
+
+Codex highest-assurance `live-certified` acceptance must be observed outside the model process. Parse host JSONL/rollout events and require a `function_call` plus a successful matching `function_call_output`; `spawn_agent` additionally needs correlated child start and child completion events with a child thread id. Generic shell execution is runtime-tool evidence, not selected Command evidence. Join every event to the exact Thinking-selected provider/task binding after the host exits. Caller-supplied JSON, CLI trust flags, fixtures, hashes without private observer attestation, self-tests, local readiness probes, configured providers, and runner-generated worker plans cannot promote a binding to invoked. Codex CLI and Codex Desktop are separate targets; a clean CLI result never proves Desktop behavior. This external attestation boundary governs the optional `live-certified` label; it is not a prerequisite for a standard release whose `meta:verify:all` run passed.
+
+Codex CLI also discovers the OS-user global `~/.agents/skills` root independently of the isolated project and `CODEX_HOME`. If that real-user root exists and the current CLI exposes no supported switch to disable it, a same-user clean-room harness must block before host invocation; changing `HOME`, `USERPROFILE`, `CODEX_HOME`, `CODEX_SKILLS_DIR`, or `--ignore-user-config` is not sufficient evidence of isolation. Use an OS-level disposable user/container or a future host-supported disable switch. Do not transfer this CLI limitation to Codex Desktop without a separate Desktop observation.
 
 Other formal tool projections follow `config/sync.json` and `config/runtime-compatibility-catalog.json`; keep `needs_probe`, `partial`, or `reference_only` statuses as evidence instead of promoting them by wording.
 

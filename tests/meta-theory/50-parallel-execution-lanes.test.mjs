@@ -125,8 +125,38 @@ describe("50 — Parallel execution lanes (engineering fan-out)", () => {
     for (const draft of drafts) {
       assert.equal(draft.ownerKind, "agent");
       assert.ok(available.has(draft.ownerAgent), `worker owner "${draft.ownerAgent}" must be an existing discovered owner`);
-      assert.equal(draft.codexSpawnBinding?.spawnMode, "typed_spawn");
-      assert.equal(draft.codexSpawnBinding?.agent_type, draft.ownerAgent);
+      assert.equal(draft.codexSpawnBinding?.hostSurface, "spawn_agent");
+      assert.equal(draft.codexSpawnBinding?.spawnMode, "native_task");
+      assert.equal(draft.codexSpawnBinding?.ownerAgent, draft.ownerAgent);
+      assert.match(draft.codexSpawnBinding?.task_name ?? "", /^[a-z0-9_]+$/);
+      assert.equal(draft.codexSpawnBinding?.fork_turns, "none");
+      const message = JSON.parse(draft.codexSpawnBinding?.message ?? "null");
+      assert.equal(message?.taskPacketId, draft.taskPacketId);
+      assert.equal(message?.roleInstanceId, draft.roleInstanceId);
+      assert.equal(message?.coordination?.mergeOwner, draft.mergeOwner);
+      assert.equal(message?.scope?.purpose, draft.purpose);
+      assert.equal(Object.hasOwn(draft.codexSpawnBinding ?? {}, "agent_type"), false);
+      assert.equal(Object.hasOwn(draft.codexSpawnBinding ?? {}, "fork_context"), false);
+      assert.equal(Object.hasOwn(draft.codexSpawnBinding ?? {}, "messageRef"), false);
     }
+    assert.equal(
+      result.dispatchBoardDraft?.dispatchMode,
+      "fanout_eligible",
+      "upload/external-write scope must stay blocked from live parallel dispatch until isolation is proven",
+    );
+    assert.equal(result.dispatchBoardDraft?.fanoutReadiness?.thinkingApproved, false);
+    assert.equal(result.dispatchBoardDraft?.fanoutReadiness?.externalWritesForbidden, false);
+  });
+
+  test("overlapping mutation shards stay eligible but never become fan-out ready", () => {
+    const result = route(
+      "meta-theory 并行修改 src/ui/button.ts；同时更新 src/ui/button.ts",
+      "codex",
+      "windows",
+    );
+    assert.ok(result.workerTaskPacketDrafts.length >= 2);
+    assert.equal(result.dispatchBoardDraft?.dispatchMode, "fanout_eligible");
+    assert.equal(result.dispatchBoardDraft?.fanoutReadiness?.thinkingApproved, false);
+    assert.equal(result.dispatchBoardDraft?.fanoutReadiness?.shardScopesPairwiseDisjoint, false);
   });
 });

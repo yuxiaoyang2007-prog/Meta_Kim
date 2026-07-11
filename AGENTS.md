@@ -160,7 +160,7 @@ That means:
 - Review checks whether Critical, Fetch, and Thinking were good enough before judging final output polish
 - Execution work is dispatched to agents, skills, commands, MCP capabilities, runtime tools, or workers selected by Thinking instead of collapsing into the main thread
 
-For Codex, meta-theory activation is user-visible permission to enter governed routing, but live subagent fan-out still requires direct subagent/delegation/parallel-agent wording or a completed native choice surface that names the parallel-agent route. When Thinking finds multiple independent worker lanes and proves DAG/collision/workspace/external-write safety, the main thread scopes, delegates, reviews, and synthesizes; it does not become the all-purpose executor for complex work. Without direct subagent/parallel-agent wording, Codex can still reach the same route by presenting a native choice surface before Execution.
+For Codex, meta-theory / governed Meta_Kim activation is user-visible authorization for safe native fan-out when Thinking proves multiple independent worker lanes and DAG/collision/workspace/external-write safety. Direct subagent/delegation/parallel-agent wording and structured governance-chain requests such as `Critical Thinking -> Fetch -> Deep Thinking -> Review` are strong activation examples, not exclusive gates. The main thread scopes, delegates, reviews, and synthesizes; it does not become the all-purpose executor for complex work. Native choice remains required only when route, scope, risk, or acceptance materially branches. Live delegation still requires the current Codex host to expose the top-level native `spawn_agent` surface; if it is absent, block or declare degraded mode instead of falling back to a legacy namespaced spawn API or silently serializing.
 
 ### Production Correctness Before Execution
 
@@ -202,7 +202,7 @@ Hard rules before Execution:
 - Multi-lens judgment uses dynamic lens discovery; user-mentioned books, people, or theories are seeds/fallbacks, not a fixed list.
 - Execution requires owner + weapon + verification owner.
 - Dependency projects require input/output contracts before use.
-- Codex subagents require a user-visible authorization source: direct subagent/delegation/parallel-agent wording or a completed native choice surface for a route that names parallel-agent fan-out. A `meta-theory` trigger alone authorizes governed routing, not live subagent dispatch. Hooks require trust review.
+- Codex native subagents require governed Meta_Kim activation or another user-visible authorization source, separable safe lanes proven by Thinking, and the current host's top-level `spawn_agent` surface. A `meta-theory` trigger or structured governance-chain request may authorize safe fan-out; native choice is reserved for branch-changing decisions. Legacy namespaced spawn APIs are not a fallback. Hooks require trust review.
 - OpenClaw skills require third-party risk and sandbox review.
 - Cursor capabilities remain unknown/partial until verified; do not mark them native from projection files alone.
 - Public-ready requires verification plus intent acceptance; workflow completion alone is not user-goal completion.
@@ -349,7 +349,7 @@ After changing canonical behavior, contracts, hooks, or runtime-facing docs:
 2. `npm run discover:global`
 3. `npm run meta:check`
 4. `npm run meta:check:global`
-5. `npm run meta:release:smoke` before routine patch/minor release; use `npm run meta:verify:all` only for larger, risky, runtime, install, hook, dependency, or explicitly release-grade changes
+5. `npm run meta:release:smoke` before routine low-risk patch/minor releases; use `npm run meta:verify:all` for the standard full release gate on larger, risky, runtime, install, hook, dependency, package, or security changes; add `npm run meta:verify:live-certified` only when the optional highest-assurance external live certification is requested
 
 Use these supporting commands as needed:
 
@@ -372,7 +372,7 @@ Use these supporting commands as needed:
 - `npm run meta:sync:global`
 - `npm run prompt:next-iteration`
 
-`npm run meta:release:smoke` is the default maintainer release check for low-risk prompt/doc/governance iterations. It runs projection sync, default capability-discovery smoke, and meta-theory tests. `npm run meta:verify:all` remains the full release-grade suite: runtime sync checks, project validation, graphify health, global sync checks, smoke-level runtime acceptance, setup tests, and meta-theory tests.
+`npm run meta:release:smoke` is the default maintainer release check for low-risk prompt/doc/governance iterations. It runs projection sync, default capability-discovery smoke, and meta-theory tests. `npm run meta:verify:all` is the standard full release suite: runtime sync checks, project validation, graphify health, global sync checks, smoke-level runtime acceptance, setup tests, and meta-theory tests. A complete passing run may be used to commit, tag, push, publish, and describe the release as standard release-verified. `npm run meta:verify:live-certified` runs that same standard suite and then appends the separate external-signature exact-binding clean-room gate.
 
 ## Release Modes
 
@@ -385,15 +385,17 @@ Routine patch/minor releases should stay fast. If the change is prompt text, doc
 
 This can be run directly as `npm run meta:release:smoke`, followed by `git diff --check`.
 
-Upgrade to full release-grade verification only when the task changes install/update behavior, global sync, hooks, runtime matrix, provider registry, dependency compatibility, runtime probes, package contents, security-sensitive behavior, or when the user explicitly asks for full/live/release-grade evidence.
+Upgrade from smoke to the standard full release gate, `npm run meta:verify:all`, when the task changes install/update behavior, global sync, hooks, runtime matrix, provider registry, dependency compatibility, runtime probes, package contents, security-sensitive behavior, or when the user explicitly asks for full release verification.
 
-Release-grade work is stricter than a local green check. In that mode, before commit, push, tag, changelog/release-note update, or publication, the run must have current evidence for:
+Standard full-release work is stricter than a local green check. Before commit, push, tag, changelog/release-note update, or publication, the run must have current evidence for:
 
 - all declared runtime install/update targets; if machine-local defaults select only one runtime, use explicit all-runtime target selection
 - project sync, global sync, and global hooks when hooks are in scope
 - runtime matrix, provider registry, dependency compatibility, and runtime probe
 - a real execution-demand route that naturally selects owner, creation providers, skill, MCP provider, command/runtime tool, and verification owner/path
-- live Claude, Codex, and OpenClaw evidence when those live targets are declared
+- runtime evaluation/probe results for the targets declared by the standard release
+
+The optional highest-assurance mode is `npm run meta:verify:live-certified`. It appends a private-attested external observer gate that must join successful host request/result events to every exact Thinking-selected binding in a clean-room run. Missing or failed external attestation means only `liveCertified=false`: do not claim `live-certified`, exact-binding live coverage, or externally signed runtime proof. It does **not** invalidate a separately complete `meta:verify:all` run and does not block an ordinary standard release.
 
 Do not treat structural smoke, systemMessage/UI warning output, auth-present checks, skipped/needsAuth states, or config-only proof as live pass evidence. Those are valid diagnostics, not live completion. Validators and gates protect against empty or dangerous routes; they are not the primary mechanism that makes the default path correct.
 

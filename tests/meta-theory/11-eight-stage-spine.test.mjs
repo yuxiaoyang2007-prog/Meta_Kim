@@ -1302,6 +1302,23 @@ describe("Part F2: choice surface runtime gate", async () => {
     assert.equal(nextState.stageRuntimeControl?.userLanguage, "zh-CN");
     assert.ok(nextState.stageRuntimeControl?.promptFingerprint);
     assert.equal(nextState.stageRuntimeControl?.factGatePolicy, "managed_gate_required_for_public_ready");
+    assert.equal(nextState.stageRuntimeControl?.dispatchMode, "fanout_eligible");
+    assert.equal(nextState.currentStage, "critical");
+    assert.notEqual(nextState.fetchRecord?.capabilitySearchPerformed, true);
+    assert.equal(nextState.stageRuntimeControl?.fanoutEligibilityEvidence, "prompt_signal_only");
+  });
+
+  test("ordinary multi-scope durable work becomes fanout eligible without agent wording", () => {
+    const { result, nextState } = runActivateHook(null, {
+      prompt:
+        "请制定并落地发布方案，核对依赖来源、跨环境兼容性、发布安全和验收方法，创建 release-readiness-plan.md。",
+    });
+
+    assert.equal(result.status, 0);
+    assert.equal(nextState.triggerReason, "natural_language_durable_work");
+    assert.equal(nextState.stageRuntimeControl?.dispatchMode, "fanout_eligible");
+    assert.equal(nextState.currentStage, "critical");
+    assert.notEqual(nextState.fetchRecord?.capabilitySearchPerformed, true);
   });
 
   test("auto prompt activation does not create command-class publish approvals", () => {
@@ -2722,7 +2739,7 @@ describe("Part F2: choice surface runtime gate", async () => {
     const nativePlanWrite = runEnforceHook(state, {
       tool_name: "Write",
       tool_input: {
-        filePath: "C:/Users/Kim/.claude/plans/meta-kim-plan.md",
+        filePath: "C:/Users/example/.claude/plans/meta-kim-plan.md",
         content: "# Plan\n",
       },
     });
@@ -2733,7 +2750,7 @@ describe("Part F2: choice surface runtime gate", async () => {
       tool_name: "Bash",
       tool_input: {
         command:
-          "Set-Content -Path C:/Users/Kim/.claude/plans/meta-kim-plan.md -Value '# Plan'",
+          "Set-Content -Path C:/Users/example/.claude/plans/meta-kim-plan.md -Value '# Plan'",
       },
     });
     assert.equal(nativePlanBashWrite.status, 0);
@@ -2755,7 +2772,7 @@ describe("Part F2: choice surface runtime gate", async () => {
       tool_name: "Bash",
       tool_input: {
         command:
-          "Set-Content -Path src/main.go -Value 'C:/Users/Kim/.claude/plans/meta-kim-plan.md'",
+          "Set-Content -Path src/main.go -Value 'C:/Users/example/.claude/plans/meta-kim-plan.md'",
       },
     });
     assert.equal(businessWriteWithPlanMention.status, 0);
@@ -2809,6 +2826,92 @@ describe("Part F2: choice surface runtime gate", async () => {
     });
     assert.equal(allowedAfterEvidence.status, 0);
     assert.doesNotMatch(allowedAfterEvidence.stdout, /permissionDecision/);
+  });
+
+  test("fanout-eligible TaskCreate cannot substitute for the first Agent dispatch", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "natural_language_durable_work",
+      }),
+      currentStage: "fetch",
+      stageRuntimeControl: {
+        activationMode: "hook_observed",
+        driverMode: "hook_observed",
+        hookGateMode: "advisory",
+        dispatchMode: "fanout_eligible",
+      },
+      fetchRecord: {
+        capabilitySearchPerformed: true,
+        capabilityMatches: [{ id: "review-owner", tier: "eligible" }],
+      },
+      dispatchedAgents: [],
+    };
+
+    const denied = runEnforceHook(state, {
+      tool_name: "TaskCreate",
+      tool_input: { subject: "dependency review" },
+    });
+    assert.equal(denied.status, 0);
+    assert.match(denied.stdout, /permissionDecision/);
+    assert.match(denied.stdout, /cannot replace native Agent dispatch/);
+
+    const allowedAfterDispatch = runEnforceHook({
+      ...state,
+      dispatchedAgents: [{ name: "review-owner" }],
+    }, {
+      tool_name: "TaskCreate",
+      tool_input: { subject: "dependency review" },
+    });
+    assert.equal(allowedAfterDispatch.status, 0);
+    assert.doesNotMatch(allowedAfterDispatch.stdout, /permissionDecision/);
+  });
+
+  test("fan_out_ready cannot bypass Thinking proof of independent lanes", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "direct_parallel_dispatch_request",
+      }),
+      currentStage: "thinking",
+      stageRuntimeControl: {
+        activationMode: "managed_stage_runtime",
+        driverMode: "managed",
+        hookGateMode: "block",
+        dispatchMode: "fan_out_ready",
+      },
+      fetchRecord: {
+        capabilitySearchPerformed: true,
+        evidence: ["real-discovery:evidence"],
+      },
+      stages: {
+        ...createInitialState({ taskClassification: "meta_theory_auto" }).stages,
+        thinking: { status: "in_progress", completedAt: null },
+      },
+      workerTaskPackets: [
+        {
+          taskPacketId: "only-lane",
+          ownerAgent: "backend",
+          roleInstanceId: "backend-1",
+          parallelGroup: "group-1",
+          mergeOwner: "meta-conductor",
+          shardScope: ["src/backend"],
+          dependsOn: [],
+        },
+      ],
+    };
+    const denied = runEnforceHook(state, {
+      tool_name: "Agent",
+      tool_input: {
+        agent_type: "backend",
+        description: "implement only-lane",
+        prompt: "implement only-lane",
+      },
+    });
+    assert.equal(denied.status, 0);
+    assert.match(denied.stdout, /permissionDecision/);
+    assert.match(denied.stdout, /Thinking fan-out readiness violation/);
+    assert.match(denied.stdout, /at least two workerTaskPackets/);
   });
 
   test("simpleMode residue in spine state cannot skip dispatch governance", () => {
@@ -3008,7 +3111,8 @@ describe("Part F2: choice surface runtime gate", async () => {
     const result = runEnforceHook(state, {
       tool_name: "spawn_agent",
       tool_input: {
-        agent_type: "meta-conductor",
+        task_name: "backend_1",
+        fork_turns: "none",
         message: "Run task-backend-001 for role backend#1",
       },
     });
@@ -3037,7 +3141,8 @@ describe("Part F2: choice surface runtime gate", async () => {
     const result = runEnforceHook(state, {
       tool_name: "spawn_agent",
       tool_input: {
-        agent_type: "backend",
+        task_name: "backend_1",
+        fork_turns: "none",
         message: "Implement backend task task-backend-001",
       },
     });
@@ -3064,7 +3169,8 @@ describe("Part F2: choice surface runtime gate", async () => {
     const result = runEnforceHook(state, {
       tool_name: "spawn_agent",
       tool_input: {
-        agent_type: "meta-prism",
+        task_name: "thinking_review",
+        fork_turns: "none",
         message: "Review Thinking packet quality as meta-prism",
       },
     });

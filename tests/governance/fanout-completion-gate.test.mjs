@@ -32,15 +32,15 @@ test("evaluateFanoutGate: Codex selected spawn lanes cannot silently serialize w
       {
         id: "w1",
         codexSpawnBinding: {
-          hostSurface: "multi_agent_v1.spawn_agent",
-          spawnMode: "typed_spawn",
+          hostSurface: "spawn_agent",
+          spawnMode: "native_task",
         },
       },
       {
         id: "w2",
         codexSpawnBinding: {
-          hostSurface: "multi_agent_v1.spawn_agent",
-          spawnMode: "typed_spawn",
+          hostSurface: "spawn_agent",
+          spawnMode: "native_task",
         },
       },
     ],

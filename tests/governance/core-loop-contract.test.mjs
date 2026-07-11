@@ -297,7 +297,7 @@ test("governed execution emits a coreLoop artifact summary", () => {
     expectedSubagentState,
   );
   assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
-  assert.equal(invocationByFamily.get("worker_task").state, "invoked");
+  assert.equal(invocationByFamily.get("worker_task").state, "blocked");
   assert.equal(invocationByFamily.get("prompt_rule").state, "applied");
   assert.equal(
     invocationByFamily.get("agent_teams_playbook").state,
@@ -380,7 +380,7 @@ test("governed execution emits a coreLoop artifact summary", () => {
   assert.equal(artifact.coreLoop.conductorConsumptionEvidence.status, "pass");
   assert.ok(artifact.coreLoop.thinkingPacket.governanceInputsConsumed.length > 0);
   assert.equal(artifact.coreLoop.executionResult.mainThreadRole, "scope_delegate_review_synthesize");
-  assert.equal(artifact.coreLoop.executionResult.actualWorkerExecution, true);
+  assert.equal(artifact.coreLoop.executionResult.actualWorkerExecution, false);
   assert.ok(artifact.coreLoop.executionResult.workerExecutionEvidence.length > 0);
   assert.ok(
     artifact.coreLoop.executionResult.workerExecutionEvidence.every(
@@ -388,11 +388,11 @@ test("governed execution emits a coreLoop artifact summary", () => {
     ),
   );
   assert.ok(
-    artifact.coreLoop.executionResult.workerExecutionEvidence.some(
-      (item) => item.liveWorkerExecution === true,
+    artifact.coreLoop.executionResult.workerExecutionEvidence.every(
+      (item) => item.liveWorkerExecution === false,
     ),
   );
-  assert.equal(artifact.coreLoop.executionResult.mergeResult.liveExecutionMerged, true);
+  assert.equal(artifact.coreLoop.executionResult.mergeResult.liveExecutionMerged, false);
   assert.equal(artifact.coreLoop.reviewPacket.upstreamQuality.critical, true);
   assert.equal(artifact.coreLoop.reviewPacket.protocolCompliance.executionEvidenceLayerIsHonest, true);
   assert.equal(artifact.coreLoop.metaReviewPacket.reviewStandardChecked, true);

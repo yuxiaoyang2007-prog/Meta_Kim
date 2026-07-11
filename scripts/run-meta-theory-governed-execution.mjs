@@ -3563,42 +3563,59 @@ function parseEnvList(value) {
     .filter(Boolean);
 }
 
-function agentTeamsCandidateSkillPaths() {
+function agentTeamsCandidateSkillPaths(runtimeName) {
   const rootParent = path.dirname(REPO_ROOT);
   const codexSkillsRoot =
     process.env.CODEX_SKILLS_DIR ||
     (homeDir() ? path.join(homeDir(), ".codex", "skills") : null);
+  const claudeSkillsRoot =
+    process.env.CLAUDE_SKILLS_DIR ||
+    (homeDir() ? path.join(homeDir(), ".claude", "skills") : null);
   const envRoots = parseEnvList(process.env.META_KIM_DEP_ROOTS);
+  const projectRuntimeCandidates = runtimeName === "claude_code"
+    ? [{
+        source: "project_claude_skill",
+        pathRef: ".claude/skills/agent-teams-playbook/SKILL.md",
+        filePath: path.join(REPO_ROOT, ".claude", "skills", AGENT_TEAMS_PLAYBOOK_ID, "SKILL.md"),
+      }]
+    : [{
+        source: "project_codex_skill",
+        pathRef: ".agents/skills/agent-teams-playbook/SKILL.md",
+        filePath: path.join(REPO_ROOT, ".agents", "skills", AGENT_TEAMS_PLAYBOOK_ID, "SKILL.md"),
+      }];
+  const runtimeGlobalCandidates = runtimeName === "claude_code"
+    ? (claudeSkillsRoot
+        ? [{
+            source: "claude_global_skill",
+            pathRef: "~/.claude/skills/agent-teams-playbook/SKILL.md",
+            filePath: path.join(claudeSkillsRoot, AGENT_TEAMS_PLAYBOOK_ID, "SKILL.md"),
+          }]
+        : [])
+    : (codexSkillsRoot
+        ? [{
+            source: "codex_global_skill",
+            pathRef: "~/.codex/skills/agent-teams-playbook/SKILL.md",
+            filePath: path.join(codexSkillsRoot, AGENT_TEAMS_PLAYBOOK_ID, "SKILL.md"),
+          }]
+        : []);
   return [
-    {
-      source: "project_codex_skill",
-      pathRef: ".agents/skills/agent-teams-playbook/SKILL.md",
-      filePath: path.join(REPO_ROOT, ".agents", "skills", AGENT_TEAMS_PLAYBOOK_ID, "SKILL.md"),
-    },
+    ...projectRuntimeCandidates,
     {
       source: "canonical_skill",
       pathRef: "canonical/skills/agent-teams-playbook/SKILL.md",
       filePath: path.join(REPO_ROOT, "canonical", "skills", AGENT_TEAMS_PLAYBOOK_ID, "SKILL.md"),
-    },
-    ...(codexSkillsRoot
-      ? [
-          {
-            source: "codex_global_skill",
-            pathRef: "~/.codex/skills/agent-teams-playbook/SKILL.md",
-            filePath: path.join(codexSkillsRoot, AGENT_TEAMS_PLAYBOOK_ID, "SKILL.md"),
-          },
-        ]
-      : []),
-    {
-      source: "sibling_dependency_checkout",
-      pathRef: "../agent-teams-playbook/SKILL.md",
-      filePath: path.join(rootParent, AGENT_TEAMS_PLAYBOOK_ID, "SKILL.md"),
     },
     ...envRoots.map((root, index) => ({
       source: `env_dependency_root_${index + 1}`,
       pathRef: `META_KIM_DEP_ROOTS[${index}]/agent-teams-playbook/SKILL.md`,
       filePath: path.join(root, AGENT_TEAMS_PLAYBOOK_ID, "SKILL.md"),
     })),
+    {
+      source: "sibling_dependency_checkout",
+      pathRef: "../agent-teams-playbook/SKILL.md",
+      filePath: path.join(rootParent, AGENT_TEAMS_PLAYBOOK_ID, "SKILL.md"),
+    },
+    ...runtimeGlobalCandidates,
   ];
 }
 
@@ -3837,7 +3854,7 @@ function buildAgentTeamsWaves(workerTaskPackets, parallelBudget = null, fanoutSa
   return waves;
 }
 
-async function resolveAgentTeamsPlaybookProvider() {
+async function resolveAgentTeamsPlaybookProvider(runtimeName) {
   const skillConfig = await readJsonIfExists(path.join(REPO_ROOT, "config", "skills.json"));
   const dependencyRegistry = await readJsonIfExists(
     path.join(REPO_ROOT, "config", "capability-index", "dependency-project-registry.json")
@@ -3858,7 +3875,7 @@ async function resolveAgentTeamsPlaybookProvider() {
       provider?.providerId === "external-skill-agent-teams-playbook"
   );
   const candidates = [];
-  for (const candidate of agentTeamsCandidateSkillPaths()) {
+  for (const candidate of agentTeamsCandidateSkillPaths(runtimeName)) {
     const skillText = await readTextIfExists(candidate.filePath);
     candidates.push({
       source: candidate.source,
@@ -3871,6 +3888,7 @@ async function resolveAgentTeamsPlaybookProvider() {
   return {
     schemaVersion: "agent-teams-playbook-provider-resolution-v0.1",
     providerId: AGENT_TEAMS_PLAYBOOK_ID,
+    runtime: runtimeName,
     configuredInSkills: Boolean(configuredSkill),
     configTargetRuntimes: configuredSkill?.targets ?? [],
     dependencyRegistryState: dependencyProject?.source?.inspectionStatus ?? "missing",
@@ -3897,11 +3915,7 @@ function buildAgentTeamsPlaybookPacket({
   const executableTasks = workerTaskPackets.filter(taskIsExecutableWorker);
   const fanoutSafetyPacket = buildFanoutSafetyPacket(executableTasks);
   const triggered = executableTasks.length >= 2;
-  const providerAvailable = (
-    providerResolution?.found === true ||
-    providerResolution?.configuredInSkills === true ||
-    providerResolution?.providerRegistryState === "registered"
-  );
+  const providerAvailable = providerResolution?.found === true;
   const parallelBudget = resolveAgentTeamsParallelBudget(executableTasks.length);
   const waves = buildAgentTeamsWaves(workerTaskPackets, parallelBudget, fanoutSafetyPacket);
   const hasParallelWave = waves.some((wave) => wave.parallelCount >= 2);
@@ -4632,7 +4646,61 @@ function normalizeHostVisibleSubagents(input) {
   return [];
 }
 
-function normalizeHostInvocationEvidence(input, { trusted = false } = {}) {
+const SYNTHETIC_EVIDENCE_REF = /^(?:self[-_ ]?test|fixture|synthetic|mock|fake|test):/i;
+const HOST_OBSERVER_ATTESTATION = Symbol("meta-kim-private-host-observer-attestation");
+
+function isIsoTimestamp(value) {
+  if (typeof value !== "string" || !value.trim()) return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed);
+}
+
+function observerArtifactContainsEvent({
+  observerArtifactPath,
+  observerArtifactSha256,
+  eventId,
+  runId,
+  sessionId,
+  providerId,
+  bindingRef,
+  resultStatus,
+  observerFormat,
+}) {
+  if (
+    typeof observerArtifactPath !== "string" ||
+    !path.isAbsolute(observerArtifactPath) ||
+    !existsSync(observerArtifactPath) ||
+    typeof observerArtifactSha256 !== "string"
+  ) return false;
+  try {
+    const content = readFileSync(observerArtifactPath, "utf8");
+    if (textSha256(content) !== observerArtifactSha256) return false;
+    const records = content
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => {
+        try { return JSON.parse(line); } catch { return null; }
+      })
+      .filter(Boolean);
+    return records.some((record) =>
+      record.eventId === eventId &&
+      record.runId === runId &&
+      record.sessionId === sessionId &&
+      (record.providerId === providerId || record.hostSurface === providerId) &&
+      record.bindingRef === bindingRef &&
+      record.resultStatus === resultStatus &&
+      record.observerFormat === observerFormat,
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function normalizeHostInvocationEvidence(input, {
+  trusted = false,
+  expectedRunId = null,
+  attestation = null,
+} = {}) {
   if (!input) return [];
   const acceptedStates = new Set(["invoked", "returned", "verified", "applied"]);
   const acceptedEvidenceKinds = new Set([
@@ -4644,6 +4712,7 @@ function normalizeHostInvocationEvidence(input, { trusted = false } = {}) {
     "mcp_tool_result",
     "command_output",
     "runtime_tool_call",
+    "hook_trigger_event",
     "host_discovery_reload",
     "durable_agent_live_invocation",
     "manual_live_proof",
@@ -4656,15 +4725,69 @@ function normalizeHostInvocationEvidence(input, { trusted = false } = {}) {
         const hostSurface = item?.hostSurface ?? item?.surface ?? null;
         const evidenceKind = item?.evidenceKind ?? "unverified_host_claim";
         const evidenceRef = item?.evidenceRef ?? item?.hostToolCallId ?? item?.artifactRef ?? null;
+        const evidenceOrigin = item?.evidenceOrigin ?? item?.producer ?? null;
+        const eventId = item?.eventId ?? item?.callId ?? item?.hostToolCallId ?? null;
+        const sessionId = item?.sessionId ?? null;
+        const runId = item?.runId ?? null;
+        const occurredAt = item?.occurredAt ?? item?.completedAt ?? null;
+        const resultStatus = item?.resultStatus ?? item?.status ?? null;
+        const bindingRef = item?.bindingRef ?? item?.taskPacketId ?? item?.laneId ?? null;
+        const observerSource = item?.observerSource ?? null;
+        const observerFormat = item?.observerFormat ?? null;
+        const observerArtifactPath = item?.observerArtifactPath ?? null;
+        const observerArtifactSha256 = item?.observerArtifactSha256 ?? null;
         const hasEvidenceRef =
           typeof evidenceRef === "string" ? evidenceRef.trim().length > 0 : Boolean(evidenceRef);
         const hasProvider = Boolean(providerId || hostSurface);
+        const externallyObserved =
+          evidenceOrigin === "external_runtime_observer" &&
+          ["stdout_jsonl", "transcript", "hook_trace", "mcp_client"].includes(observerSource) &&
+          [
+            "codex_host_jsonl_v1",
+            "claude_stream_json_v1",
+            "claude_hook_event_v1",
+            "meta_kim_hook_trace_v1",
+            "mcp_stdio_client_v1",
+          ].includes(observerFormat) &&
+          item?.synthetic !== true &&
+          !SYNTHETIC_EVIDENCE_REF.test(String(evidenceRef ?? ""));
+        const runMatches = !expectedRunId || runId === expectedRunId;
+        const occurredAtMs = Date.parse(occurredAt);
+        const nowMs = Date.now();
+        const freshEnough =
+          Number.isFinite(occurredAtMs) &&
+          occurredAtMs <= nowMs + 10 * 60 * 1000 &&
+          occurredAtMs >= nowMs - 24 * 60 * 60 * 1000;
+        const resultSucceeded = ["success", "completed", "returned", "verified", "applied"].includes(
+          resultStatus,
+        );
+        const observerArtifactVerified = observerArtifactContainsEvent({
+          observerArtifactPath,
+          observerArtifactSha256,
+          eventId,
+          runId,
+          sessionId,
+          providerId: providerId ?? hostSurface,
+          bindingRef,
+          resultStatus,
+          observerFormat,
+        });
         const proofValid =
-          trusted &&
+          attestation === HOST_OBSERVER_ATTESTATION &&
           acceptedStates.has(state) &&
           acceptedEvidenceKinds.has(evidenceKind) &&
           hasEvidenceRef &&
-          hasProvider;
+          hasProvider &&
+          externallyObserved &&
+          Boolean(eventId) &&
+          Boolean(sessionId) &&
+          Boolean(runId) &&
+          isIsoTimestamp(occurredAt) &&
+          freshEnough &&
+          resultSucceeded &&
+          Boolean(bindingRef) &&
+          runMatches &&
+          observerArtifactVerified;
         return {
           family: item?.family,
           state,
@@ -4672,10 +4795,23 @@ function normalizeHostInvocationEvidence(input, { trusted = false } = {}) {
           hostSurface,
           evidenceKind,
           evidenceRef,
+          evidenceOrigin,
+          eventId,
+          sessionId,
+          runId,
+          occurredAt,
+          resultStatus,
+          bindingRef,
+          observerSource,
+          observerFormat,
+          observerArtifactPath,
+          observerArtifactSha256,
+          observerArtifactVerified,
+          synthetic: item?.synthetic === true,
           proofValid,
           rejectionReason: proofValid
             ? null
-            : "host invocation evidence requires trusted host evidence, accepted state, accepted evidenceKind, provider/surface, and non-empty evidenceRef",
+            : "caller-supplied evidence cannot promote itself; live promotion requires a private external-observer attestation plus a fresh successful exact binding join",
           passEligible: item?.passEligible !== false && proofValid,
         };
       })
@@ -4685,15 +4821,19 @@ function normalizeHostInvocationEvidence(input, { trusted = false } = {}) {
     const trimmed = input.trim();
     if (!trimmed) return [];
     try {
-      return normalizeHostInvocationEvidence(JSON.parse(trimmed), { trusted });
+      return normalizeHostInvocationEvidence(JSON.parse(trimmed), { trusted, expectedRunId, attestation });
     } catch {
       return [];
     }
   }
-  return normalizeHostInvocationEvidence([input], { trusted });
+  return normalizeHostInvocationEvidence([input], { trusted, expectedRunId, attestation });
 }
 
-function normalizeNativeChoiceEvidence(input, { trusted = false } = {}) {
+function normalizeNativeChoiceEvidence(input, {
+  trusted = false,
+  expectedRunId = null,
+  attestation = null,
+} = {}) {
   if (!input) return [];
   const acceptedStates = new Set(["completed", "answered", "returned", "deferred", "blocked"]);
   const acceptedEvidenceKinds = new Set([
@@ -4709,14 +4849,48 @@ function normalizeNativeChoiceEvidence(input, { trusted = false } = {}) {
         const surface = item?.surface ?? item?.hostSurface ?? null;
         const evidenceKind = item?.evidenceKind ?? "unverified_native_choice_claim";
         const evidenceRef = item?.evidenceRef ?? item?.answerRef ?? item?.hostToolCallId ?? null;
+        const eventId = item?.eventId ?? item?.callId ?? item?.hostToolCallId ?? null;
+        const sessionId = item?.sessionId ?? null;
+        const runId = item?.runId ?? null;
+        const occurredAt = item?.occurredAt ?? item?.completedAt ?? null;
+        const resultStatus = item?.resultStatus ?? state;
+        const bindingRef = item?.bindingRef ?? `${item?.stage ?? "Thinking"}:native_choice:${surface ?? "unknown"}`;
+        const observerSource = item?.observerSource ?? null;
+        const observerFormat = item?.observerFormat ?? null;
+        const observerArtifactPath = item?.observerArtifactPath ?? null;
+        const observerArtifactSha256 = item?.observerArtifactSha256 ?? null;
         const hasEvidenceRef =
           typeof evidenceRef === "string" ? evidenceRef.trim().length > 0 : Boolean(evidenceRef);
+        const externallyObserved =
+          item?.evidenceOrigin === "external_runtime_observer" &&
+          ["stdout_jsonl", "transcript"].includes(observerSource) &&
+          ["codex_host_jsonl_v1", "claude_stream_json_v1"].includes(observerFormat) &&
+          item?.synthetic !== true &&
+          !SYNTHETIC_EVIDENCE_REF.test(String(evidenceRef ?? ""));
+        const observerArtifactVerified = observerArtifactContainsEvent({
+          observerArtifactPath,
+          observerArtifactSha256,
+          eventId,
+          runId,
+          sessionId,
+          providerId: surface,
+          bindingRef,
+          resultStatus,
+          observerFormat,
+        });
         const proofValid =
-          trusted &&
+          attestation === HOST_OBSERVER_ATTESTATION &&
           acceptedStates.has(state) &&
           acceptedEvidenceKinds.has(evidenceKind) &&
           hasEvidenceRef &&
-          Boolean(surface);
+          Boolean(surface) &&
+          externallyObserved &&
+          Boolean(eventId) &&
+          Boolean(sessionId) &&
+          Boolean(runId) &&
+          (!expectedRunId || runId === expectedRunId) &&
+          isIsoTimestamp(occurredAt) &&
+          observerArtifactVerified;
         return {
           runtime: item?.runtime ?? null,
           stage: item?.stage ?? item?.choiceStage ?? null,
@@ -4724,6 +4898,17 @@ function normalizeNativeChoiceEvidence(input, { trusted = false } = {}) {
           surface,
           evidenceKind,
           evidenceRef,
+          eventId,
+          sessionId,
+          runId,
+          occurredAt,
+          resultStatus,
+          bindingRef,
+          observerSource,
+          observerFormat,
+          observerArtifactPath,
+          observerArtifactSha256,
+          observerArtifactVerified,
           proofValid,
           passEligible:
             item?.passEligible !== false &&
@@ -4732,7 +4917,7 @@ function normalizeNativeChoiceEvidence(input, { trusted = false } = {}) {
           blockedEligible: proofValid && evidenceKind === "nativeChoiceSurfaceBlocked",
           rejectionReason: proofValid
             ? null
-            : "native choice evidence requires trusted host evidence, accepted state, accepted evidenceKind, surface, and non-empty evidenceRef",
+            : "caller-supplied native-choice evidence cannot promote itself; promotion requires private external-observer attestation and an exact host-event join",
         };
       })
       .filter((item) => item.surface || item.evidenceKind !== "unverified_native_choice_claim");
@@ -4741,12 +4926,12 @@ function normalizeNativeChoiceEvidence(input, { trusted = false } = {}) {
     const trimmed = input.trim();
     if (!trimmed) return [];
     try {
-      return normalizeNativeChoiceEvidence(JSON.parse(trimmed), { trusted });
+      return normalizeNativeChoiceEvidence(JSON.parse(trimmed), { trusted, expectedRunId, attestation });
     } catch {
       return [];
     }
   }
-  return normalizeNativeChoiceEvidence([input], { trusted });
+  return normalizeNativeChoiceEvidence([input], { trusted, expectedRunId, attestation });
 }
 
 function compactCommand(command, args = []) {
@@ -4804,11 +4989,11 @@ function buildCapabilityInvocationProbePacket({
       status: "not_run",
       evidenceKind: "probe_not_requested",
       requiredFamilies,
-      invokedFamilies: [],
+      callableFamilies: [],
       missingFamilies: requiredFamilies,
       probes: [],
       truthBoundary:
-        "Discovery and binding can be validated without running local invocation probes, but product-experience pass requires fresh probe evidence for callable local families.",
+        "Discovery and binding can be validated without local readiness probes. Probe results never count as live host invocation evidence.",
     };
   }
   const probes = [];
@@ -4854,12 +5039,62 @@ function buildCapabilityInvocationProbePacket({
     status: missingFamilies.length === 0 ? "pass" : "partial",
     evidenceKind: missingFamilies.length === 0 ? "fresh_invocation_probe" : "probe_partial",
     requiredFamilies,
-    invokedFamilies: [...passedFamilies],
+    callableFamilies: [...passedFamilies],
     missingFamilies,
     probes,
     truthBoundary:
-      "These probes are real local process invocations for callable local families. They do not prove host Agent/subagent, Skill, hook-trigger, or Agent Team execution.",
+      "These are local readiness probes only. They prove that a probe command is callable, not that the Thinking-selected MCP, command, runtime tool, hook, skill, or agent provider was invoked by the host.",
   };
+}
+
+function buildSelectedInvocationBindings({
+  dynamicWorkflowRuntimePacket,
+  agentTeamsPlaybookPacket,
+  runtimeSubagentInvocationPacket,
+}) {
+  const rows = dynamicWorkflowRuntimePacket?.capabilityBindingRows ?? [];
+  const bindings = [];
+  const add = ({ family, providerId, bindingRef, taskPacketId = null }) => {
+    if (!providerId || !bindingRef) return;
+    if (bindings.some((item) => item.family === family && item.bindingRef === bindingRef)) return;
+    bindings.push({ family, providerId, bindingRef, taskPacketId });
+  };
+  for (const row of rows) {
+    const taskPacketId = row.taskPacketId ?? row.laneId ?? "unknown-task";
+    for (const providerId of row.skills ?? []) {
+      add({ family: "skill", providerId, bindingRef: `${taskPacketId}:skill:${providerId}`, taskPacketId });
+    }
+    for (const providerId of row.mcp ?? []) {
+      add({ family: "mcp", providerId, bindingRef: `${taskPacketId}:mcp:${providerId}`, taskPacketId });
+    }
+    for (const providerId of row.commands ?? []) {
+      add({ family: "command_script", providerId, bindingRef: `${taskPacketId}:command_script:${providerId}`, taskPacketId });
+    }
+    for (const providerId of row.runtimeTools ?? []) {
+      add({ family: "runtime_tool", providerId, bindingRef: `${taskPacketId}:runtime_tool:${providerId}`, taskPacketId });
+    }
+    for (const hook of row.hookMatches ?? []) {
+      const providerId = hook?.hookId ?? hook?.id;
+      add({ family: "hook", providerId, bindingRef: `${taskPacketId}:hook:${providerId}`, taskPacketId });
+    }
+    if (runtimeSubagentInvocationPacket?.fanoutEligible) {
+      const providerId = row.owner ?? row.roleDisplayName ?? "runtime-subagent";
+      add({
+        family: "agent_subagent",
+        providerId,
+        bindingRef: `${taskPacketId}:agent_subagent:${providerId}`,
+        taskPacketId,
+      });
+    }
+  }
+  if (agentTeamsPlaybookPacket?.selected === true) {
+    add({
+      family: "agent_teams_playbook",
+      providerId: "agent-teams-playbook",
+      bindingRef: "run:agent_teams_playbook:agent-teams-playbook",
+    });
+  }
+  return bindings;
 }
 
 function buildRuntimeInvocationPlanPacket({
@@ -4869,52 +5104,65 @@ function buildRuntimeInvocationPlanPacket({
   capabilityInvocationProbePacket,
   hostInvocationEvidence,
   hostInvocationEvidenceTrusted = false,
+  runId = null,
 }) {
   const bindingRows = dynamicWorkflowRuntimePacket?.capabilityBindingRows ?? [];
   const evidence = normalizeHostInvocationEvidence(hostInvocationEvidence, {
     trusted: hostInvocationEvidenceTrusted,
+    expectedRunId: runId,
   });
-  const selectedFamilies = new Set();
-  if (runtimeSubagentInvocationPacket?.fanoutEligible) selectedFamilies.add("agent_subagent");
-  if (agentTeamsPlaybookPacket?.selected === true) selectedFamilies.add("agent_teams_playbook");
-  if (bindingRows.some((row) => row.skills.length > 0)) selectedFamilies.add("skill");
-  if (bindingRows.some((row) => row.mcp.length > 0)) selectedFamilies.add("mcp");
-  if (bindingRows.some((row) => row.commands.length > 0)) selectedFamilies.add("command_script");
-  if (bindingRows.some((row) => row.runtimeTools.length > 0)) selectedFamilies.add("runtime_tool");
+  const requiredBindings = buildSelectedInvocationBindings({
+    dynamicWorkflowRuntimePacket,
+    agentTeamsPlaybookPacket,
+    runtimeSubagentInvocationPacket,
+  });
+  const selectedFamilies = new Set(requiredBindings.map((binding) => binding.family));
 
-  const invokedByProbe = new Set(capabilityInvocationProbePacket?.invokedFamilies ?? []);
-  const invokedByHost = new Set(
-    evidence
-      .filter((item) =>
-        item.passEligible === true &&
-        ["invoked", "returned", "verified", "applied"].includes(item.state)
-      )
-      .map((item) => item.family),
+  const satisfiedBindings = requiredBindings.filter((binding) =>
+    evidence.some((item) =>
+      item.passEligible === true &&
+      item.family === binding.family &&
+      item.providerId === binding.providerId &&
+      item.bindingRef === binding.bindingRef &&
+      ["invoked", "returned", "verified", "applied"].includes(item.state),
+    ),
   );
-  const satisfiedFamilies = new Set([...invokedByProbe, ...invokedByHost]);
+  const satisfiedBindingRefs = new Set(satisfiedBindings.map((binding) => binding.bindingRef));
   const requiredFamilies = [...selectedFamilies];
-  const missingFamilies = requiredFamilies.filter((family) => !satisfiedFamilies.has(family));
+  const missingBindings = requiredBindings.filter(
+    (binding) => !satisfiedBindingRefs.has(binding.bindingRef),
+  );
+  const missingFamilies = requiredFamilies.filter((family) =>
+    missingBindings.some((binding) => binding.family === family),
+  );
+  const invokedFamilies = requiredFamilies.filter((family) =>
+    !missingBindings.some((binding) => binding.family === family),
+  );
   return {
     schemaVersion: "runtime-invocation-plan-v0.1",
+    runId,
     status: missingFamilies.length === 0 ? "pass" : "partial",
     requiredFamilies,
-    invokedFamilies: requiredFamilies.filter((family) => satisfiedFamilies.has(family)),
+    invokedFamilies,
     missingFamilies,
+    requiredBindings,
+    invokedBindings: satisfiedBindings,
+    missingBindings,
     evidence,
     requests: requiredFamilies.map((family) => ({
       family,
-      state: satisfiedFamilies.has(family) ? "invoked_or_applied" : "selected_not_invoked",
+      state: invokedFamilies.includes(family) ? "invoked_or_applied" : "selected_not_invoked",
       requiredEvidence:
         family === "agent_subagent" || family === "agent_teams_playbook"
           ? "host Agent/spawn_agent/Agent Team tool-call evidence"
           : family === "skill"
             ? "host skill activation evidence or skill-applied evidence"
             : family === "mcp"
-              ? "MCP tool response or fresh MCP self-test probe"
+              ? "externally observed MCP tools/call response"
               : family === "command_script"
-                ? "fresh command output with exit code"
-                : "runtime tool-call/probe artifact",
-      passEligible: satisfiedFamilies.has(family),
+                ? "externally observed selected-command output with exit code"
+                : "externally observed selected runtime tool-call result",
+      passEligible: invokedFamilies.includes(family),
     })),
     runtimePolicies: {
       codex:
@@ -4945,10 +5193,17 @@ function hostInvocationActionForFamily(family) {
     },
     mcp: {
       codex:
-        "Call the selected Codex MCP tool or run a fresh MCP tool probe and return mcp_tool_result evidence.",
+        "Call the exact Thinking-selected Codex MCP provider/tool binding and return its mcp_tool_result evidence. A catalog or self-test is not sufficient.",
       claudeCode:
-        "Call the selected Claude Code MCP tool or run a fresh MCP tool probe and return mcp_tool_result evidence.",
+        "Call the exact Thinking-selected Claude Code MCP provider/tool binding and return its mcp_tool_result evidence. A catalog or self-test is not sufficient.",
       requiredEvidenceKind: "mcp_tool_result",
+    },
+    hook: {
+      codex:
+        "Trigger the exact selected Codex hook binding during the selected host event and return correlated hook_trigger_event evidence.",
+      claudeCode:
+        "Trigger the exact selected Claude Code hook binding during the selected host event and return correlated hook_trigger_event evidence.",
+      requiredEvidenceKind: "hook_trigger_event",
     },
     command_script: {
       codex:
@@ -4979,49 +5234,73 @@ function hostInvocationActionForFamily(family) {
 }
 
 function buildHostInvocationRequestPacket({ runtimeInvocationPlanPacket, workerTaskPackets }) {
-  const requests = (runtimeInvocationPlanPacket?.requests ?? []).map((request) => {
-    const action = hostInvocationActionForFamily(request.family);
+  const missingBindings = runtimeInvocationPlanPacket?.missingBindings ?? [];
+  const requests = missingBindings.map((binding) => {
+    const action = hostInvocationActionForFamily(binding.family);
     return {
-      family: request.family,
-      status: request.passEligible ? "satisfied" : "pending_host_invocation",
-      reason: request.passEligible
-        ? "Fresh accepted invocation evidence already satisfies this selected family."
-        : "Selected executable family lacks accepted trusted host evidence.",
+      requestId: stableId(
+        "host-invocation-request",
+        `${runtimeInvocationPlanPacket?.runId ?? "unknown-run"}:${binding.bindingRef}`,
+      ),
+      family: binding.family,
+      providerId: binding.providerId,
+      bindingRef: binding.bindingRef,
+      taskPacketId: binding.taskPacketId ?? null,
+      status: "pending_host_invocation",
+      reason: "This exact selected provider binding lacks accepted private-attested host evidence.",
       selectedWorkerTaskRefs:
-        request.family === "agent_subagent" || request.family === "agent_teams_playbook"
-          ? (workerTaskPackets ?? []).map((packet) => packet.taskPacketId)
+        binding.family === "agent_subagent" || binding.family === "agent_teams_playbook"
+          ? (workerTaskPackets ?? [])
+              .filter((packet) => !binding.taskPacketId || packet.taskPacketId === binding.taskPacketId)
+              .map((packet) => packet.taskPacketId)
           : [],
       hostActions: {
         codex: action.codex,
         claudeCode: action.claudeCode,
       },
       requiredEvidence: {
-        state: request.family === "skill" ? "applied" : "invoked/returned/verified",
+        state: binding.family === "skill" ? "applied" : "invoked/returned/verified",
         evidenceKind: action.requiredEvidenceKind,
-        requiredFields: [
-          "family",
-          "state",
-          "providerId or hostSurface",
-          "evidenceKind",
-          "evidenceRef",
-        ],
+        exactValues: {
+          runId: runtimeInvocationPlanPacket?.runId ?? null,
+          providerId: binding.providerId,
+          bindingRef: binding.bindingRef,
+          evidenceKind: action.requiredEvidenceKind,
+        },
+        requiredFields: {
+          run: "runId must equal exactValues.runId",
+          session: "sessionId must identify the real host session",
+          event: "eventId must identify the correlated host call/result event",
+          provider: "providerId must equal exactValues.providerId, not only the family",
+          binding: "bindingRef must equal exactValues.bindingRef",
+          timestamp: "occurredAt must be a fresh ISO-8601 host timestamp",
+          result: "resultStatus must be an explicit successful terminal result",
+          artifactHash: "observerArtifactSha256 must match the immutable observer artifact bytes",
+        },
+        familySpecificRule:
+          binding.family === "mcp"
+            ? "Evidence must be the exact selected provider tool call (mcp_tool_result); tools/list, catalog output, and a different MCP tool do not satisfy this request."
+            : binding.family === "hook"
+              ? "EvidenceKind must be hook_trigger_event and must correlate the selected hook provider to its triggering host event."
+              : null,
         trustedAdapterOnly: true,
       },
-      passEligible: request.passEligible,
+      passEligible: false,
     };
   });
-  const pending = requests.filter((request) => request.status !== "satisfied");
   return {
-    schemaVersion: "host-invocation-request-v0.1",
-    status: pending.length === 0 ? "pass" : "partial",
+    schemaVersion: "host-invocation-request-v0.2",
+    runId: runtimeInvocationPlanPacket?.runId ?? null,
+    status: requests.length === 0 ? "pass" : "partial",
     requiredFamilies: runtimeInvocationPlanPacket?.requiredFamilies ?? [],
-    pendingFamilies: pending.map((request) => request.family),
+    pendingFamilies: [...new Set(requests.map((request) => request.family))],
+    pendingBindingCount: requests.length,
     requests,
     adapterContract: {
       boundary:
         "The Node governed runner emits requests; Claude Code/Codex host adapters must perform real host calls and return trusted evidence. Requests are not execution proof.",
       trustedEvidenceInput:
-        "Pass hostInvocationEvidence from the host adapter with hostInvocationEvidenceTrusted=true only after the host call returns.",
+        "Do not feed caller-authored evidence back into the governed runner. A separate post-process observer must attest and join successful host events to exact selected bindings after the host exits.",
       failIf:
         "A request, markdown report, CLI flag, env var, or host UI badge is treated as invoked without a trusted evidenceRef from the actual host surface.",
     },
@@ -5117,7 +5396,18 @@ function buildDurableAgentLifecyclePacket({
   };
 }
 
+export function evaluateInvocationCoverage({
+  missingBindings = [],
+  capabilityInvocationProbePacket = null,
+} = {}) {
+  return {
+    realStatus: missingBindings.length === 0 ? "pass" : "partial",
+    callableStatus: capabilityInvocationProbePacket?.status ?? "missing",
+  };
+}
+
 function buildCapabilityInvocationTruthPacket({
+  runId,
   orchestrationReport,
   dynamicWorkflowRuntimePacket,
   peerAgentMeshPacket,
@@ -5128,6 +5418,7 @@ function buildCapabilityInvocationTruthPacket({
   agentTeamsPlaybookPacket,
   capabilityInvocationProbePacket,
   runtimeSubagentInvocationPacket,
+  runtimeInvocationPlanPacket,
 }) {
   const bindingRows = dynamicWorkflowRuntimePacket?.capabilityBindingRows ?? [];
   const hasSelected = (selector) => bindingRows.some(selector);
@@ -5142,12 +5433,9 @@ function buildCapabilityInvocationTruthPacket({
       (item) => item.capabilityType,
     ),
   );
-  const probeByFamily = new Map(
-    (capabilityInvocationProbePacket?.probes ?? []).map((probe) => [probe.family, probe]),
-  );
-  const familyInvokedByProbe = (family) => probeByFamily.get(family)?.status === "pass";
   const normalizedHostInvocationEvidence = normalizeHostInvocationEvidence(hostInvocationEvidence, {
     trusted: hostInvocationEvidenceTrusted,
+    expectedRunId: runId,
   });
   const hostEvidenceForFamily = (family) =>
     normalizedHostInvocationEvidence.filter(
@@ -5159,6 +5447,13 @@ function buildCapabilityInvocationTruthPacket({
     );
   const familyAppliedByHost = (family) =>
     hostEvidenceForFamily(family).some((item) => item.state === "applied");
+  const requiredBindings = runtimeInvocationPlanPacket?.requiredBindings ?? [];
+  const missingBindings = runtimeInvocationPlanPacket?.missingBindings ?? [];
+  const familyHasRequiredBindings = (family) =>
+    requiredBindings.some((binding) => binding.family === family);
+  const familyFullyObserved = (family) =>
+    familyHasRequiredBindings(family) &&
+    !missingBindings.some((binding) => binding.family === family);
   const hostEvidenceRefs = (family) =>
     hostEvidenceForFamily(family)
       .map((item) => item.evidenceRef ?? `${item.evidenceKind}:${item.providerId}`)
@@ -5190,7 +5485,7 @@ function buildCapabilityInvocationTruthPacket({
   const rows = [
     makeRow({
       family: "agent_subagent",
-      state: familyInvokedByHost("agent_subagent") || externalAgentSpawned
+      state: familyFullyObserved("agent_subagent") || externalAgentSpawned
         ? "invoked"
         : runtimeSubagentInvocationPacket?.status === "unavailable"
           ? "unavailable"
@@ -5203,7 +5498,7 @@ function buildCapabilityInvocationTruthPacket({
         ? peerAgentMeshPacket?.peers?.length ?? 0
         : 0,
       invokedCount:
-        familyInvokedByHost("agent_subagent") || externalAgentSpawned
+        familyFullyObserved("agent_subagent") || externalAgentSpawned
           ? Math.max(1, peerAgentMeshPacket?.peers?.length ?? 0)
           : 0,
       evidenceRefs: [
@@ -5213,7 +5508,7 @@ function buildCapabilityInvocationTruthPacket({
         "coreLoop.runtimeInvocationPlanPacket.evidence[family=agent_subagent]",
       ],
       invocationEvidenceRefs: hostEvidenceRefs("agent_subagent"),
-      truthBoundary: familyInvokedByHost("agent_subagent") || externalAgentSpawned
+      truthBoundary: familyFullyObserved("agent_subagent") || externalAgentSpawned
         ? "A runtime Agent/subagent tool invocation is attached."
         : runtimeSubagentInvocationPacket?.degradationReason ??
           "No runtime Agent/subagent tool invocation evidence is attached; peer workers are run-scoped structural workers only.",
@@ -5255,9 +5550,9 @@ function buildCapabilityInvocationTruthPacket({
     }),
     makeRow({
       family: "skill",
-      state: familyInvokedByHost("skill")
+      state: familyFullyObserved("skill") && familyInvokedByHost("skill")
         ? "invoked"
-        : familyAppliedByHost("skill")
+        : familyFullyObserved("skill") && familyAppliedByHost("skill")
           ? "applied"
           : hasSelected((row) => row.skills.length > 0)
             ? "selected_not_invoked"
@@ -5279,7 +5574,7 @@ function buildCapabilityInvocationTruthPacket({
     }),
     makeRow({
       family: "mcp",
-      state: familyInvokedByHost("mcp") || familyInvokedByProbe("mcp")
+      state: familyFullyObserved("mcp")
         ? "invoked"
         : hasSelected((row) => row.mcp.length > 0)
           ? "selected_not_invoked"
@@ -5287,40 +5582,35 @@ function buildCapabilityInvocationTruthPacket({
           ? "discovered_not_selected"
           : "not_required",
       selectedCount: bindingRows.reduce((sum, row) => sum + row.mcp.length, 0),
-      invokedCount: familyInvokedByHost("mcp")
-        ? hostEvidenceForFamily("mcp").length
-        : familyInvokedByProbe("mcp")
-          ? 1
-          : 0,
+      invokedCount: familyInvokedByHost("mcp") ? hostEvidenceForFamily("mcp").length : 0,
       evidenceRefs: [
         "coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingRows[].mcp",
         "coreLoop.capabilityInvocationProbePacket.probes[family=mcp]",
         "coreLoop.runtimeInvocationPlanPacket.evidence[family=mcp]",
       ],
-      invocationEvidenceRefs: [
-        ...hostEvidenceRefs("mcp"),
-        ...(familyInvokedByProbe("mcp")
-          ? ["coreLoop.capabilityInvocationProbePacket.probes[family=mcp]"]
-          : []),
-      ],
+      invocationEvidenceRefs: hostEvidenceRefs("mcp"),
       truthBoundary:
-        "MCP provider/tool binding is not an MCP call. Live MCP invocation needs tool-call or self-test evidence attached to the run.",
+        "MCP provider/tool binding and --self-test catalog output are not MCP calls. Live MCP invocation needs an externally observed tools/call result attached to this run.",
       mustNotClaimAs: ["mcp_tool_called", "external_provider_invoked"],
     }),
     makeRow({
       family: "hook",
-      state: hasSelected((row) => row.hookMatches.length > 0)
-        ? "selected_not_invoked"
-        : inventoryTypes.has("hook")
-          ? "discovered_not_selected"
-          : "not_required",
+      state: familyFullyObserved("hook")
+        ? "invoked"
+        : hasSelected((row) => row.hookMatches.length > 0)
+          ? "selected_not_invoked"
+          : inventoryTypes.has("hook")
+            ? "discovered_not_selected"
+            : "not_required",
       selectedCount: bindingRows.reduce((sum, row) => sum + row.hookMatches.length, 0),
+      invokedCount: familyInvokedByHost("hook") ? hostEvidenceForFamily("hook").length : 0,
       evidenceRefs: [
         "coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingRows[].hookMatches",
         "canonical/runtime-assets/claude/hooks",
       ],
+      invocationEvidenceRefs: hostEvidenceRefs("hook"),
       truthBoundary:
-        "Hook matches are last-resort fuse bindings. A hook file or match is not a hook trigger event.",
+        "Hook matches are last-resort fuse bindings. A hook file, matcher, or sample output is not a trigger; live proof requires a correlated externally observed hook_trigger_event.",
       mustNotClaimAs: ["hook_triggered", "hook_blocked_or_allowed"],
     }),
     makeRow({
@@ -5341,7 +5631,7 @@ function buildCapabilityInvocationTruthPacket({
     }),
     makeRow({
       family: "command_script",
-      state: familyInvokedByHost("command_script") || familyInvokedByProbe("command_script")
+      state: familyFullyObserved("command_script")
         ? "invoked"
         : hasSelected((row) => row.commands.length > 0)
           ? "selected_not_invoked"
@@ -5351,27 +5641,20 @@ function buildCapabilityInvocationTruthPacket({
       selectedCount: bindingRows.reduce((sum, row) => sum + row.commands.length, 0),
       invokedCount: familyInvokedByHost("command_script")
         ? hostEvidenceForFamily("command_script").length
-        : familyInvokedByProbe("command_script")
-          ? 1
-          : 0,
+        : 0,
       evidenceRefs: [
         "coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingRows[].commands",
         "coreLoop.capabilityInvocationProbePacket.probes[family=command_script]",
         "coreLoop.runtimeInvocationPlanPacket.evidence[family=command_script]",
       ],
-      invocationEvidenceRefs: [
-        ...hostEvidenceRefs("command_script"),
-        ...(familyInvokedByProbe("command_script")
-          ? ["coreLoop.capabilityInvocationProbePacket.probes[family=command_script]"]
-          : []),
-      ],
+      invocationEvidenceRefs: hostEvidenceRefs("command_script"),
       truthBoundary:
-        "A command selected for a worker or validator is not marked invoked here without fresh command output on this run artifact.",
+        "A readiness validator is not the Thinking-selected command. Live proof requires externally observed output from the selected command binding on this run.",
       mustNotClaimAs: ["command_executed"],
     }),
     makeRow({
       family: "runtime_tool",
-      state: familyInvokedByHost("runtime_tool") || familyInvokedByProbe("runtime_tool")
+      state: familyFullyObserved("runtime_tool")
         ? "invoked"
         : hasSelected((row) => row.runtimeTools.length > 0)
           ? "selected_not_invoked"
@@ -5381,20 +5664,13 @@ function buildCapabilityInvocationTruthPacket({
       selectedCount: bindingRows.reduce((sum, row) => sum + row.runtimeTools.length, 0),
       invokedCount: familyInvokedByHost("runtime_tool")
         ? hostEvidenceForFamily("runtime_tool").length
-        : familyInvokedByProbe("runtime_tool")
-          ? 1
-          : 0,
+        : 0,
       evidenceRefs: [
         "coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingRows[].runtimeTools",
         "coreLoop.capabilityInvocationProbePacket.probes[family=runtime_tool]",
         "coreLoop.runtimeInvocationPlanPacket.evidence[family=runtime_tool]",
       ],
-      invocationEvidenceRefs: [
-        ...hostEvidenceRefs("runtime_tool"),
-        ...(familyInvokedByProbe("runtime_tool")
-          ? ["coreLoop.capabilityInvocationProbePacket.probes[family=runtime_tool]"]
-          : []),
-      ],
+      invocationEvidenceRefs: hostEvidenceRefs("runtime_tool"),
       truthBoundary:
         "Runtime tools selected by loadout are not claimed as called unless tool-call evidence is attached.",
       mustNotClaimAs: ["runtime_tool_called"],
@@ -5402,7 +5678,7 @@ function buildCapabilityInvocationTruthPacket({
     makeRow({
       family: "agent_teams_playbook",
       state:
-        familyInvokedByHost("agent_teams_playbook")
+        familyFullyObserved("agent_teams_playbook")
           ? "invoked"
           : agentTeamsPlaybookPacket?.status === "pass"
           ? "selected_not_invoked"
@@ -5451,48 +5727,29 @@ function buildCapabilityInvocationTruthPacket({
     familyInvokedByHost("agent_subagent");
   const noMcpCallOverclaim =
     rows.find((row) => row.family === "mcp")?.state !== "invoked" ||
-    familyInvokedByProbe("mcp") ||
     familyInvokedByHost("mcp");
   const noCommandCallOverclaim =
     rows.find((row) => row.family === "command_script")?.state !== "invoked" ||
-    familyInvokedByProbe("command_script") ||
     familyInvokedByHost("command_script");
   const noRuntimeToolOverclaim =
     rows.find((row) => row.family === "runtime_tool")?.state !== "invoked" ||
-    familyInvokedByProbe("runtime_tool") ||
     familyInvokedByHost("runtime_tool");
-  const noHookTriggerOverclaim = rows.find((row) => row.family === "hook")?.state !== "invoked";
+  const noHookTriggerOverclaim =
+    rows.find((row) => row.family === "hook")?.state !== "invoked" ||
+    familyInvokedByHost("hook");
   const noHostUiSubagentOverclaim = rows
     .find((row) => row.family === "app_visible_subagent")
     ?.mustNotClaimAs.includes("runner_agent_subagent_invocation");
   const noAgentTeamsPlaybookOverclaim =
     rows.find((row) => row.family === "agent_teams_playbook")?.state !== "invoked" ||
     familyInvokedByHost("agent_teams_playbook");
-  const realInvocationRequiredFamilies = rows
-    .filter((row) =>
-      [
-        "agent_subagent",
-        "skill",
-        "mcp",
-        "command_script",
-        "runtime_tool",
-        "agent_teams_playbook",
-      ].includes(row.family) &&
-      row.selectedCount > 0
-    )
-    .map((row) => row.family);
-  const realInvocationMissingFamilies = rows
-    .filter((row) =>
-      realInvocationRequiredFamilies.includes(row.family) &&
-      !["invoked", "applied"].includes(row.state)
-    )
-    .map((row) => row.family);
-  const callableProbeRequiredFamilies = capabilityInvocationProbePacket?.requiredFamilies ?? [];
-  const callableProbePass =
-    callableProbeRequiredFamilies.length === 0 ||
-    capabilityInvocationProbePacket?.status === "pass";
-  const selectedExecutableInvocationPass =
-    realInvocationMissingFamilies.length === 0 && callableProbePass;
+  const realInvocationRequiredFamilies = [...new Set(requiredBindings.map((binding) => binding.family))];
+  const realInvocationMissingFamilies = [...new Set(missingBindings.map((binding) => binding.family))];
+  const invocationCoverage = evaluateInvocationCoverage({
+    missingBindings,
+    capabilityInvocationProbePacket,
+  });
+  const selectedExecutableInvocationPass = invocationCoverage.realStatus === "pass";
   const pass =
     rows.length >= 10 &&
     statesValid &&
@@ -5509,21 +5766,21 @@ function buildCapabilityInvocationTruthPacket({
     schemaVersion: "capability-invocation-truth-v0.3",
     status: pass ? "pass" : "partial",
     evidenceKind:
-      pass && capabilityInvocationProbePacket?.status === "pass"
-        ? "product_experience_pass"
+      pass && normalizedHostInvocationEvidence.some((item) => item.passEligible)
+        ? "live_host_observed"
         : "truth_boundary_partial",
     stateTaxonomy: CAPABILITY_INVOCATION_STATES,
     rows,
     stateCounts,
     callableInvocationCoverage: {
-      status: capabilityInvocationProbePacket?.status ?? "missing",
+      status: invocationCoverage.callableStatus,
       requiredFamilies: capabilityInvocationProbePacket?.requiredFamilies ?? [],
-      invokedFamilies: capabilityInvocationProbePacket?.invokedFamilies ?? [],
+      callableFamilies: capabilityInvocationProbePacket?.callableFamilies ?? [],
       missingFamilies: capabilityInvocationProbePacket?.missingFamilies ?? [],
       evidenceRef: "coreLoop.capabilityInvocationProbePacket",
     },
     realInvocationCoverage: {
-      status: selectedExecutableInvocationPass ? "pass" : "partial",
+      status: invocationCoverage.realStatus,
       requiredFamilies: realInvocationRequiredFamilies,
       invokedFamilies: rows
         .filter((row) =>
@@ -5532,10 +5789,14 @@ function buildCapabilityInvocationTruthPacket({
         )
         .map((row) => row.family),
       missingFamilies: realInvocationMissingFamilies,
-      hostEvidenceCount: normalizedHostInvocationEvidence.length,
+      requiredBindings,
+      invokedBindings: runtimeInvocationPlanPacket?.invokedBindings ?? [],
+      missingBindings,
+      hostEvidenceCount: normalizedHostInvocationEvidence.filter((item) => item.passEligible).length,
+      rejectedEvidenceCount: normalizedHostInvocationEvidence.filter((item) => !item.passEligible).length,
       evidenceRef: "coreLoop.runtimeInvocationPlanPacket",
       rule:
-        "Selected executable capability families must have fresh host, MCP, command, runtime-tool, or skill-application evidence; selected_not_invoked is never execution pass.",
+        "Selected executable capability families must have externally observed, run-bound host evidence. Readiness probes, fixtures, self-tests, configuration, and selected_not_invoked never satisfy live invocation coverage.",
     },
     requiredFamilies: [
       "agent_subagent",
@@ -5854,6 +6115,7 @@ const PRODUCT_EXPERIENCE_CORE_GOAL_IDS = ["P-102", "P-103", "P-104"];
 const PRODUCT_EXPERIENCE_SUPPORT_GATE_IDS = ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"];
 
 function buildNativeChoiceSurfaceGate({
+  runId,
   cardPlanPacket,
   dynamicWorkflowDecisionRecord,
   nativeChoiceEvidence,
@@ -5869,6 +6131,7 @@ function buildNativeChoiceSurfaceGate({
   ];
   const evidence = normalizeNativeChoiceEvidence(nativeChoiceEvidence, {
     trusted: nativeChoiceEvidenceTrusted,
+    expectedRunId: runId,
   });
   const acceptedAnswers = evidence.filter((item) => item.passEligible === true);
   const blockedEvidence = evidence.filter((item) => item.blockedEligible === true);
@@ -6154,6 +6417,7 @@ function buildAutomationDecisionBoundary({ userPerceptionPacket, capabilityInvoc
 }
 
 function buildProductExperiencePacket({
+  runId,
   goalContractPacket,
   langGraphRunPacket,
   dynamicWorkflowRuntimePacket,
@@ -6242,6 +6506,7 @@ function buildProductExperiencePacket({
         "Goal lacks verification, constraints, boundaries, iteration policy, stop/pause, or contains placeholders.",
     },
     buildNativeChoiceSurfaceGate({
+      runId,
       cardPlanPacket,
       dynamicWorkflowDecisionRecord,
       nativeChoiceEvidence,
@@ -6275,7 +6540,7 @@ function buildProductExperiencePacket({
       "agent_teams_playbook_selected_as_live_agent_team",
       "automation_assistance_as_human_decision",
     ],
-    acceptedEvidenceTier: "product_experience_pass",
+    acceptedEvidenceTier: "live_host_observed",
   };
   const status = goals.every((goal) => goal.status === "pass") &&
     supportGates.every((gate) => gate.status === "pass") &&
@@ -6286,7 +6551,7 @@ function buildProductExperiencePacket({
   return {
     schemaVersion: "product-experience-core-goals-v0.1",
     status,
-    evidenceTier: status,
+    evidenceTier: status === "product_experience_pass" ? "live_host_observed" : "structural_only",
     nativeRuntimeBoundary:
       "This proves the default Meta_Kim governed product layer; it does not claim Claude Code/Codex native live UI by itself.",
     coreGoalIds: PRODUCT_EXPERIENCE_CORE_GOAL_IDS,
@@ -6526,7 +6791,7 @@ function buildCoreLoopArtifact({
       packet.executionMode === "approval_gate" || packet.externalWriteBoundary === true;
     const acceptanceEvidence = (packet.acceptanceCriteria ?? []).map((criterion, index) => ({
       criterion,
-      status: "pass",
+      status: "pending_execution",
       evidenceRef: packet.evidenceRefs?.[index] ?? packet.taskPacketId,
     }));
     return {
@@ -6534,18 +6799,18 @@ function buildCoreLoopArtifact({
       owner: packet.owner,
       ownerAgent: packet.ownerAgent,
       executionMode: packet.executionMode,
-      status: requiresApproval ? "blocked_or_needs_approval" : "executed",
+      status: requiresApproval ? "blocked_or_needs_approval" : "planned_not_executed",
       resultKind: requiresApproval
         ? "approval_gate"
-        : "run_scoped_worker_result",
+        : "run_scoped_worker_plan",
       evidenceKind: requiresApproval
         ? "approval_required"
-        : "local_worker_execution",
+        : "structural_worker_plan",
       output: requiresApproval
         ? null
         : {
             declaredOutput: packet.output ?? "worker_result",
-            producedBy: "run_scoped_local_worker_executor",
+            producedBy: "governed_runner_planner",
             ownerBoundary: packet.ownerAgent ?? packet.owner,
             shardScope: packet.shardScope ?? packet.businessFlowLaneLabel ?? packet.workType,
             acceptanceEvidence,
@@ -6557,44 +6822,43 @@ function buildCoreLoopArtifact({
         : [
             "load_worker_task_packet",
             "verify_scope_and_non_goals",
-            "produce_declared_output",
-            "record_worker_execution_evidence",
+            "prepare_declared_output_contract",
+            "request_external_worker_execution_evidence",
           ],
       note: requiresApproval
         ? "Approval is required before this worker can execute."
-        : "The run-scoped local worker executor processed this bounded worker task packet without spawning an external agent.",
+        : "The runner produced a bounded worker plan only; it did not execute the worker's command or deliverable.",
     };
   });
   const workerExecutionEvidence = workerResultPackets.map((result, index) => {
     const packet = workerTaskPackets[index] ?? {};
     const evidenceRunAt = nowIso();
     const stepEvidence = (packet.verifySteps ?? []).map((step, stepIndex) => {
-      const status = result.status === "executed" ? "verified" : "skipped";
+      const status = result.status === "planned_not_executed" ? "pending_execution" : "skipped";
       const base = {
         verifyStepRef: step.id ?? `verify-step-${stepIndex + 1}`,
         command: step.command ?? "npm run meta:theory:run",
         passClaim: step.successMarker ?? "status=pass",
         status,
-        runBy: "run_scoped_local_worker_executor",
+        runBy: "not_run",
         runAt: evidenceRunAt,
         expectedResult: step.successMarker ?? "status=pass",
-        observedResult: status === "verified" ? "status=pass" : "approval_or_dependency_blocked",
+        observedResult:
+          status === "pending_execution"
+            ? "not_run_by_governed_runner"
+            : "approval_or_dependency_blocked",
         workingDirectory: "repo-root",
         stderrTail: "",
         successMarkerFormat: "exit-code-only",
         evidenceKind: result.evidenceKind,
         artifactRef: `coreLoop.executionResult.workerResultPackets[${index}]`,
       };
-      if (status === "verified") {
-        return {
-          ...base,
-          exitCode: 0,
-          commandRanAt: evidenceRunAt,
-        };
-      }
       return {
         ...base,
-        skipReason: "Worker task execution is blocked until approval or missing dependency is resolved.",
+        skipReason:
+          status === "pending_execution"
+            ? "A real host worker/executor must run this verify step and return observed evidence."
+            : "Worker task execution is blocked until approval or missing dependency is resolved.",
       };
     });
     result.workerExecutionEvidence = stepEvidence;
@@ -6606,11 +6870,11 @@ function buildCoreLoopArtifact({
       command: "npm run meta:theory:run",
       artifactRef: `coreLoop.executionResult.workerResultPackets[${index}]`,
       verifyStepRefs: stepEvidence.map((item) => item.verifyStepRef),
-      liveWorkerExecution: result.status === "executed",
+      liveWorkerExecution: false,
       externalAgentSpawned: false,
       reason:
-        result.status === "executed"
-          ? "Run-scoped local worker execution completed the bounded task packet."
+        result.status === "planned_not_executed"
+          ? "The governed runner prepared the bounded task packet but did not execute it."
           : "Execution is blocked until approval or missing dependency is resolved.",
     };
   });
@@ -6761,6 +7025,7 @@ function buildCoreLoopArtifact({
     enabled: invokeCapabilityProbes,
   });
   const runtimeInvocationPlanPacket = buildRuntimeInvocationPlanPacket({
+    runId,
     dynamicWorkflowRuntimePacket,
     agentTeamsPlaybookPacket,
     runtimeSubagentInvocationPacket,
@@ -6778,16 +7043,18 @@ function buildCoreLoopArtifact({
     hostInvocationEvidenceTrusted,
   });
   const capabilityInvocationTruthPacket = buildCapabilityInvocationTruthPacket({
+    runId,
     orchestrationReport,
     dynamicWorkflowRuntimePacket,
     peerAgentMeshPacket,
     workerExecutionEvidence,
     hostVisibleSubagents,
     hostInvocationEvidence: runtimeInvocationPlanPacket.evidence,
-    hostInvocationEvidenceTrusted: true,
+    hostInvocationEvidenceTrusted: false,
     agentTeamsPlaybookPacket,
     capabilityInvocationProbePacket,
     runtimeSubagentInvocationPacket,
+    runtimeInvocationPlanPacket,
   });
   const visibleMetaTheorySurfacePacket = buildVisibleMetaTheorySurfacePacket({
     orchestrationReport,
@@ -6807,6 +7074,7 @@ function buildCoreLoopArtifact({
     productExperienceGoals: PRODUCT_EXPERIENCE_CORE_GOAL_IDS,
   });
   const productExperiencePacket = buildProductExperiencePacket({
+    runId,
     goalContractPacket,
     langGraphRunPacket,
     dynamicWorkflowRuntimePacket,
@@ -7725,31 +7993,31 @@ function buildWorkflowContractPackets({
     return {
       taskPacketId: packet.taskPacketId,
       owner: packet.owner,
-      status: "completed",
-      producedArtifacts: packet.scopeFiles,
+      status: "planned_not_executed",
+      producedArtifacts: [],
       fileCompletionList: packet.scopeFiles.map((scopeFile) => ({
         path: scopeFile,
         action: "create",
-        scope: "Produced governed execution artifact evidence for the run.",
-        status: "completed",
+        scope: "Planned governed execution artifact; no worker wrote this file in the structural runner.",
+        status: "skipped",
+        skipReason: "A real host worker must execute the task before this file can be reported completed.",
       })),
       workerExecutionEvidence: packet.verifySteps.map((step, stepIndex) => ({
         verifyStepRef: step.id,
         command: stepIndex === 0 ? "node scripts/validate-run-artifact.mjs <artifact>" : "node scripts/run-meta-theory-governed-execution.mjs",
         passClaim: step.verify,
-        status: "verified",
-        runBy: "run_scoped_local_worker_executor",
+        status: "skipped",
+        runBy: "not_run",
         runAt: evidenceRunAt,
         expectedResult: step.verify,
-        observedResult: step.verify,
+        observedResult: "not_run_by_structural_artifact_builder",
         workingDirectory: ".",
         stderrTail: "",
         successMarkerFormat: "exit-code-only",
-        exitCode: 0,
-        commandRanAt: evidenceRunAt,
+        skipReason: "No real worker or command execution evidence was attached to this top-level artifact.",
       })),
       handoffTarget: packet.handoffTarget,
-      blockingIssues: [],
+      blockingIssues: ["pending real host worker execution and verification evidence"],
     };
   });
   const orchestrationTaskBoardPacket = {
@@ -7819,8 +8087,8 @@ function buildWorkflowContractPackets({
   const testStrategyPacket = {
     strategy: "Run focused unit tests plus strict artifact validation on a generated real artifact.",
     requiredTestTypes: ["unit", "artifact-validation", "smoke"],
-    executedTests: ["scripts/validate-run-artifact.mjs generated artifact"],
-    deferredTests: [],
+    executedTests: ["in-process governed packet structural checks (does not prove worker execution)"],
+    deferredTests: ["scripts/validate-run-artifact.mjs generated artifact", "real host worker verification"],
     coverageRationale: "Release-grade all-runtime live evidence remains outside this structural run.",
     testDimensions: [dimension("real_test_strategy")],
     testStatus: "partial",
@@ -7873,7 +8141,7 @@ function buildWorkflowContractPackets({
   const reviewPacket = {
     ownerCoverage: "pass",
     protocolCompliance: "pass",
-    qualityGate: "pass",
+    qualityGate: "partial",
     revisionNeeded: false,
     sourceProjects: [projectRef],
     crossProjectContaminationCheck: "pass",
@@ -7891,57 +8159,16 @@ function buildWorkflowContractPackets({
         issues: [],
       },
     ],
-    findings: [
-      {
-        findingId: "finding-001",
-        severity: "medium",
-        owner: "meta-conductor",
-        sourceProject: projectRef,
-        summary: "Runner output must validate through the strict workflow-contract artifact validator.",
-        requiredAction: "Emit all required top-level workflow packets from the governed runner.",
-        fixArtifact: "scripts/run-meta-theory-governed-execution.mjs",
-        verifiedBy: "meta-prism",
-        closeState: "fixed_pending_verify",
-      },
-    ],
+    findings: [],
   };
   const verificationPacket = {
-    verified: true,
-    remainingIssues: [],
-    evidence: ["Generated worker evidence covers every strict worker verify step."],
-    fixEvidence: [
-      {
-        findingId: "finding-001",
-        actionId: "fix-001",
-        verifiedBy: "meta-prism",
-        verificationMethod: "artifact-validation",
-        evidenceRefs: ["workerResultPackets[0].workerExecutionEvidence[0]"],
-        resultArtifactRef: primaryDeliverable,
-        result: "verified_closed",
-        failureDisposition: "Return to Thinking and fix the producer packet shape.",
-      },
-    ],
-    revisionResponses: [
-      {
-        findingId: "finding-001",
-        actionId: "fix-001",
-        owner: "meta-conductor",
-        responseType: "producer-change",
-        status: "applied",
-        fixArtifact: "scripts/run-meta-theory-governed-execution.mjs",
-        responseSummary: "The governed runner emits the public workflow-contract packet shape at the artifact top level.",
-      },
-    ],
-    verificationResults: [
-      {
-        findingId: "finding-001",
-        verifiedBy: "meta-prism",
-        result: "pass",
-        evidence: ["workerResultPackets[0].workerExecutionEvidence[0]"],
-        closeState: "verified_closed",
-      },
-    ],
-    closeFindings: ["finding-001"],
+    verified: false,
+    remainingIssues: ["Real worker execution and command verification evidence are still pending."],
+    evidence: ["Top-level worker packets intentionally preserve planned/skipped truth."],
+    fixEvidence: [],
+    revisionResponses: [],
+    verificationResults: [],
+    closeFindings: [],
   };
   const strictPublicReady = coreLoop.publicReadyDecision?.publicReady === true;
   const strictPublicReadyBlockedBy = strictPublicReady
@@ -7952,10 +8179,10 @@ function buildWorkflowContractPackets({
           : ["release-grade live runtime evidence is not attached to this structural governed run"]
       );
   const summaryPacket = {
-    verifyPassed: true,
-    summaryClosed: true,
+    verifyPassed: false,
+    summaryClosed: false,
     singleDeliverableMaintained: true,
-    deliverableChainClosed: true,
+    deliverableChainClosed: false,
     consolidatedDeliverablePresent: true,
     publicReady: strictPublicReady,
     commentReviewAcknowledged: true,
@@ -8756,7 +8983,7 @@ export async function runMetaTheoryGovernedExecution({
   });
   const panelContractDefinition = await readJson(RUN_REPORT_PANEL_CONTRACT_PATH);
   const aiReadableStandards = await readJson(AI_READABLE_PRODUCT_STANDARDS_PATH);
-  const agentTeamsPlaybookProvider = await resolveAgentTeamsPlaybookProvider();
+  const agentTeamsPlaybookProvider = await resolveAgentTeamsPlaybookProvider(routeRuntime);
   let artifactStatus =
     orchestrationReport.status === "pass" &&
     runtimeEvidence.status === "pass" &&
@@ -9101,6 +9328,14 @@ function rawPositionals() {
 }
 
 async function main() {
+  if (
+    process.argv.includes("--host-invocation-evidence-trusted") ||
+    process.argv.includes("--native-choice-evidence-trusted")
+  ) {
+    throw new Error(
+      "Public CLI trust flags were removed: live evidence must come from an external runtime observer/adapter, not from the process submitting the claim.",
+    );
+  }
   const positional = rawPositionals();
   const taskArg = argValue("--task", null);
   const runIdArg = argValue("--run-id", null);
@@ -9181,16 +9416,12 @@ async function main() {
       "--host-invocation-evidence",
       process.env.META_KIM_HOST_INVOCATION_EVIDENCE ?? null,
     ),
-    hostInvocationEvidenceTrusted:
-      process.argv.includes("--host-invocation-evidence-trusted") ||
-      truthyEnvFlag(process.env.META_KIM_HOST_INVOCATION_EVIDENCE_TRUSTED),
+    hostInvocationEvidenceTrusted: false,
     nativeChoiceEvidence: argValue(
       "--native-choice-evidence",
       process.env.META_KIM_NATIVE_CHOICE_EVIDENCE ?? null,
     ),
-    nativeChoiceEvidenceTrusted:
-      process.argv.includes("--native-choice-evidence-trusted") ||
-      truthyEnvFlag(process.env.META_KIM_NATIVE_CHOICE_EVIDENCE_TRUSTED),
+    nativeChoiceEvidenceTrusted: false,
     invokeCapabilityProbes: process.argv.includes("--invoke-capability-probes"),
   });
   if (report.conversationNotice.emitted) {

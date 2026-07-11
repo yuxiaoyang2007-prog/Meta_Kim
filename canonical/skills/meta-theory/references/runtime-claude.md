@@ -39,6 +39,10 @@ In Claude Code, governed Execution is real only when the main thread invokes act
 
 Claude Code fan-out uses Claude Code's native dispatch capacity, the task DAG, collision boundaries, workspace isolation, permission model, and context budget. Meta_Kim must not impose a fixed maximum number of Claude Code subagents. If the host can safely run more independent Task/Agent lanes, use that host capacity; if the host or task cannot, record the concrete capacity or safety reason.
 
+An ordinary natural-language request for a persistent artifact with multiple independent work scopes is fan-out eligible even when the user never says Agent or parallel. After a bounded initial Fetch (at most 8 targeted source reads), Thinking must bind workers and invoke the native `Agent` surface before `TaskCreate`, `TaskUpdate`, or `TodoWrite`. Those task-list tools are bookkeeping only; they never count as worker dispatch and must not become a substitute for Agent execution.
+
+`agent-teams-playbook` uses stop-on-match capability resolution in Claude Code. Once a qualified Agent, Skill, Tool, Command, or MCP provider is found, bind it and stop searching. `find-skills` is only for a proven capability gap. A successful native Agent/Task dispatch after an optional Skill search found no install is still the normal route, not fallback or degraded execution. Do not apply Codex `task_name`, `message`, or `fork_turns` parameters to Claude Code.
+
 Before the first mutation, Thinking must produce a dispatch plan that binds each execution lane to:
 
 - `ownerAgent`: the selected agent or provider owner
@@ -54,7 +58,7 @@ Execution must then call the selected provider surface:
 - Use prompt/rule providers only when Fetch found them and Thinking bound them to the lane.
 - Use MCP tools only when the MCP inventory proves the tool is available and safe for the lane.
 
-Record selected executable families in `runtimeInvocationPlanPacket`. `hostInvocationRequestPacket` is the Claude Code adapter handoff: for each missing selected family it states the Agent/Task, Skill, slash command, MCP, or runtime-tool action the host must perform and the exact trusted evidence fields to return. The Node runner must not treat the request as proof; only the active Claude Code host or a trusted host adapter can execute the provider surface and then pass `hostInvocationEvidenceTrusted=true` with fresh evidence. `capabilityInvocationTruthPacket.realInvocationCoverage.status` is `pass` only when the selected Claude Code provider surfaces have fresh call evidence, such as Task/Agent invocation output, applied skill evidence, MCP tool result, slash command/script output, or runtime-tool result. `selected_not_invoked` is honest evidence but never a product-experience pass.
+Record selected executable bindings in `runtimeInvocationPlanPacket`. `hostInvocationRequestPacket` is the Claude Code adapter handoff: for each missing binding it states the Agent/Task, Skill, slash command, MCP, hook, or runtime-tool action the host must perform. The Node runner must not treat the request, a fixture, or a caller-supplied trust flag as proof. Highest-assurance `live-certified` evidence comes from an external observer parsing Claude stream JSON, tool-use/tool-result pairs, and correlated hook events; it must match the run, session, event, provider, task binding, timestamp, and successful result in a hash-verified observation artifact. `capabilityInvocationTruthPacket.realInvocationCoverage.status` is `pass` only when every selected binding is covered. Readiness probes and MCP `--self-test` output remain callable/catalog evidence only. `selected_not_invoked` is honest evidence but never a product-experience pass. This external attestation boundary governs the optional `live-certified` label; it is not a prerequisite for a standard release whose `meta:verify:all` run passed.
 
 For create-agent or iterate-agent routes, execution must separate two artifacts:
 
@@ -160,6 +164,8 @@ Do not copy the external hook's wording into durable Meta_Kim instructions. Keep
 
 - Confirm each Agent dispatch prompt cites a `workerTaskPackets[].taskPacketId`.
 - Confirm `AskUserQuestion` popup appeared by checking the returned answer is non-empty, or confirm non-interactive deferred native UI by checking `deferred_tool_use.name === "AskUserQuestion"` and the resumed answer is present.
+- Correlate real `hook_started` and successful `hook_response` records by `hook_id`. If no tool-use id is present, record only session-level hook observation; do not claim an exact route binding.
+- Treat generic `Bash` use as runtime-tool evidence. Promote it to selected Command evidence only after exact argv/provider/binding reconciliation outside the model process.
 - Run `npm run meta:test:meta-theory` to verify all 8-stage spine tests pass with the Claude Code adapter loaded.
 - Check `enforce-agent-dispatch.mjs` whitelists `AskUserQuestion` to avoid issue #12031.
 

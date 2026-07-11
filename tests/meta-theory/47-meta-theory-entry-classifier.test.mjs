@@ -141,7 +141,7 @@ describe("47 - Meta-theory entry classifier", () => {
 
   test("explicit meta-theory without subagent wording authorizes safe automatic fan-out", () => {
     const result = classifyMetaTheoryEntry(
-      "[$meta-theory](D:/KimProject/Meta_Kim/.agents/skills/meta-theory/SKILL.md) 帮我调整好，案例也需要对应检查，如果需要生成图片，用image2",
+      "[$meta-theory](D:/workspace/Meta_Kim/.agents/skills/meta-theory/SKILL.md) 帮我调整好，案例也需要对应检查，如果需要生成图片，用image2",
     );
 
     assert.equal(result.governedEntry, true);

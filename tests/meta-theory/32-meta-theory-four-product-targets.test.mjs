@@ -8,6 +8,7 @@ import process from "node:process";
 import {
   buildRuntimeProjectionEvidence,
   classifyProjectionFailure,
+  evaluateInvocationCoverage,
   readGovernedExecutionRun,
   runMetaTheoryGovernedExecution,
 } from "../../scripts/run-meta-theory-governed-execution.mjs";
@@ -36,6 +37,20 @@ const trustedNativeChoiceEvidence = [
 ];
 
 describe("32 — Meta-theory three product goals and support gates", () => {
+  test("real invocation coverage ignores unavailable callable probes when exact bindings are observed", () => {
+    const coverage = evaluateInvocationCoverage({
+      missingBindings: [],
+      capabilityInvocationProbePacket: {
+        status: "blocked",
+        requiredFamilies: ["mcp"],
+        callableFamilies: [],
+        missingFamilies: ["mcp"],
+      },
+    });
+    assert.equal(coverage.realStatus, "pass");
+    assert.equal(coverage.callableStatus, "blocked");
+  });
+
   test("T-001 runs the default governed orchestration runtime path", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-governed-run-"));
     try {
@@ -127,7 +142,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.equal(report.defaultRuntimePath.runtimeSubagentInvocationPacket.status, "unavailable");
       assert.equal(invocationByFamily.get("agent_subagent").state, "unavailable");
       assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
-      assert.equal(invocationByFamily.get("worker_task").state, "invoked");
+      assert.equal(invocationByFamily.get("worker_task").state, "blocked");
       assert.equal(invocationByFamily.get("prompt_rule").state, "applied");
       assert.equal(invocationByFamily.get("agent_teams_playbook").state, "selected_not_invoked");
       assert.equal(report.defaultRuntimePath.capabilityInvocationProbePacket.status, "not_run");
@@ -149,6 +164,33 @@ describe("32 — Meta-theory three product goals and support gates", () => {
             request.requiredEvidence.trustedAdapterOnly === true
         )
       );
+      assert.equal(
+        report.defaultRuntimePath.hostInvocationRequestPacket.requests.length,
+        report.defaultRuntimePath.runtimeInvocationPlanPacket.missingBindings.length,
+        "every missing exact binding must have one host invocation request",
+      );
+      for (const binding of report.defaultRuntimePath.runtimeInvocationPlanPacket.missingBindings) {
+        const request = report.defaultRuntimePath.hostInvocationRequestPacket.requests.find(
+          (item) =>
+            item.family === binding.family &&
+            item.providerId === binding.providerId &&
+            item.bindingRef === binding.bindingRef,
+        );
+        assert.ok(request, `missing exact request for ${binding.bindingRef}`);
+        assert.equal(request.requiredEvidence.exactValues.runId, "test-run-default");
+        assert.equal(request.requiredEvidence.exactValues.providerId, binding.providerId);
+        assert.equal(request.requiredEvidence.exactValues.bindingRef, binding.bindingRef);
+        for (const field of ["run", "session", "event", "provider", "binding", "timestamp", "result", "artifactHash"]) {
+          assert.ok(request.requiredEvidence.requiredFields[field], `${binding.bindingRef} missing ${field}`);
+        }
+        if (binding.family === "mcp") {
+          assert.equal(request.requiredEvidence.evidenceKind, "mcp_tool_result");
+          assert.match(request.requiredEvidence.familySpecificRule, /exact selected provider tool call/i);
+        }
+        if (binding.family === "hook") {
+          assert.equal(request.requiredEvidence.evidenceKind, "hook_trigger_event");
+        }
+      }
       assert.equal(report.defaultRuntimePath.durableAgentLifecyclePacket.status, "partial");
       assert.equal(
         report.defaultRuntimePath.durableAgentLifecyclePacket.stages.find(
@@ -222,7 +264,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         report.defaultRuntimePath.userPerceptionPacket.humanDecisionControl.automationRole,
         "assistive_only"
       );
-      assert.equal(report.coreLoop.executionResult.actualWorkerExecution, true);
+      assert.equal(report.coreLoop.executionResult.actualWorkerExecution, false);
       assert.equal(report.coreLoop.traceEvalControlPlane.coverage.coverageStatus, "pass");
       assert.equal(report.coreLoop.agUiStageEvents.events.every((event) => event.packetDumpPrevented === true), true);
       assert.equal(report.coreLoop.performanceCostBudget.acceptance.externalPaidWorkRequiresApproval, true);
@@ -234,10 +276,23 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.ok(
         report.coreLoop.executionResult.workerResultPackets.every(
           (packet) =>
-            packet.status === "executed" &&
+            packet.status === "planned_not_executed" &&
             packet.workerExecutionEvidence.length === 1 &&
-            packet.workerExecutionEvidence[0].status === "verified"
+            packet.workerExecutionEvidence[0].status === "pending_execution" &&
+            packet.workerExecutionEvidence[0].exitCode === undefined
         )
+      );
+      assert.equal(report.verificationPacket.verified, false);
+      assert.equal(report.summaryPacket.verifyPassed, false);
+      assert.ok(
+        report.workerResultPackets.every(
+          (packet) =>
+            packet.status === "planned_not_executed" &&
+            packet.fileCompletionList.every((item) => item.status === "skipped") &&
+            packet.workerExecutionEvidence.every(
+              (item) => item.status === "skipped" && item.exitCode === undefined,
+            ),
+        ),
       );
       assert.equal(
         report.coreLoop.reviewPacket.protocolCompliance.governanceAgentResultPacketsPresent,
@@ -544,19 +599,18 @@ describe("32 — Meta-theory three product goals and support gates", () => {
     const output = JSON.parse(result.stdout);
     assert.equal(output.status, "pass");
     assert.equal(output.validationStatus, "pass");
-    assert.equal(output.evidenceMode, "default-boundary-plus-trusted-self-test");
+    assert.equal(output.evidenceMode, "structural-boundary-plus-synthetic-negative-control");
     assert.equal(output.noPopupDuringSelfTest, true);
     assert.equal(output.defaultBoundaryRun.status, "partial");
-    assert.equal(output.defaultBoundaryRun.evidenceTier, "partial");
+    assert.equal(output.defaultBoundaryRun.evidenceTier, "structural_only");
     assert.deepEqual(output.defaultBoundaryRun.goals.map((goal) => goal.id), ["P-102", "P-103", "P-104"]);
     assert.deepEqual(output.defaultBoundaryRun.supportGates.map((gate) => gate.id), ["P-105", "P-106", "P-107", "P-108", "P-109", "P-110"]);
     assert.equal(output.defaultBoundaryRun.nativeChoiceSurface, "needs-host-invocation");
-    assert.equal(output.selfTestEvidenceRun.status, "pass");
-    assert.equal(output.selfTestEvidenceRun.productExperience, "product_experience_pass");
-    assert.equal(output.selfTestEvidenceRun.nativeChoiceSurface, "native_choice_answered");
+    assert.equal(output.syntheticNegativeControlRun.status, "partial");
+    assert.equal(output.syntheticNegativeControlRun.productExperience, "partial");
     assert.equal(
-      output.selfTestEvidenceRun.capabilityInvocationTruth.realInvocationCoverage.status,
-      "pass",
+      output.syntheticNegativeControlRun.capabilityInvocationTruth.realInvocationCoverage.status,
+      "partial",
     );
     assert.equal(output.repeatFailureDesign, "bottom_design_failure_return_to_critical_fetch_thinking");
     assert.equal(output.generalizationGate, "pass");
@@ -569,7 +623,8 @@ describe("32 — Meta-theory three product goals and support gates", () => {
     assert.equal(output.dynamicWorkflow.hooks, true);
     assert.ok(output.peers > 0);
     assert.equal(output.defaultBoundaryRun.capabilityInvocationTruth.status, "partial");
-    assert.equal(output.defaultBoundaryRun.capabilityInvocationTruth.states.invoked >= 1, true);
+    assert.equal(output.defaultBoundaryRun.capabilityInvocationTruth.states.invoked ?? 0, 0);
+    assert.equal(output.defaultBoundaryRun.capabilityInvocationTruth.states.applied >= 1, true);
     assert.equal(output.defaultBoundaryRun.capabilityInvocationTruth.appVisibleSubagentState, "not_required");
     assert.equal(
       output.defaultBoundaryRun.capabilityInvocationTruth.callableInvocationCoverage.status,
@@ -607,6 +662,17 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.match(capabilityTeamBlueprint.inspiration, /agent-teams-playbook/);
       assert.equal(capabilityTeamBlueprint.rows.length, lanes.length);
       assert.equal(capabilityTeamBlueprint.rows.every((row) => row.capabilitySlot && row.providerBindingPolicy === "capability_need_runtime_match"), true);
+      assert.equal(capabilityTeamBlueprint.capabilityResolutionPolicy.mode, "stop_on_first_qualified_provider");
+      assert.equal(
+        capabilityTeamBlueprint.capabilityResolutionPolicy.externalDiscoveryTrigger,
+        "only_after_local_multi_provider_gap_is_proven",
+      );
+      assert.ok(
+        capabilityTeamBlueprint.capabilityResolutionPolicy.forbidden.includes(
+          "label_successful_native_agent_dispatch_as_fallback",
+        ),
+      );
+      assert.equal(Object.hasOwn(capabilityTeamBlueprint, "fallbackChain"), false);
       assert.ok(
         lanes.every(
           (packet) =>
@@ -689,7 +755,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
     }
   });
 
-  test("T-006 trusted host invocation still needs native choice evidence for product pass", async () => {
+  test("T-006 caller-trusted claims still need external observer evidence", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-host-evidence-no-native-"));
     try {
       const report = await runMetaTheoryGovernedExecution({
@@ -728,8 +794,13 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       });
 
       assert.equal(report.status, "partial");
-      assert.equal(report.coreLoop.hostInvocationRequestPacket.status, "pass");
-      assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "pass");
+      assert.equal(report.coreLoop.hostInvocationRequestPacket.status, "partial");
+      assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "partial");
+      assert.ok(
+        report.coreLoop.runtimeInvocationPlanPacket.evidence.every(
+          (item) => item.passEligible === false,
+        ),
+      );
       assert.equal(report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.status, "partial");
       assert.equal(
         report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.liveRuntimeBoundary.status,
@@ -741,7 +812,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
     }
   });
 
-  test("T-006b host and native choice evidence can promote selected executable families to product pass", async () => {
+  test("T-006b host-shaped fixtures plus native choice cannot promote product pass", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-host-evidence-pass-"));
     try {
       const report = await runMetaTheoryGovernedExecution({
@@ -781,27 +852,21 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         nativeChoiceEvidence: trustedNativeChoiceEvidence,
       });
 
-      assert.equal(report.status, "pass");
-      assert.equal(report.coreLoop.runtimeInvocationPlanPacket.status, "pass");
-      assert.equal(report.coreLoop.hostInvocationRequestPacket.status, "pass");
-      assert.ok(
-        report.coreLoop.hostInvocationRequestPacket.requests.every(
-          (request) => request.status === "satisfied"
-        )
-      );
-      assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "pass");
+      assert.equal(report.status, "partial");
+      assert.equal(report.coreLoop.runtimeInvocationPlanPacket.status, "partial");
+      assert.equal(report.coreLoop.hostInvocationRequestPacket.status, "partial");
+      assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "partial");
       assert.equal(
         report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
-        "pass",
+        "partial",
       );
-      assert.equal(report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.status, "pass");
+      assert.equal(report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.status, "partial");
       assert.equal(
         report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.liveRuntimeBoundary.status,
-        "native_choice_answered",
+        "needs-host-invocation",
       );
-      assert.deepEqual(
-        report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingFamilies,
-        [],
+      assert.ok(
+        report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingBindings.length > 0,
       );
       assert.equal(
         report.coreLoop.productExperiencePacket.automationDecisionBoundary.status,
@@ -811,7 +876,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         report.coreLoop.productExperiencePacket.automationDecisionBoundary.decisionAuthority,
         "human_required",
       );
-      assert.equal(report.coreLoop.productExperiencePacket.status, "product_experience_pass");
+      assert.equal(report.coreLoop.productExperiencePacket.status, "partial");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -872,7 +937,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       );
       assert.ok(
         report.coreLoop.runtimeInvocationPlanPacket.evidence.every(
-          (item) => item.rejectionReason.includes("requires trusted host evidence"),
+          (item) => item.rejectionReason.includes("cannot promote itself"),
         ),
       );
       assert.ok(
@@ -885,7 +950,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
     }
   });
 
-  test("CLI clean process can accept trusted host invocation evidence for product pass", async () => {
+  test("CLI cannot self-authorize trusted host invocation evidence", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-host-evidence-cli-"));
     const hostInvocationEvidence = JSON.stringify([
       {
@@ -937,25 +1002,8 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         ],
         { cwd: process.cwd(), encoding: "utf8", timeout: 180_000 },
       );
-      assert.equal(result.status, 0, result.stderr || result.stdout);
-      const summary = JSON.parse(result.stdout);
-      assert.equal(summary.status, "pass");
-      assert.equal(summary.runId, "test-run-cli-host-evidence");
-
-      const artifact = JSON.parse(
-        await readFile(path.join(tempDir, "test-run-cli-host-evidence.json"), "utf8"),
-      );
-      assert.equal(artifact.status, "pass");
-      assert.equal(artifact.coreLoop.hostInvocationRequestPacket.status, "pass");
-      assert.equal(artifact.coreLoop.capabilityInvocationTruthPacket.status, "pass");
-      assert.equal(
-        artifact.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
-        "pass",
-      );
-      assert.equal(
-        artifact.coreLoop.productExperiencePacket.status,
-        "product_experience_pass",
-      );
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /Public CLI trust flags were removed/);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

@@ -89,6 +89,12 @@ const AMBER_BRIGHT = "\x1b[38;2;200;160;80m";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
+const MAX_ARCHIVE_DOWNLOAD_BYTES = 64 * 1024 * 1024;
+// Dependency skill archives are source/document bundles. These limits leave
+// ample room for normal assets while failing closed on decompression bombs.
+const MAX_ARCHIVE_MEMBERS = 10_000;
+const MAX_ARCHIVE_MEMBER_UNCOMPRESSED_BYTES = 32 * 1024 * 1024;
+const MAX_ARCHIVE_TOTAL_UNCOMPRESSED_BYTES = 128 * 1024 * 1024;
 
 function quoteCliArgForShell(value) {
   const text = String(value);
@@ -185,6 +191,7 @@ const pluginsOnly = process.argv.includes("--plugins-only");
 const skipPlugins =
   process.argv.includes("--skip-plugins") ||
   process.argv.includes("--no-plugins");
+const skipInventoryRefresh = process.argv.includes("--skip-inventory-refresh");
 const cliArgs = process.argv.slice(2);
 const installFailures = [];
 const archiveFallbacks = [];
@@ -1199,33 +1206,203 @@ function recordInstallFailure(details) {
   installFailures.push(details);
 }
 
-async function extractArchiveInto(targetDir, archivePath, subdirPath) {
+function resolveArchiveLimit(value, fallback, name) {
+  const resolved = value ?? fallback;
+  if (!Number.isSafeInteger(resolved) || resolved <= 0) {
+    throw new Error(`${name} must be a positive safe integer`);
+  }
+  return resolved;
+}
+
+function validateArchiveMembers(archivePath, limits = {}) {
+  const python = detectPython310();
+  if (!python) {
+    throw new Error(
+      "Archive fallback requires Python 3.10+ to validate members before extraction",
+    );
+  }
+  const maxMembers = resolveArchiveLimit(
+    limits.maxMembers,
+    MAX_ARCHIVE_MEMBERS,
+    "maxMembers",
+  );
+  const maxMemberBytes = resolveArchiveLimit(
+    limits.maxMemberBytes,
+    MAX_ARCHIVE_MEMBER_UNCOMPRESSED_BYTES,
+    "maxMemberBytes",
+  );
+  const maxTotalBytes = resolveArchiveLimit(
+    limits.maxTotalBytes,
+    MAX_ARCHIVE_TOTAL_UNCOMPRESSED_BYTES,
+    "maxTotalBytes",
+  );
+  const validator = [
+    "import re, sys, tarfile",
+    "archive = sys.argv[1]",
+    "max_members, max_member_bytes, max_total_bytes = map(int, sys.argv[2:5])",
+    "def safe_parts(value, label):",
+    "    text = value.replace('\\\\', '/')",
+    "    if not text or text.startswith('/') or text.startswith('//') or re.match(r'^[A-Za-z]:', text):",
+    "        raise RuntimeError(f'unsafe {label}: {value!r}')",
+    "    parts = []",
+    "    for part in text.split('/'):",
+    "        if part in ('', '.'):",
+    "            continue",
+    "        if part == '..':",
+    "            raise RuntimeError(f'unsafe {label}: {value!r}')",
+    "        parts.append(part)",
+    "    if not parts:",
+    "        raise RuntimeError(f'unsafe {label}: {value!r}')",
+    "    return parts",
+    "member_count = 0",
+    "total_size = 0",
+    "with tarfile.open(archive, 'r:gz') as tf:",
+    "    for member in tf:",
+    "        member_count += 1",
+    "        if member_count > max_members:",
+    "            raise RuntimeError(f'archive member count exceeds limit: {member_count} > {max_members}')",
+    "        member_size = max(0, int(member.size or 0))",
+    "        if member_size > max_member_bytes:",
+    "            raise RuntimeError(f'archive member exceeds uncompressed size limit: {member.name!r} ({member_size} > {max_member_bytes})')",
+    "        total_size += member_size",
+    "        if total_size > max_total_bytes:",
+    "            raise RuntimeError(f'archive total uncompressed size exceeds limit: {total_size} > {max_total_bytes}')",
+    "        safe_parts(member.name, 'archive member path')",
+    "        if member.issym() or member.islnk():",
+    "            safe_parts(member.linkname, 'archive link target')",
+    "            raise RuntimeError('archive links are not allowed')",
+    "        if not (member.isdir() or member.isreg()):",
+    "            raise RuntimeError(f'unsupported archive member type: {member.name!r}')",
+    "if member_count == 0:",
+    "    raise RuntimeError('archive contains no members')",
+  ].join("\n");
+  execFileSync(
+    python.command,
+    [
+      ...python.args,
+      "-c",
+      validator,
+      archivePath,
+      String(maxMembers),
+      String(maxMemberBytes),
+      String(maxTotalBytes),
+    ],
+    { stdio: "pipe" },
+  );
+}
+
+async function readResponseBodyBounded(
+  response,
+  maxBytes = MAX_ARCHIVE_DOWNLOAD_BYTES,
+) {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new Error(
+      `Archive download exceeds ${maxBytes} byte limit (content-length ${declaredLength})`,
+    );
+  }
+  if (!response.body) {
+    throw new Error("Archive fallback response has no body");
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel("archive size limit exceeded").catch(() => {});
+        throw new Error(`Archive download exceeds ${maxBytes} byte limit`);
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, total);
+}
+
+async function replaceArchiveTargetAtomically(targetDir, stagedDir) {
+  const parentDir = path.dirname(targetDir);
+  const backupDir = path.join(
+    parentDir,
+    `${path.basename(targetDir)}.archive-backup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  );
+  let movedExisting = false;
+  await fs.mkdir(parentDir, { recursive: true });
+  if (await pathExists(targetDir)) {
+    await fs.rename(targetDir, backupDir);
+    movedExisting = true;
+  }
+  try {
+    await fs.rename(stagedDir, targetDir);
+  } catch (error) {
+    if (movedExisting && !(await pathExists(targetDir))) {
+      await fs.rename(backupDir, targetDir).catch(() => {});
+    }
+    throw error;
+  }
+  if (movedExisting) {
+    await rmDirBestEffortLocked(backupDir);
+  }
+}
+
+async function extractArchiveInto(
+  targetDir,
+  archivePath,
+  subdirPath,
+  sourceMetadata = null,
+) {
   const extractDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "meta-kim-archive-"),
   );
+  const stagedTargetDir = await createSiblingStagingDir(targetDir, "archive");
   try {
     if (dryRun) {
       console.log(t.dryRun(`tar -xzf ${archivePath} -C ${extractDir}`));
     } else {
+      // Validate every member before native tar can create any filesystem entry.
+      // Links are rejected entirely because an otherwise in-root link can still
+      // be used as a write-through pivot by a later archive member.
+      validateArchiveMembers(archivePath);
       // Use relative archive name + cwd to avoid Windows tar
       // misinterpreting "C:\path" as a remote host (colon syntax).
-      execFileSync(
-        "tar",
-        ["-xzf", path.basename(archivePath), "-C", extractDir],
-        {
-          cwd: path.dirname(archivePath),
-          stdio: "pipe",
-        },
-      );
+      try {
+        execFileSync(
+          "tar",
+          ["-xzf", path.basename(archivePath), "-C", extractDir],
+          {
+            cwd: path.dirname(archivePath),
+            stdio: "pipe",
+          },
+        );
+      } catch (nativeTarError) {
+        const python = detectPython310();
+        if (!python) throw nativeTarError;
+        const safeExtract = [
+          "import sys, tarfile",
+          "archive, target = sys.argv[1], sys.argv[2]",
+          "with tarfile.open(archive, 'r:gz') as tf:",
+          "    tf.extractall(target)",
+        ].join("\n");
+        execFileSync(
+          python.command,
+          [...python.args, "-c", safeExtract, archivePath, extractDir],
+          { stdio: "pipe" },
+        );
+      }
     }
 
     const entries = await fs.readdir(extractDir, { withFileTypes: true });
-    const rootEntry = entries.find((entry) => entry.isDirectory());
-    if (!rootEntry) {
+    if (entries.length !== 1 || !entries[0].isDirectory()) {
       throw new Error(
-        `Archive extraction produced no root directory: ${archivePath}`,
+        `Archive extraction must produce exactly one root directory: ${archivePath}`,
       );
     }
+    const rootEntry = entries[0];
 
     const rootDir = path.join(extractDir, rootEntry.name);
     const sourceDir = subdirPath
@@ -1235,10 +1412,21 @@ async function extractArchiveInto(targetDir, archivePath, subdirPath) {
       throw new Error(`Archive fallback missing subdir: ${sourceDir}`);
     }
 
-    await fs.mkdir(path.dirname(targetDir), { recursive: true });
-    await fs.cp(sourceDir, targetDir, { recursive: true, force: true });
+    await fs.cp(sourceDir, stagedTargetDir, { recursive: true, force: true });
+    if (sourceMetadata) {
+      await fs.writeFile(
+        path.join(stagedTargetDir, ".meta-kim-source.json"),
+        `${JSON.stringify({ ...sourceMetadata, rootName: rootEntry.name }, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    await replaceArchiveTargetAtomically(targetDir, stagedTargetDir);
+    return { rootName: rootEntry.name };
   } finally {
     await fs.rm(extractDir, { recursive: true, force: true });
+    if (await pathExists(stagedTargetDir)) {
+      await rmDirBestEffortLocked(stagedTargetDir);
+    }
   }
 }
 
@@ -1276,9 +1464,13 @@ async function installViaArchiveFallback({
     `meta-kim-${Date.now()}-${path.basename(targetDir)}.tar.gz`,
   );
   try {
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const buffer = await readResponseBodyBounded(response);
     await fs.writeFile(archivePath, buffer);
-    await extractArchiveInto(targetDir, archivePath, subdirPath);
+    await extractArchiveInto(targetDir, archivePath, subdirPath, {
+        source: "github_archive_fallback",
+        requestedUrl: archiveUrl,
+        resolvedUrl: response.url,
+    });
     archiveFallbacks.push({ skillId, targetDir: displayTargetDir, category });
     console.warn(
       `${C.yellow}⚠${C.reset} ${t.warnArchiveFallback(skillId, category)}`,
@@ -3527,7 +3719,7 @@ async function main() {
   await installUpstreamCliSpecs(homes, activeTargets);
   await installPluginBundlesForNonClaudeRuntimes(homes, activeTargets);
   await ensureCodexChoiceSurfaceAfterInstall(homes, activeTargets);
-  refreshGlobalCapabilityInventory(activeTargets);
+  if (!skipInventoryRefresh) refreshGlobalCapabilityInventory(activeTargets);
 
   // Optional: graphify (code knowledge graph)
   if (!pluginsOnly) {
@@ -4768,7 +4960,19 @@ async function mergeHookSettings(spec, runtimeHome, runtimeId) {
   );
 }
 
-main().catch((err) => {
-  console.error(err.message || err);
-  process.exitCode = 1;
-});
+export {
+  MAX_ARCHIVE_DOWNLOAD_BYTES,
+  MAX_ARCHIVE_MEMBERS,
+  MAX_ARCHIVE_MEMBER_UNCOMPRESSED_BYTES,
+  MAX_ARCHIVE_TOTAL_UNCOMPRESSED_BYTES,
+  extractArchiveInto,
+  readResponseBodyBounded,
+  validateArchiveMembers,
+};
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err.message || err);
+    process.exitCode = 1;
+  });
+}

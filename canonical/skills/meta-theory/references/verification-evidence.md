@@ -31,7 +31,7 @@ Classify runtime evidence before claiming a live pass:
 - `skipped_or_needs_auth`: auth, model, config, permission, or environment blocker with a retry path.
 - `runtime_live_pass`: real target-runtime invocation with a recoverable assistant/tool artifact and runtime-specific scoring or verification tied to that artifact.
 
-Only `runtime_live_pass` supports a live-pass claim. Structural smoke, systemMessage/UI warnings, skipped states, config-only proof, auth-present checks, and matrix entries may support diagnosis or readiness, but they cannot be relabeled as live. If a live check times out, produces no recoverable assistant/tool artifact, or depends on a different backend than the declared runtime, classify it as incomplete.
+Only `runtime_live_pass` supports a runtime-live claim for the observed artifact. Structural smoke, systemMessage/UI warnings, skipped states, config-only proof, auth-present checks, and matrix entries may support diagnosis or readiness, but they cannot be relabeled as live. A `runtime_live_pass` is still not the optional highest-assurance `live-certified` claim unless a separate private-attested observer joins every exact selected binding. If a live check times out, produces no recoverable assistant/tool artifact, or depends on a different backend than the declared runtime, classify it as incomplete.
 
 ## Fix Evidence
 
@@ -83,7 +83,11 @@ Next action:
 
 Rule: a run that only reports files, commits, or passing tests without the root goal and completeness judgment is not closed. A partial foundation must be named as partial; do not let it sound like the product goal is fully achieved.
 
-Routine low-risk releases use smoke evidence by default: projection sync, default capability-discovery smoke, meta-theory tests, whitespace diff check, changelog/release-note readiness, and exact git/release artifacts. Upgrade to release-grade closure only for install/update, global sync, hooks, runtime matrix, provider registry, dependency compatibility, runtime probes, package contents, security-sensitive behavior, or explicit full/live evidence requests. For release-grade closure, include the declared runtime target set and evidence for update/install, project sync, global sync, global hooks if in scope, runtime matrix, provider registry, dependency compatibility, runtime probe, default execution-demand route proof, live runtime results, changelog/release-note readiness, and security audit.
+Release assurance has three explicit tiers:
+
+1. Routine low-risk releases use smoke evidence by default: projection sync, default capability-discovery smoke, meta-theory tests, whitespace diff check, changelog/release-note readiness, and exact git/release artifacts.
+2. Standard full releases use `npm run meta:verify:all` for install/update, global sync, hooks, runtime matrix, provider registry, dependency compatibility, runtime probes, package contents, security-sensitive behavior, or explicit full verification requests. A complete passing run is sufficient for an ordinary release. Include the declared runtime target set and evidence for update/install, project sync, global sync, global hooks if in scope, runtime matrix, provider registry, dependency compatibility, runtime evaluation/probes, default execution-demand route proof, changelog/release-note readiness, and security audit.
+3. Optional highest-assurance certification uses `npm run meta:verify:live-certified`, which appends private-attested external-observer exact-binding clean-room verification. Missing attestation blocks only the `live-certified` label; it does not invalidate a separately passing standard `meta:verify:all` release.
 
 
 ## Use when
@@ -137,6 +141,8 @@ Return to Critical for intent gaps, Fetch for evidence/support gaps, Thinking fo
 ## Verification
 
 Run the most specific validator for this reference plus `npm run meta:prompt:validate`. Use command/log/artifact/human acceptance evidence, not a narrative claim.
+
+For `live-certified` capability claims, use a clean-room host run with isolated HOME/runtime homes and TMP/TEMP, a packaged source snapshot, no sibling dependency checkout, no global inventory injection, and a blind business prompt that does not name or hint at the expected capability families or concurrency. Keep a pure read-only `fast_path_control` separate from a durable-artifact `governed_execution` scenario; the control must not be used to demand fan-out, and the governed scenario must not inherit the answer through prompt wording. Readiness probes prove callability only. A host transcript parser may report `orchestration_observed`, but it cannot promote its own report to `live-certified`. Highest-assurance certification requires a separate post-process verifier with private observer attestation and externally observed successful request/result events joined to every exact selected binding. Fixtures, self-authored hashes, self-tests, caller-supplied trust flags, generic shell calls mislabeled as Commands, and synthesized worker results are forbidden substitutes. This external signature is not a prerequisite for a standard release whose `meta:verify:all` run passed.
 
 ## Writeback
 
