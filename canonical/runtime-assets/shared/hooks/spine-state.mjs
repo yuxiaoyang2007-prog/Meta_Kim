@@ -1,4 +1,5 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, mkdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join, dirname, resolve, relative, isAbsolute } from "node:path";
 import { atomicWriteJson, withFileLock } from "./spine-state-utils.mjs";
 
@@ -176,11 +177,26 @@ function isWithin(parent, target) {
 }
 
 export function sanitizeStateProfile(input) {
-  const value =
-    typeof input === "string" && input.trim() ? input.trim() : "default";
-  if (value === "." || value === ".." || value.length > 80) return "default";
-  if (!/^[A-Za-z0-9._-]+$/.test(value)) return "default";
-  return value;
+  if (typeof input !== "string" || !input.trim()) return "default";
+  const raw = input.trim();
+  if (
+    raw !== "." &&
+    raw !== ".." &&
+    raw.length <= 80 &&
+    /^[A-Za-z0-9._-]+$/u.test(raw)
+  ) {
+    return raw;
+  }
+
+  const normalized = raw
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^[._-]+|[._-]+$/g, "");
+  const suffix = createHash("sha256").update(raw, "utf8").digest("hex").slice(0, 12);
+  const maxBaseLength = 80 - suffix.length - 1;
+  const readableBase = (normalized || "profile")
+    .slice(0, maxBaseLength)
+    .replace(/[._-]+$/gu, "") || "profile";
+  return `${readableBase}-${suffix}`;
 }
 
 export function resolveMetaKimStateRoot(cwd) {
@@ -222,15 +238,32 @@ export function extractMetaAgentName(description, prompt) {
   return null;
 }
 
-function spineStatePath(cwd) {
-  return join(
-    resolveRepoLocalStateDir(
-      cwd,
-      process.env.META_KIM_SPINE_STATE_DIR,
-      DEFAULT_SPINE_STATE_DIR,
-    ),
-    SPINE_STATE_FILE,
+function resolveSpineStateRoute(cwd, state = null) {
+  const fallbackProfile = sanitizeStateProfile(
+    process.env.META_KIM_PROFILE ||
+      process.env.META_KIM_STATE_PROFILE ||
+      state?.profile ||
+      state?.stateProfile,
   );
+  let stateDir = resolveRepoLocalStateDir(
+    cwd,
+    process.env.META_KIM_SPINE_STATE_DIR,
+    join(".meta-kim", "state", fallbackProfile, "spine"),
+  );
+  const stateRoot = resolveMetaKimStateRoot(cwd);
+  const routeSegments = relative(stateRoot, stateDir).split(/[\\/]+/u).filter(Boolean);
+  const firstSegment = routeSegments[0];
+  const profile = firstSegment
+    ? sanitizeStateProfile(firstSegment)
+    : fallbackProfile;
+  if (firstSegment && profile !== firstSegment) {
+    stateDir = resolve(stateRoot, profile, ...routeSegments.slice(1));
+  }
+  return { filePath: join(stateDir, SPINE_STATE_FILE), profile };
+}
+
+function spineStatePath(cwd) {
+  return resolveSpineStateRoute(cwd).filePath;
 }
 
 function ensureDir(filePath) {
@@ -245,7 +278,10 @@ function normalizeStage(stageName) {
 
 function profileFromState(state) {
   return sanitizeStateProfile(
-    state?.profile || state?.stateProfile || process.env.META_KIM_STATE_PROFILE,
+    state?.profile ||
+      state?.stateProfile ||
+      process.env.META_KIM_PROFILE ||
+      process.env.META_KIM_STATE_PROFILE,
   );
 }
 
@@ -303,15 +339,19 @@ export async function readSpineStateIncludingInactive(cwd) {
 }
 
 export async function writeSpineState(cwd, state) {
-  const filePath = spineStatePath(cwd);
+  // Resolve the file and profile together. A legacy custom spine directory is
+  // still honored, but its first state-root segment becomes the status profile
+  // so spine/status readers cannot be routed to different tenants.
+  const { filePath, profile } = resolveSpineStateRoute(cwd, state);
   await ensureDir(filePath);
-  // 多 agent fan-out 时多个进程可能并发写同一 spine state — 用 atomic temp+rename
-  // 加 file lock 兜底并发。lock 仅短暂持有，写完即释放。
+  // Serialize the state file and its public status envelopes under one lock.
+  // This prevents a concurrent writer from leaving the state from one write
+  // paired with the run-status envelope from another write.
   const lockPath = `${filePath}.lock`;
   await withFileLock(lockPath, async () => {
     await atomicWriteJson(filePath, state);
+    await writeMetaRunStatus(cwd, state, { profile });
   });
-  await writeMetaRunStatus(cwd, state);
 }
 
 export function createInitialState({
@@ -503,14 +543,13 @@ export function createMetaRunStatusEnvelope(state, options = {}) {
 export async function writeMetaRunStatus(cwd, state, options = {}) {
   if (!state || typeof state !== "object") return null;
   const envelope = createMetaRunStatusEnvelope(state, options);
-  const profile = profileFromState(state);
+  const profile = sanitizeStateProfile(options.profile || profileFromState(state));
   const paths = runStatusPaths(cwd, profile, envelope.runId);
   await ensureDir(paths.activeRun);
   await ensureDir(paths.runStatus);
-  const serialized = JSON.stringify(envelope, null, 2);
   await Promise.all([
-    writeFile(paths.activeRun, serialized, "utf-8"),
-    writeFile(paths.runStatus, serialized, "utf-8"),
+    atomicWriteJson(paths.activeRun, envelope),
+    atomicWriteJson(paths.runStatus, envelope),
   ]);
   return envelope;
 }

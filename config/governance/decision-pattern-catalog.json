@@ -1,9 +1,10 @@
 {
   "schemaVersion": 1,
-  "purpose": "Internal Meta_Kim decision data distilled from inspected reference material and Meta_Kim boundaries. These patterns are not external dependencies and do not authorize invoking Kim_Decision or any other project.",
+  "purpose": "Internal Meta_Kim decision data distilled from inspected reference material and Meta_Kim boundaries. Kim_Decision may be discovered through the dependency registry, but these patterns do not authorize invoking Kim_Decision or any other project as an execution dependency.",
   "sourceBoundary": {
     "referenceOnly": ["Kim_Decision external/local reference discovered through META_KIM_DEP_ROOTS, sibling scan, installed skills, registry, or GitHub evidence"],
-    "notADependency": true,
+    "dependencyRegistryAllowed": true,
+    "notExecutionDependency": true,
     "notInvokable": true,
     "notOwner": true,
     "notWeapon": true,

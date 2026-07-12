@@ -92,12 +92,15 @@ for (const weapon of weapons.weapons ?? []) {
 }
 
 for (const project of dependencies.projects ?? []) {
-  assert(project.id !== "kim-decision", "Kim_Decision must remain reference-only, not a dependency project");
+  if (project.id === "kim-decision") {
+    assert(project.capabilityCard?.routeEligibility === "reference_only", "Kim_Decision dependency registry entry must remain reference_only");
+    assert(project.interface?.invokeAs === "reference" || project.interface?.invokeAs === "notInvokable", "Kim_Decision must not be an invokable dependency");
+  }
   assert(project.capabilityCard, `${project.id} missing capabilityCard`);
   assert(project.interface, `${project.id} missing interface`);
   assert(project.capabilityCard.inputContract && project.capabilityCard.outputContract, `${project.id} missing IO contract`);
 }
-assert(decisionPatterns.sourceBoundary?.notADependency === true, "decision pattern catalog must mark reference source as not a dependency");
+assert(decisionPatterns.sourceBoundary?.notInvokable === true, "decision pattern catalog must mark reference source as not invokable");
 assert(decisionPatterns.stagePatterns?.some((pattern) => pattern.stage === "critical"), "decision patterns must include Critical data");
 assert(decisionPatterns.stagePatterns?.some((pattern) => pattern.stage === "fetch"), "decision patterns must include Fetch data");
 assert(decisionPatterns.stagePatterns?.some((pattern) => pattern.stage === "thinking"), "decision patterns must include Thinking data");

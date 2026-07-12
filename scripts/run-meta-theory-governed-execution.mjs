@@ -14,23 +14,18 @@ import {
 import { writeCapabilityInventory } from "./build-capability-inventory.mjs";
 import { getReportLabelsForPath } from "./meta-kim-i18n.mjs";
 import { buildAgentProjectionTargets } from "./runtime-tool-profiles.mjs";
+import { getProfilePaths } from "./meta-kim-local-state.mjs";
+import {
+  buildAgentTeamsWaves,
+  buildFanoutSafetyPacket,
+  taskIsExecutableWorker,
+} from "./governed-execution/fanout-policy.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(scriptDir, "..");
-const DEFAULT_STATE_DIR = path.join(
-  REPO_ROOT,
-  ".meta-kim",
-  "state",
-  "default",
-  "governed-executions"
-);
-const DEFAULT_DB_PATH = path.join(
-  REPO_ROOT,
-  ".meta-kim",
-  "state",
-  "default",
-  "governed-execution.sqlite"
-);
+const DEFAULT_PROFILE_DIR = getProfilePaths({ repoPath: REPO_ROOT }).profileDir;
+const DEFAULT_STATE_DIR = path.join(DEFAULT_PROFILE_DIR, "governed-executions");
+const DEFAULT_DB_PATH = path.join(DEFAULT_PROFILE_DIR, "governed-execution.sqlite");
 const RUN_REPORT_PANEL_CONTRACT_PATH = path.join(
   REPO_ROOT,
   "config",
@@ -3619,10 +3614,6 @@ function agentTeamsCandidateSkillPaths(runtimeName) {
   ];
 }
 
-function taskIsExecutableWorker(packet) {
-  return packet?.executionMode !== "approval_gate" && packet?.externalWriteBoundary !== true;
-}
-
 function parsePositiveInteger(value) {
   if (value === undefined || value === null || value === "") return null;
   const parsed = Number.parseInt(String(value), 10);
@@ -3702,156 +3693,6 @@ function resolveAgentTeamsParallelBudget(executableLaneCount) {
         ? "run all independent lanes in runtime-capacity waves"
         : "run all independent lanes in one wave",
   };
-}
-
-function arrayOfStrings(value) {
-  return Array.isArray(value)
-    ? value.filter((item) => typeof item === "string" && item.trim())
-    : [];
-}
-
-function taskDependencyIds(packet) {
-  return arrayOfStrings(packet?.dependsOn).filter(
-    (value, index, array) => array.indexOf(value) === index,
-  );
-}
-
-function taskCollisionScopes(packet) {
-  const scopeFiles = arrayOfStrings(packet?.scopeFiles).map((item) => `file:${item}`);
-  if (scopeFiles.length > 0) return scopeFiles;
-  if (packet?.artifactNamespace) return [`artifact:${packet.artifactNamespace}`];
-  if (packet?.shardKey) return [`shard:${packet.shardKey}`];
-  if (packet?.workspaceIsolation === "run_scoped" && packet?.taskPacketId) {
-    return [`run-scoped:${packet.taskPacketId}`];
-  }
-  return packet?.taskPacketId ? [`task:${packet.taskPacketId}`] : ["unknown-scope"];
-}
-
-function detectDependencyCycles(tasks) {
-  const taskIds = new Set(tasks.map((packet) => packet.taskPacketId));
-  const visiting = new Set();
-  const visited = new Set();
-  const cycleTaskIds = new Set();
-  const visit = (taskId, stack = []) => {
-    if (visited.has(taskId)) return;
-    if (visiting.has(taskId)) {
-      for (const id of stack.slice(stack.indexOf(taskId))) cycleTaskIds.add(id);
-      return;
-    }
-    visiting.add(taskId);
-    const task = tasks.find((packet) => packet.taskPacketId === taskId);
-    for (const dependencyId of taskDependencyIds(task).filter((id) => taskIds.has(id))) {
-      visit(dependencyId, [...stack, taskId]);
-    }
-    visiting.delete(taskId);
-    visited.add(taskId);
-  };
-  for (const task of tasks) visit(task.taskPacketId);
-  return [...cycleTaskIds];
-}
-
-function buildFanoutSafetyPacket(executableTasks) {
-  const taskIds = new Set(executableTasks.map((packet) => packet.taskPacketId));
-  const rows = executableTasks.map((packet) => {
-    const dependencyIds = taskDependencyIds(packet);
-    return {
-      taskPacketId: packet.taskPacketId,
-      parallelGroup: packet.parallelGroup ?? null,
-      dependsOn: dependencyIds,
-      collisionPolicy: packet.collisionPolicy ?? "unspecified",
-      workspaceIsolation: packet.workspaceIsolation ?? "unspecified",
-      mutationScopes: taskCollisionScopes(packet),
-      externalWriteBoundary: packet.externalWriteBoundary === true,
-    };
-  });
-  const missingDependencies = rows.flatMap((row) =>
-    row.dependsOn
-      .filter((dependencyId) => !taskIds.has(dependencyId))
-      .map((dependencyId) => ({
-        taskPacketId: row.taskPacketId,
-        dependencyId,
-      }))
-  );
-  const selfDependencies = rows
-    .filter((row) => row.dependsOn.includes(row.taskPacketId))
-    .map((row) => row.taskPacketId);
-  const cycleTaskIds = detectDependencyCycles(executableTasks);
-  const scopeOwners = new Map();
-  for (const row of rows) {
-    for (const scope of row.mutationScopes) {
-      if (!scopeOwners.has(scope)) scopeOwners.set(scope, []);
-      scopeOwners.get(scope).push(row.taskPacketId);
-    }
-  }
-  const collisionConflicts = [...scopeOwners.entries()]
-    .filter(([, owners]) => owners.length > 1)
-    .map(([scope, owners]) => ({ scope, taskPacketIds: owners }));
-  const explicitParallelMetadata = rows.every(
-    (row) =>
-      Boolean(row.parallelGroup) &&
-      row.collisionPolicy !== "unspecified" &&
-      row.workspaceIsolation !== "unspecified",
-  );
-  const initialReadyLaneCount = rows.filter((row) => row.dependsOn.length === 0).length;
-  const safeForParallelFanout =
-    rows.length >= 2 &&
-    explicitParallelMetadata &&
-    missingDependencies.length === 0 &&
-    selfDependencies.length === 0 &&
-    cycleTaskIds.length === 0 &&
-    collisionConflicts.length === 0 &&
-    rows.every((row) => row.externalWriteBoundary === false);
-  return {
-    schemaVersion: "agent-teams-fanout-safety-v0.1",
-    status: safeForParallelFanout ? "pass" : rows.length >= 2 ? "partial" : "not_required",
-    executableLaneCount: rows.length,
-    initialReadyLaneCount,
-    explicitParallelMetadata,
-    missingDependencies,
-    selfDependencies,
-    cycleTaskIds,
-    collisionConflicts,
-    dependencySafe:
-      missingDependencies.length === 0 && selfDependencies.length === 0 && cycleTaskIds.length === 0,
-    collisionSafe: collisionConflicts.length === 0,
-    externalWriteSafe: rows.every((row) => row.externalWriteBoundary === false),
-    safeForParallelFanout,
-    rows,
-  };
-}
-
-function buildAgentTeamsWaves(workerTaskPackets, parallelBudget = null, fanoutSafetyPacket = null) {
-  const executableTasks = workerTaskPackets.filter(taskIsExecutableWorker);
-  const budget = parallelBudget ?? resolveAgentTeamsParallelBudget(executableTasks.length);
-  const safetyPacket = fanoutSafetyPacket ?? buildFanoutSafetyPacket(executableTasks);
-  if (!safetyPacket.safeForParallelFanout) return [];
-  const waves = [];
-  const remaining = new Map(executableTasks.map((task) => [task.taskPacketId, task]));
-  const completed = new Set();
-  while (remaining.size > 0) {
-    const readyTasks = [...remaining.values()].filter((task) =>
-      taskDependencyIds(task).every((dependencyId) => completed.has(dependencyId) || !remaining.has(dependencyId))
-    );
-    if (readyTasks.length === 0) break;
-    const tasks = readyTasks.slice(0, budget.maxConcurrentAgents);
-    waves.push({
-      waveId: `agent-team-wave-${waves.length + 1}`,
-      mode: waves.length === 0 ? "primary_parallel_wave" : "followup_parallel_wave",
-      taskPacketIds: tasks.map((packet) => packet.taskPacketId),
-      roleDisplayNames: tasks.map((packet) => packet.roleDisplayName),
-      parallelCount: tasks.length,
-      requestedParallelAgents: budget.requestedParallelAgents,
-      runtimeCapacity: budget.runtimeCapacity,
-      capacitySource: budget.capacitySource,
-      capacitySourceKind: budget.capacitySourceKind,
-      mergeOwner: "meta-conductor",
-    });
-    for (const task of tasks) {
-      completed.add(task.taskPacketId);
-      remaining.delete(task.taskPacketId);
-    }
-  }
-  return waves;
 }
 
 async function resolveAgentTeamsPlaybookProvider(runtimeName) {
@@ -6248,7 +6089,6 @@ function buildNoHardcodedFixtureGate({ goalContractPacket }) {
     "WPF",
     "Electron",
     "Tauri",
-    "小红书营销自动发布器",
   ];
   const detectedForbiddenBindings = forbiddenFixtureBindings.filter((item) =>
     durableGoalText.toLowerCase().includes(item.toLowerCase())
@@ -7563,7 +7403,7 @@ function buildWorkflowContractPackets({
       },
     ],
   };
-  const externalEvidenceRequired = /小红书|抖音|快手|微信|公众号|视频号|微博|淘宝|京东|shopify|stripe|openai|api|sdk|oauth|授权|接口|平台|发布|自动发|风控|规则|限流|价格|合规/i.test(
+  const externalEvidenceRequired = /third[-\s]?party|external|provider|service|api|sdk|oauth|integration|webhook|授权|接口|外部|第三方|服务商|集成|平台规则|发布|自动发|风控|规则|限流|价格|合规/i.test(
     task,
   );
   const contentEvidencePacket = {

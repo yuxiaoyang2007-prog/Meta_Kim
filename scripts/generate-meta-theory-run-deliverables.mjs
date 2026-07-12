@@ -1,21 +1,15 @@
 #!/usr/bin/env node
 
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { readGovernedExecutionRun } from "./run-meta-theory-governed-execution.mjs";
 import { getReportLabelsForPath } from "./meta-kim-i18n.mjs";
+import { createReportContext } from "./report-context.mjs";
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(scriptDir, "..");
-const DEFAULT_STATE_DIR = path.join(
-  REPO_ROOT,
-  ".meta-kim",
-  "state",
-  "default",
-  "governed-executions"
-);
+const reportContext = createReportContext();
+const REPO_ROOT = reportContext.repoRoot;
+const DEFAULT_STATE_DIR = reportContext.resolveStatePath("governed-executions");
 
 function relativeToRepo(filePath) {
   const relativePath = path.relative(REPO_ROOT, filePath).replaceAll("\\", "/");
@@ -437,7 +431,7 @@ export async function generateRunDeliverables({
   const baseOutDir = outDir
     ? path.resolve(outDir)
     : path.join(path.dirname(run.paths.json), `${run.runId}-deliverables`);
-  await fs.mkdir(baseOutDir, { recursive: true });
+  await reportContext.ensureDirectory(baseOutDir);
 
   const files = {
     panelHtml: path.join(baseOutDir, "run-panel.html"),
@@ -484,7 +478,7 @@ export async function generateRunDeliverables({
     throw new Error(`Deliverables contain local absolute paths: ${leaks.join("; ")}`);
   }
   for (const [filePath, content] of Object.entries(outputs)) {
-    await fs.writeFile(filePath, content, "utf8");
+    await reportContext.writeText(filePath, content);
   }
   return {
     ...manifest,

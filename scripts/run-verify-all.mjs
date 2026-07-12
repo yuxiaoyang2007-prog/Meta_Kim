@@ -16,6 +16,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import process from "node:process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createReportContext } from "./report-context.mjs";
 
 export const STAGES = [
   { name: "discover:global", cmd: "npm run discover:global", timeoutMs: 120_000 },
@@ -24,8 +25,11 @@ export const STAGES = [
   { name: "meta:graphify:check", cmd: "npm run meta:graphify:check", timeoutMs: 60_000 },
   { name: "meta:check:global:release", cmd: "npm run meta:check:global:release", timeoutMs: 120_000 },
   { name: "eval-meta-agents", cmd: "node scripts/eval-meta-agents.mjs --require-all-runtimes", timeoutMs: 300_000 },
+  { name: "meta:test:inventory", cmd: "npm run meta:test:inventory", timeoutMs: 30_000 },
+  { name: "meta:test:unit", cmd: "npm run meta:test:unit", timeoutMs: 120_000 },
   { name: "meta:test:setup", cmd: "npm run meta:test:setup", timeoutMs: 300_000 },
   { name: "meta:test:meta-theory", cmd: "npm run meta:test:meta-theory", timeoutMs: 180_000 },
+  { name: "meta:test:integration", cmd: "npm run meta:test:integration", timeoutMs: 180_000 },
 ];
 
 export const LIVE_CERTIFIED_STAGE = {
@@ -85,10 +89,11 @@ const selectedStages = liveCertifiedRequested
 const jsonMode = args.includes("--json");
 const noReport = args.includes("--no-report");
 const reportIdx = args.findIndex((arg) => arg === "--report" || arg === "--json-out");
+const reportContext = createReportContext();
 const reportPath =
   reportIdx >= 0 && args[reportIdx + 1] && !args[reportIdx + 1].startsWith("--")
     ? args[reportIdx + 1]
-    : path.join(".meta-kim", "state", "default", "verification-report.json");
+    : reportContext.resolveStatePath("verification-report.json");
 
 function writeReport(report) {
   if (noReport) return;
@@ -217,12 +222,12 @@ const report = {
   resumedRun: startIndex > 0,
   releaseGradeReason:
     startIndex > 0
-      ? "Resumed verification is diagnostic only; release-grade requires one report containing all eight standard stages from discover:global through meta-theory tests."
+      ? `Resumed verification is diagnostic only; release-grade requires one report containing all ${STAGES.length} standard stages.`
       : !releaseGrade
         ? failedStage
         ? `Verification failed at ${failedStage.name}.`
-        : "The report does not contain all eight standard release-grade stages."
-        : "All eight standard release-grade stages passed in one complete run.",
+        : `The report does not contain all ${STAGES.length} standard release-grade stages.`
+        : `All ${STAGES.length} standard release-grade stages passed in one complete run.`,
   liveCertificationReason: liveCertifiedRequested
     ? liveCertified
       ? "The optional external clean-room signature gate passed after the complete standard release-grade run."

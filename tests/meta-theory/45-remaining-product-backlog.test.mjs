@@ -148,17 +148,25 @@ describe("45 — Remaining product backlog reports", () => {
       "node scripts/generate-openclaw-batch-stability-report.mjs",
     );
     const summary = runNodeScript("scripts/generate-openclaw-batch-stability-report.mjs");
-    assert.equal(summary.ok, true);
+    assert.equal(summary.generationOk, true);
+    assert.equal(summary.evidenceStatus, "not_run");
+    assert.equal(summary.runtimeEvidencePassed, false);
+    assert.equal(Object.hasOwn(summary, "ok"), false);
     assert.equal(summary.shardCount, 9);
     assert.equal(summary.batchReleaseGrade, false);
     assert.equal(summary.timeoutClassVisible, true);
 
     const { report, markdown } = readReport(summary);
-    assert.equal(report.schemaVersion, "openclaw-batch-stability-v0.1");
-    assert.equal(report.status, "pass");
-    assert.equal(report.summary.passShardCount, 9);
+    assert.equal(report.schemaVersion, "openclaw-batch-stability-v0.2");
+    assert.equal(report.generationStatus, "pass");
+    assert.equal(report.evidenceStatus, "not_run");
+    assert.equal(report.summary.passShardCount, 0);
+    assert.equal(report.summary.notRunShardCount, 9);
     assert.equal(report.batchProbe.expectedFailureClass, "timeout");
     assert.equal(report.batchProbe.releaseGradeCandidate, false);
+    assert.equal(report.batchProbe.evidenceStatus, "not_run");
+    assert.equal(report.batchProbe.observedFailureClass, null);
+    assert.ok(report.shards.every((shard) => shard.evidenceStatus === "not_run"));
     assert.ok(report.shards.every((shard) => shard.retryPolicy.maxRetries >= 1));
     assert.match(markdown, /OpenClaw Batch Stability Report/);
   });

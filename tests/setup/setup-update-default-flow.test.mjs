@@ -139,7 +139,7 @@ describe("setup update default flow", () => {
     );
 
     const checkOnlyStart = source.indexOf("if (checkOnly) {");
-    const checkOnlyEnd = source.indexOf("const localState = await ensureProfileState", checkOnlyStart);
+    const checkOnlyEnd = source.indexOf("const localState = getProfilePaths", checkOnlyStart);
     const checkOnlySource = source.slice(checkOnlyStart, checkOnlyEnd);
     assert.match(
       checkOnlySource,
@@ -426,6 +426,11 @@ describe("setup update default flow", () => {
       source,
       /const setupWithGlobalHooks =[\s\S]*?args\.includes\("--with-global-hooks"\)[\s\S]*?META_KIM_WITH_GLOBAL_HOOKS/,
       "setup must expose an explicit global hook opt-in",
+    );
+    assert.doesNotMatch(
+      source.slice(source.indexOf("const setupWithGlobalHooks"), source.indexOf("function writeUtf8BomFileSync")),
+      /!updateMode|!args\.includes\("--without-global-hooks"\)/,
+      "fresh installs must not silently enable global hooks",
     );
     assert.match(source, /function metaTheoryGlobalSyncArgs\(targets, withGlobalHooks = false\)/);
     assert.match(source, /\["claude", "codex"\]\.includes\(target\)/);

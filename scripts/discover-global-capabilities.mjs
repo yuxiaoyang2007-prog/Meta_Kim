@@ -1070,6 +1070,73 @@ async function scanPlatform(platformId, platform) {
 
 // ========== 索引构建 ==========
 
+export function mergeCanonicalHookSources(
+  sharedHooks,
+  claudeHooks,
+  openclawHooks,
+  { verifiedThinAdapterIds = new Set() } = {},
+) {
+  const claudeById = new Map(claudeHooks.map((item) => [item.id, item]));
+  const sharedIds = new Set(sharedHooks.map((item) => item.id));
+  const occupiedIds = new Set([
+    ...sharedHooks.map((item) => item.id),
+    ...claudeHooks.map((item) => item.id),
+  ]);
+
+  return [
+    ...sharedHooks.map((item) => {
+      const adapter = claudeById.get(item.id);
+      return adapter && verifiedThinAdapterIds.has(item.id)
+        ? { ...item, adapterPath: adapter.path }
+        : item;
+    }),
+    ...claudeHooks
+      .filter(
+        (item) =>
+          !sharedIds.has(item.id) || !verifiedThinAdapterIds.has(item.id),
+      )
+      .map((item) => ({
+        ...item,
+        ...(sharedIds.has(item.id)
+          ? { namespace: "canonical-claude-hooks" }
+          : {}),
+      })),
+    ...openclawHooks.map((item) => ({
+      ...item,
+      ...(occupiedIds.has(item.id)
+        ? { namespace: "canonical-openclaw-hooks" }
+        : {}),
+    })),
+  ];
+}
+
+async function verifiedThinClaudeAdapterIds(sharedHooks, claudeHooks) {
+  const sharedIds = new Set(sharedHooks.map((item) => item.id));
+  const verified = new Set();
+  for (const adapter of claudeHooks) {
+    if (!sharedIds.has(adapter.id)) continue;
+    let source;
+    try {
+      source = await fs.readFile(adapter.path, "utf8");
+    } catch {
+      continue;
+    }
+    const executable = source
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("//"))
+      .join("\n");
+    const sharedImport = `../../shared/hooks/${adapter.id}`;
+    if (
+      executable === `import "${sharedImport}";` ||
+      executable === `export * from "${sharedImport}";`
+    ) {
+      verified.add(adapter.id);
+    }
+  }
+  return verified;
+}
+
 async function collectRepoCanonicalCapabilities() {
   const agents = await scanMarkdownFiles(
     path.join(repoRoot, "canonical", "agents"),
@@ -1088,6 +1155,10 @@ async function collectRepoCanonicalCapabilities() {
   );
   const openclawHooks = await scanHookFiles(
     path.join(repoRoot, "canonical", "runtime-assets", "openclaw", "hooks"),
+  );
+  const verifiedClaudeAdapters = await verifiedThinClaudeAdapterIds(
+    sharedHooks,
+    claudeHooks,
   );
   const claudeCommands = await scanCommandFiles(
     path.join(repoRoot, "canonical", "runtime-assets", "claude", "commands"),
@@ -1164,12 +1235,26 @@ async function collectRepoCanonicalCapabilities() {
     const base = {
       id: item.id,
       type,
-      namespace,
+      namespace: item.namespace ?? namespace,
       path: path.relative(repoRoot, item.path).replace(/\\/g, "/"),
       relativePath: item.relativePath?.replace(/\\/g, "/"),
       size: item.size,
       modified: item.modified,
     };
+
+    if (type === "hooks") {
+      return {
+        ...base,
+        canonicalPath: base.path,
+        ...(item.adapterPath
+          ? {
+              adapterPath: path
+                .relative(repoRoot, item.adapterPath)
+                .replace(/\\/g, "/"),
+            }
+          : {}),
+      };
+    }
 
     // Add layer field for agents
     if (type === "agents") {
@@ -1192,7 +1277,12 @@ async function collectRepoCanonicalCapabilities() {
         toRepoCapability(item, "skills", "canonical-reference"),
       ),
     ],
-    hooks: [...sharedHooks, ...claudeHooks, ...openclawHooks].map((item) =>
+    hooks: mergeCanonicalHookSources(
+      sharedHooks,
+      claudeHooks,
+      openclawHooks,
+      { verifiedThinAdapterIds: verifiedClaudeAdapters },
+    ).map((item) =>
       toRepoCapability(item, "hooks", "canonical-runtime-assets"),
     ),
     mcpServers: mcpDiscovery.servers.map((item) =>
@@ -1929,13 +2019,10 @@ async function main() {
     }
   }
 
-  const profileName = process.env.META_KIM_PROFILE || "default";
-  const profileState = runtimeInventoryOnly
-    ? {
-        profile: profileName,
-        profileDir: path.join(os.homedir(), ".meta-kim", "state", profileName),
-      }
-    : await ensureProfileState();
+  // Runtime-only discovery still writes a local inventory, so it must use the
+  // same canonical profile resolver and collision guard as full discovery.
+  // Never join a raw META_KIM_PROFILE value into a filesystem path.
+  const profileState = await ensureProfileState();
   const canonicalIndexPath = path.join(repoRoot, CANONICAL_CAPABILITY_INDEX);
   const repoCapabilityIndex = writeRepoIndex
     ? preserveGeneratedAtWhenUnchanged(

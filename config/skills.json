@@ -23,7 +23,9 @@
         "win32": "windows",
         "default": "original"
       },
-      "legacyNames": ["find-skills"],
+      "legacyNames": [
+        "find-skills"
+      ],
       "targets": [
         "claude",
         "codex",
@@ -41,22 +43,30 @@
       "platformSupport": {
         "claude": {
           "status": "native",
-          "events": ["UserPromptSubmit"],
+          "events": [
+            "UserPromptSubmit"
+          ],
           "adapter": "claude-settings-hook"
         },
         "codex": {
           "status": "adapter-required",
-          "events": ["UserPromptSubmit"],
+          "events": [
+            "UserPromptSubmit"
+          ],
           "adapter": "codex-hookprompt-adapter"
         },
         "openclaw": {
           "status": "degraded",
-          "events": ["command:new"],
+          "events": [
+            "command:new"
+          ],
           "adapter": "openclaw-workspace-instruction"
         },
         "cursor": {
           "status": "adapter-required",
-          "events": ["beforeSubmitPrompt"],
+          "events": [
+            "beforeSubmitPrompt"
+          ],
           "adapter": "cursor-hookprompt-adapter"
         }
       },
@@ -65,11 +75,16 @@
         "cursor": "Use Cursor beforeSubmitPrompt through the Meta_Kim adapter; do not reuse Claude hook output directly."
       },
       "globalHookSubdirs": {
-        "claude": ["~/.claude/hooks/meta-kim"]
+        "claude": [
+          "~/.claude/hooks/meta-kim"
+        ]
       },
       "hookExtraFiles": {
         "claude": [
-          { "src": ".claude/prompt-optimizer-meta.md", "dest": "prompt-optimizer-meta.md" }
+          {
+            "src": ".claude/prompt-optimizer-meta.md",
+            "dest": "prompt-optimizer-meta.md"
+          }
         ]
       },
       "hookSettingsMerge": {
@@ -108,18 +123,50 @@
       "installMethod": "upstreamCli",
       "upstreamPackage": "ecc-universal@latest",
       "upstreamProfile": "core",
-      "legacyNames": ["everything-claude-code"],
+      "legacyNames": [
+        "everything-claude-code"
+      ],
       "platformSupport": {
-        "claude": { "status": "native", "adapter": "claude-plugin" },
-        "codex": { "status": "native", "adapter": "ecc-home-installer" },
-        "cursor": { "status": "native", "adapter": "ecc-project-installer" },
-        "opencode": { "status": "native", "adapter": "ecc-home-installer" },
-        "qwen": { "status": "native", "adapter": "ecc-home-installer" },
-        "zed": { "status": "native", "adapter": "ecc-project-installer" },
-        "gemini": { "status": "native", "adapter": "ecc-project-installer" },
-        "codebuddy": { "status": "native", "adapter": "ecc-project-installer" },
-        "antigravity": { "status": "native", "adapter": "ecc-project-installer" },
-        "joycode": { "status": "native", "adapter": "ecc-project-installer" }
+        "claude": {
+          "status": "native",
+          "adapter": "claude-plugin"
+        },
+        "codex": {
+          "status": "native",
+          "adapter": "ecc-home-installer"
+        },
+        "cursor": {
+          "status": "native",
+          "adapter": "ecc-project-installer"
+        },
+        "opencode": {
+          "status": "native",
+          "adapter": "ecc-home-installer"
+        },
+        "qwen": {
+          "status": "native",
+          "adapter": "ecc-home-installer"
+        },
+        "zed": {
+          "status": "native",
+          "adapter": "ecc-project-installer"
+        },
+        "gemini": {
+          "status": "native",
+          "adapter": "ecc-project-installer"
+        },
+        "codebuddy": {
+          "status": "native",
+          "adapter": "ecc-project-installer"
+        },
+        "antigravity": {
+          "status": "native",
+          "adapter": "ecc-project-installer"
+        },
+        "joycode": {
+          "status": "native",
+          "adapter": "ecc-project-installer"
+        }
       },
       "targets": [
         "claude",
@@ -141,8 +188,12 @@
       "subdir": "skills/planning-with-files",
       "pluginHookCompat": true,
       "globalHookSubdirs": {
-        "codex": ["~/.codex/hooks/meta-kim"],
-        "cursor": ["~/.cursor/hooks/meta-kim"]
+        "codex": [
+          "~/.codex/hooks/meta-kim"
+        ],
+        "cursor": [
+          "~/.cursor/hooks/meta-kim"
+        ]
       },
       "globalHookConfigFiles": {
         "codex": "~/.codex/hooks.json",
@@ -179,10 +230,91 @@
       ]
     },
     {
-      "id": "skill-creator",
-      "repo": "anthropics/skills",
+      "id": "meta-skill-creator",
+      "repo": "${skillOwner}/meta-skill-creator",
       "installMethod": "subdirExtraction",
-      "subdir": "skills/skill-creator",
+      "subdir": "skills/meta-skill-creator",
+      "capabilities": [
+        "skill-agent-tool-creation"
+      ],
+      "platformSupport": {
+        "claude": {
+          "status": "native",
+          "adapter": "claude-global-skill"
+        },
+        "codex": {
+          "status": "native",
+          "adapter": "codex-global-skill"
+        }
+      },
+      "targets": [
+        "claude",
+        "codex"
+      ]
+    },
+    {
+      "id": "goalpro",
+      "repo": "${skillOwner}/GoalPro",
+      "installMethod": "subdirExtraction",
+      "subdir": ".agents/skills/goalpro",
+      "capabilities": [
+        "goal-contract",
+        "intent-amplification",
+        "prompt-only-loop-contract"
+      ],
+      "platformSupport": {
+        "claude": {
+          "status": "native",
+          "adapter": "claude-global-skill"
+        },
+        "codex": {
+          "status": "native",
+          "adapter": "codex-global-skill"
+        },
+        "cursor": {
+          "status": "native",
+          "adapter": "cursor-global-skill"
+        },
+        "openclaw": {
+          "status": "degraded",
+          "adapter": "openclaw-global-skill"
+        }
+      },
+      "targets": [
+        "claude",
+        "codex",
+        "openclaw",
+        "cursor"
+      ]
+    },
+    {
+      "id": "kim-decision",
+      "repo": "${skillOwner}/Kim_Decision",
+      "installMethod": "subdirExtraction",
+      "subdir": ".agents/skills/Kim",
+      "capabilities": [
+        "decision-protocol-reference",
+        "path-selection",
+        "pass-kill-gate"
+      ],
+      "platformSupport": {
+        "claude": {
+          "status": "native",
+          "adapter": "claude-global-skill"
+        },
+        "codex": {
+          "status": "native",
+          "adapter": "codex-global-skill"
+        },
+        "cursor": {
+          "status": "native",
+          "adapter": "cursor-global-skill"
+        },
+        "openclaw": {
+          "status": "degraded",
+          "adapter": "openclaw-global-skill"
+        }
+      },
       "targets": [
         "claude",
         "codex",

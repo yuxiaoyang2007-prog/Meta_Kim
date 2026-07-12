@@ -5,9 +5,10 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { createReportContext } from "./report-context.mjs";
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(scriptDir, "..");
+const reportContext = createReportContext();
+const REPO_ROOT = reportContext.repoRoot;
 const SCENARIO_PATH = path.join(
   REPO_ROOT,
   "tests",
@@ -16,16 +17,14 @@ const SCENARIO_PATH = path.join(
   "research-execution-cases.json",
 );
 const CONTRACT_PATH = path.join(REPO_ROOT, "config", "contracts", "research-execution-contract.json");
-const OUTPUT_DIR = path.join(REPO_ROOT, ".meta-kim", "state", "default", "research-execution");
-const CACHE_DIR = path.join(REPO_ROOT, ".meta-kim", "state", "default", "research-evidence-cache");
+const OUTPUT_DIR = reportContext.resolveStatePath("research-execution");
+const CACHE_DIR = reportContext.resolveStatePath("research-evidence-cache");
 const CACHE_PATH = path.join(CACHE_DIR, "cache.json");
 
 const args = new Set(process.argv.slice(2));
 const REFRESH = args.has("--refresh");
 
-function relativeToRepo(filePath) {
-  return path.relative(REPO_ROOT, filePath).replaceAll("\\", "/");
-}
+const relativeToRepo = reportContext.relativeToRepo;
 
 function sha256(text) {
   return createHash("sha256").update(text).digest("hex");
@@ -460,13 +459,13 @@ async function main() {
     innovationCandidates,
   };
 
-  await fs.mkdir(OUTPUT_DIR, { recursive: true });
-  await fs.mkdir(CACHE_DIR, { recursive: true });
+  await reportContext.ensureDirectory(OUTPUT_DIR);
+  await reportContext.ensureDirectory(CACHE_DIR);
   const jsonPath = path.join(OUTPUT_DIR, "latest.json");
   const mdPath = path.join(OUTPUT_DIR, "latest.zh-CN.md");
-  await fs.writeFile(CACHE_PATH, `${JSON.stringify(cache, null, 2)}\n`);
-  await fs.writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
-  await fs.writeFile(mdPath, buildMarkdown(report));
+  await reportContext.writeJson(CACHE_PATH, cache);
+  await reportContext.writeJson(jsonPath, report);
+  await reportContext.writeText(mdPath, buildMarkdown(report));
 
   process.stdout.write(
     `${JSON.stringify(

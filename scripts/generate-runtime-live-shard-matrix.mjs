@@ -5,10 +5,11 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { getReportLabelsForPath } from "./meta-kim-i18n.mjs";
+import { createReportContext } from "./report-context.mjs";
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(scriptDir, "..");
-const OUTPUT_DIR = path.join(REPO_ROOT, ".meta-kim", "state", "default", "runtime-live-shard-matrix");
+const reportContext = createReportContext();
+const REPO_ROOT = reportContext.repoRoot;
+const OUTPUT_DIR = reportContext.resolveStatePath("runtime-live-shard-matrix");
 const CANONICAL_AGENTS_DIR = path.join(REPO_ROOT, "canonical", "agents");
 
 const META_AGENT_IDS = [
@@ -23,9 +24,7 @@ const META_AGENT_IDS = [
   "meta-chrysalis",
 ];
 
-function relativeToRepo(filePath) {
-  return path.relative(REPO_ROOT, filePath).replaceAll("\\", "/");
-}
+const relativeToRepo = reportContext.relativeToRepo;
 
 async function canonicalMetaAgentIds() {
   const files = await fs.readdir(CANONICAL_AGENTS_DIR);
@@ -146,11 +145,11 @@ async function main() {
     },
   };
 
-  await fs.mkdir(OUTPUT_DIR, { recursive: true });
+  await reportContext.ensureDirectory(OUTPUT_DIR);
   const jsonPath = path.join(OUTPUT_DIR, "latest.json");
   const mdPath = path.join(OUTPUT_DIR, "latest.zh-CN.md");
-  await fs.writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
-  await fs.writeFile(mdPath, buildMarkdown(report, mdPath));
+  await reportContext.writeJson(jsonPath, report);
+  await reportContext.writeText(mdPath, buildMarkdown(report, mdPath));
 
   process.stdout.write(
     `${JSON.stringify(

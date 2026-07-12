@@ -85,7 +85,7 @@ pip/
 lib/
 */lib/
 */node_modules/
-# v2.2.0 exception: canonical abstraction modules live under shared/lib/ on purpose
+# Canonical shared libraries are source assets, not dependency output.
 !canonical/runtime-assets/shared/lib/
 !canonical/runtime-assets/shared/lib/**
 

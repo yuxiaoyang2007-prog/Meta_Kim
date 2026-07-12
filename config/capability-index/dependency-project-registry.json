@@ -917,68 +917,87 @@
       }
     },
     {
-      "id": "skill-creator",
-      "name": "skill-creator",
+      "id": "meta-skill-creator",
+      "name": "meta-skill-creator",
       "source": {
         "type": "github",
-        "uri": "anthropics/skills",
+        "uri": "https://github.com/KimYx0207/meta-skill-creator",
         "localPath": null,
-        "inspectionStatus": "external_reference",
-        "lastInspectedAt": null
+        "inspectionStatus": "inspected_reference",
+        "lastInspectedAt": "2026-07-11",
+        "revision": "ace057d771c1baaa58811a00a2cbbdcad30d8e72",
+        "subdir": "skills/meta-skill-creator"
       },
       "capabilityCard": {
-        "oneLine": "Dependency capability for skill-creator.",
+        "oneLine": "Design, refactor, review, and validate reusable Agent Skill packages with evidence-backed release gates.",
         "canDo": [
-          "external_capability"
+          "skill_package_design",
+          "skill_package_refactor",
+          "skill_package_review",
+          "skill_package_validation"
         ],
         "canNotDo": [
-          "automatic execution without trust review"
+          "turn one-off prompts into durable skills without gap proof",
+          "claim runtime or release proof from structural validation alone"
         ],
         "inputContract": {
           "requires": [
-            "matched task shape",
-            "trust review when third-party"
+            "repeatable workflow or existing skill package",
+            "target runtime and desired delivery boundary",
+            "evidence and acceptance criteria"
           ]
         },
         "outputContract": {
           "produces": [
-            "skill-specific artifact or reference evidence"
+            "reviewable Agent Skill package",
+            "validation evidence",
+            "release readiness and writeback decision"
           ]
         },
         "triggerConditions": [
-          "skill-creator"
+          "meta-skill-creator",
+          "create, refactor, review, or validate a reusable skill package"
         ],
         "verificationMethod": "npm run meta:deps:compat",
         "risk": [
-          "third_party_skill_requires_trust_review"
+          "external skill content requires trust review before execution",
+          "upstream main can change after the inspected revision"
         ],
-        "routeEligibility": "external_reference",
+        "routeEligibility": "installed_skill_candidate",
         "notFor": [
-          "automatic execution without trust review"
+          "one-off prompt rewriting",
+          "automatic durable writeback without review"
         ],
         "taskShapes": [
-          "external_capability"
+          "skill_creation",
+          "skill_refactor",
+          "skill_review",
+          "skill_release_preparation"
         ],
-        "writebackKey": "dependency:skill-creator",
+        "writebackKey": "dependency:meta-skill-creator",
         "verificationMethods": [
-          "npm run meta:deps:compat"
+          "npm run meta:deps:compat",
+          "python scripts/check_meta_skill_package.py .",
+          "python scripts/check_closed_loop.py ."
         ]
       },
       "interface": {
-        "invokeAs": "reference",
-        "invocationPath": null,
-        "preferredWeaponId": "skill-creator-skill",
-        "requiredFiles": [],
+        "invokeAs": "skill",
+        "invocationPath": "runtime-discovered meta-skill-creator skill root",
+        "preferredWeaponId": "meta-skill-creator-skill",
+        "requiredFiles": [
+          "SKILL.md",
+          "scripts/check_meta_skill_package.py",
+          "scripts/check_closed_loop.py"
+        ],
         "requiredEnv": [],
         "requiredRuntime": [
           "claude_code",
-          "codex",
-          "cursor",
-          "openclaw"
+          "codex"
         ]
       },
       "scoring": {
-        "overall": 62
+        "overall": 88
       },
       "reusePolicy": {
         "reuseWhenScoreAbove": 80,
@@ -991,13 +1010,16 @@
         "successCount": 0,
         "failureCount": 0,
         "lastFailureReason": null,
-        "nextRunHints": []
+        "nextRunHints": [
+          "Prefer meta-skill-creator for skill package creation routes.",
+          "Keep structural checks separate from runtime and human acceptance evidence."
+        ]
       },
       "runtimeSupport": {
         "claude_code": "partial",
         "codex": "partial",
-        "cursor": "partial",
-        "openclaw": "partial"
+        "cursor": "unknown",
+        "openclaw": "unknown"
       },
       "osSupport": {
         "macos": "partial",
@@ -1006,10 +1028,281 @@
         "wsl2": "partial"
       },
       "supportEvidence": {
-        "source": "repo_claim",
-        "confidence": "repo_claim",
+        "source": "github_source_inspection_and_local_runtime_home_presence",
+        "confidence": "inspected_source_and_local_presence",
         "verificationCommand": "npm run meta:deps:compat",
-        "lastVerifiedAt": null
+        "lastVerifiedAt": "2026-07-11",
+        "evidence": [
+          "GitHub HEAD ace057d771c1baaa58811a00a2cbbdcad30d8e72 contains skills/meta-skill-creator/SKILL.md and its package validators.",
+          "Upstream README documents global Claude Code and Codex installation paths.",
+          "No upstream Cursor or OpenClaw installation contract was found, so those runtimes remain unknown."
+        ]
+      }
+    },
+    {
+      "id": "goalpro",
+      "name": "GoalPro",
+      "source": {
+        "type": "github",
+        "uri": "https://github.com/KimYx0207/GoalPro",
+        "localPath": null,
+        "inspectionStatus": "inspected_reference",
+        "lastInspectedAt": "2026-07-11",
+        "revision": "39adc8db765e0e4ad4df8d4ce02e7059fed69f26",
+        "subdir": ".agents/skills/goalpro"
+      },
+      "capabilityCard": {
+        "oneLine": "Prompt-only Goal Contract skill that turns fuzzy or strategic work into Goal Prompt + Loop Prompt before execution.",
+        "canDo": [
+          "goal_contract",
+          "intent_amplification",
+          "prompt_only_task_contract",
+          "loop_prompt_continuation_protocol"
+        ],
+        "canNotDo": [
+          "execute the generated goal",
+          "create automation or scheduler",
+          "commit or publish changes",
+          "replace Meta_Kim execution governance"
+        ],
+        "inputContract": {
+          "requires": [
+            "user goal or fuzzy task",
+            "desired audience or executor when known",
+            "scope and constraints when available"
+          ]
+        },
+        "outputContract": {
+          "produces": [
+            "Goal Prompt",
+            "Loop Prompt",
+            "scope",
+            "non-goals",
+            "acceptance evidence",
+            "stop and resume conditions"
+          ]
+        },
+        "triggerConditions": [
+          "user asks for a better goal prompt",
+          "fuzzy goal must become an execution contract",
+          "Loop Prompt or post-result continuation protocol is requested",
+          "durable task needs prompt-only handoff before execution"
+        ],
+        "verificationMethod": "npm run meta:deps:compat",
+        "risk": [
+          "prompt-only boundary must stop after producing the contract unless the user separately authorizes execution",
+          "Loop Prompt is not an automation runtime"
+        ],
+        "routeEligibility": "installed_skill_candidate",
+        "notFor": [
+          "direct file mutation",
+          "test execution",
+          "agent orchestration",
+          "scheduler creation",
+          "release or publish operations"
+        ],
+        "taskShapes": [
+          "goal_contract",
+          "intent_amplification",
+          "prompt_contract",
+          "loop_prompt"
+        ],
+        "writebackKey": "dependency:goalpro",
+        "verificationMethods": [
+          "npm run meta:deps:compat",
+          "npm run meta:providers:validate"
+        ]
+      },
+      "interface": {
+        "invokeAs": "skill",
+        "invocationPath": "runtime-discovered goalpro skill root",
+        "preferredWeaponId": "goalpro-skill",
+        "requiredFiles": [
+          "SKILL.md"
+        ],
+        "requiredEnv": [],
+        "requiredRuntime": [
+          "claude_code",
+          "codex",
+          "openclaw",
+          "cursor"
+        ]
+      },
+      "scoring": {
+        "overall": 88
+      },
+      "reusePolicy": {
+        "reuseWhenScoreAbove": 80,
+        "requiresHumanConfirmationAboveRisk": "medium",
+        "writebackOnUse": true,
+        "recordUsageStats": true
+      },
+      "evolution": {
+        "usageCount": 0,
+        "successCount": 0,
+        "failureCount": 0,
+        "lastFailureReason": null,
+        "nextRunHints": [
+          "Use in Critical before execution when the user needs a prompt-only goal contract.",
+          "Do not execute the generated Goal Prompt or Loop Prompt without separate user authorization."
+        ]
+      },
+      "runtimeSupport": {
+        "claude_code": "partial",
+        "codex": "partial",
+        "openclaw": "partial",
+        "cursor": "partial"
+      },
+      "osSupport": {
+        "macos": "partial",
+        "windows": "partial",
+        "linux": "partial",
+        "wsl2": "partial"
+      },
+      "supportEvidence": {
+        "source": "local_source_inspection_and_memory",
+        "confidence": "inspected_source_and_local_presence",
+        "verificationCommand": "npm run meta:deps:compat",
+        "lastVerifiedAt": "2026-07-11",
+        "evidence": [
+          "D:/KimProject/GoalPro contains .agents/skills/goalpro/SKILL.md with a prompt-only Goal Prompt + Loop Prompt contract.",
+          "The inspected GoalPro HEAD was 39adc8db765e0e4ad4df8d4ce02e7059fed69f26."
+        ]
+      }
+    },
+    {
+      "id": "kim-decision",
+      "name": "Kim_Decision",
+      "source": {
+        "type": "github",
+        "uri": "https://github.com/KimYx0207/Kim_Decision",
+        "localPath": null,
+        "inspectionStatus": "inspected_reference",
+        "lastInspectedAt": "2026-07-11",
+        "revision": "32208316c1900ee25fcc56f255ad178281a7da98",
+        "subdir": ".agents/skills/Kim"
+      },
+      "capabilityCard": {
+        "oneLine": "Reference-only decision protocol for real-intent lock, path selection, minimum test, and pass/kill judgment.",
+        "canDo": [
+          "decision_protocol_reference",
+          "real_intent_judgment",
+          "path_selection",
+          "minimum_test_design",
+          "pass_kill_gate"
+        ],
+        "canNotDo": [
+          "direct code implementation",
+          "code executor",
+          "runtime hook install",
+          "MCP server startup",
+          "security approval",
+          "universal owner"
+        ],
+        "inputContract": {
+          "requires": [
+            "decision question",
+            "evidence labels",
+            "constraints",
+            "candidate paths when available"
+          ]
+        },
+        "outputContract": {
+          "produces": [
+            "decision rationale",
+            "selected path",
+            "minimum test",
+            "passSignal",
+            "killSignal"
+          ]
+        },
+        "triggerConditions": [
+          "route choice is branch-changing",
+          "Critical needs real-intent judgment",
+          "Thinking needs path selection",
+          "Review needs pass/kill judgment"
+        ],
+        "verificationMethod": "npm run meta:deps:compat",
+        "risk": [
+          "reference_only",
+          "not_for_code_execution",
+          "must not become implementation owner or callable dependency"
+        ],
+        "routeEligibility": "reference_only",
+        "notFor": [
+          "code execution",
+          "implementation owner",
+          "security approval",
+          "runtime install authority",
+          "release authority"
+        ],
+        "taskShapes": [
+          "strategy_product_decision",
+          "intent_acceptance",
+          "path_selection",
+          "review_pass_kill"
+        ],
+        "writebackKey": "dependency:kim-decision-state-machine",
+        "verificationMethods": [
+          "npm run meta:deps:compat",
+          "npm run meta:route:validate"
+        ]
+      },
+      "interface": {
+        "invokeAs": "reference",
+        "invocationPath": null,
+        "preferredWeaponId": "meta-kim-decision-patterns",
+        "requiredFiles": [
+          "SKILL.md"
+        ],
+        "requiredEnv": [],
+        "requiredRuntime": [
+          "claude_code",
+          "codex",
+          "openclaw",
+          "cursor"
+        ]
+      },
+      "scoring": {
+        "overall": 72
+      },
+      "reusePolicy": {
+        "reuseWhenScoreAbove": 80,
+        "requiresHumanConfirmationAboveRisk": "medium",
+        "writebackOnUse": true,
+        "recordUsageStats": true
+      },
+      "evolution": {
+        "usageCount": 0,
+        "successCount": 0,
+        "failureCount": 0,
+        "lastFailureReason": null,
+        "nextRunHints": [
+          "Use as decision reference in Critical, Thinking, and Review only.",
+          "Never route Kim_Decision as an implementation worker or code executor."
+        ]
+      },
+      "runtimeSupport": {
+        "claude_code": "partial",
+        "codex": "partial",
+        "openclaw": "partial",
+        "cursor": "partial"
+      },
+      "osSupport": {
+        "macos": "partial",
+        "windows": "partial",
+        "linux": "partial",
+        "wsl2": "partial"
+      },
+      "supportEvidence": {
+        "source": "local_source_inspection_and_internalized_patterns",
+        "confidence": "inspected_source_and_reference_only",
+        "verificationCommand": "npm run meta:deps:compat",
+        "lastVerifiedAt": "2026-07-11",
+        "evidence": [
+          "A local sibling inspection found the Kim_Decision skill source at its repository skill root, but Meta_Kim keeps it reference-only.",
+          "config/governance/decision-pattern-catalog.json remains the internalized decision-pattern source for execution routing."
+        ]
       }
     }
   ]

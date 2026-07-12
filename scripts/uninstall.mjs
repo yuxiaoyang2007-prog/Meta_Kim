@@ -538,9 +538,12 @@ async function main() {
   };
 
   const rawScope = valueOf("scope") || "both";
-  const scope = ["global", "project", "both"].includes(rawScope)
-    ? rawScope
-    : "both";
+  if (!["global", "project", "both"].includes(rawScope)) {
+    console.error(`meta-kim uninstall: invalid scope '${rawScope}'; expected global, project, or both`);
+    process.exitCode = 2;
+    return;
+  }
+  const scope = rawScope;
   const apply = flag("yes");
   const deep = flag("deep");
   const purgeProjectAgents = flag("purge-project-agents");

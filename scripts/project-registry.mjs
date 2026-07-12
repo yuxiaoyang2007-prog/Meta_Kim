@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { importDatabaseSync } from "./sqlite-runtime.mjs";
+import { withSqliteTransaction } from "./sqlite-transaction.mjs";
 
 function normalizeRepoPath(repoPath) {
   return path.resolve(repoPath);
@@ -155,43 +156,46 @@ export async function joinProjectRegistry({
   runtimeFamily = "shared",
   sourceType = "meta_architecture",
   sourceRef = "meta-kim-runtime",
+  onWriteStep = null,
 } = {}) {
   const { projectRegistryPath } = getProjectRegistryPaths({ homeDir });
   const db = await openProjectRegistry(projectRegistryPath);
   try {
-    const { projectRef, now } = upsertProjectRow(db, {
-      repoPath,
-      enrollmentStatus: "joined",
-    });
+    const { projectRef } = withSqliteTransaction(db, () => {
+      const project = upsertProjectRow(db, {
+        repoPath,
+        enrollmentStatus: "joined",
+      });
+      onWriteStep?.("project");
 
-    db.prepare(
-      `
+      db.prepare(`
         INSERT INTO project_platforms (
           project_ref, platform, status, first_seen_at, last_seen_at
         ) VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(project_ref, platform) DO UPDATE SET
           status = excluded.status,
           last_seen_at = excluded.last_seen_at
-      `,
-    ).run(projectRef, runtimeFamily, "active", now, now);
+      `).run(project.projectRef, runtimeFamily, "active", project.now, project.now);
+      onWriteStep?.("platform");
 
-    db.prepare(
-      `
+      db.prepare(`
         INSERT INTO project_sources (
           project_ref, source_type, source_ref, metadata_json, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(project_ref, source_type, source_ref) DO UPDATE SET
           metadata_json = excluded.metadata_json,
           updated_at = excluded.updated_at
-      `,
-    ).run(
-      projectRef,
-      sourceType,
-      sourceRef,
-      JSON.stringify({ runtimeFamily }),
-      now,
-      now,
-    );
+      `).run(
+        project.projectRef,
+        sourceType,
+        sourceRef,
+        JSON.stringify({ runtimeFamily }),
+        project.now,
+        project.now,
+      );
+      onWriteStep?.("source");
+      return project;
+    });
 
     return {
       projectRef,

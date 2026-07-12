@@ -243,7 +243,7 @@ describe("31 — Capability Gap orchestration through meta-theory Conductor", ()
       assert.equal(agent.externalEvidencePolicy?.loadoutHasRetrieval, true);
     }
     assert.ok(report.projectAgentBlueprintPacket.agents.length >= 9);
-    assert.ok(frontendLane.projectAgentId.includes("xiaohongshu-marketing-automation"));
+    assert.ok(frontendLane.projectAgentId.includes("marketing-automation"));
     assert.ok(frontendLane.capabilityLoadout.runtimeSkillCandidates.includes("frontend-patterns"));
     assert.ok(integrationLane.capabilityLoadout.runtimeMcpCandidates.includes("exa"));
     assert.ok(

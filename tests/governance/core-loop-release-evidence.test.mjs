@@ -75,7 +75,16 @@ test("release verification path includes governance tests", () => {
     "node scripts/eval-meta-agents.mjs --require-all-runtimes --live",
     "existing live runtime evaluation command must remain compatible",
   );
-  assert.equal(STAGES.length, 8);
+  for (const requiredStage of [
+    "meta:verify:governance",
+    "meta:test:inventory",
+    "meta:test:unit",
+    "meta:test:setup",
+    "meta:test:meta-theory",
+    "meta:test:integration",
+  ]) {
+    assert.equal(STAGES.some((stage) => stage.name === requiredStage), true, requiredStage);
+  }
   assert.equal(STAGES.some((stage) => stage.name === LIVE_CERTIFIED_STAGE.name), false);
   assert.match(verifyRunnerSource, /releaseGrade/);
   assert.match(verifyRunnerSource, /续跑诊断通过/);

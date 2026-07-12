@@ -5,15 +5,14 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { openRunStateStore } from "./capability-gap-mvp.mjs";
+import { createReportContext } from "./report-context.mjs";
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(scriptDir, "..");
-const DEFAULT_DB_PATH = path.join(REPO_ROOT, ".meta-kim", "state", "default", "governed-execution.sqlite");
-const OUTPUT_DIR = path.join(REPO_ROOT, ".meta-kim", "state", "default", "run-trend-panel");
+const reportContext = createReportContext();
+const REPO_ROOT = reportContext.repoRoot;
+const DEFAULT_DB_PATH = reportContext.resolveStatePath("governed-execution.sqlite");
+const OUTPUT_DIR = reportContext.resolveStatePath("run-trend-panel");
 
-function relativeToRepo(filePath) {
-  return path.relative(REPO_ROOT, filePath).replaceAll("\\", "/");
-}
+const relativeToRepo = reportContext.relativeToRepo;
 
 function hasLocalAbsolutePath(value) {
   const text = typeof value === "string" ? value : JSON.stringify(value);
@@ -29,7 +28,7 @@ async function readJsonIfExists(filePath, fallback = null) {
 }
 
 async function loadGeneratedReport(name) {
-  const reportPath = path.join(REPO_ROOT, ".meta-kim", "state", "default", name, "latest.json");
+  const reportPath = reportContext.resolveStatePath(name, "latest.json");
   const report = await readJsonIfExists(reportPath, null);
   return report ? { path: relativeToRepo(reportPath), report } : null;
 }
@@ -270,13 +269,13 @@ function buildMarkdown(report) {
 
 async function main() {
   const report = await buildTrendReport();
-  await fs.mkdir(OUTPUT_DIR, { recursive: true });
+  await reportContext.ensureDirectory(OUTPUT_DIR);
   const jsonPath = path.join(OUTPUT_DIR, "latest.json");
   const mdPath = path.join(OUTPUT_DIR, "latest.zh-CN.md");
   const htmlPath = path.join(OUTPUT_DIR, "trend-panel.html");
-  await fs.writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
-  await fs.writeFile(mdPath, buildMarkdown(report));
-  await fs.writeFile(htmlPath, buildHtml(report));
+  await reportContext.writeJson(jsonPath, report);
+  await reportContext.writeText(mdPath, buildMarkdown(report));
+  await reportContext.writeText(htmlPath, buildHtml(report));
 
   process.stdout.write(
     `${JSON.stringify(

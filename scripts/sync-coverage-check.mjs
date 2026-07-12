@@ -84,14 +84,10 @@ const KNOWN_INTENTIONAL_EXCLUSIONS = [
     reason:
       "Runtime state scaffold consumed in-place by .meta-kim/ helpers; no projection target",
   },
-  // shared/lib/ is the PoC abstraction layer (v2.2.0): DeliverableTypeProfile,
-  // PolicyRegistry, GateDispatcher, IntentVerbLexicon. Not projected to runtime
-  // mirrors in v2.2.0; will be wired into hooks in v2.3.0 via feature-flagged
-  // opt-in. See docs/design-time-gate-redesign.md (R3/R4 paths).
   {
     prefix: "shared/lib/",
     reason:
-      "v2.2.0 PoC abstraction modules (DeliverableTypeProfile / PolicyRegistry / GateDispatcher / IntentVerbLexicon); not projected to runtime mirrors until v2.3.0 feature-flag rollout (R3/R4 in docs/design-time-gate-redesign.md)",
+      "Retained design-time PoC modules are tested in place; they are not production-wired capabilities or runtime projection sources",
   },
 ];
 

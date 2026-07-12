@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-05T06:17:40.691Z",
+  "generatedAt": "2026-07-11T06:30:49.824Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -20,7 +20,7 @@
   "summary": {
     "totalAgents": 9,
     "totalSkills": 17,
-    "totalHooks": 26,
+    "totalHooks": 22,
     "totalMcpServers": 1,
     "totalMcpTools": 4,
     "totalPlugins": 4,
@@ -33,13 +33,13 @@
       "scope": "local_project_projection_when_present",
       "note": "Canonical totals count source inventory entries; runtimeActualCounts counts generated local projection files/settings when those gitignored runtime folders exist.",
       "canonicalInventory": {
-        "hooks": 26,
+        "hooks": 22,
         "commands": 7
       },
       "claude": {
         "projectionPresent": true,
         "hookCommandEntries": 12,
-        "hookFiles": 15,
+        "hookFiles": 16,
         "commandFiles": 3
       },
       "codex": {
@@ -244,8 +244,8 @@
         "type": "skills",
         "namespace": "canonical",
         "path": "canonical/skills/meta-theory/SKILL.md",
-        "size": 70838,
-        "modified": "2026-07-05T06:08:54.966Z"
+        "size": 74941,
+        "modified": "2026-07-10T19:51:34.847Z"
       },
       "repo:canonical:same-set-reusable-flow-for-project-file-inventor": {
         "id": "same-set-reusable-flow-for-project-file-inventor",
@@ -270,8 +270,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/dev-governance.md",
         "relativePath": "dev-governance.md",
-        "size": 34083,
-        "modified": "2026-07-05T06:09:15.736Z"
+        "size": 34643,
+        "modified": "2026-07-10T19:51:47.674Z"
       },
       "repo:canonical-reference:evolution-writeback": {
         "id": "evolution-writeback",
@@ -288,8 +288,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/global-owner-discovery.md",
         "relativePath": "global-owner-discovery.md",
-        "size": 8265,
-        "modified": "2026-06-29T17:20:01.916Z"
+        "size": 8320,
+        "modified": "2026-07-10T15:45:56.338Z"
       },
       "repo:canonical-reference:intent-amplification": {
         "id": "intent-amplification",
@@ -351,8 +351,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/runtime-claude.md",
         "relativePath": "runtime-claude.md",
-        "size": 17452,
-        "modified": "2026-06-23T14:13:28.922Z"
+        "size": 18987,
+        "modified": "2026-07-10T19:52:09.219Z"
       },
       "repo:canonical-reference:runtime-codex": {
         "id": "runtime-codex",
@@ -360,8 +360,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/runtime-codex.md",
         "relativePath": "runtime-codex.md",
-        "size": 21778,
-        "modified": "2026-07-05T06:09:02.008Z"
+        "size": 26108,
+        "modified": "2026-07-10T19:52:09.222Z"
       },
       "repo:canonical-reference:spine-state": {
         "id": "spine-state",
@@ -387,8 +387,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/verification-evidence.md",
         "relativePath": "verification-evidence.md",
-        "size": 6829,
-        "modified": "2026-06-03T12:46:11.921Z"
+        "size": 8622,
+        "modified": "2026-07-10T19:51:19.511Z"
       }
     },
     "hooks": {
@@ -396,28 +396,33 @@
         "id": "activate-meta-theory-spine.mjs",
         "type": "hooks",
         "namespace": "canonical-runtime-assets",
-        "path": "canonical/runtime-assets/claude/hooks/activate-meta-theory-spine.mjs",
+        "path": "canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs",
         "relativePath": "activate-meta-theory-spine.mjs",
-        "size": 17916,
-        "modified": "2026-07-04T21:50:59.525Z"
+        "size": 16976,
+        "modified": "2026-07-10T18:58:31.010Z",
+        "canonicalPath": "canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs",
+        "adapterPath": "canonical/runtime-assets/claude/hooks/activate-meta-theory-spine.mjs"
       },
       "repo:canonical-runtime-assets:meta-kim-memory-save.mjs": {
         "id": "meta-kim-memory-save.mjs",
         "type": "hooks",
         "namespace": "canonical-runtime-assets",
-        "path": "canonical/runtime-assets/claude/hooks/meta-kim-memory-save.mjs",
+        "path": "canonical/runtime-assets/shared/hooks/meta-kim-memory-save.mjs",
         "relativePath": "meta-kim-memory-save.mjs",
-        "size": 30546,
-        "modified": "2026-06-23T11:44:11.845Z"
+        "size": 30329,
+        "modified": "2026-06-23T11:44:06.347Z",
+        "canonicalPath": "canonical/runtime-assets/shared/hooks/meta-kim-memory-save.mjs"
       },
       "repo:canonical-runtime-assets:skip-reminder.mjs": {
         "id": "skip-reminder.mjs",
         "type": "hooks",
         "namespace": "canonical-runtime-assets",
-        "path": "canonical/runtime-assets/claude/hooks/skip-reminder.mjs",
+        "path": "canonical/runtime-assets/shared/hooks/skip-reminder.mjs",
         "relativePath": "skip-reminder.mjs",
-        "size": 6932,
-        "modified": "2026-07-03T19:34:11.336Z"
+        "size": 7198,
+        "modified": "2026-07-10T21:06:45.128Z",
+        "canonicalPath": "canonical/runtime-assets/shared/hooks/skip-reminder.mjs",
+        "adapterPath": "canonical/runtime-assets/claude/hooks/skip-reminder.mjs"
       },
       "repo:canonical-runtime-assets:spine-state-utils.mjs": {
         "id": "spine-state-utils.mjs",
@@ -425,26 +430,31 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/shared/hooks/spine-state-utils.mjs",
         "relativePath": "spine-state-utils.mjs",
-        "size": 2720,
-        "modified": "2026-07-04T21:44:16.794Z"
+        "size": 3788,
+        "modified": "2026-07-10T21:49:57.696Z",
+        "canonicalPath": "canonical/runtime-assets/shared/hooks/spine-state-utils.mjs"
       },
       "repo:canonical-runtime-assets:spine-state.mjs": {
         "id": "spine-state.mjs",
         "type": "hooks",
         "namespace": "canonical-runtime-assets",
-        "path": "canonical/runtime-assets/claude/hooks/spine-state.mjs",
+        "path": "canonical/runtime-assets/shared/hooks/spine-state.mjs",
         "relativePath": "spine-state.mjs",
-        "size": 47052,
-        "modified": "2026-07-03T18:12:35.846Z"
+        "size": 49066,
+        "modified": "2026-07-11T06:30:07.560Z",
+        "canonicalPath": "canonical/runtime-assets/shared/hooks/spine-state.mjs",
+        "adapterPath": "canonical/runtime-assets/claude/hooks/spine-state.mjs"
       },
       "repo:canonical-runtime-assets:utils.mjs": {
         "id": "utils.mjs",
         "type": "hooks",
         "namespace": "canonical-runtime-assets",
-        "path": "canonical/runtime-assets/claude/hooks/utils.mjs",
+        "path": "canonical/runtime-assets/shared/hooks/utils.mjs",
         "relativePath": "utils.mjs",
-        "size": 1526,
-        "modified": "2026-06-23T06:08:55.797Z"
+        "size": 1514,
+        "modified": "2026-07-10T21:00:33.692Z",
+        "canonicalPath": "canonical/runtime-assets/shared/hooks/utils.mjs",
+        "adapterPath": "canonical/runtime-assets/claude/hooks/utils.mjs"
       },
       "repo:canonical-runtime-assets:bash-readonly-whitelist.mjs": {
         "id": "bash-readonly-whitelist.mjs",
@@ -452,8 +462,9 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/bash-readonly-whitelist.mjs",
         "relativePath": "bash-readonly-whitelist.mjs",
-        "size": 15131,
-        "modified": "2026-06-23T14:28:38.468Z"
+        "size": 15104,
+        "modified": "2026-07-05T09:58:56.068Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/bash-readonly-whitelist.mjs"
       },
       "repo:canonical-runtime-assets:block-dangerous-bash.mjs": {
         "id": "block-dangerous-bash.mjs",
@@ -462,7 +473,8 @@
         "path": "canonical/runtime-assets/claude/hooks/block-dangerous-bash.mjs",
         "relativePath": "block-dangerous-bash.mjs",
         "size": 773,
-        "modified": "2026-04-18T14:43:40.662Z"
+        "modified": "2026-04-18T14:43:40.662Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/block-dangerous-bash.mjs"
       },
       "repo:canonical-runtime-assets:ecc-permission-cache-wrapper.mjs": {
         "id": "ecc-permission-cache-wrapper.mjs",
@@ -471,7 +483,8 @@
         "path": "canonical/runtime-assets/claude/hooks/ecc-permission-cache-wrapper.mjs",
         "relativePath": "ecc-permission-cache-wrapper.mjs",
         "size": 3648,
-        "modified": "2026-05-26T02:39:29.858Z"
+        "modified": "2026-05-26T02:39:29.858Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/ecc-permission-cache-wrapper.mjs"
       },
       "repo:canonical-runtime-assets:enforce-agent-dispatch.mjs": {
         "id": "enforce-agent-dispatch.mjs",
@@ -479,8 +492,9 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
         "relativePath": "enforce-agent-dispatch.mjs",
-        "size": 63090,
-        "modified": "2026-07-04T21:43:37.756Z"
+        "size": 60014,
+        "modified": "2026-07-10T19:00:27.861Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs"
       },
       "repo:canonical-runtime-assets:graphify-context.mjs": {
         "id": "graphify-context.mjs",
@@ -489,7 +503,18 @@
         "path": "canonical/runtime-assets/claude/hooks/graphify-context.mjs",
         "relativePath": "graphify-context.mjs",
         "size": 1500,
-        "modified": "2026-06-21T08:45:16.445Z"
+        "modified": "2026-06-21T08:45:16.445Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/graphify-context.mjs"
+      },
+      "repo:canonical-claude-hooks:meta-kim-memory-save.mjs": {
+        "id": "meta-kim-memory-save.mjs",
+        "type": "hooks",
+        "namespace": "canonical-claude-hooks",
+        "path": "canonical/runtime-assets/claude/hooks/meta-kim-memory-save.mjs",
+        "relativePath": "meta-kim-memory-save.mjs",
+        "size": 30546,
+        "modified": "2026-06-23T11:44:11.845Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/meta-kim-memory-save.mjs"
       },
       "repo:canonical-runtime-assets:post-console-log-warn.mjs": {
         "id": "post-console-log-warn.mjs",
@@ -498,7 +523,8 @@
         "path": "canonical/runtime-assets/claude/hooks/post-console-log-warn.mjs",
         "relativePath": "post-console-log-warn.mjs",
         "size": 988,
-        "modified": "2026-04-18T14:43:47.394Z"
+        "modified": "2026-04-18T14:43:47.394Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/post-console-log-warn.mjs"
       },
       "repo:canonical-runtime-assets:post-format.mjs": {
         "id": "post-format.mjs",
@@ -507,7 +533,8 @@
         "path": "canonical/runtime-assets/claude/hooks/post-format.mjs",
         "relativePath": "post-format.mjs",
         "size": 1020,
-        "modified": "2026-05-18T20:17:20.854Z"
+        "modified": "2026-05-18T20:17:20.854Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/post-format.mjs"
       },
       "repo:canonical-runtime-assets:post-typecheck.mjs": {
         "id": "post-typecheck.mjs",
@@ -516,7 +543,8 @@
         "path": "canonical/runtime-assets/claude/hooks/post-typecheck.mjs",
         "relativePath": "post-typecheck.mjs",
         "size": 947,
-        "modified": "2026-04-18T14:43:54.623Z"
+        "modified": "2026-04-18T14:43:54.623Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/post-typecheck.mjs"
       },
       "repo:canonical-runtime-assets:stop-compaction.mjs": {
         "id": "stop-compaction.mjs",
@@ -525,7 +553,8 @@
         "path": "canonical/runtime-assets/claude/hooks/stop-compaction.mjs",
         "relativePath": "stop-compaction.mjs",
         "size": 16853,
-        "modified": "2026-06-20T19:25:53.357Z"
+        "modified": "2026-06-20T19:25:53.357Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/stop-compaction.mjs"
       },
       "repo:canonical-runtime-assets:stop-completion-guard.mjs": {
         "id": "stop-completion-guard.mjs",
@@ -534,7 +563,8 @@
         "path": "canonical/runtime-assets/claude/hooks/stop-completion-guard.mjs",
         "relativePath": "stop-completion-guard.mjs",
         "size": 5003,
-        "modified": "2026-04-13T13:35:56.019Z"
+        "modified": "2026-04-13T13:35:56.019Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/stop-completion-guard.mjs"
       },
       "repo:canonical-runtime-assets:stop-console-log-audit.mjs": {
         "id": "stop-console-log-audit.mjs",
@@ -543,7 +573,8 @@
         "path": "canonical/runtime-assets/claude/hooks/stop-console-log-audit.mjs",
         "relativePath": "stop-console-log-audit.mjs",
         "size": 1107,
-        "modified": "2026-05-16T14:06:24.573Z"
+        "modified": "2026-05-16T14:06:24.573Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/stop-console-log-audit.mjs"
       },
       "repo:canonical-runtime-assets:stop-memory-save.mjs": {
         "id": "stop-memory-save.mjs",
@@ -552,7 +583,8 @@
         "path": "canonical/runtime-assets/claude/hooks/stop-memory-save.mjs",
         "relativePath": "stop-memory-save.mjs",
         "size": 13619,
-        "modified": "2026-06-23T11:44:18.206Z"
+        "modified": "2026-06-23T11:44:18.206Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/stop-memory-save.mjs"
       },
       "repo:canonical-runtime-assets:stop-save-progress.mjs": {
         "id": "stop-save-progress.mjs",
@@ -561,7 +593,8 @@
         "path": "canonical/runtime-assets/claude/hooks/stop-save-progress.mjs",
         "relativePath": "stop-save-progress.mjs",
         "size": 13923,
-        "modified": "2026-06-23T14:14:21.590Z"
+        "modified": "2026-06-23T14:14:21.590Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/stop-save-progress.mjs"
       },
       "repo:canonical-runtime-assets:stop-spine-cleanup.mjs": {
         "id": "stop-spine-cleanup.mjs",
@@ -570,7 +603,8 @@
         "path": "canonical/runtime-assets/claude/hooks/stop-spine-cleanup.mjs",
         "relativePath": "stop-spine-cleanup.mjs",
         "size": 1642,
-        "modified": "2026-06-20T19:45:14.832Z"
+        "modified": "2026-06-20T19:45:14.832Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/stop-spine-cleanup.mjs"
       },
       "repo:canonical-runtime-assets:subagent-context.mjs": {
         "id": "subagent-context.mjs",
@@ -579,7 +613,8 @@
         "path": "canonical/runtime-assets/claude/hooks/subagent-context.mjs",
         "relativePath": "subagent-context.mjs",
         "size": 1581,
-        "modified": "2026-06-21T08:45:16.446Z"
+        "modified": "2026-06-21T08:45:16.446Z",
+        "canonicalPath": "canonical/runtime-assets/claude/hooks/subagent-context.mjs"
       }
     },
     "mcpServers": {
@@ -732,8 +767,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/codex/commands/meta-theory.md",
         "relativePath": "meta-theory.md",
-        "size": 6787,
-        "modified": "2026-07-03T11:49:45.268Z"
+        "size": 7256,
+        "modified": "2026-07-10T12:47:44.834Z"
       },
       "repo:canonical-runtime-assets:save-progress": {
         "id": "save-progress",

@@ -4,10 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { getProfilePaths } from "./meta-kim-local-state.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(__dirname, "..");
-export const stateDir = path.join(repoRoot, ".meta-kim", "state", "default");
+export const stateDir = getProfilePaths().profileDir;
 export const GOVERNANCE_ACTIONS = [
   "clarify_intent",
   "fetch_platform_capability",
@@ -145,10 +146,18 @@ export function scriptExists(scriptPath) {
 
 export function classifyTaskShape(task) {
   const text = String(task ?? "").toLowerCase();
-  if (/hook|runtime|codex|claude|cursor|openclaw|windows|mac|wsl|钩子|运行时|平台|安装|更新|配置|沙盒|权限|审批/.test(text)) {
+  const runtimePlatformSignal =
+    /hook|runtime|codex|claude|cursor|openclaw|windows|mac|wsl|钩子|运行时|安装|更新|配置|沙盒|权限|审批/.test(text) ||
+    /平台.{0,12}(key|adapter|适配|注册|路由|hook|钩子|mcp|权限|配置|安装|更新|同步|投影)|(?:key|adapter|hook|mcp|权限|配置|安装|更新|同步|投影).{0,12}平台/.test(text);
+  const businessContentSignal =
+    /内容|营销|增长|推广|投放|标题|文案|封面|素材|受众|转化|流量|传播|图文|视频|campaign|content|copy|audience|creative|conversion/.test(text);
+  if (runtimePlatformSignal && !businessContentSignal) {
     return "platform_governance";
   }
-  if (/strategy|growth|moneti[sz]e|pricing|business|product|pmf|conversion|策略|增长|商业化|变现|定价|产品|转化|留存|分发|用户路径/.test(text)) {
+  if (/goal\s*prompt|loop\s*prompt|goalpro|goal\s*contract|intent amplification|目标契约|目标合同|意图放大|循环提示词/.test(text)) {
+    return "goal_contract";
+  }
+  if (/strategy|growth|moneti[sz]e|pricing|business|product|pmf|conversion|decision|judge|判断|决策|选择|取舍|pass.?kill|策略|增长|商业化|变现|定价|产品|转化|留存|分发|用户路径|高流量/.test(text)) {
     return "strategy_product_decision";
   }
   if (/refactor|code|test|api|database|bug|integration|重构|代码|测试|接口|数据库|缺陷|集成/.test(text)) {

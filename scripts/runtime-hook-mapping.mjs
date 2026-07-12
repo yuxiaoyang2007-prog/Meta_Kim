@@ -87,6 +87,16 @@ export const HOOKPROMPT_PLATFORM_SUPPORT = {
   },
 };
 
+// Cross-runtime hook core. These files have exactly one canonical owner under
+// shared/hooks; runtime sync must never prefer a same-named runtime copy.
+export const SHARED_RUNTIME_HOOK_FILES = Object.freeze([
+  "activate-meta-theory-spine.mjs",
+  "skip-reminder.mjs",
+  "spine-state.mjs",
+  "spine-state-utils.mjs",
+  "utils.mjs",
+]);
+
 export function commandToken(value) {
   return /[\s"]/u.test(String(value)) ? JSON.stringify(String(value)) : String(value);
 }

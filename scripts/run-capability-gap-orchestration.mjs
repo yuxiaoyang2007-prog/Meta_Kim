@@ -10,12 +10,13 @@ import {
   decideCapabilityGap,
 } from "./capability-gap-mvp.mjs";
 import { buildAgentProjectionTargets } from "./runtime-tool-profiles.mjs";
+import { getProfilePaths } from "./meta-kim-local-state.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(scriptDir, "..");
-const DEFAULT_OUTPUT_PATH = path.resolve(
-  REPO_ROOT,
-  ".meta-kim/state/default/capability-gap-orchestration.json"
+const DEFAULT_OUTPUT_PATH = path.join(
+  getProfilePaths({ repoPath: REPO_ROOT }).profileDir,
+  "capability-gap-orchestration.json",
 );
 
 const ROLE_BY_DECISION = {
@@ -587,25 +588,24 @@ function inferDynamicWorkflowIntent(input) {
     /^(什么|为何|为什么|怎么理解|解释|介绍)\b/u,
     /^(what|why|explain)\b/i,
   ]);
-  const platformTargets = [];
-  if (matchesAny(normalized, [/(小红书|xiaohongshu|rednote|red note)/iu])) {
-    platformTargets.push("xiaohongshu");
-  }
-  if (matchesAny(normalized, [/\b(x|twitter|threads|instagram|tiktok|youtube)\b/i])) {
-    platformTargets.push("social_platform");
-  }
+  const platformTargets = matchesAny(normalized, [
+    /(第三方|外部|内容渠道|社交渠道|服务商|平台集成)/u,
+    /\b(third[-\s]?party|external|provider|service|channel|social platform)\b/i,
+  ])
+    ? ["external_platform"]
+    : [];
   const hasLocalScriptObject = matchesAny(normalized, [
     /(脚本|批处理|命令行|批量重命名)/u,
     /\b(script|cli|rename)\b/i,
   ]);
   const hasProductObject = matchesAny(normalized, [
     /\b(app|web app|dashboard|platform|tool|saas|automation|publisher)\b/i,
-    /(系统|平台|工具|应用|网站|面板|看板|自动发布器|发布器|营销.*器|自动化|小红书)/u,
+    /(系统|平台|工具|应用|网站|面板|看板|自动发布器|发布器|营销.*器|自动化)/u,
   ]);
   const scriptLikeOnly =
     hasLocalScriptObject &&
     !matchesAny(normalized, [
-      /(界面|网站|平台|系统|应用|看板|小红书|发布器|营销|账号|排期|日历|审批)/u,
+      /(界面|网站|平台|系统|应用|看板|发布器|营销|账号|排期|日历|审批)/u,
       /\b(web|app|dashboard|platform|publisher|campaign|account|schedule)\b/i,
     ]);
   const wishStyleProductBuild =
@@ -675,7 +675,7 @@ function inferDynamicWorkflowIntent(input) {
   const requestsLiveExternalAction =
     !externalWritesExplicitlyForbidden &&
     matchesAny(normalized, [
-      /(现在发布|直接发布|立刻发布|发到小红书|登录账号|使用凭证|使用生产凭证|真实发布|实际发布|真实外部写)/u,
+      /(现在发布|直接发布|立刻发布|登录账号|使用凭证|使用生产凭证|真实发布|实际发布|真实外部写)/u,
       /\b(publish now|post now|use production credentials|log in|real publish|external write)\b/i,
     ]);
   const requiresReleaseOps =
@@ -731,10 +731,8 @@ function inferProjectProfile(input, intent) {
   const projectKey = (projectKeyParts.length > 0 ? projectKeyParts.join("-") : fallbackKey)
     .replace(/[^a-z0-9-]+/gi, "-")
     .toLowerCase();
-  const projectLabel = platform === "xiaohongshu"
-    ? "小红书营销自动发布器"
-    : localTodoDashboard
-      ? "本地待办看板"
+  const projectLabel = localTodoDashboard
+    ? "本地待办看板"
     : intent.requiresScheduling
       ? "本地待办看板"
       : "当前项目";

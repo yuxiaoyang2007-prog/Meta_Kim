@@ -210,6 +210,24 @@ assert(
 const code = route("complex code refactor with tests");
 assert(!code.rankedRoutes.some((item) => item.dependencyProject === "kim-decision"), "Kim_Decision must not become implementation owner for pure code execution");
 
+const contentGrowthDecision = route("内容营销中，标题文案和封面设计怎样提升转化，帮我判断怎么改", "codex", "windows");
+assert(contentGrowthDecision.taskShape === "strategy_product_decision", "Business content work must not be misclassified as runtime platform governance");
+assert(contentGrowthDecision.recommendedRoute?.id === "kim-decision-lens:codex:windows", "Decision tasks should expose the Kim_Decision decision lens");
+assert(contentGrowthDecision.recommendedRoute?.dependency === null, "Kim_Decision lens must not be recorded as an execution dependency");
+assert(contentGrowthDecision.recommendedRoute?.decisionLensProvider === "kim-decision", "Kim_Decision lens provider should be visible separately from execution dependencies");
+assert(contentGrowthDecision.recommendedRoute?.boundary?.notExecutor === true, "Kim_Decision lens must not become an implementation executor");
+assert(
+  JSON.stringify(contentGrowthDecision.decisionExperiencePlan?.sequence ?? []).includes("critical_decision") &&
+    JSON.stringify(contentGrowthDecision.decisionExperiencePlan?.sequence ?? []).includes("fetch_evidence_decision") &&
+    JSON.stringify(contentGrowthDecision.decisionExperiencePlan?.sequence ?? []).includes("thinking_path_decision"),
+  "Decision UX must keep Kim_Decision in Critical/Fetch/Thinking",
+);
+assert(!JSON.stringify(contentGrowthDecision.decisionExperiencePlan?.sequence ?? []).includes("goalpro"), "Decision route must not trigger GoalPro early");
+assert(/not the place that creates user Goals/i.test(contentGrowthDecision.decisionExperiencePlan?.evolutionBoundary ?? ""), "Evolution must not be bound to user Goal creation");
+
+const contentAutomationBuild = route("帮我做一个内容营销自动发布器，需要内容策略、前端界面、后端 API、数据模型、平台集成、权限风控、测试验收和发布运维", "codex", "windows");
+assert(contentAutomationBuild.recommendedRoute?.id === "product-build-orchestration:codex:windows", "An explicit product build must retain the product-build orchestration route even when it includes strategy language");
+
 const codexAgentSearch = route("Create a provider smoke test that discovers an execution agent and finds a skill provider", "codex", "windows");
 assert(
   codexAgentSearch.recommendedRoute?.selectedCapabilityProviders?.agent?.platformId !== "claudeCode",

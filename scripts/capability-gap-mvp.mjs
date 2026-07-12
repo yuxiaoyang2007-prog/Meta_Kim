@@ -6,6 +6,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { importDatabaseSync } from "./sqlite-runtime.mjs";
+import { withSqliteTransaction } from "./sqlite-transaction.mjs";
 import { buildAgentProjectionTargets } from "./runtime-tool-profiles.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -1034,7 +1035,8 @@ export async function openRunStateStore(dbPath = ":memory:") {
         event.createdAt,
       );
     },
-    persistDecisionRun(result) {
+    persistDecisionRun(result, { onWriteStep = null } = {}) {
+      return withSqliteTransaction(db, () => {
       db.prepare(`
         INSERT OR REPLACE INTO runs
         (run_id, status, started_at, ended_at, primary_goal, payload_json)
@@ -1047,6 +1049,7 @@ export async function openRunStateStore(dbPath = ":memory:") {
         result.run.primaryGoal,
         json(result.run),
       );
+      onWriteStep?.("run");
       db.prepare(`
         INSERT OR REPLACE INTO capability_gaps
         (gap_id, run_id, requested_capability, checked_providers_json, insufficiency_reason, payload_json)
@@ -1059,6 +1062,7 @@ export async function openRunStateStore(dbPath = ":memory:") {
         result.capabilityGap.insufficiencyReason,
         json(result.capabilityGap),
       );
+      onWriteStep?.("capability_gap");
       db.prepare(`
         INSERT OR REPLACE INTO gap_decisions
         (decision_id, gap_id, decision, decision_reason, rejected_alternatives_json, verification_owner, payload_json)
@@ -1124,6 +1128,7 @@ export async function openRunStateStore(dbPath = ":memory:") {
       for (const event of result.events) {
         this.appendEvent(event);
       }
+      });
     },
     getRun(runId) {
       return db.prepare("SELECT * FROM runs WHERE run_id = ?").get(runId);

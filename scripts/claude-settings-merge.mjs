@@ -30,16 +30,7 @@ export function isGlobalMetaKimManagedHookCommand(command) {
   if (norm.includes("/hooks/hookprompt-adapter.mjs")) {
     return true;
   }
-  const managedFiles = [
-    ...REPO_META_KIM_HOOK_FILES,
-    ...RETIRED_META_KIM_HOOK_FILES,
-  ];
-  return managedFiles.some(
-    (file) =>
-      norm.includes(`/hooks/${file}`) ||
-      norm.includes(`.claude/hooks/${file}`) ||
-      norm.includes(`/hooks/${file} `),
-  );
+  return false;
 }
 
 export function isRawHookPromptUserPromptSubmitCommand(command) {
@@ -141,14 +132,16 @@ export function buildMetaKimHooksTemplate(
   };
 }
 
-export function stripGlobalMetaKimHookEntriesFromBlocks(blocks) {
+export function stripGlobalMetaKimHookEntriesFromBlocks(
+  blocks,
+  { isManagedHookCommand = isGlobalMetaKimManagedHookCommand } = {},
+) {
   return blocks
     .map((block) => ({
       ...block,
       hooks: (block.hooks || []).filter(
         (h) =>
-          !isGlobalMetaKimManagedHookCommand(h.command || "") &&
-          !isRetiredMetaKimHookCommand(h.command || "") &&
+          !isManagedHookCommand(h.command || "") &&
           !isRawHookPromptUserPromptSubmitCommand(h.command || ""),
       ),
     }))
@@ -246,14 +239,21 @@ export function mergeHookMatcherBlocks(existing, additions) {
 }
 
 /** Merge Meta_Kim global hooks (hooks/meta-kim/) into existing settings; preserves other keys. */
-export function mergeGlobalMetaKimHooksIntoSettings(settings, template) {
+export function mergeGlobalMetaKimHooksIntoSettings(
+  settings,
+  template,
+  options = {},
+) {
   const next = { ...settings };
   if (!next.hooks) {
     next.hooks = {};
   }
   const hooks = {};
   for (const [event, blocks] of Object.entries(next.hooks)) {
-    const cleaned = stripGlobalMetaKimHookEntriesFromBlocks(blocks || []);
+    const cleaned = stripGlobalMetaKimHookEntriesFromBlocks(
+      blocks || [],
+      options,
+    );
     if (cleaned.length > 0) {
       hooks[event] = cleaned;
     }

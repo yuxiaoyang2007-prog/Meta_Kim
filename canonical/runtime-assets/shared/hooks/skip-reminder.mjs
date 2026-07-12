@@ -33,6 +33,14 @@ const HOOK_IMPACTS = {
 };
 const HOOK_IMPACT_GENERIC =
   "This hook may have produced a guardrail the user wanted";
+const HOOK_LABELS = {
+  title: "Meta_Kim hook skipped",
+  hook: "Hook:",
+  reason: "Reason:",
+  impact: "Impact:",
+  restore: "Restore:",
+  restoreInstructions: "clear the skip override and retry the governed action",
+};
 
 /**
  * Skip decision constants (PRIN-ST: explicit over implicit)
@@ -155,16 +163,19 @@ export function hasSimpleKeyword(prompt) {
  */
 export function remindSkipped(hookName, reason, impact = "") {
   const lines = [
-    `\x1b[33m${t.hookSkipTitle}\x1b[0m`, // yellow
-    `  ${t.hookLabel} ${hookName}`,
-    `  ${t.reasonLabel} ${reason}`,
+    `\x1b[33m${HOOK_LABELS.title}\x1b[0m`, // yellow
+    `  ${HOOK_LABELS.hook} ${hookName}`,
+    `  ${HOOK_LABELS.reason} ${reason}`,
   ];
 
   if (impact) {
-    lines.push(`  ${t.impactLabel} ${impact}`);
+    lines.push(`  ${HOOK_LABELS.impact} ${impact}`);
   }
 
-  lines.push(`  ${t.restoreLabel} ${t.restoreInstructions}`, "");
+  lines.push(
+    `  ${HOOK_LABELS.restore} ${HOOK_LABELS.restoreInstructions}`,
+    "",
+  );
 
   // Write to stderr to not interfere with JSON output on stdout
   process.stderr.write(lines.join("\n") + "\n");

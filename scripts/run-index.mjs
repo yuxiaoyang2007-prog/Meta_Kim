@@ -3,6 +3,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import {
   ensureProfileState,
   getProfilePaths,
@@ -13,6 +14,7 @@ import {
   isSupportedNodeVersion,
 } from "./node-runtime-requirements.mjs";
 import { importDatabaseSync } from "./sqlite-runtime.mjs";
+import { withSqliteTransaction } from "./sqlite-transaction.mjs";
 import { validateArtifactFile } from "./validate-run-artifact.mjs";
 
 const DEFAULT_SOURCE = "tests/fixtures/run-artifacts";
@@ -84,7 +86,7 @@ async function resolveArtifactSources() {
   return [...new Set(files)];
 }
 
-async function openDb(runIndexPath) {
+export async function openDb(runIndexPath) {
   if (!isSupportedNodeVersion(process.versions.node)) {
     throw new Error(
       `run-index requires Node.js >=${MIN_NODE_VERSION}. Current: ${process.versions.node}. ` +
@@ -281,8 +283,10 @@ function summarizeArtifact(artifact, artifactPath) {
   };
 }
 
-function upsertRun(db, summary) {
+export function upsertRun(db, summary, { onWriteStep = null } = {}) {
+  return withSqliteTransaction(db, () => {
   db.prepare("DELETE FROM run_findings WHERE artifact_path = ?").run(summary.artifactPath);
+  onWriteStep?.("delete_findings");
   db.prepare(`
     INSERT INTO runs (
       artifact_path, indexed_at, governance_flow, task_class, request_class, primary_deliverable,
@@ -317,6 +321,7 @@ function upsertRun(db, summary) {
     summary.writebackDecision,
     JSON.stringify(summary.payload)
   );
+  onWriteStep?.("upsert_run");
 
   const insertFinding = db.prepare(`
     INSERT INTO run_findings (
@@ -332,7 +337,9 @@ function upsertRun(db, summary) {
       summary.openFindingIds.includes(finding.findingId) ? "open" : "closed",
       summary.openFindingIds.includes(finding.findingId) ? 1 : 0
     );
+    onWriteStep?.("insert_finding");
   }
+  });
 }
 
 async function indexArtifacts({ reset = false } = {}) {
@@ -342,7 +349,9 @@ async function indexArtifacts({ reset = false } = {}) {
   });
   const db = await openDb(runIndexPath);
   if (reset) {
-    db.exec("DELETE FROM run_findings; DELETE FROM runs;");
+    withSqliteTransaction(db, () => {
+      db.exec("DELETE FROM run_findings; DELETE FROM runs;");
+    });
   }
 
   const indexed = [];
@@ -467,7 +476,11 @@ async function main() {
   console.log(JSON.stringify(result, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+const isMain = process.argv[1] &&
+  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+if (isMain) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}

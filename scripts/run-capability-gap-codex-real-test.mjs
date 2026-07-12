@@ -2,6 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { getProfilePaths } from "./meta-kim-local-state.mjs";
 import process from "node:process";
 
 const CASES = [
@@ -313,7 +314,7 @@ async function main() {
     results,
   };
 
-  const stateDir = path.resolve(".meta-kim/state/default");
+  const stateDir = getProfilePaths({ repoPath: process.cwd() }).profileDir;
   await fs.mkdir(stateDir, { recursive: true });
   const jsonPath = path.join(stateDir, "capability-gap-codex-real-test.json");
   await fs.writeFile(jsonPath, JSON.stringify(report, null, 2));

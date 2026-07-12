@@ -30,7 +30,9 @@ function runCommand(label, cmd, args = []) {
 
   try {
     if (isNpm) {
-      execSync(`npm run ${args[0]}`, {
+      const forwarded = args.slice(1);
+      const command = `npm run ${args[0]}${forwarded.length ? ` -- ${forwarded.join(" ")}` : ""}`;
+      execSync(command, {
         cwd: repoRoot,
         stdio: "inherit",
         shell: true,
@@ -46,6 +48,7 @@ function runCommand(label, cmd, args = []) {
     return true;
   } catch (err) {
     console.error(`\n  [FAIL] ${fullLabel} exited with error`);
+    process.exitCode = 1;
     return false;
   }
 }
@@ -77,6 +80,7 @@ async function runFullDiagnostic() {
     "Claude/Codex/Cursor/OpenClaw 集成",
     runCommand("Claude/Codex/Cursor/OpenClaw 集成诊断", "npm", [
       "meta:eval:agents",
+      "--require-all-runtimes",
     ]),
   ]);
 
@@ -89,7 +93,8 @@ async function runFullDiagnostic() {
     console.log(`  ${color}${icon}\x1b[0m ${name}`);
   }
   const passed = results.filter(([, ok]) => ok).length;
-  console.log(`\n  通过: ${passed}/${results.length}`);
+  const failed = results.length - passed;
+  console.log(`\n  checked=${results.length} passed=${passed} failed=${failed} skipped=0`);
   if (passed === results.length) {
     console.log("  \x1b[32m全部通过 — All checks passed!\x1b[0m");
   } else {
@@ -98,6 +103,7 @@ async function runFullDiagnostic() {
     );
   }
   console.log(`${"=".repeat(60)}\n`);
+  return failed === 0;
 }
 
 async function main() {
@@ -111,7 +117,8 @@ async function main() {
     console.log(
       `\n[INFO] Non-interactive mode detected — running full diagnostic...\n`,
     );
-    await runFullDiagnostic();
+    const ok = await runFullDiagnostic();
+    if (!ok) process.exitCode = 1;
     return;
   }
 

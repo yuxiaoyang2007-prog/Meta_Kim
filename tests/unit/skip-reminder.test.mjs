@@ -144,3 +144,25 @@ describe("createSkipRecord function", () => {
     assert.ok(record.timestamp);
   });
 });
+
+describe("remindSkipped function", () => {
+  test("should render without relying on an undefined runtime i18n object", async () => {
+    const { remindSkipped } = await import("../../canonical/runtime-assets/shared/hooks/skip-reminder.mjs");
+    const originalWrite = process.stderr.write;
+    let output = "";
+    process.stderr.write = (chunk) => {
+      output += String(chunk);
+      return true;
+    };
+    try {
+      assert.doesNotThrow(() =>
+        remindSkipped("post-format", "test skip", "formatting not checked"),
+      );
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+    assert.match(output, /Meta_Kim hook skipped/);
+    assert.match(output, /post-format/);
+    assert.match(output, /test skip/);
+  });
+});

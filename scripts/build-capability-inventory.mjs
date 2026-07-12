@@ -4,8 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { OS_TARGETS, RUNTIMES, exists, listFiles, readJson, repoPath, stateDir, toPosix, writeJson } from "./governance-lib.mjs";
+import { getProfilePaths, toRepoRelative } from "./meta-kim-local-state.mjs";
 
 const outputPath = path.join(stateDir, "capability-inventory.json");
+const profileStatePath = toRepoRelative(getProfilePaths().profileDir);
 
 function defaultSupport(runtime = "partial", os = "partial") {
   return {
@@ -285,7 +287,7 @@ async function globalRuntimeCapabilities(projectProjectionMode) {
   if (projectProjectionMode !== "global_only") return [];
 
   const inventory = await readJsonIfExists(
-    ".meta-kim/state/default/capability-index/global-capabilities.json",
+    `${profileStatePath}/capability-index/global-capabilities.json`,
   );
   const byPlatform = inventory?.byPlatform;
   if (!byPlatform || typeof byPlatform !== "object") return [];
@@ -369,9 +371,9 @@ async function configAndStateCapabilities() {
     ...(await fileCapabilities("config/contracts", "config", ["meta-prism"], { match: (file) => file.endsWith(".json") || file.endsWith(".md"), mustPreserve: true, routeEligibility: "reference", verificationMethod: "npm run meta:validate" })),
     ...(await fileRecordIfExists("canonical/runtime-assets/shared/hooks/meta-kim-memory-save.mjs", { id: "canonical-memory-save-hook", type: "memory", providerType: "memory", ownerCandidates: ["meta-librarian", "meta-sentinel"], routeEligibility: "reference", verificationMethod: "npm run meta:check:global:release" })),
     ...(await fileRecordIfExists("canonical/runtime-assets/claude/hooks/stop-memory-save.mjs", { id: "canonical-stop-memory-save-hook", type: "memory", providerType: "memory", ownerCandidates: ["meta-librarian", "meta-sentinel"], routeEligibility: "reference", verificationMethod: "npm run meta:check:global:release" })),
-    ...(await fileRecordIfExists(".meta-kim/state/default/capability-index/global-capabilities.json", { id: "cached-global-capability-inventory", type: "external", providerType: "external", ownerCandidates: ["meta-librarian", "meta-artisan"], routeEligibility: "reference", verificationMethod: "npm run discover:global" })),
-    ...(await fileRecordIfExists(".meta-kim/state/default/capability-inventory.json", { id: "local-capability-inventory-state", type: "memory", providerType: "memory", ownerCandidates: ["meta-librarian"], routeEligibility: "reference", verificationMethod: "npm run meta:capabilities:index" })),
-    ...(await fileRecordIfExists(".meta-kim/state/default/run-index.sqlite", { id: "run-index-state", type: "memory", providerType: "memory", ownerCandidates: ["meta-librarian"], routeEligibility: "reference", verificationMethod: "npm run meta:rebuild:run-index" })),
+    ...(await fileRecordIfExists(`${profileStatePath}/capability-index/global-capabilities.json`, { id: "cached-global-capability-inventory", type: "external", providerType: "external", ownerCandidates: ["meta-librarian", "meta-artisan"], routeEligibility: "reference", verificationMethod: "npm run discover:global" })),
+    ...(await fileRecordIfExists(`${profileStatePath}/capability-inventory.json`, { id: "local-capability-inventory-state", type: "memory", providerType: "memory", ownerCandidates: ["meta-librarian"], routeEligibility: "reference", verificationMethod: "npm run meta:capabilities:index" })),
+    ...(await fileRecordIfExists(`${profileStatePath}/run-index.sqlite`, { id: "run-index-state", type: "memory", providerType: "memory", ownerCandidates: ["meta-librarian"], routeEligibility: "reference", verificationMethod: "npm run meta:rebuild:run-index" })),
     ...(await fileRecordIfExists("graphify-out/GRAPH_REPORT.md", { id: "graphify-report", type: "graph", providerType: "graph", ownerCandidates: ["meta-librarian", "meta-conductor"], routeEligibility: "reference", verificationMethod: "npm run meta:graphify:check" })),
     ...(await fileRecordIfExists("graphify-out/graph.json", { id: "graphify-graph", type: "graph", providerType: "graph", ownerCandidates: ["meta-librarian", "meta-conductor"], routeEligibility: "reference", verificationMethod: "npm run meta:graphify:check" })),
   ];

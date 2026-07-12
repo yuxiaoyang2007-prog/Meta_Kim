@@ -12,6 +12,7 @@ import {
   buildHookPromptAdapterSource,
   hookCommand,
   nodeHookCommand,
+  SHARED_RUNTIME_HOOK_FILES,
 } from "./runtime-hook-mapping.mjs";
 import { ensureCodexAppNativeControls } from "./codex-config-merge.mjs";
 import {
@@ -286,10 +287,12 @@ async function tryReadCanonical(filePath) {
 }
 
 async function canonicalGlobalHookSource(fileName) {
-  for (const baseDir of [
-    path.join(canonicalRuntimeAssetsDir, "claude", "hooks"),
-    path.join(canonicalRuntimeAssetsDir, "shared", "hooks"),
-  ]) {
+  const sharedHooksDir = path.join(canonicalRuntimeAssetsDir, "shared", "hooks");
+  const claudeHooksDir = path.join(canonicalRuntimeAssetsDir, "claude", "hooks");
+  const sourceDirs = SHARED_RUNTIME_HOOK_FILES.includes(fileName)
+    ? [sharedHooksDir]
+    : [claudeHooksDir, sharedHooksDir];
+  for (const baseDir of sourceDirs) {
     const sourcePath = path.join(baseDir, fileName);
     try {
       await fs.access(sourcePath);
@@ -2433,7 +2436,8 @@ async function syncClaudeProjection(
         (entry) =>
           entry.isFile() &&
           entry.name.endsWith(".mjs") &&
-          PROJECT_CLAUDE_HOOK_FILES.has(entry.name),
+          PROJECT_CLAUDE_HOOK_FILES.has(entry.name) &&
+          !SHARED_RUNTIME_HOOK_FILES.includes(entry.name),
       )
       .sort((left, right) => left.name.localeCompare(right.name));
 
@@ -2454,10 +2458,7 @@ async function syncClaudeProjection(
       }
     }
 
-    const sharedClaudeHookDependencies = [
-      "activate-meta-theory-spine.mjs",
-      "skip-reminder.mjs",
-    ];
+    const sharedClaudeHookDependencies = SHARED_RUNTIME_HOOK_FILES;
     for (const hookName of sharedClaudeHookDependencies) {
       const hookContent = await tryReadCanonical(
         path.join(canonicalRuntimeAssetsDir, "shared", "hooks", hookName),
@@ -2683,10 +2684,7 @@ Examples:
           PROJECT_CLAUDE_HOOK_FILES.has(entry.name),
       )
       .map((entry) => entry.name);
-    const sharedHookDeps = [
-      "activate-meta-theory-spine.mjs",
-      "skip-reminder.mjs",
-    ];
+    const sharedHookDeps = SHARED_RUNTIME_HOOK_FILES;
     for (const hookName of sharedHookDeps) {
       if (await tryReadCanonical(
         path.join(canonicalRuntimeAssetsDir, "shared", "hooks", hookName),

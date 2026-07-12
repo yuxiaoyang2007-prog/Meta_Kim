@@ -90,6 +90,40 @@ test("provider registry covers all provider kinds and required modeled providers
   }
 });
 
+test("meta-skill-creator is the formal skill creation provider for Claude Code and Codex", () => {
+  const skills = JSON.parse(readFileSync("config/skills.json", "utf8"));
+  const dependencies = JSON.parse(
+    readFileSync("config/capability-index/dependency-project-registry.json", "utf8"),
+  );
+  const registry = JSON.parse(
+    readFileSync("config/capability-index/provider-registry.json", "utf8"),
+  );
+
+  const manifestEntry = skills.skills.find((skill) => skill.id === "meta-skill-creator");
+  assert.ok(manifestEntry, "meta-skill-creator must be installable from the skills manifest");
+  assert.equal(manifestEntry.repo, "${skillOwner}/meta-skill-creator");
+  assert.equal(manifestEntry.subdir, "skills/meta-skill-creator");
+  assert.deepEqual(manifestEntry.targets, ["claude", "codex"]);
+  assert.equal(skills.skills.some((skill) => skill.id === "skill-creator"), false);
+
+  const dependency = dependencies.projects.find((project) => project.id === "meta-skill-creator");
+  assert.ok(dependency, "meta-skill-creator must be present in the dependency registry");
+  assert.deepEqual(dependency.interface.requiredRuntime, ["claude_code", "codex"]);
+  assert.equal(dependencies.projects.some((project) => project.id === "skill-creator"), false);
+
+  const provider = registry.providers.find(
+    (candidate) => candidate.id === "external-skill-meta-skill-creator",
+  );
+  assert.ok(provider, "meta-skill-creator must be present in the provider registry");
+  assert.deepEqual(provider.mappings.skillsJsonIds, ["meta-skill-creator"]);
+  assert.equal(provider.runtimeAdapters.cursor.status, "blocked");
+  assert.equal(provider.runtimeAdapters.openclaw.status, "blocked");
+  assert.equal(
+    registry.providers.some((candidate) => candidate.id === "external-skill-skill-creator"),
+    false,
+  );
+});
+
 test("strict global hook validation checks Codex and Cursor HookPrompt adapters", () => {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-hooks-"));
   const codexHooks = path.join(tempDir, ".codex", "hooks.json");

@@ -20,7 +20,7 @@ const REQUIRED_SKILLS = [
   "planning-with-files",
   "cli-anything",
   "gstack",
-  "skill-creator",
+  "meta-skill-creator",
 ];
 
 const FOUNDATIONAL_CAPABILITIES = [

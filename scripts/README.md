@@ -4,10 +4,10 @@ This directory is intentionally large because Meta_Kim exposes most maintenance 
 
 ## Current Shape
 
-- Top-level `.mjs` scripts: 96
-- MCP server scripts: 1 (`scripts/mcp/meta-runtime-server.mjs`)
-- Direct `package.json` entries: 106
-- Referenced helper scripts: 21
+The inventory is computed from the current checkout instead of copied into this
+document. Run `npm run meta:inventory` for live script, package-entry, and
+tracked-test counts. `npm run meta:test:inventory` additionally fails when a
+tracked `*.test.mjs` file is outside the explicit standard suites.
 
 ## Core Loop And Discovery Bus
 

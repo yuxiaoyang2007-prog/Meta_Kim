@@ -314,8 +314,6 @@ function runEnforceHook(state, payload, options = {}) {
     for (const fileName of [
       "enforce-agent-dispatch.mjs",
       "bash-readonly-whitelist.mjs",
-      "spine-state.mjs",
-      "utils.mjs",
     ]) {
       copyFileSync(
         join(REPO_ROOT, "canonical/runtime-assets/claude/hooks", fileName),
@@ -364,8 +362,6 @@ function runEnforceHookWithState(state, payload, options = {}) {
     for (const fileName of [
       "enforce-agent-dispatch.mjs",
       "bash-readonly-whitelist.mjs",
-      "spine-state.mjs",
-      "utils.mjs",
     ]) {
       copyFileSync(
         join(REPO_ROOT, "canonical/runtime-assets/claude/hooks", fileName),
@@ -410,22 +406,17 @@ function runActivateHook(existingState, payload, options = {}) {
   try {
     const hookDir = join(cwd, "hooks");
     mkdirSync(hookDir, { recursive: true });
-    const sourceDir =
-      runtime === "claude"
-        ? "canonical/runtime-assets/claude/hooks"
-        : "canonical/runtime-assets/shared/hooks";
+    const sourceDir = "canonical/runtime-assets/shared/hooks";
     for (const fileName of ["activate-meta-theory-spine.mjs", "spine-state.mjs", "utils.mjs"]) {
       copyFileSync(
         join(REPO_ROOT, sourceDir, fileName),
         join(hookDir, fileName),
       );
     }
-    if (runtime !== "claude") {
-      copyFileSync(
-        join(REPO_ROOT, "canonical/runtime-assets/shared/hooks/spine-state-utils.mjs"),
-        join(hookDir, "spine-state-utils.mjs"),
-      );
-    }
+    copyFileSync(
+      join(REPO_ROOT, "canonical/runtime-assets/shared/hooks/spine-state-utils.mjs"),
+      join(hookDir, "spine-state-utils.mjs"),
+    );
     const spineDir = join(cwd, ".meta-kim", "state", "test", "spine");
     mkdirSync(spineDir, { recursive: true });
     const spinePath = join(spineDir, "spine-state.json");
@@ -2060,8 +2051,6 @@ describe("Part F2: choice surface runtime gate", async () => {
       for (const fileName of [
         "enforce-agent-dispatch.mjs",
         "bash-readonly-whitelist.mjs",
-        "spine-state.mjs",
-        "utils.mjs",
       ]) {
         copyFileSync(
           join(REPO_ROOT, "canonical/runtime-assets/claude/hooks", fileName),
@@ -2134,8 +2123,6 @@ describe("Part F2: choice surface runtime gate", async () => {
       for (const fileName of [
         "enforce-agent-dispatch.mjs",
         "bash-readonly-whitelist.mjs",
-        "spine-state.mjs",
-        "utils.mjs",
       ]) {
         copyFileSync(
           join(REPO_ROOT, "canonical/runtime-assets/claude/hooks", fileName),
@@ -2208,8 +2195,6 @@ describe("Part F2: choice surface runtime gate", async () => {
       for (const fileName of [
         "enforce-agent-dispatch.mjs",
         "bash-readonly-whitelist.mjs",
-        "spine-state.mjs",
-        "utils.mjs",
       ]) {
         copyFileSync(
           join(REPO_ROOT, "canonical/runtime-assets/claude/hooks", fileName),

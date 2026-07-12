@@ -13,7 +13,6 @@ import { fileURLToPath } from "node:url";
 import {
   buildMetaKimHooksTemplate,
   hookCommandNode,
-  isRetiredMetaKimHookCommand,
   isGlobalMetaKimManagedHookCommand,
   mergeHookMatcherBlocks,
   mergeGlobalMetaKimHooksIntoSettings,
@@ -39,6 +38,7 @@ import {
 import {
   buildCodexHooksJson,
   buildHookPromptAdapterSource,
+  SHARED_RUNTIME_HOOK_FILES,
 } from "./runtime-hook-mapping.mjs";
 
 // Recorder is lazily opened in runSync(); helpers record through this holder
@@ -69,15 +69,76 @@ const repoRoot = path.resolve(__dirname, "..");
 const sourceDir = canonicalSkillRoot;
 const sourceSkillFile = path.join(sourceDir, "SKILL.md");
 
-const checkOnly = process.argv.includes("--check");
-const printTargetsOnly = process.argv.includes("--print-targets");
-const skipGlobalHooks = process.argv.includes("--skip-global-hooks");
-const withGlobalHooks =
-  process.argv.includes("--with-global-hooks") && !skipGlobalHooks;
 const cliArgs = process.argv.slice(2);
+
+function printHelp() {
+  console.log(`Usage: node scripts/sync-global-meta-theory.mjs [options]
+
+Options:
+  --check                 Check selected global projections without writing
+  --print-targets         Print resolved runtime homes and selected targets
+  --targets <ids>         Comma-separated runtime ids
+  --with-global-hooks     Include global Hook files and runtime registration
+  --skip-global-hooks     Explicitly skip global Hook synchronization
+  --help, -h              Show this help without resolving homes or writing`);
+}
+
+function parseCliArgs(args) {
+  const flags = new Set([
+    "--check",
+    "--print-targets",
+    "--with-global-hooks",
+    "--skip-global-hooks",
+    "--help",
+    "-h",
+  ]);
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (flags.has(arg)) continue;
+    if (arg === "--targets") {
+      const value = args[index + 1];
+      if (!value || value.startsWith("-")) {
+        throw new Error("--targets requires a comma-separated value");
+      }
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--targets=")) {
+      if (!arg.slice("--targets=".length).trim()) {
+        throw new Error("--targets requires a comma-separated value");
+      }
+      continue;
+    }
+    throw new Error(`Unknown option: ${arg}. Run with --help for usage.`);
+  }
+
+  const help = args.includes("--help") || args.includes("-h");
+  const skipGlobalHooks = args.includes("--skip-global-hooks");
+  return {
+    help,
+    checkOnly: args.includes("--check"),
+    printTargetsOnly: args.includes("--print-targets"),
+    skipGlobalHooks,
+    withGlobalHooks: args.includes("--with-global-hooks") && !skipGlobalHooks,
+  };
+}
+
+let cliOptions;
+try {
+  cliOptions = parseCliArgs(cliArgs);
+} catch (error) {
+  console.error(error.message);
+  process.exitCode = 1;
+}
+
+const checkOnly = cliOptions?.checkOnly ?? false;
+const printTargetsOnly = cliOptions?.printTargetsOnly ?? false;
+const withGlobalHooks = cliOptions?.withGlobalHooks ?? false;
 
 const repoHooksDir = path.join(canonicalRuntimeAssetsDir, "claude", "hooks");
 const sharedHooksDir = path.join(canonicalRuntimeAssetsDir, "shared", "hooks");
+const sharedRuntimeHookFiles = new Set(SHARED_RUNTIME_HOOK_FILES);
 // Files shipped into ~/.claude/hooks/meta-kim/ during global sync.
 // Sources: canonical/runtime-assets/claude/hooks/*.mjs + shared/hooks/*.mjs.
 // This whitelist is the single source of truth for "what belongs to Meta_Kim
@@ -94,7 +155,6 @@ const CANONICAL_SHARED_HOOKS_DIR = path.join(
 );
 const GLOBAL_HOOK_PACKAGE_FILES = new Set([
   // ── canonical/runtime-assets/claude/hooks/ ──
-  "activate-meta-theory-spine.mjs",
   "bash-readonly-whitelist.mjs",
   "block-dangerous-bash.mjs",
   "ecc-permission-cache-wrapper.mjs",
@@ -110,12 +170,13 @@ const GLOBAL_HOOK_PACKAGE_FILES = new Set([
   "stop-save-progress.mjs",
   "stop-spine-cleanup.mjs",
   "subagent-context.mjs",
-  "utils.mjs",
   // ── canonical/runtime-assets/shared/hooks/ ──
+  "activate-meta-theory-spine.mjs",
   "meta-kim-memory-save.mjs",
   "skip-reminder.mjs",
   "spine-state.mjs",
   "spine-state-utils.mjs",
+  "utils.mjs",
 ]);
 const GLOBAL_HOOK_PACKAGE_FILES_LEGACY = new Set([
   // Files that were shipped historically but are no longer in canonical.
@@ -185,10 +246,12 @@ const CODEX_LEGACY_SHARED_SKILL_ROOT = path.join(
 
 let runtimeHomes = {};
 let allowedRoots = [];
+let allowedRealRoots = [];
 let activeTargets = [];
 let cleanupTargets = [];
 let staleSkillCleanupTargets = [];
 let selectedTargetIds = [];
+const removedOwnedLegacyHookPaths = new Set();
 
 function assertHomeBound(targetPath) {
   const resolved = path.resolve(targetPath);
@@ -198,6 +261,45 @@ function assertHomeBound(targetPath) {
   if (!isAllowed) {
     throw new Error(
       `Refusing to write outside the configured runtime homes: ${resolved}`,
+    );
+  }
+}
+
+async function projectedRealPath(targetPath) {
+  let cursor = path.resolve(targetPath);
+  const missing = [];
+  while (true) {
+    try {
+      const real = await fs.realpath(cursor);
+      return path.join(real, ...missing.reverse());
+    } catch (error) {
+      if (error?.code !== "ENOENT" && error?.code !== "ENOTDIR") throw error;
+      const parent = path.dirname(cursor);
+      if (parent === cursor) throw error;
+      missing.push(path.basename(cursor));
+      cursor = parent;
+    }
+  }
+}
+
+function pathIsWithin(root, target) {
+  const relativePath = path.relative(root, target);
+  return (
+    relativePath === "" ||
+    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
+  );
+}
+
+async function assertRealHomeBound(targetPath) {
+  assertHomeBound(targetPath);
+  const resolved = path.resolve(targetPath);
+  const realTarget = await projectedRealPath(resolved);
+  const matched = allowedRoots
+    .map((root, index) => ({ root, realRoot: allowedRealRoots[index] }))
+    .filter(({ root }) => pathIsWithin(root, resolved));
+  if (!matched.some(({ realRoot }) => pathIsWithin(realRoot, realTarget))) {
+    throw new Error(
+      `Refusing to follow a symlink or junction outside configured runtime homes: ${resolved} -> ${realTarget}`,
     );
   }
 }
@@ -213,6 +315,7 @@ async function pathExists(targetPath) {
 
 async function backupExistingPath(targetPath, { family, label }) {
   assertHomeBound(targetPath);
+  await assertRealHomeBound(targetPath);
   if (!(await pathExists(targetPath))) return null;
 
   const backupDir = path.join(
@@ -221,10 +324,12 @@ async function backupExistingPath(targetPath, { family, label }) {
     legacyHookBackupStamp,
   );
   assertHomeBound(backupDir);
+  await assertRealHomeBound(backupDir);
   await fs.mkdir(backupDir, { recursive: true });
 
   const backupPath = path.join(backupDir, path.basename(targetPath));
   assertHomeBound(backupPath);
+  await assertRealHomeBound(backupPath);
   await fs.cp(targetPath, backupPath, {
     recursive: true,
     force: true,
@@ -251,6 +356,9 @@ async function resolveTargets() {
   if (selectedTargetIds.includes("codex")) {
     allowedRoots.push(path.resolve(path.dirname(CODEX_LEGACY_SHARED_SKILL_ROOT)));
   }
+  allowedRealRoots = await Promise.all(
+    allowedRoots.map((root) => projectedRealPath(root)),
+  );
 
   activeTargets = selectedTargetIds.map((targetId) => ({
     targetId,
@@ -409,6 +517,10 @@ async function fingerprintSelectedFiles(rootDir, allowedNames) {
 }
 
 async function canonicalHookSourcePath(fileName) {
+  if (sharedRuntimeHookFiles.has(fileName)) {
+    const shared = path.join(sharedHooksDir, fileName);
+    return (await pathExists(shared)) ? shared : null;
+  }
   const claudeSpecific = path.join(repoHooksDir, fileName);
   if (await pathExists(claudeSpecific)) {
     return claudeSpecific;
@@ -461,6 +573,7 @@ async function fingerprintInstalledGlobalHooks(rootDir) {
 
 async function copyCanonicalSkill(targetDir, targetId) {
   assertHomeBound(targetDir);
+  await assertRealHomeBound(targetDir);
   await fs.mkdir(path.dirname(targetDir), { recursive: true });
   await fs.rm(targetDir, { recursive: true, force: true });
   await fs.mkdir(targetDir, { recursive: true });
@@ -468,6 +581,7 @@ async function copyCanonicalSkill(targetDir, targetId) {
     const relativePath = path.relative(sourceDir, sourcePath).replace(/\\/g, "/");
     const targetPath = path.join(targetDir, ...relativePath.split("/"));
     assertHomeBound(targetPath);
+    await assertRealHomeBound(targetPath);
     const content = await fs.readFile(sourcePath, "utf8");
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     await fs.writeFile(
@@ -524,6 +638,7 @@ async function collectCanonicalCommands(sourceDir) {
 async function copyRuntimeCommands(targetId, sourceDir) {
   const commandsDir = path.join(runtimeHomes[targetId].dir, "commands");
   assertHomeBound(commandsDir);
+  await assertRealHomeBound(commandsDir);
   const commands = await collectCanonicalCommands(sourceDir);
   await fs.mkdir(commandsDir, { recursive: true });
 
@@ -531,6 +646,7 @@ async function copyRuntimeCommands(targetId, sourceDir) {
   for (const command of commands) {
     const targetPath = path.join(commandsDir, command.name);
     assertHomeBound(targetPath);
+    await assertRealHomeBound(targetPath);
     await fs.writeFile(targetPath, command.content, "utf8");
     targetPaths.push(targetPath);
     recordSafe((rec) =>
@@ -577,6 +693,7 @@ async function checkRuntimeCommands(targetId, sourceDir) {
 async function ensureCodexGlobalConfigChoiceSurface() {
   const configPath = path.join(runtimeHomes.codex.dir, "config.toml");
   assertHomeBound(configPath);
+  await assertRealHomeBound(configPath);
   await fs.mkdir(path.dirname(configPath), { recursive: true });
 
   const prev = (await pathExists(configPath))
@@ -629,6 +746,7 @@ async function ensureCodexGlobalConfigChoiceSurface() {
 
 async function removeIfExists(targetPath) {
   assertHomeBound(targetPath);
+  await assertRealHomeBound(targetPath);
   if (!(await pathExists(targetPath))) {
     return false;
   }
@@ -676,6 +794,7 @@ async function isStaleMetaKimSkillAlias(target) {
 
 async function backupAndRemoveStaleSkillAlias(target) {
   assertHomeBound(target.dir);
+  await assertRealHomeBound(target.dir);
   if (!(await isStaleMetaKimSkillAlias(target))) {
     return false;
   }
@@ -688,6 +807,7 @@ async function backupAndRemoveStaleSkillAlias(target) {
     legacyHookBackupStamp,
   );
   assertHomeBound(backupRoot);
+  await assertRealHomeBound(backupRoot);
   await fs.mkdir(backupRoot, { recursive: true });
   const backupPath = path.join(
     backupRoot,
@@ -697,6 +817,7 @@ async function backupAndRemoveStaleSkillAlias(target) {
       .replace(/[^A-Za-z0-9_.-]+/g, "_")}`,
   );
   assertHomeBound(backupPath);
+  await assertRealHomeBound(backupPath);
   await fs.cp(target.dir, backupPath, {
     recursive: true,
     force: true,
@@ -712,22 +833,66 @@ async function backupAndRemoveStaleSkillAlias(target) {
   return true;
 }
 
-async function backupAndRemoveLegacyRootHook(topHooksDir, fileName) {
+async function sameFileContent(leftPath, rightPath) {
+  try {
+    const [left, right] = await Promise.all([
+      fs.readFile(leftPath),
+      fs.readFile(rightPath),
+    ]);
+    return left.equals(right);
+  } catch {
+    return false;
+  }
+}
+
+async function backupAndRemoveLegacyRootHook(
+  topHooksDir,
+  fileName,
+  { canonicalSourcePath = null, retired = false } = {},
+) {
   const legacyTopPath = path.join(topHooksDir, fileName);
   assertHomeBound(legacyTopPath);
+  await assertRealHomeBound(legacyTopPath);
   if (!(await pathExists(legacyTopPath))) {
     return false;
   }
+  const owned = retired
+    ? await isOwnedRetiredMetaKimHook(legacyTopPath, fileName)
+    : canonicalSourcePath &&
+      (await sameFileContent(legacyTopPath, canonicalSourcePath));
+  if (!owned) return false;
   const backupDir = path.join(
     topHooksDir,
     ".meta-kim-legacy-backup",
     legacyHookBackupStamp,
   );
   assertHomeBound(backupDir);
+  await assertRealHomeBound(backupDir);
   await fs.mkdir(backupDir, { recursive: true });
   await fs.copyFile(legacyTopPath, path.join(backupDir, fileName));
   await fs.rm(legacyTopPath, { force: true });
+  removedOwnedLegacyHookPaths.add(
+    path.resolve(legacyTopPath).replace(/\\/g, "/"),
+  );
   return true;
+}
+
+async function isOwnedRetiredMetaKimHook(filePath, fileName) {
+  if (fileName !== "pre-git-push-confirm.mjs" || !(await pathExists(filePath))) {
+    return false;
+  }
+  let source;
+  try {
+    source = await fs.readFile(filePath, "utf8");
+  } catch {
+    return false;
+  }
+  return [
+    "PreToolUse hook: remind before git push",
+    "readJsonFromStdin",
+    "About to git push",
+    "permissionDecision: \"allow\"",
+  ].every((marker) => source.includes(marker));
 }
 
 function globalMetaKimHooksDir() {
@@ -741,6 +906,7 @@ function codexGlobalMetaKimHooksDir() {
 async function copyCanonicalHooksToGlobal() {
   const dest = globalMetaKimHooksDir();
   assertHomeBound(dest);
+  await assertRealHomeBound(dest);
   await fs.mkdir(path.dirname(dest), { recursive: true });
   await backupExistingPath(dest, {
     family: "hook-package",
@@ -754,8 +920,17 @@ async function copyCanonicalHooksToGlobal() {
       continue;
     }
     const destPath = path.join(dest, fileName);
+    await assertRealHomeBound(destPath);
     await fs.copyFile(sourcePath, destPath);
-    await backupAndRemoveLegacyRootHook(path.dirname(dest), fileName);
+    const removed = await backupAndRemoveLegacyRootHook(
+      path.dirname(dest),
+      fileName,
+      { canonicalSourcePath: sourcePath },
+    );
+    const legacyPath = path.join(path.dirname(dest), fileName);
+    if (!removed && (await pathExists(legacyPath))) {
+      console.warn(`Preserved unowned same-name Hook: ${legacyPath}`);
+    }
   }
 
   // Cleanup hooks removed from canonical but still present in older installs.
@@ -771,8 +946,15 @@ async function copyCanonicalHooksToGlobal() {
   for (const retired of RETIRED_HOOK_FILES) {
     const topPath = path.join(topHooksDir, retired);
     assertHomeBound(topPath);
-    if (await pathExists(topPath)) {
-      await fs.rm(topPath, { force: true });
+    await assertRealHomeBound(topPath);
+    if (await isOwnedRetiredMetaKimHook(topPath, retired)) {
+      await backupAndRemoveLegacyRootHook(topHooksDir, retired, {
+        retired: true,
+      });
+    } else if (await pathExists(topPath)) {
+      console.warn(
+        `Preserved unowned same-name Hook during retired cleanup: ${topPath}`,
+      );
     }
   }
 
@@ -803,6 +985,7 @@ async function copyCanonicalHooksToGlobal() {
 async function copyCanonicalHooksToCodexGlobal() {
   const dest = codexGlobalMetaKimHooksDir();
   assertHomeBound(dest);
+  await assertRealHomeBound(dest);
   await fs.mkdir(path.dirname(dest), { recursive: true });
   await backupExistingPath(dest, {
     family: "hook-package",
@@ -816,6 +999,7 @@ async function copyCanonicalHooksToCodexGlobal() {
       continue;
     }
     const destPath = path.join(dest, fileName);
+    await assertRealHomeBound(destPath);
     await fs.copyFile(sourcePath, destPath);
   }
 
@@ -855,6 +1039,7 @@ async function syncClaudeGlobalSettingsHooks() {
   const absHooks = globalMetaKimHooksDir();
   const settingsPath = path.join(runtimeHomes.claude.dir, "settings.json");
   assertHomeBound(settingsPath);
+  await assertRealHomeBound(settingsPath);
 
   const template = buildMetaKimHooksTemplate(absHooks, repoRoot, {
     hookPromptCommand: await claudeGlobalHookPromptCommand(),
@@ -895,8 +1080,9 @@ async function syncClaudeGlobalSettingsHooks() {
     );
   }
 
-  const merged = mergeGlobalMetaKimHooksIntoSettings(base, template);
-  stripRetiredGlobalHookEntries(merged);
+  const merged = mergeGlobalMetaKimHooksIntoSettings(base, template, {
+    isManagedHookCommand: isOwnedGlobalMetaKimHookCommand,
+  });
   const out = `${JSON.stringify(merged, null, 2)}\n`;
   const prev = (await pathExists(settingsPath))
     ? await fs.readFile(settingsPath, "utf8")
@@ -942,6 +1128,7 @@ async function claudeGlobalHookPromptCommand() {
 async function ensureCodexGlobalHookPromptAdapter() {
   const adapterPath = codexGlobalHookPromptAdapterPath();
   assertHomeBound(adapterPath);
+  await assertRealHomeBound(adapterPath);
   await fs.mkdir(path.dirname(adapterPath), { recursive: true });
   await fs.writeFile(adapterPath, buildHookPromptAdapterSource("codex"), "utf8");
   recordSafe((rec) =>
@@ -982,8 +1169,7 @@ function stripGlobalMetaKimHooksFromCodexConfig(config = {}) {
       const blockHooks = Array.isArray(block?.hooks)
         ? block.hooks.filter(
             (hook) =>
-              !isGlobalMetaKimManagedHookCommand(hook?.command ?? "") &&
-              !isRetiredMetaKimHookCommand(hook?.command ?? ""),
+              !isOwnedGlobalMetaKimHookCommand(hook?.command ?? ""),
           )
         : [];
       if (Array.isArray(block?.hooks)) {
@@ -993,8 +1179,7 @@ function stripGlobalMetaKimHooksFromCodexConfig(config = {}) {
         continue;
       }
       if (
-        !isGlobalMetaKimManagedHookCommand(block?.command ?? "") &&
-        !isRetiredMetaKimHookCommand(block?.command ?? "")
+        !isOwnedGlobalMetaKimHookCommand(block?.command ?? "")
       ) {
         keptBlocks.push(block);
       }
@@ -1034,6 +1219,7 @@ async function readJsonConfig(configPath, label) {
 async function syncCodexGlobalHooksJson() {
   const hooksJsonPath = codexGlobalHooksJsonPath();
   assertHomeBound(hooksJsonPath);
+  await assertRealHomeBound(hooksJsonPath);
   const template = buildCodexGlobalHooksTemplate();
   const base = await readJsonConfig(hooksJsonPath, hooksJsonPath);
   const merged = mergeCodexGlobalHooksIntoConfig(base, template);
@@ -1117,8 +1303,9 @@ async function checkClaudeGlobalSettingsHooks() {
     hookPromptCommand: await claudeGlobalHookPromptCommand(),
   });
   const settings = await readClaudeGlobalSettings(settingsPath);
-  const expected = mergeGlobalMetaKimHooksIntoSettings(settings, template);
-  stripRetiredGlobalHookEntries(expected);
+  const expected = mergeGlobalMetaKimHooksIntoSettings(settings, template, {
+    isManagedHookCommand: isOwnedGlobalMetaKimHookCommand,
+  });
 
   const actualHooks = JSON.stringify(settings.hooks ?? {});
   const expectedHooks = JSON.stringify(expected.hooks ?? {});
@@ -1186,26 +1373,12 @@ async function checkCodexGlobalHooksJson() {
   return inSync;
 }
 
-function stripRetiredGlobalHookEntries(settings) {
-  if (!settings.hooks || typeof settings.hooks !== "object") {
-    return;
-  }
-  for (const [event, blocks] of Object.entries(settings.hooks)) {
-    const keptBlocks = [];
-    for (const block of blocks ?? []) {
-      const hooks = (block.hooks ?? []).filter(
-        (hook) => !isRetiredMetaKimHookCommand(hook.command ?? ""),
-      );
-      if (hooks.length > 0) {
-        keptBlocks.push({ ...block, hooks });
-      }
-    }
-    if (keptBlocks.length > 0) {
-      settings.hooks[event] = keptBlocks;
-    } else {
-      delete settings.hooks[event];
-    }
-  }
+function isOwnedGlobalMetaKimHookCommand(command) {
+  if (isGlobalMetaKimManagedHookCommand(command)) return true;
+  const normalized = String(command ?? "").replace(/\\\\/g, "\\").replace(/\\/g, "/");
+  return [...removedOwnedLegacyHookPaths].some((ownedPath) =>
+    normalized.includes(ownedPath),
+  );
 }
 
 async function runCheck() {
@@ -1467,6 +1640,11 @@ function printTargets() {
 }
 
 async function main() {
+  if (!cliOptions) return;
+  if (cliOptions.help) {
+    printHelp();
+    return;
+  }
   await resolveTargets();
   if (printTargetsOnly) {
     printTargets();

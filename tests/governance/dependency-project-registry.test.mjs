@@ -4,7 +4,10 @@ import { readJson } from "../meta-theory/_helpers.mjs";
 
 test("dependency projects have capability cards and Kim_Decision stays reference-only", async () => {
   const registry = await readJson("config/capability-index/dependency-project-registry.json");
-  assert.equal(registry.projects.some((project) => project.id === "kim-decision"), false);
+  const kimDecision = registry.projects.find((project) => project.id === "kim-decision");
+  assert.ok(kimDecision);
+  assert.equal(kimDecision.capabilityCard.routeEligibility, "reference_only");
+  assert.equal(kimDecision.interface.invokeAs, "reference");
   for (const project of registry.projects) {
     assert.ok(project.capabilityCard, `${project.id} missing capabilityCard`);
     assert.ok(project.capabilityCard.inputContract, `${project.id} missing inputContract`);
@@ -14,7 +17,8 @@ test("dependency projects have capability cards and Kim_Decision stays reference
   }
 
   const patterns = await readJson("config/governance/decision-pattern-catalog.json");
-  assert.equal(patterns.sourceBoundary.notADependency, true);
+  assert.equal(patterns.sourceBoundary.dependencyRegistryAllowed, true);
+  assert.equal(patterns.sourceBoundary.notExecutionDependency, true);
   assert.equal(patterns.sourceBoundary.notInvokable, true);
   assert.ok(patterns.stagePatterns.some((pattern) => pattern.id === "thinking-minimum-test"));
 });

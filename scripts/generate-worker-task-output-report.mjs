@@ -4,9 +4,10 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { createReportContext } from "./report-context.mjs";
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(scriptDir, "..");
+const reportContext = createReportContext();
+const REPO_ROOT = reportContext.repoRoot;
 const CONTRACT_PATH = path.join(REPO_ROOT, "config", "contracts", "worker-task-output-contract.json");
 const SCENARIO_PATH = path.join(
   REPO_ROOT,
@@ -15,11 +16,9 @@ const SCENARIO_PATH = path.join(
   "scenarios",
   "worker-task-output-replay.json",
 );
-const OUTPUT_DIR = path.join(REPO_ROOT, ".meta-kim", "state", "default", "worker-task-output");
+const OUTPUT_DIR = reportContext.resolveStatePath("worker-task-output");
 
-function relativeToRepo(filePath) {
-  return path.relative(REPO_ROOT, filePath).replaceAll("\\", "/");
-}
+const relativeToRepo = reportContext.relativeToRepo;
 
 function hasValue(value) {
   if (Array.isArray(value)) return value.length > 0;
@@ -193,11 +192,11 @@ async function main() {
     samples,
   };
 
-  await fs.mkdir(OUTPUT_DIR, { recursive: true });
+  await reportContext.ensureDirectory(OUTPUT_DIR);
   const jsonPath = path.join(OUTPUT_DIR, "latest.json");
   const mdPath = path.join(OUTPUT_DIR, "latest.zh-CN.md");
-  await fs.writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
-  await fs.writeFile(mdPath, buildMarkdown(report));
+  await reportContext.writeJson(jsonPath, report);
+  await reportContext.writeText(mdPath, buildMarkdown(report));
 
   process.stdout.write(
     `${JSON.stringify(

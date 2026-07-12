@@ -2,6 +2,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { assert, exists, listFiles, readJson, repoPath, toPosix } from "./governance-lib.mjs";
+import { getProfilePaths } from "./meta-kim-local-state.mjs";
+
+const activeProfileDir = getProfilePaths({ repoPath: repoPath(".") }).profileDir;
+const activeProfileRef = toPosix(path.relative(repoPath("."), activeProfileDir));
+const resolveProfileSource = (source) => String(source)
+  .replaceAll("{profile}", getProfilePaths().profile)
+  .replace(/^\.meta-kim\/state\/default(?=\/|$)/u, activeProfileRef);
 
 const contract = await readJson("config/contracts/prompt-abstract-capability-contract.json");
 const skills = await readJson("config/skills.json");
@@ -36,7 +43,7 @@ const REQUIRED_SKILL_IDS = [
   "planning-with-files",
   "cli-anything",
   "gstack",
-  "skill-creator",
+  "meta-skill-creator",
 ];
 
 const REQUIRED_RUNTIME_CAPABILITIES = [
@@ -143,15 +150,13 @@ for (const id of [
 }
 
 for (const source of contract.inventorySources ?? []) {
-  if (source.includes("{profile}") || source.startsWith("graphify-out")) continue;
-  const sourceExists = await exists(repoPath(source));
-  if (source.includes(".meta-kim/state/default/capability-index/global-capabilities.json")) {
-    continue;
-  }
+  if (source.startsWith("graphify-out")) continue;
+  const resolvedSource = resolveProfileSource(source);
+  const sourceExists = await exists(repoPath(resolvedSource));
   if (!sourceExists && OPTIONAL_PROJECT_INVENTORY_SOURCES.has(source)) {
     continue;
   }
-  assert(sourceExists, `inventory source missing ${source}`);
+  assert(sourceExists, `inventory source missing ${resolvedSource}`);
 }
 
 const skillIds = new Set((skills.skills ?? []).map((skill) => skill.id));
@@ -285,7 +290,7 @@ for (const privateDoc of [
   });
 }
 
-const globalInventoryPath = repoPath(".meta-kim/state/default/capability-index/global-capabilities.json");
+const globalInventoryPath = path.join(activeProfileDir, "capability-index", "global-capabilities.json");
 if (await exists(globalInventoryPath)) {
   const globalInventory = JSON.parse(await fs.readFile(globalInventoryPath, "utf8"));
   assert((globalInventory.summary?.totalSkills ?? 0) >= 1, "global inventory exists but has no skills");

@@ -5,9 +5,10 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { createReportContext } from "./report-context.mjs";
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(scriptDir, "..");
+const reportContext = createReportContext();
+const REPO_ROOT = reportContext.repoRoot;
 const CONTRACT_PATH = path.join(REPO_ROOT, "config", "contracts", "product-delivery-bundle-contract.json");
 const SCENARIO_PATH = path.join(
   REPO_ROOT,
@@ -16,7 +17,7 @@ const SCENARIO_PATH = path.join(
   "scenarios",
   "reviewer-calibration-samples.json",
 );
-const OUTPUT_DIR = path.join(REPO_ROOT, ".meta-kim", "state", "default", "product-delivery-bundle");
+const OUTPUT_DIR = reportContext.resolveStatePath("product-delivery-bundle");
 const BUNDLE_RUN_ID = `product-delivery-bundle-${process.pid}`;
 
 const componentCommands = {
@@ -33,9 +34,7 @@ const componentCommands = {
   feedback: ["scripts/generate-feedback-loop-report.mjs"],
 };
 
-function relativeToRepo(filePath) {
-  return path.relative(REPO_ROOT, filePath).replaceAll("\\", "/");
-}
+const relativeToRepo = reportContext.relativeToRepo;
 
 function parseJsonFromStdout(stdout) {
   const jsonStart = stdout.indexOf("{");
@@ -267,7 +266,7 @@ async function main() {
     if (hasLocalAbsolutePath(value)) privacyLeaks.push("local_absolute_path");
   }
 
-  await fs.mkdir(OUTPUT_DIR, { recursive: true });
+  await reportContext.ensureDirectory(OUTPUT_DIR);
   const jsonPath = path.join(OUTPUT_DIR, "latest.json");
   const mdPath = path.join(OUTPUT_DIR, "latest.zh-CN.md");
   files.bundleManifest = {
@@ -317,8 +316,8 @@ async function main() {
     reviewerCalibration,
   };
 
-  await fs.writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
-  await fs.writeFile(mdPath, buildMarkdown(report));
+  await reportContext.writeJson(jsonPath, report);
+  await reportContext.writeText(mdPath, buildMarkdown(report));
 
   process.stdout.write(
     `${JSON.stringify(

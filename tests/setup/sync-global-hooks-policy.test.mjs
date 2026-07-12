@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile, spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -37,6 +37,121 @@ async function runScript(args, env) {
 }
 
 describe("sync-global-meta-theory hook policy", () => {
+  test("help exits successfully without resolving or writing runtime homes", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      for (const flag of ["--help", "-h"]) {
+        const result = await runScript([flag], env);
+        assert.match(result.stdout, /Usage: node scripts\/sync-global-meta-theory\.mjs/);
+        assert.match(result.stdout, /--with-global-hooks/);
+        assert.deepEqual(
+          await readdir(root),
+          [],
+          `${flag} must not create runtime home or manifest state`,
+        );
+      }
+    });
+  });
+
+  test("unknown and incomplete options fail closed without writing", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      for (const args of [["--typo"], ["--targets"], ["--targets="]]) {
+        await assert.rejects(
+          () => runScript(args, env),
+          (error) => {
+            assert.match(
+              error.stderr,
+              /Unknown option: --typo|--targets requires a comma-separated value/,
+            );
+            return true;
+          },
+        );
+        assert.deepEqual(
+          await readdir(root),
+          [],
+          `${args.join(" ")} must fail before creating runtime state`,
+        );
+      }
+    });
+  });
+
+  test("retired Hook cleanup preserves unowned same-name user files", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      const hooksDir = path.join(root, "claude", "hooks");
+      const userHook = path.join(hooksDir, "pre-git-push-confirm.mjs");
+      const settingsPath = path.join(root, "claude", "settings.json");
+      await mkdir(hooksDir, { recursive: true });
+      await writeFile(userHook, "// user-owned same-name Hook\n", "utf8");
+      await writeFile(
+        settingsPath,
+        `${JSON.stringify({
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: "Bash",
+                hooks: [{ type: "command", command: `node "${userHook}"` }],
+              },
+            ],
+          },
+        })}\n`,
+        "utf8",
+      );
+
+      const result = await runScript(
+        ["--targets", "claude", "--with-global-hooks"],
+        env,
+      );
+
+      assert.equal(await readFile(userHook, "utf8"), "// user-owned same-name Hook\n");
+      assert.match(await readFile(settingsPath, "utf8"), /pre-git-push-confirm\.mjs/u);
+      assert.match(result.stderr, /Preserved unowned same-name Hook/);
+    });
+  });
+
+  test("owned retired Meta_Kim Hook is backed up before removal", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      const hooksDir = path.join(root, "claude", "hooks");
+      const retiredHook = path.join(hooksDir, "pre-git-push-confirm.mjs");
+      const ownedSource = `#!/usr/bin/env node
+// PreToolUse hook: remind before git push
+const readJsonFromStdin = true;
+const decision = { permissionDecision: "allow" };
+console.log("About to git push");
+`;
+      await mkdir(hooksDir, { recursive: true });
+      await writeFile(retiredHook, ownedSource, "utf8");
+
+      await runScript(["--targets", "claude", "--with-global-hooks"], env);
+
+      await assert.rejects(() => readFile(retiredHook, "utf8"));
+      const backupRoot = path.join(hooksDir, ".meta-kim-legacy-backup");
+      const stamps = await readdir(backupRoot);
+      assert.ok(stamps.length > 0);
+      assert.equal(
+        await readFile(path.join(backupRoot, stamps[0], path.basename(retiredHook)), "utf8"),
+        ownedSource,
+      );
+    });
+  });
+
+  test("runtime-home writes reject a commands junction that escapes the selected home", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      const codexHome = path.join(root, "codex");
+      const outside = path.join(root, "outside-codex-home");
+      await mkdir(codexHome, { recursive: true });
+      await mkdir(outside, { recursive: true });
+      await symlink(outside, path.join(codexHome, "commands"), "junction");
+
+      await assert.rejects(
+        () => runScript(["--targets", "codex"], env),
+        (error) => {
+          assert.match(error.stderr, /Refusing to follow a symlink or junction/);
+          return true;
+        },
+      );
+      assert.deepEqual(await readdir(outside), []);
+    });
+  });
+
   test("default global sync/check does not require Claude global hooks", async () => {
     await withTempRuntimeHomes(async ({ env, root }) => {
       const sync = await runScript(["--targets", "claude"], env);
@@ -233,11 +348,18 @@ describe("sync-global-meta-theory hook policy", () => {
     await withTempRuntimeHomes(async ({ env, root }) => {
       const rootHookDir = path.join(root, "claude", "hooks");
       await mkdir(rootHookDir, { recursive: true });
-      await writeFile(
-        path.join(rootHookDir, "post-format.mjs"),
-        "// locally modified legacy Meta_Kim hook\n",
+      const canonical = await readFile(
+        path.join(
+          REPO_ROOT,
+          "canonical",
+          "runtime-assets",
+          "claude",
+          "hooks",
+          "post-format.mjs",
+        ),
         "utf8",
       );
+      await writeFile(path.join(rootHookDir, "post-format.mjs"), canonical, "utf8");
 
       await runScript(["--targets", "claude", "--with-global-hooks"], env);
 

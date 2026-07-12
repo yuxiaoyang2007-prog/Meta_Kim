@@ -142,7 +142,7 @@ describe("W2: enforce-agent-dispatch.mjs dead-branch + critical bypass", () => {
 describe("W2: activate-meta-theory-spine.mjs EXECUTION_DELTA boundary", () => {
   test("EXECUTION_DELTA marker precedes the top-level execution flow", () => {
     const src = load(
-      "canonical/runtime-assets/claude/hooks/activate-meta-theory-spine.mjs",
+      "canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs",
     );
     const markerIdx = src.indexOf("EXECUTION_DELTA");
     assert.ok(markerIdx > 0, "EXECUTION_DELTA marker must exist");

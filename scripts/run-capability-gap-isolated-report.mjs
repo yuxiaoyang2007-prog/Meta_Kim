@@ -2,6 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { getProfilePaths } from "./meta-kim-local-state.mjs";
 import process from "node:process";
 
 const DEFAULT_TASK =
@@ -291,16 +292,17 @@ async function main() {
   const runtime = argValue("--runtime", "codex");
   const osTarget = argValue("--os", "windows");
   const expectedDecision = argValue("--expected-decision", "create_script");
+  const profileDir = getProfilePaths({ repoPath: process.cwd() }).profileDir;
   const jsonPath = path.resolve(
     argValue(
       "--json-out",
-      ".meta-kim/state/default/capability-gap-isolated-task-report.json",
+      path.join(profileDir, "capability-gap-isolated-task-report.json"),
     ),
   );
   const markdownPath = path.resolve(
     argValue(
       "--markdown-out",
-      ".meta-kim/state/default/capability-gap-isolated-task-report.zh-CN.md",
+      path.join(profileDir, "capability-gap-isolated-task-report.zh-CN.md"),
     ),
   );
 

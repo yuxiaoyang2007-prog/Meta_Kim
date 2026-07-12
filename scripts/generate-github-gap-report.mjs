@@ -6,11 +6,12 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { getReportLabelsForPath } from "./meta-kim-i18n.mjs";
+import { createReportContext } from "./report-context.mjs";
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(scriptDir, "..");
+const reportContext = createReportContext();
+const REPO_ROOT = reportContext.repoRoot;
 const PRD_PATH = path.join(REPO_ROOT, "docs", "ai-native-capability-gap-mvp-prd.zh-CN.md");
-const OUTPUT_DIR = path.join(REPO_ROOT, ".meta-kim", "state", "default", "github-gap-report");
+const OUTPUT_DIR = reportContext.resolveStatePath("github-gap-report");
 const INCOMPLETE_PRIMARY_STATUS_RE = /阻塞|未开始|进行中|部分完成/;
 const COMPATIBILITY_PENDING_STATUS_RE = /兼容待验证|低优先级兼容待验证/;
 const COMPATIBILITY_TASK_RE = /^P-02[45]$/;
@@ -70,9 +71,7 @@ function parseVersion(prd) {
   return /^- 版本：(.+)$/m.exec(prd)?.[1]?.trim() ?? "unknown";
 }
 
-function relativeToRepo(filePath) {
-  return path.relative(REPO_ROOT, filePath).replaceAll("\\", "/");
-}
+const relativeToRepo = reportContext.relativeToRepo;
 
 function buildMarkdown(report, outputPath) {
   const labels = getReportLabelsForPath(outputPath);
@@ -231,11 +230,11 @@ async function main() {
     },
   };
 
-  await fs.mkdir(OUTPUT_DIR, { recursive: true });
+  await reportContext.ensureDirectory(OUTPUT_DIR);
   const jsonPath = path.join(OUTPUT_DIR, "latest.json");
   const mdPath = path.join(OUTPUT_DIR, "latest.zh-CN.md");
-  await fs.writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
-  await fs.writeFile(mdPath, buildMarkdown(report, mdPath));
+  await reportContext.writeJson(jsonPath, report);
+  await reportContext.writeText(mdPath, buildMarkdown(report, mdPath));
 
   process.stdout.write(
     `${JSON.stringify(

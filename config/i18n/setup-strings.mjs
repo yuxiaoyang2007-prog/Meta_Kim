@@ -29,6 +29,14 @@ export function buildI18N({ MIN_NODE_VERSION }) {
     noRuntimeHint1:
       "Meta_Kim works with Claude Code, Codex, OpenClaw, or Cursor.",
     noRuntimeHint2: "Install at least one: {claudeCodeDocs}",
+    selectedRuntimeCapabilityHeading: "Selected runtime capability summary:",
+    selectedRuntimeCapabilities: {
+      codex: "Codex: agents, skills, commands, MCP, and version-dependent project/global hooks",
+      cursor: "Cursor: agents, skills, MCP, rules, and official preToolUse hooks",
+      openclaw: "OpenClaw: workspaces, skills, hooks, and declarative governance; tool blocking still requires a typed plugin adapter",
+    },
+    selectedRuntimeCapabilityBoundary:
+      "Capabilities vary by runtime; this report lists only what was selected and synchronized.",
     continueAnyway: "Continue setup anyway?",
     setupCancelled: "Setup cancelled. Install an AI coding tool and re-run.",
     stepConfig: "Project configuration",
@@ -112,11 +120,11 @@ ${r ? `Raw error: ${r}` : ""}
     platformClaudeCode: "Claude Code",
     platformClaudeCodeCap: "agents + skills + hooks",
     platformCodex: "Codex",
-    platformCodexCap: "agents + skills",
+    platformCodexCap: "agents + skills + commands + MCP + hooks (version-dependent)",
     platformOpenClaw: "OpenClaw",
-    platformOpenClawCap: "workspace + skills",
+    platformOpenClawCap: "workspace + skills + hooks + declarative governance",
     platformCursor: "Cursor",
-    platformCursorCap: "agents + skills",
+    platformCursorCap: "agents + skills + rules + MCP + preToolUse hooks",
     postInstallNotesLayerActivation: "Three-layer memory activation:",
     layer1Label: "Layer 1 (Memory)",
     layer1Note: "automatic — built into Claude Code",
@@ -336,8 +344,12 @@ Possible causes:
     mcpMemoryHookInstalled: "MCP Memory runtime hooks installed",
     mcpMemoryHookWarnings:
       "Hook installation reported warnings (non-blocking) — underlying stderr shown below:",
+    mcpMemoryEndpointSelected: (endpoint) => `MCP Memory endpoint: ${endpoint}`,
+    mcpMemoryEndpointInvalid: (reason) => `Invalid MCP Memory endpoint configuration: ${reason}`,
+    mcpMemoryRemoteEndpointNoAutoStart: (endpoint) =>
+      `Using external MCP Memory endpoint ${endpoint}; local process and boot auto-start were not configured.`,
     mcpMemoryAutoStarting: "Starting MCP Memory Service (HTTP, background)...",
-    mcpMemoryAutoStarted: "MCP Memory Service running at http://localhost:8000",
+    mcpMemoryAutoStarted: (endpoint) => `MCP Memory Service running at ${endpoint}`,
     mcpMemoryAutoStartUnverified:
       "MCP Memory Service process is running; continuing",
     mcpMemoryAutoStartFailed: "Auto-start failed — start manually:",
@@ -345,8 +357,8 @@ Possible causes:
       "  MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryAutoStartBoot: "Boot auto-start configured",
     mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
-    mcpMemoryAutoStartFailureMessage:
-      "Meta_Kim MCP Memory Service failed to start or did not become healthy at http://127.0.0.1:8000. Cross-session memory may be unavailable. Please start it manually: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
+    mcpMemoryAutoStartFailureMessage: (healthUrl) =>
+      `Meta_Kim MCP Memory Service failed to start or did not become healthy at ${healthUrl}. Cross-session memory may be unavailable. Please start it manually: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http`,
     updateHeading: "Update Mode",
     updateNpm: "Reinstalling npm dependencies...",
     updateSkills: "Updating all skills...",
@@ -649,6 +661,14 @@ Possible causes:
     noRuntime: "未检测到 AI 编程工具。",
     noRuntimeHint1: "Meta_Kim 支持 Claude Code、Codex、OpenClaw 或 Cursor。",
     noRuntimeHint2: "至少安装一个：{claudeCodeDocs}",
+    selectedRuntimeCapabilityHeading: "已选 runtime 能力摘要：",
+    selectedRuntimeCapabilities: {
+      codex: "Codex：agents、skills、Commands、MCP，以及取决于版本的项目/全局 hooks",
+      cursor: "Cursor：agents、skills、rules、MCP 和官方 preToolUse hooks",
+      openclaw: "OpenClaw：workspaces、skills、hooks 和声明式治理；工具阻断仍需 typed plugin adapter",
+    },
+    selectedRuntimeCapabilityBoundary:
+      "各 runtime 能力不同；本报告只展示实际选中并同步的能力。",
     continueAnyway: "仍然继续安装？",
     setupCancelled: "安装已取消。请先安装 AI 编程工具。",
     stepConfig: "项目配置",
@@ -729,11 +749,11 @@ ${r ? `原始错误：${r}` : ""}
     platformClaudeCode: "Claude Code",
     platformClaudeCodeCap: "agents + skills + hooks",
     platformCodex: "Codex",
-    platformCodexCap: "agents + skills",
+    platformCodexCap: "agents + skills + Commands + MCP + hooks（取决于版本）",
     platformOpenClaw: "OpenClaw",
-    platformOpenClawCap: "workspace + skills",
+    platformOpenClawCap: "workspace + skills + hooks + 声明式治理",
     platformCursor: "Cursor",
-    platformCursorCap: "agents + skills",
+    platformCursorCap: "agents + skills + rules + MCP + preToolUse hooks",
     postInstallNotesLayerActivation: "三层记忆激活方式：",
     layer1Label: "第一层（Memory）",
     layer1Note: "自动激活——内置于 Claude Code",
@@ -938,8 +958,12 @@ ${r ? `原始错误：${r}` : ""}
     mcpMemoryHookInstalled: "MCP Memory 运行时钩子已安装",
     mcpMemoryHookWarnings:
       "钩子安装产生警告（不影响后续流程）——以下是子进程 stderr 原文：",
+    mcpMemoryEndpointSelected: (endpoint) => `MCP Memory 端点：${endpoint}`,
+    mcpMemoryEndpointInvalid: (reason) => `MCP Memory 端点配置无效：${reason}`,
+    mcpMemoryRemoteEndpointNoAutoStart: (endpoint) =>
+      `使用外部 MCP Memory 端点 ${endpoint}；未启动本地进程，也未配置开机自启。`,
     mcpMemoryAutoStarting: "正在启动 MCP Memory Service（HTTP 后台模式）...",
-    mcpMemoryAutoStarted: "MCP Memory Service 已运行于 http://localhost:8000",
+    mcpMemoryAutoStarted: (endpoint) => `MCP Memory Service 已运行于 ${endpoint}`,
     mcpMemoryAutoStartUnverified:
       "MCP Memory Service 进程正在运行，继续安装",
     mcpMemoryAutoStartFailed: "自动启动失败——请手动启动：",
@@ -947,8 +971,8 @@ ${r ? `原始错误：${r}` : ""}
       "  MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryAutoStartBoot: "已配置开机自启",
     mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
-    mcpMemoryAutoStartFailureMessage:
-      "Meta_Kim MCP Memory Service 启动失败，或未在 http://127.0.0.1:8000 变为 healthy。跨会话记忆可能不可用。请手动启动：MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
+    mcpMemoryAutoStartFailureMessage: (healthUrl) =>
+      `Meta_Kim MCP Memory Service 启动失败，或未在 ${healthUrl} 变为 healthy。跨会话记忆可能不可用。请手动启动：MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http`,
     updateHeading: "更新模式",
     updateNpm: "正在重新安装 npm 依赖...",
     updateSkills: "正在更新所有技能...",
@@ -1238,6 +1262,14 @@ ${r ? `原始错误：${r}` : ""}
     noRuntimeHint1:
       "Meta_Kim は Claude Code、Codex、OpenClaw、または Cursor で動作します。",
     noRuntimeHint2: "少なくとも1つインストールしてください：{claudeCodeDocs}",
+    selectedRuntimeCapabilityHeading: "選択した runtime の機能概要:",
+    selectedRuntimeCapabilities: {
+      codex: "Codex: agents、skills、commands、MCP、バージョン依存の project/global hooks",
+      cursor: "Cursor: agents、skills、rules、MCP、公式 preToolUse hooks",
+      openclaw: "OpenClaw: workspaces、skills、hooks、宣言的ガバナンス。ツールブロックには typed plugin adapter が必要",
+    },
+    selectedRuntimeCapabilityBoundary:
+      "runtime ごとに機能は異なります。本レポートは実際に選択・同期した機能のみ表示します。",
     continueAnyway: "セットアップを続行しますか？",
     setupCancelled:
       "セットアップがキャンセルされました。AIコーディングツールをインストールして再実行してください。",
@@ -1322,11 +1354,11 @@ ${r ? `生エラー：${r}` : ""}
     platformClaudeCode: "Claude Code",
     platformClaudeCodeCap: "agents + skills + hooks",
     platformCodex: "Codex",
-    platformCodexCap: "agents + skills",
+    platformCodexCap: "agents + skills + commands + MCP + hooks (バージョン依存)",
     platformOpenClaw: "OpenClaw",
-    platformOpenClawCap: "workspace + skills",
+    platformOpenClawCap: "workspace + skills + hooks + 宣言的ガバナンス",
     platformCursor: "Cursor",
-    platformCursorCap: "agents + skills",
+    platformCursorCap: "agents + skills + rules + MCP + preToolUse hooks",
     postInstallNotesLayerActivation: "3層メモリの有効化方法：",
     layer1Label: "第1層（Memory）",
     layer1Note: "自動有効 — Claude Code に組み込み済み",
@@ -1551,10 +1583,14 @@ ${r ? `生エラー：${r}` : ""}
     mcpMemoryHookInstalled: "MCP Memory ランタイムフックをインストールしました",
     mcpMemoryHookWarnings:
       "フックのインストール中に警告が発生しました（非ブロッキング）——子プロセスの stderr を以下に表示します:",
+    mcpMemoryEndpointSelected: (endpoint) => `MCP Memory エンドポイント: ${endpoint}`,
+    mcpMemoryEndpointInvalid: (reason) => `MCP Memory エンドポイント設定が無効です: ${reason}`,
+    mcpMemoryRemoteEndpointNoAutoStart: (endpoint) =>
+      `外部 MCP Memory エンドポイント ${endpoint} を使用します。ローカルプロセスと自動起動は設定しません。`,
     mcpMemoryAutoStarting:
       "MCP Memory Service（HTTP バックグラウンド）を起動中...",
-    mcpMemoryAutoStarted:
-      "MCP Memory Service が http://localhost:8000 で実行中",
+    mcpMemoryAutoStarted: (endpoint) =>
+      `MCP Memory Service が ${endpoint} で実行中`,
     mcpMemoryAutoStartUnverified:
       "MCP Memory Service プロセスは実行中です。インストールを続行します",
     mcpMemoryAutoStartFailed: "自動起動に失敗——手動で起動してください：",
@@ -1562,8 +1598,8 @@ ${r ? `生エラー：${r}` : ""}
       "  MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryAutoStartBoot: "起動時自動開始を設定しました",
     mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
-    mcpMemoryAutoStartFailureMessage:
-      "Meta_Kim MCP Memory Service の起動に失敗したか、http://127.0.0.1:8000 が healthy になりませんでした。クロスセッションメモリが利用できない可能性があります。手動で起動してください: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
+    mcpMemoryAutoStartFailureMessage: (healthUrl) =>
+      `Meta_Kim MCP Memory Service の起動に失敗したか、${healthUrl} が healthy になりませんでした。クロスセッションメモリが利用できない可能性があります。手動で起動してください: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http`,
     updateHeading: "アップデートモード",
     updateNpm: "npm依存関係を再インストール中...",
     updateSkills: "すべてのスキルを更新中...",
@@ -1871,6 +1907,14 @@ ${r ? `生エラー：${r}` : ""}
     noRuntimeHint1:
       "Meta_Kim은 Claude Code, Codex, OpenClaw 또는 Cursor에서 작동합니다.",
     noRuntimeHint2: "최소 하나를 설치하세요: {claudeCodeDocs}",
+    selectedRuntimeCapabilityHeading: "선택한 runtime 기능 요약:",
+    selectedRuntimeCapabilities: {
+      codex: "Codex: agents, skills, commands, MCP 및 버전 의존 project/global hooks",
+      cursor: "Cursor: agents, skills, rules, MCP 및 공식 preToolUse hooks",
+      openclaw: "OpenClaw: workspaces, skills, hooks 및 선언적 governance; 도구 차단은 typed plugin adapter가 필요",
+    },
+    selectedRuntimeCapabilityBoundary:
+      "runtime별로 기능이 다릅니다. 본 보고서는 실제로 선택하고 동기화한 기능만 표시합니다.",
     continueAnyway: "설정을 계속 진행할까요?",
     setupCancelled:
       "설정이 취소되었습니다. AI 코딩 도구를 설치하고 다시 실행하세요.",
@@ -1953,11 +1997,11 @@ ${r ? `원본 오류：${r}` : ""}
     platformClaudeCode: "Claude Code",
     platformClaudeCodeCap: "agents + skills + hooks",
     platformCodex: "Codex",
-    platformCodexCap: "agents + skills",
+    platformCodexCap: "agents + skills + commands + MCP + hooks (버전 의존)",
     platformOpenClaw: "OpenClaw",
-    platformOpenClawCap: "workspace + skills",
+    platformOpenClawCap: "workspace + skills + hooks + 선언적 governance",
     platformCursor: "Cursor",
-    platformCursorCap: "agents + skills",
+    platformCursorCap: "agents + skills + rules + MCP + preToolUse hooks",
     postInstallNotesLayerActivation: "3층 메모리 활성화 방식:",
     layer1Label: "제1층 (Memory)",
     layer1Note: "자동 활성화 — Claude Code에 내장됨",
@@ -2174,9 +2218,13 @@ ${r ? `원본 오류：${r}` : ""}
     mcpMemoryHookInstalled: "MCP Memory 런타임 훅 설치 완료",
     mcpMemoryHookWarnings:
       "훅 설치에서 경고가 발생했습니다 (비차단) — 하위 프로세스의 stderr 원문은 아래와 같습니다:",
+    mcpMemoryEndpointSelected: (endpoint) => `MCP Memory 엔드포인트: ${endpoint}`,
+    mcpMemoryEndpointInvalid: (reason) => `MCP Memory 엔드포인트 설정이 잘못되었습니다: ${reason}`,
+    mcpMemoryRemoteEndpointNoAutoStart: (endpoint) =>
+      `외부 MCP Memory 엔드포인트 ${endpoint}를 사용합니다. 로컬 프로세스와 부팅 자동 시작은 설정하지 않았습니다.`,
     mcpMemoryAutoStarting: "MCP Memory Service (HTTP 백그라운드) 시작 중...",
-    mcpMemoryAutoStarted:
-      "MCP Memory Service가 http://localhost:8000에서 실행 중",
+    mcpMemoryAutoStarted: (endpoint) =>
+      `MCP Memory Service가 ${endpoint}에서 실행 중`,
     mcpMemoryAutoStartUnverified:
       "MCP Memory Service 프로세스가 실행 중이므로 설치를 계속합니다",
     mcpMemoryAutoStartFailed: "자동 시작 실패 — 수동으로 시작하세요:",
@@ -2184,8 +2232,8 @@ ${r ? `원본 오류：${r}` : ""}
       "  MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryAutoStartBoot: "부팅 시 자동 시작 구성 완료",
     mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
-    mcpMemoryAutoStartFailureMessage:
-      "Meta_Kim MCP Memory Service를 시작하지 못했거나 http://127.0.0.1:8000 이 healthy 상태가 되지 않았습니다. 세션 간 메모리를 사용할 수 없을 수 있습니다. 수동으로 시작하세요: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
+    mcpMemoryAutoStartFailureMessage: (healthUrl) =>
+      `Meta_Kim MCP Memory Service를 시작하지 못했거나 ${healthUrl}이 healthy 상태가 되지 않았습니다. 세션 간 메모리를 사용할 수 없을 수 있습니다. 수동으로 시작하세요: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http`,
     updateHeading: "업데이트 모드",
     updateNpm: "npm 의존성 재설치 중...",
     updateSkills: "모든 스킬 업데이트 중...",

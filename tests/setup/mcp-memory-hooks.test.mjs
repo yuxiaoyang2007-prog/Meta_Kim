@@ -13,6 +13,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
+import { sanitizeStateProfile } from "../../canonical/runtime-assets/shared/hooks/spine-state.mjs";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -1103,18 +1104,19 @@ describe("MCP memory cross-runtime hooks", () => {
 
       assert.equal(result.status, 0, result.stderr);
 
+      const safeProfile = sanitizeStateProfile("../escape");
       const latestPath = path.join(
         tempDir,
         ".meta-kim",
         "state",
-        "default",
+        safeProfile,
         "compaction",
         "latest.json",
       );
       const packet = JSON.parse(readFileSync(latestPath, "utf8"));
 
-      assert.equal(packet.profile, "default");
-      assert.equal(packet.profileKey, "default-auto");
+      assert.equal(packet.profile, safeProfile);
+      assert.equal(packet.profileKey, `${safeProfile}-auto`);
       assert.equal(
         existsSync(path.join(tempDir, "..", "escape", "compaction", "latest.json")),
         false,
@@ -1541,7 +1543,8 @@ describe("MCP memory cross-runtime hooks", () => {
       "MCP Memory prompt must run before hook registration",
     );
     assert.ok(
-      fn.indexOf("askYesNo(t.askMcpMemoryInstall") < fn.indexOf("startMcpMemoryServiceBackground(resolved)"),
+      fn.indexOf("askYesNo(t.askMcpMemoryInstall") <
+        fn.indexOf("startMcpMemoryServiceBackground(resolved, memoryEndpoint)"),
       "MCP Memory prompt must run before background autostart",
     );
   });
@@ -1614,7 +1617,9 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.match(source, /const legacyCmdPath = join\(startupDir, "mcp-memory-start\.cmd"\)/);
     assert.match(source, /rmSync\(legacyCmdPath, \{ force: true \}\)/);
     assert.match(source, /function Test-MetaKimMemoryHealth/);
-    assert.match(source, /http:\/\/127\.0\.0\.1:8000\/api\/health/);
+    assert.match(source, /endpoint\.healthUrl/);
+    assert.match(source, /\$env:MCP_MEMORY_URL/);
+    assert.match(source, /\$env:META_KIM_MEMORY_PORT/);
     assert.match(source, /Start-Process -FilePath \$memoryBin/);
     assert.match(source, /for \(\$i = 0; \$i -lt 150; \$i\+\+\)/);
     assert.match(source, /System\.Windows\.MessageBox/);
@@ -1622,7 +1627,8 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.doesNotMatch(source, /const cmdPath = join\(startupDir, "mcp-memory-start\.cmd"\)/);
 
     assert.match(source, /const scriptPath = join\(metaKimDir, "mcp-memory-start\.sh"\)/);
-    assert.match(source, /curl -fsS --noproxy '\*' --max-time 3 http:\/\/127\.0\.0\.1:8000\/api\/health/);
+    assert.match(source, /HEALTH_URL=\$\{shellQuote\(endpoint\.healthUrl\)\}/);
+    assert.match(source, /curl -fsS --noproxy '\*' --max-time 3 "\$HEALTH_URL"/);
     assert.match(source, /TITLE=\$\{shellQuote\(failureTitle\)\}/);
     assert.match(source, /MSG=\$\{shellQuote\(failureMessage\)\}/);
     assert.match(source, /osascript -e "display dialog/);
@@ -1632,7 +1638,8 @@ describe("MCP memory cross-runtime hooks", () => {
     assert.match(source, /kdialog --sorry/);
     assert.match(source, /xmessage -center/);
     assert.match(source, /Exec=\/bin\/sh "\$\{scriptPath\}"/);
-    assert.match(source, /<string>\/bin\/sh<\/string><string>\$\{scriptPath\}<\/string>/);
+    assert.match(source, /<string>\/bin\/sh<\/string><string>\$\{xmlEscape\(scriptPath\)\}<\/string>/);
+    assert.match(source, /<key>StandardOutPath<\/key><string>\$\{xmlEscape\(logPath\)\}<\/string>/);
   });
 
   test("setup registers MCP memory server with supported entrypoints", () => {

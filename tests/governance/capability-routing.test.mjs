@@ -130,6 +130,35 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     assert.equal(fuzzy.rankedRoutes.some((route) => route.dependencyProject === "kim-decision" && route.scoreBand === "execute"), false);
   }
 
+  const goalContract = route("帮我把这个模糊目标整理成 Goal Prompt 和 Loop Prompt，先不要执行", "codex", "windows");
+  assert.equal(goalContract.taskShape, "goal_contract");
+  assert.equal(goalContract.recommendedRoute?.weapon, "goalpro");
+  assert.equal(goalContract.recommendedRoute?.dependencyProject, "goalpro");
+  assert.equal(goalContract.recommendedRoute?.boundary?.executionMode, "prompt_only");
+  assert.equal(goalContract.recommendedRoute?.boundary?.notExecutor, true);
+  assert.equal(goalContract.rankedRoutes.some((candidate) => candidate.dependencyProject === "kim-decision" && candidate.scoreBand === "execute"), false);
+
+  const codeRefactor = route("帮我重构这个前端模块并运行测试", "codex", "windows");
+  assert.equal(codeRefactor.taskShape, "engineering_execution");
+  assert.equal(codeRefactor.rankedRoutes.some((candidate) => candidate.dependencyProject === "kim-decision" && candidate.scoreBand === "execute"), false);
+
+  const contentGrowthDecision = route("内容营销中，标题文案和封面设计怎样提升转化，帮我判断怎么改", "codex", "windows");
+  assert.equal(contentGrowthDecision.taskShape, "strategy_product_decision");
+  assert.equal(contentGrowthDecision.recommendedRoute?.id, "kim-decision-lens:codex:windows");
+  assert.equal(contentGrowthDecision.recommendedRoute?.dependency, null);
+  assert.equal(contentGrowthDecision.recommendedRoute?.decisionLensProvider, "kim-decision");
+  assert.equal(contentGrowthDecision.recommendedRoute?.boundary?.executionMode, "model_context");
+  assert.equal(contentGrowthDecision.recommendedRoute?.boundary?.notExecutor, true);
+  assert.deepEqual(
+    contentGrowthDecision.decisionExperiencePlan?.sequence?.map((step) => step.step),
+    ["critical_decision", "fetch_evidence_decision", "thinking_path_decision"],
+  );
+  assert.match(contentGrowthDecision.decisionExperiencePlan?.goalProBoundary ?? "", /not triggered by this route/i);
+  assert.match(contentGrowthDecision.decisionExperiencePlan?.evolutionBoundary ?? "", /not the place that creates user Goals/i);
+
+  const contentAutomationBuild = route("帮我做一个内容营销自动发布器，需要内容策略、前端界面、后端 API、数据模型、平台集成、权限风控、测试验收和发布运维", "codex", "windows");
+  assert.equal(contentAutomationBuild.recommendedRoute?.id, "product-build-orchestration:codex:windows");
+
   const product = route("product monetization task");
   assert.ok(product.internalDecisionPatterns.includes("thinking-minimum-test"));
 
@@ -391,7 +420,7 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   assert.equal(smoke.recommendedRoute?.id, "execution-capability-discovery:codex:windows");
   assert.ok(!/^meta-/.test(smoke.recommendedRoute?.owner ?? ""), "Engineering smoke route must use an execution owner");
   assert.equal(smoke.recommendedRoute?.selectedCapabilityProviders?.skillDiscovery?.id, "findskill");
-  assert.equal(smoke.recommendedRoute?.selectedCapabilityProviders?.skillCreation?.id, "skill-creator");
+  assert.equal(smoke.recommendedRoute?.selectedCapabilityProviders?.skillCreation?.id, "meta-skill-creator");
   assert.equal(
     smoke.recommendedRoute?.selectedCapabilityProviders?.skillDiscovery?.platformId,
     "codex",
@@ -400,7 +429,7 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   assert.equal(
     smoke.recommendedRoute?.selectedCapabilityProviders?.skillCreation?.platformId,
     "codex",
-    "Codex smoke route must prefer the Codex-installed skill-creator provider over same-name Claude Code skills",
+    "Codex smoke route must prefer the Codex-installed meta-skill-creator provider over same-name Claude Code skills",
   );
   assert.ok(smoke.recommendedRoute?.selectedCapabilityProviders?.agent, "Engineering smoke route must bind an execution agent provider");
   assert.notEqual(
@@ -416,6 +445,22 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   );
   assert.ok(smoke.recommendedRoute?.selectedCapabilityProviders?.command || smoke.recommendedRoute?.selectedCapabilityProviders?.runtimeTool);
   assert.equal(smoke.routeExecutionGate?.canEnterExecution, true);
+
+  const claudeSmoke = route(
+    "Create a provider smoke test that discovers an execution agent, finds a skill provider, finds an MCP provider, and emits a verification command",
+    "claude_code",
+    "windows",
+  );
+  assert.equal(
+    claudeSmoke.recommendedRoute?.selectedCapabilityProviders?.skillCreation?.id,
+    "meta-skill-creator",
+    "Claude Code smoke route must select the replacement meta-skill-creator provider",
+  );
+  assert.equal(
+    claudeSmoke.recommendedRoute?.selectedCapabilityProviders?.skillCreation?.platformId,
+    "claudeCode",
+    "Claude Code smoke route must prefer the Claude Code-installed meta-skill-creator provider",
+  );
 
   const claudeAgentSearch = route(
     "在 Claude Code 里运行 agent 搜索不对 critical and fetch thinking and review",

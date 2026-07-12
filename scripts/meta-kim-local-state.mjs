@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { sanitizeStateProfile } from "../canonical/runtime-assets/shared/hooks/spine-state.mjs";
 import { detectProjectRegistryEntry } from "./project-registry.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,7 +21,7 @@ function repoPathHash(repoPath = repoRoot) {
 }
 
 export function resolveProfileName(input = process.env.META_KIM_PROFILE) {
-  return typeof input === "string" && input.trim() ? input.trim() : "default";
+  return sanitizeStateProfile(input);
 }
 
 export function resolveRuntimeFamily(
@@ -64,9 +65,10 @@ export function getProfilePaths({
   runtimeFamily = resolveRuntimeFamily(),
   repoPath = repoRoot,
 } = {}) {
-  const profileDir = path.join(localStateRoot, profile);
+  const safeProfile = resolveProfileName(profile);
+  const profileDir = path.join(localStateRoot, safeProfile);
   return {
-    profile,
+    profile: safeProfile,
     runtimeFamily,
     profileKey: buildProfileKey({ repoPath, runtimeFamily }),
     profileDir,
@@ -102,13 +104,23 @@ export async function readProfileMetadata(options = {}) {
 
 export async function ensureProfileState(options = {}) {
   const paths = getProfilePaths(options);
+  const existing = await readProfileMetadata(options);
+  if (
+    existing &&
+    (existing.profileKey !== paths.profileKey || existing.runtimeFamily !== paths.runtimeFamily)
+  ) {
+    throw new Error(
+      `profile collision detected for ${paths.profile}: expected ${paths.profileKey}/${paths.runtimeFamily}, ` +
+        `found ${existing.profileKey ?? "unknown"}/${existing.runtimeFamily ?? "unknown"}. ` +
+        `Set META_KIM_PROFILE to a distinct name for each concurrently used runtime (for example codex or claude).`,
+    );
+  }
   await fs.mkdir(paths.profileDir, { recursive: true });
   await fs.mkdir(paths.compactionDir, { recursive: true });
   await fs.mkdir(paths.doctorCacheDir, { recursive: true });
   await fs.mkdir(paths.migrationsDir, { recursive: true });
 
   const now = new Date().toISOString();
-  const existing = await readProfileMetadata(options);
   const metadata = {
     profile: paths.profile,
     profileKey: paths.profileKey,

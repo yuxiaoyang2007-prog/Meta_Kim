@@ -13,10 +13,12 @@
  *   --plugins-only    only run `claude plugin install` (no git clones)
  *   --skip-plugins    skip `claude plugin install` even if defaults apply
  *   --skills=id,...   install only these manifest skill ids (omit = all)
+ *   --prefer-local-dependencies
+ *                     prefer local sibling dependency checkouts for testing
  *
  * Env (optional): META_KIM_CLAUDE_HOME, CLAUDE_HOME, META_KIM_CODEX_HOME,
  * CODEX_HOME, META_KIM_OPENCLAW_HOME, OPENCLAW_HOME, META_KIM_QODER_HOME,
- * QODER_HOME, META_KIM_SKILL_IDS
+ * QODER_HOME, META_KIM_SKILL_IDS, META_KIM_LOCAL_DEPENDENCY_ROOT
  */
 
 import { execFileSync, execSync, spawnSync, spawn } from "node:child_process";
@@ -57,6 +59,7 @@ import {
   detectLegacySubdirInstall,
   detectPluginBundleSkillResidue,
   sanitizeInstalledSkillTree,
+  validateSkillFrontmatter,
 } from "./install-skill-sanitizer.mjs";
 import { fileURLToPath } from "node:url";
 import {
@@ -185,6 +188,108 @@ function guideAlreadyHasGraphifySection(platform) {
   }
 }
 
+const cliArgs = process.argv.slice(2);
+const directInvocation = process.argv[1] === fileURLToPath(import.meta.url);
+const INSTALLER_BOOLEAN_FLAGS = new Set([
+  "--update",
+  "--dry-run",
+  "--plugins-only",
+  "--skip-plugins",
+  "--no-plugins",
+  "--skip-inventory-refresh",
+  "--prefer-local-dependencies",
+]);
+const INSTALLER_VALUE_FLAGS = new Set([
+  "--targets",
+  "--skills",
+  "--scope",
+  "--proxy",
+  "--log-file",
+]);
+
+function installerHelpText() {
+  return [
+    "Usage: node scripts/install-global-skills-all-runtimes.mjs [options]",
+    "",
+    "Options:",
+    "  --update                    update installed skills",
+    "  --targets <ids>             comma-separated runtime ids",
+    "  --skills <ids>              comma-separated skill ids",
+    "  --dry-run                   print actions without writing",
+    "  --plugins-only              install native plugin bundles only",
+    "  --skip-plugins, --no-plugins",
+    "  --skip-inventory-refresh",
+    "  --prefer-local-dependencies  use local sibling dependency checkouts when present",
+    "  --proxy <url>",
+    "  --log-file <path>",
+    "  -h, --help                  show this help without writing",
+  ].join("\n");
+}
+
+function validateInstallerArgs(argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "-h" || arg === "--help") continue;
+    if (INSTALLER_BOOLEAN_FLAGS.has(arg)) continue;
+    const equalsIndex = arg.indexOf("=");
+    const flag = equalsIndex === -1 ? arg : arg.slice(0, equalsIndex);
+    if (INSTALLER_VALUE_FLAGS.has(flag)) {
+      if (equalsIndex !== -1) {
+        if (!arg.slice(equalsIndex + 1) && flag !== "--skills") {
+          throw new Error(`${flag} requires a value`);
+        }
+        continue;
+      }
+      if (
+        argv[index + 1] === undefined ||
+        (argv[index + 1] === "" && flag !== "--skills") ||
+        argv[index + 1].startsWith("--")
+      ) {
+        throw new Error(`${flag} requires a value`);
+      }
+      index += 1;
+      continue;
+    }
+    throw new Error(`Unknown installer argument: ${arg}`);
+  }
+}
+
+if (directInvocation) {
+  if (cliArgs.includes("--help") || cliArgs.includes("-h")) {
+    console.log(installerHelpText());
+    process.exit(0);
+  }
+  validateInstallerArgs(cliArgs);
+}
+
+const preferLocalDependencies = cliArgs.includes("--prefer-local-dependencies");
+
+function localDependencyRoots() {
+  const roots = [];
+  if (process.env.META_KIM_LOCAL_DEPENDENCY_ROOT) {
+    roots.push(process.env.META_KIM_LOCAL_DEPENDENCY_ROOT);
+  }
+  roots.push(path.dirname(repoRoot));
+  return [...new Set(roots.map((root) => path.resolve(root)))];
+}
+
+function repoNameFromFullName(repoFullName) {
+  return String(repoFullName ?? "").split("/").filter(Boolean).at(-1) ?? null;
+}
+
+function resolveLocalDependencyRepo(repoFullName) {
+  if (!preferLocalDependencies) return null;
+  const repoName = repoNameFromFullName(repoFullName);
+  if (!repoName) return null;
+  for (const root of localDependencyRoots()) {
+    const candidate = path.join(root, repoName);
+    if (existsSync(path.join(candidate, ".git"))) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 const updateMode = process.argv.includes("--update");
 const dryRun = process.argv.includes("--dry-run");
 const pluginsOnly = process.argv.includes("--plugins-only");
@@ -192,7 +297,6 @@ const skipPlugins =
   process.argv.includes("--skip-plugins") ||
   process.argv.includes("--no-plugins");
 const skipInventoryRefresh = process.argv.includes("--skip-inventory-refresh");
-const cliArgs = process.argv.slice(2);
 const installFailures = [];
 const archiveFallbacks = [];
 const repairedInstallRoots = [];
@@ -424,12 +528,14 @@ function loadSkillsManifest() {
     for (const skill of manifest.skills) {
       const repo = skill.repo.replace("${skillOwner}", skillOwner);
       const fullUrl = `https://github.com/${repo}.git`;
+      const localRepoPath = resolveLocalDependencyRepo(repo);
 
       const subdir = resolveManifestSkillSubdir(skill, os.platform());
 
       skillRepos.push({
         id: skill.id,
         repo: fullUrl,
+        ...(localRepoPath ? { localRepoPath } : {}),
         ...(subdir ? { subdir } : {}),
         targets: skill.targets || ["claude", "codex", "openclaw"],
         ...(skill.claudePlugin ? { claudePlugin: skill.claudePlugin } : {}),
@@ -487,7 +593,11 @@ function applySkillsIdFilter(skillRepos, filterIds) {
 
 const manifestLoad = loadSkillsManifest();
 let SKILL_REPOS = manifestLoad.skillRepos;
-const skillsArg = parseSkillsArg(cliArgs);
+function normalizeInstallerSkillsFilter(parsedSkills) {
+  return parsedSkills;
+}
+
+const skillsArg = normalizeInstallerSkillsFilter(parseSkillsArg(cliArgs));
 const skillsFilterActive = skillsArg !== null;
 if (skillsArg !== null) {
   const { repos, unknownIds } = applySkillsIdFilter(SKILL_REPOS, skillsArg);
@@ -532,8 +642,13 @@ function resolveHomes() {
   };
 }
 
-function resolveCompatibilitySkillRoots(runtimeId, primarySkillsRoot) {
-  return [];
+function resolveCompatibilitySkillRoots(runtimeId, primarySkillsRoot, spec) {
+  if (runtimeId !== "codex" || spec?.id !== "meta-skill-creator") return [];
+  return [primarySkillsRoot];
+}
+
+function resolveOsUserHome(userHome = os.homedir()) {
+  return path.resolve(userHome);
 }
 
 /** Primary deploy segment under each runtime home: skills/ (default) or plugins/ (rare). */
@@ -544,7 +659,20 @@ function skillInstallRootSegment(spec) {
   return spec.installRoot === "plugins" ? "plugins" : "skills";
 }
 
-function resolveSkillTargetDir(runtimeHome, spec) {
+function resolveSkillTargetDir(
+  runtimeHome,
+  spec,
+  runtimeId = null,
+  userHome = os.homedir(),
+) {
+  if (runtimeId === "codex" && spec.id === "meta-skill-creator") {
+    return path.join(
+      resolveOsUserHome(userHome),
+      ".agents",
+      "skills",
+      spec.id,
+    );
+  }
   return path.join(runtimeHome, skillInstallRootSegment(spec), spec.id);
 }
 
@@ -556,7 +684,7 @@ function usesGenericSkillInstall(spec) {
   );
 }
 
-/** Legacy Codex ~/.agents mirror: skills/ vs plugins/ sibling layout. */
+/** Resolve a secondary compatibility target under a supplied skills root. */
 function resolveCompatSkillTargetDir(legacySkillsRoot, spec) {
   if (skillInstallRootSegment(spec) === "plugins") {
     return path.join(path.dirname(legacySkillsRoot), "plugins", spec.id);
@@ -569,6 +697,39 @@ function assertUnderHome(resolved) {
   const abs = path.resolve(resolved);
   if (abs !== home && !abs.startsWith(`${home}${path.sep}`)) {
     throw new Error(`Refusing to write outside user home: ${abs}`);
+  }
+}
+
+function isPathInside(root, candidate) {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+async function assertRealPathContained(userHome, targetPath) {
+  const lexicalHome = path.resolve(userHome);
+  const lexicalTarget = path.resolve(targetPath);
+  if (!isPathInside(lexicalHome, lexicalTarget)) {
+    throw new Error(`Refusing path outside OS user home: ${lexicalTarget}`);
+  }
+
+  const realHome = await fs.realpath(lexicalHome).catch(() => lexicalHome);
+  const relative = path.relative(lexicalHome, lexicalTarget);
+  const segments = relative.split(path.sep).filter(Boolean);
+  let current = lexicalHome;
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    const stat = await fs.lstat(current).catch((error) => {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!stat) break;
+    if (stat.isSymbolicLink()) {
+      throw new Error(`Refusing symlink or junction in managed path: ${current}`);
+    }
+    const realCurrent = await fs.realpath(current);
+    if (!isPathInside(realHome, realCurrent)) {
+      throw new Error(`Refusing managed path escape: ${current} -> ${realCurrent}`);
+    }
   }
 }
 
@@ -845,6 +1006,7 @@ async function sanitizeCompatibilityRoots(runtimeId, primarySkillsRoot, spec) {
   const extraRoots = resolveCompatibilitySkillRoots(
     runtimeId,
     primarySkillsRoot,
+    spec,
   );
   for (const extraRoot of extraRoots) {
     const targetDir = resolveCompatSkillTargetDir(extraRoot, spec);
@@ -876,6 +1038,231 @@ async function sanitizeCompatibilityRoots(runtimeId, primarySkillsRoot, spec) {
       await sanitizeManagedSkillTarget(spec.id, targetDir);
     }
     await ensureHookLayoutAliases(path.dirname(extraRoot), spec);
+  }
+}
+
+async function validateMetaSkillCreatorPackage(rootDir) {
+  const rootStat = await fs.lstat(rootDir);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw new Error(`Invalid meta-skill-creator package root: ${rootDir}`);
+  }
+  const skillPath = path.join(rootDir, "SKILL.md");
+  const skillStat = await fs.lstat(skillPath);
+  if (!skillStat.isFile() || skillStat.isSymbolicLink()) {
+    throw new Error("meta-skill-creator requires a regular SKILL.md");
+  }
+  const skillContent = await fs.readFile(skillPath, "utf8");
+  const frontmatter = validateSkillFrontmatter(skillContent);
+  if (!frontmatter.ok || !/^name:\s*meta-skill-creator\s*$/im.test(skillContent)) {
+    throw new Error(
+      `Invalid meta-skill-creator SKILL.md: ${frontmatter.message}`,
+    );
+  }
+
+  async function rejectLinks(currentDir) {
+    for (const entry of await fs.readdir(currentDir, { withFileTypes: true })) {
+      const entryPath = path.join(currentDir, entry.name);
+      const stat = await fs.lstat(entryPath);
+      if (stat.isSymbolicLink()) {
+        throw new Error(`meta-skill-creator package contains a link: ${entryPath}`);
+      }
+      if (stat.isDirectory()) await rejectLinks(entryPath);
+    }
+  }
+  await rejectLinks(rootDir);
+}
+
+async function transactionalReplaceMetaSkillTargets(
+  sourceDir,
+  targets,
+  {
+    userHome = os.homedir(),
+    failCommitAfter = 0,
+    failRollbackTarget = null,
+  } = {},
+) {
+  await validateMetaSkillCreatorPackage(sourceDir);
+  for (const target of targets) {
+    await assertRealPathContained(userHome, target);
+  }
+
+  const prepared = [];
+  const backups = [];
+  const installed = [];
+  let committed = false;
+  try {
+    // Prepare and validate every target before mutating either live root.
+    for (const target of targets) {
+      const staged = await createSiblingStagingDir(target, "transaction");
+      await assertRealPathContained(userHome, staged);
+      await fs.cp(sourceDir, staged, { recursive: true, force: true });
+      await validateMetaSkillCreatorPackage(staged);
+      prepared.push({ target, staged });
+    }
+
+    for (const { target } of prepared) {
+      await assertRealPathContained(userHome, target);
+      if (!(await pathExists(target))) continue;
+      const backup = path.join(
+        path.dirname(target),
+        `${path.basename(target)}.transaction-backup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      );
+      await fs.rename(target, backup);
+      backups.push({ target, backup });
+    }
+
+    for (const item of prepared) {
+      await assertRealPathContained(userHome, item.target);
+      await fs.rename(item.staged, item.target);
+      installed.push(item.target);
+      if (failCommitAfter > 0 && installed.length === failCommitAfter) {
+        throw new Error(`Injected commit failure after target ${failCommitAfter}`);
+      }
+    }
+    for (const target of installed) {
+      await validateMetaSkillCreatorPackage(target);
+    }
+    committed = true;
+  } catch (error) {
+    const recoveryErrors = [];
+    if (!committed) {
+      for (const target of installed.reverse()) {
+        try {
+          await fs.rm(target, { recursive: true, force: true });
+          if (await pathExists(target)) {
+            throw new Error(`new target still exists after rollback removal: ${target}`);
+          }
+        } catch (recoveryError) {
+          recoveryErrors.push(
+            new Error(`failed to remove new target ${target}: ${recoveryError.message}`),
+          );
+        }
+      }
+      for (const { target, backup } of backups.reverse()) {
+        try {
+          if (failRollbackTarget && path.resolve(target) === path.resolve(failRollbackTarget)) {
+            throw new Error("Injected rollback restore failure");
+          }
+          if (!(await pathExists(backup))) {
+            throw new Error(`recovery backup is missing: ${backup}`);
+          }
+          if (await pathExists(target)) {
+            throw new Error(`live target blocks recovery: ${target}`);
+          }
+          await fs.rename(backup, target);
+          if (!(await pathExists(target)) || (await pathExists(backup))) {
+            throw new Error(`recovery verification failed: ${backup} -> ${target}`);
+          }
+          await validateMetaSkillCreatorPackage(target);
+        } catch (recoveryError) {
+          recoveryErrors.push(
+            new Error(
+              `failed to restore ${target} from recovery backup ${backup}: ${recoveryError.message}`,
+            ),
+          );
+        }
+      }
+    }
+    if (recoveryErrors.length > 0) {
+      const recoveryPaths = backups
+        .filter(({ backup }) => existsSync(backup))
+        .map(({ backup }) => backup);
+      throw new AggregateError(
+        [error, ...recoveryErrors],
+        `meta-skill-creator transaction failed and recovery was incomplete; recovery backups: ${recoveryPaths.join(", ") || "none"}; recovery errors: ${recoveryErrors.map((item) => item.message).join(" | ")}`,
+      );
+    }
+    throw error;
+  } finally {
+    for (const { staged } of prepared) {
+      if (await pathExists(staged)) {
+        await fs.rm(staged, { recursive: true, force: true }).catch(() => {});
+      }
+    }
+  }
+  for (const { backup } of backups) {
+    await rmDirBestEffortLocked(backup);
+  }
+}
+
+function testMetaSkillSourceDir() {
+  if (
+    process.env.META_KIM_ALLOW_TEST_FIXTURES === "1" &&
+    process.env.META_KIM_TEST_META_SKILL_SOURCE_DIR
+  ) {
+    return path.resolve(process.env.META_KIM_TEST_META_SKILL_SOURCE_DIR);
+  }
+  return null;
+}
+
+function testMetaSkillTransactionFaults(targets) {
+  if (process.env.META_KIM_ALLOW_TEST_FIXTURES !== "1") return {};
+  const failCommitAfter = Number.parseInt(
+    process.env.META_KIM_TEST_FAIL_COMMIT_AFTER ?? "0",
+    10,
+  );
+  const rollbackIndex = Number.parseInt(
+    process.env.META_KIM_TEST_FAIL_ROLLBACK_TARGET_INDEX ?? "-1",
+    10,
+  );
+  return {
+    failCommitAfter: Number.isFinite(failCommitAfter) ? failCommitAfter : 0,
+    failRollbackTarget:
+      rollbackIndex >= 0 && rollbackIndex < targets.length
+        ? targets[rollbackIndex]
+        : null,
+  };
+}
+
+async function installMetaSkillCreatorAcrossRuntimes(
+  runtimeHomes,
+  activeTargets,
+  spec,
+  { sourceDir = testMetaSkillSourceDir(), userHome = os.homedir() } = {},
+) {
+  const targets = [];
+  if (activeTargets.includes("claude") && spec.targets?.includes("claude")) {
+    targets.push(path.join(runtimeHomes.claude, "skills", spec.id));
+  }
+  if (activeTargets.includes("codex") && spec.targets?.includes("codex")) {
+    targets.push(
+      resolveSkillTargetDir(runtimeHomes.codex, spec, "codex", userHome),
+      path.join(runtimeHomes.codex, "skills", spec.id),
+    );
+  }
+  if (targets.length === 0) return;
+  for (const target of targets) {
+    await assertRealPathContained(userHome, target);
+  }
+  if (dryRun) {
+    for (const target of targets) {
+      console.log(t.dryRun(`install ${spec.id}: ${target}`));
+    }
+    return;
+  }
+
+  const sourceStage = await createSiblingStagingDir(targets[0], "source");
+  try {
+    await assertRealPathContained(userHome, sourceStage);
+    if (sourceDir) {
+      await fs.cp(sourceDir, sourceStage, { recursive: true, force: true });
+    } else if (spec.subdir) {
+      await installGitSkillFromSubdir(
+        spec.id,
+        sourceStage,
+        spec.repo,
+        spec.subdir,
+      );
+    } else {
+      await installGitSkill(spec.id, sourceStage, spec.repo);
+    }
+    await validateMetaSkillCreatorPackage(sourceStage);
+    await transactionalReplaceMetaSkillTargets(sourceStage, targets, {
+      userHome,
+      ...testMetaSkillTransactionFaults(targets),
+    });
+  } finally {
+    await fs.rm(sourceStage, { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -1818,17 +2205,6 @@ async function installGitSkillFromSubdir(
   await sanitizeManagedSkillTarget(skillId, targetDir);
 }
 
-async function installSkillCreator(targetBaseSkills) {
-  const id = "skill-creator";
-  const targetDir = path.join(targetBaseSkills, id);
-  await installGitSkillFromSubdir(
-    id,
-    targetDir,
-    "https://github.com/anthropics/skills.git",
-    "skills/skill-creator",
-  );
-}
-
 async function deployRuntimeHookSupport(spec, runtimeHome, runtimeId, skillsRoot) {
   await sanitizeCompatibilityRoots(runtimeId, skillsRoot, spec);
   await ensureHookLayoutAliases(runtimeHome, spec);
@@ -1861,11 +2237,12 @@ async function installAllSkillsForRuntime(label, runtimeHome, runtimeId) {
   for (const spec of SKILL_REPOS) {
     if (!usesGenericSkillInstall(spec))
       continue; // plugin bundles handled by installPluginBundlesForNonClaudeRuntimes
+    if (spec.id === "meta-skill-creator") continue;
     if (spec.targets && !spec.targets.includes(runtimeId)) {
       continue;
     }
     emitHeader();
-    const targetDir = resolveSkillTargetDir(runtimeHome, spec);
+    const targetDir = resolveSkillTargetDir(runtimeHome, spec, runtimeId);
     await cleanupLegacySkillNames(runtimeHome, spec);
     if (spec.subdir) {
       await installGitSkillFromSubdir(
@@ -1879,13 +2256,6 @@ async function installAllSkillsForRuntime(label, runtimeHome, runtimeId) {
     }
     await deployRuntimeHookSupport(spec, runtimeHome, runtimeId, skillsRoot);
     await cleanupDisabledSkillResidue(runtimeHome, spec.id);
-  }
-  const hasManifestSkillCreator = SKILL_REPOS.some(
-    (spec) => spec.id === "skill-creator",
-  );
-  if (!skillsFilterActive && !hasManifestSkillCreator) {
-    emitHeader();
-    await installSkillCreator(skillsRoot);
   }
 
   if (!hasOutput) {
@@ -3130,48 +3500,27 @@ async function cleanupClaudeNativePluginSkillResidue(homes, activeTargets) {
 
 // ── Two-phase install helpers ─────────────────────────────────
 
-/**
- * Remove legacy-named skill directories/symlinks before installing the current skill.
- * For example, when "find-skills" was renamed to "findskill", this removes the old
- * "find-skills" directory or symlink so both do not coexist.
- *
- * @param {string} runtimeHome - The runtime home directory (e.g. ~/.claude)
- * @param {object} spec - The skill spec from the manifest (must have .id, may have .legacyNames)
- */
 async function cleanupLegacySkillNames(runtimeHome, spec) {
   const legacyNames = spec.legacyNames;
-  if (!legacyNames || legacyNames.length === 0) {
-    return;
-  }
-
+  if (!legacyNames || legacyNames.length === 0) return;
   const installSegment = skillInstallRootSegment(spec);
-
   for (const legacyName of legacyNames) {
     const legacyDir = path.join(runtimeHome, installSegment, legacyName);
-    if (!(await pathExists(legacyDir))) {
-      continue;
-    }
-
+    if (!(await pathExists(legacyDir))) continue;
     if (dryRun) {
       console.log(t.dryRun(`remove legacy skill dir: ${legacyDir}`));
       continue;
     }
-
     try {
       const stat = await fs.lstat(legacyDir);
-      if (stat.isSymbolicLink()) {
-        await fs.unlink(legacyDir);
-      } else {
-        await rmDirWithRetry(legacyDir);
-      }
+      if (stat.isSymbolicLink()) await fs.unlink(legacyDir);
+      else await rmDirWithRetry(legacyDir);
       console.log(
         `${C.green}✓${C.reset} ${t.warnLegacyNameRemoved(spec.id, legacyName, legacyDir)}`,
       );
     } catch (error) {
       if (isWindowsLockError(error)) {
-        console.warn(
-          `${C.yellow}⚠${C.reset} ${t.warnStagingLocked(legacyDir)}`,
-        );
+        console.warn(`${C.yellow}⚠${C.reset} ${t.warnStagingLocked(legacyDir)}`);
         continue;
       }
       console.warn(
@@ -3337,6 +3686,46 @@ async function stageSkillClone(
     await handleGitFailure({ skillId, targetDir: stagedPath, repoUrl, error });
     return (await pathExists(stagedPath)) && !(await isEmptyDir(stagedPath));
   }
+}
+
+async function stageSkillFromLocalRepo(
+  skillId,
+  stagedPath,
+  localRepoPath,
+  subdirPath = null,
+  preExistingPath,
+  skipIfExisting,
+) {
+  if (
+    skipIfExisting &&
+    preExistingPath &&
+    (await pathExists(preExistingPath)) &&
+    !(await isEmptyDir(preExistingPath))
+  ) {
+    return true;
+  }
+
+  if ((await pathExists(stagedPath)) && !(await isEmptyDir(stagedPath))) {
+    return true;
+  }
+
+  const sourcePath = subdirPath
+    ? path.join(localRepoPath, ...subdirPath.split("/").filter(Boolean))
+    : localRepoPath;
+
+  if (dryRun) {
+    console.log(
+      t.dryRun(`stage local ${sourcePath} -> ${stagedPath}`),
+    );
+    return true;
+  }
+
+  if (!(await pathExists(sourcePath))) {
+    throw new Error(`Local dependency source missing for ${skillId}: ${sourcePath}`);
+  }
+  await fs.mkdir(path.dirname(stagedPath), { recursive: true });
+  await fs.cp(sourcePath, stagedPath, { recursive: true, force: true });
+  return true;
 }
 
 /**
@@ -3516,8 +3905,13 @@ async function installSkillsToMultipleRuntimes(
       );
       if (applicableRuntimes.length === 0) continue;
       // Check the first runtime as the canonical "already installed" source.
-      const firstRuntimeHome = homes[applicableRuntimes[0]];
-      const candidate = resolveSkillTargetDir(firstRuntimeHome, spec);
+      const firstRuntimeId = applicableRuntimes[0];
+      const firstRuntimeHome = homes[firstRuntimeId];
+      const candidate = resolveSkillTargetDir(
+        firstRuntimeHome,
+        spec,
+        firstRuntimeId,
+      );
       if ((await pathExists(candidate)) && !(await isEmptyDir(candidate))) {
         alreadyExists.set(spec.id, candidate);
       }
@@ -3529,6 +3923,7 @@ async function installSkillsToMultipleRuntimes(
 
     const stagePromises = SKILL_REPOS.filter((spec) => {
       if (!usesGenericSkillInstall(spec)) return false;
+      if (spec.id === "meta-skill-creator") return false;
       const needs = targetRuntimeIds.filter(
         (id) => !spec.targets || spec.targets.includes(id),
       );
@@ -3537,7 +3932,22 @@ async function installSkillsToMultipleRuntimes(
       limitClone(async () => {
         const stagedPath = path.join(stagingRoot, spec.id);
         const preExistingPath = alreadyExists.get(spec.id);
-        const success = spec.subdir
+        const fixtureSource =
+          spec.id === "meta-skill-creator" ? testMetaSkillSourceDir() : null;
+        if (fixtureSource) {
+          await fs.cp(fixtureSource, stagedPath, { recursive: true, force: true });
+          return { id: spec.id, success: true, stagedPath };
+        }
+        const success = spec.localRepoPath
+          ? await stageSkillFromLocalRepo(
+              spec.id,
+              stagedPath,
+              spec.localRepoPath,
+              spec.subdir,
+              preExistingPath,
+              !updateMode,
+            )
+          : spec.subdir
           ? await stageSkillFromSubdir(
               spec.id,
               stagedPath,
@@ -3600,15 +4010,14 @@ async function installSkillsToMultipleRuntimes(
       for (const spec of SKILL_REPOS) {
         if (!usesGenericSkillInstall(spec))
           continue; // plugin bundles handled separately
+        if (spec.id === "meta-skill-creator") continue;
         if (spec.targets && !spec.targets.includes(runtimeId)) {
           continue;
         }
 
         const staged = stagedSkills.get(spec.id);
-        const targetDir = resolveSkillTargetDir(runtimeHome, spec);
-
+        const targetDir = resolveSkillTargetDir(runtimeHome, spec, runtimeId);
         await cleanupLegacySkillNames(runtimeHome, spec);
-
         // staged?.success can be true even when stagedPath is empty (skip-clone
         // when skill already exists at first runtime). In that case fall through
         // to direct install so "already exists" output is printed.
@@ -3644,15 +4053,6 @@ async function installSkillsToMultipleRuntimes(
         await cleanupDisabledSkillResidue(runtimeHome, spec.id);
       }
 
-      // skill-creator fallback (if not in manifest)
-      const hasManifestSkillCreator = SKILL_REPOS.some(
-        (s) => s.id === "skill-creator",
-      );
-      if (!skillsFilterActive && !hasManifestSkillCreator) {
-        emitHeader();
-        await installSkillCreator(skillsRoot);
-      }
-
       if (!hasOutput) {
         console.log(
           `\n${C.green}✓${C.reset} ${C.dim}${t.allUpToDate(label)}${C.reset}`,
@@ -3668,6 +4068,12 @@ async function main() {
   const { activeTargets } = await resolveTargetContext(cliArgs);
   const homes = resolveHomes();
 
+  for (const runtimeId of activeTargets) {
+    if (homes[runtimeId]) {
+      await assertRealPathContained(os.homedir(), homes[runtimeId]);
+    }
+  }
+
   if (strippedLoopbackProxyEnv.length > 0) {
     console.warn(
       `${C.yellow}⚠${C.reset} ${t.warnIgnoringLoopbackProxyEnv(strippedLoopbackProxyEnv)}`,
@@ -3677,6 +4083,17 @@ async function main() {
   // Clean up known legacy artifacts before any install operations
   await cleanupLegacyGlobalArtifacts(homes);
   await cleanupStaleStagingDirs(homes);
+
+  const metaSkillCreatorSpec = SKILL_REPOS.find(
+    (spec) => spec.id === "meta-skill-creator" && usesGenericSkillInstall(spec),
+  );
+  if (!pluginsOnly && metaSkillCreatorSpec) {
+    await installMetaSkillCreatorAcrossRuntimes(
+      homes,
+      activeTargets,
+      metaSkillCreatorSpec,
+    );
+  }
 
   if (!pluginsOnly) {
     const runtimeLabels = {
@@ -3692,6 +4109,7 @@ async function main() {
         SKILL_REPOS.some(
           (spec) =>
             usesGenericSkillInstall(spec) &&
+            spec.id !== "meta-skill-creator" &&
             (!spec.targets || spec.targets.includes(id)),
         ),
     );
@@ -3722,7 +4140,7 @@ async function main() {
   if (!skipInventoryRefresh) refreshGlobalCapabilityInventory(activeTargets);
 
   // Optional: graphify (code knowledge graph)
-  if (!pluginsOnly) {
+  if (!pluginsOnly && process.env.META_KIM_SKIP_OPTIONAL_TOOLS !== "1") {
     console.log(`\n${C.bold}${AMBER}${t.pythonToolsOptionalHeader}${C.reset}`);
 
     // Detect Python: prefer already-activated venv (VIRTUAL_ENV), fall back to probe.
@@ -4968,6 +5386,14 @@ export {
   extractArchiveInto,
   readResponseBodyBounded,
   validateArchiveMembers,
+  assertRealPathContained,
+  normalizeInstallerSkillsFilter,
+  resolveCompatibilitySkillRoots,
+  resolveOsUserHome,
+  resolveSkillTargetDir,
+  transactionalReplaceMetaSkillTargets,
+  validateInstallerArgs,
+  validateMetaSkillCreatorPackage,
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -10,7 +10,9 @@ const json = args.has("--json");
 const latest = args.has("--latest");
 const profileArg = process.argv.find((arg) => arg.startsWith("--profile="));
 const profile =
-  profileArg?.slice("--profile=".length) || process.env.META_KIM_STATE_PROFILE;
+  profileArg?.slice("--profile=".length) ||
+  process.env.META_KIM_PROFILE ||
+  process.env.META_KIM_STATE_PROFILE;
 
 const DEFAULT_LABELS = {
   inactive: "meta_governance_status=inactive",

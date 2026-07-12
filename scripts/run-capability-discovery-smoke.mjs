@@ -4,9 +4,10 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
+import { getProfilePaths } from "./meta-kim-local-state.mjs";
 
 const repoRoot = process.cwd();
-const stateDir = path.join(repoRoot, ".meta-kim", "state", "default");
+const stateDir = getProfilePaths({ repoPath: repoRoot }).profileDir;
 
 function argValue(name, fallback = null) {
   const index = process.argv.indexOf(name);

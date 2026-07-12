@@ -10,13 +10,14 @@
 //   await atomicWriteJson(targetPath, payloadObject);
 //   await withFileLock(lockPath, async () => { ... });
 
-import { writeFile, rename, mkdir, open, readFile, unlink } from "node:fs/promises";
+import { writeFile, rename, mkdir, open, readFile, unlink, stat } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
 import { randomBytes } from "node:crypto";
 
 const LOCK_RETRIES = 25;
 const LOCK_BASE_BACKOFF_MS = 12;
 const LOCK_MAX_BACKOFF_MS = 200;
+const LOCK_STALE_AFTER_MS = 5 * 60 * 1000;
 
 function randomSuffix() {
   return randomBytes(6).toString("hex");
@@ -25,6 +26,44 @@ function randomSuffix() {
 async function sleep(ms) {
   if (ms <= 0) return;
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function processIsAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
+}
+
+async function reclaimStaleLock(lockPath) {
+  let content;
+  let lockStat;
+  try {
+    [content, lockStat] = await Promise.all([
+      readFile(lockPath, "utf8"),
+      stat(lockPath),
+    ]);
+  } catch {
+    return false;
+  }
+  let ownerPid = null;
+  try {
+    ownerPid = Number.parseInt(JSON.parse(content)?.pid, 10);
+  } catch {
+    ownerPid = Number.parseInt(String(content).split(".")[0], 10);
+  }
+  const oldEnough = Date.now() - lockStat.mtimeMs > LOCK_STALE_AFTER_MS;
+  if (!oldEnough && (processIsAlive(ownerPid) || !Number.isInteger(ownerPid))) return false;
+  try {
+    if ((await readFile(lockPath, "utf8")) !== content) return false;
+    await unlink(lockPath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function atomicWriteJson(targetPath, payload) {
@@ -51,7 +90,7 @@ export async function atomicWriteJson(targetPath, payload) {
 export async function withFileLock(lockPath, fn) {
   const dir = dirname(lockPath);
   await mkdir(dir, { recursive: true });
-  const owner = `${process.pid}.${randomSuffix()}`;
+  const owner = `${JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString(), nonce: randomSuffix() })}\n`;
   let attempt = 0;
   let handle = null;
   while (attempt < LOCK_RETRIES) {
@@ -61,6 +100,7 @@ export async function withFileLock(lockPath, fn) {
       break;
     } catch (err) {
       if (err && err.code === "EEXIST") {
+        if (await reclaimStaleLock(lockPath)) continue;
         const backoff = Math.min(
           LOCK_MAX_BACKOFF_MS,
           LOCK_BASE_BACKOFF_MS * 2 ** attempt + Math.floor(Math.random() * LOCK_BASE_BACKOFF_MS),

@@ -30,13 +30,12 @@ test("60 — SKILL.md names the dispatcher as the single owner of capabilityInve
   );
 });
 
-test("60 — hook count under .claude/hooks/ is unchanged from baseline (no new fuses added)", () => {
-  // Baseline: this session added ZERO new hooks. Test guards the invariant.
+test("60 — Claude canonical hooks contain runtime adapters and thin shared-core compatibility adapters", () => {
   const hooksDir = resolve(repoRoot, "canonical/runtime-assets/claude/hooks");
   const hooks = readdirSync(hooksDir).filter((f) => f.endsWith(".mjs"));
-  // The exact list of hook files in canonical/runtime-assets/claude/hooks/ as
-  // of HEAD=fd0a596c (this session adds ZERO new hook files; this list is
-  // the baseline snapshot).
+  // Cross-runtime implementations live exclusively under shared/hooks and are
+  // projected into .claude/hooks by sync-runtimes.mjs. These four thin files
+  // keep canonical Claude adapters directly executable in source tests.
   const expected = [
     "activate-meta-theory-spine.mjs",
     "bash-readonly-whitelist.mjs",
@@ -65,7 +64,6 @@ test("60 — hook count under .claude/hooks/ is unchanged from baseline (no new 
       `expected hook present: ${f}`,
     );
   }
-  // Guard against accidental new-hook drift in the same session.
   assert.ok(
     hooks.length === expected.length,
     `hook count drifted: actual=${hooks.length} expected=${expected.length}; ` +

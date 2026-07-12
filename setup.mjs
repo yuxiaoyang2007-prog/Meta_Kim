@@ -38,7 +38,8 @@ import { join, dirname, resolve, isAbsolute, relative } from "node:path";
 import { homedir, platform, tmpdir } from "node:os";
 import { createInterface } from "node:readline";
 import {
-  ensureProfileState,
+  getProfilePaths,
+  readProfileMetadata,
   toRepoRelative,
 } from "./scripts/meta-kim-local-state.mjs";
 import {
@@ -78,6 +79,15 @@ import {
   MIN_NODE_VERSION,
   isSupportedNodeVersion,
 } from "./scripts/node-runtime-requirements.mjs";
+import {
+  memoryServiceEnv,
+  memoryServerHttpArgs,
+  resolveMemoryEndpoint,
+} from "./scripts/memory-endpoint.mjs";
+import {
+  normalizeSetupCliArgs,
+  validateSetupCliArgs,
+} from "./scripts/setup-cli-policy.mjs";
 
 // ── Config ──────────────────────────────────────────────
 
@@ -85,7 +95,16 @@ const PROJECT_DIR = resolve(import.meta.dirname || ".");
 const SKILLS_DIR = join(resolveRuntimeHomeDir("claude"), "skills");
 const PROXY = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || "";
 const isWin = platform() === "win32";
-const args = process.argv.slice(2);
+const args = normalizeSetupCliArgs(process.argv.slice(2));
+try {
+  validateSetupCliArgs(args);
+} catch (error) {
+  console.error(`meta-kim setup: ${error.message}`);
+  if (error.showHelp) {
+    console.error("Run 'meta-kim --help' for supported commands and options.");
+  }
+  process.exit(2);
+}
 const updateMode = args.includes("--update") || args.includes("-u");
 const checkOnly = args.includes("--check");
 const projectBootstrapMode = args.includes("--project-bootstrap");
@@ -98,20 +117,12 @@ const silentMode = args.includes("--silent") || !process.stdout.isTTY;
 const useSavedProjectDirsMode =
   args.includes("--all-projects") || args.includes("--update-projects");
 const saveProjectDirsMode = args.includes("--save-project-dirs");
-// Global hook projection policy:
-//   - Fresh install (`npx meta-kim`, `node setup.mjs` without --update):
-//     install global hooks by default so first-time users get the full
-//     governance surface (enforce-agent-dispatch, stop-completion-guard,
-//     fan-out gate, etc.) without needing to know an opt-in flag.
-//   - Update (`--update` / `-u`): keep opt-in to avoid silently
-//     overwriting a user-local hook that was hand-edited between releases.
-//   - Explicit overrides win: `--with-global-hooks` (force on, including
-//     during update) or `--without-global-hooks` (force off, including
-//     during install).
+// Global hook projection policy: always opt-in. Installation and update may
+// only change user-level runtime hook settings after an explicit CLI/env
+// request. `--without-global-hooks` remains a compatibility no-op.
 const setupWithGlobalHooks =
   args.includes("--with-global-hooks") ||
-  process.env.META_KIM_WITH_GLOBAL_HOOKS === "1" ||
-  (!args.includes("--without-global-hooks") && !updateMode);
+  process.env.META_KIM_WITH_GLOBAL_HOOKS === "1";
 
 function writeUtf8BomFileSync(path, content) {
   writeFileSync(
@@ -3965,7 +3976,7 @@ async function runQuickDeploy() {
   printPostCopyBootstrapHint();
   console.log("");
 
-  showNextSteps(runtimes);
+  showNextSteps(runtimes, platformId === "all" ? detectedTargetIds(runtimes) : [platformId]);
 }
 
 // ── Install scope selection ─────────────────────────────
@@ -4491,19 +4502,15 @@ async function selectActiveTargets(runtimes) {
   });
   info(t.savedActiveTargets(chosenTargets.join(", ")));
 
-  // Platform capability transparency: warn if Claude Code is not selected
-  const hasClaude = chosenTargets.includes("claude");
-  if (!hasClaude) {
-    console.log(`
-⚠  平台能力提示:
-   您选择的平台暂不支持以下功能:
-   • Hook 自动化 (PreToolUse/PostToolUse)
-   • Layer 1 Memory 自动激活
-   • CLI 快速命令 (npm run meta:xxx)
-
-   推荐: Claude Code 提供最完整的 Meta_Kim 体验。
-         https://docs.anthropic.com/claude-code
-`);
+  if (!chosenTargets.includes("claude")) {
+    console.log("");
+    info(t.selectedRuntimeCapabilityHeading);
+    for (const target of chosenTargets) {
+      const capability = t.selectedRuntimeCapabilities[target];
+      if (capability) console.log(`${C.dim}  • ${capability}${C.reset}`);
+    }
+    console.log(`${C.dim}  ${t.selectedRuntimeCapabilityBoundary}${C.reset}`);
+    console.log("");
   }
 
   return chosenTargets;
@@ -5506,7 +5513,11 @@ function isMcpMemoryProcessRunning() {
   }
 }
 
-async function startMcpMemoryServiceBackground(resolved) {
+async function startMcpMemoryServiceBackground(resolved, endpoint = resolveMemoryEndpoint()) {
+  if (!endpoint.canAutoStart) {
+    info(t.mcpMemoryRemoteEndpointNoAutoStart(endpoint.endpointUrl));
+    return;
+  }
   const memoryBin = findMemoryBinPath(resolved);
   if (!memoryBin) {
     warn(t.mcpMemoryAutoStartFailed);
@@ -5515,15 +5526,15 @@ async function startMcpMemoryServiceBackground(resolved) {
   }
 
   info(t.mcpMemoryAutoStarting);
-  const env = {
+  const env = memoryServiceEnv(endpoint, {
     ...process.env,
     MCP_ALLOW_ANONYMOUS_ACCESS: "true",
     HF_HUB_OFFLINE: "1",
     TRANSFORMERS_OFFLINE: "1",
-  };
+  });
 
   try {
-    const child = spawn(memoryBin, ["server", "--http"], {
+    const child = spawn(memoryBin, memoryServerHttpArgs(endpoint), {
       env,
       detached: true,
       stdio: "ignore",
@@ -5544,12 +5555,22 @@ async function startMcpMemoryServiceBackground(resolved) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL));
     healthy = await new Promise((resolve) => {
       const req = http.get(
-        "http://127.0.0.1:8000/api/health",
+        endpoint.healthUrl,
         { timeout: 3000 },
         (res) => {
           let body = "";
           res.on("data", (c) => (body += c));
-          res.on("end", () => resolve(body.includes("healthy")));
+          res.on("end", () => {
+            if ((res.statusCode ?? 500) < 200 || (res.statusCode ?? 500) >= 300) {
+              resolve(false);
+              return;
+            }
+            try {
+              resolve(JSON.parse(body)?.status === "healthy");
+            } catch {
+              resolve(false);
+            }
+          });
         },
       );
       req.on("error", () => resolve(false));
@@ -5562,29 +5583,33 @@ async function startMcpMemoryServiceBackground(resolved) {
   }
 
   if (healthy) {
-    ok(t.mcpMemoryAutoStarted);
-    const bootOk = configureBootAutoStart(memoryBin);
+    ok(t.mcpMemoryAutoStarted(endpoint.endpointUrl));
+    const bootOk = configureBootAutoStart(memoryBin, endpoint);
     if (bootOk) ok(t.mcpMemoryAutoStartBoot);
     return;
   }
 
   if (isMcpMemoryProcessRunning()) {
-    ok(t.mcpMemoryAutoStartUnverified);
-    const bootOk = configureBootAutoStart(memoryBin);
-    if (bootOk) ok(t.mcpMemoryAutoStartBoot);
-    return;
+    warn(t.mcpMemoryAutoStartUnverified);
   }
 
   warn(t.mcpMemoryAutoStartFailed);
   info(t.mcpMemoryAutoStartManual);
 }
 
-function configureBootAutoStart(memoryBin) {
+function configureBootAutoStart(memoryBin, endpoint = resolveMemoryEndpoint()) {
+  if (!endpoint.canAutoStart) return false;
   const plat = platform();
   const shellQuote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
   const psSingleQuote = (value) => `'${String(value).replace(/'/g, "''")}'`;
+  const xmlEscape = (value) => String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
   const failureTitle = t.mcpMemoryAutoStartFailureTitle;
-  const failureMessage = t.mcpMemoryAutoStartFailureMessage;
+  const failureMessage = t.mcpMemoryAutoStartFailureMessage(endpoint.healthUrl);
   try {
     if (plat === "win32") {
       const startupDir = join(
@@ -5606,12 +5631,19 @@ function configureBootAutoStart(memoryBin) {
       const legacyCmdPath = join(startupDir, "mcp-memory-start.cmd");
       if (existsSync(legacyCmdPath)) rmSync(legacyCmdPath, { force: true });
       const escapedMemoryBin = memoryBin.replace(/'/g, "''");
+      const psHealthUrl = psSingleQuote(endpoint.healthUrl);
+      const psEndpointUrl = psSingleQuote(endpoint.endpointUrl);
+      const psPort = psSingleQuote(endpoint.port);
       writeUtf8BomFileSync(
         psPath,
         `$ErrorActionPreference = "SilentlyContinue"\r\n` +
           `$env:MCP_ALLOW_ANONYMOUS_ACCESS = "true"\r\n` +
           `$env:HF_HUB_OFFLINE = "1"\r\n` +
           `$env:TRANSFORMERS_OFFLINE = "1"\r\n` +
+          `$env:MCP_MEMORY_URL = ${psEndpointUrl}\r\n` +
+          `$env:META_KIM_MEMORY_PORT = ${psPort}\r\n` +
+          `$env:MCP_HTTP_HOST = ${psSingleQuote(endpoint.hostname)}\r\n` +
+          `$env:MCP_HTTP_PORT = ${psPort}\r\n` +
           `$memoryBin = '${escapedMemoryBin}'\r\n` +
           `$failureTitle = ${psSingleQuote(failureTitle)}\r\n` +
           `$failureMessage = ${psSingleQuote(failureMessage)}\r\n` +
@@ -5620,13 +5652,14 @@ function configureBootAutoStart(memoryBin) {
           `$stderrLog = Join-Path $logDir "mcp-memory.err.log"\r\n` +
           `function Test-MetaKimMemoryHealth {\r\n` +
           `  try {\r\n` +
-          `    $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 3\r\n` +
-          `    return ($response.Content -match "healthy")\r\n` +
+          `    $response = Invoke-WebRequest -Uri ${psHealthUrl} -UseBasicParsing -TimeoutSec 3\r\n` +
+          `    $payload = $response.Content | ConvertFrom-Json\r\n` +
+          `    return ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300 -and $payload.status -eq "healthy")\r\n` +
           `  } catch { return $false }\r\n` +
           `}\r\n` +
           `if (Test-MetaKimMemoryHealth) { exit 0 }\r\n` +
           `try {\r\n` +
-          `  Start-Process -FilePath $memoryBin -ArgumentList @("server", "--http") -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog\r\n` +
+          `  Start-Process -FilePath $memoryBin -ArgumentList @("server", "--http", "--http-host", ${psSingleQuote(endpoint.hostname)}, "--http-port", ${psPort}) -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog\r\n` +
           `} catch {}\r\n` +
           `$healthy = $false\r\n` +
           `for ($i = 0; $i -lt 150; $i++) {\r\n` +
@@ -5661,18 +5694,23 @@ function configureBootAutoStart(memoryBin) {
           `export MCP_ALLOW_ANONYMOUS_ACCESS=true\n` +
           `export HF_HUB_OFFLINE=1\n` +
           `export TRANSFORMERS_OFFLINE=1\n` +
+          `export MCP_MEMORY_URL=${shellQuote(endpoint.endpointUrl)}\n` +
+          `export META_KIM_MEMORY_PORT=${shellQuote(endpoint.port)}\n` +
+          `export MCP_HTTP_HOST=${shellQuote(endpoint.hostname)}\n` +
+          `export MCP_HTTP_PORT=${shellQuote(endpoint.port)}\n` +
           `MEMORY_BIN=${shellQuote(memoryBin)}\n` +
           `LOG_PATH=${shellQuote(logPath)}\n` +
           `TITLE=${shellQuote(failureTitle)}\n` +
           `MSG=${shellQuote(failureMessage)}\n` +
+          `HEALTH_URL=${shellQuote(endpoint.healthUrl)}\n` +
           `check_health() {\n` +
-          `  command -v curl >/dev/null 2>&1 && curl -fsS --noproxy '*' --max-time 3 http://127.0.0.1:8000/api/health 2>/dev/null | grep -q healthy\n` +
+          `  command -v node >/dev/null 2>&1 && command -v curl >/dev/null 2>&1 && curl -fsS --noproxy '*' --max-time 3 "$HEALTH_URL" 2>/dev/null | node -e 'let b="";process.stdin.setEncoding("utf8");process.stdin.on("data",c=>b+=c);process.stdin.on("end",()=>{try{process.exit(JSON.parse(b).status==="healthy"?0:1)}catch{process.exit(1)}})'\n` +
           `}\n` +
           `notify_failure() {\n` +
           `  osascript -e "display dialog \\"$MSG\\" with title \\"$TITLE\\" buttons {\\"OK\\"} with icon caution" >/dev/null 2>&1 || true\n` +
           `}\n` +
           `check_health && exit 0\n` +
-          `"$MEMORY_BIN" server --http >>"$LOG_PATH" 2>&1 &\n` +
+          `"$MEMORY_BIN" server --http --http-host ${shellQuote(endpoint.hostname)} --http-port ${shellQuote(endpoint.port)} >>"$LOG_PATH" 2>&1 &\n` +
           `healthy=0\n` +
           `i=0\n` +
           `while [ "$i" -lt 150 ]; do\n` +
@@ -5690,16 +5728,20 @@ function configureBootAutoStart(memoryBin) {
 <plist version="1.0"><dict>
   <key>Label</key><string>com.meta-kim.mcp-memory-service</string>
   <key>ProgramArguments</key><array>
-    <string>/bin/sh</string><string>${scriptPath}</string>
+    <string>/bin/sh</string><string>${xmlEscape(scriptPath)}</string>
   </array>
   <key>EnvironmentVariables</key><dict>
     <key>MCP_ALLOW_ANONYMOUS_ACCESS</key><string>true</string>
     <key>HF_HUB_OFFLINE</key><string>1</string>
     <key>TRANSFORMERS_OFFLINE</key><string>1</string>
+    <key>MCP_MEMORY_URL</key><string>${xmlEscape(endpoint.endpointUrl)}</string>
+    <key>META_KIM_MEMORY_PORT</key><string>${xmlEscape(endpoint.port)}</string>
+    <key>MCP_HTTP_HOST</key><string>${xmlEscape(endpoint.hostname)}</string>
+    <key>MCP_HTTP_PORT</key><string>${xmlEscape(endpoint.port)}</string>
   </dict>
   <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>${logPath}</string>
-  <key>StandardErrorPath</key><string>${logPath}</string>
+  <key>StandardOutPath</key><string>${xmlEscape(logPath)}</string>
+  <key>StandardErrorPath</key><string>${xmlEscape(logPath)}</string>
 </dict></plist>`,
       );
       return true;
@@ -5717,12 +5759,17 @@ function configureBootAutoStart(memoryBin) {
         `export MCP_ALLOW_ANONYMOUS_ACCESS=true\n` +
         `export HF_HUB_OFFLINE=1\n` +
         `export TRANSFORMERS_OFFLINE=1\n` +
+        `export MCP_MEMORY_URL=${shellQuote(endpoint.endpointUrl)}\n` +
+        `export META_KIM_MEMORY_PORT=${shellQuote(endpoint.port)}\n` +
+        `export MCP_HTTP_HOST=${shellQuote(endpoint.hostname)}\n` +
+        `export MCP_HTTP_PORT=${shellQuote(endpoint.port)}\n` +
         `MEMORY_BIN=${shellQuote(memoryBin)}\n` +
         `LOG_PATH=${shellQuote(logPath)}\n` +
         `TITLE=${shellQuote(failureTitle)}\n` +
         `MSG=${shellQuote(failureMessage)}\n` +
+        `HEALTH_URL=${shellQuote(endpoint.healthUrl)}\n` +
         `check_health() {\n` +
-        `  command -v curl >/dev/null 2>&1 && curl -fsS --noproxy '*' --max-time 3 http://127.0.0.1:8000/api/health 2>/dev/null | grep -q healthy\n` +
+        `  command -v node >/dev/null 2>&1 && command -v curl >/dev/null 2>&1 && curl -fsS --noproxy '*' --max-time 3 "$HEALTH_URL" 2>/dev/null | node -e 'let b="";process.stdin.setEncoding("utf8");process.stdin.on("data",c=>b+=c);process.stdin.on("end",()=>{try{process.exit(JSON.parse(b).status==="healthy"?0:1)}catch{process.exit(1)}})'\n` +
         `}\n` +
         `notify_failure() {\n` +
         `  if command -v notify-send >/dev/null 2>&1; then notify-send "$TITLE" "$MSG"; return; fi\n` +
@@ -5732,7 +5779,7 @@ function configureBootAutoStart(memoryBin) {
         `  printf '%s\\n' "$MSG" >>"$LOG_PATH"\n` +
         `}\n` +
         `check_health && exit 0\n` +
-        `"$MEMORY_BIN" server --http >>"$LOG_PATH" 2>&1 &\n` +
+        `"$MEMORY_BIN" server --http --http-host ${shellQuote(endpoint.hostname)} --http-port ${shellQuote(endpoint.port)} >>"$LOG_PATH" 2>&1 &\n` +
         `healthy=0\n` +
         `i=0\n` +
         `while [ "$i" -lt 150 ]; do\n` +
@@ -5761,6 +5808,15 @@ async function installMcpMemoryServiceStep(inUpdateMode = false, activeTargets =
     skip(`${C.dim}${t.mcpMemorySkipped}${C.reset}`);
     return;
   }
+
+  let memoryEndpoint;
+  try {
+    memoryEndpoint = resolveMemoryEndpoint();
+  } catch (error) {
+    warn(t.mcpMemoryEndpointInvalid(error.message));
+    return;
+  }
+  info(t.mcpMemoryEndpointSelected(memoryEndpoint.endpointUrl));
 
   // Detect Python — reuse same detection as graphify for consistency
   const detected = checkPython310();
@@ -5888,7 +5944,7 @@ async function installMcpMemoryServiceStep(inUpdateMode = false, activeTargets =
   await runMcpMemoryHookInstaller(activeTargets);
 
   // Step 4.8 — start the HTTP server in background and configure boot auto-start
-  await startMcpMemoryServiceBackground(resolved);
+  await startMcpMemoryServiceBackground(resolved, memoryEndpoint);
 }
 
 function ensureNetworkxCompatibility(python) {
@@ -5955,7 +6011,7 @@ async function validate() {
   else warn(t.validationWarnings);
 }
 
-function showNextSteps(runtimes) {
+function showNextSteps(runtimes, selectedTargets = detectedTargetIds(runtimes)) {
   const hasDeployDirs = quickDeployDirs.length > 0 || Boolean(quickDeployDir);
   const displayDir = quickDeployDirs[0] || quickDeployDir || PROJECT_DIR;
 
@@ -6044,19 +6100,11 @@ function showNextSteps(runtimes) {
     `${C.bold}${C.cyan}● ${t.postInstallNotesPlatformSync}${C.reset}`,
   );
   const platformRows = [
-    { name: t.platformClaudeCode, cap: t.platformClaudeCodeCap },
-    { name: t.platformCodex, cap: t.platformCodexCap },
-    { name: t.platformOpenClaw, cap: t.platformOpenClawCap },
-    { name: t.platformCursor, cap: t.platformCursorCap },
-  ].filter(
-    (r) =>
-      runtimes[
-        r.name
-          .replace("platform", "")
-          .toLowerCase()
-          .replace("claudecode", "claude")
-      ] || r.name === t.platformClaudeCode,
-  );
+    { id: "claude", name: t.platformClaudeCode, cap: t.platformClaudeCodeCap },
+    { id: "codex", name: t.platformCodex, cap: t.platformCodexCap },
+    { id: "openclaw", name: t.platformOpenClaw, cap: t.platformOpenClawCap },
+    { id: "cursor", name: t.platformCursor, cap: t.platformCursorCap },
+  ].filter((row) => selectedTargets.includes(row.id));
   for (const row of platformRows) {
     console.log(`${C.dim}• ${row.name}: ${row.cap}${C.reset}`);
   }
@@ -6080,15 +6128,18 @@ function showNextSteps(runtimes) {
   );
   console.log("");
   console.log(`${C.bold}${C.cyan}● ${t.usefulCommandsHeading}${C.reset}`);
-  console.log(
-    `${C.dim}  npm run meta:status        # ${t.cmdWhereStatus}${C.reset}`,
-  );
-  console.log(
-    `${C.dim}  npm run meta:status:diff   # ${t.cmdWhereStatusDiff}${C.reset}`,
-  );
-  console.log(
-    `${C.dim}  npm run meta:uninstall     # ${t.cmdWhereUninstall}${C.reset}`,
-  );
+  if (hasDeployDirs) {
+    const npxPrefix = "npx --yes github:KimYx0207/Meta_Kim meta-kim";
+    console.log(`${C.dim}  ${npxPrefix} status          # ${t.cmdWhereStatus}${C.reset}`);
+    console.log(`${C.dim}  ${npxPrefix} status --diff   # ${t.cmdWhereStatusDiff}${C.reset}`);
+    console.log(`${C.dim}  ${npxPrefix} doctor          # ${t.cmdDoctor}${C.reset}`);
+    console.log(`${C.dim}  ${npxPrefix} uninstall       # ${t.cmdWhereUninstall}${C.reset}`);
+  } else {
+    console.log(`${C.dim}  npm run meta:status        # ${t.cmdWhereStatus}${C.reset}`);
+    console.log(`${C.dim}  npm run meta:status:diff   # ${t.cmdWhereStatusDiff}${C.reset}`);
+    console.log(`${C.dim}  npm run meta:doctor        # ${t.cmdDoctor}${C.reset}`);
+    console.log(`${C.dim}  npm run meta:uninstall     # ${t.cmdWhereUninstall}${C.reset}`);
+  }
   console.log("");
   console.log(
     `${C.dim}${C.yellow}★ ${t.postInstallNotesReminder} ${t.postInstallNotesReminderText}${C.reset}`,
@@ -6401,11 +6452,12 @@ async function main() {
     console.log(
       `${C.dim}${t.checkTargets(targetContext.activeTargets.join(", "), targetContext.supportedTargets.join(", "))}${C.reset}`,
     );
-    const localState = await ensureProfileState();
+    const localState = getProfilePaths();
+    const profileMetadata = await readProfileMetadata();
     console.log("");
     console.log(`${C.bold}${t.localStateHeader}${C.reset}`);
     console.log(
-      `${C.dim}  profile=${localState.profile} key=${localState.metadata.profileKey}${C.reset}`,
+      `${C.dim}  profile=${localState.profile} key=${profileMetadata?.profileKey ?? localState.profileKey} status=${profileMetadata ? "present" : "not-created"}${C.reset}`,
     );
     console.log(
       `${C.dim}  run index: ${toRepoRelative(localState.runIndexPath)}${C.reset}`,
@@ -6654,7 +6706,7 @@ async function runInstall() {
     await copyToDeployDirs(activeTargets, deployDirs);
   }
 
-  showNextSteps(runtimes);
+  showNextSteps(runtimes, activeTargets);
 }
 
 async function runUpdate() {

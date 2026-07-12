@@ -49,6 +49,7 @@ import { readdir } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
+import { resolveMemoryEndpoint } from "./memory-endpoint.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
@@ -200,27 +201,15 @@ function isMemoryProcessRunning() {
 }
 
 function configuredMemoryEndpoint() {
-  if (process.env.MCP_MEMORY_URL) return process.env.MCP_MEMORY_URL;
-  const port = process.env.META_KIM_MEMORY_PORT || "8000";
-  return `http://localhost:${port}`;
+  return resolveMemoryEndpoint().endpointUrl;
 }
 
 function memoryHealthUrl(endpoint = configuredMemoryEndpoint()) {
-  try {
-    return new URL("/api/health", endpoint).toString();
-  } catch {
-    return "http://localhost:8000/api/health";
-  }
+  return resolveMemoryEndpoint({ MCP_MEMORY_URL: endpoint }).healthUrl;
 }
 
 function endpointPort(endpoint = configuredMemoryEndpoint()) {
-  try {
-    const url = new URL(endpoint);
-    if (url.port) return url.port;
-    return url.protocol === "https:" ? "443" : "80";
-  } catch {
-    return "8000";
-  }
+  return resolveMemoryEndpoint({ MCP_MEMORY_URL: endpoint }).port;
 }
 
 function findProcessUsingPort(port) {
@@ -1278,13 +1267,13 @@ if (args.includes("--force")) {
   args.splice(forceIndex, 1);
 }
 
-if (args.includes("--check")) {
-  check(targets);
-} else if (args.includes("--remove")) {
-  remove(targets);
-} else {
-  install(targets).catch((err) => {
-    console.error(`Installation failed: ${err.message}`);
-    process.exit(1);
-  });
+async function main() {
+  if (args.includes("--check")) check(targets);
+  else if (args.includes("--remove")) remove(targets);
+  else await install(targets);
 }
+
+main().catch((err) => {
+  console.error(`Installation failed: ${err.message}`);
+  process.exit(1);
+});

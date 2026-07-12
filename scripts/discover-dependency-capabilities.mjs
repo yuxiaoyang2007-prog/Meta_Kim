@@ -225,8 +225,11 @@ async function discover() {
       osSupport: Object.fromEntries(OS_TARGETS.map((target) => [target, "partial"])),
     }, { installedStatus: installed?.installedStatus ?? "external_reference" }));
   }).filter(Boolean);
-  const kim = await kimDecisionRecord();
-  const discoveredDependencyProjects = [...registryProjects, ...manifestProjects, kim].filter((project) => !projectFilter || project.id === projectFilter || project.name.toLowerCase().includes(projectFilter.toLowerCase()));
+  const dynamicProjects = [];
+  if (!registryProjects.some((project) => project.id === "kim-decision")) {
+    dynamicProjects.push(await kimDecisionRecord());
+  }
+  const discoveredDependencyProjects = [...registryProjects, ...manifestProjects, ...dynamicProjects].filter((project) => !projectFilter || project.id === projectFilter || project.name.toLowerCase().includes(projectFilter.toLowerCase()));
   return {
     generatedAt: new Date().toISOString(),
     scannedSources: {

@@ -262,17 +262,17 @@ async function checkValidateRun() {
 }
 
 async function checkLocalState() {
-  const state = await ensureProfileState();
-  const targetContext = await resolveTargetContext();
   const collision = await detectProfileCollision({
-    profile: state.profile,
-    runtimeFamily: state.runtimeFamily,
+    profile: process.env.META_KIM_PROFILE,
+    runtimeFamily: process.env.META_KIM_RUNTIME_FAMILY,
   });
   if (collision.collision) {
     throw new Error(
-      `profile collision detected for ${state.profile}: expected ${collision.expectedProfileKey}, found ${collision.existing?.profileKey}`,
+      `profile collision detected: expected ${collision.expectedProfileKey}, found ${collision.existing?.profileKey}`,
     );
   }
+  const state = await ensureProfileState();
+  const targetContext = await resolveTargetContext();
   let runIndexReady = false;
   try {
     await fs.access(state.runIndexPath);

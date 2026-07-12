@@ -2277,16 +2277,16 @@
       "evolutionKey": "provider:external-skill-gstack"
     },
     {
-      "id": "external-skill-skill-creator",
+      "id": "external-skill-meta-skill-creator",
       "providerType": "external_skill",
-      "summary": "Skill creation package provider.",
+      "summary": "Meta Skill Creator provider for evidence-backed Agent Skill design, refactoring, review, and release preparation.",
       "sourceOfTruth": "config/skills.json",
       "mappings": {
         "skillsJsonIds": [
-          "skill-creator"
+          "meta-skill-creator"
         ],
         "dependencyProjectIds": [
-          "skill-creator"
+          "meta-skill-creator"
         ]
       },
       "activation": {
@@ -2294,7 +2294,7 @@
           "global_home",
           "dependency_registry"
         ],
-        "trigger": "skill creation workflow",
+        "trigger": "skill creation, refactor, review, or release-preparation workflow",
         "outputConsumption": "model_context"
       },
       "verification": {
@@ -2302,7 +2302,7 @@
         "command": "npm run meta:deps:compat"
       },
       "risk": {
-        "trustReview": "third_party_skill"
+        "trustReview": "owner_managed_external_skill"
       },
       "support": {
         "default": {
@@ -2319,27 +2319,86 @@
             "wsl2": "partial"
           }
         },
-        "runtimes": {}
+        "runtimes": {
+          "claude_code": {
+            "state": "declared",
+            "status": "partial",
+            "installLayers": {
+              "global_home": "needs_probe",
+              "dependency_registry": "verified"
+            },
+            "os": {
+              "macos": "partial",
+              "windows": "partial",
+              "linux": "partial",
+              "wsl2": "partial"
+            }
+          },
+          "codex": {
+            "state": "declared",
+            "status": "partial",
+            "installLayers": {
+              "global_home": "needs_probe",
+              "dependency_registry": "verified"
+            },
+            "os": {
+              "macos": "partial",
+              "windows": "partial",
+              "linux": "partial",
+              "wsl2": "partial"
+            }
+          },
+          "cursor": {
+            "state": "blocked_for_execution",
+            "status": "blocked",
+            "reason": "No upstream Cursor installation contract is declared.",
+            "installLayers": {
+              "global_home": "unsupported",
+              "dependency_registry": "verified"
+            },
+            "os": {
+              "macos": "needs_probe",
+              "windows": "needs_probe",
+              "linux": "needs_probe",
+              "wsl2": "needs_probe"
+            }
+          },
+          "openclaw": {
+            "state": "blocked_for_execution",
+            "status": "blocked",
+            "reason": "No upstream OpenClaw installation contract is declared.",
+            "installLayers": {
+              "global_home": "unsupported",
+              "dependency_registry": "verified"
+            },
+            "os": {
+              "macos": "needs_probe",
+              "windows": "needs_probe",
+              "linux": "needs_probe",
+              "wsl2": "needs_probe"
+            }
+          }
+        }
       },
       "providerKind": "external_skill",
       "capabilities": [
-        "Skill creation package provider.",
-        "skill-creator",
-        "skill-creator"
+        "Agent Skill package creation and lifecycle governance.",
+        "meta-skill-creator",
+        "skill-agent-tool-creation"
       ],
       "source": {
         "sourceOfTruth": "config/skills.json",
         "mappings": {
           "skillsJsonIds": [
-            "skill-creator"
+            "meta-skill-creator"
           ],
           "dependencyProjectIds": [
-            "skill-creator"
+            "meta-skill-creator"
           ]
         }
       },
       "trust": {
-        "review": "third_party_skill",
+        "review": "owner_managed_external_skill",
         "required": true
       },
       "installMethod": "globalHome",
@@ -2349,11 +2408,11 @@
       ],
       "exposedArtifacts": [
         "config/skills.json",
-        "config/skills.json#skill-creator",
-        "dependency-project-registry.json#skill-creator"
+        "config/skills.json#meta-skill-creator",
+        "dependency-project-registry.json#meta-skill-creator"
       ],
       "activationEvents": [
-        "skill creation workflow"
+        "skill creation, refactor, review, or release-preparation workflow"
       ],
       "outputContracts": {
         "consumption": "model_context",
@@ -2361,8 +2420,11 @@
         "mustEnforcePolicy": false
       },
       "safetyBoundary": {
-        "trustReview": "third_party_skill",
-        "notes": []
+        "trustReview": "owner_managed_external_skill",
+        "notes": [
+          "Only Claude Code and Codex have an inspected upstream installation contract.",
+          "Structural validation must not be reported as runtime or human acceptance proof."
+        ]
       },
       "runtimeAdapters": {
         "claude_code": {
@@ -2372,7 +2434,7 @@
             "global_home": "needs_probe",
             "dependency_registry": "verified"
           },
-          "activationEvent": "skill creation workflow",
+          "activationEvent": "skill creation, refactor, review, or release-preparation workflow",
           "outputContract": "model_context",
           "reason": null
         },
@@ -2383,31 +2445,31 @@
             "global_home": "needs_probe",
             "dependency_registry": "verified"
           },
-          "activationEvent": "skill creation workflow",
+          "activationEvent": "skill creation, refactor, review, or release-preparation workflow",
           "outputContract": "model_context",
           "reason": null
         },
         "cursor": {
-          "state": "declared",
-          "status": "partial",
+          "state": "blocked_for_execution",
+          "status": "blocked",
           "installLayers": {
-            "global_home": "needs_probe",
+            "global_home": "unsupported",
             "dependency_registry": "verified"
           },
-          "activationEvent": "skill creation workflow",
-          "outputContract": "model_context",
-          "reason": null
+          "activationEvent": null,
+          "outputContract": "not_consumed",
+          "reason": "No upstream Cursor installation contract is declared."
         },
         "openclaw": {
-          "state": "declared",
-          "status": "partial",
+          "state": "blocked_for_execution",
+          "status": "blocked",
           "installLayers": {
-            "global_home": "needs_probe",
+            "global_home": "unsupported",
             "dependency_registry": "verified"
           },
-          "activationEvent": "skill creation workflow",
-          "outputContract": "model_context",
-          "reason": null
+          "activationEvent": null,
+          "outputContract": "not_consumed",
+          "reason": "No upstream OpenClaw installation contract is declared."
         }
       },
       "osAdapters": {
@@ -2432,14 +2494,14 @@
         "statusByRuntime": {
           "claude_code": "none",
           "codex": "none",
-          "cursor": "none",
-          "openclaw": "none"
+          "cursor": "unsupported_upstream_contract",
+          "openclaw": "unsupported_upstream_contract"
         },
         "reason": null
       },
       "owner": "meta-artisan",
       "reviewOwner": "meta-prism",
-      "evolutionKey": "provider:external-skill-skill-creator"
+      "evolutionKey": "provider:external-skill-meta-skill-creator"
     },
     {
       "id": "plugin-marketplace-superpowers",
@@ -3930,7 +3992,9 @@
           "planning-with-files",
           "cli-anything",
           "gstack",
-          "skill-creator"
+          "meta-skill-creator",
+          "goalpro",
+          "kim-decision"
         ]
       },
       "activation": {
@@ -3978,7 +4042,9 @@
         "planning-with-files",
         "cli-anything",
         "gstack",
-        "skill-creator"
+        "meta-skill-creator",
+        "goalpro",
+        "kim-decision"
       ],
       "source": {
         "sourceOfTruth": "config/capability-index/dependency-project-registry.json",
@@ -3993,7 +4059,9 @@
             "planning-with-files",
             "cli-anything",
             "gstack",
-            "skill-creator"
+            "meta-skill-creator",
+            "goalpro",
+            "kim-decision"
           ]
         }
       },
@@ -4016,7 +4084,9 @@
         "dependency-project-registry.json#planning-with-files",
         "dependency-project-registry.json#cli-anything",
         "dependency-project-registry.json#gstack",
-        "dependency-project-registry.json#skill-creator"
+        "dependency-project-registry.json#meta-skill-creator",
+        "dependency-project-registry.json#goalpro",
+        "dependency-project-registry.json#kim-decision"
       ],
       "activationEvents": [
         "Fetch dependency capability search"
@@ -4647,6 +4717,367 @@
       "owner": "meta-artisan",
       "reviewOwner": "meta-prism",
       "evolutionKey": "provider:command-governance-weapons"
+    },
+    {
+      "id": "external-skill-goalpro",
+      "providerType": "external_skill",
+      "summary": "GoalPro prompt-only Goal Contract provider for Goal Prompt + Loop Prompt handoff before execution.",
+      "sourceOfTruth": "config/skills.json",
+      "mappings": {
+        "skillsJsonIds": [
+          "goalpro"
+        ],
+        "dependencyProjectIds": [
+          "goalpro"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "global_home",
+          "dependency_registry"
+        ],
+        "trigger": "goal prompt, loop prompt, or fuzzy goal contract request",
+        "outputConsumption": "model_context"
+      },
+      "verification": {
+        "method": "dependency compatibility",
+        "command": "npm run meta:deps:compat"
+      },
+      "risk": {
+        "trustReview": "owner_managed_external_skill",
+        "notes": [
+          "Prompt-only boundary must stop after producing the contract unless execution is separately authorized."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "external_skill",
+      "capabilities": [
+        "Goal Prompt + Loop Prompt contract generation.",
+        "goalpro",
+        "goal-contract",
+        "intent-amplification",
+        "prompt-only-loop-contract"
+      ],
+      "source": {
+        "sourceOfTruth": "config/skills.json",
+        "mappings": {
+          "skillsJsonIds": [
+            "goalpro"
+          ],
+          "dependencyProjectIds": [
+            "goalpro"
+          ]
+        }
+      },
+      "trust": {
+        "review": "owner_managed_external_skill",
+        "required": true
+      },
+      "installMethod": "globalHome",
+      "installLayers": [
+        "global_home",
+        "dependency_registry"
+      ],
+      "exposedArtifacts": [
+        "config/skills.json",
+        "config/skills.json#goalpro",
+        "dependency-project-registry.json#goalpro"
+      ],
+      "activationEvents": [
+        "goal prompt, loop prompt, or fuzzy goal contract request"
+      ],
+      "outputContracts": {
+        "consumption": "model_context",
+        "mustEnterModelContext": true,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "owner_managed_external_skill",
+        "notes": [
+          "GoalPro is not an executor, scheduler, release owner, or automation runtime."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "goal prompt, loop prompt, or fuzzy goal contract request",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "codex": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "goal prompt, loop prompt, or fuzzy goal contract request",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "cursor": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "goal prompt, loop prompt, or fuzzy goal contract request",
+          "outputContract": "model_context",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "goal prompt, loop prompt, or fuzzy goal contract request",
+          "outputContract": "model_context",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Prompt-only contract must not be relabeled as execution evidence."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Prompt-only contract must not be relabeled as execution evidence."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Prompt-only contract must not be relabeled as execution evidence."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "Prompt-only contract must not be relabeled as execution evidence."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:external-skill-goalpro"
+    },
+    {
+      "id": "external-skill-kim-decision",
+      "providerType": "external_skill",
+      "summary": "Kim_Decision reference-only decision protocol provider for path selection and pass/kill judgment.",
+      "sourceOfTruth": "config/skills.json",
+      "mappings": {
+        "skillsJsonIds": [
+          "kim-decision"
+        ],
+        "dependencyProjectIds": [
+          "kim-decision"
+        ]
+      },
+      "activation": {
+        "installLayers": [
+          "global_home",
+          "dependency_registry"
+        ],
+        "trigger": "branch-changing decision, path selection, or pass/kill review",
+        "outputConsumption": "reference_only"
+      },
+      "verification": {
+        "method": "dependency compatibility and route validation",
+        "command": "npm run meta:deps:compat && npm run meta:route:validate"
+      },
+      "risk": {
+        "trustReview": "reference_only_external_skill",
+        "notes": [
+          "Kim_Decision must not become a callable code executor or implementation owner."
+        ]
+      },
+      "support": {
+        "default": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "os": {
+            "macos": "partial",
+            "windows": "partial",
+            "linux": "partial",
+            "wsl2": "partial"
+          }
+        },
+        "runtimes": {}
+      },
+      "providerKind": "external_skill",
+      "capabilities": [
+        "Decision protocol reference for real intent, path selection, minimum test, and pass/kill gates.",
+        "kim-decision",
+        "decision-protocol-reference",
+        "path-selection",
+        "pass-kill-gate"
+      ],
+      "source": {
+        "sourceOfTruth": "config/skills.json",
+        "mappings": {
+          "skillsJsonIds": [
+            "kim-decision"
+          ],
+          "dependencyProjectIds": [
+            "kim-decision"
+          ]
+        }
+      },
+      "trust": {
+        "review": "reference_only_external_skill",
+        "required": true
+      },
+      "installMethod": "globalHome",
+      "installLayers": [
+        "global_home",
+        "dependency_registry"
+      ],
+      "exposedArtifacts": [
+        "config/skills.json",
+        "config/skills.json#kim-decision",
+        "dependency-project-registry.json#kim-decision",
+        "config/governance/decision-pattern-catalog.json"
+      ],
+      "activationEvents": [
+        "branch-changing decision, path selection, or pass/kill review"
+      ],
+      "outputContracts": {
+        "consumption": "reference_only",
+        "mustEnterModelContext": false,
+        "mustEnforcePolicy": false
+      },
+      "safetyBoundary": {
+        "trustReview": "reference_only_external_skill",
+        "notes": [
+          "Reference-only dependency may guide Critical, Thinking, and Review; it may not execute implementation work."
+        ]
+      },
+      "runtimeAdapters": {
+        "claude_code": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "branch-changing decision, path selection, or pass/kill review",
+          "outputContract": "reference_only",
+          "reason": null
+        },
+        "codex": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "branch-changing decision, path selection, or pass/kill review",
+          "outputContract": "reference_only",
+          "reason": null
+        },
+        "cursor": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "branch-changing decision, path selection, or pass/kill review",
+          "outputContract": "reference_only",
+          "reason": null
+        },
+        "openclaw": {
+          "state": "declared",
+          "status": "partial",
+          "installLayers": {
+            "global_home": "needs_probe",
+            "dependency_registry": "verified"
+          },
+          "activationEvent": "branch-changing decision, path selection, or pass/kill review",
+          "outputContract": "reference_only",
+          "reason": null
+        }
+      },
+      "osAdapters": {
+        "macos": {
+          "status": "partial",
+          "risks": [
+            "Reference-only dependency must not enter execution routes."
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "risks": [
+            "Reference-only dependency must not enter execution routes."
+          ]
+        },
+        "linux": {
+          "status": "partial",
+          "risks": [
+            "Reference-only dependency must not enter execution routes."
+          ]
+        },
+        "wsl2": {
+          "status": "partial",
+          "risks": [
+            "Reference-only dependency must not enter execution routes."
+          ]
+        }
+      },
+      "degradation": {
+        "statusByRuntime": {
+          "claude_code": "none",
+          "codex": "none",
+          "cursor": "none",
+          "openclaw": "none"
+        },
+        "reason": null
+      },
+      "owner": "meta-artisan",
+      "reviewOwner": "meta-prism",
+      "evolutionKey": "provider:external-skill-kim-decision"
     }
   ]
 }

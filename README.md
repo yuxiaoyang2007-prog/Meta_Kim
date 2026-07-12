@@ -89,7 +89,7 @@ npm install
 node setup.mjs
 ```
 
-> 💡 **After install**: `setup.mjs` prints where every artifact lives. To revisit that summary anytime (or diff vs. the previous install), run `npm run meta:status` in the directory where you installed.
+> 💡 **After install**: `setup.mjs` prints where every artifact lives. A global install can use `meta-kim status` from any directory; an npx install can repeat `npx --yes github:KimYx0207/Meta_Kim meta-kim status`. Repository maintainers may also use `npm run meta:status`.
 
 At a fresh clone, Meta_Kim intentionally separates source files, generated projections, and local state:
 
@@ -835,7 +835,7 @@ Interactive update flow:
 | Command | Purpose |
 | --- | --- |
 | `npm run meta:sync` | Sync from canonical sources to all four runtimes |
-| `npm run meta:check:runtimes` | Check whether the four runtimes are in sync |
+| `npm run meta:check:runtimes` | Check the default formal project projections (Claude Code + Codex); use explicit runtime targets for broader checks |
 | `npm run meta:validate` | Validate repository integrity |
 | `npm run meta:verify:all` | Full validation, including runtime smoke checks |
 
@@ -913,7 +913,7 @@ Meta_Kim writes to 3 places:
 2. **Your home** — `~/.claude/skills/meta-theory/` (plus `.codex / .cursor / .openclaw`) for global skills shared across all projects
 3. **Manifest** — `~/.meta-kim/install-manifest.json` tracks everything for safe rollback
 
-Run `npm run meta:status` (or `node setup.mjs --check`) in the directory where you ran `npx` to see the full footprint. Use `npm run meta:uninstall` for a safe rollback.
+From a global install, run `meta-kim status` from any directory to see the full footprint. With npx, repeat `npx --yes github:KimYx0207/Meta_Kim meta-kim status` and replace `status` with `check`, `doctor`, `update`, or `uninstall` as needed. These commands resolve scripts from the package rather than the current directory. Repository maintainers can keep using the equivalent `npm run meta:*` commands.
 
 ### Q: What is different about Meta_Kim compared with a normal AI coding assistant?
 
@@ -1014,7 +1014,9 @@ Meta_Kim itself is licensed under Apache License 2.0. The following optional ski
 | [OthmanAdi/planning-with-files](https://github.com/OthmanAdi/planning-with-files) | MIT |
 | [HKUDS/CLI-Anything](https://github.com/HKUDS/CLI-Anything) | Apache 2.0 |
 | [garrytan/gstack](https://github.com/garrytan/gstack) | MIT |
-| [anthropics/skills](https://github.com/anthropics/skills) | No license declared (© Anthropic, PBC) |
+| [KimYx0207/meta-skill-creator](https://github.com/KimYx0207/meta-skill-creator) | MIT |
+
+`meta-skill-creator` is installed only for its currently declared targets: Claude Code at `~/.claude/skills/meta-skill-creator`, and Codex at `~/.agents/skills/meta-skill-creator` with a synchronized compatibility copy at `~/.codex/skills/meta-skill-creator`. Cursor and OpenClaw are not current installation targets for this skill.
 
 ### Optional pip Packages
 

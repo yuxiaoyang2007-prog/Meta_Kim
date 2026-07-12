@@ -98,7 +98,7 @@ describe("Claude settings hook command rendering", () => {
     assert.match(promptHooks[2].command, /optional\.js/);
   });
 
-  test("global settings merge strips retired git push confirmation hooks", () => {
+  test("global settings merge preserves unproven same-name retired hooks", () => {
     const base = {
       hooks: {
         PreToolUse: [
@@ -130,9 +130,31 @@ describe("Claude settings hook command rendering", () => {
 
     assert.equal(
       commands.some((entry) => entry.includes("pre-git-push-confirm.mjs")),
-      false,
+      true,
     );
     assert.ok(commands.includes('node "C:/Users/Example/.claude/hooks/custom.mjs"'));
+  });
+
+  test("global settings merge strips retired hooks only with ownership proof", () => {
+    const retired =
+      'node "C:/Users/Example/.claude/hooks/pre-git-push-confirm.mjs"';
+    const merged = mergeGlobalMetaKimHooksIntoSettings(
+      {
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash",
+              hooks: [{ type: "command", command: retired }],
+            },
+          ],
+        },
+      },
+      buildMetaKimHooksTemplate(
+        "C:\\Users\\Example\\.claude\\hooks\\meta-kim",
+      ),
+      { isManagedHookCommand: (command) => command === retired },
+    );
+    assert.doesNotMatch(JSON.stringify(merged), /pre-git-push-confirm\.mjs/u);
   });
 
   test("global settings merge removes old managed events no longer in the template", () => {
@@ -165,7 +187,7 @@ describe("Claude settings hook command rendering", () => {
     );
   });
 
-  test("global settings merge replaces legacy root Meta_Kim hook commands", () => {
+  test("global settings merge replaces ownership-proven legacy root Meta_Kim hook commands", () => {
     const base = {
       hooks: {
         UserPromptSubmit: [
@@ -197,7 +219,12 @@ describe("Claude settings hook command rendering", () => {
       "C:\\Users\\Example\\.claude\\hooks\\meta-kim",
     );
 
-    const merged = mergeGlobalMetaKimHooksIntoSettings(base, template);
+    const merged = mergeGlobalMetaKimHooksIntoSettings(base, template, {
+      isManagedHookCommand: (command) =>
+        command.includes(".claude/hooks/activate-meta-theory-spine.mjs") ||
+        command.includes(".claude/hooks/block-dangerous-bash.mjs") ||
+        command.includes("/hooks/meta-kim/"),
+    });
     const commands = Object.values(merged.hooks)
       .flatMap((blocks) => blocks.flatMap((block) => block.hooks ?? []))
       .map((hook) => hook.command);

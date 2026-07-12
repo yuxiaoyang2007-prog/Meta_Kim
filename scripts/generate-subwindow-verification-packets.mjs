@@ -4,17 +4,12 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { createReportContext } from "./report-context.mjs";
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(scriptDir, "..");
+const reportContext = createReportContext();
+const REPO_ROOT = reportContext.repoRoot;
 const PRD_PATH = path.join(REPO_ROOT, "docs", "ai-native-capability-gap-mvp-prd.zh-CN.md");
-const OUTPUT_DIR = path.join(
-  REPO_ROOT,
-  ".meta-kim",
-  "state",
-  "default",
-  "subwindow-verification-packets",
-);
+const OUTPUT_DIR = reportContext.resolveStatePath("subwindow-verification-packets");
 
 const COMMANDS_BY_TASK = {
   "P-026": [
@@ -57,9 +52,7 @@ function parsePrdTasks(prd) {
     });
 }
 
-function relativeToRepo(filePath) {
-  return path.relative(REPO_ROOT, filePath).replaceAll("\\", "/");
-}
+const relativeToRepo = reportContext.relativeToRepo;
 
 function buildPacket(task) {
   return {
@@ -141,11 +134,11 @@ async function main() {
     packets,
   };
 
-  await fs.mkdir(OUTPUT_DIR, { recursive: true });
+  await reportContext.ensureDirectory(OUTPUT_DIR);
   const jsonPath = path.join(OUTPUT_DIR, "latest.json");
   const mdPath = path.join(OUTPUT_DIR, "latest.zh-CN.md");
-  await fs.writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
-  await fs.writeFile(mdPath, buildMarkdown(packets));
+  await reportContext.writeJson(jsonPath, report);
+  await reportContext.writeText(mdPath, buildMarkdown(packets));
 
   process.stdout.write(
     `${JSON.stringify(

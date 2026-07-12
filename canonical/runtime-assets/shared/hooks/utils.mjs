@@ -2,7 +2,7 @@
 /**
  * Shared utilities for Meta_Kim hooks.
  * DRY centralization — all hooks import from here instead of duplicating readJsonFromStdin.
- * Synced from canonical/runtime-assets/claude/hooks/utils.mjs to .claude/hooks/utils.mjs
+ * Canonical cross-runtime source projected into each runtime hook directory.
  */
 
 /**

@@ -27,6 +27,7 @@ const taskText = String(task ?? "").toLowerCase();
 const entryClassification = classifyMetaTheoryEntry(task);
 const choicePolicy = entryClassification.ambiguityPacket?.choicePolicy ?? "no_choice_needed";
 const subjectiveRouteChoice = entryClassification.triggerReason === "subjective_quality_ambiguous";
+const stateDirRef = toPosix(path.relative(repoPath("."), stateDir));
 const GOVERNANCE_CHAIN_PREFIX_RE =
   /^critical(?:\s+thinking)?(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)fetch(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)(?:deep\s+)?thinking(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)review\s*/iu;
 const autoFanoutDispatchRequested =
@@ -227,10 +228,17 @@ function explicitCapabilityGapRequested() {
 }
 
 function taskTerms() {
+  if (taskShape === "goal_contract") return ["goal prompt", "loop prompt", "goal contract", "intent amplification", "goalpro", "目标契约", "目标合同", "意图放大"];
   if (taskShape === "strategy_product_decision") return ["strategy", "product", "decision", "monetization", "策略", "产品", "商业化", "变现"];
   if (taskShape === "platform_governance") return ["runtime", "platform", "hook", "os", "codex", "cursor", "openclaw", "claude", "平台", "钩子"];
   if (taskShape === "engineering_execution") return ["code", "test", "refactor", "engineering", "代码", "测试", "重构"];
   return ["governance", "capability", "workflow", "治理", "能力"];
+}
+
+function decisionAdjustmentRequested() {
+  if (taskShape !== "strategy_product_decision") return false;
+  if (productBuildExecutionRequested()) return false;
+  return /decision|judge|判断|决策|选择|取舍|pass.?kill|要不要|值不值得|怎么改|怎么做|路径|方案|策略|高流量|标题|文案|封面/.test(taskText);
 }
 
 function fitsTask(entry) {
@@ -783,7 +791,7 @@ const ownerDiscoveryPacket = {
     { source: "codex_project_inventory", checked: true, sourceRef: ".codex/agents; .agents/skills; .codex/commands; .codex/hooks; .codex/hooks.json; .codex/config.toml; .mcp.json; package.json scripts" },
     { source: "cursor_project_inventory", checked: true, sourceRef: ".cursor/agents; .cursor/skills; .cursor/rules; .cursor/prompts; .cursor/hooks; .cursor/hooks.json; .cursor/mcp.json" },
     { source: "openclaw_project_inventory", checked: true, sourceRef: "openclaw/workspaces; openclaw/skills; openclaw/hooks; openclaw/openclaw.template.json" },
-    { source: "local_global_inventory_cache", checked: true, sourceRef: ".meta-kim/state/default/capability-index/global-capabilities.json" },
+    { source: "local_global_inventory_cache", checked: true, sourceRef: `${stateDirRef}/capability-index/global-capabilities.json` },
     { source: "claude_global_inventory", checked: true, sourceRef: "~/.claude/agents; ~/.claude/skills; ~/.claude/commands; ~/.claude/hooks; ~/.claude/settings.json" },
     { source: "codex_global_inventory", checked: true, sourceRef: "~/.codex/agents; ~/.codex/skills; ~/.codex/commands; ~/.codex/hooks; ~/.codex/hooks.json; ~/.codex/config.toml; ~/.agents/skills" },
     { source: "codex_global_skill_filesystem_light_scan", checked: true, sourceRef: "~/.codex/skills; ~/.codex/plugins/cache" },
@@ -825,7 +833,7 @@ const ownerDiscoveryPacket = {
     "openclaw/workspaces",
     "openclaw/openclaw.template.json",
     "config/runtime-capability-matrix.json",
-    ".meta-kim/state/default/capability-inventory.json",
+    `${stateDirRef}/capability-inventory.json`,
     ".mcp.json",
     "package.json",
     "scripts",
@@ -852,7 +860,7 @@ const ownerDiscoveryPacket = {
     "~/.openclaw/workspace-*",
     "~/.openclaw/skills",
     "~/.openclaw/hooks",
-    ".meta-kim/state/default/capability-index/global-capabilities.json",
+    `${stateDirRef}/capability-index/global-capabilities.json`,
     "config/contracts/workflow-contract.json",
   ],
 };
@@ -892,9 +900,32 @@ const candidateFoundationalCapabilities = (capabilityInventory.capabilities ?? [
   .slice(0, 20)
   .map((cap) => cap.id);
 
-function routeForWeapon(weapon) {
+function dependencyTaskFitScore(dep) {
+  const terms = taskTerms();
+  const depText = JSON.stringify(dep).toLowerCase();
+  let score = dep.reuseScore ?? 50;
+  if (terms.some((term) => depText.includes(term))) score += 25;
+  if (taskShape === "goal_contract" && dep.id === "goalpro") score += 50;
+  if (taskShape === "strategy_product_decision" && dep.id === "kim-decision") score += 20;
+  if (dependencyExecutable(dep)) score += 30;
+  else score -= 120;
+  return score;
+}
+
+function selectDependencyForWeapon(weapon) {
   const dependencyIds = weapon.dependencyProjects ?? [];
-  const dep = dependencyIds.length ? candidateDependencies.find((candidate) => dependencyIds.includes(candidate.id)) ?? null : null;
+  if (!dependencyIds.length) return null;
+  const matches = candidateDependencies.filter((candidate) =>
+    dependencyIds.includes(candidate.id),
+  );
+  const executableMatches = matches.filter(dependencyExecutable);
+  const pool = executableMatches.length ? executableMatches : [];
+  return pool
+    .sort((a, b) => dependencyTaskFitScore(b) - dependencyTaskFitScore(a))[0] ?? null;
+}
+
+function routeForWeapon(weapon) {
+  const dep = selectDependencyForWeapon(weapon);
   const runtimeValue = weapon.runtimeSupport?.[runtime] ?? "unknown";
   const osValue = weapon.osSupport?.[osTarget] ?? "unknown";
   const available = new Set([
@@ -918,6 +949,9 @@ function routeForWeapon(weapon) {
   if (weapon.ownerCandidates?.some((owner) => owner === "general-purpose")) blockedReasons.push("general-purpose fallback");
   if (weapon.ownerCandidates?.some((owner) => /runtimeInstanceAlias|nickname/i.test(owner))) blockedReasons.push("runtime alias as durable owner");
   if (taskShape === "engineering_execution" && selectedOwner && GOVERNANCE_OWNERS.includes(selectedOwner)) blockedReasons.push("governance agent as implementation worker");
+  if (productBuildExecutionRequested() && weapon.id === "meta-kim-decision-patterns") {
+    blockedReasons.push("product build requires multi-lane orchestration; decision patterns remain a lens inside Thinking");
+  }
   if (dep && !dependencyExecutable(dep)) {
     if (dep.routeEligibility === "reference_only" || dep.invokeAs === "reference") blockedReasons.push("dependency reference_only");
     if (!dep.invocationPath) blockedReasons.push("dependency missing invocationPath");
@@ -1235,7 +1269,7 @@ const PRODUCT_BUILD_INTENT_SIGNALS = {
   ],
   currentResearch: [
     /market|research|competitor|policy|platform|rule|current/i,
-    /市场|研究|竞品|平台|规则|最新|调研|小红书|抖音|公众号|视频号/,
+    /市场|研究|竞品|平台|规则|最新|调研|内容渠道|外部服务|第三方/,
   ],
   interface: [
     /app|web|site|dashboard|frontend|ui|ux|interface|page|tool|product|mvp/i,
@@ -1304,6 +1338,11 @@ function productBuildLaneEvidence() {
     verification,
     contentOnly,
   };
+}
+
+function productBuildExecutionRequested() {
+  const evidence = productBuildLaneEvidence();
+  return evidence.implementation || evidence.automationIntegration || (evidence.interfaceNeeded && evidence.dataState);
 }
 
 function productRouteDecisionRequested() {
@@ -1881,13 +1920,13 @@ function executionCapabilityDiscoveryRoute() {
   const wantsDiscovery = explicitDiscoveryRoute || /find|discover|search|寻找|发现/.test(taskText);
   const wantsCreation = /create|scaffold|generate|创建|生成/.test(taskText);
   const selectedSkillDiscovery = selectProvider("skills", ["findskill", "skill-scout", "skill-stocktake"]);
-  const selectedSkillCreation = selectProvider("skills", ["skill-creator", "create-agent", "agent-teams-playbook"]);
+  const selectedSkillCreation = selectProvider("skills", ["meta-skill-creator", "create-agent", "agent-teams-playbook"]);
   const selectedSkill = wantsDiscovery
     ? selectedSkillDiscovery ?? selectedSkillCreation
     : wantsCreation
       ? selectedSkillCreation ?? selectedSkillDiscovery
       : selectProvider("skills", ["tdd-workflow", "verification-loop", "meta-theory"]);
-  const selectedAgentCreation = selectProvider("skills", ["create-agent", "agent-teams-playbook", "skill-creator"]);
+  const selectedAgentCreation = selectProvider("skills", ["create-agent", "agent-teams-playbook", "meta-skill-creator"]);
   const selectedMcpServer = selectProvider("mcpServers", ["meta-kim-runtime", "repo-mcp", "codex-config-mcp"]);
   const selectedMcpTool = selectProvider("mcpTools", ["get_meta_runtime_capabilities", "list_meta_agents", "get_meta_agent"]);
   const selectedCommand = selectProvider("commands", ["meta-theory", "save-progress"]);
@@ -1949,6 +1988,154 @@ function executionCapabilityDiscoveryRoute() {
       runtimeTool: selectedRuntimeTool,
     },
     parallelExecutionLanes,
+    blockedReasons,
+  };
+}
+
+function goalProContractRoute() {
+  if (taskShape !== "goal_contract") return null;
+  const selectedSkill = selectProvider("skills", ["goalpro"]);
+  const dependency = dependencyRecords.find((dep) => dep.id === "goalpro") ?? null;
+  const blockedReasons = [];
+  if (!selectedSkill) blockedReasons.push("goalpro skill provider missing");
+  if (!dependency) blockedReasons.push("goalpro dependency project missing");
+  if (dependency && !dependencyExecutable(dependency)) blockedReasons.push("goalpro dependency not executable");
+  const score = blockedReasons.length ? 49 : 92;
+  return {
+    id: `goalpro-contract:${runtime}:${osTarget}`,
+    owner: "meta-conductor",
+    weapon: "goalpro",
+    dependency: selectedSkill?.id ?? "goalpro",
+    dependencyProject: "goalpro",
+    runtime,
+    os: osTarget,
+    verificationOwner: "meta-prism",
+    verificationMethod: "npm run meta:deps:compat",
+    verification: {
+      command: "npm run meta:deps:compat",
+      artifact: "config/skills.json; config/capability-index/dependency-project-registry.json",
+      passCondition: "GoalPro is registered as a prompt-only dependency skill for Goal Prompt / Loop Prompt / intent-amplification work.",
+    },
+    score,
+    scoreBand: score >= 85 ? "execute" : "blocked",
+    routeScoreBreakdown: {
+      intentFitWeight: 20,
+      ownerFitWeight: 15,
+      weaponFitWeight: 15,
+      dependencyFitWeight: 15,
+      runtimeSupportWeight: 10,
+      osSupportWeight: 10,
+      verificationStrengthWeight: 10,
+      riskRollbackClarityWeight: 5,
+      runtimeSupport: "native",
+      osSupport: "supported",
+      dependencyFit: dependency ? 95 : 0,
+    },
+    ownerBinding: {
+      selectedOwner: "meta-conductor",
+      source: "goal_contract_task_shape",
+      existingOwnerMatched: true,
+      bindingStage: "Thinking",
+      providerEvidenceRef: "candidateDependencyProjects.goalpro",
+      ownerDiscoveryRef: "ownerDiscoveryPacket",
+    },
+    selectedCapabilityProviders: selectedSkill ? [selectedSkill] : [],
+    boundary: {
+      invokeAs: "skill",
+      executionMode: "prompt_only",
+      notExecutor: true,
+      notAutomationScheduler: true,
+    },
+    blockedReasons,
+  };
+}
+
+function kimDecisionExperienceRoute() {
+  if (!decisionAdjustmentRequested()) return null;
+  const selectedSkill = selectProvider("skills", ["kim-decision"]);
+  const dependency = dependencyRecords.find((dep) => dep.id === "kim-decision") ?? null;
+  const blockedReasons = [];
+  if (!selectedSkill) blockedReasons.push("kim-decision skill provider missing");
+  if (!dependency) blockedReasons.push("kim-decision dependency project missing");
+  const score = blockedReasons.length ? 49 : 93;
+  return {
+    id: `kim-decision-lens:${runtime}:${osTarget}`,
+    owner: "meta-warden",
+    weapon: "meta-kim-decision-patterns",
+    dependency: null,
+    dependencyProject: null,
+    decisionLensProvider: selectedSkill?.id ?? "kim-decision",
+    runtime,
+    os: osTarget,
+    verificationOwner: "meta-prism",
+    verificationMethod: "npm run meta:route:validate",
+    verification: {
+      command: "npm run meta:route:validate",
+      artifact: "route JSON",
+      passCondition: "Decision tasks expose a Kim_Decision decision lens without promoting it to code executor, then offer GoalPro only after the decision is ready to become a goal.",
+    },
+    score,
+    scoreBand: score >= 85 ? "execute" : "blocked",
+    routeScoreBreakdown: {
+      intentFitWeight: 20,
+      ownerFitWeight: 15,
+      weaponFitWeight: 15,
+      dependencyFitWeight: 15,
+      runtimeSupportWeight: 10,
+      osSupportWeight: 10,
+      verificationStrengthWeight: 10,
+      riskRollbackClarityWeight: 5,
+      runtimeSupport: "native",
+      osSupport: "supported",
+      dependencyFit: dependency ? 90 : 0,
+    },
+    ownerBinding: {
+      selectedOwner: "meta-warden",
+      source: "decision_adjustment_task_shape",
+      existingOwnerMatched: true,
+      bindingStage: "Thinking",
+      providerEvidenceRef: "candidateDependencyProjects.kim-decision",
+      ownerDiscoveryRef: "ownerDiscoveryPacket",
+    },
+    selectedCapabilityProviders: selectedSkill ? [selectedSkill] : [],
+    boundary: {
+      invokeAs: "decision_lens",
+      executionMode: "model_context",
+      notExecutor: true,
+      notImplementationWorker: true,
+      notAutomationScheduler: true,
+    },
+    decisionExperiencePlan: {
+      userVisibleActivation: "Kim_Decision decision lens",
+      scope:
+        "Decision support only during Critical, Fetch, and Thinking. It does not create a Goal, run execution, schedule automation, or start a Loop.",
+      sequence: [
+        {
+          step: "critical_decision",
+          provider: "kim-decision",
+          stage: "Critical",
+          purpose: "锁定真问题、成功标准、非目标、关键取舍和 pass/kill 判断，不急着写执行目标。",
+        },
+        {
+          step: "fetch_evidence_decision",
+          provider: "kim-decision",
+          stage: "Fetch",
+          purpose: "判断哪些证据会改变路线，哪些外部/本地事实必须先查，避免拍脑袋决策。",
+        },
+        {
+          step: "thinking_path_decision",
+          provider: "kim-decision",
+          stage: "Thinking",
+          purpose: "比较候选路径，选择最小 MVP / 最小验证 / 执行路线，并记录为什么不走其他路。",
+        },
+      ],
+      goalProBoundary:
+        "GoalPro is not triggered by this route. It is selected only when the user explicitly asks for Goal Prompt, Loop Prompt, goal contract, or prompt-only goal packaging.",
+      loopBoundary:
+        "Loop belongs after a Goal has produced a result and the user wants a next-round review/continuation prompt; it is not part of Critical, Fetch, Thinking, or Evolution writeback.",
+      evolutionBoundary:
+        "Evolution records Meta_Kim system writeback or none-with-reason; it is not the place that creates user Goals.",
+    },
     blockedReasons,
   };
 }
@@ -2407,6 +2594,8 @@ function productBuildOrchestrationRoute() {
 }
 
 const syntheticRoutes = [
+  goalProContractRoute(),
+  kimDecisionExperienceRoute(),
   productBuildOrchestrationRoute(),
   subjectiveUiDesignRoute(),
   executionCapabilityDiscoveryRoute(),
@@ -2743,6 +2932,7 @@ const output = {
   osFilterResult: { requested: osArg, applied: osTarget, unsupported: !OS_TARGETS.includes(osTarget) },
   rankedRoutes,
   recommendedRoute,
+  decisionExperiencePlan: recommendedRoute?.decisionExperiencePlan ?? null,
   subjectiveUiCapabilityAmplification: recommendedRoute?.subjectiveUiCapabilityAmplification ?? null,
   decisionCheckpoints: recommendedRoute?.subjectiveUiCapabilityAmplification?.decisionCheckpoints ?? [],
   capabilityGapDetected,

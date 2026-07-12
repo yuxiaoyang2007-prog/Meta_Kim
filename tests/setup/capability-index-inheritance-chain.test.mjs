@@ -5,6 +5,7 @@ import path from "node:path";
 
 import {
   formatTableOutput,
+  mergeCanonicalHookSources,
   preserveGeneratedAtWhenUnchanged,
 } from "../../scripts/discover-global-capabilities.mjs";
 import {
@@ -56,6 +57,51 @@ async function listCanonicalSkillIds() {
 }
 
 describe("capability index inheritance chain", () => {
+  test("same-name Claude Hook adapter cannot overwrite shared canonical source", () => {
+    const shared = [
+      {
+        id: "spine-state.mjs",
+        path: "/repo/canonical/runtime-assets/shared/hooks/spine-state.mjs",
+      },
+    ];
+    const claude = [
+      {
+        id: "spine-state.mjs",
+        path: "/repo/canonical/runtime-assets/claude/hooks/spine-state.mjs",
+      },
+      {
+        id: "claude-only.mjs",
+        path: "/repo/canonical/runtime-assets/claude/hooks/claude-only.mjs",
+      },
+    ];
+
+    assert.deepEqual(
+      mergeCanonicalHookSources(shared, claude, [], {
+        verifiedThinAdapterIds: new Set(["spine-state.mjs"]),
+      }),
+      [
+        {
+          ...shared[0],
+          adapterPath: claude[0].path,
+        },
+        claude[1],
+      ],
+    );
+  });
+
+  test("unverified Claude and same-name OpenClaw Hooks cannot overwrite shared truth", () => {
+    const shared = [{ id: "same.mjs", path: "/shared/same.mjs" }];
+    const claude = [{ id: "same.mjs", path: "/claude/same.mjs" }];
+    const openclaw = [{ id: "same.mjs", path: "/openclaw/same.mjs" }];
+    const merged = mergeCanonicalHookSources(shared, claude, openclaw);
+
+    assert.deepEqual(merged, [
+      shared[0],
+      { ...claude[0], namespace: "canonical-claude-hooks" },
+      { ...openclaw[0], namespace: "canonical-openclaw-hooks" },
+    ]);
+  });
+
   test("global discovery table defaults to category stats instead of dumping every capability", () => {
     const index = {
       byPlatform: {

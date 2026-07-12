@@ -24,7 +24,7 @@ const FILE_OR_MUTATION_RE =
   /\b(?:file|code|repo|repository|project|app|page|component|test|config|contract|script)\b|(?:文件|代码|仓库|项目|页面|组件|测试|配置|合同|脚本)/iu;
 
 const PRODUCT_BUILD_OBJECT_RE =
-  /\b(?:app|web app|dashboard|platform|tool|saas|automation|publisher|scheduler|workflow|product|assistant|content)\b|(?:系统|平台|工具|应用|网站|面板|看板|自动发布器|发布器|营销.*器|自动化|工作流|小红书|东西|产品|助手|内容)/iu;
+  /\b(?:app|web app|dashboard|platform|tool|saas|automation|publisher|scheduler|workflow|product|assistant|content)\b|(?:系统|平台|工具|应用|网站|面板|看板|自动发布器|发布器|营销.*器|自动化|工作流|东西|产品|助手|内容)/iu;
 
 const PROJECT_UNDERSTANDING_RE =
   /\b(?:project|repo|repository|codebase|architecture|commerciali[sz]e|market|competitor|business model|strategy|roadmap)\b|(?:项目|仓库|代码库|架构|怎么玩|干啥|做什么|商业化|市场|竞品|商业模式|发展|路线图|战略)/iu;

@@ -174,7 +174,7 @@ Submit `evolutionWritebackPacket` to Warden's Evolution Writeback Gate:
 
 **Important**: Chrysalis does NOT directly edit canonical files. Warden approves; Chrysalis coordinates; target specialist performs writeback:
 - Agent evolution -> meta-genesis via Type B pipeline
-- Skill creation -> skill-creator or meta-artisan
+- Skill creation -> meta-skill-creator or meta-artisan
 - Contract changes -> Warden-designated contract specialist
 - Capability index -> Scout coordination
 
@@ -435,7 +435,7 @@ Construct evolutionWritebackPacket
 Warden's Evolution Writeback Gate (approval/rejection)
   ↓
 If approved:
-  |-- Pattern reuse -> skill-creator / meta-artisan
+  |-- Pattern reuse -> meta-skill-creator / meta-artisan
   |-- Boundary drift -> meta-genesis (Type B pipeline)
   |-- Capability gap -> Scout
   |-- Scar -> Warden-designated scar owner through a gated scar writeback packet
