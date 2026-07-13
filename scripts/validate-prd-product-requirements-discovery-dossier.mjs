@@ -100,6 +100,6 @@ hasAll(prd, [
 
 assert(pkg.scripts?.["meta:prd:product-discovery:validate"]?.includes("validate-prd-product-requirements-discovery-dossier.mjs"), "package.json missing meta:prd:product-discovery:validate");
 assert(pkg.scripts?.["meta:prd:all-dossiers:validate"]?.includes("meta:prd:product-discovery:validate"), "all-dossiers validator must include P-095 validator");
-assert(pkg.scripts?.["meta:verify:governance"]?.includes("meta:prd:all-dossiers:validate"), "meta:verify:governance must include all PRD dossier validation");
+assert(`${pkg.scripts?.["meta:verify:governance"] ?? ""} ${pkg.scripts?.["meta:verify:governance:core"] ?? ""}`.includes("meta:prd:all-dossiers:validate"), "meta:verify:governance must include all PRD dossier validation");
 
 console.log(`PRD product/requirements/discovery dossier valid: P-095 dossier_ready, contract ${contract.status}`);

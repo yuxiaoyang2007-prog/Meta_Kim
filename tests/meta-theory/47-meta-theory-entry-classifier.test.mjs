@@ -2,9 +2,32 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFile } from "./_helpers.mjs";
-import { classifyMetaTheoryEntry } from "../../scripts/meta-theory-entry-classifier.mjs";
+import {
+  classifyMetaTheoryEntry,
+  validateEntryLexicon,
+} from "../../scripts/meta-theory-entry-classifier.mjs";
+import lexicon from "../../config/governance/entry-classification-lexicon.json" with { type: "json" };
 
 describe("47 - Meta-theory entry classifier", () => {
+  test("entry lexicon enforces the complete bounded four-language schema", () => {
+    assert.equal(validateEntryLexicon(structuredClone(lexicon)).schemaVersion, 1);
+
+    const missingLanguage = structuredClone(lexicon);
+    delete missingLanguage.categories.action.ko;
+    assert.throws(() => validateEntryLexicon(missingLanguage), /exactly en, zh, ja, and ko/);
+
+    const emptyMatcher = structuredClone(lexicon);
+    emptyMatcher.categories.action.ja = [];
+    assert.throws(() => validateEntryLexicon(emptyMatcher), /must contain 1-128 terms/);
+
+    const oversized = structuredClone(lexicon);
+    oversized.categories.action.en = Array.from({ length: 129 }, (_, index) => `term-${index}`);
+    assert.throws(() => validateEntryLexicon(oversized), /must contain 1-128 terms/);
+
+    const extraCategory = structuredClone(lexicon);
+    extraCategory.categories.extra = structuredClone(extraCategory.categories.action);
+    assert.throws(() => validateEntryLexicon(extraCategory), /must define exactly/);
+  });
   test("explicit meta-theory activation enters regulated path", () => {
     const result = classifyMetaTheoryEntry("meta-theory 帮我做治理审查");
 
@@ -27,6 +50,20 @@ describe("47 - Meta-theory entry classifier", () => {
     assert.equal(result.taskClassification, "meta_theory_auto");
     assert.equal(result.triggerReason, "natural_language_durable_work");
     assert.equal(result.shouldAskBeforeFetch, false);
+  });
+
+  test("onboarding and recovery improvement requests enter the governed standard path", () => {
+    for (const prompt of [
+      "Please streamline the onboarding experience and make recovery clearer",
+      "把新手上手体验捋顺，失败后要能恢复",
+      "オンボーディング体験を改善し、失敗後の復旧を明確にしてください",
+      "온보딩 경험을 개선하고 실패 후 복구를 명확하게 해주세요",
+    ]) {
+      const result = classifyMetaTheoryEntry(prompt);
+      assert.equal(result.governedEntry, true, prompt);
+      assert.equal(result.path, "standard_path", prompt);
+      assert.equal(result.taskClassification, "meta_theory_auto", prompt);
+    }
   });
 
   test("wish-style product build enters governed path without protocol words", () => {

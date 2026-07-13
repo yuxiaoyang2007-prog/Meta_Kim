@@ -12,7 +12,15 @@
 //   node scripts/run-verify-all.mjs --live-certified # 追加外部签名实机认证
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { createHash } from "node:crypto";
+import os from "node:os";
 import process from "node:process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,7 +29,7 @@ import { createReportContext } from "./report-context.mjs";
 export const STAGES = [
   { name: "discover:global", cmd: "npm run discover:global", timeoutMs: 120_000 },
   { name: "meta:check", cmd: "npm run meta:check", timeoutMs: 120_000 },
-  { name: "meta:verify:governance", cmd: "npm run meta:verify:governance", timeoutMs: 300_000 },
+  { name: "meta:verify:governance:core", cmd: "npm run meta:verify:governance:core", timeoutMs: 300_000 },
   { name: "meta:graphify:check", cmd: "npm run meta:graphify:check", timeoutMs: 60_000 },
   { name: "meta:check:global:release", cmd: "npm run meta:check:global:release", timeoutMs: 120_000 },
   { name: "eval-meta-agents", cmd: "node scripts/eval-meta-agents.mjs --require-all-runtimes", timeoutMs: 300_000 },
@@ -38,8 +46,358 @@ export const LIVE_CERTIFIED_STAGE = {
   timeoutMs: 30_000,
 };
 
-export function computeReleaseGrade({ results, startIndex }) {
+const ALL_RUNTIME_TARGETS = Object.freeze([
+  "claude",
+  "codex",
+  "openclaw",
+  "cursor",
+]);
+const RELEASE_PROBE_SKILL_ID = "planning-with-files";
+const RELEASE_PROBE_MODE_TIMEOUT_MS = 180_000;
+const RELEASE_PREFLIGHT_EXPECTED_DURATION_MS = RELEASE_PROBE_MODE_TIMEOUT_MS * 2;
+
+function emitProgress(onProgress, event) {
+  if (typeof onProgress !== "function") return;
+  try {
+    onProgress(event);
+  } catch {
+    // Progress reporting must never change verification evidence or control flow.
+  }
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function captureCommand(cwd, command, args) {
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `${command} ${args.join(" ")} failed: ${result.stderr || result.stdout || `exit ${result.status}`}`,
+    );
+  }
+  return result.stdout;
+}
+
+export function captureReleaseSourceSnapshot(cwd = process.cwd()) {
+  try {
+    const head = captureCommand(cwd, "git", ["rev-parse", "HEAD"]).trim();
+    const tree = captureCommand(cwd, "git", ["rev-parse", "HEAD^{tree}"]).trim();
+    const status = captureCommand(cwd, "git", [
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--untracked-files=all",
+    ]);
+    const trackedDiff = captureCommand(cwd, "git", [
+      "diff",
+      "--binary",
+      "HEAD",
+      "--",
+      ".",
+    ]);
+    const untracked = captureCommand(cwd, "git", [
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "-z",
+    ])
+      .split("\0")
+      .filter(Boolean)
+      .sort();
+    const untrackedEvidence = untracked.map((relativePath) => {
+      const filePath = path.join(cwd, relativePath);
+      try {
+        return `${relativePath}\0${sha256(readFileSync(filePath))}`;
+      } catch (error) {
+        return `${relativePath}\0unreadable:${error.code ?? error.message}`;
+      }
+    });
+    const packageManifestHash = sha256(readFileSync(path.join(cwd, "package.json")));
+    return {
+      captureOk: true,
+      head,
+      tree,
+      dirty: status.length > 0,
+      statusEntryCount: status.split("\0").filter(Boolean).length,
+      diffHash: sha256(
+        [status, trackedDiff, ...untrackedEvidence].join("\0meta-kim-snapshot\0"),
+      ),
+      packageManifestHash,
+      untrackedFileCount: untracked.length,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      captureOk: false,
+      head: null,
+      tree: null,
+      dirty: null,
+      statusEntryCount: null,
+      diffHash: null,
+      packageManifestHash: null,
+      untrackedFileCount: null,
+      error: error.message,
+    };
+  }
+}
+
+export function compareReleaseSourceSnapshots(start, end) {
+  const mismatchReasons = [];
+  if (!start?.captureOk || !end?.captureOk) mismatchReasons.push("source_snapshot_unavailable");
+  for (const field of ["head", "tree", "diffHash", "packageManifestHash"]) {
+    if (start?.[field] !== end?.[field]) mismatchReasons.push(`${field}_changed_during_verification`);
+  }
+  if (start?.dirty === true) mismatchReasons.push("source_dirty_at_start");
+  if (end?.dirty === true) mismatchReasons.push("source_dirty_at_end");
+  const stable = mismatchReasons.every((reason) =>
+    ["source_dirty_at_start", "source_dirty_at_end"].includes(reason),
+  );
+  return {
+    stable,
+    releaseEligible:
+      stable && start?.captureOk === true && end?.captureOk === true,
+    cleanCommitEligible:
+      stable && start?.captureOk === true && end?.captureOk === true &&
+      start.dirty === false && end.dirty === false,
+    mismatchReasons,
+  };
+}
+
+export function compareReleaseSourceSnapshotSequence(entries) {
+  const snapshots = entries.map((entry, index) =>
+    entry?.snapshot
+      ? { label: entry.label ?? `snapshot_${index}`, snapshot: entry.snapshot }
+      : { label: `snapshot_${index}`, snapshot: entry },
+  );
+  if (snapshots.length < 2) {
+    return {
+      stable: false,
+      releaseEligible: false,
+      cleanCommitEligible: false,
+      mismatchReasons: ["source_snapshot_sequence_incomplete"],
+      windows: [],
+    };
+  }
+
+  const windows = [];
+  for (let index = 1; index < snapshots.length; index += 1) {
+    const previous = snapshots[index - 1];
+    const current = snapshots[index];
+    windows.push({
+      from: previous.label,
+      to: current.label,
+      ...compareReleaseSourceSnapshots(previous.snapshot, current.snapshot),
+    });
+  }
+  const mismatchReasons = [...new Set(windows.flatMap((window) => window.mismatchReasons))];
+  const capturesAvailable = snapshots.every((entry) => entry.snapshot?.captureOk === true);
+  const stable = windows.every((window) => window.stable);
+  return {
+    stable,
+    releaseEligible: stable && capturesAvailable,
+    cleanCommitEligible:
+      stable && capturesAvailable && snapshots.every((entry) => entry.snapshot.dirty === false),
+    mismatchReasons,
+    windows,
+  };
+}
+
+function installedProbeSkillPath(runtimeHomes, runtimeId) {
+  return path.join(runtimeHomes[runtimeId], "skills", RELEASE_PROBE_SKILL_ID, "SKILL.md");
+}
+
+export function runAllRuntimeGlobalInstallUpdateProbe({
+  cwd = process.cwd(),
+  installerScript = path.join(cwd, "scripts", "install-global-skills-all-runtimes.mjs"),
+  environment = process.env,
+  onProgress = null,
+} = {}) {
+  emitProgress(onProgress, {
+    event: "all_runtime_probe_start",
+    expectedDurationMs: RELEASE_PREFLIGHT_EXPECTED_DURATION_MS,
+    targets: [...ALL_RUNTIME_TARGETS],
+  });
+  const isolatedHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-release-targets-"));
+  const runtimeHomes = Object.fromEntries(
+    ALL_RUNTIME_TARGETS.map((runtimeId) => [runtimeId, path.join(isolatedHome, runtimeId)]),
+  );
+  for (const runtimeHome of Object.values(runtimeHomes)) mkdirSync(runtimeHome, { recursive: true });
+  const probeEnv = {
+    ...environment,
+    HOME: isolatedHome,
+    USERPROFILE: isolatedHome,
+    META_KIM_CLAUDE_HOME: runtimeHomes.claude,
+    META_KIM_CODEX_HOME: runtimeHomes.codex,
+    META_KIM_OPENCLAW_HOME: runtimeHomes.openclaw,
+    META_KIM_CURSOR_HOME: runtimeHomes.cursor,
+    META_KIM_SKIP_OPTIONAL_TOOLS: "1",
+  };
+  delete probeEnv.META_KIM_LOCAL_DEPENDENCY_ROOT;
+  const commands = [];
+  try {
+    for (const mode of ["install", "update"]) {
+      emitProgress(onProgress, {
+        event: "runtime_probe_mode_start",
+        mode,
+        expectedDurationMs: RELEASE_PROBE_MODE_TIMEOUT_MS,
+        targets: [...ALL_RUNTIME_TARGETS],
+      });
+      const commandArgs = [
+        installerScript,
+        ...(mode === "update" ? ["--update"] : []),
+        "--targets",
+        ALL_RUNTIME_TARGETS.join(","),
+        "--skills",
+        RELEASE_PROBE_SKILL_ID,
+        "--skip-plugins",
+        "--skip-inventory-refresh",
+      ];
+      const result = spawnSync(process.execPath, commandArgs, {
+        cwd,
+        encoding: "utf8",
+        windowsHide: true,
+        timeout: RELEASE_PROBE_MODE_TIMEOUT_MS,
+        env: probeEnv,
+      });
+      const commandRecord = {
+        mode,
+        status: result.status === 0 ? "passed" : "failed",
+        exitCode: result.status,
+        timedOut: result.error?.code === "ETIMEDOUT",
+        outputHash: sha256(`${result.stdout ?? ""}\n${result.stderr ?? ""}`),
+        artifactProof: [],
+        error: result.error?.message ?? null,
+      };
+      commands.push(commandRecord);
+      if (result.status !== 0 || result.error) {
+        const failure = {
+          status: "failed",
+          targets: [...ALL_RUNTIME_TARGETS],
+          modes: commands,
+          sourcePolicy: "external_declared_dependency_no_local_fallback",
+          artifactProof: [],
+          error: result.error?.message || result.stderr || result.stdout || `exit ${result.status}`,
+        };
+        emitProgress(onProgress, {
+          event: "runtime_probe_mode_complete",
+          mode,
+          status: "failed",
+          durationLimitMs: RELEASE_PROBE_MODE_TIMEOUT_MS,
+          error: failure.error,
+          nextAction:
+            "Check dependency access and runtime-home permissions, then rerun node scripts/run-verify-all.mjs.",
+        });
+        emitProgress(onProgress, {
+          event: "all_runtime_probe_complete",
+          status: "failed",
+          error: failure.error,
+        });
+        return failure;
+      }
+      commandRecord.artifactProof = ALL_RUNTIME_TARGETS.map((runtimeId) => {
+        const skillPath = installedProbeSkillPath(runtimeHomes, runtimeId);
+        const content = readFileSync(skillPath);
+        return {
+          runtime: runtimeId,
+          relativePath: path.relative(isolatedHome, skillPath).replaceAll("\\", "/"),
+          sha256: sha256(content),
+          bytes: content.length,
+        };
+      });
+      emitProgress(onProgress, {
+        event: "runtime_probe_mode_complete",
+        mode,
+        status: "passed",
+        artifactCount: commandRecord.artifactProof.length,
+      });
+    }
+
+    const artifactProof = commands.at(-1).artifactProof;
+    const proof = {
+      status: "passed",
+      targets: [...ALL_RUNTIME_TARGETS],
+      modes: commands,
+      sourcePolicy: "external_declared_dependency_no_local_fallback",
+      artifactProof,
+      identicalArtifactHash:
+        new Set(artifactProof.map((entry) => entry.sha256)).size === 1,
+      error: null,
+    };
+    emitProgress(onProgress, {
+      event: "all_runtime_probe_complete",
+      status: "passed",
+      artifactCount: artifactProof.length,
+    });
+    return proof;
+  } catch (error) {
+    const failure = {
+      status: "failed",
+      targets: [...ALL_RUNTIME_TARGETS],
+      modes: commands,
+      sourcePolicy: "external_declared_dependency_no_local_fallback",
+      artifactProof: [],
+      error: error.message,
+    };
+    emitProgress(onProgress, {
+      event: "all_runtime_probe_complete",
+      status: "failed",
+      error: error.message,
+      nextAction:
+        "Inspect the probe error and runtime-home permissions, then rerun node scripts/run-verify-all.mjs.",
+    });
+    return failure;
+  } finally {
+    rmSync(isolatedHome, { recursive: true, force: true });
+  }
+}
+
+export function runReleasePreflight({
+  captureSnapshot = () => captureReleaseSourceSnapshot(process.cwd()),
+  runProbe = ({ onProgress: probeProgress } = {}) =>
+    runAllRuntimeGlobalInstallUpdateProbe({ onProgress: probeProgress }),
+  onProgress = null,
+} = {}) {
+  emitProgress(onProgress, {
+    event: "release_preflight_start",
+    expectedDurationMs: RELEASE_PREFLIGHT_EXPECTED_DURATION_MS,
+    targets: [...ALL_RUNTIME_TARGETS],
+  });
+  const invocation = captureSnapshot();
+  const globalTargetProof = runProbe({ onProgress });
+  const postProbe = captureSnapshot();
+  const result = {
+    globalTargetProof,
+    sourceSnapshot: { invocation, postProbe },
+    sourceIntegrity: compareReleaseSourceSnapshotSequence([
+      { label: "invocation", snapshot: invocation },
+      { label: "post_probe", snapshot: postProbe },
+    ]),
+  };
+  emitProgress(onProgress, {
+    event: "release_preflight_complete",
+    status: globalTargetProof.status,
+    error: globalTargetProof.error ?? null,
+    nextAction:
+      globalTargetProof.status === "passed"
+        ? null
+        : "Resolve the reported install/update probe failure, then rerun node scripts/run-verify-all.mjs.",
+  });
+  return result;
+}
+
+export function computeReleaseGrade({
+  results,
+  startIndex,
+  sourceIntegrity = { releaseEligible: true },
+  globalTargetProof = { status: "passed" },
+}) {
   if (startIndex !== 0 || results.length < STAGES.length) return false;
+  if (sourceIntegrity.releaseEligible !== true || globalTargetProof.status !== "passed") return false;
   return STAGES.every(
     (stage, index) =>
       results[index]?.name === stage.name && results[index]?.status === "passed",
@@ -60,8 +418,19 @@ export function computeLiveCertified({
   );
 }
 
-export function computeVerificationClaims({ requested, results, startIndex }) {
-  const releaseGrade = computeReleaseGrade({ results, startIndex });
+export function computeVerificationClaims({
+  requested,
+  results,
+  startIndex,
+  sourceIntegrity,
+  globalTargetProof,
+}) {
+  const releaseGrade = computeReleaseGrade({
+    results,
+    startIndex,
+    sourceIntegrity,
+    globalTargetProof,
+  });
   const liveCertified = computeLiveCertified({
     requested,
     releaseGrade,
@@ -79,6 +448,40 @@ export function computeVerificationClaims({ requested, results, startIndex }) {
   };
 }
 
+function printReleasePreflightProgress(progress) {
+  const expectedMinutes = Math.max(
+    1,
+    Math.ceil((progress.expectedDurationMs ?? 0) / 60_000),
+  );
+  let message = null;
+  if (progress.event === "release_preflight_start") {
+    message =
+      `发布预检开始：将隔离验证四个运行时的安装和更新，预计最长约 ${expectedMinutes} 分钟；期间会持续显示进度。`;
+  } else if (progress.event === "all_runtime_probe_start") {
+    message = "正在准备隔离运行时目录和依赖探针。";
+  } else if (progress.event === "runtime_probe_mode_start") {
+    message =
+      `开始四运行时${progress.mode === "install" ? "安装" : "更新"}探针（最长约 ${expectedMinutes} 分钟）。`;
+  } else if (progress.event === "runtime_probe_mode_complete") {
+    if (progress.status === "passed") {
+      message =
+        `四运行时${progress.mode === "install" ? "安装" : "更新"}探针通过（${progress.artifactCount ?? 0} 个产物已核验）。`;
+    } else {
+      const detail = String(progress.error ?? "unknown error").trim().split(/\r?\n/u)[0];
+      message =
+        `四运行时${progress.mode === "install" ? "安装" : "更新"}探针失败：${detail}\n` +
+        `下一步：${progress.nextAction}`;
+    }
+  } else if (progress.event === "all_runtime_probe_complete" && progress.status === "failed") {
+    message = `隔离安装/更新预检未通过；请先处理上方失败原因。`;
+  } else if (progress.event === "release_preflight_complete") {
+    message = progress.status === "passed"
+      ? "发布预检完成，继续执行标准验证阶段。"
+      : `发布预检停止。下一步：${progress.nextAction}`;
+  }
+  if (message) process.stderr.write(`[verify-all] ${message}\n`);
+}
+
 async function main() {
 
 const args = process.argv.slice(2);
@@ -94,6 +497,14 @@ const reportPath =
   reportIdx >= 0 && args[reportIdx + 1] && !args[reportIdx + 1].startsWith("--")
     ? args[reportIdx + 1]
     : reportContext.resolveStatePath("verification-report.json");
+
+if (args.includes("--probe-all-runtime-global-targets")) {
+  const probe = runAllRuntimeGlobalInstallUpdateProbe({
+    onProgress: printReleasePreflightProgress,
+  });
+  process.stdout.write(`${JSON.stringify(probe, null, 2)}\n`);
+  process.exit(probe.status === "passed" ? 0 : 1);
+}
 
 function writeReport(report) {
   if (noReport) return;
@@ -166,10 +577,37 @@ function runWithTimeout(cmd, timeoutMs) {
   };
 }
 
-let failedStage = null;
 const startedAt = new Date().toISOString();
+const releasePreflight =
+  startIndex === 0
+    ? runReleasePreflight({ onProgress: printReleasePreflightProgress })
+    : (() => {
+        const invocation = captureReleaseSourceSnapshot(process.cwd());
+        return {
+          sourceSnapshot: { invocation, postProbe: invocation },
+          sourceIntegrity: compareReleaseSourceSnapshotSequence([
+            { label: "invocation", snapshot: invocation },
+            { label: "post_probe", snapshot: invocation },
+          ]),
+          globalTargetProof: {
+            status: "not_run_for_resumed_diagnostic",
+            targets: [...ALL_RUNTIME_TARGETS],
+            modes: [],
+            sourcePolicy: "external_declared_dependency_no_local_fallback",
+            artifactProof: [],
+            error: null,
+          },
+        };
+      })();
+const { globalTargetProof } = releasePreflight;
+const sourceSnapshotInvocation = releasePreflight.sourceSnapshot.invocation;
+const sourceSnapshotPostProbe = releasePreflight.sourceSnapshot.postProbe;
+let failedStage =
+  startIndex === 0 && globalTargetProof.status !== "passed"
+    ? { name: "all-runtime-global-install-update-probe" }
+    : null;
 const results = [];
-for (let i = startIndex; i < selectedStages.length; i += 1) {
+for (let i = startIndex; !failedStage && i < selectedStages.length; i += 1) {
   const stage = selectedStages[i];
   const label = `[${i + 1}/${selectedStages.length}] ${stage.name}`;
   const t0 = Date.now();
@@ -208,14 +646,22 @@ for (let i = startIndex; i < selectedStages.length; i += 1) {
   }
 }
 
+const sourceSnapshotEnd = captureReleaseSourceSnapshot(process.cwd());
+const sourceIntegrity = compareReleaseSourceSnapshotSequence([
+  { label: "invocation", snapshot: sourceSnapshotInvocation },
+  { label: "post_probe", snapshot: sourceSnapshotPostProbe },
+  { label: "final", snapshot: sourceSnapshotEnd },
+]);
 const verificationClaims = computeVerificationClaims({
   requested: liveCertifiedRequested,
   results,
   startIndex,
+  sourceIntegrity,
+  globalTargetProof,
 });
 const { releaseGrade, liveCertified, liveCertificationStatus } = verificationClaims;
 const report = {
-  ok: !failedStage,
+  ok: !failedStage && sourceIntegrity.stable,
   releaseGrade,
   liveCertified,
   liveCertificationStatus,
@@ -223,6 +669,10 @@ const report = {
   releaseGradeReason:
     startIndex > 0
       ? `Resumed verification is diagnostic only; release-grade requires one report containing all ${STAGES.length} standard stages.`
+      : globalTargetProof.status !== "passed"
+        ? "Release-grade requires successful isolated install and update artifacts for every declared global runtime target."
+      : !sourceIntegrity.stable
+        ? `Source changed during verification: ${sourceIntegrity.mismatchReasons.join(", ")}.`
       : !releaseGrade
         ? failedStage
         ? `Verification failed at ${failedStage.name}.`
@@ -239,6 +689,16 @@ const report = {
     : "Optional external live certification was not requested.",
   startedAt,
   completedAt: new Date().toISOString(),
+  releasePreflight: {
+    globalTargetProof,
+    sourceSnapshot: {
+      invocation: sourceSnapshotInvocation,
+      postProbe: sourceSnapshotPostProbe,
+      start: sourceSnapshotPostProbe,
+      end: sourceSnapshotEnd,
+      ...sourceIntegrity,
+    },
+  },
   startStage: selectedStages[startIndex]?.name ?? null,
   failedStage: failedStage?.name ?? null,
   stages: results,
@@ -251,6 +711,12 @@ if (failedStage) {
   console.error(`\n=== verify-all 停在 ${failedStage.name} ===`);
   process.exit(1);
 }
+if (!sourceIntegrity.stable) {
+  console.error(`  报告：${reportPath}`);
+  if (jsonMode) console.log(JSON.stringify(report, null, 2));
+  console.error("\n=== verify-all 源码在验证期间发生变化，不构成 release-grade ===");
+  process.exit(1);
+}
 if (jsonMode) console.log(JSON.stringify(report, null, 2));
 if (startIndex > 0) {
   console.log(
@@ -258,8 +724,15 @@ if (startIndex > 0) {
   );
 } else {
   console.log(
-    `\n=== verify-all 全过（共 ${selectedStages.length} 步）===`,
+    releaseGrade
+      ? `\n=== verify-all 全过（共 ${selectedStages.length} 步）===`
+      : `\n=== verify-all 阶段通过，但不构成 release-grade：${sourceIntegrity.mismatchReasons.join(", ")} ===`,
   );
+  if (releaseGrade && !sourceIntegrity.cleanCommitEligible) {
+    console.log(
+      "源码内容在整轮验证期间保持稳定，但工作树非 clean；提交或打标签前必须重新核对 commit tree 与本报告中的 tree/diff/package hashes。",
+    );
+  }
 }
 console.log(`报告：${reportPath}`);
 }

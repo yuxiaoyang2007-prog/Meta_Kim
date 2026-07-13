@@ -125,7 +125,7 @@ hasAll(JSON.stringify(contract), [
 ], "P-086 contract packet coverage");
 
 assert(pkg.scripts?.["meta:prd:prompt-first-flow:validate"]?.includes("validate-prompt-first-full-flow-stage-contract.mjs"), "package.json missing meta:prd:prompt-first-flow:validate");
-assert(pkg.scripts?.["meta:verify:governance"]?.includes("meta:prd:prompt-first-flow:validate"), "meta:verify:governance must include P-086 validator");
+assert(`${pkg.scripts?.["meta:verify:governance"] ?? ""} ${pkg.scripts?.["meta:verify:governance:core"] ?? ""}`.includes("meta:prd:prompt-first-flow:validate"), "meta:verify:governance must include P-086 validator");
 
 hasAll(prd, [
   "版本：v0.46",

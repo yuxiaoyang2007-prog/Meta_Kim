@@ -1165,7 +1165,7 @@
         "verificationCommand": "npm run meta:deps:compat",
         "lastVerifiedAt": "2026-07-11",
         "evidence": [
-          "D:/KimProject/GoalPro contains .agents/skills/goalpro/SKILL.md with a prompt-only Goal Prompt + Loop Prompt contract.",
+          "GoalPro revision 39adc8db765e0e4ad4df8d4ce02e7059fed69f26 contains .agents/skills/goalpro/SKILL.md with a prompt-only Goal Prompt + Loop Prompt contract.",
           "The inspected GoalPro HEAD was 39adc8db765e0e4ad4df8d4ce02e7059fed69f26."
         ]
       }

@@ -5,36 +5,57 @@ import { spawnSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateSetupCliArgs } from "../scripts/setup-cli-policy.mjs";
+import {
+  getStatusCliCopy,
+  resolveMetaKimCliLanguage,
+} from "../scripts/meta-kim-i18n.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const rawArgs = process.argv.slice(2);
 while (["meta-kim", "--"].includes(rawArgs[0])) rawArgs.shift();
 
-const HELP = `Meta_Kim ${packageJson.version}
+function languageValue(args) {
+  const equals = args.find((arg) => arg.startsWith("--lang="));
+  if (equals) return equals.slice("--lang=".length);
+  const index = args.indexOf("--lang");
+  return index >= 0 ? args[index + 1] ?? null : null;
+}
 
-Usage:
+function resolvedLanguage(args = rawArgs) {
+  return resolveMetaKimCliLanguage(languageValue(args)).language;
+}
+
+function statusCopy(args = rawArgs) {
+  return getStatusCliCopy(resolvedLanguage(args));
+}
+
+function renderHelp(language = resolvedLanguage()) {
+  const status = getStatusCliCopy(language);
+  return `Meta_Kim ${packageJson.version}
+
+${status.usageHeading}:
   meta-kim [install] [options]
   meta-kim update [options]
   meta-kim check [options]
-  meta-kim status [--json|--diff|--scope=global|project|both]
+  ${status.usage}
   meta-kim doctor
   meta-kim uninstall [--yes] [--deep] [--scope=global|project|both]
   meta-kim project bootstrap [--project-dir <dir>] [--dry-run|--apply] [--json]
 
-Global hooks are opt-in. Pass --with-global-hooks only when Meta_Kim may update
-Claude Code, Codex, or Cursor user-level hook wiring.
+${status.hooksNote}
 
-Options:
-  -h, --help       Show this help without changing files
-  -v, --version    Show the installed package version
+${status.optionsHeading}:
+  -h, --help       ${status.helpOption}
+  -v, --version    ${status.versionOption}
 `;
+}
 
 const commands = new Set(["install", "update", "check", "status", "doctor", "uninstall", "project"]);
 
-function fail(message) {
+function fail(message, copy = statusCopy()) {
   console.error(`meta-kim: ${message}`);
-  console.error("Run 'meta-kim --help' for usage.");
+  console.error(copy.usageHint);
   process.exit(2);
 }
 
@@ -46,14 +67,65 @@ function validateSetupOptions(args) {
   }
 }
 
-function validateScopeOptions(args) {
+function validateScopeOptions(args, copy = getStatusCliCopy("en")) {
   for (const arg of args) {
     if (!arg.startsWith("--scope=")) continue;
     const scope = arg.slice("--scope=".length);
     if (!["global", "project", "both"].includes(scope)) {
-      fail(`invalid scope '${scope}'; expected global, project, or both`);
+      fail(copy.invalidScope(scope), copy);
     }
   }
+}
+
+function statusOptionTokens(args) {
+  const tokens = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--lang") {
+      if (!args[index + 1] || args[index + 1].startsWith("--")) {
+        fail(statusCopy(args).missingLang, statusCopy(args));
+      }
+      index += 1;
+      continue;
+    }
+    tokens.push(arg);
+  }
+  return tokens;
+}
+
+function renderConciseStatus(payload, copy) {
+  const findings = Array.isArray(payload.findings) ? payload.findings : [];
+  const runtimes = [...new Set(findings.map((item) => item.runtime).filter(Boolean))];
+  return [
+    copy.title,
+    `${copy.scope}: ${payload.scope}`,
+    `${copy.found}: ${findings.length}`,
+    `${copy.manifest}: ${payload.manifest?.entries ?? copy.none}`,
+    `${copy.runtimes}: ${runtimes.length ? runtimes.join(", ") : copy.none}`,
+    `${copy.portable}: ${payload.machinePortable?.portable ? copy.yes : copy.no}`,
+    ...(!payload.machinePortable?.portable ? [copy.portabilityReason] : []),
+    "",
+    copy.uninstallDryRun,
+    copy.uninstallApply,
+    copy.details,
+    copy.machine,
+    copy.diff,
+  ].join("\n");
+}
+
+function runConciseStatus(args, copy) {
+  const forwarded = args.filter((arg) => !["--details", "--verbose"].includes(arg));
+  const result = spawnSync(process.execPath, [join(root, "scripts/footprint.mjs"), "--json", ...forwarded], {
+    cwd: root,
+    encoding: "utf8",
+    env: process.env,
+  });
+  if (result.status !== 0) {
+    if (result.stderr) process.stderr.write(result.stderr);
+    process.exit(result.status === null ? 1 : result.status);
+  }
+  process.stdout.write(`${renderConciseStatus(JSON.parse(result.stdout), copy)}\n`);
+  process.exit(0);
 }
 
 function run(relativeScript, args = []) {
@@ -66,7 +138,7 @@ function run(relativeScript, args = []) {
 }
 
 if (rawArgs.length === 1 && ["-h", "--help", "help"].includes(rawArgs[0])) {
-  console.log(HELP);
+  console.log(renderHelp());
   process.exit(0);
 }
 if (rawArgs.length === 1 && ["-v", "--version", "version"].includes(rawArgs[0])) {
@@ -92,11 +164,36 @@ switch (command) {
     run("setup.mjs", ["--check", ...commandArgs]);
     break;
   case "status":
-    if (commandArgs.some((arg) => !["--json", "--diff"].includes(arg) && !arg.startsWith("--scope="))) {
-      fail(`unknown status option '${commandArgs.find((arg) => !["--json", "--diff"].includes(arg) && !arg.startsWith("--scope="))}'`);
+    {
+    const copy = statusCopy(commandArgs);
+    const optionTokens = statusOptionTokens(commandArgs);
+    const unknown = optionTokens.find(
+      (arg) =>
+        !["--json", "--diff", "--details", "--verbose", "--help", "-h"].includes(arg) &&
+        !arg.startsWith("--scope=") &&
+        !arg.startsWith("--lang="),
+    );
+    if (unknown) {
+      fail(copy.unknown(unknown), copy);
     }
-    validateScopeOptions(commandArgs);
-    run("scripts/footprint.mjs", commandArgs);
+    validateScopeOptions(commandArgs, copy);
+    if (optionTokens.includes("--help") || optionTokens.includes("-h")) {
+      console.log(renderHelp(resolvedLanguage(commandArgs)));
+      process.exit(0);
+    }
+    if (
+      optionTokens.includes("--json") ||
+      optionTokens.includes("--diff") ||
+      optionTokens.includes("--details") ||
+      optionTokens.includes("--verbose")
+    ) {
+      run(
+        "scripts/footprint.mjs",
+        commandArgs.filter((arg) => !["--details", "--verbose"].includes(arg)),
+      );
+    }
+    runConciseStatus(commandArgs, copy);
+    }
     break;
   case "doctor":
     if (commandArgs.length > 0) fail(`unknown doctor option '${commandArgs[0]}'`);

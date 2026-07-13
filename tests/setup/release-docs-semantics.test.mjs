@@ -82,6 +82,8 @@ describe("release documentation semantics", () => {
         "canonical/runtime-assets/shared/lib/intent-verb-lexicon.mjs",
         "canonical/runtime-assets/shared/lib/policy-registry.mjs",
         "config/contracts/deliverable-type-profiles.json",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md",
       ]) {
         assert.equal(packageFiles.has(requiredFile), true, `package missing ${requiredFile}`);
       }

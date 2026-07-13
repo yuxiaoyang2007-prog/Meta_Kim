@@ -281,7 +281,9 @@ They cover:
 - optional premature-completion guard
 - spine-state cleanup
 
-Shared hook dependencies such as `bash-readonly-whitelist.mjs`, `spine-state.mjs`, `hook-i18n.mjs`, `skip-reminder.mjs`, and `utils.mjs` are copied as support files. They are not direct `.claude/settings.json` hook commands.
+Shared hook dependencies such as `project-root.mjs`, `bash-readonly-whitelist.mjs`, `spine-state.mjs`, `hook-i18n.mjs`, `skip-reminder.mjs`, and `utils.mjs` are copied as support files. They are not direct `.claude/settings.json` hook commands. `activate-meta-theory-spine.mjs` and `project-root.mjs` are one runtime dependency set and must always be projected together.
+
+The activation hook never treats a bare cwd as a project. It prefers a valid `CLAUDE_PROJECT_DIR`, then walks up from cwd for `.git` or `.meta-kim/state/default/project-bootstrap.json`, and only uses an absolute marker-backed runtime payload root when cwd is not already a recognized project. The resolved root is passed explicitly to post-copy; if no legitimate root exists, both spine-state and post-copy projection skip without writing.
 
 Hook behavior differs across runtimes. Do not assume Claude's `SubagentStart`-style behavior exists in Codex, OpenClaw, or Cursor unless the runtime adapter explicitly verifies it.
 

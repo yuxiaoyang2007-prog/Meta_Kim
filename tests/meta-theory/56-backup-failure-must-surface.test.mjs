@@ -1,7 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import {
+  executeSafeManagedFileTransaction,
+  sha256ManagedFile,
+} from "../../scripts/safe-managed-file-operations.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..", "..");
 
@@ -9,47 +21,93 @@ function read(rel) {
   return readFileSync(resolve(repoRoot, rel), "utf8");
 }
 
-function sliceFromFn(source, fnName, len = 900) {
-  const idx = source.indexOf(`function ${fnName}`);
-  assert.notEqual(idx, -1, `${fnName} not found`);
-  return source.slice(idx, idx + len);
-}
-
-test("56 — backupBeforeMerge exists in setup.mjs and surfaces failure", () => {
+test("56 — setup routes managed writes through the shared safe transaction", () => {
   const setup = read("setup.mjs");
-  assert.match(setup, /function backupBeforeMerge\s*\(/);
-  const slice = sliceFromFn(setup, "backupBeforeMerge");
-  assert.match(slice, /catch/, "backupBeforeMerge must catch its own errors");
   assert.match(
-    slice,
-    /warn|console\.(warn|error)/,
-    "backupBeforeMerge must warn (or console.warn/error) on failure, never silent",
+    setup,
+    /executeSafeManagedFileTransaction\s*\(/,
+    "setup managed writes must use the shared transaction boundary",
   );
 });
 
-test("56 — backupBeforeForce exists in install-mcp-memory-hooks.mjs and surfaces failure", () => {
+test("56 — MCP memory hook install and removal use the shared safe transaction", () => {
   const mcp = read("scripts/install-mcp-memory-hooks.mjs");
-  assert.match(mcp, /function backupBeforeForce\s*\(/);
-  const slice = sliceFromFn(mcp, "backupBeforeForce");
-  assert.match(slice, /catch/, "backupBeforeForce must catch its own errors");
-  assert.match(
-    slice,
-    /warn|console\.(warn|error)/,
-    "backupBeforeForce must warn (or console.warn/error) on failure, never silent",
+  const transactionCalls = (mcp.match(/executeSafeManagedFileTransaction\s*\(/g) || []).length;
+  assert.ok(
+    transactionCalls >= 2,
+    `install and removal must each call the shared transaction, found ${transactionCalls}`,
   );
 });
 
-test("56 — backup helpers are invoked at write sites (not dead code)", () => {
-  const setup = read("setup.mjs");
-  const mcp = read("scripts/install-mcp-memory-hooks.mjs");
-  const setupCalls = (setup.match(/backupBeforeMerge\s*\(/g) || []).length;
-  const mcpCalls = (mcp.match(/backupBeforeForce\s*\(/g) || []).length;
-  assert.ok(
-    setupCalls >= 2,
-    `backupBeforeMerge should have a definition + call sites, found ${setupCalls}`,
-  );
-  assert.ok(
-    mcpCalls >= 2,
-    `backupBeforeForce should have a definition + call site, found ${mcpCalls}`,
-  );
+test("56 — a fully verified rollback returns an explicit zero-residue recovery result", () => {
+  const root = mkdtempSync(join(tmpdir(), "meta-kim-backup-contract-"));
+  try {
+    const first = join(root, "first.txt");
+    const second = join(root, "second.txt");
+    writeFileSync(first, "first-old\n");
+    writeFileSync(second, "second-old\n");
+
+    const result = executeSafeManagedFileTransaction({
+      trustedRoot: root,
+      backupRoot: join(root, ".meta-kim", "backups"),
+      injectFailureAtCommit: 2,
+      operations: [
+        {
+          kind: "write",
+          relPath: "first.txt",
+          content: "first-new\n",
+          expectedOldHash: sha256ManagedFile(first),
+        },
+        {
+          kind: "write",
+          relPath: "second.txt",
+          content: "second-new\n",
+          expectedOldHash: sha256ManagedFile(second),
+        },
+      ],
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /injected_commit_failure/);
+    assert.equal(result.status, "rolled_back");
+    assert.equal(result.recovery, "recovered_rolled_back");
+    assert.equal(readFileSync(first, "utf8"), "first-old\n");
+    assert.equal(readFileSync(second, "utf8"), "second-old\n");
+    assert.deepEqual(result.backups, []);
+    assert.match(result.nextAction, /fully rolled back/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("56 — incomplete recovery preserves the journal and returns an actionable blocker", () => {
+  const root = mkdtempSync(join(tmpdir(), "meta-kim-recovery-evidence-"));
+  try {
+    const controlDir = join(root, ".meta-kim", "transactions");
+    const journalPath = join(controlDir, "managed-files.journal.json");
+    mkdirSync(controlDir, { recursive: true });
+    writeFileSync(journalPath, '{"schemaVersion":"invalid"}\n');
+
+    const result = executeSafeManagedFileTransaction({
+      trustedRoot: root,
+      backupRoot: join(root, ".meta-kim", "backups"),
+      operations: [
+        {
+          kind: "write",
+          relPath: "new.txt",
+          content: "new\n",
+        },
+      ],
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.status, "recovery_required");
+    assert.equal(result.reason, "invalid_transaction_journal");
+    assert.equal(result.journalPath, journalPath);
+    assert.equal(existsSync(journalPath), true);
+    assert.match(result.nextAction, /preserve the journal and backups/i);
+    assert.equal(existsSync(join(root, "new.txt")), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

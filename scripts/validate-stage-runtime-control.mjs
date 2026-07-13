@@ -144,7 +144,7 @@ function assertPrdAndPackage() {
     "package.json missing meta:prd:stage-runtime-control:validate",
   );
   assert(
-    pkg.scripts?.["meta:verify:governance"]?.includes(
+    `${pkg.scripts?.["meta:verify:governance"] ?? ""} ${pkg.scripts?.["meta:verify:governance:core"] ?? ""}`.includes(
       "meta:prd:stage-runtime-control:validate",
     ),
     "meta:verify:governance must include P-115 validator",

@@ -137,7 +137,7 @@ if (contract.status === "all_dossiers_ready") {
 }
 
 assert(pkg.scripts?.["meta:prd:source-map:validate"]?.includes("validate-prd-category-source-map.mjs"), "package.json missing meta:prd:source-map:validate");
-assert(pkg.scripts?.["meta:verify:governance"]?.includes("meta:prd:source-map:validate"), "meta:verify:governance must include PRD source map validator");
+assert(`${pkg.scripts?.["meta:verify:governance"] ?? ""} ${pkg.scripts?.["meta:verify:governance:core"] ?? ""}`.includes("meta:prd:source-map:validate"), "meta:verify:governance must include PRD source map validator");
 
 const prd = await readText("docs/ai-native-capability-gap-mvp-prd.zh-CN.md");
 for (const marker of [

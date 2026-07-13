@@ -69,7 +69,7 @@ function assertPacketStatus(report) {
   assert.equal(report.coreLoop.dynamicWorkflowRuntimePacket.status, "pass");
   assert.equal(report.coreLoop.peerAgentMeshPacket.status, "pass");
   assert.equal(report.coreLoop.agentTeamsPlaybookPacket.status, "pass");
-  assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "partial");
+  assert.equal(report.capabilityInvocationTruthPacket.status, "partial");
   assert.equal(report.coreLoop.userPerceptionPacket.status, "partial");
   assert.equal(report.coreLoop.productExperiencePacket.status, "partial");
   assert.equal(report.productExperiencePacket.status, "partial");
@@ -168,7 +168,7 @@ function assertVisibleMetaTheorySurface(report) {
   assert.ok(packet.requiredVisibleTopics.includes("orchestration"));
   assert.ok(packet.requiredVisibleTopics.includes("dynamic_workflow"));
   assert.ok(packet.requiredVisibleTopics.includes("capability_inventory_not_skill_only"));
-  assert.ok(packet.requiredVisibleTopics.includes("capability_invocation_truth"));
+  assert.ok(packet.requiredVisibleTopics.includes("capability_invocation_presentation"));
   assert.ok(packet.requiredVisibleTopics.includes("agent_teams_playbook"));
   assert.ok(packet.requiredVisibleTopics.includes("peer_agent_mesh"));
   assert.ok(packet.requiredVisibleTopics.includes("langgraph_style_control_graph"));
@@ -176,8 +176,32 @@ function assertVisibleMetaTheorySurface(report) {
   assert.ok(packet.capabilityInventory.nonSkillCapabilityTypeCount > 0);
   assert.equal(packet.dynamicWorkflow.status, "pass");
   assert.ok(packet.dynamicWorkflow.visibleRows.length > 0);
-  assert.equal(packet.capabilityInvocationTruth.status, "partial");
-  assert.ok(packet.capabilityInvocationTruth.visibleRows.length >= REQUIRED_INVOCATION_FAMILIES.length);
+  assert.ok(
+    [
+      "completed",
+      "called",
+      "called_with_failures",
+      "failed",
+      "denied",
+      "blocked",
+      "not_confirmed",
+      "unavailable",
+    ].includes(
+      packet.capabilityInvocationPresentation.executionState,
+    ),
+  );
+  assert.equal(packet.capabilityInvocationPresentation.executionState, "not_confirmed");
+  assert.match(packet.capabilityInvocationPresentation.userSummary, /当前聊天中的实际调用结果为准/);
+  assert.deepEqual(
+    Object.keys(packet.capabilityInvocationPresentation).sort(),
+    ["executionLabel", "executionState", "schemaVersion", "userSummary"],
+  );
+  assert.doesNotMatch(
+    packet.capabilityInvocationPresentation.userSummary,
+    /exact[_ -]?binding|live[_ -]?certification|provider|lane|精确(?:绑定|认证)|实时认证/i,
+  );
+  assert.equal(Object.hasOwn(packet, "capabilityInvocationTruth"), false);
+  assert.equal(Object.hasOwn(packet.capabilityInvocationPresentation, "rows"), false);
   assert.equal(packet.agentTeamsPlaybook.status, "pass");
   assert.equal(packet.agentTeamsPlaybook.selected, true);
   assert.ok(packet.agentTeamsPlaybook.waveCount >= 1);
@@ -187,11 +211,38 @@ function assertVisibleMetaTheorySurface(report) {
   assert.ok(packet.langGraph.nodeCount >= 8);
   assert.ok(packet.langGraph.edgeCount >= 7);
   assert.ok(packet.langGraph.checkpointCount >= 8);
-  assert.equal(report.runReportPanelContract.visibleMetaTheorySurface.status, "partial");
+  const panelSurface = report.runReportPanelContract.visibleMetaTheorySurface;
+  assert.equal(panelSurface.status, "partial");
+  assert.equal(Object.hasOwn(panelSurface, "capabilityInvocationTruth"), false);
+  assert.deepEqual(
+    Object.keys(panelSurface.capabilityInvocationPresentation).sort(),
+    ["executionLabel", "executionState", "schemaVersion", "userSummary"],
+  );
+}
+
+function assertFailurePresentationSemantics(report) {
+  const strictPresentation = report.capabilityInvocationPresentationPacket;
+  const visiblePresentation = report.visibleMetaTheorySurfacePacket.capabilityInvocationPresentation;
+  const failureDisposition = strictPresentation.failureDisposition;
+  if (failureDisposition) {
+    assert.ok(["failed", "denied", "blocked"].includes(failureDisposition));
+    assert.equal(visiblePresentation.executionState, failureDisposition);
+    assert.notEqual(visiblePresentation.executionState, "unavailable");
+  }
+  if (visiblePresentation.executionState === "unavailable") {
+    assert.equal(failureDisposition, null);
+    assert.equal(
+      report.runtimeSubagentInvocationPacket.availabilityDisposition,
+      "genuinely_unavailable",
+    );
+    assert.equal(strictPresentation.evidenceBoundary.successfulBindingCount, 0);
+    assert.equal(strictPresentation.evidenceBoundary.verifiedFailedBindingCount, 0);
+  }
 }
 
 function assertCapabilityInvocationTruth(report) {
-  const packet = report.coreLoop.capabilityInvocationTruthPacket;
+  const packet = report.capabilityInvocationTruthPacket;
+  assert.equal(report.coreLoop.capabilityInvocationTruthPacket, packet);
   assert.equal(packet.status, "partial");
   for (const state of [
     "invoked",
@@ -260,7 +311,17 @@ function assertCapabilityInvocationTruth(report) {
       .get("agent_teams_playbook")
       .mustNotClaimAs.includes("live_agent_team_created"),
   );
-  assert.equal(report.runReportPanelContract.capabilityInvocationTruth.status, "partial");
+  assert.equal(packet.rows.length >= REQUIRED_INVOCATION_FAMILIES.length, true);
+  assert.equal(report.capabilityInvocationTruthPacket, packet);
+  assert.equal(Object.hasOwn(report.runReportPanelContract, "capabilityInvocationTruth"), false);
+  assert.equal(
+    report.runReportPanelContract.capabilityInvocationPresentation.executionState,
+    "not_confirmed",
+  );
+  assert.deepEqual(
+    Object.keys(report.runReportPanelContract.capabilityInvocationPresentation).sort(),
+    ["executionLabel", "executionState", "schemaVersion", "userSummary"],
+  );
 }
 
 function assertInvocationProbes(report) {
@@ -302,24 +363,34 @@ function assertAgentTeamsPlaybook(report) {
 
 async function assertReadableReportShowsVisibleSurface(report) {
   const markdown = await readFile(report.paths.markdown, "utf8");
+  const visibleChrome = markdown.slice(markdown.indexOf("## 用户目标"));
   for (const marker of [
-    "## Meta-Theory 可见编排面",
-    "Dynamic Workflow",
-    "能力发现",
-    "Agent Teams Playbook",
-    "Peer Agent Mesh",
-    "LangGraph-style",
-    "自动化与人工决策边界",
-    "Automation assists; humans decide.",
-    "human_required",
-    "能力发现矩阵",
-    "真实能力调用状态",
-    "agent_subagent",
-    "agent_teams_playbook",
-    "selected_not_invoked",
+    "## 用户目标",
+    "## 工作协调与调用情况",
+    "调用记录",
+    "协作情况",
+    "工作流概览",
+    "## 阶段进展",
+    "Critical",
+    "Fetch",
+    "Thinking",
+    "Execution",
+    "Review",
+    "Verification",
+    "Evolution",
+    "## 验证与下一步",
   ]) {
     assert.match(markdown, new RegExp(marker), `readable report missing ${marker}`);
   }
+  assert.doesNotMatch(
+    visibleChrome,
+    /调用记录[^\n]*不可用/,
+    "a user-visible provider summary must not say unavailable when invocation is only awaiting evidence linkage",
+  );
+  assert.doesNotMatch(
+    visibleChrome,
+    /selected_not_invoked|capabilityInvocationTruthPacket\.rows|exact[_ -]?binding|live[_ -]?certification|provider|lane|精确(?:绑定|认证)|实时认证/i,
+  );
 }
 
 function assertProductExperience(report) {
@@ -430,6 +501,7 @@ function assertMcpSelfTest() {
 }
 
 function summarizeReport(report) {
+  const invocationTruth = report.capabilityInvocationTruthPacket;
   return {
     status: report.status,
     evidenceTier: report.coreLoop.productExperiencePacket.evidenceTier,
@@ -446,35 +518,26 @@ function summarizeReport(report) {
     productExperience: report.coreLoop.productExperiencePacket.status,
     visibleMetaTheorySurface: report.coreLoop.visibleMetaTheorySurfacePacket.status,
     capabilityInvocationTruth: {
-      status: report.coreLoop.capabilityInvocationTruthPacket.status,
-      states: report.coreLoop.capabilityInvocationTruthPacket.stateCounts,
-      callableInvocationCoverage:
-        report.coreLoop.capabilityInvocationTruthPacket.callableInvocationCoverage,
+      status: invocationTruth.status,
+      states: invocationTruth.stateCounts,
+      callableInvocationCoverage: invocationTruth.callableInvocationCoverage,
       realInvocationCoverage: {
-        status: report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
-        requiredFamilies:
-          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.requiredFamilies,
-        invokedFamilies:
-          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.invokedFamilies,
-        missingFamilies:
-          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingFamilies,
-        requiredBindingCount:
-          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.requiredBindings.length,
-        invokedBindingCount:
-          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.invokedBindings.length,
-        missingBindingCount:
-          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingBindings.length,
-        hostEvidenceCount:
-          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.hostEvidenceCount,
-        rejectedEvidenceCount:
-          report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.rejectedEvidenceCount,
+        status: invocationTruth.realInvocationCoverage.status,
+        requiredFamilies: invocationTruth.realInvocationCoverage.requiredFamilies,
+        invokedFamilies: invocationTruth.realInvocationCoverage.invokedFamilies,
+        missingFamilies: invocationTruth.realInvocationCoverage.missingFamilies,
+        requiredBindingCount: invocationTruth.realInvocationCoverage.requiredBindings.length,
+        invokedBindingCount: invocationTruth.realInvocationCoverage.invokedBindings.length,
+        missingBindingCount: invocationTruth.realInvocationCoverage.missingBindings.length,
+        hostEvidenceCount: invocationTruth.realInvocationCoverage.hostEvidenceCount,
+        rejectedEvidenceCount: invocationTruth.realInvocationCoverage.rejectedEvidenceCount,
       },
       appVisibleSubagentState:
-        report.coreLoop.capabilityInvocationTruthPacket.rows.find(
+        invocationTruth.rows.find(
           (row) => row.family === "app_visible_subagent",
         )?.state ?? "missing",
       agentTeamsPlaybookState:
-        report.coreLoop.capabilityInvocationTruthPacket.rows.find(
+        invocationTruth.rows.find(
           (row) => row.family === "agent_teams_playbook",
         )?.state ?? "missing",
     },
@@ -501,6 +564,7 @@ async function main() {
     assertCapabilityInvocationTruth(report);
     assertAgentTeamsPlaybook(report);
     assertVisibleMetaTheorySurface(report);
+    assertFailurePresentationSemantics(report);
     assertUserPerception(report);
     assertProductExperience(report);
     await assertReadableReportShowsVisibleSurface(report);
@@ -526,7 +590,7 @@ async function main() {
       ),
     );
     assert.equal(
-      negativeControlReport.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
+      negativeControlReport.capabilityInvocationTruthPacket.realInvocationCoverage.status,
       "partial",
     );
 

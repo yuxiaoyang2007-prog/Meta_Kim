@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync, promises as fs } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -12,7 +12,12 @@ import {
   openRunStateStore,
 } from "./capability-gap-mvp.mjs";
 import { writeCapabilityInventory } from "./build-capability-inventory.mjs";
-import { getReportLabelsForPath } from "./meta-kim-i18n.mjs";
+import {
+  getGovernedRunSurfaceLabels,
+  getReportLabelsForPath,
+  normalizeOutputLanguage,
+  resolveOutputLanguage,
+} from "./meta-kim-i18n.mjs";
 import { buildAgentProjectionTargets } from "./runtime-tool-profiles.mjs";
 import { getProfilePaths } from "./meta-kim-local-state.mjs";
 import {
@@ -42,7 +47,10 @@ const RUNTIME_TARGETS = ["claude", "codex", "cursor", "openclaw"];
 const WARDEN_APPROVAL_PACKET_SCHEMA_VERSION = "warden-approval-v0.1";
 const CONVERSATION_NOTICE_SCHEMA_VERSION = "conversation-notice-v0.1";
 const CONVERSATION_NOTICE_ADAPTER = "meta-theory-governed-execution-cli";
+const RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const SELECT_EXECUTION_ROUTE_SCRIPT = path.join(scriptDir, "select-execution-route.mjs");
+const WINDOWS_TRANSIENT_RENAME_ERRORS = new Set(["EACCES", "EBUSY", "EPERM"]);
+const WINDOWS_RENAME_RETRY_DELAYS_MS = Object.freeze([10, 25, 50, 100]);
 
 const RUNTIME_FAILURE_TAXONOMY = Object.freeze({
   pass: "pass",
@@ -813,6 +821,106 @@ function summarizeBusinessPhaseStatuses(businessPhasePlanPacket) {
 function stableId(prefix, seed) {
   const hash = createHash("sha1").update(String(seed ?? "")).digest("hex").slice(0, 12);
   return `${prefix}-${hash}`;
+}
+
+function uniqueRunId(taskFingerprint) {
+  return `meta-run-${taskFingerprint.slice(-12)}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+}
+
+function validateRunId(value, source = "runId") {
+  const runId = String(value ?? "").trim();
+  if (
+    !RUN_ID_RE.test(runId) ||
+    runId === "." ||
+    runId === ".." ||
+    runId.includes("/") ||
+    runId.includes("\\")
+  ) {
+    throw new Error(
+      `Invalid ${source}: use 1-128 ASCII letters, digits, dot, underscore, or hyphen; path separators and dot segments are forbidden.`,
+    );
+  }
+  return runId;
+}
+
+function resolveOutputFile(outputDir, fileName) {
+  const root = path.resolve(outputDir);
+  const resolved = path.resolve(root, fileName);
+  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
+    throw new Error(`Governed run path escapes output directory: ${fileName}`);
+  }
+  return resolved;
+}
+
+export async function renameWithTransientWindowsRetry(
+  sourcePath,
+  targetPath,
+  {
+    platform = process.platform,
+    rename = fs.rename,
+    retryDelaysMs = WINDOWS_RENAME_RETRY_DELAYS_MS,
+    sleep = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
+  } = {},
+) {
+  let retryIndex = 0;
+  while (true) {
+    try {
+      await rename(sourcePath, targetPath);
+      return;
+    } catch (error) {
+      const retryDelayMs = retryDelaysMs[retryIndex];
+      const retryable =
+        platform === "win32" &&
+        WINDOWS_TRANSIENT_RENAME_ERRORS.has(error?.code) &&
+        Number.isFinite(retryDelayMs) &&
+        retryDelayMs >= 0;
+      if (!retryable) throw error;
+      retryIndex += 1;
+      await sleep(retryDelayMs);
+    }
+  }
+}
+
+async function atomicWriteFile(filePath, content) {
+  const tempPath = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`,
+  );
+  try {
+    await fs.writeFile(tempPath, content);
+    await renameWithTransientWindowsRetry(tempPath, filePath);
+  } finally {
+    await fs.rm(tempPath, { force: true }).catch(() => {});
+  }
+}
+
+async function reserveExplicitRunId(reservationPath, { runId, taskFingerprint }) {
+  let handle;
+  try {
+    handle = await fs.open(reservationPath, "wx");
+    await handle.writeFile(
+      `${JSON.stringify(
+        {
+          schemaVersion: "governed-run-reservation-v0.1",
+          runId,
+          taskFingerprint,
+          status: "reserved_or_incomplete",
+          reservedAt: nowIso(),
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  } catch (error) {
+    if (error?.code === "EEXIST") {
+      throw new Error(
+        `Governed run '${runId}' already exists or is reserved by another process. Use an explicit overwrite only after verifying the existing run.`,
+      );
+    }
+    throw error;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
 }
 
 function textSha256(text) {
@@ -1623,16 +1731,46 @@ function cardDisplayName(labels, cardKey, fallback) {
   return labels.cardNames?.[cardKey] ?? fallback ?? cardKey;
 }
 
-function joinVisibleList(items, fallback) {
+function joinVisibleList(items, fallback, language = "zh-CN") {
   const cleaned = [...new Set((items ?? []).filter(Boolean))];
-  return cleaned.length > 0 ? cleaned.join("、") : fallback;
+  return cleaned.length > 0
+    ? cleaned.join(language === "zh-CN" || language === "ja-JP" ? "、" : ", ")
+    : fallback;
 }
 
-function joinNoticeSentence(parts) {
+function joinNoticeSentence(parts, language = "zh-CN") {
   const cleaned = parts
     .map((part) => String(part ?? "").trim().replace(/[。.!]+$/u, ""))
     .filter(Boolean);
-  return cleaned.length > 0 ? `${cleaned.join("；")}。` : "";
+  if (cleaned.length === 0) return "";
+  if (language === "zh-CN") return `${cleaned.join("；")}。`;
+  if (language === "ja-JP") return `${cleaned.join("。")}。`;
+  return `${cleaned.join("; ")}.`;
+}
+
+function localizedBusinessPhaseReason(phase, language) {
+  if (language === "zh-CN") return phase.statusReason;
+  const reasons = {
+    en: {
+      done: "completed with recorded evidence",
+      skipped: "skipped with a recorded reason",
+      blocked: "blocked until the named evidence or dependency is available",
+      pending: "waiting for user feedback or the next required input",
+    },
+    "ja-JP": {
+      done: "証拠を記録して完了",
+      skipped: "理由を記録してスキップ",
+      blocked: "必要な証拠または依存関係を待機",
+      pending: "ユーザーのフィードバックまたは次の入力を待機",
+    },
+    "ko-KR": {
+      done: "증거를 기록하고 완료",
+      skipped: "이유를 기록하고 건너뜀",
+      blocked: "필요한 증거 또는 의존성을 기다리는 중",
+      pending: "사용자 피드백 또는 다음 입력을 기다리는 중",
+    },
+  };
+  return reasons[language]?.[phase.status] ?? reasons.en[phase.status] ?? phase.status;
 }
 
 function buildUserFacingCardProgressNotices(cardPlanPacket, labels) {
@@ -1696,14 +1834,14 @@ function buildUserFacingCardSummary(cardPlanPacket, labels) {
     dealtLine: labels.cardVisibleSummary.dealtLine({
       eventCount,
       cardTypeCount,
-      activeCards: joinVisibleList(activeNames, none),
+      activeCards: joinVisibleList(activeNames, none, labels.htmlLang),
     }),
     inactiveLine: labels.cardVisibleSummary.inactiveLine({
-      inactiveCards: joinVisibleList(suppressedNames, none),
+      inactiveCards: joinVisibleList(suppressedNames, none, labels.htmlLang),
     }),
     userLine: labels.cardVisibleSummary.userLine({
-      userCards: joinVisibleList(userNames, none),
-      interruptCards: joinVisibleList(interruptNames, none),
+      userCards: joinVisibleList(userNames, none, labels.htmlLang),
+      interruptCards: joinVisibleList(interruptNames, none, labels.htmlLang),
       riskState,
       pauseState,
     }),
@@ -2114,7 +2252,12 @@ function buildBusinessFlowBlueprintPacket({ businessPhasePlanPacket, orchestrati
   };
 }
 
-function buildGovernanceStartReasonPacket({ orchestrationReport, businessPhasePlanPacket, cardPlanPacket }) {
+function buildGovernanceStartReasonPacket({
+  orchestrationReport,
+  businessPhasePlanPacket,
+  cardPlanPacket,
+  language = "zh-CN",
+}) {
   const capabilityCount = orchestrationReport.fetchEvidence.capabilityInventory.length;
   const workerTaskCount = orchestrationReport.workerTaskPackets.length;
   const phaseCount = businessPhasePlanPacket.phaseCount;
@@ -2122,22 +2265,44 @@ function buildGovernanceStartReasonPacket({ orchestrationReport, businessPhasePl
   const coveragePass = businessPhasePlanPacket.triggerStandard.coveragePass;
   const cardEventCount = cardPlanPacket.visibleSummary.eventCount;
   const cardTypeCount = cardPlanPacket.visibleSummary.cardTypeCount;
-  const spineReason =
-    `触发 8 阶段：这是可执行治理任务，已发现 ${capabilityCount} 类能力和 ${workerTaskCount} 个工作单元，需要先锁意图、查证据、定路线，再执行审查验证。`;
-  const workflowReason =
-    `触发 11 阶段：本次要闭合交付链，${phaseCount} 个业务阶段已按触发规则评分，最低评分 ${minimumScore}，阈值 80，覆盖=${coveragePass ? "通过" : "未通过"}。`;
-  const cardReason =
-    `触发发牌：本轮生成 ${cardEventCount} 次发牌事件，涉及 ${cardTypeCount} 类牌；最低评分 ${cardPlanPacket.dealStandard.minimumScore}，阈值 ${cardPlanPacket.dealStandard.passThreshold}，覆盖=${cardPlanPacket.dealStandard.coveragePass ? "通过" : "未通过"}。`;
+  const copies = {
+    en: {
+      summary: "Entering Meta-Theory: this task needs governed closure, not direct execution alone.",
+      spine: `8-stage spine triggered: ${capabilityCount} capability types and ${workerTaskCount} work units require intent, evidence, route selection, execution, review, and verification.`,
+      workflow: `11-phase workflow triggered: ${phaseCount} phases scored; minimum ${minimumScore}, threshold 80, coverage=${coveragePass ? "pass" : "fail"}.`,
+      cards: `Card decisions triggered: ${cardEventCount} event(s), ${cardTypeCount} card type(s); minimum ${cardPlanPacket.dealStandard.minimumScore}, threshold ${cardPlanPacket.dealStandard.passThreshold}, coverage=${cardPlanPacket.dealStandard.coveragePass ? "pass" : "fail"}.`,
+    },
+    "zh-CN": {
+      summary: "进入 Meta-Theory：任务需要治理闭环，不只是直接执行。",
+      spine: `触发 8 阶段：这是可执行治理任务，已发现 ${capabilityCount} 类能力和 ${workerTaskCount} 个工作单元，需要先锁意图、查证据、定路线，再执行审查验证。`,
+      workflow: `触发 11 阶段：本次要闭合交付链，${phaseCount} 个业务阶段已按触发规则评分，最低评分 ${minimumScore}，阈值 80，覆盖=${coveragePass ? "通过" : "未通过"}。`,
+      cards: `触发发牌：本轮生成 ${cardEventCount} 次发牌事件，涉及 ${cardTypeCount} 类牌；最低评分 ${cardPlanPacket.dealStandard.minimumScore}，阈值 ${cardPlanPacket.dealStandard.passThreshold}，覆盖=${cardPlanPacket.dealStandard.coveragePass ? "通过" : "未通过"}。`,
+    },
+    "ja-JP": {
+      summary: "Meta-Theory に入ります。このタスクは直接実行だけでなく、統制された完結が必要です。",
+      spine: `8 ステージを開始: ${capabilityCount} 種類の能力と ${workerTaskCount} 件の作業単位について、意図、証拠、経路、実行、レビュー、検証を管理します。`,
+      workflow: `11 フェーズを開始: ${phaseCount} フェーズを評価、最低 ${minimumScore}、しきい値 80、カバレッジ=${coveragePass ? "合格" : "不合格"}。`,
+      cards: `カード判断を開始: ${cardEventCount} 件、${cardTypeCount} 種類。最低 ${cardPlanPacket.dealStandard.minimumScore}、しきい値 ${cardPlanPacket.dealStandard.passThreshold}、カバレッジ=${cardPlanPacket.dealStandard.coveragePass ? "合格" : "不合格"}。`,
+    },
+    "ko-KR": {
+      summary: "Meta-Theory 를 시작합니다. 이 작업은 단순 실행이 아니라 거버넌스 기반 마감이 필요합니다.",
+      spine: `8단계 시작: ${capabilityCount}개 능력 유형과 ${workerTaskCount}개 작업 단위의 의도, 증거, 경로, 실행, 리뷰, 검증을 관리합니다.`,
+      workflow: `11단계 시작: ${phaseCount}개 단계를 평가했으며 최저 ${minimumScore}, 기준 80, 커버리지=${coveragePass ? "통과" : "실패"}.`,
+      cards: `카드 판단 시작: ${cardEventCount}개 이벤트, ${cardTypeCount}개 유형. 최저 ${cardPlanPacket.dealStandard.minimumScore}, 기준 ${cardPlanPacket.dealStandard.passThreshold}, 커버리지=${cardPlanPacket.dealStandard.coveragePass ? "통과" : "실패"}.`,
+    },
+  };
+  const localized = copies[language] ?? copies.en;
   return {
     schemaVersion: "governance-start-reason-v0.1",
     status: "pass",
     audience: "user",
     placement: "run_start",
     maxLineCharacters: 120,
-    summary: "进入 Meta-Theory：任务需要治理闭环，不只是直接执行。",
-    spineReason,
-    workflowReason,
-    cardReason,
+    language,
+    summary: localized.summary,
+    spineReason: localized.spine,
+    workflowReason: localized.workflow,
+    cardReason: localized.cards,
     evidenceRefs: [
       "fetchEvidence.capabilityInventory",
       "workerTaskPackets",
@@ -2156,6 +2321,62 @@ function renderReportList(label, ...args) {
   return Array.isArray(value) ? value : [String(value)];
 }
 
+function progressEvent({ runId, stage, status, reason, owner = null, details = {} }) {
+  return {
+    schemaVersion: "conversation-progress-event-v0.1",
+    eventKind: "coarse_snapshot",
+    eventId: stableId("conversation-progress", `${runId}-${stage}-${status}-${nowIso()}`),
+    runId,
+    stage,
+    status,
+    reason,
+    owner,
+    details,
+    occurredAt: nowIso(),
+  };
+}
+
+function renderConversationProgressEvent(event, labels, surfaceLabels, first = false) {
+  const prefix = first ? `${labels.conversationNotice.title}: ` : "";
+  return `${prefix}[${event.stage}] ${event.reason}`;
+}
+
+async function publishConversationProgress({
+  event,
+  events,
+  labels,
+  surfaceLabels,
+  enabled,
+  onConversationProgress,
+}) {
+  const text = renderConversationProgressEvent(
+    event,
+    labels,
+    surfaceLabels,
+    events.length === 1,
+  );
+  const enrichedEvent = { ...event, text, textSha256: textSha256(text) };
+  events.push(enrichedEvent);
+  if (!enabled || typeof onConversationProgress !== "function") return;
+  await onConversationProgress(enrichedEvent);
+}
+
+function localizedHostObservationBoundary(language) {
+  const messages = {
+    "zh-CN": "聊天可见性：必须由宿主主线程中的助手消息逐条证明；stderr 或 API 回调只算传输，不算用户已经看见。",
+    "ja-JP": "チャット表示の証明には、ホストのメインスレッド上のアシスタントメッセージ観測が必要です。stderr/API コールバックは転送であり、表示完了の証明ではありません。",
+    "ko-KR": "채팅 표시 여부는 호스트 기본 스레드의 어시스턴트 메시지 관찰로 증명해야 합니다. stderr/API 콜백은 전송일 뿐 사용자 표시 완료 증거가 아닙니다.",
+    "en-US": "Chat visibility requires assistant-message observation in the host main thread; stderr or API callbacks are transport only, not proof that the user saw it.",
+  };
+  return messages[language] ?? messages["en-US"];
+}
+
+function conversationNoticeOutputBoundary(channel) {
+  if (channel === "stderr") return "stderr_progress_channel";
+  if (channel === "api_callback") return "api_callback_progress_channel";
+  return `transport:${String(channel ?? "unknown")}`;
+}
+
 function buildConversationNotice({
   orchestrationReport,
   runtimeEvidence,
@@ -2163,58 +2384,134 @@ function buildConversationNotice({
   governanceStartReasonPacket,
   businessPhasePlanPacket,
   cardPlanPacket,
+  progressEvents = [],
+  surfaceSnapshot = null,
+  artifactStatus = "partial",
+  partialReasons = [],
   emitConversationNotice = false,
-  conversationNoticeChannel = "stdout",
+  conversationNoticeChannel = "api_callback",
   conversationNoticeAdapter = CONVERSATION_NOTICE_ADAPTER,
 }) {
   const capabilityCount = orchestrationReport.fetchEvidence.capabilityInventory.length;
   const workerTaskCount = orchestrationReport.workerTaskPackets.length;
   const synthesisOwner = orchestrationReport.orchestrationTaskBoardPacket.synthesisOwner;
+  const surfaceLabels = getGovernedRunSurfaceLabels(labels.htmlLang);
+  const copy = surfaceLabels.notice;
   const laneSummary = [
     ...new Set(
       orchestrationReport.workerTaskPackets
-        .map((packet) => packet.businessFlowLaneLabel ?? packet.roleDisplayName)
+        .map((packet) =>
+          labels.htmlLang === "zh-CN"
+            ? packet.businessFlowLaneLabel ?? packet.roleDisplayName
+            : packet.roleDisplayName ?? packet.businessFlowLaneId,
+        )
         .filter(Boolean)
     ),
-  ].join("、");
+  ].join(labels.htmlLang === "zh-CN" ? "、" : ", ");
   const phaseSummary = summarizeBusinessPhaseStatuses(businessPhasePlanPacket);
+  const currentPhase = businessPhasePlanPacket?.closure?.currentPhase ?? "missing";
+  const currentStatus = businessPhasePlanPacket?.closure?.currentStatus ?? "missing";
+  const localizedCurrentLine =
+    labels.htmlLang === "zh-CN"
+      ? phaseSummary.currentLine
+      : `${currentPhase}=${currentStatus}`;
+  const localizedBlockedLine =
+    labels.htmlLang === "zh-CN"
+      ? phaseSummary.blockedLine
+      : (businessPhasePlanPacket?.phases ?? [])
+          .filter((phase) => phase.status === "blocked")
+          .map((phase) => phase.phase)
+          .join(", ") || "none";
   const cardSummary = buildUserFacingCardSummary(cardPlanPacket, labels);
+  const phaseReasonLines = (businessPhasePlanPacket?.phases ?? []).map(
+    (phase) =>
+      `${phase.phase}=${phase.status}: ${localizedBusinessPhaseReason(phase, labels.htmlLang)}`,
+  );
+  const surface = surfaceSnapshot ?? {
+    providerInvocationState: "selected_not_invoked",
+    providerBindings: [],
+    meshMode: "planned_structural",
+    peerCount: workerTaskCount,
+    handoffCount: workerTaskCount,
+    nodeCount: TRACE_SPINE.length + workerTaskCount,
+    edgeCount: Math.max(TRACE_SPINE.length - 1, 0),
+    state: "structural_ready",
+    checkpointCount: 0,
+  };
+  const blocks = [
+    {
+      id: "progress",
+      title: copy.progress,
+      fields: ["stage", "currentWork", "cardDecisions"],
+      lines: [
+        `${copy.startReason}: ${governanceStartReasonPacket.summary}`,
+        `${copy.spine}: ${copy.spineDetail}`,
+        `${copy.workflow}: ${copy.workflowDetail}`,
+        `${copy.workflowStatus}: ${copy.workflowDetail}`,
+        `${copy.currentStage}: ${copy.currentDetail}`,
+        `${copy.card}: ${copy.cardDetail}`,
+        `${labels.conversationNotice.stageProgress}: ${labels.conversationNotice.stageProgressDetail}`,
+      ],
+    },
+    {
+      id: "route",
+      title: copy.route,
+      fields: ["owner", "capability", "handoff"],
+      lines: [
+        `${labels.conversationNotice.route}: ${labels.conversationNotice.routeDetail(capabilityCount)}`,
+        `${copy.businessFlow}: ${copy.businessFlowFallback}`,
+        `${surfaceLabels.report.owner}: ${surfaceLabels.report.coordinator}`,
+        surface.providerPresentationSummary
+          ? `${surfaceLabels.report.providers}: ${surface.providerPresentationSummary}`
+          : `${surfaceLabels.report.providers}: state=${surface.providerInvocationState}; selected=${(surface.providerBindings ?? []).join(", ") || "none"}`,
+        `${surfaceLabels.report.mesh}: ${surfaceLabels.report.collaborationDetail(surface.peerCount, surface.handoffCount)}`,
+        `${surfaceLabels.report.control}: ${surfaceLabels.report.controlDetail(surface.nodeCount, surface.edgeCount, surface.checkpointCount)}`,
+        copy.visibleSurface,
+        `${labels.conversationNotice.handoff}: ${surfaceLabels.report.collaborationDetail(workerTaskCount, surface.handoffCount)}`,
+      ],
+    },
+    {
+      id: "closure",
+      title: copy.closure,
+      fields: ["result", "riskOrBlocker", "verification", "nextAction"],
+      lines: [
+        `${copy.result}: ${copy.resultDetail(artifactStatus)}`,
+        `${copy.risk}: ${copy.riskDetail((businessPhasePlanPacket?.phases ?? []).filter((phase) => phase.status === "blocked").length)}`,
+        `${copy.blockedStage}: ${copy.riskDetail((businessPhasePlanPacket?.phases ?? []).filter((phase) => phase.status === "blocked").length)}`,
+        localizedHostObservationBoundary(labels.htmlLang),
+        `${labels.conversationNotice.verification}: ${copy.verificationDetail(artifactStatus)}`,
+        `${copy.next}: ${copy.nextDetail}`,
+      ],
+    },
+  ];
+  const progressLines = progressEvents.map(
+    (event, index) =>
+      event.text ?? renderConversationProgressEvent(event, labels, surfaceLabels, index === 0),
+  );
+  const aggregateLines = blocks.flatMap((block) => [
+    `- ${block.title}`,
+    ...block.lines.map((line) => `  ${line}`),
+  ]);
   const lines = [
-    `${labels.conversationNotice.title}: ${labels.plainLanguageSummary}`,
-    `- 开始原因: ${governanceStartReasonPacket.summary}`,
-    `- 8 阶段: ${governanceStartReasonPacket.spineReason}`,
-    `- 11 阶段: ${governanceStartReasonPacket.workflowReason}`,
-    `- 11阶段状态: ${phaseSummary.groupLine}`,
-    `- 当前阶段: ${phaseSummary.currentLine}`,
-    `- 阻塞阶段: ${phaseSummary.blockedLine}`,
-    `- 发牌: ${governanceStartReasonPacket.cardReason}`,
-    `- ${labels.conversationNotice.stageProgress}: ${labels.conversationNotice.stageProgressDetail}`,
-    `- ${cardSummary.progressSectionTitle}:`,
-    ...cardSummary.progressNotices.flatMap((notice) => [
-      `  ${notice.stageLine}`,
-      `  ${notice.dealLine}`,
-    ]),
-    `- 发牌摘要: ${cardSummary.dealtLine}`,
-    `- ${labels.cardVisibleSummary.userFocusLabel}: ${joinNoticeSentence([
-      cardSummary.userLine,
-      cardSummary.repeatPolicy,
-      cardSummary.nextLine,
-      cardSummary.nativeChoiceBoundary,
-    ])}`,
-    `- ${labels.conversationNotice.route}: ${labels.conversationNotice.routeDetail(capabilityCount)}`,
-    `- 业务流: ${laneSummary || "按当前任务动态拆分执行 lane"}`,
-    "- Meta-Theory visible surface: orchestration, Dynamic Workflow, capability inventory beyond Skill, capability invocation truth, Peer Agent Mesh, and LangGraph-style graph must be shown in the readable report.",
-    `- ${labels.conversationNotice.handoff}: ${labels.conversationNotice.handoffDetail(
-      workerTaskCount,
-      synthesisOwner,
-      laneSummary
-    )}`,
-    `- ${labels.conversationNotice.verification}: ${labels.conversationNotice.verificationDetail(
-      runtimeEvidence.status
-    )}`,
+    ...(progressLines.length > 0
+      ? progressLines
+      : [`${labels.conversationNotice.title}: ${labels.plainLanguageSummary}`]),
+    ...aggregateLines,
   ];
   const text = lines.join("\n");
   const hash = textSha256(text);
+  const aggregateText = aggregateLines.join("\n");
+  const hostObservationExpectations = [
+    ...progressEvents.map((event, index) => {
+      const progressText =
+        event.text ?? renderConversationProgressEvent(event, labels, surfaceLabels, index === 0);
+      return {
+        stage: event.stage,
+        textSha256: event.textSha256 ?? textSha256(progressText),
+      };
+    }),
+    { stage: "Aggregate", textSha256: textSha256(aggregateText) },
+  ];
   const emitted = emitConversationNotice === true;
   return {
     schemaVersion: CONVERSATION_NOTICE_SCHEMA_VERSION,
@@ -2224,12 +2521,17 @@ function buildConversationNotice({
     adapter: emitted ? conversationNoticeAdapter : null,
     emittedAt: emitted ? new Date().toISOString() : null,
     language: labels.htmlLang,
+    blockCount: blocks.length,
+    blocks,
+    progressEvents,
     lineCount: lines.length,
     text,
+    aggregateText,
+    hostObservationExpectations,
     textSha256: hash,
     emittedTextSha256: emitted ? hash : null,
-    evidenceKind: emitted ? "adapter_emitted_notice" : "not_emitted",
-    outputBoundary: emitted ? "stdout_before_summary_json" : null,
+    evidenceKind: emitted ? "transport_emitted_notice" : "not_emitted",
+    outputBoundary: emitted ? conversationNoticeOutputBoundary(conversationNoticeChannel) : null,
     routeSummary: {
       capabilityCount,
       workerTaskCount,
@@ -2238,6 +2540,46 @@ function buildConversationNotice({
       businessPhaseSummary: phaseSummary,
       cardSummary,
     },
+  };
+}
+
+function evaluateHostAssistantMessageEvidence(input, expectations) {
+  let parsed = input;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      parsed = null;
+    }
+  }
+  const records = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.observations) ? parsed.observations : [];
+  const eligible = records.filter(
+    (record) =>
+      record?.mainThreadChat === true &&
+      record?.resultStatus === "completed" &&
+      typeof record?.sessionId === "string" &&
+      record.sessionId.length > 0 &&
+      typeof record?.messageId === "string" &&
+      record.messageId.length > 0 &&
+      typeof record?.eventId === "string" &&
+      record.eventId.length > 0 &&
+      /^[a-f0-9]{64}$/u.test(record?.textSha256 ?? ""),
+  );
+  const sessions = new Set(eligible.map((record) => record.sessionId));
+  const matches = expectations.map((expectation) =>
+    eligible.filter((record) => record.textSha256 === expectation.textSha256),
+  );
+  return {
+    status: "host_observation_required",
+    reason:
+      input == null
+        ? "host_assistant_message_evidence_missing"
+        : "runner_host_observation_is_diagnostic_only",
+    sessionId: null,
+    matchedCount: matches.filter((items) => items.length === 1).length,
+    expectedCount: expectations.length,
+    evidenceRefs: [],
+    diagnosticSessionCount: sessions.size,
   };
 }
 
@@ -2280,21 +2622,24 @@ function buildUserExperienceNotice({
     labels.userExperienceNotice.signals.verification(runtimeEvidence.status),
   ];
   const noticeEmitted = conversationNotice?.emitted === true;
+  const noticeObserved = conversationNotice?.hostObservation?.status === "pass";
 
   return {
     schemaVersion: "user-experience-notice-v0.1",
-    status: noticeEmitted ? "ready" : "partial",
-    primarySurface: noticeEmitted ? "localized_conversation_notice" : "user_readable_run_report",
-    pendingPrimarySurface: noticeEmitted ? null : "localized_conversation_notice",
+    status: noticeObserved ? "ready" : "partial",
+    primarySurface: noticeObserved ? "localized_conversation_notice" : "user_readable_run_report",
+    pendingPrimarySurface: noticeObserved ? null : "localized_conversation_notice_host_observation_required",
     secondarySurface: "user_readable_run_report",
     conversationNoticeEmitted: noticeEmitted,
-    statusReason: noticeEmitted
+    conversationNoticeObserved: noticeObserved,
+    hostObservationStatus: conversationNotice?.hostObservation?.status ?? "host_observation_required",
+    statusReason: noticeObserved
       ? labels.userExperienceNotice.emittedStatusReason(
           conversationNotice.channel,
           conversationNotice.adapter,
           conversationNotice.textSha256
         )
-      : labels.userExperienceNotice.partialStatusReason,
+      : `${labels.userExperienceNotice.partialStatusReason} ${localizedHostObservationBoundary(labels.htmlLang)}`,
     conversationNoticeEvidence: noticeEmitted
       ? {
           schemaVersion: conversationNotice.schemaVersion,
@@ -2507,6 +2852,65 @@ function buildStageOperationPlan({
   };
 }
 
+function buildLocalizedGovernedRunReport({
+  runId,
+  task,
+  artifactStatus,
+  orchestrationReport,
+  runtimeEvidence,
+  writebackFlow,
+  governanceStartReasonPacket,
+  businessPhasePlanPacket,
+  stageOperationPlan,
+  visibleMetaTheorySurfacePacket,
+  capabilityInvocationTruthPacket,
+  capabilityInvocationPresentationPacket,
+  productExperiencePacket,
+  labels,
+}) {
+  const surface = getGovernedRunSurfaceLabels(labels.htmlLang);
+  const report = surface.report;
+  const invocationCopy = surface.invocationPresentation;
+  const mesh = visibleMetaTheorySurfacePacket?.peerAgentMesh ?? {};
+  const control = visibleMetaTheorySurfacePacket?.langGraph ?? {};
+  const stageNarratives = {
+    en: ["Critical: confirming the goal and boundaries.", "Fetch: checking evidence and available capabilities.", "Thinking: organizing the route and responsibilities.", "Execution: preparing or carrying out the selected work.", "Review: checking quality, risk, and clarity.", "Verification: checking the result against the acceptance standard.", "Evolution: recording the reusable conclusion when appropriate."],
+    "zh-CN": ["Critical：确认目标与边界。", "Fetch：核对证据与可用能力。", "Thinking：整理路线与职责。", "Execution：准备或执行选定工作。", "Review：检查质量、风险与可读性。", "Verification：按验收标准核对结果。", "Evolution：在适合时记录可复用结论。"],
+    "ja-JP": ["Critical：目標と境界を確認します。", "Fetch：証拠と利用可能な機能を確認します。", "Thinking：ルートと担当を整理します。", "Execution：選択した作業を準備または実行します。", "Review：品質、リスク、読みやすさを確認します。", "Verification：受け入れ基準に照らして結果を確認します。", "Evolution：必要に応じて再利用可能な結論を記録します。"],
+    "ko-KR": ["Critical: 목표와 경계를 확인합니다.", "Fetch: 증거와 사용 가능한 기능을 확인합니다.", "Thinking: 경로와 책임을 정리합니다.", "Execution: 선택한 작업을 준비하거나 실행합니다.", "Review: 품질, 위험, 가독성을 확인합니다.", "Verification: 승인 기준에 따라 결과를 확인합니다.", "Evolution: 필요하면 재사용 가능한 결론을 기록합니다."],
+  }[labels.htmlLang] ?? [];
+  const verificationSentence = runtimeEvidence.status === "pass"
+    ? { en: "Verification checks completed successfully.", "zh-CN": "验证检查已完成。", "ja-JP": "検証チェックは完了しました。", "ko-KR": "검증 확인을 완료했습니다." }[labels.htmlLang]
+    : { en: "Verification still needs additional evidence.", "zh-CN": "验证仍需补充证据。", "ja-JP": "検証には追加の証拠が必要です。", "ko-KR": "검증에 추가 증거가 필요합니다." }[labels.htmlLang];
+  return [
+    `# ${labels.governedExecutionReportTitle}`,
+    "",
+    `${labels.inputTask}: ${task}`,
+    "",
+    `## ${report.goal}`,
+    "",
+    `- ${surface.notice.resultDetail(artifactStatus)}`,
+    `- ${surface.notice.riskDetail((businessPhasePlanPacket?.phases ?? []).filter((phase) => phase.status === "blocked").length)}`,
+    "",
+    `## ${report.orchestration}`,
+    "",
+    `- ${report.owner}: ${report.coordinator}`,
+    `- ${report.providers}: ${capabilityInvocationPresentationPacket?.userSummary ?? invocationCopy.userSummary("not_confirmed", invocationCopy.executionStates.not_confirmed)}`,
+    `- ${report.mesh}: ${report.collaborationDetail(mesh.peerCount ?? 0, mesh.handoffCount ?? 0)}`,
+    `- ${report.control}: ${report.controlDetail(control.nodeCount ?? 0, control.edgeCount ?? 0, control.checkpointCount ?? 0)}`,
+    "",
+    `## ${report.stages}`,
+    "",
+    ...stageNarratives.map((line) => `- ${line}`),
+    "",
+    `## ${report.verification}`,
+    "",
+    `- ${verificationSentence}`,
+    `- ${report.next}: ${surface.notice.nextDetail}`,
+    "",
+  ].join("\n");
+}
+
 function buildUserReadableRunReport({
   runId,
   task,
@@ -2522,6 +2926,7 @@ function buildUserReadableRunReport({
   stageOperationPlan,
   visibleMetaTheorySurfacePacket,
   capabilityInvocationTruthPacket,
+  capabilityInvocationPresentationPacket,
   productExperiencePacket,
   markdownPath,
 }) {
@@ -2529,6 +2934,39 @@ function buildUserReadableRunReport({
   const sectionLabels = labels.sections;
   const toolList = labels.toolList(labels.toolNames);
   const cardSummary = buildUserFacingCardSummary(cardPlanPacket, labels);
+  return buildLocalizedGovernedRunReport({
+      runId,
+      task,
+      artifactStatus,
+      orchestrationReport,
+      runtimeEvidence,
+      writebackFlow,
+      governanceStartReasonPacket,
+      businessPhasePlanPacket,
+      stageOperationPlan,
+      visibleMetaTheorySurfacePacket,
+      capabilityInvocationTruthPacket,
+      capabilityInvocationPresentationPacket,
+      productExperiencePacket,
+      labels,
+    });
+  /* The detailed packet-oriented report below is retained as internal source context only.
+     User-readable Markdown returns above; strict details remain in JSON/debug artifacts. */
+  const visibleAutomationAllowed = [
+    "收集证据",
+    "草拟候选选项",
+    "运行确定性检查",
+    "提示风险与阻塞",
+    "整理用户可见状态",
+  ];
+  const visibleAutomationForbidden = [
+    "不能替用户选择会改变路线的分支",
+    "不能替用户接受风险",
+    "不能在证据不足时声称可公开交付",
+    "不能用报告或 Hook 提示冒充原生选择证据",
+    "不能把未确认调用说成已经调用",
+    "不能替代 Review 的人工判断",
+  ];
   const lines = [
     `# ${labels.governedExecutionReportTitle}`,
     "",
@@ -2583,14 +3021,12 @@ function buildUserReadableRunReport({
     "|---|---|",
     ...Array.from({
       length: Math.max(
-        productExperiencePacket?.automationDecisionBoundary?.automationAllowed?.length ?? 0,
-        productExperiencePacket?.automationDecisionBoundary?.automationForbidden?.length ?? 0
+        visibleAutomationAllowed.length,
+        visibleAutomationForbidden.length,
       ),
     }).map((_, index) => {
-      const allowed =
-        productExperiencePacket?.automationDecisionBoundary?.automationAllowed?.[index] ?? "";
-      const forbidden =
-        productExperiencePacket?.automationDecisionBoundary?.automationForbidden?.[index] ?? "";
+      const allowed = visibleAutomationAllowed[index] ?? "";
+      const forbidden = visibleAutomationForbidden[index] ?? "";
       return `| ${String(allowed).replaceAll("|", "\\|")} | ${String(forbidden).replaceAll("|", "\\|")} |`;
     }),
     "",
@@ -2600,7 +3036,7 @@ function buildUserReadableRunReport({
     `- 编排: board=${visibleMetaTheorySurfacePacket?.orchestration?.boardId ?? "missing"} / owner=${visibleMetaTheorySurfacePacket?.orchestration?.synthesisOwner ?? "missing"} / workers=${visibleMetaTheorySurfacePacket?.orchestration?.workerTaskCount ?? 0}`,
     `- Dynamic Workflow: lanes=${visibleMetaTheorySurfacePacket?.dynamicWorkflow?.selectedLaneIds?.length ?? 0} / bindings=${visibleMetaTheorySurfacePacket?.dynamicWorkflow?.visibleRows?.length ?? 0}`,
     `- 能力发现: total=${visibleMetaTheorySurfacePacket?.capabilityInventory?.total ?? 0} / nonSkillTypes=${visibleMetaTheorySurfacePacket?.capabilityInventory?.nonSkillCapabilityTypeCount ?? 0} / notSkillOnly=${labels.boolean(Boolean(visibleMetaTheorySurfacePacket?.capabilityInventory?.notSkillOnly))}`,
-    `- 真实调用状态: families=${capabilityInvocationTruthPacket?.rows?.length ?? 0} / invoked=${capabilityInvocationTruthPacket?.stateCounts?.invoked ?? 0} / applied=${capabilityInvocationTruthPacket?.stateCounts?.applied ?? 0} / hostVisible=${capabilityInvocationTruthPacket?.stateCounts?.host_visible_observed ?? 0} / selectedNotInvoked=${capabilityInvocationTruthPacket?.stateCounts?.selected_not_invoked ?? 0} / callableProbe=${capabilityInvocationTruthPacket?.callableInvocationCoverage?.status ?? "missing"} / unavailable=${capabilityInvocationTruthPacket?.stateCounts?.unavailable ?? 0}`,
+    `- ${getGovernedRunSurfaceLabels(labels.htmlLang).invocationPresentation.executionLabel}: ${capabilityInvocationPresentationPacket?.userSummary ?? "运行记录待关联；以当前聊天中的实际调用结果为准，额外独立复核不会改变本次运行。"}`,
     `- Agent Teams Playbook: status=${visibleMetaTheorySurfacePacket?.agentTeamsPlaybook?.status ?? "missing"} / selected=${labels.boolean(Boolean(visibleMetaTheorySurfacePacket?.agentTeamsPlaybook?.selected))} / waves=${visibleMetaTheorySurfacePacket?.agentTeamsPlaybook?.waveCount ?? 0}`,
     `- Peer Agent Mesh: peers=${visibleMetaTheorySurfacePacket?.peerAgentMesh?.peerCount ?? 0} / handoffs=${visibleMetaTheorySurfacePacket?.peerAgentMesh?.handoffCount ?? 0}`,
     `- LangGraph-style: nodes=${visibleMetaTheorySurfacePacket?.langGraph?.nodeCount ?? 0} / edges=${visibleMetaTheorySurfacePacket?.langGraph?.edgeCount ?? 0} / conditional=${visibleMetaTheorySurfacePacket?.langGraph?.conditionalEdgeCount ?? 0} / checkpoints=${visibleMetaTheorySurfacePacket?.langGraph?.checkpointCount ?? 0}`,
@@ -2610,7 +3046,7 @@ function buildUserReadableRunReport({
     `| 编排 orchestration | worker 数、parallelGroup、mergeOwner、synthesis owner | visibleMetaTheorySurfacePacket.orchestration | ${visibleMetaTheorySurfacePacket?.orchestration?.status ?? "missing"} |`,
     `| Dynamic Workflow | selected lanes、omitted lanes、capability bindings、worker results | visibleMetaTheorySurfacePacket.dynamicWorkflow | ${visibleMetaTheorySurfacePacket?.dynamicWorkflow?.status ?? "missing"} |`,
     `| 能力发现 capability inventory | agent/skill/command/MCP/tool/hook/runtime/memory/graph/research，不只 Skill | visibleMetaTheorySurfacePacket.capabilityInventory | ${visibleMetaTheorySurfacePacket?.capabilityInventory?.notSkillOnly ? "pass" : "partial"} |`,
-    `| 真实能力调用 capability invocation truth | invoked / applied / host_visible_observed / selected_not_invoked / discovered_not_selected / unavailable / blocked / not_required | capabilityInvocationTruthPacket + capabilityInvocationProbePacket | ${capabilityInvocationTruthPacket?.status ?? "missing"} |`,
+    `| 能力调用展示 | ${capabilityInvocationPresentationPacket?.userSummary ?? "运行记录待关联；以当前聊天中的实际调用结果为准，额外独立复核不会改变本次运行。"} | 当前运行展示摘要 | ${capabilityInvocationPresentationPacket?.executionLabel ?? "运行记录待关联（以当前聊天中的实际调用结果为准）"} |`,
     `| Agent Teams Playbook | 2+ 并行 lane 时发现并选中 fan-out 编排适配器，同时保留 live spawn_agent 边界 | visibleMetaTheorySurfacePacket.agentTeamsPlaybook | ${visibleMetaTheorySurfacePacket?.agentTeamsPlaybook?.status ?? "missing"} |`,
     `| Peer Agent Mesh | peer workers、handoff、merge owner、result status | visibleMetaTheorySurfacePacket.peerAgentMesh | ${visibleMetaTheorySurfacePacket?.peerAgentMesh?.status ?? "missing"} |`,
     `| LangGraph-style 控制图 | nodes、edges、conditional edges、state、checkpoint、replay | visibleMetaTheorySurfacePacket.langGraph | ${visibleMetaTheorySurfacePacket?.langGraph?.status ?? "missing"} |`,
@@ -2631,15 +3067,6 @@ function buildUserReadableRunReport({
     ...((visibleMetaTheorySurfacePacket?.dynamicWorkflow?.visibleRows ?? []).map(
       (row) =>
         `| ${row.laneLabel ?? row.laneId ?? "lane"} | ${row.owner} | ${row.skills} | ${row.mcp} | ${row.commands} | ${row.runtimeTools} | ${row.hooks} | ${labels.boolean(row.workerResult)} |`
-    )),
-    "",
-    "### 真实能力调用状态",
-    "",
-    "| capability family | state | invocation evidence | boundary |",
-    "|---|---|---|---|",
-    ...((capabilityInvocationTruthPacket?.rows ?? []).map(
-      (row) =>
-        `| ${row.family} | ${row.state} | ${(row.evidenceRefs ?? []).join(", ").replaceAll("|", "\\|")} | ${String(row.truthBoundary).replaceAll("|", "\\|")} |`
     )),
     "",
     "### Peer Agent Mesh",
@@ -2832,9 +3259,13 @@ function buildRunReportPanelContract({
   productExperiencePacket,
   visibleMetaTheorySurfacePacket,
   capabilityInvocationTruthPacket,
+  capabilityInvocationPresentationPacket,
   paths,
 }) {
   const blockedGaps = orchestrationReport.capabilityGaps.filter((gap) => gap.blocked);
+  const visibleInvocationPresentation = buildUserCapabilityInvocationPresentation(
+    capabilityInvocationPresentationPacket,
+  );
   const aiReadableRubric = aiReadableStandards.standards.map((standard) => ({
     id: standard.id,
     label: standard.label,
@@ -2883,6 +3314,16 @@ function buildRunReportPanelContract({
     );
   const fullProductExperiencePass =
     productExperiencePacket?.status === "product_experience_pass" && supportGatesPass;
+  const visibleSupportGates = (productExperiencePacket?.supportGates ?? []).map((gate) => ({
+    id: gate.id,
+    name: gate.name,
+    status: gate.status,
+    evidenceKind: gate.evidenceKind,
+    failIf: gate.failIf,
+    ...(gate.id === "P-109"
+      ? { capabilityInvocationPresentation: visibleInvocationPresentation }
+      : {}),
+  }));
   return {
     schemaVersion: contractDefinition.schemaVersion,
     contractId: "run-report-panel-contract",
@@ -2927,13 +3368,12 @@ function buildRunReportPanelContract({
       evidenceTier: productExperiencePacket?.evidenceTier ?? "missing",
       nativeRuntimeBoundary: productExperiencePacket?.nativeRuntimeBoundary ?? null,
       goals: productExperiencePacket?.goals ?? [],
-      supportGates: productExperiencePacket?.supportGates ?? [],
+      supportGates: visibleSupportGates,
       noOverclaimGate: productExperiencePacket?.noOverclaimGate ?? null,
       nativeChoiceSurfaceGate: productExperiencePacket?.nativeChoiceSurfaceGate ?? null,
       repeatFailureDesignGate: productExperiencePacket?.repeatFailureDesignGate ?? null,
       generalizationGate: productExperiencePacket?.generalizationGate ?? null,
-      capabilityInvocationTruthGate:
-        productExperiencePacket?.capabilityInvocationTruthGate ?? null,
+      capabilityInvocationPresentation: visibleInvocationPresentation,
       agentTeamsPlaybookGate:
         productExperiencePacket?.agentTeamsPlaybookGate ?? null,
       automationDecisionBoundary:
@@ -2945,22 +3385,13 @@ function buildRunReportPanelContract({
       orchestration: visibleMetaTheorySurfacePacket?.orchestration ?? null,
       dynamicWorkflow: visibleMetaTheorySurfacePacket?.dynamicWorkflow ?? null,
       capabilityInventory: visibleMetaTheorySurfacePacket?.capabilityInventory ?? null,
-      capabilityInvocationTruth:
-        visibleMetaTheorySurfacePacket?.capabilityInvocationTruth ?? null,
+      capabilityInvocationPresentation:
+        visibleMetaTheorySurfacePacket?.capabilityInvocationPresentation ?? null,
       agentTeamsPlaybook: visibleMetaTheorySurfacePacket?.agentTeamsPlaybook ?? null,
       peerAgentMesh: visibleMetaTheorySurfacePacket?.peerAgentMesh ?? null,
       langGraph: visibleMetaTheorySurfacePacket?.langGraph ?? null,
     },
-    capabilityInvocationTruth: {
-      status: capabilityInvocationTruthPacket?.status ?? "missing",
-      stateTaxonomy: capabilityInvocationTruthPacket?.stateTaxonomy ?? [],
-      stateCounts: capabilityInvocationTruthPacket?.stateCounts ?? {},
-      requiredFamilies: capabilityInvocationTruthPacket?.requiredFamilies ?? [],
-      truthAssertions: capabilityInvocationTruthPacket?.truthAssertions ?? null,
-      callableInvocationCoverage:
-        capabilityInvocationTruthPacket?.callableInvocationCoverage ?? null,
-      rows: capabilityInvocationTruthPacket?.rows ?? [],
-    },
+    capabilityInvocationPresentation: visibleInvocationPresentation,
     cardPlan: {
       dealerOwner: cardPlanPacket.dealerOwner,
       cardEventCount: cardPlanPacket.cardEvents.length,
@@ -3888,6 +4319,14 @@ function buildRuntimeSubagentInvocationPacket({
     authorizationSource,
     runnerCanCallHostSpawnAgent: false,
     hostSpawnAgentEvidenceAttached: externalAgentSpawned,
+    availabilityDisposition:
+      status === "unavailable"
+        ? "host_evidence_unattached"
+        : status === "not_authorized"
+          ? "authorization_denied"
+          : status === "invoked"
+            ? "observed_success"
+            : "not_required",
     selectedWorkerLaneCount: agentTeamsPlaybookPacket?.executableLaneCount ?? 0,
     expectedIndependentLaneCount:
       entryClassification?.expectedIndependentLaneCount ??
@@ -4944,12 +5383,11 @@ function buildRuntimeInvocationPlanPacket({
   runtimeSubagentInvocationPacket,
   capabilityInvocationProbePacket,
   hostInvocationEvidence,
-  hostInvocationEvidenceTrusted = false,
   runId = null,
 }) {
   const bindingRows = dynamicWorkflowRuntimePacket?.capabilityBindingRows ?? [];
   const evidence = normalizeHostInvocationEvidence(hostInvocationEvidence, {
-    trusted: hostInvocationEvidenceTrusted,
+    trusted: false,
     expectedRunId: runId,
   });
   const requiredBindings = buildSelectedInvocationBindings({
@@ -5151,11 +5589,10 @@ function buildHostInvocationRequestPacket({ runtimeInvocationPlanPacket, workerT
 function buildDurableAgentLifecyclePacket({
   writebackFlow,
   hostInvocationEvidence,
-  hostInvocationEvidenceTrusted = false,
 }) {
   const candidates = writebackFlow?.candidates ?? [];
   const evidence = normalizeHostInvocationEvidence(hostInvocationEvidence, {
-    trusted: hostInvocationEvidenceTrusted,
+    trusted: false,
   });
   const durableEvidence = evidence.filter(
     (item) => item.family === "durable_agent" && item.passEligible === true,
@@ -5255,7 +5692,6 @@ function buildCapabilityInvocationTruthPacket({
   workerExecutionEvidence,
   hostVisibleSubagents,
   hostInvocationEvidence,
-  hostInvocationEvidenceTrusted = false,
   agentTeamsPlaybookPacket,
   capabilityInvocationProbePacket,
   runtimeSubagentInvocationPacket,
@@ -5275,7 +5711,7 @@ function buildCapabilityInvocationTruthPacket({
     ),
   );
   const normalizedHostInvocationEvidence = normalizeHostInvocationEvidence(hostInvocationEvidence, {
-    trusted: hostInvocationEvidenceTrusted,
+    trusted: false,
     expectedRunId: runId,
   });
   const hostEvidenceForFamily = (family) =>
@@ -5359,13 +5795,13 @@ function buildCapabilityInvocationTruthPacket({
     }),
     makeRow({
       family: "app_visible_subagent",
-      state: hostSubagents.length > 0 ? "host_visible_observed" : "not_required",
+      state: "not_required",
       selectedCount: hostSubagents.length,
-      observedCount: hostSubagents.length,
+      observedCount: 0,
       evidenceRefs:
         hostSubagents.length > 0
-          ? hostSubagents.map((item) => `host_ui:${item.name}`)
-          : ["host UI subagent evidence is not attached to this CLI artifact"],
+          ? hostSubagents.map((item) => `unverified_host_ui_hint:${item.name}`)
+          : ["host UI names are not strict invocation evidence"],
       truthBoundary:
         "Codex App or another host UI may show app-visible subagents; this is user-visible host evidence and must not be relabeled as a Meta_Kim runner Agent/spawn_agent tool invocation unless tool-call evidence is attached.",
       mustNotClaimAs: [
@@ -5671,6 +6107,144 @@ function buildCapabilityInvocationTruthPacket({
   };
 }
 
+function buildCapabilityInvocationPresentation({
+  capabilityInvocationTruthPacket = null,
+  runtimeSubagentInvocationPacket = null,
+  outputLanguage = "en",
+} = {}) {
+  const rows = capabilityInvocationTruthPacket?.rows ?? [];
+  const agentRow = rows.find((row) => row.family === "agent_subagent") ?? null;
+  const hostVisibleRow = rows.find((row) => row.family === "app_visible_subagent") ?? null;
+  const coverage = capabilityInvocationTruthPacket?.realInvocationCoverage ?? {};
+  const requiredAgentBindings = (coverage.requiredBindings ?? []).filter(
+    (binding) => binding?.family === "agent_subagent",
+  );
+  const invokedAgentBindings = (coverage.invokedBindings ?? []).filter(
+    (binding) => binding?.family === "agent_subagent",
+  );
+  const missingAgentBindings = (coverage.missingBindings ?? []).filter(
+    (binding) => binding?.family === "agent_subagent",
+  );
+  const failedAgentBindings = (coverage.failedBindings ?? []).filter(
+    (binding) => binding?.family === "agent_subagent",
+  );
+  const bindingKey = (binding) =>
+    binding?.bindingRef && binding?.providerId
+      ? `${binding.bindingRef}\u0000${binding.providerId}`
+      : null;
+  const failedStates = new Set([
+    "failed",
+    "failure",
+    "error",
+    "denied",
+    "blocked",
+    "unsupported",
+  ]);
+  const invocationFailed = (binding) =>
+    [binding?.state, binding?.status, binding?.resultStatus]
+      .filter(Boolean)
+      .some((value) => failedStates.has(String(value).toLowerCase()));
+  const successfulInvokedBindings = invokedAgentBindings.filter(
+    (binding) => bindingKey(binding) && !invocationFailed(binding),
+  );
+  const failedInvokedBindings = invokedAgentBindings.filter(invocationFailed);
+  const successfulKeys = new Set(successfulInvokedBindings.map(bindingKey));
+  const inferredMissingBindings = requiredAgentBindings.filter(
+    (binding) => !successfulKeys.has(bindingKey(binding)),
+  );
+  const failedOrMissingKeys = new Set(
+    [...missingAgentBindings, ...inferredMissingBindings, ...failedAgentBindings, ...failedInvokedBindings]
+      .map((binding) => bindingKey(binding) ?? JSON.stringify(binding))
+      .filter(Boolean),
+  );
+  const successfulBindingCount = successfulInvokedBindings.length;
+  const failureCount = failedOrMissingKeys.size;
+  const exactMatchedBindingCount = requiredAgentBindings.filter((binding) =>
+    successfulKeys.has(bindingKey(binding)),
+  ).length;
+  const exactAllSuccess =
+    requiredAgentBindings.length > 0 &&
+    exactMatchedBindingCount === requiredAgentBindings.length &&
+    failureCount === 0;
+  const calledWithFailures = successfulBindingCount > 0 && failureCount > 0;
+  const calledWithoutExactMatch =
+    successfulBindingCount > 0 && failureCount === 0 && !exactAllSuccess;
+  const verifiedFailureResults = failedAgentBindings.map((binding) =>
+    String(binding?.resultStatus ?? binding?.status ?? binding?.state ?? "failed").toLowerCase(),
+  );
+  const verifiedFailureState = verifiedFailureResults.includes("denied")
+    ? "denied"
+    : verifiedFailureResults.includes("blocked")
+      ? "blocked"
+      : verifiedFailureResults.length > 0
+        ? "failed"
+        : null;
+  const genuinelyUnavailable =
+    successfulBindingCount === 0 &&
+    failedAgentBindings.length === 0 &&
+    runtimeSubagentInvocationPacket?.availabilityDisposition === "genuinely_unavailable" &&
+    ["unsupported", "provider_missing_or_unusable", "missing_provider"].includes(
+      runtimeSubagentInvocationPacket?.status,
+    );
+  const executionState = exactAllSuccess
+    ? "completed"
+    : calledWithFailures
+      ? "called_with_failures"
+      : calledWithoutExactMatch
+        ? "called"
+      : verifiedFailureState
+        ? verifiedFailureState
+      : genuinelyUnavailable
+        ? "unavailable"
+        : "not_confirmed";
+  const exactBindingState = exactAllSuccess
+    ? "exact_binding_verified"
+    : "exact_binding_pending";
+  const liveCertificationState = "live_certification_pending";
+  const surface = getGovernedRunSurfaceLabels(outputLanguage);
+  const copy = surface.invocationPresentation;
+  const executionLabel = copy.executionStates[executionState];
+  const exactBindingLabel = copy.certificationStates[exactBindingState];
+  return {
+    schemaVersion: "capability-invocation-presentation-v0.1",
+    executionState,
+    failureDisposition: verifiedFailureState,
+    exactBindingState,
+    liveCertificationState,
+    executionLabel,
+    exactBindingLabel,
+    liveCertificationLabel: copy.certificationStates[liveCertificationState],
+    summary: copy.summary(executionLabel, exactBindingLabel),
+    userSummary: copy.userSummary(executionState, executionLabel),
+    evidenceBoundary: {
+      exactBindingVerified: exactAllSuccess,
+      successfulBindingCount,
+      exactMatchedBindingCount,
+      failedBindingCount: failureCount,
+      verifiedFailedBindingCount: failedAgentBindings.length,
+      missingBindingCount: new Set(
+        [...missingAgentBindings, ...inferredMissingBindings]
+          .map((binding) => bindingKey(binding) ?? JSON.stringify(binding)),
+      ).size,
+      unverifiedHostHintCount: hostVisibleRow?.selectedCount ?? 0,
+      liveCertificationEvidenceRef: null,
+      rawAgentState: agentRow?.state ?? "missing",
+      rawHostVisibleState: hostVisibleRow?.state ?? "missing",
+      rawAuditUnchanged: true,
+    },
+  };
+}
+
+function buildUserCapabilityInvocationPresentation(packet = null) {
+  if (!packet) return null;
+  return {
+    schemaVersion: "capability-invocation-user-presentation-v0.1",
+    executionState: packet.executionState,
+    executionLabel: packet.executionLabel,
+    userSummary: packet.userSummary,
+  };
+}
+
 function buildVisibleMetaTheorySurfacePacket({
   orchestrationReport,
   langGraphRunPacket,
@@ -5678,6 +6252,7 @@ function buildVisibleMetaTheorySurfacePacket({
   peerAgentMeshPacket,
   capabilityInvocationProbePacket,
   capabilityInvocationTruthPacket,
+  capabilityInvocationPresentationPacket,
   agentTeamsPlaybookPacket,
 }) {
   const capabilityRows = orchestrationReport.fetchEvidence.capabilityInventory.map((item) => ({
@@ -5722,7 +6297,7 @@ function buildVisibleMetaTheorySurfacePacket({
       "orchestration",
       "dynamic_workflow",
       "capability_inventory_not_skill_only",
-      "capability_invocation_truth",
+      "capability_invocation_presentation",
       "agent_teams_playbook",
       "peer_agent_mesh",
       "langgraph_style_control_graph",
@@ -5746,7 +6321,6 @@ function buildVisibleMetaTheorySurfacePacket({
       omittedLanesWithReason: dynamicWorkflowRuntimePacket.omittedLanesWithReason,
       businessFlowLaneCount: dynamicWorkflowRuntimePacket.businessFlowLaneCount,
       capabilityBindingCoverage: dynamicWorkflowRuntimePacket.capabilityBindingCoverage,
-      callableInvocationCoverage: capabilityInvocationTruthPacket.callableInvocationCoverage,
       visibleRows: dynamicRows,
     },
     capabilityInventory: {
@@ -5756,23 +6330,9 @@ function buildVisibleMetaTheorySurfacePacket({
       notSkillOnly: nonSkillCapabilityTypes.length > 0,
       visibleRows: capabilityRows,
     },
-    capabilityInvocationTruth: {
-      status: capabilityInvocationTruthPacket.status,
-      stateTaxonomy: capabilityInvocationTruthPacket.stateTaxonomy,
-      stateCounts: capabilityInvocationTruthPacket.stateCounts,
-      callableInvocationCoverage: capabilityInvocationTruthPacket.callableInvocationCoverage,
-      realInvocationCoverage: capabilityInvocationTruthPacket.realInvocationCoverage,
-      probeStatus: capabilityInvocationProbePacket?.status ?? "missing",
-      visibleRows: capabilityInvocationTruthPacket.rows.map((row) => ({
-        family: row.family,
-        state: row.state,
-        selectedCount: row.selectedCount,
-        invokedCount: row.invokedCount,
-        appliedCount: row.appliedCount,
-        observedCount: row.observedCount,
-        truthBoundary: row.truthBoundary,
-      })),
-    },
+    capabilityInvocationPresentation: buildUserCapabilityInvocationPresentation(
+      capabilityInvocationPresentationPacket,
+    ),
     agentTeamsPlaybook: {
       status: agentTeamsPlaybookPacket?.status ?? "missing",
       selected: agentTeamsPlaybookPacket?.selected === true,
@@ -5829,6 +6389,7 @@ function buildUserPerceptionPacket({
   agUiStageEvents,
   visibleMetaTheorySurfacePacket,
   productExperienceGoals = [],
+  outputLanguage = "zh-CN",
 }) {
   const stageNames = (stageOperationPlan?.stages ?? []).map((stage) => stage.stage);
   const cues = [
@@ -5911,7 +6472,7 @@ function buildUserPerceptionPacket({
     schemaVersion: "user-perception-v0.1",
     status: pass ? "pass" : "partial",
     evidenceKind: pass ? "product_experience_pass" : "report_only",
-    language: "zh-CN",
+    language: outputLanguage,
     plainLanguagePolicy:
       "用户看到的是阶段、路线、owner 交接、阻塞、验证和停止条件，不需要理解 packet/JSON 名称。",
     surfaces,
@@ -6542,13 +7103,13 @@ function buildCoreLoopArtifact({
   analytics,
   hostVisibleSubagents,
   hostInvocationEvidence,
-  hostInvocationEvidenceTrusted,
   nativeChoiceEvidence,
   nativeChoiceEvidenceTrusted,
   agentTeamsPlaybookProvider,
   invokeCapabilityProbes = false,
   runtime = "codex",
   osTarget = "windows",
+  outputLanguage = "zh-CN",
 }) {
   const routeRuntime = normalizeRouteRuntime(runtime);
   const routeOs = normalizeOsTarget(osTarget);
@@ -6871,7 +7432,6 @@ function buildCoreLoopArtifact({
     runtimeSubagentInvocationPacket,
     capabilityInvocationProbePacket,
     hostInvocationEvidence,
-    hostInvocationEvidenceTrusted,
   });
   const hostInvocationRequestPacket = buildHostInvocationRequestPacket({
     runtimeInvocationPlanPacket,
@@ -6880,7 +7440,6 @@ function buildCoreLoopArtifact({
   const durableAgentLifecyclePacket = buildDurableAgentLifecyclePacket({
     writebackFlow,
     hostInvocationEvidence,
-    hostInvocationEvidenceTrusted,
   });
   const capabilityInvocationTruthPacket = buildCapabilityInvocationTruthPacket({
     runId,
@@ -6890,11 +7449,15 @@ function buildCoreLoopArtifact({
     workerExecutionEvidence,
     hostVisibleSubagents,
     hostInvocationEvidence: runtimeInvocationPlanPacket.evidence,
-    hostInvocationEvidenceTrusted: false,
     agentTeamsPlaybookPacket,
     capabilityInvocationProbePacket,
     runtimeSubagentInvocationPacket,
     runtimeInvocationPlanPacket,
+  });
+  const capabilityInvocationPresentationPacket = buildCapabilityInvocationPresentation({
+    capabilityInvocationTruthPacket,
+    runtimeSubagentInvocationPacket,
+    outputLanguage,
   });
   const visibleMetaTheorySurfacePacket = buildVisibleMetaTheorySurfacePacket({
     orchestrationReport,
@@ -6903,6 +7466,7 @@ function buildCoreLoopArtifact({
     peerAgentMeshPacket,
     capabilityInvocationProbePacket,
     capabilityInvocationTruthPacket,
+    capabilityInvocationPresentationPacket,
     agentTeamsPlaybookPacket,
   });
   const userPerceptionPacket = buildUserPerceptionPacket({
@@ -6912,6 +7476,7 @@ function buildCoreLoopArtifact({
     agUiStageEvents,
     visibleMetaTheorySurfacePacket,
     productExperienceGoals: PRODUCT_EXPERIENCE_CORE_GOAL_IDS,
+    outputLanguage,
   });
   const productExperiencePacket = buildProductExperiencePacket({
     runId,
@@ -7025,6 +7590,7 @@ function buildCoreLoopArtifact({
     hostInvocationRequestPacket,
     capabilityInvocationProbePacket,
     capabilityInvocationTruthPacket,
+    capabilityInvocationPresentationPacket,
     durableAgentLifecyclePacket,
     visibleMetaTheorySurfacePacket,
     userPerceptionPacket,
@@ -7270,7 +7836,11 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function normalizeCardPlanForWorkflowContract(cardPlanPacket) {
+function normalizeCardPlanForWorkflowContract(
+  cardPlanPacket,
+  outputLanguage = "zh-CN",
+  languageSource = "latest_user_input",
+) {
   const cardPlan = cloneJson(cardPlanPacket);
   cardPlan.cardTypeDecisions = cardPlan.cardTypeDecisions.map((card) => ({
     ...card,
@@ -7279,11 +7849,11 @@ function normalizeCardPlanForWorkflowContract(cardPlanPacket) {
       card.choiceSurfaceDelivery === "adapter_required_not_triggered_by_artifact"
         ? "request_user_input"
         : "conversation_fallback",
-    userLanguage: "zh-CN",
+    userLanguage: outputLanguage,
   }));
   cardPlan.cardEvents = cardPlan.cardEvents.map((event) => ({
     ...event,
-    userLanguage: "zh-CN",
+    userLanguage: outputLanguage,
   }));
   cardPlan.controlDecisions = cardPlan.controlDecisions.map((decision) => ({
     ...decision,
@@ -7293,8 +7863,8 @@ function normalizeCardPlanForWorkflowContract(cardPlanPacket) {
   }));
   cardPlan.deliveryShells = cardPlan.deliveryShells.map((shell) => ({
     ...shell,
-    userLanguage: shell.userLanguage ?? "zh-CN",
-    languageSource: shell.languageSource ?? "latest_user_message_or_explicit_preference",
+    userLanguage: outputLanguage,
+    languageSource,
   }));
   return cardPlan;
 }
@@ -7338,6 +7908,8 @@ function buildWorkflowContractPackets({
   businessFlowBlueprintPacket,
   runtime = "codex",
   osTarget = "windows",
+  outputLanguage = "zh-CN",
+  languageSource = "latest_user_input",
 }) {
   const routeRuntime = normalizeRouteRuntime(runtime);
   const routeOs = normalizeOsTarget(osTarget);
@@ -7345,7 +7917,11 @@ function buildWorkflowContractPackets({
   const primaryDeliverable = `governed-execution-${runId}`;
   const timestamp = nowIso();
   const choiceState = "no_branching_choice";
-  const normalizedCardPlanPacket = normalizeCardPlanForWorkflowContract(cardPlanPacket);
+  const normalizedCardPlanPacket = normalizeCardPlanForWorkflowContract(
+    cardPlanPacket,
+    outputLanguage,
+    languageSource,
+  );
   const capabilityMatch = workflowCapabilityMatch({
     id: "governed_execution",
     owner: "meta-conductor",
@@ -8086,8 +8662,8 @@ function buildWorkflowContractPackets({
       requiresUserChoice: false,
       defaultAssumptions: ["This structural run has no branch-changing user choice remaining."],
       pendingUserChoices: [],
-      userLanguage: "zh-CN",
-      languageSource: "latest_user_message_or_explicit_preference",
+      userLanguage: outputLanguage,
+      languageSource,
       nativeChoiceSurface: "request_user_input",
       choiceGateSkip: choiceState,
       intentGatePacketVersion: "v1",
@@ -8170,7 +8746,8 @@ async function readLatestRunId(stateDir) {
   const latestPath = path.join(stateDir, "latest.json");
   const raw = await readTextIfExists(latestPath);
   if (!raw) return null;
-  return JSON.parse(raw).runId ?? null;
+  const latestRunId = JSON.parse(raw).runId ?? null;
+  return latestRunId == null ? null : validateRunId(latestRunId, "latest.json runId");
 }
 
 function selectExecutionRouteArgs({ task, runtime = "codex", os = "windows" }) {
@@ -8711,6 +9288,9 @@ async function buildRouteDrivenOrchestration({ task, runId, runtime = "codex", o
 export async function runMetaTheoryGovernedExecution({
   task,
   runId = null,
+  allowOverwrite = false,
+  outputLanguage = null,
+  cliOutputLanguage = null,
   stateDir = DEFAULT_STATE_DIR,
   artifactDir = null,
   dbPath = DEFAULT_DB_PATH,
@@ -8721,11 +9301,12 @@ export async function runMetaTheoryGovernedExecution({
   applyWriteback = false,
   canonicalRoot = path.join(REPO_ROOT, "canonical"),
   emitConversationNotice = false,
-  conversationNoticeChannel = "stdout",
+  onConversationProgress = null,
+  conversationNoticeChannel = "api_callback",
   conversationNoticeAdapter = CONVERSATION_NOTICE_ADAPTER,
   hostVisibleSubagents = process.env.META_KIM_HOST_VISIBLE_SUBAGENTS ?? null,
   hostInvocationEvidence = process.env.META_KIM_HOST_INVOCATION_EVIDENCE ?? null,
-  hostInvocationEvidenceTrusted = false,
+  hostAssistantMessageEvidence = process.env.META_KIM_HOST_ASSISTANT_MESSAGE_EVIDENCE ?? null,
   nativeChoiceEvidence = process.env.META_KIM_NATIVE_CHOICE_EVIDENCE ?? null,
   nativeChoiceEvidenceTrusted = false,
   invokeCapabilityProbes = false,
@@ -8734,7 +9315,66 @@ export async function runMetaTheoryGovernedExecution({
   if (!normalizedTask) {
     throw new Error("Missing task for governed meta-theory execution.");
   }
-  const effectiveRunId = runId ?? stableId("meta-run", normalizedTask);
+  const taskFingerprint = stableId("task", normalizedTask);
+  const requestedRunId = runId == null ? null : String(runId);
+  const effectiveRunId = validateRunId(
+    requestedRunId ?? uniqueRunId(taskFingerprint),
+    requestedRunId == null ? "generated runId" : "requested runId",
+  );
+  const languageResolution = resolveOutputLanguage({
+    explicitLanguage: outputLanguage,
+    cliLanguage: cliOutputLanguage,
+    latestInput: normalizedTask,
+  });
+  const resolvedOutputLanguage = languageResolution.language;
+  const outputDir = artifactDir ? path.resolve(artifactDir) : path.resolve(stateDir);
+  await fs.mkdir(outputDir, { recursive: true });
+  const jsonPath = resolveOutputFile(outputDir, `${effectiveRunId}.json`);
+  const markdownFileName = `${effectiveRunId}.${resolvedOutputLanguage}.md`;
+  const markdownPath = resolveOutputFile(outputDir, markdownFileName);
+  const latestPath = resolveOutputFile(outputDir, "latest.json");
+  const reservationPath = resolveOutputFile(
+    outputDir,
+    `${effectiveRunId}.reservation.json`,
+  );
+  if (requestedRunId != null && allowOverwrite !== true) {
+    await reserveExplicitRunId(reservationPath, {
+      runId: effectiveRunId,
+      taskFingerprint,
+    });
+  }
+  if (
+    requestedRunId != null &&
+    allowOverwrite !== true &&
+    (existsSync(jsonPath) || existsSync(markdownPath))
+  ) {
+    throw new Error(
+      `Governed run '${effectiveRunId}' already exists. Pass allowOverwrite=true or --overwrite-run to replace it explicitly.`,
+    );
+  }
+  const labels = getReportLabelsForPath(markdownPath);
+  const surfaceLabels = getGovernedRunSurfaceLabels(resolvedOutputLanguage);
+  const progressEvents = [];
+  const progressEnabled =
+    emitConversationNotice === true || typeof onConversationProgress === "function";
+  const publishProgress = async (event) =>
+    publishConversationProgress({
+      event,
+      events: progressEvents,
+      labels,
+      surfaceLabels,
+      enabled: progressEnabled,
+      onConversationProgress,
+    });
+  await publishProgress(
+    progressEvent({
+      runId: effectiveRunId,
+      stage: "Critical",
+      status: "started",
+      reason: surfaceLabels.events.runStart(effectiveRunId),
+      owner: "meta-warden",
+    }),
+  );
   const routeRuntime = normalizeRouteRuntime(runtime);
   const routeOs = normalizeOsTarget(osTarget);
   const orchestrationReport = await buildRouteDrivenOrchestration({
@@ -8746,10 +9386,33 @@ export async function runMetaTheoryGovernedExecution({
   const capabilityInventoryBus = await writeCapabilityInventory(
     path.join(stateDir, "capability-inventory.json"),
   );
+  await publishProgress(
+    progressEvent({
+      runId: effectiveRunId,
+      stage: "Fetch",
+      status: "completed",
+      reason: surfaceLabels.events.fetch(
+        orchestrationReport.fetchEvidence.capabilityInventory.length,
+      ),
+      owner: orchestrationReport.fetchEvidence.orchestrationOwner,
+    }),
+  );
   const decisionResults = buildRouteDrivenDecisionResults({
     task: normalizedTask,
     runId: effectiveRunId,
   });
+  await publishProgress(
+    progressEvent({
+      runId: effectiveRunId,
+      stage: "Thinking",
+      status: "route_ready_before_execution",
+      reason: surfaceLabels.events.thinking(
+        orchestrationReport.orchestrationTaskBoardPacket.synthesisOwner,
+        orchestrationReport.workerTaskPackets.length,
+      ),
+      owner: orchestrationReport.orchestrationTaskBoardPacket.synthesisOwner,
+    }),
+  );
   const runtimeEvidence = await buildRuntimeProjectionEvidence({
     repoRoot: REPO_ROOT,
     orchestrationReport,
@@ -8761,6 +9424,19 @@ export async function runMetaTheoryGovernedExecution({
     applyWriteback,
     canonicalRoot,
   });
+  await publishProgress(
+    progressEvent({
+      runId: effectiveRunId,
+      stage: "Execution",
+      status: "preparing_dispatch_pending",
+      reason: surfaceLabels.events.execution(
+        "preparing_dispatch_pending",
+        orchestrationReport.workerTaskPackets.length,
+        orchestrationReport.workerTaskPackets.filter((packet) => packet.handoffContract).length,
+      ),
+      owner: orchestrationReport.orchestrationTaskBoardPacket.synthesisOwner,
+    }),
+  );
   const cardPlanPacket = buildCardPlanPacket({
     runId: effectiveRunId,
     orchestrationReport,
@@ -8780,7 +9456,32 @@ export async function runMetaTheoryGovernedExecution({
     orchestrationReport,
     businessPhasePlanPacket,
     cardPlanPacket,
+    language: resolvedOutputLanguage,
   });
+  await publishProgress(
+    progressEvent({
+      runId: effectiveRunId,
+      stage: "Review",
+      status: "structural_review_snapshot",
+      reason: surfaceLabels.events.review(
+        "structural_review_snapshot",
+        orchestrationReport.reviewResult.owner,
+      ),
+      owner: orchestrationReport.reviewResult.owner,
+    }),
+  );
+  await publishProgress(
+    progressEvent({
+      runId: effectiveRunId,
+      stage: "Closure",
+      status: "projection_snapshot",
+      reason: surfaceLabels.events.closure(
+        runtimeEvidence.status,
+        `${businessPhasePlanPacket.closure.currentPhase}=${businessPhasePlanPacket.closure.currentStatus}`,
+      ),
+      owner: orchestrationReport.verificationResult.owner,
+    }),
+  );
   await persistDecisionRuns({ dbPath, decisionResults });
   const analytics = await persistRuntimeEvidenceEvents({
     dbPath,
@@ -8788,26 +9489,57 @@ export async function runMetaTheoryGovernedExecution({
     runtimeEvidence,
     writebackFlow,
   });
-  const outputDir = artifactDir ? path.resolve(artifactDir) : stateDir;
-  await fs.mkdir(outputDir, { recursive: true });
-  const jsonPath = path.join(outputDir, `${effectiveRunId}.json`);
-  const markdownPath = path.join(outputDir, `${effectiveRunId}.zh-CN.md`);
-  const latestPath = path.join(outputDir, "latest.json");
-  const labels = getReportLabelsForPath(markdownPath);
   const sectionLabels = labels.sections;
   const toolList = labels.toolList(labels.toolNames);
-  const conversationNotice = buildConversationNotice({
+  let artifactStatus =
+    orchestrationReport.status === "pass" &&
+    runtimeEvidence.status === "pass" &&
+    ["candidate_only", "approved-for-writeback", "none-with-reason"].includes(writebackFlow.status)
+      ? "pass"
+      : "partial";
+  let conversationNotice = buildConversationNotice({
     orchestrationReport,
     runtimeEvidence,
     labels,
     governanceStartReasonPacket,
     businessPhasePlanPacket,
     cardPlanPacket,
-    emitConversationNotice,
+    progressEvents,
+    surfaceSnapshot: {
+      providerInvocationState: hostInvocationEvidence
+        ? "host_evidence_pending_validation"
+        : "selected_not_invoked",
+      providerBindings: [],
+      providerPresentationSummary: surfaceLabels.invocationPresentation.userSummary(
+        "not_confirmed",
+        surfaceLabels.invocationPresentation.executionStates.not_confirmed,
+      ),
+      meshMode: "planned_structural",
+      peerCount: orchestrationReport.workerTaskPackets.length,
+      handoffCount: orchestrationReport.workerTaskPackets.filter(
+        (packet) => packet.handoffContract,
+      ).length,
+      nodeCount: TRACE_SPINE.length + orchestrationReport.workerTaskPackets.length,
+      edgeCount:
+        Math.max(TRACE_SPINE.length - 1, 0) +
+        orchestrationReport.workerTaskPackets.reduce(
+          (count, packet) => count + (packet.dependsOn?.length ?? 0),
+          0,
+        ),
+      state: "structural_route_ready",
+      checkpointCount: 0,
+    },
+    emitConversationNotice: progressEnabled,
     conversationNoticeChannel,
     conversationNoticeAdapter,
+    artifactStatus,
+    partialReasons: artifactStatus === "partial" ? ["structural_preflight_incomplete"] : [],
   });
-  const userExperienceNotice = buildUserExperienceNotice({
+  conversationNotice.hostObservation = evaluateHostAssistantMessageEvidence(
+    hostAssistantMessageEvidence,
+    conversationNotice.hostObservationExpectations,
+  );
+  let userExperienceNotice = buildUserExperienceNotice({
     orchestrationReport,
     runtimeEvidence,
     writebackFlow,
@@ -8824,12 +9556,6 @@ export async function runMetaTheoryGovernedExecution({
   const panelContractDefinition = await readJson(RUN_REPORT_PANEL_CONTRACT_PATH);
   const aiReadableStandards = await readJson(AI_READABLE_PRODUCT_STANDARDS_PATH);
   const agentTeamsPlaybookProvider = await resolveAgentTeamsPlaybookProvider(routeRuntime);
-  let artifactStatus =
-    orchestrationReport.status === "pass" &&
-    runtimeEvidence.status === "pass" &&
-    ["candidate_only", "approved-for-writeback", "none-with-reason"].includes(writebackFlow.status)
-      ? "pass"
-      : "partial";
   const coreLoop = buildCoreLoopArtifact({
     runId: effectiveRunId,
     task: normalizedTask,
@@ -8846,13 +9572,13 @@ export async function runMetaTheoryGovernedExecution({
     analytics,
     hostVisibleSubagents,
     hostInvocationEvidence,
-    hostInvocationEvidenceTrusted,
     nativeChoiceEvidence,
     nativeChoiceEvidenceTrusted,
     agentTeamsPlaybookProvider,
     invokeCapabilityProbes,
     runtime: routeRuntime,
     osTarget: routeOs,
+    outputLanguage: resolvedOutputLanguage,
   });
   artifactStatus =
     artifactStatus === "pass" &&
@@ -8863,6 +9589,102 @@ export async function runMetaTheoryGovernedExecution({
     coreLoop.productExperiencePacket.status === "product_experience_pass"
       ? "pass"
       : "partial";
+  const partialReasons = artifactStatus === "pass"
+    ? []
+    : [
+        orchestrationReport.status !== "pass" ? `orchestration=${orchestrationReport.status}` : null,
+        runtimeEvidence.status !== "pass" ? `runtime_projection=${runtimeEvidence.status}` : null,
+        coreLoop.runtimeInvocationPlanPacket.status !== "pass"
+          ? `provider_invocation=${coreLoop.runtimeInvocationPlanPacket.status}`
+          : null,
+        coreLoop.hostInvocationRequestPacket.status !== "pass"
+          ? `host_invocation=${coreLoop.hostInvocationRequestPacket.status}`
+          : null,
+        coreLoop.capabilityInvocationTruthPacket.status !== "pass"
+          ? `invocation_truth=${coreLoop.capabilityInvocationTruthPacket.status}`
+          : null,
+        coreLoop.productExperiencePacket.status !== "product_experience_pass"
+          ? `product_experience=${coreLoop.productExperiencePacket.status}`
+          : null,
+      ].filter(Boolean);
+  const invokedBindingRefs = new Set(
+    (coreLoop.runtimeInvocationPlanPacket.invokedBindings ?? []).map(
+      (binding) => binding.bindingRef,
+    ),
+  );
+  const providerBindings = (coreLoop.runtimeInvocationPlanPacket.requiredBindings ?? []).map(
+    (binding) =>
+      `${binding.family}:${binding.providerId ?? binding.bindingRef}:${
+        invokedBindingRefs.has(binding.bindingRef) ? "invoked_or_applied" : "selected_not_invoked"
+      }`,
+  );
+  const liveInvocationPass =
+    coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage?.status === "pass";
+  conversationNotice = buildConversationNotice({
+    orchestrationReport,
+    runtimeEvidence,
+    labels,
+    governanceStartReasonPacket,
+    businessPhasePlanPacket,
+    cardPlanPacket,
+    progressEvents,
+    surfaceSnapshot: {
+      providerInvocationState:
+        coreLoop.runtimeInvocationPlanPacket.status === "pass"
+          ? "invoked_or_applied"
+          : "selected_not_invoked",
+      providerBindings,
+      providerPresentationSummary: coreLoop.capabilityInvocationPresentationPacket.userSummary,
+      meshMode:
+        coreLoop.capabilityInvocationPresentationPacket.executionState === "completed"
+          ? "exact_binding_observed"
+          : coreLoop.capabilityInvocationPresentationPacket.executionState === "called_with_failures"
+            ? "exact_binding_partial"
+          : coreLoop.capabilityInvocationPresentationPacket.executionState === "called"
+            ? "host_visible_observed"
+            : liveInvocationPass
+              ? "host_observed"
+              : "planned_structural",
+      peerCount: coreLoop.visibleMetaTheorySurfacePacket.peerAgentMesh?.peerCount ?? 0,
+      handoffCount: coreLoop.visibleMetaTheorySurfacePacket.peerAgentMesh?.handoffCount ?? 0,
+      nodeCount: coreLoop.visibleMetaTheorySurfacePacket.langGraph?.nodeCount ?? 0,
+      edgeCount: coreLoop.visibleMetaTheorySurfacePacket.langGraph?.edgeCount ?? 0,
+      state: coreLoop.visibleMetaTheorySurfacePacket.langGraph?.status ?? "missing",
+      checkpointCount: coreLoop.visibleMetaTheorySurfacePacket.langGraph?.checkpointCount ?? 0,
+    },
+    artifactStatus,
+    partialReasons,
+    emitConversationNotice: progressEnabled,
+    conversationNoticeChannel,
+    conversationNoticeAdapter,
+  });
+  conversationNotice.hostObservation = evaluateHostAssistantMessageEvidence(
+    hostAssistantMessageEvidence,
+    conversationNotice.hostObservationExpectations,
+  );
+  if (progressEnabled && typeof onConversationProgress === "function") {
+    await onConversationProgress({
+      schemaVersion: "conversation-progress-event-v0.1",
+      eventId: stableId("conversation-progress", `${effectiveRunId}-aggregate`),
+      runId: effectiveRunId,
+      stage: "Aggregate",
+      status: artifactStatus,
+      reason: "final_user_visible_aggregate",
+      owner: orchestrationReport.orchestrationTaskBoardPacket.synthesisOwner,
+      occurredAt: nowIso(),
+      text: conversationNotice.aggregateText,
+      textSha256: textSha256(conversationNotice.aggregateText),
+    });
+    conversationNotice.progressStreamed = true;
+  }
+  userExperienceNotice = buildUserExperienceNotice({
+    orchestrationReport,
+    runtimeEvidence,
+    writebackFlow,
+    labels,
+    conversationNotice,
+    cardPlanPacket,
+  });
   const userReportMarkdown = buildUserReadableRunReport({
     runId: effectiveRunId,
     task: normalizedTask,
@@ -8878,6 +9700,7 @@ export async function runMetaTheoryGovernedExecution({
     stageOperationPlan,
     visibleMetaTheorySurfacePacket: coreLoop.visibleMetaTheorySurfacePacket,
     capabilityInvocationTruthPacket: coreLoop.capabilityInvocationTruthPacket,
+    capabilityInvocationPresentationPacket: coreLoop.capabilityInvocationPresentationPacket,
     productExperiencePacket: coreLoop.productExperiencePacket,
     markdownPath,
   });
@@ -8895,6 +9718,7 @@ export async function runMetaTheoryGovernedExecution({
     productExperiencePacket: coreLoop.productExperiencePacket,
     visibleMetaTheorySurfacePacket: coreLoop.visibleMetaTheorySurfacePacket,
     capabilityInvocationTruthPacket: coreLoop.capabilityInvocationTruthPacket,
+    capabilityInvocationPresentationPacket: coreLoop.capabilityInvocationPresentationPacket,
     paths: {
       json: jsonPath,
       markdown: markdownPath,
@@ -8913,10 +9737,23 @@ export async function runMetaTheoryGovernedExecution({
     businessFlowBlueprintPacket,
     runtime: routeRuntime,
     osTarget: routeOs,
+    outputLanguage: resolvedOutputLanguage,
+    languageSource: languageResolution.source,
   });
   const artifact = {
     schemaVersion: 1,
     runId: effectiveRunId,
+    requestedRunId,
+    overwriteAuthorized: allowOverwrite === true,
+    reservation: requestedRunId == null
+      ? null
+      : {
+          path: path.basename(reservationPath),
+          mode: allowOverwrite === true ? "explicit_overwrite" : "exclusive_wx",
+        },
+    taskFingerprint,
+    resolvedOutputLanguage,
+    languageResolution,
     status: artifactStatus,
     task: normalizedTask,
     coreLoop,
@@ -8952,6 +9789,7 @@ export async function runMetaTheoryGovernedExecution({
     hostInvocationRequestPacket: coreLoop.hostInvocationRequestPacket,
     capabilityInvocationProbePacket: coreLoop.capabilityInvocationProbePacket,
     capabilityInvocationTruthPacket: coreLoop.capabilityInvocationTruthPacket,
+    capabilityInvocationPresentationPacket: coreLoop.capabilityInvocationPresentationPacket,
     durableAgentLifecyclePacket: coreLoop.durableAgentLifecyclePacket,
     visibleMetaTheorySurfacePacket: coreLoop.visibleMetaTheorySurfacePacket,
     userPerceptionPacket: coreLoop.userPerceptionPacket,
@@ -8978,6 +9816,7 @@ export async function runMetaTheoryGovernedExecution({
       hostInvocationRequestPacket: coreLoop.hostInvocationRequestPacket,
       capabilityInvocationProbePacket: coreLoop.capabilityInvocationProbePacket,
       capabilityInvocationTruthPacket: coreLoop.capabilityInvocationTruthPacket,
+      capabilityInvocationPresentationPacket: coreLoop.capabilityInvocationPresentationPacket,
       durableAgentLifecyclePacket: coreLoop.durableAgentLifecyclePacket,
       visibleMetaTheorySurfacePacket: coreLoop.visibleMetaTheorySurfacePacket,
       userPerceptionPacket: coreLoop.userPerceptionPacket,
@@ -9023,7 +9862,8 @@ export async function runMetaTheoryGovernedExecution({
     runReport: {
       status: artifactStatus,
       runId: effectiveRunId,
-      markdownPath: `${effectiveRunId}.zh-CN.md`,
+      language: resolvedOutputLanguage,
+      markdownPath: markdownFileName,
       sections: [
         sectionLabels.decisionSummary,
         "开始原因",
@@ -9049,13 +9889,16 @@ export async function runMetaTheoryGovernedExecution({
     },
     ...workflowContractPackets,
   };
-  await fs.writeFile(jsonPath, `${JSON.stringify(artifact, null, 2)}\n`);
-  await fs.writeFile(markdownPath, userReportMarkdown);
-  await fs.writeFile(
+  await atomicWriteFile(jsonPath, `${JSON.stringify(artifact, null, 2)}\n`);
+  await atomicWriteFile(markdownPath, userReportMarkdown);
+  await atomicWriteFile(
     latestPath,
     `${JSON.stringify(
       {
         runId: effectiveRunId,
+        taskFingerprint,
+        resolvedOutputLanguage,
+        languageResolution,
         jsonPath: relative(jsonPath),
         markdownPath: relative(markdownPath),
       },
@@ -9084,11 +9927,42 @@ export async function readGovernedExecutionRun({
   if (!effectiveRunId) {
     throw new Error("No governed execution run found.");
   }
-  const jsonPath = path.join(outputDir, `${effectiveRunId}.json`);
-  const markdownPath = path.join(outputDir, `${effectiveRunId}.zh-CN.md`);
+  const safeRunId = validateRunId(effectiveRunId, "read runId");
+  const jsonPath = resolveOutputFile(outputDir, `${safeRunId}.json`);
+  const artifact = JSON.parse(await fs.readFile(jsonPath, "utf8"));
+  if (artifact?.runId !== safeRunId) {
+    throw new Error(
+      `Governed run binding mismatch: requested '${safeRunId}' but artifact contains '${artifact?.runId ?? "missing"}'.`,
+    );
+  }
+  const recordedMarkdown = artifact?.runReport?.markdownPath;
+  const language = normalizeOutputLanguage(
+    artifact?.resolvedOutputLanguage ?? artifact?.runReport?.language,
+  ) ?? "zh-CN";
+  let recordedMarkdownPath = null;
+  if (recordedMarkdown) {
+    const recordedBase = path.basename(recordedMarkdown);
+    const prefix = `${safeRunId}.`;
+    const recordedLocale =
+      recordedBase.startsWith(prefix) && recordedBase.endsWith(".md")
+        ? recordedBase.slice(prefix.length, -3)
+        : null;
+    if (!normalizeOutputLanguage(recordedLocale)) {
+      throw new Error(
+        `Governed run report binding mismatch: '${recordedBase}' does not belong to '${safeRunId}' with a supported locale.`,
+      );
+    }
+    recordedMarkdownPath = resolveOutputFile(outputDir, recordedBase);
+  }
+  const candidates = [
+    recordedMarkdownPath,
+    resolveOutputFile(outputDir, `${safeRunId}.${language}.md`),
+    resolveOutputFile(outputDir, `${safeRunId}.zh-CN.md`),
+  ].filter(Boolean);
+  const markdownPath = candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
   return {
-    runId: effectiveRunId,
-    artifact: JSON.parse(await fs.readFile(jsonPath, "utf8")),
+    runId: safeRunId,
+    artifact,
     markdown: await fs.readFile(markdownPath, "utf8"),
     paths: { json: jsonPath, markdown: markdownPath },
   };
@@ -9126,6 +10000,8 @@ function positionalTask(fallback = null) {
         "--native-choice-evidence",
         "--runtime",
         "--os",
+        "--lang",
+        "--output-language",
       ].includes(value)
     ) {
       index += 1;
@@ -9156,6 +10032,8 @@ function rawPositionals() {
         "--native-choice-evidence",
         "--runtime",
         "--os",
+        "--lang",
+        "--output-language",
       ].includes(value)
     ) {
       index += 1;
@@ -9184,6 +10062,13 @@ async function main() {
   const dbArg = argValue("--db", null);
   const runtimeArg = argValue("--runtime", process.env.META_KIM_RUNTIME ?? "codex");
   const osArg = argValue("--os", process.env.META_KIM_OS ?? "windows");
+  const cliOutputLanguage = argValue(
+    "--output-language",
+    argValue("--lang", null),
+  );
+  const emitConversationProgress =
+    process.argv.includes("--emit-conversation-notice") &&
+    !process.argv.includes("--no-emit-conversation-notice");
   const runtime = normalizeRouteRuntime(runtimeArg);
   const osTarget = normalizeOsTarget(osArg);
   const useTemporaryOutput = process.argv.includes("--temp-output");
@@ -9230,6 +10115,8 @@ async function main() {
   const report = await runMetaTheoryGovernedExecution({
     task,
     runId: runIdArg ?? (taskArg ? null : positional[1] ?? null),
+    allowOverwrite: process.argv.includes("--overwrite-run"),
+    cliOutputLanguage,
     stateDir,
     artifactDir,
     dbPath: path.resolve(
@@ -9243,10 +10130,13 @@ async function main() {
     approvalPacket,
     applyWriteback: process.argv.includes("--apply-writeback"),
     canonicalRoot: path.resolve(argValue("--canonical-root", path.join(REPO_ROOT, "canonical"))),
-    emitConversationNotice:
-      process.argv.includes("--emit-conversation-notice") &&
-      !process.argv.includes("--no-emit-conversation-notice"),
-    conversationNoticeChannel: "stdout",
+    emitConversationNotice: emitConversationProgress,
+    onConversationProgress: emitConversationProgress
+      ? ({ text }) => {
+          process.stderr.write(`${text}\n`);
+        }
+      : null,
+    conversationNoticeChannel: "stderr",
     conversationNoticeAdapter: CONVERSATION_NOTICE_ADAPTER,
     hostVisibleSubagents: argValue(
       "--host-visible-subagents",
@@ -9256,7 +10146,6 @@ async function main() {
       "--host-invocation-evidence",
       process.env.META_KIM_HOST_INVOCATION_EVIDENCE ?? null,
     ),
-    hostInvocationEvidenceTrusted: false,
     nativeChoiceEvidence: argValue(
       "--native-choice-evidence",
       process.env.META_KIM_NATIVE_CHOICE_EVIDENCE ?? null,
@@ -9264,8 +10153,8 @@ async function main() {
     nativeChoiceEvidenceTrusted: false,
     invokeCapabilityProbes: process.argv.includes("--invoke-capability-probes"),
   });
-  if (report.conversationNotice.emitted) {
-    process.stdout.write(`${report.conversationNotice.text}\n\n`);
+  if (report.conversationNotice.emitted && !report.conversationNotice.progressStreamed) {
+    process.stderr.write(`${report.conversationNotice.text}\n`);
   }
   process.stdout.write(
     `${JSON.stringify(

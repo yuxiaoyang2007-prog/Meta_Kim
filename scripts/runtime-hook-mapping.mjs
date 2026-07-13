@@ -91,6 +91,7 @@ export const HOOKPROMPT_PLATFORM_SUPPORT = {
 // shared/hooks; runtime sync must never prefer a same-named runtime copy.
 export const SHARED_RUNTIME_HOOK_FILES = Object.freeze([
   "activate-meta-theory-spine.mjs",
+  "project-root.mjs",
   "skip-reminder.mjs",
   "spine-state.mjs",
   "spine-state-utils.mjs",

@@ -163,7 +163,7 @@ function validateContract(contract, coreLoop, pkg) {
     "package.json missing P-067 validator script",
   );
   assert.ok(
-    pkg.scripts?.["meta:verify:governance"]?.includes("meta:prd:smooth-capability:validate"),
+    `${pkg.scripts?.["meta:verify:governance"] ?? ""} ${pkg.scripts?.["meta:verify:governance:core"] ?? ""}`.includes("meta:prd:smooth-capability:validate"),
     "meta:verify:governance must include P-067 validator",
   );
 }

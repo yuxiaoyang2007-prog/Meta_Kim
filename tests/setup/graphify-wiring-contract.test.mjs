@@ -383,7 +383,7 @@ console.log("forced rebuild ok");
       "utf8",
     );
 
-    assert.match(body, /const rootDir = process\.cwd\(\)/);
+    assert.match(body, /const rootDir = resolveProjectRoot\(\{/);
     assert.match(body, /\["-m", "pip", "show", "graphifyy"\]/);
     assert.match(body, /\["-m", "pip", "install", "graphifyy"\]/);
     assert.match(body, /\["-m", "graphify", "hook", "install"\]/);
@@ -395,7 +395,9 @@ console.log("forced rebuild ok");
     assert.match(body, /spawn\(process\.execPath, \[scriptPath, "--auto-worker"\]/);
     assert.match(body, /detached: true/);
     assert.match(body, /failedRetryMs/);
-    assert.doesNotMatch(body, /PROJECT_DIR/);
+    // CLAUDE_PROJECT_DIR (the runtime's project env) is allowed; this only
+    // guards against setup.mjs's PROJECT_DIR staging global.
+    assert.doesNotMatch(body, /(?<![A-Za-z0-9_])PROJECT_DIR\b/);
   });
 
   test("meta-theory activation hook starts post-copy auto-init without blocking startup", () => {
@@ -410,7 +412,7 @@ console.log("forced rebuild ok");
 
     assert.match(src, /project-post-copy-init\.mjs/);
     assert.match(src, /--package-root/);
-    assert.match(src, /spawnSync\(process\.execPath, \[scriptPath, "--auto"\]/);
+    assert.match(src, /spawnSync\(process\.execPath, \[scriptPath, "--auto", "--project-root", root\]/);
     assert.match(src, /timeout: 4000/);
     assert.match(src, /stdio: "ignore"/);
     assert.match(src, /META_KIM_POST_COPY_AUTO === "off"/);
@@ -433,6 +435,9 @@ console.log("forced rebuild ok");
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-post-copy-auto-"));
     const packageRoot = mkdtempSync(path.join(os.tmpdir(), "meta-kim-package-root-"));
     try {
+      // A real session runs the hook from a project root; mark tempDir so the
+      // project-root gate activates here instead of skipping a bare temp dir.
+      mkdirSync(path.join(tempDir, ".git"), { recursive: true });
       const globalScript = path.join(packageRoot, "scripts", "project-post-copy-init.mjs");
       mkdirSync(path.dirname(globalScript), { recursive: true });
       writeFileSync(
@@ -440,9 +445,12 @@ console.log("forced rebuild ok");
         [
           'import { mkdirSync, writeFileSync } from "node:fs";',
           'import { join } from "node:path";',
-          'const stateDir = join(process.cwd(), ".meta-kim", "state", "default");',
+          'const rootArg = process.argv.indexOf("--project-root");',
+          'const declaredRoot = rootArg >= 0 ? process.argv[rootArg + 1] : null;',
+          'if (!declaredRoot) process.exit(2);',
+          'const stateDir = join(declaredRoot, ".meta-kim", "state", "default");',
           'mkdirSync(stateDir, { recursive: true });',
-          'writeFileSync(join(stateDir, "post-copy-init.json"), JSON.stringify({ status: "stubbed" }) + "\\n");',
+          'writeFileSync(join(stateDir, "post-copy-init.json"), JSON.stringify({ status: "stubbed", declaredRoot }) + "\\n");',
         ].join("\n"),
         "utf8",
       );
@@ -466,6 +474,13 @@ console.log("forced rebuild ok");
         existsSync(path.join(tempDir, ".meta-kim", "state", "default", "post-copy-init.json")),
         true,
       );
+      const marker = JSON.parse(
+        readFileSync(
+          path.join(tempDir, ".meta-kim", "state", "default", "post-copy-init.json"),
+          "utf8",
+        ),
+      );
+      assert.equal(path.resolve(marker.declaredRoot), path.resolve(tempDir));
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
       rmSync(packageRoot, { recursive: true, force: true });
@@ -475,6 +490,9 @@ console.log("forced rebuild ok");
   test("meta-theory activation hook starts spine without project bootstrap automation", () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-activation-no-write-"));
     try {
+      // Mark tempDir a project root so the spine activates here (this test
+      // asserts spine-state is written but no project-bootstrap.json).
+      mkdirSync(path.join(tempDir, ".git"), { recursive: true });
       const hookPath = path.join(
         root,
         "canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs",
@@ -514,6 +532,9 @@ console.log("forced rebuild ok");
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-probe-off-spine-"));
     const globalStateDir = mkdtempSync(path.join(os.tmpdir(), "meta-kim-probe-off-state-"));
     try {
+      // Mark tempDir a project root so prompt-entry spine activation writes
+      // spine-state here (probe-off must not suppress legitimate activation).
+      mkdirSync(path.join(tempDir, ".git"), { recursive: true });
       const hookPath = path.join(
         root,
         "canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs",

@@ -224,7 +224,14 @@ async function checkHooks() {
 async function checkSync() {
   const { stderr, stdout } = await execFileAsync(
     process.execPath,
-    [path.join(repoRoot, "scripts", "sync-runtimes.mjs"), "--check"],
+    [
+      path.join(repoRoot, "scripts", "sync-runtimes.mjs"),
+      "--check",
+      "--scope",
+      "project",
+      "--targets",
+      "claude,codex",
+    ],
     { cwd: repoRoot, encoding: "utf8" },
   );
   if (stderr && stderr.trim()) {

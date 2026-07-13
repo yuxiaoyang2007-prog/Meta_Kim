@@ -15,10 +15,17 @@ describe("53 — setup.mjs i18n extracted to single source (config/i18n/setup-st
 
   test("setup.mjs imports buildI18N and no longer defines I18N inline", () => {
     const setupSrc = readFileSync(SETUP_FILE, "utf8");
+    const setupStringsImport = setupSrc.match(
+      /import\s*\{([^}]*)\}\s*from\s*["']\.\/config\/i18n\/setup-strings\.mjs["']/,
+    );
+    assert.ok(
+      setupStringsImport,
+      "setup.mjs must import the shared config/i18n/setup-strings.mjs module",
+    );
     assert.match(
-      setupSrc,
-      /import\s*\{\s*buildI18N\s*\}\s*from\s*["']\.\/config\/i18n\/setup-strings\.mjs["']/,
-      "setup.mjs must import buildI18N from config/i18n/setup-strings.mjs"
+      setupStringsImport[1],
+      /(?:^|,)\s*buildI18N\s*(?:,|$)/,
+      "the shared setup strings import must include buildI18N",
     );
     assert.match(setupSrc, /const\s+I18N\s*=\s*buildI18N\s*\(/, "setup.mjs must call buildI18N to construct I18N");
     assert.doesNotMatch(

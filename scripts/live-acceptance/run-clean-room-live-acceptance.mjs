@@ -9,14 +9,19 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import {
   lintBlindPrompt,
+  observeClaudeAssistantMessages,
   observeClaudeJsonl,
+  observeCodexAssistantMessages,
   observeCodexJsonl,
   observeMcpClientJsonl,
+  parseJsonl,
 } from "./observe-host-events.mjs";
+import { buildExactBindingCandidateFromFiles } from "./build-exact-binding-candidate.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..", "..");
 const sha256 = (value) => createHash("sha256").update(String(value), "utf8").digest("hex");
+const sha256Bytes = (value) => createHash("sha256").update(value).digest("hex");
 const EXPECTED_AGENT_TEAMS_PLAYBOOK_REF = "v4.8.0";
 const EXPECTED_AGENT_TEAMS_PLAYBOOK_COMMIT = "753ff43bd9b1f9aee4d184c4f21e7f494af5a79f";
 const EXPECTED_AGENT_TEAMS_PLAYBOOK_SKILL_SHA256 =
@@ -25,6 +30,317 @@ const FAST_PATH_CONTROL_PROMPT =
   "请对这个刚安装的项目做一次只读的发布前维护审计。核对依赖来源、跨运行环境兼容性和发布安全。最多查看 8 个最相关文件，最后用 10 行以内列出风险和证据。不得修改源码、安装依赖、提交、推送或访问工作区外文件。";
 const GOVERNED_EXECUTION_PROMPT =
   "请为这个刚安装的项目制定并落地一份发布就绪改进方案。基于现有文件核对依赖来源、跨运行环境兼容性和发布安全，创建 release-readiness-plan.md，写清优先级、每项修改建议、验收方法和不做事项。最多查看 12 个最相关文件；只允许新增这一个报告文件，不得修改源码、安装依赖、提交、推送或访问工作区外文件。";
+const SAFE_RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+
+function pathIsWithin(root, target, { allowRoot = false } = {}) {
+  const relative = path.relative(root, target);
+  return (allowRoot && relative === "") || (
+    relative !== "" && relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+  );
+}
+
+async function realContainedFile(root, filePath, label) {
+  const realRoot = await fs.realpath(path.resolve(root));
+  const realFile = await fs.realpath(path.resolve(filePath));
+  if (!pathIsWithin(realRoot, realFile)) throw new Error(`${label}_outside_allowed_root`);
+  const stats = await fs.stat(realFile);
+  if (!stats.isFile()) throw new Error(`${label}_not_regular_file`);
+  return realFile;
+}
+
+async function atomicExclusiveWrite(filePath, bytes) {
+  const resolved = path.resolve(filePath);
+  const temporary = path.join(path.dirname(resolved), `.${path.basename(resolved)}.${randomUUID()}.tmp`);
+  await fs.writeFile(temporary, bytes, { flag: "wx", mode: 0o600 });
+  try {
+    await fs.link(temporary, resolved);
+  } finally {
+    await fs.rm(temporary, { force: true });
+  }
+}
+
+function topLevelHostSessionFromRaw(rawHostJsonl, runtime, assistantMessages = []) {
+  const records = parseJsonl(rawHostJsonl);
+  const candidates = [];
+  for (const { value } of records) {
+    if (runtime === "codex" && value?.type === "session_meta") {
+      candidates.push(value?.payload?.id ?? value?.payload?.session_id ?? null);
+    }
+    if (runtime === "codex" && value?.type === "thread.started") {
+      candidates.push(value.thread_id ?? null);
+    }
+    if (runtime === "claude" && value?.type === "system") {
+      candidates.push(value.session_id ?? value?.payload?.session_id ?? null);
+    }
+  }
+  if (runtime === "claude") {
+    candidates.push(...assistantMessages
+      .filter((message) => message?.mainThreadChat === true)
+      .map((message) => message.sessionId));
+  }
+  const sessions = [...new Set(candidates.filter(Boolean))];
+  if (sessions.length !== 1) throw new Error(`top_level_host_session_count:${sessions.length}`);
+  return sessions[0];
+}
+
+function bindAssistantMessagesToTopLevelSession(messages, topLevelSessionId) {
+  return messages.map((message) => ({
+    ...message,
+    mainThreadChat:
+      message.mainThreadChat === true && message.sessionId === topLevelSessionId,
+  }));
+}
+
+async function atomicExclusiveMove(sourcePath, destinationPath) {
+  await fs.link(sourcePath, destinationPath);
+  await fs.rm(sourcePath);
+}
+
+function canonicalFlatEvents(events) {
+  return (events ?? []).map((event) => {
+    const marker = event?.metaKimBinding;
+    if (!marker) return event;
+    if (event.bindingRef != null) {
+      const { metaKimBinding, ...canonical } = event;
+      return canonical;
+    }
+    for (const [key, value] of Object.entries(marker)) {
+      if (event[key] !== undefined && event[key] !== value) {
+        throw new Error(`observer_binding_collision:${key}`);
+      }
+    }
+    const { metaKimBinding, ...rest } = event;
+    return { ...rest, ...marker };
+  });
+}
+
+function conversationNoticeExpectations(artifact) {
+  const notice = artifact?.conversationNotice ?? artifact?.coreLoop?.conversationNotice ?? null;
+  const explicit = notice?.hostObservationExpectations ??
+    notice?.progressObservationExpectations ??
+    artifact?.coreLoop?.conversationNoticeObservationPacket?.expectedMessages ??
+    [];
+  if (!Array.isArray(explicit) || explicit.length === 0) {
+    throw new Error("conversation_notice_observation_expectations_missing");
+  }
+  return explicit.map((entry, index) => {
+    if (!/^[a-f0-9]{64}$/u.test(entry?.textSha256 ?? "")) {
+      throw new Error(`conversation_notice_text_hash_missing:${index}`);
+    }
+    if (typeof entry?.stage !== "string" || entry.stage.length === 0) {
+      throw new Error(`conversation_notice_stage_missing:${index}`);
+    }
+    return {
+      textSha256: entry.textSha256,
+      stage: entry.stage,
+    };
+  });
+}
+
+function joinConversationNotices(artifact, assistantMessages, topLevelSessionId) {
+  const joined = conversationNoticeExpectations(artifact).map((expected, index) => {
+    const matches = assistantMessages.filter((message) =>
+      message?.textSha256 === expected.textSha256
+    );
+    if (matches.length !== 1) throw new Error(`conversation_notice_match_count:${index}:${matches.length}`);
+    const message = matches[0];
+    if (message.mainThreadChat !== true || message.sessionId !== topLevelSessionId) {
+      throw new Error(`conversation_notice_not_main_thread:${index}`);
+    }
+    return {
+      stage: expected.stage,
+      textSha256: expected.textSha256,
+      sessionId: message.sessionId,
+      messageId: message.messageId,
+      eventId: message.eventId,
+      observerFormat: message.observerFormat,
+      resultStatus: message.resultStatus,
+      mainThreadChat: true,
+    };
+  });
+  const sessions = new Set(joined.map((item) => item.sessionId).filter(Boolean));
+  if (sessions.size !== 1 || joined.some((item) => !item.sessionId)) {
+    throw new Error("conversation_notice_session_ambiguous_or_missing");
+  }
+  return joined;
+}
+
+function isGovernedArtifact(value) {
+  return Boolean(
+    value?.runId &&
+    Array.isArray(value?.coreLoop?.runtimeInvocationPlanPacket?.requiredBindings),
+  );
+}
+
+async function walkJsonFiles(root) {
+  if (!existsSync(root)) return [];
+  const results = [];
+  for (const entry of await fs.readdir(root, { withFileTypes: true })) {
+    const entryPath = path.join(root, entry.name);
+    if (entry.isDirectory()) results.push(...await walkJsonFiles(entryPath));
+    else if (entry.isFile() && entry.name.endsWith(".json")) results.push(entryPath);
+  }
+  return results;
+}
+
+export async function snapshotGovernedArtifacts(workspace) {
+  const stateRoot = path.join(path.resolve(workspace), ".meta-kim", "state");
+  const snapshot = new Map();
+  for (const filePath of await walkJsonFiles(stateRoot)) {
+    try {
+      const bytes = await fs.readFile(filePath);
+      if (!isGovernedArtifact(JSON.parse(bytes.toString("utf8")))) continue;
+      snapshot.set(path.resolve(filePath), sha256Bytes(bytes));
+    } catch {
+      // Non-run JSON and concurrently incomplete files are not governed artifacts.
+    }
+  }
+  return snapshot;
+}
+
+export function selectSingleNewGovernedArtifact(before, after) {
+  const changed = [...after.entries()]
+    .filter(([filePath, digest]) => before.get(filePath) !== digest)
+    .map(([filePath]) => filePath)
+    .sort();
+  if (changed.length !== 1) {
+    throw new Error(`governed_artifact_count:${changed.length}`);
+  }
+  return changed[0];
+}
+
+export async function buildUnsignedCandidateBundle({
+  artifactsDir,
+  harnessRunId,
+  governedArtifactPath,
+  governedArtifactRoot,
+  selectedGovernedArtifactSha256,
+  runtime,
+  rawHostJsonl,
+}) {
+  if (!SAFE_RUN_ID.test(harnessRunId ?? "")) throw new Error("harness_run_id_invalid");
+  if (!['codex', 'claude'].includes(runtime)) throw new Error("observer_runtime_invalid");
+  if (typeof rawHostJsonl !== "string" || rawHostJsonl.length === 0) {
+    throw new Error("raw_host_jsonl_missing");
+  }
+  if (!/^[a-f0-9]{64}$/u.test(selectedGovernedArtifactSha256 ?? "")) {
+    throw new Error("selected_governed_artifact_sha256_missing");
+  }
+  const realArtifactsDir = await fs.realpath(path.resolve(artifactsDir));
+  const realGovernedPath = await realContainedFile(
+    governedArtifactRoot,
+    governedArtifactPath,
+    "governed_artifact",
+  );
+  const governedBytes = await fs.readFile(realGovernedPath);
+  const governedSha256 = sha256Bytes(governedBytes);
+  if (governedSha256 !== selectedGovernedArtifactSha256) {
+    throw new Error("governed_artifact_changed_after_snapshot");
+  }
+  const governedArtifact = JSON.parse(governedBytes.toString("utf8"));
+  const observedEvents = runtime === "codex"
+    ? observeCodexJsonl(rawHostJsonl)
+    : observeClaudeJsonl(rawHostJsonl);
+  const events = canonicalFlatEvents(observedEvents);
+  const assistantMessages = runtime === "codex"
+    ? observeCodexAssistantMessages(rawHostJsonl)
+    : observeClaudeAssistantMessages(rawHostJsonl);
+  const topLevelHostSessionId = topLevelHostSessionFromRaw(
+    rawHostJsonl,
+    runtime,
+    assistantMessages,
+  );
+  const sessionBoundAssistantMessages = bindAssistantMessagesToTopLevelSession(
+    assistantMessages,
+    topLevelHostSessionId,
+  );
+  const conversationNoticeObservations = joinConversationNotices(
+    governedArtifact,
+    sessionBoundAssistantMessages,
+    topLevelHostSessionId,
+  );
+  const markedEvents = (events ?? []).filter((event) => event?.bindingRef != null);
+  if (markedEvents.length === 0) {
+    throw new Error("missing_raw_host_binding_marker");
+  }
+  if (markedEvents.some((event) => event.runId !== governedArtifact.runId)) {
+    throw new Error("governed_run_id_mismatch");
+  }
+
+  const bundlesRoot = path.join(realArtifactsDir, "bundles");
+  await fs.mkdir(bundlesRoot, { recursive: true });
+  const realBundlesRoot = await fs.realpath(bundlesRoot);
+  if (!pathIsWithin(realArtifactsDir, realBundlesRoot)) throw new Error("bundles_root_outside_artifacts");
+  const bundleRoot = path.resolve(realBundlesRoot, harnessRunId);
+  if (!pathIsWithin(realBundlesRoot, bundleRoot)) throw new Error("bundle_root_outside_artifacts");
+  await fs.mkdir(bundleRoot);
+  const realBundleRoot = await fs.realpath(bundleRoot);
+  if (!pathIsWithin(realBundlesRoot, realBundleRoot)) throw new Error("bundle_symlink_escape");
+  const governedBundlePath = path.join(bundleRoot, `${governedSha256}.governed.json`);
+  await atomicExclusiveWrite(governedBundlePath, governedBytes);
+  const rawBytes = Buffer.from(rawHostJsonl, "utf8");
+  const rawSha256 = sha256Bytes(rawBytes);
+  const rawObservationPath = path.join(bundleRoot, `${rawSha256}.raw.jsonl`);
+  await atomicExclusiveWrite(rawObservationPath, rawBytes);
+  const normalizedObservation = {
+    schemaVersion: "clean-room-normalized-binding-observation-v0.1",
+    runId: governedArtifact.runId,
+    rawArtifact: {
+      path: path.basename(rawObservationPath),
+      sha256: rawSha256,
+    },
+    events,
+    topLevelHostSessionId,
+    assistantMessages: sessionBoundAssistantMessages.map(({ text, ...observation }) => observation),
+    conversationNoticeObservations,
+    retentionPolicy: {
+      classification: "local_sensitive",
+      successfulBundlePolicy: "content_addressed_bundle_only",
+      failedBundlePolicy: "standalone_raw_failure_diagnostic",
+      deletionAuthority: "maintainer_or_release_evidence_retention_job",
+    },
+  };
+  const observationBytes = Buffer.from(`${JSON.stringify(normalizedObservation, null, 2)}\n`, "utf8");
+  const observationSha256 = sha256Bytes(observationBytes);
+  const observationPath = path.join(bundleRoot, `${observationSha256}.observation.json`);
+  await atomicExclusiveWrite(observationPath, observationBytes);
+  const temporaryCandidatePath = path.join(bundleRoot, "candidate.pending.json");
+  const candidate = await buildExactBindingCandidateFromFiles({
+    governedArtifactPath: governedBundlePath,
+    observationPath,
+    rawObservationPath,
+    outputPath: temporaryCandidatePath,
+    bundleRoot,
+    conversationNoticeObservations,
+    retentionPolicy: normalizedObservation.retentionPolicy,
+  });
+  const candidateBytes = await fs.readFile(temporaryCandidatePath);
+  const candidateSha256 = sha256Bytes(candidateBytes);
+  const candidatePath = path.join(bundleRoot, `${candidateSha256}.candidate.json`);
+  await atomicExclusiveMove(temporaryCandidatePath, candidatePath);
+  return {
+    status: "unsigned_candidate_built",
+    promotionEligible: false,
+    exactBindingCoverage: false,
+    governedRunId: governedArtifact.runId,
+    bundleRoot: path.relative(realArtifactsDir, bundleRoot).replaceAll("\\", "/"),
+    governedArtifact: { path: path.basename(governedBundlePath), sha256: governedSha256 },
+    rawHostJsonl: { path: path.basename(rawObservationPath), sha256: rawSha256 },
+    observation: { path: path.basename(observationPath), sha256: observationSha256 },
+    candidate: { path: path.basename(candidatePath), sha256: candidateSha256 },
+    candidateStatus: candidate.status,
+    conversationNoticeObservations,
+    retentionPolicy: {
+      classification: "local_sensitive",
+      successfulBundlePolicy: "content_addressed_bundle_only",
+      failedBundlePolicy: "standalone_raw_failure_diagnostic",
+      deletionAuthority: "maintainer_or_release_evidence_retention_job",
+    },
+    trustBoundary:
+      "Unsigned candidate only; exactBindingCoverage remains false until a private external observer verifies and attests every selected binding.",
+  };
+}
 
 function run(command, args, options = {}) {
   return spawnSync(command, args, {
@@ -553,6 +869,7 @@ async function main() {
       process.exitCode = 1;
       return;
     }
+    const governedArtifactsBefore = await snapshotGovernedArtifacts(packageInfo.workspace);
     let authBoundary;
     let result;
     if (runtime === "codex") {
@@ -578,10 +895,62 @@ async function main() {
       ], { cwd: packageInfo.workspace, env, input: prompt, timeoutMs });
     }
     const rawPath = path.join(artifactsDir, `${runId}.raw.jsonl`);
-    await fs.writeFile(rawPath, result.stdout ?? "", "utf8");
+    await atomicExclusiveWrite(rawPath, result.stdout ?? "");
     const events = runtime === "codex"
       ? observeCodexJsonl(result.stdout)
       : observeClaudeJsonl(result.stdout);
+    const assistantMessages = runtime === "codex"
+      ? observeCodexAssistantMessages(result.stdout)
+      : observeClaudeAssistantMessages(result.stdout);
+    const governedArtifactsAfter = await snapshotGovernedArtifacts(packageInfo.workspace);
+    let candidateGeneration;
+    try {
+      const governedArtifactPath = selectSingleNewGovernedArtifact(
+        governedArtifactsBefore,
+        governedArtifactsAfter,
+      );
+      candidateGeneration = await buildUnsignedCandidateBundle({
+        artifactsDir,
+        harnessRunId: runId,
+        governedArtifactPath,
+        governedArtifactRoot: path.join(packageInfo.workspace, ".meta-kim", "state"),
+        selectedGovernedArtifactSha256: governedArtifactsAfter.get(governedArtifactPath),
+        runtime,
+        rawHostJsonl: result.stdout ?? "",
+      });
+    } catch (error) {
+      candidateGeneration = {
+        status: "blocked",
+        promotionEligible: false,
+        exactBindingCoverage: false,
+        reason: error.message,
+        requiredRunnerChange:
+          error.message === "missing_raw_host_binding_marker"
+            ? "The runtime host dispatcher must copy hostInvocationRequestPacket exact values plus taskPacketId and roleInstanceId into an immutable metaKimBinding marker in the real Task/spawn call arguments."
+            : error.message.startsWith("conversation_notice_")
+              ? "The governed runner must emit conversationNotice.hostObservationExpectations[] with one {stage, textSha256} entry for every required visible progress notice. The harness derives the single real host session from completed assistant-message events; callers must not provide a session id."
+            : null,
+      };
+    }
+    let standaloneRawRetained = true;
+    if (candidateGeneration.status === "unsigned_candidate_built") {
+      try {
+        await fs.rm(rawPath);
+        standaloneRawRetained = false;
+      } catch (error) {
+        candidateGeneration = {
+          ...candidateGeneration,
+          status: "blocked",
+          promotionEligible: false,
+          exactBindingCoverage: false,
+          reason: `standalone_raw_cleanup_failed:${error.code ?? error.message}`,
+        };
+      }
+    }
+    const contentAddressedRawPath = candidateGeneration.rawHostJsonl
+      ? path.join(artifactsDir, candidateGeneration.bundleRoot, candidateGeneration.rawHostJsonl.path)
+      : null;
+    const retainedRawPath = standaloneRawRetained ? rawPath : contentAddressedRawPath;
     const naturallyObservedFamilies = [...new Set(events.map((event) => event.family))].sort();
     // This harness observes host behavior; it deliberately cannot promote its
     // own output to route completion. Exact selected-binding coverage must be
@@ -593,7 +962,12 @@ async function main() {
       target: runtime === "codex" ? "codex_cli" : "claude_code",
       acceptanceMode: "blind_route",
       scenario,
-      status: result.status === 0 && events.length > 0 ? "orchestration_observed" : "blocked",
+      status:
+        result.status === 0 &&
+        events.length > 0 &&
+        candidateGeneration.status === "unsigned_candidate_built"
+          ? "orchestration_observed"
+          : "blocked",
       promotionEligible: false,
       exactBindingCoverage,
       process: {
@@ -604,10 +978,21 @@ async function main() {
       isolation,
       installation,
       authBoundary,
+      candidateGeneration,
       observation: {
-        rawArtifact: rawPath,
+        rawArtifact: retainedRawPath,
+        standaloneFailureDiagnostic: standaloneRawRetained ? rawPath : null,
         rawSha256: sha256(result.stdout ?? ""),
+        retentionPolicy: {
+          classification: "local_sensitive",
+          state: standaloneRawRetained
+            ? "standalone_raw_retained_for_failed_bundle_diagnostic"
+            : "content_addressed_bundle_only",
+          successfulBundlePolicy: "remove_redundant_standalone_raw",
+          failedBundlePolicy: "retain_standalone_raw_with_explicit_path",
+        },
         eventCount: events.length,
+        assistantMessageCount: assistantMessages.length,
         naturallyObservedFamilies,
         notObservedFamilies: [
           "agent_subagent", "skill", "mcp", "hook", "command_script", "runtime_tool",
@@ -622,7 +1007,10 @@ async function main() {
           ? "codex_cli evidence does not prove codex_desktop behavior"
           : "claude_code stream evidence applies only to this isolated CLI run",
     };
-    await fs.writeFile(path.join(artifactsDir, `${runId}.json`), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    await atomicExclusiveWrite(
+      path.join(artifactsDir, `${runId}.json`),
+      `${JSON.stringify(report, null, 2)}\n`,
+    );
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     process.exitCode = 1;
   } finally {

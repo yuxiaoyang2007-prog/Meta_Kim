@@ -24,6 +24,11 @@ describe("49 - 11-phase business workflow visibility", () => {
         await readFile(path.join(tempDir, "api-phase-visibility.json"), "utf8")
       );
       assert.equal(artifact.conversationNotice.status, "not_emitted");
+      assert.equal(artifact.userExperienceNotice.status, "partial");
+      assert.equal(
+        artifact.userExperienceNotice.hostObservationStatus,
+        "host_observation_required"
+      );
       assert.equal(artifact.businessPhasePlanPacket.phaseCount, 11);
       for (const phase of artifact.businessPhasePlanPacket.phases) {
         assert.ok(["done", "skipped", "blocked", "pending"].includes(phase.status));
@@ -38,10 +43,10 @@ describe("49 - 11-phase business workflow visibility", () => {
       assert.match(artifact.businessPhasePlanPacket.closure.currentNextAction, /等待用户确认/);
 
       const markdown = await readFile(path.join(tempDir, "api-phase-visibility.zh-CN.md"), "utf8");
-      assert.match(markdown, /11 阶段业务流/u);
-      assert.match(markdown, /Reason \| Next/u);
-      assert.match(markdown, /已完成：/u);
-      assert.match(markdown, /等待：需要用户验收或反馈/u);
+      assert.match(markdown, /## 阶段进展/u);
+      assert.match(markdown, /Critical：确认目标与边界/u);
+      assert.match(markdown, /Evolution：在适合时记录可复用结论/u);
+      assert.match(markdown, /## 验证与下一步/u);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -68,15 +73,14 @@ describe("49 - 11-phase business workflow visibility", () => {
       );
 
       assert.equal(result.status, 0, result.stderr);
-      assert.match(result.stdout, /^Meta_Kim 对话提示:/u);
-      assert.match(result.stdout, /11阶段状态: done=/u);
-      assert.match(result.stdout, /skipped=revision\/evolve/u);
-      assert.match(result.stdout, /blocked=none/u);
-      assert.match(result.stdout, /pending=feedback/u);
-      assert.match(result.stdout, /当前阶段: feedback=pending/u);
-      assert.match(result.stdout, /阻塞阶段: none/u);
+      JSON.parse(result.stdout);
+      assert.match(result.stderr, /Meta_Kim 对话提示:/u);
+      assert.match(result.stderr, /11阶段状态: 业务流程正在推进/u);
+      assert.doesNotMatch(result.stderr, /done=|skipped=|blocked=|pending=/u);
+      assert.match(result.stderr, /当前阶段: 当前正在进行闭环、验证和用户验收/u);
+      assert.match(result.stderr, /阻塞阶段: 没有已确认的业务阻塞/u);
       assert.doesNotMatch(
-        result.stdout,
+        result.stderr,
         /businessPhasePlanPacket|workerTaskPackets|cardPlanPacket/u
       );
 
@@ -84,7 +88,12 @@ describe("49 - 11-phase business workflow visibility", () => {
         await readFile(path.join(tempDir, "cli-phase-visibility.json"), "utf8")
       );
       assert.equal(artifact.conversationNotice.status, "emitted");
-      assert.equal(artifact.conversationNotice.evidenceKind, "adapter_emitted_notice");
+      assert.equal(artifact.conversationNotice.evidenceKind, "transport_emitted_notice");
+      assert.equal(artifact.conversationNotice.outputBoundary, "stderr_progress_channel");
+      assert.equal(
+        artifact.conversationNotice.hostObservation.status,
+        "host_observation_required"
+      );
       assert.match(
         artifact.conversationNotice.routeSummary.businessPhaseSummary.groupLine,
         /blocked=none/u
@@ -93,7 +102,13 @@ describe("49 - 11-phase business workflow visibility", () => {
         artifact.conversationNotice.routeSummary.businessPhaseSummary.currentLine,
         /feedback=pending/u
       );
-      assert.equal(artifact.userExperienceNotice.status, "ready");
+      assert.equal(artifact.userExperienceNotice.status, "partial");
+      assert.equal(artifact.userExperienceNotice.conversationNoticeEmitted, true);
+      assert.equal(artifact.userExperienceNotice.conversationNoticeObserved, false);
+      assert.equal(
+        artifact.userExperienceNotice.hostObservationStatus,
+        "host_observation_required"
+      );
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -127,6 +142,10 @@ describe("49 - 11-phase business workflow visibility", () => {
       );
       assert.equal(artifact.conversationNotice.status, "not_emitted");
       assert.equal(artifact.userExperienceNotice.status, "partial");
+      assert.equal(
+        artifact.userExperienceNotice.hostObservationStatus,
+        "host_observation_required"
+      );
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

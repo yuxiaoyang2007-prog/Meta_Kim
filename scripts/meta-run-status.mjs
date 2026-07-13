@@ -4,10 +4,20 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { readMetaRunStatus } from "../canonical/runtime-assets/shared/hooks/spine-state.mjs";
+import {
+  getMetaRunStatusCopy,
+  resolveMetaKimCliLanguage,
+} from "./meta-kim-i18n.mjs";
 
 const args = new Set(process.argv.slice(2));
 const json = args.has("--json");
 const latest = args.has("--latest");
+const details = args.has("--details") || args.has("--verbose");
+const langEqualsArg = process.argv.find((arg) => arg.startsWith("--lang="));
+const langIndex = process.argv.indexOf("--lang");
+const cliLanguage =
+  langEqualsArg?.slice("--lang=".length) ||
+  (langIndex >= 0 ? process.argv[langIndex + 1] : null);
 const profileArg = process.argv.find((arg) => arg.startsWith("--profile="));
 const profile =
   profileArg?.slice("--profile=".length) ||
@@ -42,6 +52,27 @@ const LATEST_LABELS = {
   separator: "=",
   listSeparator: "; ",
 };
+
+function humanCopy(languageHint = null) {
+  const { language } = cliLanguage
+    ? resolveMetaKimCliLanguage(cliLanguage)
+    : languageHint
+      ? resolveMetaKimCliLanguage(languageHint)
+      : resolveMetaKimCliLanguage();
+  return getMetaRunStatusCopy(language);
+}
+
+function humanValue(value, copy) {
+  const key = String(value ?? "none");
+  return copy.values[key] ?? key;
+}
+
+function localizeEmbeddedEnums(value, copy) {
+  return String(value ?? copy.values.none).replace(
+    /(?<=[:/])(pass|partial|failed|blocked|pending|unknown)(?=[:/;\s]|$)/gu,
+    (match) => humanValue(match, copy),
+  );
+}
 
 function safeProfileName(value) {
   const candidate = value || "default";
@@ -216,21 +247,33 @@ function summarizeLatestGovernedExecution(cwd, latestExecution) {
   };
 }
 
-function renderLatestSummary(summary) {
-  if (!summary) return LATEST_LABELS.missing;
+function renderLatestSummary(summary, copy, showDetails = false) {
+  const labels = copy.labels;
+  if (!summary) return labels.missing;
 
-  return [
-    `${LATEST_LABELS.latestRun}${LATEST_LABELS.separator}${summary.runId}`,
-    `${LATEST_LABELS.task}${LATEST_LABELS.separator}${summary.task}`,
-    `${LATEST_LABELS.status}${LATEST_LABELS.separator}${summary.status}`,
-    `${LATEST_LABELS.publicReady}${LATEST_LABELS.separator}${summary.publicReady}`,
-    `${LATEST_LABELS.summary}${LATEST_LABELS.separator}${summary.summary}`,
-    `${LATEST_LABELS.ownerHandoff}${LATEST_LABELS.separator}${summary.ownerHandoff}`,
-    `${LATEST_LABELS.runtimeEvidence}${LATEST_LABELS.separator}${summary.runtimeEvidence}`,
-    `${LATEST_LABELS.releaseBoundary}${LATEST_LABELS.separator}${summary.releaseBoundary}`,
-    `${LATEST_LABELS.report}${LATEST_LABELS.separator}${summary.report}`,
-    `${LATEST_LABELS.nextCommand}${LATEST_LABELS.separator}${summary.nextCommand}`,
-  ].join("\n");
+  const separator = labels.separator ?? "=";
+  const primary = [
+    labels.title,
+    `${labels.latestRun}${separator}${summary.runId}`,
+    `${labels.status}${separator}${humanValue(summary.status, copy)}`,
+    `${labels.publicReady}${separator}${humanValue(summary.publicReady, copy)}`,
+    `${labels.summary}${separator}${summary.summary}`,
+  ];
+  if (summary.releaseBoundary !== LATEST_LABELS.none) {
+    primary.push(`${labels.releaseBoundary}${separator}${localizeEmbeddedEnums(summary.releaseBoundary, copy)}`);
+  }
+  primary.push(
+    `${labels.report}${separator}${summary.report}`,
+    `${labels.nextCommand}${separator}${summary.nextCommand}`,
+  );
+  if (showDetails) {
+    primary.splice(2, 0, `${labels.task}${separator}${summary.task}`);
+    primary.push(
+      `${labels.ownerHandoff}${separator}${summary.ownerHandoff}`,
+      `${labels.runtimeEvidence}${separator}${localizeEmbeddedEnums(summary.runtimeEvidence, copy)}`,
+    );
+  }
+  return primary.join("\n");
 }
 
 if (latest) {
@@ -245,7 +288,8 @@ if (latest) {
     process.exit(0);
   }
 
-  console.log(renderLatestSummary(summary));
+  const copy = humanCopy(latestExecution?.artifact?.resolvedOutputLanguage);
+  console.log(renderLatestSummary(summary, copy, details));
   process.exit(0);
 }
 
@@ -257,13 +301,14 @@ if (json) {
 }
 
 if (!status) {
-  console.log(DEFAULT_LABELS.inactive);
+  console.log(humanCopy().labels.inactive);
   process.exit(0);
 }
 
+const copy = humanCopy(status.resolvedOutputLanguage);
 const labels = {
-  ...DEFAULT_LABELS,
-  ...(status.publicLabels && typeof status.publicLabels === "object"
+  ...copy.labels,
+  ...(!cliLanguage && status.publicLabels && typeof status.publicLabels === "object"
     ? status.publicLabels
     : {}),
 };
@@ -271,12 +316,12 @@ const labels = {
 if (status.active === false) {
   const continuation =
     status.deactivationReason === "session_stop"
-      ? "local_continuity_or_new_run_only"
+      ? humanValue("local_continuity_or_new_run_only", copy)
       : status.continuationBoundary?.mode || labels.none;
   console.log(
     [
       labels.inactive,
-      `${labels.reason || "reason"}${labels.separator}${status.deactivationReason || labels.none}`,
+      `${labels.reason || "reason"}${labels.separator}${humanValue(status.deactivationReason || "none", copy)}`,
       `${labels.continuation || "continuation"}${labels.separator}${continuation}`,
       `${labels.current}${labels.separator}${status.currentStage || labels.none}`,
     ].join("\n"),

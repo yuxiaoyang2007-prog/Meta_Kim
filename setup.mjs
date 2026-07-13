@@ -23,6 +23,7 @@
  */
 
 import { execSync, spawnSync, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import http from "node:http";
 import {
   existsSync,
@@ -31,8 +32,12 @@ import {
   readdirSync,
   cpSync,
   statSync,
+  lstatSync,
+  realpathSync,
   readFileSync,
   writeFileSync,
+  renameSync,
+  unlinkSync,
 } from "node:fs";
 import { join, dirname, resolve, isAbsolute, relative } from "node:path";
 import { homedir, platform, tmpdir } from "node:os";
@@ -85,9 +90,32 @@ import {
   resolveMemoryEndpoint,
 } from "./scripts/memory-endpoint.mjs";
 import {
+  executeSafeManagedFileTransaction,
+  withSafeManagedFileLock,
+} from "./scripts/safe-managed-file-operations.mjs";
+import {
+  ensureSafeProjectDirectory,
+  isPathInsideDir,
+  mergeProjectCleanupResults,
+  projectCleanupRetryableIssues,
+  projectCleanupStatus,
+  projectFileHash,
+  projectPathDigest,
+  projectRemovalProofForManifestEntry,
+  projectRemovalUnprovenReasonForManifestEntry,
+  safeProjectPathInfo,
+  summarizeProjectAssetCleanup,
+} from "./scripts/project-bootstrap-file-safety.mjs";
+import {
   normalizeSetupCliArgs,
   validateSetupCliArgs,
 } from "./scripts/setup-cli-policy.mjs";
+import {
+  INSTALL_STEP_CLASSIFICATION,
+  INSTALL_STEP_OUTCOME,
+  installStep,
+  summarizeInstallStatus,
+} from "./scripts/install-status-semantics.mjs";
 
 // ── Config ──────────────────────────────────────────────
 
@@ -292,7 +320,10 @@ const LANGUAGES = [
 
 // i18n strings live in config/i18n/setup-strings.mjs to keep setup.mjs small.
 // buildI18N is a closure so the (v) => ... functions can reference MIN_NODE_VERSION.
-import { buildI18N } from "./config/i18n/setup-strings.mjs";
+import {
+  buildI18N,
+  PROJECT_BOOTSTRAP_CHOICE_COPY,
+} from "./config/i18n/setup-strings.mjs";
 const I18N = buildI18N({ MIN_NODE_VERSION });
 
 let t = I18N.en; // default, overwritten by selectLanguage()
@@ -902,8 +933,7 @@ async function withProgress(label, fn) {
   console.log(`${C.dim}→${C.reset} ${label}`);
 
   try {
-    await fn();
-    return true;
+    return await fn();
   } catch (err) {
     console.log(`${C.red}✗${C.reset}`);
     throw err;
@@ -972,6 +1002,7 @@ const PROJECT_BOOTSTRAP_MERGED_CONFIG_PATHS = new Set([
 
 const GLOBAL_HOOK_PACKAGE_FILES_LIST = [
   "activate-meta-theory-spine.mjs",
+  "project-root.mjs",
   "bash-readonly-whitelist.mjs",
   "block-dangerous-bash.mjs",
   "ecc-permission-cache-wrapper.mjs",
@@ -1049,6 +1080,7 @@ const PROJECT_HOOK_SOURCE_CANDIDATES = {
   ],
   codex: [
     "activate-meta-theory-spine.mjs",
+    "project-root.mjs",
     "bash-readonly-whitelist.mjs",
     "enforce-agent-dispatch.mjs",
     "graphify-context.mjs",
@@ -1067,6 +1099,7 @@ const PROJECT_HOOK_SOURCE_CANDIDATES = {
   ],
   cursor: [
     "activate-meta-theory-spine.mjs",
+    "project-root.mjs",
     "bash-readonly-whitelist.mjs",
     "enforce-agent-dispatch.mjs",
     "graphify-context.mjs",
@@ -1782,44 +1815,40 @@ function prepareProjectDeployJson(relPath, srcPath, targetDir) {
   return parsed;
 }
 
-function backupBeforeMerge(destPath, label = "pre-merge") {
-  if (!destPath) return null;
-  if (!existsSync(destPath)) return null;
-  try {
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupRoot = join(
-      PROJECT_DIR,
-      ".meta-kim",
-      "backups",
-      `${label}-${stamp}`,
-    );
-    const safeBase = String(destPath).replace(/[\\/]+/g, "__");
-    const backupPath = join(backupRoot, safeBase);
-    mkdirSync(dirname(backupPath), { recursive: true });
-    cpSync(destPath, backupPath);
-    return backupPath;
-  } catch (err) {
-    warn(t?.warnBackupFailed?.(destPath, err.message) || `Backup failed for ${destPath}: ${err.message}`);
-    return null;
-  }
+function writeProjectManagedTransaction(targetDir, relPath, content, label) {
+  const destPath = join(targetDir, relPath);
+  return executeSafeManagedFileTransaction({
+    trustedRoot: targetDir,
+    backupRoot: join(targetDir, ".meta-kim", "backups"),
+    operations: [{
+      kind: "write",
+      relPath,
+      content,
+      expectedOldHash: projectFileHash(destPath),
+    }],
+    transactionLabel: label,
+  });
 }
 
 function mergeProtectedProjectDeployFile(srcPath, destPath, relPath, targetDir) {
-  backupBeforeMerge(destPath, "pre-merge");
-  writeJsonObject(
-    destPath,
-    plannedProtectedProjectDeployJson(srcPath, destPath, relPath, targetDir),
+  const result = writeProjectManagedTransaction(
+    targetDir,
+    relPath,
+    JSON.stringify(plannedProtectedProjectDeployJson(srcPath, destPath, relPath, targetDir), null, 2) + "\n",
+    "pre-merge",
   );
+  if (!result.ok) throw new Error(`Protected project JSON write blocked: ${String(result.reason).replaceAll("_", "-")}`);
   return 1;
 }
 
 function mergeProtectedProjectDeployTextFile(srcPath, destPath, relPath, targetDir) {
-  backupBeforeMerge(destPath, "pre-merge");
-  writeFileSync(
-    destPath,
+  const result = writeProjectManagedTransaction(
+    targetDir,
+    relPath,
     plannedProtectedProjectDeployText(srcPath, destPath, relPath, targetDir),
-    "utf8",
+    "pre-merge",
   );
+  if (!result.ok) throw new Error(`Protected project text write blocked: ${String(result.reason).replaceAll("_", "-")}`);
   return 1;
 }
 
@@ -2055,19 +2084,31 @@ function projectGeneratedFilePlan(relPath, content, targetDir, source) {
   const exists = existsSync(destPath);
   const current = exists ? readFileSync(destPath, "utf8") : null;
   const contentStatus = !exists ? "missing" : current === content ? "same" : "different";
+  const manifestManaged = previousProjectManagedRelPaths(targetDir).has(rel);
+  const unknownExistingConflict = exists && !manifestManaged && contentStatus !== "same";
   return {
     relPath: rel,
     source,
     content,
     exists,
     contentStatus,
-    ownership: isMetaKimNamespacedProjectPath(rel)
+    ownership: manifestManaged
+      ? "manifest_managed"
+      : unknownExistingConflict
+        ? "unknown_existing"
+      : isMetaKimNamespacedProjectPath(rel)
       ? "meta_kim_owned"
       : exists
         ? "unknown_existing"
         : "new_file",
-    action: exists ? "replace" : "create",
-    effectiveAction: contentStatus === "same" ? "unchanged" : exists ? "replace" : "create",
+    action: unknownExistingConflict ? "conflict" : exists ? "replace" : "create",
+    effectiveAction: contentStatus === "same"
+      ? "unchanged"
+      : unknownExistingConflict
+        ? "conflict"
+        : exists
+          ? "replace"
+          : "create",
     mergePolicy: exists
       ? "meta_kim_namespaced_projection_replace"
       : "generated_projection_create",
@@ -2187,6 +2228,18 @@ function previousProjectManagedFileMap(targetDir) {
   return result;
 }
 
+function projectRemovalProof(targetDir, relPath) {
+  const rel = normalizeDeployRelPath(relPath);
+  const manifestEntry = previousProjectManagedFileMap(targetDir).get(rel);
+  return projectRemovalProofForManifestEntry(targetDir, rel, manifestEntry);
+}
+
+function projectRemovalUnprovenReason(targetDir, relPath, fallback) {
+  const rel = normalizeDeployRelPath(relPath);
+  const manifestEntry = previousProjectManagedFileMap(targetDir).get(rel);
+  return projectRemovalUnprovenReasonForManifestEntry(manifestEntry, fallback);
+}
+
 function isProjectLocalCapabilityAsset(relPath) {
   const rel = normalizeDeployRelPath(relPath);
   if (!rel || PROJECT_BOOTSTRAP_MERGED_CONFIG_PATHS.has(rel)) return false;
@@ -2213,27 +2266,23 @@ function isRedundantProjectInstructionFile(targetDir, relPath) {
   const rel = normalizeDeployRelPath(relPath);
   const targetPath = join(targetDir, rel);
   const sourcePath = join(PROJECT_DIR, rel);
-  if (!existsSync(targetPath) || !existsSync(sourcePath)) return false;
+  if (!safeProjectPathInfo(targetDir, rel) || !existsSync(sourcePath)) return false;
   const stats = statSync(targetPath);
   if (!stats.isFile()) return false;
   const current = readFileSync(targetPath, "utf8");
   const generated = rewriteProjectDirRefs(readFileSync(sourcePath, "utf8"), targetDir);
   const userText = stripManagedTextBlock(current, rel);
-  const metaKimProjectionSignature =
-    (rel === "AGENTS.md" && userText.trimStart().startsWith("# Meta_Kim for Codex")) ||
-    (rel === "CLAUDE.md" &&
-      userText.trimStart().startsWith("# Meta_Kim for Claude Code"));
   return (
     equivalentText(current, generated) ||
     equivalentText(userText, "") ||
-    equivalentText(userText, generated) ||
-    metaKimProjectionSignature
+    equivalentText(userText, generated)
   );
 }
 
 function removeRedundantProjectInstructionFiles(targetDir, activeTargets) {
   const removed = [];
   const skipped = [];
+  const backups = [];
   const root = resolve(targetDir);
   for (const relPath of projectInstructionRelPathsForTargets(activeTargets)) {
     const rel = normalizeDeployRelPath(relPath);
@@ -2243,56 +2292,17 @@ function removeRedundantProjectInstructionFiles(targetDir, activeTargets) {
       continue;
     }
     if (!isRedundantProjectInstructionFile(targetDir, rel)) continue;
-    if (!removeUntrackedProjectPath(targetDir, rel, skipped, { recursive: false })) {
+    if (!removeUntrackedProjectPath(targetDir, rel, skipped, {
+      recursive: false,
+      backup: true,
+      backups,
+    })) {
       continue;
     }
     removed.push(rel);
     pruneEmptyProjectDirs(targetDir, rel);
   }
-  return { removed, skipped };
-}
-
-function projectAssetCleanupBucket(relPath) {
-  const rel = normalizeDeployRelPath(relPath);
-  const runtime = rel.startsWith(".claude/")
-    ? "Claude Code"
-    : rel.startsWith(".codex/") || rel.startsWith(".agents/")
-      ? "Codex"
-      : rel.startsWith(".cursor/")
-        ? "Cursor"
-        : rel.startsWith("openclaw/")
-          ? "OpenClaw"
-          : "Other";
-  const type = rel.includes("/agents/") || rel.startsWith("openclaw/workspaces/")
-    ? "agents"
-    : rel.includes("/skills/")
-      ? "skills"
-      : rel.includes("/commands/")
-        ? "Commands"
-        : rel.includes("/hooks/")
-          ? "hooks"
-          : rel.includes("/rules/")
-            ? "rules"
-            : rel.includes("/capability-index/")
-              ? "capability-index"
-              : "assets";
-  return `${runtime} ${type}`;
-}
-
-function summarizeProjectAssetCleanup(removed) {
-  const counts = new Map();
-  for (const relPath of removed) {
-    const bucket = projectAssetCleanupBucket(relPath);
-    counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([bucket, count]) => `${bucket}: ${count}`);
-}
-
-function isPathInsideDir(absPath, absDir) {
-  const rel = relative(absDir, absPath);
-  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+  return { removed, skipped, backups };
 }
 
 function isGitTrackedProjectPath(targetDir, relPath) {
@@ -2310,8 +2320,9 @@ function removeUntrackedProjectPath(targetDir, relPath, skipped, options = {}) {
   const rel = normalizeDeployRelPath(relPath);
   const root = resolve(targetDir);
   const absPath = resolve(targetDir, rel);
-  if (!isPathInsideDir(absPath, root)) {
-    skipped.push({ relPath: rel, reason: "outside_target_dir" });
+  const safePath = safeProjectPathInfo(targetDir, rel);
+  if (!safePath) {
+    skipped.push({ relPath: rel, reason: "unsafe_realpath_or_link_preserved" });
     return false;
   }
   if (!existsSync(absPath)) return false;
@@ -2319,14 +2330,79 @@ function removeUntrackedProjectPath(targetDir, relPath, skipped, options = {}) {
     skipped.push({ relPath: rel, reason: "git_tracked_preserved" });
     return false;
   }
+  const backup = backupProjectPathBeforeRemoval(targetDir, rel);
+  if (!backup) {
+    skipped.push({ relPath: rel, reason: "backup_failed_preserved" });
+    return false;
+  }
+  if (Array.isArray(options.backups)) {
+    options.backups.push({ relPath: rel, ...backup });
+  }
+  if (!safeProjectPathInfo(targetDir, rel)) {
+    skipped.push({ relPath: rel, reason: "unsafe_realpath_changed_preserved" });
+    return false;
+  }
   rmSync(absPath, { recursive: options.recursive !== false, force: true });
   return true;
+}
+
+function backupProjectPathBeforeRemoval(targetDir, relPath) {
+  const rel = normalizeDeployRelPath(relPath);
+  const source = resolve(targetDir, rel);
+  if (!safeProjectPathInfo(targetDir, rel)) return null;
+  try {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupRoot = join(
+      targetDir,
+      ".meta-kim",
+      "backups",
+      "project-cleanup",
+      stamp,
+    );
+    const destination = join(backupRoot, rel);
+    if (!ensureSafeProjectDirectory(targetDir, dirname(destination))) return null;
+    cpSync(source, destination, { recursive: true });
+    const sourceHash = projectPathDigest(targetDir, rel);
+    const backupRelPath = normalizeDeployRelPath(relative(targetDir, destination));
+    const backupHash = projectPathDigest(targetDir, backupRelPath);
+    if (!sourceHash || sourceHash !== backupHash) {
+      rmSync(destination, { recursive: true, force: true });
+      return null;
+    }
+    return { backupRelPath, sourceHash, backupHash };
+  } catch {
+    return null;
+  }
+}
+
+function writeProjectFileWithVerifiedBackup(targetDir, relPath, content, backups = null) {
+  const rel = normalizeDeployRelPath(relPath);
+  const safePath = safeProjectPathInfo(targetDir, rel);
+  if (!safePath || !lstatSync(safePath.target).isFile()) return false;
+  const backup = backupProjectPathBeforeRemoval(targetDir, rel);
+  if (!backup) return false;
+  const tempPath = join(dirname(safePath.target), `.${Date.now()}-${process.pid}.meta-kim.tmp`);
+  try {
+    writeFileSync(tempPath, content);
+    if (!safeProjectPathInfo(targetDir, normalizeDeployRelPath(relative(targetDir, tempPath)))) {
+      unlinkSync(tempPath);
+      return false;
+    }
+    renameSync(tempPath, safePath.target);
+    if (Array.isArray(backups)) backups.push({ relPath: rel, ...backup });
+    return true;
+  } catch {
+    if (existsSync(tempPath)) unlinkSync(tempPath);
+    return false;
+  }
 }
 
 function pruneEmptyProjectDirs(targetDir, relPath, removedDirs = null) {
   let currentDir = dirname(join(targetDir, normalizeDeployRelPath(relPath)));
   const root = resolve(targetDir);
   while (currentDir !== root && isPathInsideDir(currentDir, root)) {
+    const currentRel = normalizeDeployRelPath(relative(targetDir, currentDir));
+    if (!safeProjectPathInfo(targetDir, currentRel)) return;
     let entries = [];
     try {
       entries = readdirSync(currentDir);
@@ -2350,12 +2426,18 @@ function removeStaleManagedProjectAssets(
   options = {},
 ) {
   const removeCurrentManaged = options.removeCurrentManaged === true;
+  const preserveRelPaths = new Set(
+    (options.preserveRelPaths ?? [])
+      .map((relPath) => normalizeDeployRelPath(relPath))
+      .filter(Boolean),
+  );
   const currentRelPaths = new Set(
     currentFilePlans.map((file) => normalizeDeployRelPath(file.relPath)).filter(Boolean),
   );
   const previousRelPaths = previousProjectManagedRelPaths(targetDir);
   const removed = [];
   const skipped = [];
+  const backups = [];
   const root = resolve(targetDir);
 
   // cleanupProjectRedundancyDirs (removeCurrentManaged) must delete every
@@ -2368,6 +2450,7 @@ function removeStaleManagedProjectAssets(
     ? Array.from(new Set([...previousRelPaths, ...currentRelPaths]))
     : Array.from(previousRelPaths);
   for (const relPath of cleanupSources) {
+    if (preserveRelPaths.has(relPath)) continue;
     if (!removeCurrentManaged && currentRelPaths.has(relPath)) continue;
     if (!isProjectLocalCapabilityAsset(relPath)) continue;
     const absPath = resolve(targetDir, relPath);
@@ -2381,14 +2464,30 @@ function removeStaleManagedProjectAssets(
       skipped.push({ relPath, reason: "not_a_file" });
       continue;
     }
-    if (!removeUntrackedProjectPath(targetDir, relPath, skipped, { recursive: false })) {
+    const proof = projectRemovalProof(targetDir, relPath);
+    if (!proof) {
+      skipped.push({
+        relPath,
+        reason: projectRemovalUnprovenReason(
+          targetDir,
+          relPath,
+          "ownership_or_hash_unproven_preserved",
+        ),
+      });
+      continue;
+    }
+    if (!removeUntrackedProjectPath(targetDir, relPath, skipped, {
+      recursive: false,
+      backup: true,
+      backups,
+    })) {
       continue;
     }
     removed.push(relPath);
     pruneEmptyProjectDirs(targetDir, relPath);
   }
 
-  return { removed, skipped };
+  return { removed, skipped, backups };
 }
 
 const LEGACY_PROJECT_CAPABILITY_RELS_BY_PLATFORM = {
@@ -2411,13 +2510,6 @@ const LEGACY_PROJECT_CAPABILITY_RELS_BY_PLATFORM = {
   ],
 };
 
-function mergeProjectCleanupResults(...cleanups) {
-  return {
-    removed: cleanups.flatMap((cleanup) => cleanup?.removed ?? []),
-    skipped: cleanups.flatMap((cleanup) => cleanup?.skipped ?? []),
-  };
-}
-
 function legacyProjectCapabilityRelPaths(activeTargets) {
   const targets = activeTargets.includes("all")
     ? Object.keys(LEGACY_PROJECT_CAPABILITY_RELS_BY_PLATFORM)
@@ -2434,6 +2526,7 @@ function legacyProjectCapabilityRelPaths(activeTargets) {
 function removeLegacyProjectCapabilityEntrypoints(targetDir, activeTargets) {
   const removed = [];
   const skipped = [];
+  const backups = [];
   const root = resolve(targetDir);
 
   for (const relPath of legacyProjectCapabilityRelPaths(activeTargets)) {
@@ -2444,12 +2537,27 @@ function removeLegacyProjectCapabilityEntrypoints(targetDir, activeTargets) {
       continue;
     }
     if (!existsSync(absPath)) continue;
-    if (!removeUntrackedProjectPath(targetDir, rel, skipped)) continue;
+    const proof = projectRemovalProof(targetDir, rel);
+    if (!proof) {
+      skipped.push({
+        relPath: rel,
+        reason: projectRemovalUnprovenReason(
+          targetDir,
+          rel,
+          "legacy_ownership_unproven_preserved",
+        ),
+      });
+      continue;
+    }
+    if (!removeUntrackedProjectPath(targetDir, rel, skipped, {
+      backup: true,
+      backups,
+    })) continue;
     removed.push(rel);
     pruneEmptyProjectDirs(targetDir, rel);
   }
 
-  return { removed, skipped };
+  return { removed, skipped, backups };
 }
 
 const GLOBAL_CLEANUP_PROJECT_CAPABILITY_ROOTS_BY_PLATFORM = {
@@ -2493,6 +2601,16 @@ function removeGlobalProjectCapabilityRoots(targetDir, activeTargets) {
       continue;
     }
     if (!existsSync(absPath)) continue;
+    const entries = statSync(absPath).isDirectory() ? readdirSync(absPath) : [rel];
+    if (entries.length > 0) {
+      const hasManagedChildren = [...previousProjectManagedRelPaths(targetDir)].some(
+        (managedRel) => managedRel === rel || managedRel.startsWith(`${rel}/`),
+      );
+      if (!hasManagedChildren) {
+        skipped.push({ relPath: rel, reason: "unproven_same_name_content_preserved" });
+      }
+      continue;
+    }
     if (!removeUntrackedProjectPath(targetDir, rel, skipped)) continue;
     removed.push(rel);
     pruneEmptyProjectDirs(targetDir, rel);
@@ -2531,14 +2649,46 @@ function isMetaKimGeneratedSkillDirectory(dirPath) {
   return markerRe.test(raw);
 }
 
+function projectDirectoryRemovalProof(targetDir, relPath) {
+  const rel = normalizeDeployRelPath(relPath);
+  const safePath = safeProjectPathInfo(targetDir, rel);
+  if (!safePath || !lstatSync(safePath.target).isDirectory()) return null;
+  const absPath = safePath.target;
+  const manifestRelPaths = [...previousProjectManagedRelPaths(targetDir)].filter(
+    (managedRel) => managedRel === rel || managedRel.startsWith(`${rel}/`),
+  );
+  const currentFiles = [];
+  const visit = (dirPath) => {
+    for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
+      const entryPath = join(dirPath, entry.name);
+      const entryRel = normalizeDeployRelPath(relative(targetDir, entryPath));
+      if (entry.isSymbolicLink() || !safeProjectPathInfo(targetDir, entryRel)) {
+        currentFiles.push(null);
+      } else if (entry.isDirectory()) visit(entryPath);
+      else if (entry.isFile()) {
+        currentFiles.push(entryRel);
+      } else currentFiles.push(null);
+    }
+  };
+  visit(absPath);
+  if (manifestRelPaths.length === 0) return null;
+  if (currentFiles.some((fileRel) => !fileRel || !projectRemovalProof(targetDir, fileRel))) return null;
+  return {
+    source: "manifest_directory",
+    managedFileCount: manifestRelPaths.length,
+    currentFileCount: currentFiles.length,
+  };
+}
+
 function removeMetaKimGeneratedProjectSkillResidue(targetDir, activeTargets) {
   const removed = [];
   const skipped = [];
+  const backups = [];
   const root = resolve(targetDir);
   for (const relRoot of targetValuesForPlatforms(PROJECT_SKILL_ROOTS_BY_PLATFORM, activeTargets)) {
     const absRoot = resolve(targetDir, relRoot);
-    if (!isPathInsideDir(absRoot, root)) {
-      skipped.push({ relPath: normalizeDeployRelPath(relRoot), reason: "outside_target_dir" });
+    if (!safeProjectPathInfo(targetDir, relRoot)) {
+      if (existsSync(absRoot)) skipped.push({ relPath: normalizeDeployRelPath(relRoot), reason: "unsafe_realpath_or_link_preserved" });
       continue;
     }
     if (!existsSync(absRoot)) continue;
@@ -2547,12 +2697,26 @@ function removeMetaKimGeneratedProjectSkillResidue(targetDir, activeTargets) {
       const absPath = join(absRoot, entry.name);
       const relPath = normalizeDeployRelPath(relative(targetDir, absPath));
       if (!isMetaKimGeneratedSkillDirectory(absPath)) continue;
-      if (!removeUntrackedProjectPath(targetDir, relPath, skipped)) continue;
+      if (isGitTrackedProjectPath(targetDir, relPath)) {
+        skipped.push({ relPath, reason: "git_tracked_preserved" });
+        continue;
+      }
+      if (!projectDirectoryRemovalProof(targetDir, relPath)) {
+        skipped.push({
+          relPath,
+          reason: "signature_only_ownership_unproven_preserved",
+        });
+        continue;
+      }
+      if (!removeUntrackedProjectPath(targetDir, relPath, skipped, {
+        backup: true,
+        backups,
+      })) continue;
       removed.push(relPath);
       pruneEmptyProjectDirs(targetDir, relPath);
     }
   }
-  return { removed, skipped };
+  return { removed, skipped, backups };
 }
 
 function directoryContainsFiles(dirPath) {
@@ -2573,41 +2737,60 @@ function isMetaKimOpenClawHookDirectory(dirPath) {
 function removeMetaKimOpenClawDirectoryResidue(targetDir, activeTargets) {
   const removed = [];
   const skipped = [];
+  const backups = [];
   if (!expandedCleanupTargets(activeTargets).includes("openclaw")) {
     return { removed, skipped };
   }
   const root = resolve(targetDir);
   const hookRoot = resolve(targetDir, "openclaw/hooks");
-  if (isPathInsideDir(hookRoot, root) && existsSync(hookRoot)) {
+  if (safeProjectPathInfo(targetDir, "openclaw/hooks") && existsSync(hookRoot)) {
     for (const entry of readdirSync(hookRoot, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const absPath = join(hookRoot, entry.name);
       const relPath = normalizeDeployRelPath(relative(targetDir, absPath));
       if (!isMetaKimOpenClawHookDirectory(absPath)) continue;
-      if (!removeUntrackedProjectPath(targetDir, relPath, skipped)) continue;
+      if (isGitTrackedProjectPath(targetDir, relPath)) {
+        skipped.push({ relPath, reason: "git_tracked_preserved" });
+        continue;
+      }
+      if (!projectDirectoryRemovalProof(targetDir, relPath)) {
+        skipped.push({
+          relPath,
+          reason: "signature_only_ownership_unproven_preserved",
+        });
+        continue;
+      }
+      if (!removeUntrackedProjectPath(targetDir, relPath, skipped, {
+        backup: true,
+        backups,
+      })) continue;
       removed.push(relPath);
       pruneEmptyProjectDirs(targetDir, relPath);
     }
-  } else if (!isPathInsideDir(hookRoot, root)) {
-    skipped.push({ relPath: "openclaw/hooks", reason: "outside_target_dir" });
+  } else if (existsSync(hookRoot)) {
+    skipped.push({ relPath: "openclaw/hooks", reason: "unsafe_realpath_or_link_preserved" });
   }
 
   const workspaceRoot = resolve(targetDir, "openclaw/workspaces");
-  if (isPathInsideDir(workspaceRoot, root) && existsSync(workspaceRoot)) {
+  if (safeProjectPathInfo(targetDir, "openclaw/workspaces") && existsSync(workspaceRoot)) {
     for (const entry of readdirSync(workspaceRoot, { withFileTypes: true })) {
       if (!entry.isDirectory() || !entry.name.startsWith("meta-")) continue;
       const absPath = join(workspaceRoot, entry.name);
       const relPath = normalizeDeployRelPath(relative(targetDir, absPath));
       if (directoryContainsFiles(absPath)) continue;
+      if (!projectDirectoryRemovalProof(targetDir, relPath)) {
+        skipped.push({ relPath, reason: "ownership_unproven_empty_dir_preserved" });
+        continue;
+      }
       if (!removeUntrackedProjectPath(targetDir, relPath, skipped)) continue;
       removed.push(relPath);
       pruneEmptyProjectDirs(targetDir, relPath);
     }
-  } else if (!isPathInsideDir(workspaceRoot, root)) {
-    skipped.push({ relPath: "openclaw/workspaces", reason: "outside_target_dir" });
+  } else if (existsSync(workspaceRoot)) {
+    skipped.push({ relPath: "openclaw/workspaces", reason: "unsafe_realpath_or_link_preserved" });
   }
 
-  return { removed, skipped };
+  return { removed, skipped, backups };
 }
 
 function stripMetaKimMcpServersFromConfig(config = {}) {
@@ -2710,30 +2893,54 @@ function isGeneratedOnlyProjectConfig(targetDir, relPath, config, currentFilePla
   });
 }
 
-function cleanupRedundantProjectConfigs(targetDir, activeTargets, currentFilePlans = []) {
+function cleanupRedundantProjectConfigs(
+  targetDir,
+  activeTargets,
+  currentFilePlans = [],
+  options = {},
+) {
   const removed = [];
   const skipped = [];
+  const backups = [];
   const root = resolve(targetDir);
+  const preserveRelPaths = new Set(
+    (options.preserveRelPaths ?? [])
+      .map((relPath) => normalizeDeployRelPath(relPath))
+      .filter(Boolean),
+  );
   const relPaths = targetValuesForPlatforms(
     PROJECT_META_KIM_CONFIG_RELS_BY_PLATFORM,
     activeTargets,
   );
   for (const relPath of relPaths) {
     const rel = normalizeDeployRelPath(relPath);
+    if (preserveRelPaths.has(rel)) continue;
     const absPath = resolve(targetDir, rel);
     if (!isPathInsideDir(absPath, root)) {
       skipped.push({ relPath: rel, reason: "outside_target_dir" });
       continue;
     }
     if (!existsSync(absPath)) continue;
+    if (!safeProjectPathInfo(targetDir, rel)) {
+      skipped.push({ relPath: rel, reason: "unsafe_realpath_or_link_preserved" });
+      continue;
+    }
     const current = readJsonObjectIfExists(absPath);
     if (!current) continue;
     const stripped = stripMetaKimProjectConfig(rel, current);
+    const ownershipProof = projectRemovalProof(targetDir, rel);
+    if (!ownershipProof) {
+      skipped.push({
+        relPath: rel,
+        reason: projectRemovalUnprovenReason(targetDir, rel, "config_ownership_unproven_preserved"),
+      });
+      continue;
+    }
     const shouldDelete =
       isEmptyProjectConfigShell(stripped) ||
       isGeneratedOnlyProjectConfig(targetDir, rel, stripped, currentFilePlans);
     if (shouldDelete) {
-      if (!removeUntrackedProjectPath(targetDir, rel, skipped, { recursive: false })) {
+      if (!removeUntrackedProjectPath(targetDir, rel, skipped, { recursive: false, backups })) {
         continue;
       }
       removed.push(rel);
@@ -2745,11 +2952,17 @@ function cleanupRedundantProjectConfigs(targetDir, activeTargets, currentFilePla
         skipped.push({ relPath: rel, reason: "git_tracked_preserved" });
         continue;
       }
-      backupBeforeMerge(absPath, "pre-strip");
-      writeJsonObject(absPath, stripped);
+      if (!writeProjectFileWithVerifiedBackup(
+        targetDir,
+        rel,
+        JSON.stringify(stripped, null, 2) + "\n",
+        backups,
+      )) {
+        skipped.push({ relPath: rel, reason: "backup_or_atomic_write_failed_preserved" });
+      }
     }
   }
-  return { removed, skipped };
+  return { removed, skipped, backups };
 }
 
 function isMetaKimProjectTaskState(filePath) {
@@ -2757,9 +2970,21 @@ function isMetaKimProjectTaskState(filePath) {
   return raw.includes("auto-save from Stop hook") && raw.includes("meta_kim");
 }
 
-function removeMetaKimProjectLocalState(targetDir) {
+function isValidatedProjectBootstrapManifest(targetDir) {
+  const rel = ".meta-kim/state/default/project-bootstrap.json";
+  if (!safeProjectPathInfo(targetDir, rel)) return false;
+  const manifest = readProjectBootstrapManifest(targetDir);
+  if (manifest?.schemaVersion !== "meta-kim-project-bootstrap-v0.1") return false;
+  if (!Array.isArray(manifest.managedFiles) || manifest.managedFiles.length === 0) return false;
+  return manifest.managedFiles.every((entry) =>
+    typeof entry?.relPath === "string" && /^[a-f0-9]{64}$/iu.test(entry?.contentHash ?? ""),
+  );
+}
+
+function removeMetaKimProjectLocalState(targetDir, options = {}) {
   const removed = [];
   const skipped = [];
+  const backups = [];
   const root = resolve(targetDir);
   for (const relPath of PROJECT_META_KIM_LOCAL_STATE_RELS) {
     const rel = normalizeDeployRelPath(relPath);
@@ -2769,52 +2994,52 @@ function removeMetaKimProjectLocalState(targetDir) {
       continue;
     }
     if (!existsSync(absPath)) continue;
-    if (rel === ".claude/project-task-state.json" && !isMetaKimProjectTaskState(absPath)) {
-      skipped.push({ relPath: rel, reason: "local_state_not_meta_kim_signed" });
+    if (!safeProjectPathInfo(targetDir, rel)) {
+      skipped.push({ relPath: rel, reason: "unsafe_realpath_or_link_preserved" });
       continue;
     }
-    if (!removeUntrackedProjectPath(targetDir, rel, skipped)) continue;
+    if (
+      rel === ".meta-kim/state/default/project-bootstrap.json" &&
+      options.preserveManifest === true
+    ) {
+      skipped.push({
+        relPath: rel,
+        reason: "retryable_cleanup_pending_manifest_preserved",
+      });
+      continue;
+    }
+    if (
+      rel === ".claude/project-task-state.json" &&
+      (!isMetaKimProjectTaskState(absPath) || !projectRemovalProof(targetDir, rel))
+    ) {
+      skipped.push({ relPath: rel, reason: "local_state_ownership_unproven_preserved" });
+      continue;
+    }
+    if (
+      rel === ".meta-kim/state/default/project-bootstrap.json" &&
+      !isValidatedProjectBootstrapManifest(targetDir)
+    ) {
+      skipped.push({ relPath: rel, reason: "invalid_or_user_manifest_preserved" });
+      continue;
+    }
+    if (
+      rel === ".meta-kim/meta-kim-post-copy.mjs" &&
+      !projectRemovalProof(targetDir, rel)
+    ) {
+      skipped.push({ relPath: rel, reason: "local_state_ownership_unproven_preserved" });
+      continue;
+    }
+    if (!removeUntrackedProjectPath(targetDir, rel, skipped, { backups })) continue;
     removed.push(rel);
     pruneEmptyProjectDirs(targetDir, rel, removed);
   }
-  return { removed, skipped };
-}
-
-function pruneEmptyDirsPostOrder(absDir, targetRoot, removed, targetDir) {
-  if (!existsSync(absDir) || !isPathInsideDir(absDir, targetRoot)) return;
-  for (const entry of readdirSync(absDir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    pruneEmptyDirsPostOrder(join(absDir, entry.name), targetRoot, removed, targetDir);
-  }
-  if (absDir === targetRoot) return;
-  const entries = readdirSync(absDir);
-  if (entries.length > 0) return;
-  rmSync(absDir, { recursive: true, force: true });
-  removed.push(normalizeDeployRelPath(relative(targetDir, absDir)));
+  return { removed, skipped, backups };
 }
 
 function pruneEmptyProjectRuntimeDirs(targetDir, activeTargets) {
-  const removed = [];
-  const skipped = [];
-  const root = resolve(targetDir);
-  const roots = [
-    ...targetValuesForPlatforms(PROJECT_SKILL_ROOTS_BY_PLATFORM, activeTargets),
-    ".agents",
-    ".claude",
-    ".codex",
-    "openclaw",
-    ".cursor",
-  ];
-  for (const relRoot of [...new Set(roots)]) {
-    const absRoot = resolve(targetDir, relRoot);
-    if (!isPathInsideDir(absRoot, root)) {
-      skipped.push({ relPath: normalizeDeployRelPath(relRoot), reason: "outside_target_dir" });
-      continue;
-    }
-    if (!existsSync(absRoot)) continue;
-    pruneEmptyDirsPostOrder(absRoot, root, removed, targetDir);
-  }
-  return { removed, skipped };
+  void targetDir;
+  void activeTargets;
+  return { removed: [], skipped: [] };
 }
 
 function stripStaleProjectHookConfigs(targetDir, currentFilePlans) {
@@ -2839,9 +3064,13 @@ function stripStaleProjectHookConfigs(targetDir, currentFilePlans) {
     const stripped = stripProjectMetaKimHooksFromHookConfig(current);
     if (jsonEquivalent(current, stripped)) continue;
     if (isGitTrackedProjectPath(targetDir, relPath)) continue;
-    backupBeforeMerge(configPath, "pre-strip-hooks");
-    writeJsonObject(configPath, stripped);
-    changed.push(relPath);
+    const result = writeProjectManagedTransaction(
+      targetDir,
+      relPath,
+      JSON.stringify(stripped, null, 2) + "\n",
+      "pre-strip-hooks",
+    );
+    if (result.ok) changed.push(relPath);
   }
 
   return changed;
@@ -2916,19 +3145,8 @@ function projectBootstrapStatus(targetDir, activeTargets, filePlans) {
     status,
     requiresConfirmation: status !== "ready",
     confirmationReason:
-      status === "ready"
-        ? "Project bootstrap manifest and project-specific files are current; no project write is needed."
-        : status === "conflict"
-          ? "Existing project files overlap Meta_Kim generated paths but are not known to be Meta_Kim-owned; resolve conflicts before apply."
-          : status === "stale"
-          ? "Existing project bootstrap manifest uses a different Meta_Kim version."
-          : status === "target_scope_changed"
-            ? "Selected runtime targets differ from the previous project bootstrap manifest."
-          : status === "missing"
-            ? "Project context/config/state or confirmed overrides are missing one or more required files."
-            : status === "repair_required"
-              ? "Project bootstrap version is current, but managed files need repair, merge, or recreation."
-              : "Project has existing or equivalent config but still needs a confirmed bootstrap to record state or apply pending changes.",
+      t.projectBootstrapConfirmationReasons?.[status] ??
+      t.projectBootstrapConfirmationReasons.ready_with_existing_config,
     metaKimVersion: version,
     targetDir,
     activeTargets,
@@ -3016,23 +3234,26 @@ function projectBootstrapWritePreview(targetDir, filePlans, state) {
   };
 }
 
+function projectBootstrapChoiceCopy() {
+  return PROJECT_BOOTSTRAP_CHOICE_COPY[currentLangCode] ?? PROJECT_BOOTSTRAP_CHOICE_COPY.en;
+}
 function buildProjectBootstrapChoiceSurface(state, writePreview) {
+  const copy = projectBootstrapChoiceCopy();
   if (!state.requiresConfirmation) {
     return {
       required: false,
       trigger: "no_choice_needed_current",
-      header: "Project ready",
-      question:
-        "Meta_Kim project bootstrap is already current for the selected targets. No project-specific files need to be written, and no confirmation popup should be shown.",
+      header: copy.readyHeader,
+      question: copy.readyQuestion,
       recommendedOptionId: "continue",
       options: [
         {
           id: "continue",
-          label: "Continue",
-          expectedResult: "Proceed with the governed run without project-specific bootstrap writes.",
-          advantage: "Avoids repeated prompts and leaves the project untouched.",
-          risk: "None for the current selected targets.",
-          verificationImpact: "Dry-run shows status=ready, requiresConfirmation=false, and zero project writes.",
+          label: copy.continueLabel,
+          expectedResult: copy.continueExpected,
+          advantage: copy.continueAdvantage,
+          risk: copy.continueRisk,
+          verificationImpact: copy.continueVerify,
         },
       ],
     };
@@ -3046,48 +3267,39 @@ function buildProjectBootstrapChoiceSurface(state, writePreview) {
   return {
     required: true,
     trigger: "runtime_native_choice_required_before_apply",
-    runtimeRequirement:
-      "Claude Code must use AskUserQuestion and Codex must use request_user_input before --apply. Compatibility runtimes may show a labeled chat decision card.",
-    header: "Project bootstrap",
+    runtimeRequirement: copy.runtimeRequirement,
+    header: copy.bootstrapHeader,
     question: [
-      `AI understanding: this directory needs Meta_Kim project-specific context/config/state or confirmed overrides for ${targetText}.`,
-      `AI additions: dry-run found ${state.status}; ${reason}`,
-      "Capability route: reuse global runtime capabilities first, then apply only project-specific context/config/state or confirmed overrides.",
-      `Candidate paths: ${
-        hasConflicts
-          ? "inspect and resolve conflicts, skip this project for now, or apply only after conflicts are resolved"
-          : "apply now, inspect only, or skip this project for now"
-      }. Pending project writes: ${pendingCount}; conflicts: ${conflictCount}; global writes: ${writePreview.globalWrites.length}.`,
+      copy.understanding(targetText),
+      copy.additions(state.status, reason),
+      copy.route,
+      copy.candidates(hasConflicts, pendingCount, conflictCount, writePreview.globalWrites.length),
     ].join("\n"),
     recommendedOptionId: hasConflicts ? "inspect_dry_run_only" : "apply_project_bootstrap",
     options: [
       {
         id: "apply_project_bootstrap",
-        label: hasConflicts ? "Apply after resolving conflicts" : "Apply project bootstrap (Recommended)",
-        expectedResult:
-          "Create or update the selected project-specific context/config/state or confirmed overrides, then write the project bootstrap manifest.",
-        advantage: "The next meta-theory trigger can proceed without asking again when files remain current.",
-        risk: hasConflicts
-          ? "Blocked until writePreview.projectConflicts is empty; Meta_Kim will not overwrite unknown user-owned files."
-          : "Touches project files listed in writePreview.projectWrites after backup/merge policy.",
-        verificationImpact:
-          "After apply, a second dry-run must report status=ready, requiresConfirmation=false, pending=0, and projectWrites=0.",
+        label: hasConflicts ? copy.applyBlocked : copy.apply,
+        expectedResult: copy.applyExpected,
+        advantage: copy.applyAdvantage,
+        risk: hasConflicts ? copy.applyBlockedRisk : copy.applyRisk,
+        verificationImpact: copy.applyVerify,
       },
       {
         id: "inspect_dry_run_only",
-        label: "Inspect only",
-        expectedResult: "Do not write files; keep the dry-run plan for human review.",
-        advantage: "Safest when the project owner wants to inspect generated files first.",
-        risk: "Meta_Kim can still reuse global capabilities, but project-specific context/config/state may remain stale for this directory.",
-        verificationImpact: "No manifest update is written; the next trigger will ask again if state is unchanged.",
+        label: copy.inspect,
+        expectedResult: copy.inspectExpected,
+        advantage: copy.inspectAdvantage,
+        risk: copy.inspectRisk,
+        verificationImpact: copy.inspectVerify,
       },
       {
         id: "skip_this_project",
-        label: "Skip project-local writes",
-        expectedResult: "Continue without applying Meta_Kim project-specific files.",
-        advantage: "Avoids changing a directory that should rely on global reusable capabilities only.",
-        risk: "Only global reusable capabilities remain available; project-specific overrides/config/state are not enabled.",
-        verificationImpact: "The run must not claim project-governed readiness for this directory.",
+        label: copy.skip,
+        expectedResult: copy.skipExpected,
+        advantage: copy.skipAdvantage,
+        risk: copy.skipRisk,
+        verificationImpact: copy.skipVerify,
       },
     ],
   };
@@ -3177,13 +3389,35 @@ function writeProjectBootstrapManifest(targetDir, plan, backup, cleanup = null) 
     protectedMergeDecisions: plan.decisions,
     backup,
     cleanup,
-    managedFiles: plan.files.filter(
-      (file) => file.action !== "skip" && file.effectiveAction !== "conflict",
-    ),
+    managedFiles: plan.files
+      .filter(
+        (file) => file.action !== "skip" && file.effectiveAction !== "conflict",
+      )
+      .map((file) => ({
+        ...file,
+        contentHash: projectFileHash(join(targetDir, file.relPath)),
+      })),
     skippedFiles: plan.files.filter((file) => file.action === "skip"),
   };
-  mkdirSync(dirname(manifestPath), { recursive: true });
-  writeJsonObject(manifestPath, manifest);
+  const transaction = executeSafeManagedFileTransaction({
+    trustedRoot: targetDir,
+    backupRoot: join(targetDir, ".meta-kim", "backups"),
+    operations: [{
+      kind: "write",
+      phase: "manifest",
+      relPath: ".meta-kim/state/default/project-bootstrap.json",
+      content: JSON.stringify(manifest, null, 2) + "\n",
+      expectedOldHash: projectFileHash(manifestPath),
+      allowManagedMissingCreate: true,
+    }],
+    transactionLabel: "project-bootstrap-manifest",
+    lockKey: "project-bootstrap-manifest",
+  });
+  if (!transaction.ok) {
+    throw new Error(
+      `Project bootstrap manifest write blocked: ${transaction.reason ?? transaction.status}`,
+    );
+  }
   return manifestPath;
 }
 
@@ -3201,6 +3435,7 @@ const PROJECT_HOOK_DIRS_BY_PLATFORM = {
 const PROJECT_HOOK_FILE_WHITELIST_BY_PLATFORM = {
   claude: new Set([
     "activate-meta-theory-spine.mjs",
+    "project-root.mjs",
     "bash-readonly-whitelist.mjs",
     "block-dangerous-bash.mjs",
     "ecc-permission-cache-wrapper.mjs",
@@ -3225,6 +3460,7 @@ const PROJECT_HOOK_FILE_WHITELIST_BY_PLATFORM = {
   ]),
   codex: new Set([
     "activate-meta-theory-spine.mjs",
+    "project-root.mjs",
     "bash-readonly-whitelist.mjs",
     "codex_hook_adapter.py",
     "codex_hook_runner.mjs",
@@ -3262,6 +3498,7 @@ const PROJECT_HOOK_FILE_WHITELIST_BY_PLATFORM = {
   ]),
   cursor: new Set([
     "activate-meta-theory-spine.mjs",
+    "project-root.mjs",
     "bash-readonly-whitelist.mjs",
     "enforce-agent-dispatch.mjs",
     "graphify-context.mjs",
@@ -3300,11 +3537,19 @@ const PROJECT_HOOK_FILE_WHITELIST_BY_PLATFORM = {
 // whitelist, and emits a 4-locale progress message.
 async function migrateProjectMetaKimHooksForBootstrap(activeTargets, targetDir) {
   const platforms = Array.isArray(activeTargets) ? activeTargets : [];
+  const cleanup = { removed: [], skipped: [], backups: [] };
   for (const platform of platforms) {
     const relDir = PROJECT_HOOK_DIRS_BY_PLATFORM[platform];
     const whitelist = PROJECT_HOOK_FILE_WHITELIST_BY_PLATFORM[platform];
     if (!relDir || !whitelist) continue;
     const hooksDir = join(targetDir, relDir);
+    if (existsSync(hooksDir) && !safeProjectPathInfo(targetDir, relDir)) {
+      cleanup.skipped.push({
+        relPath: normalizeDeployRelPath(relDir),
+        reason: "unsafe_realpath_or_link_preserved",
+      });
+      continue;
+    }
     let entries;
     try {
       entries = readdirSync(hooksDir);
@@ -3321,19 +3566,38 @@ async function migrateProjectMetaKimHooksForBootstrap(activeTargets, targetDir) 
       }
       const relPath = normalizeDeployRelPath(join(relDir, name));
       const skipped = [];
-      if (!removeUntrackedProjectPath(targetDir, relPath, skipped, { recursive: false })) {
+      if (!safeProjectPathInfo(targetDir, relPath)) {
+        cleanup.skipped.push({
+          relPath,
+          reason: "unsafe_realpath_or_link_preserved",
+        });
         kept.push(name);
         continue;
       }
-      try {
-        removed.push(name);
-      } catch (error) {
-        if (error.code !== "ENOENT") {
-          warn(
-            `[Meta_Kim] Failed to remove ${platform} hook ${name}: ${error.message}`,
-          );
-        }
+      const proof = projectRemovalProof(targetDir, relPath);
+      if (!proof) {
+        cleanup.skipped.push({
+          relPath,
+          reason: projectRemovalUnprovenReason(
+            targetDir,
+            relPath,
+            "hook_ownership_unproven_preserved",
+          ),
+        });
+        kept.push(name);
+        continue;
       }
+      if (!removeUntrackedProjectPath(targetDir, relPath, skipped, {
+        recursive: false,
+        backup: true,
+        backups: cleanup.backups,
+      })) {
+        cleanup.skipped.push(...skipped);
+        kept.push(name);
+        continue;
+      }
+      removed.push(name);
+      cleanup.removed.push(relPath);
     }
     if (removed.length > 0) {
       if (!jsonOutputMode) {
@@ -3355,9 +3619,33 @@ async function migrateProjectMetaKimHooksForBootstrap(activeTargets, targetDir) 
       }
     }
   }
+  return cleanup;
 }
 
+const PROJECT_MUTATION_SESSION_LOCK_KEY = "project-mutation-session";
 async function applyProjectBootstrapToDir(activeTargets, targetDir) {
+  if (!existsSync(targetDir)) {
+    mkdirSync(targetDir, { recursive: true });
+  }
+  const session = await withSafeManagedFileLock(
+    {
+      trustedRoot: targetDir,
+      lockKey: PROJECT_MUTATION_SESSION_LOCK_KEY,
+    },
+    () => runProjectBootstrapApplyUnlocked(activeTargets, targetDir),
+  );
+  if (!session.ok) {
+    const error = new Error(
+      `Project bootstrap session blocked: ${session.reason ?? session.status}`,
+    );
+    error.status = "blocked";
+    error.repairAction = session.nextAction ??
+      "Wait for the active project operation to finish, then rerun project bootstrap dry-run before apply.";
+    throw error;
+  }
+  return session.value;
+}
+async function runProjectBootstrapApplyUnlocked(activeTargets, targetDir) {
   const legacyCleanup = removeLegacyProjectCapabilityEntrypoints(targetDir, activeTargets);
   let plan = buildProjectBootstrapPlan(activeTargets, targetDir);
   const cleanup = mergeProjectCleanupResults(
@@ -3402,6 +3690,9 @@ async function applyProjectBootstrapToDir(activeTargets, targetDir) {
 }
 
 function classifyProjectBootstrapError(error) {
+  if (error?.status === "blocked" || error?.status === "failed") {
+    return error.status;
+  }
   const msg = error?.message || String(error);
   return /EACCES|EPERM|permission|read-only|readonly|access denied/i.test(msg)
     ? "blocked"
@@ -3423,7 +3714,7 @@ function projectBootstrapFailureResult(targetDir, activeTargets, error) {
       status: classifyProjectBootstrapError(error),
       message,
       returnToStage: "Fetch",
-      repairAction:
+      repairAction: error?.repairAction ??
         "Fix target permissions or resolve the conflicting project file, then rerun project bootstrap dry-run before apply.",
     },
   };
@@ -3722,10 +4013,13 @@ function printProjectCleanupSummary(results) {
   if (!results.length) return;
   console.log(`${C.bold}${t.projectCleanupSummary}${C.reset}`);
   for (const result of results) {
-    const label =
-      result.status === "ok"
-        ? `${C.green}${t.projectDeployStatusOk}${C.reset}`
-        : `${C.red}${t.projectDeployStatusFailed}${C.reset}`;
+    const label = result.status === "ok"
+      ? `${C.green}${t.projectDeployStatusOk}${C.reset}`
+      : result.status === "partial"
+        ? `${C.yellow}${t.projectDeployStatusPartial}${C.reset}`
+        : result.status === "blocked"
+          ? `${C.red}${t.projectDeployStatusBlocked}${C.reset}`
+          : `${C.red}${t.projectDeployStatusFailed}${C.reset}`;
     console.log(`${C.dim}- ${result.dir}:${C.reset} ${label}`);
   }
   console.log("");
@@ -3751,16 +4045,45 @@ function cleanupProjectHookConfigs(activeTargets, targetDir) {
   if (platforms.has("cursor")) relPaths.push(".cursor/hooks.json");
 
   const changed = [];
+  const cleanup = { removed: [], skipped: [], backups: [] };
   for (const relPath of relPaths) {
     const configPath = join(targetDir, relPath);
     if (!existsSync(configPath)) continue;
+    if (!safeProjectPathInfo(targetDir, relPath)) {
+      cleanup.skipped.push({
+        relPath,
+        reason: "unsafe_realpath_or_link_preserved",
+      });
+      continue;
+    }
+    if (!projectRemovalProof(targetDir, relPath)) {
+      cleanup.skipped.push({
+        relPath,
+        reason: projectRemovalUnprovenReason(
+          targetDir,
+          relPath,
+          "config_ownership_unproven_preserved",
+        ),
+      });
+      continue;
+    }
     const current = readJsonObjectIfExists(configPath);
     if (!current) continue;
     const stripped = stripProjectMetaKimHooksFromHookConfig(current);
     if (jsonEquivalent(current, stripped)) continue;
     if (isGitTrackedProjectPath(targetDir, relPath)) continue;
-    backupBeforeMerge(configPath, "pre-strip-hooks");
-    writeJsonObject(configPath, stripped);
+    if (!writeProjectFileWithVerifiedBackup(
+      targetDir,
+      relPath,
+      JSON.stringify(stripped, null, 2) + "\n",
+      cleanup.backups,
+    )) {
+      cleanup.skipped.push({
+        relPath,
+        reason: "backup_or_atomic_write_failed_preserved",
+      });
+      continue;
+    }
     changed.push(relPath);
   }
 
@@ -3772,7 +4095,7 @@ function cleanupProjectHookConfigs(activeTargets, targetDir) {
         : `Removed Meta_Kim project hook references from: ${changed.join(", ")}`;
     info(message);
   }
-  return changed;
+  return { changed, cleanup };
 }
 
 async function cleanupProjectRedundancyDirs(activeTargets, targetDirs) {
@@ -3789,47 +4112,113 @@ async function cleanupProjectRedundancyDirs(activeTargets, targetDirs) {
   const results = [];
   for (const targetDir of dirs) {
     try {
-      await migrateProjectMetaKimHooksForBootstrap(activeTargets, targetDir);
-      const strippedHookConfigs = cleanupProjectHookConfigs(activeTargets, targetDir);
-      const legacyCleanup = removeLegacyProjectCapabilityEntrypoints(targetDir, activeTargets);
-      const plan = buildProjectBootstrapPlan(activeTargets, targetDir);
-      const capabilityRootCleanup = removeGlobalProjectCapabilityRoots(targetDir, activeTargets);
-      const generatedSkillCleanup = removeMetaKimGeneratedProjectSkillResidue(
-        targetDir,
-        activeTargets,
-      );
-      const openClawDirectoryCleanup = removeMetaKimOpenClawDirectoryResidue(
-        targetDir,
-        activeTargets,
-      );
-      const configCleanup = cleanupRedundantProjectConfigs(
-        targetDir,
-        activeTargets,
-        plan.files,
-      );
-      const instructionCleanup = removeRedundantProjectInstructionFiles(
-        targetDir,
-        activeTargets,
-      );
-      const localStateCleanup = removeMetaKimProjectLocalState(targetDir);
-      const emptyDirCleanup = pruneEmptyProjectRuntimeDirs(targetDir, activeTargets);
-      const cleanup = mergeProjectCleanupResults(
-        legacyCleanup,
-        capabilityRootCleanup,
-        generatedSkillCleanup,
-        openClawDirectoryCleanup,
-        configCleanup,
-        instructionCleanup,
-        removeStaleManagedProjectAssets(targetDir, plan.files, {
-          removeCurrentManaged: true,
-        }),
-        localStateCleanup,
-        emptyDirCleanup,
-      );
-      if (!jsonOutputMode) {
-        reportProjectAssetCleanup(cleanup, { reason: "global_redundancy" });
+      if (!existsSync(targetDir)) {
+        results.push({
+          dir: targetDir,
+          status: "ok",
+          cleanup: mergeProjectCleanupResults(),
+          strippedHookConfigs: [],
+          retryableIssues: [],
+        });
+        continue;
       }
-      results.push({ dir: targetDir, status: "ok", cleanup, strippedHookConfigs });
+      const session = await withSafeManagedFileLock(
+        {
+          trustedRoot: targetDir,
+          lockKey: PROJECT_MUTATION_SESSION_LOCK_KEY,
+        },
+        async () => {
+          const hookMigrationCleanup = await migrateProjectMetaKimHooksForBootstrap(
+            activeTargets,
+            targetDir,
+          );
+          const hookConfigResult = cleanupProjectHookConfigs(activeTargets, targetDir);
+          const strippedHookConfigs = hookConfigResult.changed;
+          const legacyCleanup = removeLegacyProjectCapabilityEntrypoints(targetDir, activeTargets);
+          const plan = buildProjectBootstrapPlan(activeTargets, targetDir);
+          const capabilityRootCleanup = removeGlobalProjectCapabilityRoots(targetDir, activeTargets);
+          const generatedSkillCleanup = removeMetaKimGeneratedProjectSkillResidue(
+            targetDir,
+            activeTargets,
+          );
+          const openClawDirectoryCleanup = removeMetaKimOpenClawDirectoryResidue(
+            targetDir,
+            activeTargets,
+          );
+          const configCleanup = cleanupRedundantProjectConfigs(
+            targetDir,
+            activeTargets,
+            plan.files,
+            { preserveRelPaths: strippedHookConfigs },
+          );
+          const instructionCleanup = removeRedundantProjectInstructionFiles(
+            targetDir,
+            activeTargets,
+          );
+          const staleManagedCleanup = removeStaleManagedProjectAssets(
+            targetDir,
+            plan.files,
+            {
+              removeCurrentManaged: true,
+              preserveRelPaths: strippedHookConfigs,
+            },
+          );
+          const cleanupBeforeLocalState = mergeProjectCleanupResults(
+            hookMigrationCleanup,
+            hookConfigResult.cleanup,
+            legacyCleanup,
+            capabilityRootCleanup,
+            generatedSkillCleanup,
+            openClawDirectoryCleanup,
+            configCleanup,
+            instructionCleanup,
+            staleManagedCleanup,
+          );
+          const retryableBeforeLocalState = projectCleanupRetryableIssues(
+            cleanupBeforeLocalState,
+          );
+          const localStateCleanup = removeMetaKimProjectLocalState(targetDir, {
+            preserveManifest: retryableBeforeLocalState.length > 0,
+          });
+          const emptyDirCleanup = pruneEmptyProjectRuntimeDirs(targetDir, activeTargets);
+          const cleanup = mergeProjectCleanupResults(
+            cleanupBeforeLocalState,
+            localStateCleanup,
+            emptyDirCleanup,
+          );
+          const retryableIssues = projectCleanupRetryableIssues(cleanup);
+          const status = projectCleanupStatus(cleanup);
+          if (!jsonOutputMode) {
+            reportProjectAssetCleanup(cleanup, { reason: "global_redundancy" });
+          }
+          return {
+            dir: targetDir,
+            status,
+            cleanup,
+            strippedHookConfigs,
+            retryableIssues,
+          };
+        },
+      );
+      if (!session.ok) {
+        const message = `Project cleanup session blocked: ${session.reason ?? session.status}`;
+        if (!jsonOutputMode) {
+          warn(t.projectDeployFailed(targetDir, message));
+        }
+        results.push({
+          dir: targetDir,
+          status: "blocked",
+          message,
+          repairAction: session.nextAction ??
+            "Wait for the active project operation to finish, then retry cleanup.",
+          retryableIssues: [{
+            reason: session.reason ?? session.status,
+            status: "blocked",
+          }],
+        });
+        continue;
+      }
+      results.push(session.value);
     } catch (error) {
       const msg = error?.message || String(error);
       if (!jsonOutputMode) {
@@ -4544,6 +4933,8 @@ function runNodeScript(scriptRelative, extraArgs = [], envOverrides = {}) {
   return spawnSync(spawnConfig.command, spawnConfig.args, mergedOptions);
 }
 
+let lastGlobalCapabilityInventoryResult = true;
+
 function refreshGlobalCapabilityInventory(activeTargets = []) {
   info(t.refreshGlobalCapabilityInventory);
   const targetArgs =
@@ -4554,9 +4945,11 @@ function refreshGlobalCapabilityInventory(activeTargets = []) {
     META_KIM_LANG: currentLangCode,
   });
   if (result.status === 0) {
+    lastGlobalCapabilityInventoryResult = true;
     ok(t.globalCapabilityInventoryRefreshed);
     return true;
   }
+  lastGlobalCapabilityInventoryResult = false;
   warn(t.globalCapabilityInventoryFailed);
   return false;
 }
@@ -5097,6 +5490,8 @@ async function installPythonTools(
     return true;
   }
 
+  let wiringOk = true;
+
   // Idempotent wiring: register graphify skill for each active target + git hooks once.
   // git hooks are cross-platform (commit/checkout trigger), install once.
   // If the repo wasn't cloned via git (e.g. extracted from a zip), `.git` won't
@@ -5116,6 +5511,7 @@ async function installPythonTools(
     if (hookResult.status === 0) {
       ok(t.graphifyHookInstalled);
     } else {
+      wiringOk = false;
       warn(t.graphifyHookFailed);
       const hookStdout = readProcessText(hookResult);
       const hookStderr = (hookResult.stderr || "").toString().trim();
@@ -5151,6 +5547,7 @@ async function installPythonTools(
     if (skillResult.status === 0) {
       ok(t.graphifySkillRegistered(platform));
     } else {
+      wiringOk = false;
       warn(t.graphifySkillFailed(platform));
     }
   }
@@ -5163,7 +5560,7 @@ async function installPythonTools(
   );
   if (rebuildResult.status === 0) {
     ok(t.graphifyCodeGraphGenerated);
-    return true;
+    return wiringOk;
   } else {
     warn(t.graphifyCodeGraphGenerationFailed);
     const rebuildOutput = readProcessText(rebuildResult);
@@ -5334,7 +5731,7 @@ async function runMcpMemoryHookInstaller(activeTargets = DEFAULT_TARGETS.map((ta
   );
   if (!existsSync(hookScript)) {
     warn(`Hook installer missing: ${hookScript}`);
-    return;
+    return false;
   }
 
   const spawnDesc = buildNodeScriptSpawn(
@@ -5354,12 +5751,14 @@ async function runMcpMemoryHookInstaller(activeTargets = DEFAULT_TARGETS.map((ta
 
   if (result.status === 0) {
     ok(t.mcpMemoryHookInstalled);
+    return true;
   } else {
     warn(t.mcpMemoryHookWarnings);
     const stderrText = (result.stderr || "").trim();
     if (stderrText) {
       console.log(`${C.dim}${stderrText}${C.reset}`);
     }
+    return false;
   }
 }
 
@@ -5465,6 +5864,52 @@ function isLegacyMcpMemoryServerConfig(config) {
   );
 }
 
+function registerMcpMemoryServer({
+  mcpPath,
+  memoryServerConfig,
+  fileExists = existsSync,
+  readText = readFileSync,
+  writeText = writeFileSync,
+  isLegacy = isLegacyMcpMemoryServerConfig,
+  onRegistered = () => {},
+  onExisting = () => {},
+  onFailure = () => {},
+}) {
+  try {
+    if (fileExists(mcpPath)) {
+      const mcpConfig = JSON.parse(readText(mcpPath, "utf8"));
+      if (mcpConfig.mcpServers?.["mcp-memory-service"] && !isLegacy(
+        mcpConfig.mcpServers["mcp-memory-service"],
+      )) {
+        onExisting();
+        return true;
+      }
+      const nextConfig = {
+        ...mcpConfig,
+        mcpServers: {
+          ...(mcpConfig.mcpServers ?? {}),
+          "mcp-memory-service": memoryServerConfig,
+        },
+      };
+      writeText(mcpPath, JSON.stringify(nextConfig, null, 2) + "\n");
+      onRegistered();
+      return true;
+    }
+
+    const newConfig = {
+      mcpServers: {
+        "mcp-memory-service": memoryServerConfig,
+      },
+    };
+    writeText(mcpPath, JSON.stringify(newConfig, null, 2) + "\n");
+    onRegistered();
+    return true;
+  } catch (error) {
+    onFailure(error);
+    return false;
+  }
+}
+
 function stopMcpMemoryService() {
   const plat = platform();
   try {
@@ -5516,13 +5961,13 @@ function isMcpMemoryProcessRunning() {
 async function startMcpMemoryServiceBackground(resolved, endpoint = resolveMemoryEndpoint()) {
   if (!endpoint.canAutoStart) {
     info(t.mcpMemoryRemoteEndpointNoAutoStart(endpoint.endpointUrl));
-    return;
+    return true;
   }
   const memoryBin = findMemoryBinPath(resolved);
   if (!memoryBin) {
     warn(t.mcpMemoryAutoStartFailed);
     info(t.mcpMemoryAutoStartManual);
-    return;
+    return false;
   }
 
   info(t.mcpMemoryAutoStarting);
@@ -5586,7 +6031,7 @@ async function startMcpMemoryServiceBackground(resolved, endpoint = resolveMemor
     ok(t.mcpMemoryAutoStarted(endpoint.endpointUrl));
     const bootOk = configureBootAutoStart(memoryBin, endpoint);
     if (bootOk) ok(t.mcpMemoryAutoStartBoot);
-    return;
+    return bootOk;
   }
 
   if (isMcpMemoryProcessRunning()) {
@@ -5595,6 +6040,7 @@ async function startMcpMemoryServiceBackground(resolved, endpoint = resolveMemor
 
   warn(t.mcpMemoryAutoStartFailed);
   info(t.mcpMemoryAutoStartManual);
+  return false;
 }
 
 function configureBootAutoStart(memoryBin, endpoint = resolveMemoryEndpoint()) {
@@ -5814,7 +6260,7 @@ async function installMcpMemoryServiceStep(inUpdateMode = false, activeTargets =
     memoryEndpoint = resolveMemoryEndpoint();
   } catch (error) {
     warn(t.mcpMemoryEndpointInvalid(error.message));
-    return;
+    return false;
   }
   info(t.mcpMemoryEndpointSelected(memoryEndpoint.endpointUrl));
 
@@ -5823,7 +6269,7 @@ async function installMcpMemoryServiceStep(inUpdateMode = false, activeTargets =
   if (!detected) {
     warn(t.pythonNotFound);
     info(t.pythonHint);
-    return;
+    return false;
   }
 
   // Resolve Python for mcp-memory-service (safetensors prefers 3.11/3.12).
@@ -5858,7 +6304,7 @@ async function installMcpMemoryServiceStep(inUpdateMode = false, activeTargets =
         if (stderr) {
           console.log(`${C.dim}${t.pipErrorDetail(stderr)}${C.reset}`);
         }
-        return;
+        return false;
       }
       const newVersion = checkMcpMemoryService(python).version ?? "latest";
       ok(t.mcpMemoryUpgraded(newVersion));
@@ -5880,7 +6326,7 @@ async function installMcpMemoryServiceStep(inUpdateMode = false, activeTargets =
       if (stderr) {
         console.log(`${C.dim}${t.pipErrorDetail(stderr)}${C.reset}`);
       }
-      return;
+      return false;
     } else {
       ok(t.mcpMemoryInstalled);
     }
@@ -5892,59 +6338,29 @@ async function installMcpMemoryServiceStep(inUpdateMode = false, activeTargets =
   const memoryServerConfig = buildMcpMemoryServerConfig(resolved);
 
   const mcpPath = join(PROJECT_DIR, ".mcp.json");
-  if (existsSync(mcpPath)) {
-    try {
-      const mcpConfig = JSON.parse(readFileSync(mcpPath, "utf8"));
-      if (
-        isLegacyMcpMemoryServerConfig(
-          mcpConfig.mcpServers?.["mcp-memory-service"],
-        )
-      ) {
-        const nextConfig = {
-          ...mcpConfig,
-          mcpServers: {
-            ...(mcpConfig.mcpServers ?? {}),
-            "mcp-memory-service": memoryServerConfig,
-          },
-        };
-        writeFileSync(mcpPath, JSON.stringify(nextConfig, null, 2) + "\n");
-        ok(t.mcpMemoryServerRegistered);
-      } else if (mcpConfig.mcpServers?.["mcp-memory-service"]) {
-        ok(t.mcpMemoryServerExists);
-      } else {
-        const nextConfig = {
-          ...mcpConfig,
-          mcpServers: {
-            ...(mcpConfig.mcpServers ?? {}),
-            "mcp-memory-service": memoryServerConfig,
-          },
-        };
-        writeFileSync(mcpPath, JSON.stringify(nextConfig, null, 2) + "\n");
-        ok(t.mcpMemoryServerRegistered);
-      }
-    } catch {
-      warn(t.mcpMemoryServerExists);
-    }
-  } else {
-    // Create minimal .mcp.json with just the memory service
-    const newConfig = {
-      mcpServers: {
-        "mcp-memory-service": memoryServerConfig,
-      },
-    };
-    writeFileSync(mcpPath, JSON.stringify(newConfig, null, 2) + "\n");
-    ok(t.mcpMemoryServerRegistered);
-  }
+  const registrationOk = registerMcpMemoryServer({
+    mcpPath,
+    memoryServerConfig,
+    onRegistered: () => ok(t.mcpMemoryServerRegistered),
+    onExisting: () => ok(t.mcpMemoryServerExists),
+    onFailure: (error) =>
+      warn(`${t.setupError} MCP Memory server registration: ${error.message}`),
+  });
+  if (!registrationOk) return false;
 
   info(t.mcpMemoryServerStartHint);
 
   // Step 4.7 — auto-install runtime memory hooks so the full pipeline
   // (pip package → .mcp.json → hook files → runtime registration →
   // health check) runs from a single `node setup.mjs` invocation.
-  await runMcpMemoryHookInstaller(activeTargets);
+  const hooksOk = await runMcpMemoryHookInstaller(activeTargets);
 
   // Step 4.8 — start the HTTP server in background and configure boot auto-start
-  await startMcpMemoryServiceBackground(resolved, memoryEndpoint);
+  const backgroundOk = await startMcpMemoryServiceBackground(
+    resolved,
+    memoryEndpoint,
+  );
+  return registrationOk && hooksOk && backgroundOk;
 }
 
 function ensureNetworkxCompatibility(python) {
@@ -6007,8 +6423,67 @@ async function validate() {
     validateSpawn.args,
     validateSpawn.options,
   );
-  if (validateResult.status === 0) ok(t.validationPassed);
-  else warn(t.validationWarnings);
+  if (validateResult.status === 0) {
+    ok(t.validationPassed);
+    return true;
+  }
+  warn(`${t.setupError} ${t.stepValidate}`);
+  return false;
+}
+
+function printInstallResult(result, completeMessage) {
+  if (result.status === "complete") {
+    console.log(`\n${C.bold}${C.green}✓ ${completeMessage}${C.reset}\n`);
+    return;
+  }
+
+  const failedLabels = result.failedSteps.map((step) => step.id).join(", ");
+  if (result.status === "partial") {
+    console.log(`\n${C.bold}${C.yellow}⚠ ${t.validationWarnings}${C.reset}`);
+    console.log(`${C.dim}  ${failedLabels}${C.reset}\n`);
+    return;
+  }
+
+  console.log(`\n${C.bold}${C.red}✗ ${t.setupError} ${failedLabels}${C.reset}`);
+  console.log("");
+}
+
+function installRecoveryCopy(mode, result) {
+  const failed = result.failedSteps.map((step) => step.id).join(", ");
+  const copies = {
+    en: {
+      title: mode === "update" ? "Update needs attention" : "Installation needs attention",
+      partial: "Core setup may be usable, but optional or follow-up steps did not finish.",
+      failed: "Setup is incomplete. Do not treat the runtime as ready yet.",
+      retry: `Failed steps: ${failed || "unknown"}. Fix the reported cause, rerun the same command, then run node setup.mjs --check.`,
+    },
+    "zh-CN": {
+      title: mode === "update" ? "更新尚未完整完成" : "安装尚未完整完成",
+      partial: "核心能力可能可用，但仍有可选项或收尾步骤未完成。",
+      failed: "当前安装不完整，请先不要把运行时视为已就绪。",
+      retry: `失败步骤：${failed || "未知"}。修复上方原因后重跑同一命令，再执行 node setup.mjs --check。`,
+    },
+    "ja-JP": {
+      title: mode === "update" ? "更新はまだ完了していません" : "インストールはまだ完了していません",
+      partial: "コア機能は利用できる可能性がありますが、任意または後続の手順が未完了です。",
+      failed: "セットアップは未完了です。runtime を準備完了として扱わないでください。",
+      retry: `失敗した手順: ${failed || "不明"}。上記の原因を修正して同じコマンドを再実行し、その後 node setup.mjs --check を実行してください。`,
+    },
+    "ko-KR": {
+      title: mode === "update" ? "업데이트가 아직 완료되지 않았습니다" : "설치가 아직 완료되지 않았습니다",
+      partial: "핵심 기능은 사용할 수 있을 수 있지만 선택 또는 후속 단계가 완료되지 않았습니다.",
+      failed: "설치가 불완전합니다. 아직 runtime을 준비 완료로 간주하지 마세요.",
+      retry: `실패 단계: ${failed || "알 수 없음"}. 위 원인을 해결한 뒤 같은 명령을 다시 실행하고 node setup.mjs --check 를 실행하세요.`,
+    },
+  };
+  return copies[currentLangCode] ?? copies.en;
+}
+
+function showInstallRecovery(result, mode) {
+  const copy = installRecoveryCopy(mode, result);
+  console.log(`${C.bold}${result.status === "partial" ? C.yellow : C.red}${copy.title}${C.reset}`);
+  console.log(result.status === "partial" ? copy.partial : copy.failed);
+  console.log(`${C.dim}${copy.retry}${C.reset}\n`);
 }
 
 function showNextSteps(runtimes, selectedTargets = detectedTargetIds(runtimes)) {
@@ -6326,10 +6801,55 @@ function showModeInfo() {
   );
 }
 
-function checkProjectRuntimeSync(runtimes, targetContext) {
-  if (targetContext.localOverrides?.projectProjectionMode !== "global_only") {
-    checkSync(runtimes, targetContext.activeTargets);
+const GLOBAL_ONLY_PROJECT_HOOK_PAIRS = [
+  { runtime: "Claude Code", dir: ".claude/hooks" },
+  { runtime: "Codex", dir: ".codex/hooks" },
+  { runtime: "Cursor", dir: ".cursor/hooks" },
+];
+
+function checkGlobalOnlyProjectHookPairs() {
+  heading(t.syncHeading);
+  let allOk = true;
+  for (const pair of GLOBAL_ONLY_PROJECT_HOOK_PAIRS) {
+    const activator = join(PROJECT_DIR, pair.dir, "activate-meta-theory-spine.mjs");
+    const resolver = join(PROJECT_DIR, pair.dir, "project-root.mjs");
+    const activatorExists = existsSync(activator) && statSync(activator).isFile();
+    const resolverExists = existsSync(resolver) && statSync(resolver).isFile();
+    const importsResolver = activatorExists &&
+      /from\s+["']\.\/project-root\.mjs["']/u.test(readFileSync(activator, "utf8"));
+    if (activatorExists && resolverExists && importsResolver) {
+      ok(t.syncGlobalOnlyHookPairOk(pair.runtime));
+      continue;
+    }
+    allOk = false;
+    fail(
+      t.syncGlobalOnlyHookPairFailed(
+        pair.runtime,
+        [
+          !activatorExists ? "activate-meta-theory-spine.mjs" : null,
+          !resolverExists ? "project-root.mjs" : null,
+          activatorExists && !importsResolver ? "project-root import" : null,
+        ].filter(Boolean).join(", "),
+      ),
+    );
   }
+  console.log("");
+  if (allOk) info(t.syncOk);
+  return allOk;
+}
+
+function checkProjectRuntimeSync(runtimes, targetContext) {
+  if (targetContext.localOverrides?.projectProjectionMode === "global_only") {
+    return checkGlobalOnlyProjectHookPairs();
+  }
+  return checkSync(runtimes, targetContext.activeTargets);
+}
+
+function reportProjectRuntimeSyncResult(syncOk) {
+  if (syncOk) return true;
+  console.error(`\n${C.red}✗ ${t.checkOverallFailed}${C.reset}`);
+  console.error(`${C.yellow}${t.checkRepairCommand}${C.reset}\n`);
+  return false;
 }
 
 async function runProjectBootstrapCli() {
@@ -6401,11 +6921,10 @@ async function runProjectCleanupCli() {
       : savedDirs;
 
   const results = await cleanupProjectRedundancyDirs(activeTargets, targetDirs);
-  const failed = results.filter((result) => result.status === "failed");
   const summary = {
     schemaVersion: "meta-kim-project-cleanup-result-v0.1",
     mode: "cleanup",
-    ok: failed.length === 0,
+    ok: results.every((result) => result.status === "ok"),
     resultCount: results.length,
     results,
   };
@@ -6415,9 +6934,9 @@ async function runProjectCleanupCli() {
     return summary.ok;
   }
 
-  console.log(`Meta_Kim project cleanup: ${summary.ok ? "ok" : "failed"}`);
-  console.log(`  targets=${activeTargets.join(",")}`);
-  console.log(`  cleanedProjects=${summary.resultCount}`);
+  console.log(t.projectCleanupCliResult(summary.ok));
+  console.log(`  ${t.projectCleanupCliTargets(activeTargets.join(","))}`);
+  console.log(`  ${t.projectCleanupCliProjects(summary.resultCount)}`);
   return summary.ok;
 }
 
@@ -6448,7 +6967,7 @@ async function main() {
     console.log(`\n${C.green}✓ ${t.envOk}${C.reset}\n`);
     const detectedRuntimes = await detectRuntimes();
     const targetContext = await resolveTargetContext(args);
-    checkProjectRuntimeSync(detectedRuntimes, targetContext);
+    const syncOk = checkProjectRuntimeSync(detectedRuntimes, targetContext);
     console.log(
       `${C.dim}${t.checkTargets(targetContext.activeTargets.join(", "), targetContext.supportedTargets.join(", "))}${C.reset}`,
     );
@@ -6472,17 +6991,18 @@ async function main() {
       `${C.dim}  migration helper: npm run migrate:meta-kim -- <source-dir> --apply${C.reset}`,
     );
     console.log("");
-    process.exit(0);
+    reportProjectRuntimeSyncResult(syncOk);
+    process.exit(syncOk ? 0 : 1);
   }
 
   if (updateMode) {
-    await runUpdate();
-    process.exit(0);
+    const result = await runUpdate();
+    process.exit(result.exitCode);
   }
 
   if (silentMode) {
-    await runInstall();
-    process.exit(0);
+    const result = await runInstall();
+    process.exit(result.exitCode);
   }
 
   // ── Interactive: choose action ──
@@ -6494,15 +7014,21 @@ async function main() {
   ];
   const actionIdx = await askSelect(t.actionPrompt, actionLabels);
 
-  if (actionIdx === 0) await runInstall();
-  else if (actionIdx === 1) await runUpdate();
-  else if (actionIdx === 2) await runCheck();
+  let result = null;
+  if (actionIdx === 0) result = await runInstall();
+  else if (actionIdx === 1) result = await runUpdate();
+  else if (actionIdx === 2) {
+    const checkOk = await runCheck();
+    if (!checkOk) process.exitCode = 1;
+  }
   else process.exit(0);
+  if (result?.exitCode) process.exitCode = result.exitCode;
 }
 
 // ── Action runners ──────────────────────────────────────
 
 async function runInstall() {
+  const stepResults = [];
   const runtimes = await detectRuntimes();
   const activeTargets = await selectActiveTargets(runtimes);
 
@@ -6527,14 +7053,6 @@ async function runInstall() {
   const deployDirs = needProject ? await askDeployDirectory() : [];
   const cleanupDirs = needGlobal ? await askProjectCleanupDirectory() : [];
 
-  // Early cleanup: run right after directory selection so the user sees the
-  // result immediately. Must not depend on the slower install steps below
-  // (npm install / python / mcp / validate) — those are easy to interrupt,
-  // and losing the cleanup defeats the global-single-source intent.
-  if (cleanupDirs.length > 0) {
-    await cleanupProjectRedundancyDirs(activeTargets, cleanupDirs);
-  }
-
   // Show installation overview
   showInstallOverview(
     activeTargets,
@@ -6551,13 +7069,24 @@ async function runInstall() {
 
   console.log();
 
+  if (cleanupDirs.length > 0) {
+    const cleanupResults = await cleanupProjectRedundancyDirs(activeTargets, cleanupDirs);
+    stepResults.push(
+      installStep(
+        t.projectCleanupBatchHeading(cleanupDirs.length),
+        cleanupResults.length === cleanupDirs.length &&
+          cleanupResults.every((item) => item.status === "ok"),
+      ),
+    );
+  }
+
   // 步骤计数
   let stepNum = 0;
 
   // 项目目录更新
   if (needProject) {
     stepNum++;
-    await withProgress(t.stepLabel(stepNum, t.progressNpmInstall), async () => {
+    const npmOk = await withProgress(t.stepLabel(stepNum, t.progressNpmInstall), async () => {
       if (
         existsSync(join(PROJECT_DIR, "node_modules", "@modelcontextprotocol"))
       ) {
@@ -6576,6 +7105,7 @@ async function runInstall() {
       warn(t.npmFailed);
       return false;
     });
+    stepResults.push(installStep(t.progressNpmInstall, npmOk));
 
     stepNum++;
     await withProgress(t.stepLabel(stepNum, t.progressCleanupLegacy), () => {
@@ -6585,13 +7115,14 @@ async function runInstall() {
     });
 
     stepNum++;
-    await withProgress(t.stepLabel(stepNum, t.progressSyncConfig), async () => {
+    const configOk = await withProgress(t.stepLabel(stepNum, t.progressSyncConfig), async () => {
       const configResult = await autoConfigure(installScope, activeTargets);
       if (!configResult) {
         warn(t.warnConfigSyncFailed);
       }
       return configResult;
     });
+    stepResults.push(installStep(t.progressSyncConfig, configOk));
   }
 
   // 全局安装
@@ -6609,7 +7140,7 @@ async function runInstall() {
 
     // 安装全局技能
     stepNum++;
-    await withProgress(
+    const skillsOk = await withProgress(
       t.stepLabel(stepNum, t.progressInstallSkills),
       async () => {
         const localOverrides = await loadLocalOverrides();
@@ -6638,10 +7169,11 @@ async function runInstall() {
         return installResult.status === 0;
       },
     );
+    stepResults.push(installStep(t.progressInstallSkills, skillsOk));
 
     // 同步全局 meta-theory
     stepNum++;
-    await withProgress(t.stepLabel(stepNum, t.progressSyncMeta), () => {
+    const metaSyncOk = await withProgress(t.stepLabel(stepNum, t.progressSyncMeta), () => {
       const syncResult = runNodeScript(
         "scripts/sync-global-meta-theory.mjs",
         metaTheoryGlobalSyncArgs(activeTargets, setupWithGlobalHooks),
@@ -6655,61 +7187,102 @@ async function runInstall() {
       }
       return syncResult.status === 0 && runtimeHooksOk;
     });
+    stepResults.push(installStep(t.progressSyncMeta, metaSyncOk));
   }
 
   if (needGlobal) {
     stepNum++;
-    await withProgress(
+    const inventoryOk = await withProgress(
       t.stepLabel(stepNum, t.refreshGlobalCapabilityInventory),
       async () => refreshGlobalCapabilityInventory(activeTargets),
     );
+    stepResults.push(installStep(t.refreshGlobalCapabilityInventory, inventoryOk));
   }
 
   // [Optional] Python tools (graphify)
   stepNum++;
-  await withProgress(
+  const pythonToolsOk = await withProgress(
     t.stepLabel(stepNum, t.progressInstallPython),
     async () => {
       const wantPython = await askYesNo(t.askPythonToolsUpdate, true);
       if (wantPython) {
-        await installPythonTools(activeTargets, false, PROJECT_DIR, {
+        return await installPythonTools(activeTargets, false, PROJECT_DIR, {
           projectWiring: needProject,
         });
       } else {
         skip(`${C.dim}${t.pythonToolsSkipped}${C.reset}`);
+        return INSTALL_STEP_OUTCOME.SKIPPED;
       }
     },
+  );
+  stepResults.push(
+    installStep(
+      t.progressInstallPython,
+      pythonToolsOk,
+      INSTALL_STEP_CLASSIFICATION.OPTIONAL,
+    ),
   );
 
   // [Optional] MCP Memory Service (Layer 3)
   stepNum++;
-  await withProgress(
+  const mcpMemoryOk = await withProgress(
     t.stepLabel(stepNum, t.progressInstallMcpMemory),
     async () => {
-      await installMcpMemoryServiceStep(false, activeTargets);
+      return await installMcpMemoryServiceStep(false, activeTargets);
     },
+  );
+  stepResults.push(
+    installStep(
+      t.progressInstallMcpMemory,
+      mcpMemoryOk === undefined ? INSTALL_STEP_OUTCOME.SKIPPED : mcpMemoryOk,
+      INSTALL_STEP_CLASSIFICATION.OPTIONAL,
+    ),
   );
 
   // 验证：项目路径检查 repo-local；全局路径只跑项目完整性校验
   stepNum++;
-  await withProgress(t.stepLabel(stepNum, t.progressValidate), async () => {
+  let runtimeSyncOk = true;
+  const validationOk = await withProgress(t.stepLabel(stepNum, t.progressValidate), async () => {
     if (needProject) {
-      checkSync(runtimes, activeTargets);
+      runtimeSyncOk = checkSync(runtimes, activeTargets);
     }
-    await validate();
+    return await validate();
   });
-
-  console.log(`\n${C.bold}${C.green}✓ ${t.installComplete}${C.reset}\n`);
+  if (needProject) {
+    stepResults.push(installStep(t.syncHeading, runtimeSyncOk));
+  }
+  stepResults.push(installStep(t.progressValidate, validationOk));
 
   // Copy runtime files to user-chosen project directories (if opted in earlier)
   if (deployDirs.length > 0) {
-    await copyToDeployDirs(activeTargets, deployDirs);
+    const deployResults = await copyToDeployDirs(activeTargets, deployDirs);
+    stepResults.push(
+      installStep(
+        t.projectDeployBatchHeading(deployDirs.length),
+        deployResults.length === deployDirs.length &&
+          deployResults.every((item) => item.status === "ok"),
+      ),
+    );
   }
 
-  showNextSteps(runtimes, activeTargets);
+  const result = summarizeInstallStatus(stepResults);
+
+  if (result.status === "complete") {
+    console.log(`\n${C.bold}${C.green}✓ ${t.installComplete}${C.reset}\n`);
+  } else {
+    printInstallResult(result, t.installComplete);
+  }
+
+  if (result.status === "complete") {
+    showNextSteps(runtimes, activeTargets);
+  } else {
+    showInstallRecovery(result, "install");
+  }
+  return result;
 }
 
 async function runUpdate() {
+  const stepResults = [];
   heading(t.updateHeading);
   const runtimes = await detectRuntimes();
   const reselectTargets = await askYesNo(t.askReselectRuntimes, true);
@@ -6730,12 +7303,15 @@ async function runUpdate() {
   const deployDirs = needProject ? await askDeployDirectory() : [];
   const cleanupDirs = needGlobal ? await askProjectCleanupDirectory() : [];
 
-  // Early cleanup: run right after directory selection so the user sees the
-  // result immediately. Must not depend on the slower install steps below
-  // (npm install / python / mcp / validate) — those are easy to interrupt,
-  // and losing the cleanup defeats the global-single-source intent.
   if (cleanupDirs.length > 0) {
-    await cleanupProjectRedundancyDirs(activeTargets, cleanupDirs);
+    const cleanupResults = await cleanupProjectRedundancyDirs(activeTargets, cleanupDirs);
+    stepResults.push(
+      installStep(
+        t.projectCleanupBatchHeading(cleanupDirs.length),
+        cleanupResults.length === cleanupDirs.length &&
+          cleanupResults.every((item) => item.status === "ok"),
+      ),
+    );
   }
 
   // ── 1. npm install (always — new code may have new deps) ────────────
@@ -6746,21 +7322,37 @@ async function runUpdate() {
   });
   if (npmResult.status === 0) ok(t.npmDone);
   else warn(t.npmFailed);
+  stepResults.push(installStep(t.updateNpm, npmResult.status === 0));
 
   // ── 2. [Optional] Python tools (graphify) ─────────────────────────
   console.log("");
   const wantPython = await askYesNo(t.askPythonToolsUpdate, true);
+  let pythonToolsOutcome = INSTALL_STEP_OUTCOME.SKIPPED;
   if (wantPython) {
-    await installPythonTools(activeTargets, true, PROJECT_DIR, {
+    pythonToolsOutcome = await installPythonTools(activeTargets, true, PROJECT_DIR, {
       projectWiring: needProject,
     });
   } else {
     skip(`${C.dim}${t.pythonToolsSkipped}${C.reset}`);
   }
+  stepResults.push(
+    installStep(
+      t.progressInstallPython,
+      pythonToolsOutcome,
+      INSTALL_STEP_CLASSIFICATION.OPTIONAL,
+    ),
+  );
 
   // ── 2.5 [Optional] MCP Memory Service (Layer 3) ─────────────────
   console.log("");
-  await installMcpMemoryServiceStep(true, activeTargets);
+  const mcpMemoryOk = await installMcpMemoryServiceStep(true, activeTargets);
+  stepResults.push(
+    installStep(
+      t.progressInstallMcpMemory,
+      mcpMemoryOk === undefined ? INSTALL_STEP_OUTCOME.SKIPPED : mcpMemoryOk,
+      INSTALL_STEP_CLASSIFICATION.OPTIONAL,
+    ),
+  );
 
   // ── 2.8. Clean up legacy skill files ───────────────────────────────
   const legacyCount = cleanupLegacySkills(updateScope);
@@ -6777,6 +7369,7 @@ async function runUpdate() {
     ]);
     if (syncResult.status === 0) ok(t.updateSyncDone);
     else warn(t.updateSyncSkip);
+    stepResults.push(installStep(t.updateSyncProjectFiles, syncResult.status === 0));
   }
 
   // ── 4. Global skills update ───────────────────────────────────────
@@ -6808,6 +7401,9 @@ async function runUpdate() {
       warn(t.warnSkillsUpdateFailed);
       warn(`${C.dim}${t.warnSkillsUpdateFailedHint}${C.reset}`);
     }
+    stepResults.push(
+      installStep(t.progressInstallSkills, updateInstallResult.status === 0),
+    );
   }
 
   // ── 5. Global meta-theory sync ────────────────────────────────────
@@ -6824,6 +7420,12 @@ async function runUpdate() {
     if (updateSyncResult.status === 0 && runtimeHooksOk)
       ok(t.updateMetaTheoryDone);
     else warn(t.warnMetaTheoryUpdateFailed);
+    stepResults.push(
+      installStep(
+        t.progressSyncMeta,
+        updateSyncResult.status === 0 && runtimeHooksOk,
+      ),
+    );
   }
 
   // ── 5.5. Refresh global capability inventory ───────────────────────
@@ -6833,25 +7435,52 @@ async function runUpdate() {
   }
 
   // ── 6. checkSync (repo-local, project scope) ───────────────────────
-  if (needProject) {
-    checkSync(runtimes, activeTargets);
+  if (needGlobal) {
+    stepResults.push(
+      installStep(
+        t.refreshGlobalCapabilityInventory,
+        lastGlobalCapabilityInventoryResult,
+      ),
+    );
   }
-  console.log(`\n${C.bold}${C.green}✓ ${t.updateComplete}${C.reset}\n`);
+  let updateRuntimeSyncOk = true;
+  if (needProject) {
+    updateRuntimeSyncOk = checkSync(runtimes, activeTargets);
+    stepResults.push(installStep(t.syncHeading, updateRuntimeSyncOk));
+  }
+  stepResults.push(installStep(t.progressValidate, await validate()));
 
   // Copy runtime files to user-chosen project directories (if opted in earlier)
   if (deployDirs.length > 0) {
-    await copyToDeployDirs(activeTargets, deployDirs);
+    const deployResults = await copyToDeployDirs(activeTargets, deployDirs);
+    stepResults.push(
+      installStep(
+        t.projectDeployBatchHeading(deployDirs.length),
+        deployResults.length === deployDirs.length &&
+          deployResults.every((item) => item.status === "ok"),
+      ),
+    );
   }
+  const result = summarizeInstallStatus(stepResults);
+  if (result.status === "complete") {
+    console.log(`\n${C.bold}${C.green}✓ ${t.updateComplete}${C.reset}\n`);
+  } else {
+    printInstallResult(result, t.updateComplete);
+    showInstallRecovery(result, "update");
+  }
+  return result;
 }
 
 async function runCheck() {
   console.log(`\n${C.green}✓ ${t.envOk}${C.reset}\n`);
   const runtimes = await detectRuntimes();
   const targetContext = await resolveTargetContext(args);
-  checkProjectRuntimeSync(runtimes, targetContext);
+  const syncOk = checkProjectRuntimeSync(runtimes, targetContext);
   console.log(
     `${C.dim}${t.checkTargets(targetContext.activeTargets.join(", "), targetContext.supportedTargets.join(", "))}${C.reset}`,
   );
+  reportProjectRuntimeSyncResult(syncOk);
+  return syncOk;
 }
 
 main().catch((err) => {

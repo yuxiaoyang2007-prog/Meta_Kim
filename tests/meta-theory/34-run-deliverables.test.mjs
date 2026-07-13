@@ -293,7 +293,7 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(runArtifact.userExperienceNotice.primarySurface, "user_readable_run_report");
       assert.equal(
         runArtifact.userExperienceNotice.pendingPrimarySurface,
-        "localized_conversation_notice"
+        "localized_conversation_notice_host_observation_required"
       );
       assert.equal(runArtifact.userExperienceNotice.secondarySurface, "user_readable_run_report");
       assert.equal(runArtifact.userExperienceNotice.conversationNoticeEmitted, false);
@@ -438,19 +438,14 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.match(runArtifact.governanceStartReasonPacket.spineReason, /触发 8 阶段/);
       assert.match(runArtifact.governanceStartReasonPacket.workflowReason, /触发 11 阶段/);
       assert.match(runArtifact.governanceStartReasonPacket.cardReason, /触发发牌/);
-      assert.match(markdownReport, /用户可见发牌摘要/u);
-      assert.match(markdownReport, /过程发牌事件/u);
-      assert.match(
+      assert.match(markdownReport, /## 用户目标/u);
+      assert.match(markdownReport, /## 工作协调与调用情况/u);
+      assert.match(markdownReport, /## 阶段进展/u);
+      assert.match(markdownReport, /## 验证与下一步/u);
+      assert.doesNotMatch(
         markdownReport,
-        /Critical 进行中[\s\S]*触发发牌：发现目标或验收边界可能改变路线，触发澄清牌/u
+        /cardPlanPacket|status=|owner=|next=|selected_not_invoked|missingBindings/u,
       );
-      assert.match(markdownReport, /本轮生成 \d+ 次发牌事件，涉及 \d+ 类牌/u);
-      assert.doesNotMatch(markdownReport, /已发 \d+\/10|发 \d+\/10|dealt \d+\/10/u);
-      assert.doesNotMatch(markdownReport, /cardPlanPacket/u);
-      assert.match(markdownReport, /澄清/u);
-      assert.match(markdownReport, /用户.*相关/u);
-      assert.match(markdownReport, /同一类牌可以/u);
-      assert.match(markdownReport, /不是 native choice popup 证据/u);
       for (const line of [
         runArtifact.governanceStartReasonPacket.summary,
         runArtifact.governanceStartReasonPacket.spineReason,
@@ -578,57 +573,17 @@ describe("34 — Meta-theory run deliverables", () => {
         computedPhaseCoveragePass
       );
       const markdown = await readFile(path.join(tempDir, "test-run-deliverables.zh-CN.md"), "utf8");
-      assert.match(markdown, /Critical \/ Fetch \/ Thinking \/ Review/);
-      assert.match(markdown, /## 开始原因/);
-      assert.match(markdown, /触发 8 阶段/);
-      assert.match(markdown, /触发 11 阶段/);
-      assert.match(markdown, /触发发牌/);
-      assert.match(markdown, /## 发牌/);
-      assert.match(markdown, /Deal standard/);
-      assert.match(markdown, /accurate_interrupt/);
-      assert.match(markdown, fixCardWasDealt ? /accurate_deal/ : /accurate_suppress/);
-      assert.match(markdown, /## 用户体验提示/);
-      assert.match(markdown, /用户只用普通自然语言输入/);
-      assert.match(markdown, /还没有发出 runtime conversation notice/);
-      assert.match(markdown, /内部 artifact/);
-      assert.match(markdown, /## Meta-Theory 可见编排面/);
-      assert.match(markdown, /Dynamic Workflow/);
-      assert.match(markdown, /能力发现/);
-      assert.match(markdown, /Peer Agent Mesh/);
-      assert.match(markdown, /LangGraph-style/);
-      assert.match(markdown, /能力发现矩阵/);
-      assert.match(markdown, /真实能力调用状态/);
-      assert.match(markdown, /agent_subagent/);
-      assert.match(markdown, /app_visible_subagent/);
-      assert.match(markdown, /selected_not_invoked/);
-      assert.match(markdown, /## 阶段执行说明/);
-      assert.match(markdown, /要做什么/);
-      assert.match(markdown, /结果长什么样/);
-      assert.match(markdown, /## 三目标产品验收/);
-      assert.match(markdown, /P-102/);
-      assert.match(markdown, /P-103/);
-      assert.match(markdown, /P-104/);
-      assert.match(markdown, /P-105/);
-      assert.match(markdown, /P-106/);
-      assert.match(markdown, /P-107/);
-      assert.match(markdown, /P-108/);
-      assert.match(markdown, /P-109/);
-      assert.match(markdown, /## 执行编排明细/);
-      assert.match(markdown, /Agent/);
-      assert.match(markdown, /Skill/);
-      assert.match(markdown, /MCP/);
-      assert.match(markdown, /npm run meta:gap:orchestrate/);
-      assert.match(markdown, /11 阶段业务流/);
-      assert.match(markdown, /Trigger standard/);
-      assert.match(markdown, computedPhaseCoveragePass ? /triggered/ : /blocked_without_enough_evidence/);
-      assert.match(markdown, /pending_external_input/);
-      assert.match(markdown, /能力路线/);
-      assert.match(markdown, /持久 Agent 策略/);
-      assert.match(markdown, /\.claude\/agents\/\{agent\}\.md/);
-      assert.match(markdown, /\.codex\/agents\/\{agent\}\.toml/);
-      assert.match(markdown, /openclaw\/workspaces\/\{agent\}\/SOUL\.md/);
-      assert.match(markdown, /\.cursor\/agents\/\{agent\}\.md/);
-      assert.match(markdown, /partial 或 needs_probe/);
+      assert.match(markdown, /Critical：确认目标与边界/u);
+      assert.match(markdown, /Fetch：核对证据与可用能力/u);
+      assert.match(markdown, /Execution：准备或执行选定工作/u);
+      assert.match(markdown, /Meta_Kim 协调能力/u);
+      assert.match(markdown, /运行记录待关联（以当前聊天中的实际调用结果为准）/u);
+      assert.match(markdown, /验证检查已完成/u);
+      assert.match(markdown, /请查看当前可见结果，并确认剩余验收点/u);
+      assert.doesNotMatch(
+        markdown,
+        /Packet|packet|status=|owner=|next=|selected_not_invoked|missingBindings|accurate_interrupt/u,
+      );
       const manifest = await generateRunDeliverables({
         runId: "test-run-deliverables",
         stateDir: tempDir,
@@ -746,7 +701,11 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(runArtifact.agentTeamsPlaybookPacket.acceptance.dagAndCollisionSafe, true);
       assert.equal(runArtifact.agentTeamsPlaybookPacket.acceptance.waveSizeWithinRuntimeCapacity, true);
       assert.equal(runArtifact.agentTeamsPlaybookPacket.acceptance.noArbitraryMetaKimCap, true);
-      assert.equal(runArtifact.visibleMetaTheorySurfacePacket.capabilityInvocationTruth.status, "partial");
+      assert.equal(runArtifact.visibleMetaTheorySurfacePacket.capabilityInvocationTruth, undefined);
+      assert.equal(
+        runArtifact.visibleMetaTheorySurfacePacket.capabilityInvocationPresentation.executionState,
+        "not_confirmed"
+      );
       assert.equal(runArtifact.visibleMetaTheorySurfacePacket.dynamicWorkflow.status, "pass");
       assert.equal(runArtifact.visibleMetaTheorySurfacePacket.agentTeamsPlaybook.status, "pass");
       assert.equal(runArtifact.visibleMetaTheorySurfacePacket.peerAgentMesh.status, "pass");
@@ -805,21 +764,15 @@ describe("34 — Meta-theory run deliverables", () => {
         "assistive_only"
       );
       const markdown = await readFile(path.join(tempDir, "natural-user-task.zh-CN.md"), "utf8");
-      assert.match(markdown, /## Meta-Theory 可见编排面/);
-      assert.match(markdown, /## 自动化与人工决策边界/);
-      assert.match(markdown, /Automation assists; humans decide\./);
-      assert.match(markdown, /Dynamic Workflow/);
-      assert.match(markdown, /能力发现/);
-      assert.match(markdown, /Agent Teams Playbook/);
-      assert.match(markdown, /Peer Agent Mesh/);
-      assert.match(markdown, /LangGraph-style/);
-      assert.match(markdown, /## 阶段执行说明/);
-      assert.match(markdown, /## 执行编排明细/);
-      assert.match(markdown, /## 三目标产品验收/);
-      assert.match(markdown, /用户只用普通自然语言输入/);
-      assert.match(markdown, /要做什么/);
-      assert.match(markdown, /结果长什么样/);
-      assert.match(markdown, /下一项工作/);
+      assert.match(markdown, /## 用户目标/u);
+      assert.match(markdown, /Meta_Kim 协调能力/u);
+      assert.match(markdown, /阶段进展/u);
+      assert.match(markdown, /质量、风险与可读性/u);
+      assert.match(markdown, /验证与下一步/u);
+      assert.doesNotMatch(
+        markdown,
+        /Packet|packet|status=|owner=|next=|selected_not_invoked|missingBindings/u,
+      );
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -847,50 +800,31 @@ describe("34 — Meta-theory run deliverables", () => {
         { cwd: process.cwd(), encoding: "utf8" }
       );
       assert.equal(result.status, 0, result.stderr);
-      assert.match(result.stdout, /^Meta_Kim 对话提示:/u);
-      assert.match(result.stdout, /开始原因: 进入 Meta-Theory/u);
-      assert.match(result.stdout, /8 阶段: 触发 8 阶段/u);
-      assert.match(result.stdout, /11 阶段: 触发 11 阶段/u);
-      assert.match(result.stdout, /过程发牌事件:/u);
-      assert.match(
-        result.stdout,
-        /Critical 进行中\s*\n\s*触发发牌：发现目标或验收边界可能改变路线，触发澄清牌/u
-      );
-      assert.match(
-        result.stdout,
-        /Thinking 进行中\s*\n\s*触发发牌：发现存在多个可行路径，需要选择，触发选项牌/u
-      );
-      assert.match(result.stdout, /发牌摘要: 触发发牌/u);
-      assert.match(result.stdout, /本轮生成 \d+ 次发牌事件，涉及 \d+ 类牌/u);
-      assert.doesNotMatch(result.stdout, /已发 \d+\/10|发 \d+\/10|dealt \d+\/10/u);
-      assert.match(result.stdout, /澄清/u);
-      assert.match(result.stdout, /选项/u);
-      assert.match(result.stdout, /用户相关牌/u);
-      assert.match(result.stdout, /同一类牌可以/u);
-      assert.match(result.stdout, /风险已插入|风险未触发/u);
-      assert.match(result.stdout, /暂停已触发|暂停未触发/u);
-      assert.match(result.stdout, /不是 native choice popup 证据/u);
-      assert.match(result.stdout, /许愿式自然语言需求/u);
-      assert.match(result.stdout, /阶段进度/u);
-      assert.match(result.stdout, /Meta-Review/u);
-      assert.match(result.stdout, /Verification/u);
-      assert.match(result.stdout, /Evolution/u);
-      assert.match(result.stdout, /能力路线/u);
-      assert.match(result.stdout, /产品定义/u);
-      assert.match(result.stdout, /市场与平台规则研究/u);
-      assert.match(result.stdout, /内容策略与生成/u);
-      assert.match(result.stdout, /后端 API/u);
-      assert.match(result.stdout, /测试验收/u);
-      assert.match(result.stdout, /验证/u);
+      JSON.parse(result.stdout);
+      assert.match(result.stderr, /Meta_Kim 对话提示:/u);
+      assert.match(result.stderr, /开始原因: 进入 Meta-Theory/u);
+      assert.match(result.stderr, /本轮会确认目标、核对证据、选择路线、执行工作、审查质量并验证结果/u);
+      assert.match(result.stderr, /只有会改变范围、风险或验收方式的决策才会提示用户/u);
+      assert.match(result.stderr, /许愿式自然语言需求/u);
+      assert.match(result.stderr, /阶段进度/u);
+      assert.match(result.stderr, /Verification/u);
+      assert.match(result.stderr, /Evolution/u);
+      assert.match(result.stderr, /能力路线/u);
+      assert.match(result.stderr, /Meta_Kim 协调能力/u);
+      assert.match(result.stderr, /协作角色/u);
+      assert.match(result.stderr, /本次工作已部分完成/u);
+      assert.match(result.stderr, /请查看当前可见结果/u);
+      assert.match(result.stderr, /验证/u);
       assert.doesNotMatch(
-        result.stdout,
-        /ownerDiscoveryPacket|orchestrationTaskBoardPacket|workerTaskPackets|cardPlanPacket/u
+        result.stderr,
+        /ownerDiscoveryPacket|orchestrationTaskBoardPacket|workerTaskPackets|cardPlanPacket|status=|owner=|next=/u
       );
 
-      const emittedText = result.stdout.split("\n\n")[0];
       const artifact = JSON.parse(
         await readFile(path.join(tempDir, "wish-style-conversation-notice.json"), "utf8")
       );
+      const emittedText = artifact.conversationNotice.text;
+      assert.ok(result.stderr.includes(emittedText));
       assert.equal(
         artifact.governanceStartReasonPacket.schemaVersion,
         "governance-start-reason-v0.1"
@@ -905,12 +839,14 @@ describe("34 — Meta-theory run deliverables", () => {
       assert.equal(artifact.conversationNotice.status, "emitted");
       assert.ok(artifact.conversationNotice.routeSummary.workerTaskCount >= 2);
       assert.equal(artifact.conversationNotice.emitted, true);
-      assert.equal(artifact.conversationNotice.channel, "stdout");
+      assert.equal(artifact.conversationNotice.channel, "stderr");
       assert.equal(artifact.conversationNotice.adapter, "meta-theory-governed-execution-cli");
       assert.equal(artifact.conversationNotice.text, emittedText);
       assert.equal(artifact.conversationNotice.textSha256, emittedHash);
       assert.equal(artifact.conversationNotice.emittedTextSha256, emittedHash);
-      assert.equal(artifact.conversationNotice.evidenceKind, "adapter_emitted_notice");
+      assert.equal(artifact.conversationNotice.evidenceKind, "transport_emitted_notice");
+      assert.equal(artifact.conversationNotice.outputBoundary, "stderr_progress_channel");
+      assert.equal(artifact.conversationNotice.hostObservation.status, "host_observation_required");
       assert.ok(
         artifact.conversationNotice.routeSummary.cardSummary.activeCards.includes("澄清")
       );
@@ -921,10 +857,14 @@ describe("34 — Meta-theory run deliverables", () => {
         artifact.conversationNotice.routeSummary.cardSummary.nativeChoiceBoundary,
         /不是 native choice popup 证据/u
       );
-      assert.equal(artifact.userExperienceNotice.status, "ready");
-      assert.equal(artifact.userExperienceNotice.primarySurface, "localized_conversation_notice");
-      assert.equal(artifact.userExperienceNotice.pendingPrimarySurface, null);
+      assert.equal(artifact.userExperienceNotice.status, "partial");
+      assert.equal(artifact.userExperienceNotice.primarySurface, "user_readable_run_report");
+      assert.equal(
+        artifact.userExperienceNotice.pendingPrimarySurface,
+        "localized_conversation_notice_host_observation_required"
+      );
       assert.equal(artifact.userExperienceNotice.conversationNoticeEmitted, true);
+      assert.equal(artifact.userExperienceNotice.conversationNoticeObserved, false);
       const selectedLaneIds = artifact.defaultRuntimePath.workerTaskPackets.map(
         (packet) => packet.businessFlowLaneId
       );
@@ -974,7 +914,7 @@ describe("34 — Meta-theory run deliverables", () => {
       );
       assert.match(
         artifact.userExperienceNotice.statusReason,
-        /conversation notice 已通过 stdout/
+        /stderr 或 API 回调只算传输/
       );
     } finally {
       await rm(tempDir, { recursive: true, force: true });
@@ -1001,26 +941,19 @@ describe("34 — Meta-theory run deliverables", () => {
         { cwd: process.cwd(), encoding: "utf8" }
       );
       assert.equal(result.status, 0, result.stderr);
-      assert.match(result.stdout, /^Meta_Kim 对话提示:/u);
-      assert.match(result.stdout, /过程发牌事件:/u);
-      assert.match(
-        result.stdout,
-        /Critical 进行中\s*\n\s*触发发牌：发现目标或验收边界可能改变路线，触发澄清牌/u
-      );
-      assert.match(result.stdout, /发牌摘要: 触发发牌/u);
-      assert.match(result.stdout, /本轮生成 \d+ 次发牌事件，涉及 \d+ 类牌/u);
-      assert.doesNotMatch(result.stdout, /已发 \d+\/10|发 \d+\/10|dealt \d+\/10/u);
-      assert.match(result.stdout, /澄清/u);
-      assert.match(result.stdout, /用户相关牌/u);
-      assert.match(result.stdout, /同一类牌可以/u);
-      assert.match(result.stdout, /不是 native choice popup 证据/u);
-      assert.match(result.stdout, /"status": "partial"/u);
+      const summary = JSON.parse(result.stdout);
+      assert.match(result.stderr, /Meta_Kim 对话提示:/u);
+      assert.match(result.stderr, /只有会改变范围、风险或验收方式的决策才会提示用户/u);
+      assert.match(result.stderr, /Meta_Kim 协调能力/u);
+      assert.match(result.stderr, /验证仍需补充证据或等待用户验收/u);
+      assert.doesNotMatch(result.stderr, /status=|owner=|next=|selected_not_invoked|missingBindings/u);
+      assert.equal(summary.status, "partial");
 
       const artifact = JSON.parse(
         await readFile(path.join(tempDir, "default-conversation-notice.json"), "utf8")
       );
       assert.equal(artifact.conversationNotice.status, "emitted");
-      assert.equal(artifact.conversationNotice.evidenceKind, "adapter_emitted_notice");
+      assert.equal(artifact.conversationNotice.evidenceKind, "transport_emitted_notice");
       assert.ok(
         artifact.conversationNotice.routeSummary.cardSummary.activeCards.includes("澄清")
       );
@@ -1028,7 +961,7 @@ describe("34 — Meta-theory run deliverables", () => {
         artifact.conversationNotice.routeSummary.cardSummary.nativeChoiceBoundary,
         /不是 native choice popup 证据/u
       );
-      assert.equal(artifact.userExperienceNotice.status, "ready");
+      assert.equal(artifact.userExperienceNotice.status, "partial");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

@@ -63,7 +63,7 @@ test("runtime safety validator is wired into governance verification", () => {
     `node ${CONTRACT.releaseGate.validatorScript}`,
   );
   assert.match(
-    PACKAGE.scripts["meta:verify:governance"],
+    `${PACKAGE.scripts["meta:verify:governance"]} && ${PACKAGE.scripts["meta:verify:governance:core"]}`,
     new RegExp(`npm run ${CONTRACT.releaseGate.packageScript}`),
   );
 

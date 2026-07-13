@@ -29,6 +29,7 @@ const CLAUDE_COMPATIBILITY_ADAPTERS = new Set([
 test("cross-runtime hook core has one canonical owner", () => {
   assert.deepEqual(SHARED_RUNTIME_HOOK_FILES, [
     "activate-meta-theory-spine.mjs",
+    "project-root.mjs",
     "skip-reminder.mjs",
     "spine-state.mjs",
     "spine-state-utils.mjs",

@@ -922,6 +922,12 @@ const canonicalSharedSpineHookPath = path.join(
   "hooks",
   "activate-meta-theory-spine.mjs",
 );
+const canonicalSharedProjectRootHookPath = path.join(
+  canonicalRuntimeAssetsDir,
+  "shared",
+  "hooks",
+  "project-root.mjs",
+);
 const canonicalClaudeEnforceDispatchHookPath = path.join(
   canonicalRuntimeAssetsDir,
   "claude",
@@ -964,6 +970,7 @@ const canonicalSharedMemorySaveHookPath = path.join(
 );
 const GLOBAL_META_KIM_HOOK_PACKAGE_FILES = new Set([
   "activate-meta-theory-spine.mjs",
+  "project-root.mjs",
   "bash-readonly-whitelist.mjs",
   "block-dangerous-bash.mjs",
   "ecc-permission-cache-wrapper.mjs",
@@ -990,7 +997,6 @@ const PROJECT_CLAUDE_HOOK_FILES = new Set([
   "bash-readonly-whitelist.mjs",
   "enforce-agent-dispatch.mjs",
   "graphify-context.mjs",
-  "hook-i18n.mjs",
   "post-console-log-warn.mjs",
   "post-format.mjs",
   "post-typecheck.mjs",
@@ -1003,6 +1009,14 @@ const PROJECT_CLAUDE_HOOK_FILES = new Set([
   "stop-spine-cleanup.mjs",
   "subagent-context.mjs",
   "utils.mjs",
+]);
+
+// These retired basenames may also belong to users. The v1 project install
+// manifest has no content hash, so it cannot prove exact ownership for safe
+// deletion. Keep them out of the active projection (and avoid missing-source
+// warnings) while preserving any existing file until stronger evidence exists.
+const PRESERVED_UNOWNED_LEGACY_PROJECT_HOOK_FILES = new Set([
+  "hook-i18n.mjs",
 ]);
 
 const REMOVED_PROJECT_CLAUDE_HOOK_FILES = [
@@ -2194,6 +2208,7 @@ async function pruneNonProjectedRuntimeSkills(
 // (i.e. user-authored files) are never touched.
 const CLAUDE_PROJECT_HOOK_FILES = new Set([
   "activate-meta-theory-spine.mjs",
+  "project-root.mjs",
   "bash-readonly-whitelist.mjs",
   "block-dangerous-bash.mjs",
   "ecc-permission-cache-wrapper.mjs",
@@ -2221,6 +2236,7 @@ const CLAUDE_PROJECT_HOOK_FILES = new Set([
 // files match the same basename as global hooks dir.
 const CODEX_PROJECT_HOOK_FILES = new Set([
   "activate-meta-theory-spine.mjs",
+  "project-root.mjs",
   "bash-readonly-whitelist.mjs",
   "codex_hook_adapter.py",
   "codex_hook_runner.mjs",
@@ -2251,6 +2267,7 @@ const CODEX_PROJECT_HOOK_FILES = new Set([
 
 const CODEX_ACTIVE_PROJECT_HOOK_FILES = new Set([
   "activate-meta-theory-spine.mjs",
+  "project-root.mjs",
   "bash-readonly-whitelist.mjs",
   "enforce-agent-dispatch.mjs",
   "graphify-context.mjs",
@@ -2271,6 +2288,7 @@ const CODEX_ACTIVE_PROJECT_HOOK_FILES = new Set([
 // Cursor hook files (.ps1/.sh variants under ~/.cursor/hooks/).
 const CURSOR_PROJECT_HOOK_FILES = new Set([
   "activate-meta-theory-spine.mjs",
+  "project-root.mjs",
   "bash-readonly-whitelist.mjs",
   "enforce-agent-dispatch.mjs",
   "graphify-context.mjs",
@@ -2294,6 +2312,7 @@ const CURSOR_PROJECT_HOOK_FILES = new Set([
 
 const CURSOR_ACTIVE_PROJECT_HOOK_FILES = new Set([
   "activate-meta-theory-spine.mjs",
+  "project-root.mjs",
   "bash-readonly-whitelist.mjs",
   "enforce-agent-dispatch.mjs",
   "graphify-context.mjs",
@@ -2662,40 +2681,40 @@ Examples:
 
   await syncCapabilityIndexMirrors(dirs, selectedTargets, changedFiles);
 
-  // Root-cause fix for "meta:sync reports 0 changes and never projects hook
-  // updates to runtime mirrors": when `local.overrides.json` has
-  // `projectProjectionMode: "global_only"`, `selectedTargets` is forced to [],
-  // so the per-runtime `syncClaudeProjection` (which hosts the hook
-  // projection) is skipped, and `enforce-agent-dispatch.mjs` /
-  // `spine-state.mjs` (and any other canonical hook) silently drift out of
-  // sync until a manual `cp`. Canonical hooks are governance infrastructure
-  // (not user-level agent/skill/command), so they must be projected to all
-  // three runtime mirrors regardless of `selectedTargets` and
-  // `projectProjectionMode`. This block runs unconditionally (still gated by
-  // `scope !== "global"` so global-only users are not double-written).
-  if (scope !== "global") {
-    const canonicalHookFiles = (
-      await fs.readdir(canonicalClaudeHooksDir, { withFileTypes: true })
-    )
-      .filter(
-        (entry) =>
-          entry.isFile() &&
-          entry.name.endsWith(".mjs") &&
-          PROJECT_CLAUDE_HOOK_FILES.has(entry.name),
-      )
-      .map((entry) => entry.name);
-    const sharedHookDeps = SHARED_RUNTIME_HOOK_FILES;
-    for (const hookName of sharedHookDeps) {
-      if (await tryReadCanonical(
-        path.join(canonicalRuntimeAssetsDir, "shared", "hooks", hookName),
-      )) canonicalHookFiles.push(hookName);
-    }
+  // `global_only` suppresses durable project agents/skills/commands, but the
+  // repo-local governance hook package still has to remain internally
+  // resolvable. Keep the three hook-capable project mirrors paired with the
+  // same shared dependencies (especially activate-meta-theory-spine.mjs +
+  // project-root.mjs). This is deliberately narrower than selecting a runtime:
+  // it does not materialize agents, skills, commands, rules, or MCP config.
+  if (globalOnlyProjectSync) {
     const runtimeHookTargets = [
-      { hooksDir: dirs.claudeHooksProjectionDir, display: dirs.displayPaths.claudeHooks, runtime: "claude" },
+      {
+        runtime: "claude",
+        hooksDir: dirs.claudeHooksProjectionDir,
+        display: dirs.displayPaths.claudeHooks,
+        activeFiles: new Set([
+          ...PROJECT_CLAUDE_HOOK_FILES,
+          ...SHARED_RUNTIME_HOOK_FILES,
+        ]),
+      },
+      {
+        runtime: "codex",
+        hooksDir: dirs.codexHooksDir,
+        display: dirs.displayPaths.codexHooks,
+        activeFiles: CODEX_ACTIVE_PROJECT_HOOK_FILES,
+      },
+      {
+        runtime: "cursor",
+        hooksDir: dirs.cursorHooksDir,
+        display: dirs.displayPaths.cursorHooks,
+        activeFiles: CURSOR_ACTIVE_PROJECT_HOOK_FILES,
+      },
     ];
+
     for (const target of runtimeHookTargets) {
-      for (const hookName of canonicalHookFiles) {
-        const hookSource = sharedHookDeps.includes(hookName)
+      for (const hookName of target.activeFiles) {
+        const hookSource = SHARED_RUNTIME_HOOK_FILES.includes(hookName)
           ? path.join(canonicalRuntimeAssetsDir, "shared", "hooks", hookName)
           : path.join(canonicalClaudeHooksDir, hookName);
         const hookContent = await tryReadCanonical(hookSource);
@@ -2711,13 +2730,18 @@ Examples:
           changedFiles.push(`${target.display}/${hookName}`);
         }
       }
-      for (const hookName of REMOVED_PROJECT_CLAUDE_HOOK_FILES) {
-        if (
-          (await removeGeneratedPath(path.join(target.hooksDir, hookName)))
-            .changed
-        ) {
-          changedFiles.push(`${target.display}/${hookName}`);
-        }
+
+      const preservedFiles = new Set([
+        ...target.activeFiles,
+        ...PRESERVED_UNOWNED_LEGACY_PROJECT_HOOK_FILES,
+      ]);
+      const removedHooks = await removeProjectMetaKimHooks(
+        target.hooksDir,
+        target.runtime,
+        { keep: preservedFiles },
+      );
+      for (const hookName of removedHooks) {
+        changedFiles.push(`${target.display}/${hookName}`);
       }
     }
   }
@@ -3029,6 +3053,20 @@ Examples:
       ) {
         changedFiles.push(`${dp.codexHooks}/activate-meta-theory-spine.mjs`);
       }
+      const projectRootHookContent = await tryReadCanonical(
+        canonicalSharedProjectRootHookPath,
+      );
+      if (
+        projectRootHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.codexHooksDir, "project-root.mjs"),
+            projectRootHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.codexHooks}/project-root.mjs`);
+      }
       // Sync the dispatch-enforcement gate + its bash-readonly classifier from
       // the Claude canonical hooks directory. These two files implement the
       // capability-first gate and meta-readonly contract; they share a deny()
@@ -3335,6 +3373,20 @@ Examples:
       ) {
         changedFiles.push(`${dp.cursorHooks}/activate-meta-theory-spine.mjs`);
       }
+      const cursorProjectRootHookContent = await tryReadCanonical(
+        canonicalSharedProjectRootHookPath,
+      );
+      if (
+        cursorProjectRootHookContent &&
+        (
+          await writeGeneratedFile(
+            path.join(dirs.cursorHooksDir, "project-root.mjs"),
+            cursorProjectRootHookContent,
+          )
+        ).changed
+      ) {
+        changedFiles.push(`${dp.cursorHooks}/project-root.mjs`);
+      }
       // Sync the dispatch-enforcement gate + its bash-readonly classifier from
       // the Claude canonical hooks directory. deny() output adapts to Cursor's
       // official Cursor hook JSON schema at runtime via META_KIM_HOOK_RUNTIME / argv inspection.
@@ -3598,7 +3650,7 @@ Examples:
   }
 
   if (checkOnly) {
-    if (selectedTargets.length === 0) {
+    if (selectedTargets.length === 0 && !globalOnlyProjectSync) {
       console.log(
         t.syncRuntimesCheckNoTargets ||
           "[meta:sync] 未选定 runtime target — projectProjectionMode=global_only 且未传 --targets。\n本次未检查任何镜像，\"已是最新\"结论不成立。\n检查项目投影：npm run meta:check:runtimes -- --scope project --targets claude,codex\n检查全局镜像：npm run meta:check:runtimes -- --scope global",

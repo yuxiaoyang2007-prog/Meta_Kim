@@ -71,6 +71,19 @@ function runSyncGlobal(targets, extraEnv = {}) {
   );
 }
 
+function runProjectSyncFromFixture(tempRoot, args = []) {
+  return spawnSync(
+    process.execPath,
+    ["scripts/sync-runtimes.mjs", ...args],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, META_KIM_REPO_ROOT: tempRoot },
+    },
+  );
+}
+
 describe("runtime hook sync contract", () => {
   test("source repo project check treats absent runtime projections as expected", () => {
     const tempRoot = createTempSourceRepoFixture();
@@ -117,6 +130,66 @@ describe("runtime hook sync contract", () => {
     assert.doesNotMatch(output, /\.claude\/hooks\//);
   });
 
+  test("global_only project sync keeps Claude Codex Cursor hook dependency pairs resolvable", () => {
+    const tempRoot = createTempSourceRepoFixture();
+    try {
+      const overrideDir = join(tempRoot, ".meta-kim");
+      mkdirSync(overrideDir, { recursive: true });
+      writeFileSync(
+        join(overrideDir, "local.overrides.json"),
+        `${JSON.stringify({ projectProjectionMode: "global_only" }, null, 2)}\n`,
+      );
+
+      const retiredHookSentinel = "// user-owned legacy basename\n";
+      for (const runtimeDir of [".claude", ".codex", ".cursor"]) {
+        const hooksDir = join(tempRoot, runtimeDir, "hooks");
+        mkdirSync(hooksDir, { recursive: true });
+        writeFileSync(
+          join(hooksDir, "hook-i18n.mjs"),
+          retiredHookSentinel,
+          "utf8",
+        );
+      }
+
+      const sync = runProjectSyncFromFixture(tempRoot);
+      assert.equal(sync.status, 0, sync.stderr || sync.stdout);
+      assert.doesNotMatch(
+        sync.stdout + sync.stderr,
+        /missing canonical.*hook-i18n|缺失的 canonical.*hook-i18n/iu,
+      );
+
+      for (const runtimeDir of [".claude", ".codex", ".cursor"]) {
+        const hooksDir = join(tempRoot, runtimeDir, "hooks");
+        const activatorPath = join(hooksDir, "activate-meta-theory-spine.mjs");
+        const projectRootPath = join(hooksDir, "project-root.mjs");
+        assert.equal(existsSync(activatorPath), true, `${runtimeDir} activator missing`);
+        assert.equal(existsSync(projectRootPath), true, `${runtimeDir} project-root missing`);
+        assert.match(
+          readFileSync(activatorPath, "utf8"),
+          /from "\.\/project-root\.mjs"/u,
+          `${runtimeDir} activator must resolve its paired project-root dependency`,
+        );
+        assert.equal(
+          readFileSync(join(hooksDir, "hook-i18n.mjs"), "utf8"),
+          retiredHookSentinel,
+          `${runtimeDir} same-name legacy file must be preserved without exact ownership proof`,
+        );
+      }
+
+      assert.equal(existsSync(join(tempRoot, ".codex", "agents")), false);
+      assert.equal(existsSync(join(tempRoot, ".cursor", "agents")), false);
+      assert.equal(existsSync(join(tempRoot, ".agents", "skills")), false);
+
+      const check = runProjectSyncFromFixture(tempRoot, ["--check", "--json"]);
+      assert.equal(check.status, 0, check.stderr || check.stdout);
+      const summary = JSON.parse(check.stdout);
+      assert.equal(summary.status, "ok");
+      assert.deepEqual(summary.targets, []);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   test("global sync includes the meta-theory spine activation hook package", () => {
     const source = readFileSync(
       join(repoRoot, "scripts/sync-global-meta-theory.mjs"),
@@ -135,6 +208,10 @@ describe("runtime hook sync contract", () => {
         ),
       ),
       true,
+    );
+    assert.match(
+      source,
+      /GLOBAL_HOOK_PACKAGE_FILES = new Set\(\[[\s\S]*"project-root\.mjs"/,
     );
   });
 
@@ -158,6 +235,10 @@ describe("runtime hook sync contract", () => {
         existsSync(
           join(codexHome, "hooks", "meta-kim", "activate-meta-theory-spine.mjs"),
         ),
+        true,
+      );
+      assert.equal(
+        existsSync(join(codexHome, "hooks", "meta-kim", "project-root.mjs")),
         true,
       );
       assert.equal(existsSync(join(codexHome, "hooks.json")), true);

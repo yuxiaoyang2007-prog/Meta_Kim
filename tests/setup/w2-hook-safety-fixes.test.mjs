@@ -2,9 +2,9 @@
  * W2 hook safety / reversibility regression tests (v2.8.62+).
  *
  * Covers:
- *   - setup.mjs backupBeforeMerge helper
+ *   - setup.mjs shared managed-file transaction boundary
  *   - scripts/uninstall.mjs Category B scope guard
- *   - scripts/install-mcp-memory-hooks.mjs backupBeforeForce helper
+ *   - scripts/install-mcp-memory-hooks.mjs transactional --force writes
  *   - canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs
  *       L2-02 (dead branch removed) + L2-03 (deactivationReason gate)
  */
@@ -20,32 +20,38 @@ function load(rel) {
   return readFileSync(join(REPO_ROOT, rel), "utf8");
 }
 
-describe("W2: backupBeforeMerge helper exists in setup.mjs", () => {
-  test("function is defined and called from both merge paths", () => {
+describe("W2: protected project writes use the shared safe transaction", () => {
+  test("transaction helper is defined and called from both merge paths", () => {
     const src = load("setup.mjs");
     assert.match(
       src,
-      /function\s+backupBeforeMerge\s*\(/,
-      "backupBeforeMerge must be defined",
+      /function\s+writeProjectManagedTransaction\s*\([\s\S]*?executeSafeManagedFileTransaction\s*\(/,
+      "the project transaction helper must delegate to the shared safe transaction",
     );
     assert.match(
       src,
-      /backupBeforeMerge\(destPath,\s*"pre-merge"\)/,
-      "backupBeforeMerge must be called from mergeProtectedProjectDeployFile",
+      /function\s+mergeProtectedProjectDeployFile\s*\([\s\S]*?writeProjectManagedTransaction\s*\(/,
+      "the JSON merge path must use the project transaction helper",
     );
     assert.match(
       src,
-      /backupBeforeMerge\(destPath,\s*"pre-merge"\)/g,
-      "backupBeforeMerge must be called from the text-merge path too",
+      /function\s+mergeProtectedProjectDeployTextFile\s*\([\s\S]*?writeProjectManagedTransaction\s*\(/,
+      "the text merge path must use the project transaction helper",
     );
+    assert.doesNotMatch(src, /function\s+backupBeforeMerge\s*\(/);
   });
 
-  test("strip hooks write sites also call backupBeforeMerge", () => {
+  test("strip-hooks writes use a transaction or verified backup boundary", () => {
     const src = load("setup.mjs");
-    const matches = src.match(/backupBeforeMerge\(configPath/g) || [];
-    assert.ok(
-      matches.length >= 2,
-      "expected at least 2 backupBeforeMerge calls in strip-hooks sites",
+    assert.match(
+      src,
+      /function\s+stripStaleProjectHookConfigs\s*\([\s\S]*?writeProjectManagedTransaction\s*\(/,
+      "stale Hook config stripping must use the shared transaction",
+    );
+    assert.match(
+      src,
+      /function\s+cleanupProjectHookConfigs\s*\([\s\S]*?writeProjectFileWithVerifiedBackup\s*\(/,
+      "cleanup Hook config stripping must verify its backup before writing",
     );
   });
 });
@@ -66,34 +72,34 @@ describe("W2: uninstall.mjs Category B scope guard", () => {
   });
 });
 
-describe("W2: install-mcp-memory-hooks.mjs --force backup", () => {
-  test("backupBeforeForce helper exists", () => {
+describe("W2: install-mcp-memory-hooks.mjs --force transaction", () => {
+  test("install and removal use the shared safe transaction", () => {
     const src = load("scripts/install-mcp-memory-hooks.mjs");
     assert.match(
       src,
-      /function\s+backupBeforeForce\s*\(/,
-      "backupBeforeForce must be defined",
+      /function\s+installSelectedRuntimeFilesTransactional\s*\([\s\S]*?executeSafeManagedFileTransaction\s*\(/,
+      "runtime Hook installation must use the shared safe transaction",
     );
+    assert.match(
+      src,
+      /function\s+removeSelectedRuntimeFilesTransactional\s*\([\s\S]*?executeSafeManagedFileTransaction\s*\(/,
+      "runtime Hook removal must use the shared safe transaction",
+    );
+    assert.doesNotMatch(src, /function\s+backupBeforeForce\s*\(/);
   });
 
-  test("FORCE_UPDATE branch calls backupBeforeForce before writeFileSync", () => {
+  test("FORCE_UPDATE authorizes but never bypasses transactional settings writes", () => {
     const src = load("scripts/install-mcp-memory-hooks.mjs");
-    const backupIdx = src.indexOf("backupBeforeForce(CLAUDE_SETTINGS)");
-    assert.ok(backupIdx > 0, "backupBeforeForce(CLAUDE_SETTINGS) must be called");
-    // After the backup call, the next writeFileSync must target CLAUDE_SETTINGS.
-    const tail = src.slice(backupIdx);
-    const writeFileMatches = [
-      ...tail.matchAll(/writeFileSync\s*\(\s*([A-Za-z_$][\w$]*)/g),
-    ];
-    assert.ok(
-      writeFileMatches.length > 0,
-      "must have at least one writeFileSync after the backup",
+    assert.match(src, /if\s*\(args\.includes\("--force"\)\)\s*\{[\s\S]*?FORCE_UPDATE\s*=\s*true/);
+    assert.match(
+      src,
+      /jsonOperation\s*\(\s*CLAUDE_SETTINGS,[\s\S]*?"auxiliary"\s*\)/,
+      "Claude settings must be planned as a transaction operation",
     );
-    const firstTarget = writeFileMatches[0][1];
-    assert.equal(
-      firstTarget,
-      "CLAUDE_SETTINGS",
-      "first writeFileSync after the backup must target CLAUDE_SETTINGS",
+    assert.doesNotMatch(
+      src,
+      /writeFileSync\s*\(\s*CLAUDE_SETTINGS\b/,
+      "--force must not restore a direct settings write bypass",
     );
   });
 });
@@ -153,7 +159,7 @@ describe("W2: activate-meta-theory-spine.mjs EXECUTION_DELTA boundary", () => {
       "shouldReplaceActiveState must be defined before EXECUTION_DELTA",
     );
     // writeSpineState call must come after EXECUTION_DELTA marker
-    const writeIdx = src.indexOf("writeSpineState(cwd, state);");
+    const writeIdx = src.indexOf("writeSpineState(projectRoot, state);");
     assert.ok(
       writeIdx > markerIdx,
       "top-level writeSpineState must live below the EXECUTION_DELTA marker",

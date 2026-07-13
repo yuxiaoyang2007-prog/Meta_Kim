@@ -2,9 +2,13 @@ import process from "node:process";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, dirname, resolve } from "node:path";
+import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readJsonFromStdin } from "./utils.mjs";
+import {
+  projectRootCandidatesFromPayload,
+  resolveProjectRoot,
+} from "./project-root.mjs";
 import {
   readSpineState,
   readSpineStateIncludingInactive,
@@ -264,7 +268,7 @@ function buildContinuationBoundary(previousState, promptText) {
   };
 }
 
-function startPostCopyAutoInit() {
+function startPostCopyAutoInit(root) {
   if (process.env.META_KIM_POST_COPY_AUTO === "off") return;
 
   const globalScriptPath = packageRoot
@@ -273,14 +277,14 @@ function startPostCopyAutoInit() {
   const scriptPath =
     globalScriptPath && existsSync(globalScriptPath)
       ? globalScriptPath
-      : existsSync(join(cwd, ".meta-kim", "meta-kim-post-copy.mjs"))
-        ? join(cwd, ".meta-kim", "meta-kim-post-copy.mjs")
-        : join(cwd, "meta-kim-post-copy.mjs");
+      : existsSync(join(root, ".meta-kim", "meta-kim-post-copy.mjs"))
+        ? join(root, ".meta-kim", "meta-kim-post-copy.mjs")
+        : join(root, "meta-kim-post-copy.mjs");
   if (!existsSync(scriptPath)) return;
 
   try {
-    spawnSync(process.execPath, [scriptPath, "--auto"], {
-      cwd,
+    spawnSync(process.execPath, [scriptPath, "--auto", "--project-root", root], {
+      cwd: root,
       stdio: "ignore",
       timeout: 4000,
       windowsHide: true,
@@ -300,12 +304,24 @@ if (!activation.triggered) {
   process.exit(0);
 }
 
-startPostCopyAutoInit();
+const projectRoot = resolveProjectRoot({
+  cwd,
+  explicitDeclarations: [process.env.CLAUDE_PROJECT_DIR],
+  runtimeCandidates: projectRootCandidatesFromPayload(payload),
+});
+if (!projectRoot) {
+  // No legitimate project root (e.g. hook invoked from a temp dir with no
+  // .git / project-bootstrap manifest and no valid explicit declaration). Never
+  // bootstrap an arbitrary cwd — skip spine-state + post-copy projection.
+  process.exit(0);
+}
+
+startPostCopyAutoInit(projectRoot);
 
 const rawPromptText = getRawPromptText();
 const promptFingerprint = fingerprintPrompt(rawPromptText);
-const rawExisting = await readSpineStateIncludingInactive(cwd);
-const existing = rawExisting?.active === false ? null : rawExisting || (await readSpineState(cwd));
+const rawExisting = await readSpineStateIncludingInactive(projectRoot);
+const existing = rawExisting?.active === false ? null : rawExisting || (await readSpineState(projectRoot));
 if (existing && existing.active && !shouldReplaceActiveState(existing, promptFingerprint)) {
   process.exit(0);
 }
@@ -364,7 +380,7 @@ if (isFanoutActivation) {
         : "meta_theory_trigger_request";
 }
 
-await writeSpineState(cwd, state);
+await writeSpineState(projectRoot, state);
 
 // ── multi-agent helpers ───────────────────────────────────────────────────────
 // 1) runAutoCapabilitySearch：扫 canonical/agents/ + agent-eligibility.json，

@@ -1,0 +1,337 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meta-kim.local/contracts/private-attested-live-evidence.schema.json",
+  "title": "Meta_Kim private-attested exact-binding live evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runId",
+    "target",
+    "scenario",
+    "status",
+    "promotionEligible",
+    "exactBindingCoverage",
+    "isolation",
+    "bundle",
+    "requiredBindings",
+    "observedBindings",
+    "conversationNoticeJoin",
+    "signerDecision",
+    "attestation"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "private-attested-live-evidence-v0.1" },
+    "runId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "target": { "enum": ["codex_cli", "codex_desktop", "claude_code"] },
+    "scenario": { "enum": ["governed_execution", "fast_path_control"] },
+    "status": { "const": "release_attested" },
+    "promotionEligible": { "const": true },
+    "exactBindingCoverage": { "const": true },
+    "isolation": { "$ref": "#/$defs/isolation" },
+    "bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactRoot",
+        "governedArtifact",
+        "unsignedCandidate",
+        "rawHostArtifact",
+        "normalizedObservation"
+      ],
+      "properties": {
+        "artifactRoot": { "$ref": "#/$defs/relativePath" },
+        "governedArtifact": { "$ref": "#/$defs/artifactReference" },
+        "unsignedCandidate": { "$ref": "#/$defs/artifactReference" },
+        "rawHostArtifact": { "$ref": "#/$defs/artifactReference" },
+        "normalizedObservation": { "$ref": "#/$defs/artifactReference" }
+      }
+    },
+    "requiredBindings": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/requiredBinding" }
+    },
+    "observedBindings": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/observedBinding" }
+    },
+    "conversationNoticeJoin": { "$ref": "#/$defs/conversationNoticeJoin" },
+    "signerDecision": { "$ref": "#/$defs/signerDecision" },
+    "attestation": { "$ref": "#/$defs/attestation" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "target": { "const": "codex_cli" } } },
+      "then": {
+        "properties": {
+          "isolation": {
+            "type": "object",
+            "required": ["codexSharedSkillRootContaminates"],
+            "properties": { "codexSharedSkillRootContaminates": { "const": false } }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "boundedString": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?![A-Za-z]:[\\\\/])(?![\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"
+    },
+    "nullableBoundedString": {
+      "anyOf": [
+        { "$ref": "#/$defs/boundedString" },
+        { "type": "null" }
+      ]
+    },
+    "artifactReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relativePath", "sha256"],
+      "properties": {
+        "relativePath": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "conversationNoticeJoin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expectedCount",
+        "matchedCount",
+        "singleSession",
+        "sessionId",
+        "textSha256Set",
+        "textSha256SetDigest"
+      ],
+      "properties": {
+        "expectedCount": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "matchedCount": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "singleSession": { "const": true },
+        "sessionId": { "$ref": "#/$defs/boundedString" },
+        "textSha256Set": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        },
+        "textSha256SetDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "family": {
+      "enum": [
+        "agent_subagent",
+        "skill",
+        "mcp",
+        "hook",
+        "command_script",
+        "runtime_tool",
+        "agent_teams_playbook"
+      ]
+    },
+    "isolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "home",
+        "runtimeHome",
+        "packageWorkspace",
+        "packageSha256",
+        "promptSha256",
+        "siblingAgentTeamsPlaybookAbsent",
+        "globalInventoryInjectionConfigured",
+        "promptLint"
+      ],
+      "properties": {
+        "home": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "runtimeHome": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "packageWorkspace": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "packageSha256": { "$ref": "#/$defs/sha256" },
+        "promptSha256": { "$ref": "#/$defs/sha256" },
+        "siblingAgentTeamsPlaybookAbsent": { "const": true },
+        "globalInventoryInjectionConfigured": { "const": false },
+        "codexSharedSkillRootContaminates": { "type": "boolean" },
+        "promptLint": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pass", "hits"],
+          "properties": {
+            "pass": { "const": true },
+            "hits": { "type": "array", "maxItems": 0 }
+          }
+        }
+      }
+    },
+    "requiredBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family", "providerId", "bindingRef", "taskPacketId", "roleInstanceId"],
+      "properties": {
+        "family": { "$ref": "#/$defs/family" },
+        "providerId": { "$ref": "#/$defs/boundedString" },
+        "bindingRef": { "$ref": "#/$defs/boundedString" },
+        "taskPacketId": { "$ref": "#/$defs/nullableBoundedString" },
+        "roleInstanceId": { "$ref": "#/$defs/nullableBoundedString" }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "taskPacketId": { "$ref": "#/$defs/boundedString" },
+            "roleInstanceId": { "$ref": "#/$defs/boundedString" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "taskPacketId": { "type": "null" },
+            "roleInstanceId": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "observedBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+            "family",
+            "providerId",
+            "bindingRef",
+            "taskPacketId",
+            "roleInstanceId",
+            "hostSurface",
+            "evidenceKind",
+            "runId",
+            "target",
+            "scenario",
+            "sessionId",
+            "eventId",
+            "occurredAt",
+            "resultStatus",
+            "packageSha256",
+            "promptSha256"
+      ],
+      "properties": {
+            "family": { "$ref": "#/$defs/family" },
+            "providerId": { "$ref": "#/$defs/boundedString" },
+            "bindingRef": { "$ref": "#/$defs/boundedString" },
+            "taskPacketId": { "$ref": "#/$defs/nullableBoundedString" },
+            "roleInstanceId": { "$ref": "#/$defs/nullableBoundedString" },
+            "hostSurface": { "$ref": "#/$defs/boundedString" },
+            "evidenceKind": { "$ref": "#/$defs/boundedString" },
+            "runId": { "$ref": "#/$defs/boundedString" },
+            "target": { "enum": ["codex_cli", "codex_desktop", "claude_code"] },
+            "scenario": { "enum": ["governed_execution", "fast_path_control"] },
+            "sessionId": { "$ref": "#/$defs/boundedString" },
+            "eventId": { "$ref": "#/$defs/boundedString" },
+            "parentEventId": { "type": ["string", "null"], "maxLength": 512 },
+            "occurredAt": { "type": "string", "format": "date-time" },
+            "resultStatus": { "enum": ["success", "completed", "returned", "verified", "applied"] },
+            "packageSha256": { "$ref": "#/$defs/sha256" },
+            "promptSha256": { "$ref": "#/$defs/sha256" }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "taskPacketId": { "$ref": "#/$defs/boundedString" },
+                "roleInstanceId": { "$ref": "#/$defs/boundedString" }
+              }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "taskPacketId": { "type": "null" },
+                "roleInstanceId": { "type": "null" }
+              }
+            }
+          ]
+        },
+        {
+          "if": { "type": "object", "properties": { "family": { "const": "agent_subagent" } } },
+          "then": { "type": "object", "properties": { "evidenceKind": { "enum": ["spawn_agent_result", "agent_task_result"] } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "family": { "const": "mcp" } } },
+          "then": { "type": "object", "properties": { "evidenceKind": { "const": "mcp_tool_result" } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "family": { "const": "hook" } } },
+          "then": { "type": "object", "properties": { "evidenceKind": { "const": "hook_trigger_event" } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "family": { "const": "skill" } } },
+          "then": { "type": "object", "properties": { "evidenceKind": { "const": "skill_application" } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "family": { "const": "command_script" } } },
+          "then": { "type": "object", "properties": { "evidenceKind": { "const": "command_output" } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "family": { "const": "runtime_tool" } } },
+          "then": { "type": "object", "properties": { "evidenceKind": { "const": "runtime_tool_call" } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "family": { "const": "agent_teams_playbook" } } },
+          "then": { "type": "object", "properties": { "evidenceKind": { "const": "agent_team_result" } } }
+        }
+      ]
+    },
+    "signerDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policyVersion",
+        "decidedAt",
+        "decision",
+        "requiredCount",
+        "observedCount",
+        "matchedCount",
+        "unmatchedBindingRefs",
+        "unselectedObservedBindingRefs",
+        "requiredTaskLaneCount",
+        "observedTaskLaneCount",
+        "matchedTaskLaneCount",
+        "unmatchedTaskLanes",
+        "unselectedObservedTaskLanes"
+      ],
+      "properties": {
+        "policyVersion": { "$ref": "#/$defs/boundedString" },
+        "decidedAt": { "type": "string", "format": "date-time" },
+        "decision": { "const": "release_attested" },
+        "requiredCount": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "observedCount": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "matchedCount": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "unmatchedBindingRefs": { "type": "array", "maxItems": 0 },
+        "unselectedObservedBindingRefs": { "type": "array", "maxItems": 0 },
+        "requiredTaskLaneCount": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "observedTaskLaneCount": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "matchedTaskLaneCount": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "unmatchedTaskLanes": { "type": "array", "maxItems": 0 },
+        "unselectedObservedTaskLanes": { "type": "array", "maxItems": 0 }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "keyId", "signatureBase64", "signedPayloadSha256"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "keyId": { "const": "meta-kim-release-observer-ed25519-2b0848f46fe6c6d72" },
+        "signatureBase64": { "type": "string", "minLength": 64, "maxLength": 256 },
+        "signedPayloadSha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

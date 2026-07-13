@@ -252,7 +252,7 @@ describe("meta-theory run status envelope", () => {
     assert.match(notice, /Do not hardcode any single human language/);
   });
 
-  test("status CLI returns neutral inactive output without hardcoded language", async () => {
+  test("status CLI resolves inactive output from the shared default locale", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-status-cli-"));
     try {
       const result = spawnSync(
@@ -261,11 +261,15 @@ describe("meta-theory run status envelope", () => {
         {
           cwd: tempDir,
           encoding: "utf8",
+          env: {
+            ...process.env,
+            META_KIM_OUTPUT_LANGUAGE: "zh",
+          },
         },
       );
 
       assert.equal(result.status, 0);
-      assert.match(result.stdout, /meta_governance_status=inactive/);
+      assert.match(result.stdout, /Meta_Kim 治理状态：未运行/);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -304,7 +308,11 @@ describe("meta-theory run status envelope", () => {
 
       const result = spawnSync(
         process.execPath,
-        [path.join(__dirname, "..", "..", "scripts", "meta-run-status.mjs")],
+        [
+          path.join(__dirname, "..", "..", "scripts", "meta-run-status.mjs"),
+          "--lang",
+          "en",
+        ],
         {
           cwd: tempDir,
           encoding: "utf8",
@@ -313,8 +321,8 @@ describe("meta-theory run status envelope", () => {
 
       assert.equal(result.status, 0);
       assert.match(result.stdout, /meta_governance_status=inactive/);
-      assert.match(result.stdout, /reason=session_stop/);
-      assert.match(result.stdout, /continuation=local_continuity_or_new_run_only/);
+      assert.match(result.stdout, /reason=session stopped/);
+      assert.match(result.stdout, /continuation=continue from local context or start a new run/);
       assert.doesNotMatch(result.stdout, /meta_governance_active/);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
@@ -463,6 +471,9 @@ describe("meta-theory run status envelope", () => {
         [
           path.join(__dirname, "..", "..", "scripts", "meta-run-status.mjs"),
           "--latest",
+          "--lang",
+          "en",
+          "--details",
         ],
         {
           cwd: tempDir,
@@ -471,10 +482,11 @@ describe("meta-theory run status envelope", () => {
       );
 
       assert.equal(result.status, 0);
+      assert.match(result.stdout, /Latest governed run/);
       assert.match(result.stdout, /latest_run=meta-latest-demo/);
       assert.match(result.stdout, /task=demo task/);
-      assert.match(result.stdout, /status=pass/);
-      assert.match(result.stdout, /public_ready=false/);
+      assert.match(result.stdout, /status=passed/);
+      assert.match(result.stdout, /public_ready=no/);
       assert.match(result.stdout, /summary=demo summary/);
       assert.match(
         result.stdout,
@@ -482,7 +494,7 @@ describe("meta-theory run status envelope", () => {
       );
       assert.match(
         result.stdout,
-        /runtime_evidence=codex:pass\/runtime_live_pass\/pass; cursor:blocked\/unsupported\/native_harness_missing/,
+        /runtime_evidence=codex:passed\/runtime_live_pass\/passed; cursor:blocked\/unsupported\/native_harness_missing/,
       );
       assert.match(
         result.stdout,
@@ -495,6 +507,46 @@ describe("meta-theory run status envelope", () => {
       );
       const escapedTempDir = tempDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       assert.doesNotMatch(result.stdout, new RegExp(escapedTempDir));
+
+      const localized = [
+        ["zh", /最近一次治理运行/, /状态：通过/, /可交付：否/],
+        ["ja", /最新のガバナンス実行/, /状態：合格/, /公開準備：いいえ/],
+        ["ko", /최근 거버넌스 실행/, /상태: 통과/, /공개 준비: 아니요/],
+      ];
+      for (const [language, title, statusLabel, readyLabel] of localized) {
+        const localeResult = spawnSync(
+          process.execPath,
+          [
+            path.join(__dirname, "..", "..", "scripts", "meta-run-status.mjs"),
+            "--latest",
+            "--lang",
+            language,
+          ],
+          { cwd: tempDir, encoding: "utf8" },
+        );
+        assert.equal(localeResult.status, 0, localeResult.stderr);
+        assert.match(localeResult.stdout, title);
+        assert.match(localeResult.stdout, statusLabel);
+        assert.match(localeResult.stdout, readyLabel);
+        assert.match(localeResult.stdout, /demo summary/);
+        assert.doesNotMatch(localeResult.stdout, /owner_handoff|runtime_evidence/);
+      }
+
+      const jsonResult = spawnSync(
+        process.execPath,
+        [
+          path.join(__dirname, "..", "..", "scripts", "meta-run-status.mjs"),
+          "--latest",
+          "--lang",
+          "zh",
+          "--json",
+        ],
+        { cwd: tempDir, encoding: "utf8" },
+      );
+      const machineSummary = JSON.parse(jsonResult.stdout);
+      assert.equal(machineSummary.status, "pass");
+      assert.equal(machineSummary.publicReady, "false");
+      assert.equal(machineSummary.task, "demo task");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

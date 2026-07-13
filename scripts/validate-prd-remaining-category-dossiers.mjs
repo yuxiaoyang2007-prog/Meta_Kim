@@ -226,6 +226,6 @@ hasAll(prd, [
 assert(pkg.scripts?.["meta:prd:remaining-dossiers:validate"]?.includes("validate-prd-remaining-category-dossiers.mjs"), "package.json missing meta:prd:remaining-dossiers:validate");
 assert(pkg.scripts?.["meta:prd:all-dossiers:validate"]?.includes("meta:prd:product-discovery:validate"), "all-dossiers validator must include P-095");
 assert(pkg.scripts?.["meta:prd:all-dossiers:validate"]?.includes("meta:prd:remaining-dossiers:validate"), "all-dossiers validator must include P-096..P-100");
-assert(pkg.scripts?.["meta:verify:governance"]?.includes("meta:prd:all-dossiers:validate"), "meta:verify:governance must include all PRD dossier validation");
+assert(`${pkg.scripts?.["meta:verify:governance"] ?? ""} ${pkg.scripts?.["meta:verify:governance:core"] ?? ""}`.includes("meta:prd:all-dossiers:validate"), "meta:verify:governance must include all PRD dossier validation");
 
 console.log(`PRD remaining category dossiers valid: ${selectedSpecs.map((spec) => spec.taskId).join(", ")} dossier_ready`);

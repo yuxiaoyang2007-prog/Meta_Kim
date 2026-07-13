@@ -104,7 +104,7 @@ function validateContractShape(contract, stageContract, liveContract, pkg) {
     "package.json missing runtime priority validator",
   );
   assert.ok(
-    pkg.scripts?.["meta:verify:governance"]?.includes("meta:prd:runtime-priority:validate"),
+    `${pkg.scripts?.["meta:verify:governance"] ?? ""} ${pkg.scripts?.["meta:verify:governance:core"] ?? ""}`.includes("meta:prd:runtime-priority:validate"),
     "meta:verify:governance must include runtime priority validator",
   );
 }

@@ -172,6 +172,7 @@ const GLOBAL_HOOK_PACKAGE_FILES = new Set([
   "subagent-context.mjs",
   // ── canonical/runtime-assets/shared/hooks/ ──
   "activate-meta-theory-spine.mjs",
+  "project-root.mjs",
   "meta-kim-memory-save.mjs",
   "skip-reminder.mjs",
   "spine-state.mjs",

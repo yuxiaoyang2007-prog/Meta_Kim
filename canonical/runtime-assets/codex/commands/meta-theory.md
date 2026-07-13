@@ -29,7 +29,7 @@ If this command file has not been rendered by global sync and the placeholder is
 npm run meta:theory:run:notice -- --runtime codex "$ARGUMENTS"
 ```
 
-Then relay the compact stdout notice and the returned report path in chat. Use `node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --read latest` from the rendered package root, or `npm run meta:theory:report -- latest` in the source checkout, to reopen the user-readable report when more detail is needed. This is the default artifact path for `/meta-theory` governed execution: Warden entry gate -> Conductor orchestration -> CapabilityGap decisions -> workerTaskPackets -> runtime projection evidence -> Warden writeback decision -> visible run report. The `:notice` fallback keeps `--emit-conversation-notice` inside `package.json` because some Windows/npm paths strip forwarded flags. Keep the user request as the first positional argument; do not switch to `--task` unless calling the Node script directly.
+Relay every localized stderr progress snapshot into normal assistant chat at its natural transition point, without shortening away owner, result, risk, verification, or next-action guidance. Treat stdout as the single final machine-readable JSON summary; read its returned report path and include that path in the chat closure. Use `node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --read latest` from the rendered package root, or `npm run meta:theory:report -- latest` in the source checkout, to reopen the user-readable report when more detail is needed. This is the default artifact path for `/meta-theory` governed execution: Warden entry gate -> Conductor orchestration -> CapabilityGap decisions -> workerTaskPackets -> runtime projection evidence -> Warden writeback decision -> visible run report. The `:notice` fallback keeps `--emit-conversation-notice` inside `package.json` because some Windows/npm paths strip forwarded flags. Keep the user request as the first positional argument; do not switch to `--task` unless calling the Node script directly.
 
 Codex execution rule:
 
@@ -55,7 +55,7 @@ This command adapter binds `governance-orchestration`, `capability-discovery-and
 
 ## Pass
 
-- The command resolves the shared skill, records capability discovery, runs the governed artifact path from the rendered installed package root or `meta:theory:run:notice` fallback, relays the compact notice/report path, and dispatches via the active subagent tool for execution-layer analysis when available.
+- The command resolves the shared skill, records capability discovery, runs the governed artifact path from the rendered installed package root or `meta:theory:run:notice` fallback, relays the localized stderr progress snapshots plus the final stdout JSON report path, and dispatches via the active subagent tool for execution-layer analysis when available.
 - If no callable subagent tool is available, it reports the exact checked capability and does not continue as if agent dispatch happened.
 - Governed execution that needs an artifact uses the rendered `node "__META_KIM_PACKAGE_ROOT__/scripts/run-meta-theory-governed-execution.mjs" --emit-conversation-notice "$ARGUMENTS"` command, or `npm run meta:theory:run:notice -- "$ARGUMENTS"` only as a source-checkout fallback, then reopens the report by runId or `latest`.
 

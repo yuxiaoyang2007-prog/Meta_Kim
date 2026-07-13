@@ -12,8 +12,6 @@ import {
   readGovernedExecutionRun,
   runMetaTheoryGovernedExecution,
 } from "../../scripts/run-meta-theory-governed-execution.mjs";
-import { getReportLabels } from "../../scripts/meta-kim-i18n.mjs";
-
 const multiGapTask = [
   "同一套 PRD review standard 需要 skill。",
   "长期 test coverage owner 需要 agent。",
@@ -132,9 +130,9 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         report.defaultRuntimePath.agentTeamsPlaybookPacket.acceptance.noArbitraryMetaKimCap,
         true
       );
-      assert.equal(report.defaultRuntimePath.capabilityInvocationTruthPacket.status, "partial");
+      assert.equal(report.capabilityInvocationTruthPacket.status, "partial");
       const invocationByFamily = new Map(
-        report.defaultRuntimePath.capabilityInvocationTruthPacket.rows.map((row) => [
+        report.capabilityInvocationTruthPacket.rows.map((row) => [
           row.family,
           row,
         ])
@@ -147,7 +145,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.equal(invocationByFamily.get("agent_teams_playbook").state, "selected_not_invoked");
       assert.equal(report.defaultRuntimePath.capabilityInvocationProbePacket.status, "not_run");
       assert.equal(
-        report.defaultRuntimePath.capabilityInvocationTruthPacket.realInvocationCoverage.status,
+        report.capabilityInvocationTruthPacket.realInvocationCoverage.status,
         "partial"
       );
       assert.equal(report.defaultRuntimePath.hostInvocationRequestPacket.status, "partial");
@@ -206,8 +204,57 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.ok(["pass", "partial"].includes(report.defaultRuntimePath.visibleMetaTheorySurfacePacket.status));
       assert.equal(report.defaultRuntimePath.visibleMetaTheorySurfacePacket.capabilityInventory.notSkillOnly, true);
       assert.equal(
-        report.defaultRuntimePath.visibleMetaTheorySurfacePacket.capabilityInvocationTruth.status,
-        "partial"
+        report.defaultRuntimePath.visibleMetaTheorySurfacePacket.capabilityInvocationPresentation.executionState,
+        "not_confirmed"
+      );
+      assert.ok(
+        [
+          "completed",
+          "called",
+          "called_with_failures",
+          "failed",
+          "denied",
+          "blocked",
+          "not_confirmed",
+          "unavailable",
+        ].includes(
+          report.defaultRuntimePath.visibleMetaTheorySurfacePacket.capabilityInvocationPresentation
+            .executionState,
+        ),
+      );
+      assert.notEqual(
+        report.defaultRuntimePath.visibleMetaTheorySurfacePacket.capabilityInvocationPresentation
+          .executionState,
+        "unavailable",
+      );
+      assert.match(
+        report.defaultRuntimePath.visibleMetaTheorySurfacePacket.capabilityInvocationPresentation.userSummary,
+        /当前聊天中的实际调用结果为准/,
+      );
+      assert.deepEqual(
+        Object.keys(
+          report.defaultRuntimePath.visibleMetaTheorySurfacePacket.capabilityInvocationPresentation,
+        ).sort(),
+        ["executionLabel", "executionState", "schemaVersion", "userSummary"],
+      );
+      assert.equal(
+        Object.hasOwn(
+          report.defaultRuntimePath.visibleMetaTheorySurfacePacket,
+          "capabilityInvocationTruth",
+        ),
+        false,
+      );
+      assert.equal(
+        Object.hasOwn(
+          report.defaultRuntimePath.visibleMetaTheorySurfacePacket.capabilityInvocationPresentation,
+          "rows",
+        ),
+        false,
+      );
+      assert.ok(report.capabilityInvocationTruthPacket.rows.length >= 1);
+      assert.equal(
+        report.capabilityInvocationTruthPacket,
+        report.coreLoop.capabilityInvocationTruthPacket,
       );
       assert.equal(
         report.defaultRuntimePath.visibleMetaTheorySurfacePacket.dynamicWorkflow.status,
@@ -536,10 +583,38 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.equal(readBack.artifact.runReport.status, "partial");
       assert.equal(readBack.artifact.runReportPanelContract.status, "partial");
       assert.equal(
-        readBack.artifact.runReportPanelContract.capabilityInvocationTruth.callableInvocationCoverage
-          .status,
+        readBack.artifact.runReportPanelContract.capabilityInvocationPresentation.executionState,
+        "not_confirmed",
+      );
+      assert.deepEqual(
+        Object.keys(
+          readBack.artifact.runReportPanelContract.capabilityInvocationPresentation,
+        ).sort(),
+        ["executionLabel", "executionState", "schemaVersion", "userSummary"],
+      );
+      assert.equal(
+        Object.hasOwn(readBack.artifact.runReportPanelContract, "capabilityInvocationTruth"),
+        false,
+      );
+      assert.equal(
+        Object.hasOwn(
+          readBack.artifact.runReportPanelContract.visibleMetaTheorySurface,
+          "capabilityInvocationTruth",
+        ),
+        false,
+      );
+      assert.equal(
+        Object.hasOwn(
+          readBack.artifact.runReportPanelContract.capabilityInvocationPresentation,
+          "rows",
+        ),
+        false,
+      );
+      assert.equal(
+        readBack.artifact.capabilityInvocationTruthPacket.callableInvocationCoverage.status,
         "not_run",
       );
+      assert.ok(readBack.artifact.capabilityInvocationTruthPacket.rows.length >= 1);
       assert.equal(
         readBack.artifact.runReportPanelContract.schemaVersion,
         "run-report-panel-contract-v0.1"
@@ -566,22 +641,23 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         readBack.artifact.runReportPanelContract.deliverables.panelContract,
         "artifact.runReportPanelContract"
       );
-      const labels = getReportLabels("zh-CN");
-      const sectionLabels = labels.sections;
-      const toolList = labels.toolList(labels.toolNames);
       for (const section of [
-        sectionLabels.decisionSummary,
-        sectionLabels.whyDecision,
-        sectionLabels.ownerHandoff,
-        sectionLabels.toolEvidenceFull(toolList),
-        "三目标产品验收",
-        sectionLabels.capabilityUpgrade,
-        sectionLabels.wardenApproval,
-        sectionLabels.verificationStatus,
+        "用户目标",
+        "工作协调与调用情况",
+        "阶段进展",
+        "验证与下一步",
       ]) {
         assert.match(readBack.markdown, new RegExp(section));
-        assert.ok(readBack.artifact.runReport.sections.includes(section));
       }
+      assert.match(readBack.markdown, /调用记录/);
+      assert.match(readBack.markdown, /协作情况/);
+      assert.match(readBack.markdown, /工作流概览/);
+      assert.doesNotMatch(readBack.markdown, /调用记录[^\n]*不可用/);
+      const visibleChrome = readBack.markdown.slice(readBack.markdown.indexOf("## 用户目标"));
+      assert.doesNotMatch(
+        visibleChrome,
+        /selected_not_invoked|capabilityInvocationTruthPacket\.rows|exact[_ -]?binding|live[_ -]?certification|provider|lane|精确(?:绑定|认证)|实时认证/i,
+      );
       await stat(readBack.paths.json);
       await stat(readBack.paths.markdown);
     } finally {
@@ -795,7 +871,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
 
       assert.equal(report.status, "partial");
       assert.equal(report.coreLoop.hostInvocationRequestPacket.status, "partial");
-      assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "partial");
+      assert.equal(report.capabilityInvocationTruthPacket.status, "partial");
       assert.ok(
         report.coreLoop.runtimeInvocationPlanPacket.evidence.every(
           (item) => item.passEligible === false,
@@ -855,9 +931,9 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.equal(report.status, "partial");
       assert.equal(report.coreLoop.runtimeInvocationPlanPacket.status, "partial");
       assert.equal(report.coreLoop.hostInvocationRequestPacket.status, "partial");
-      assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "partial");
+      assert.equal(report.capabilityInvocationTruthPacket.status, "partial");
       assert.equal(
-        report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
+        report.capabilityInvocationTruthPacket.realInvocationCoverage.status,
         "partial",
       );
       assert.equal(report.coreLoop.productExperiencePacket.nativeChoiceSurfaceGate.status, "partial");
@@ -866,7 +942,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         "needs-host-invocation",
       );
       assert.ok(
-        report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingBindings.length > 0,
+        report.capabilityInvocationTruthPacket.realInvocationCoverage.missingBindings.length > 0,
       );
       assert.equal(
         report.coreLoop.productExperiencePacket.automationDecisionBoundary.status,
@@ -925,9 +1001,9 @@ describe("32 — Meta-theory three product goals and support gates", () => {
       assert.ok(
         report.coreLoop.hostInvocationRequestPacket.pendingFamilies.includes("agent_subagent")
       );
-      assert.equal(report.coreLoop.capabilityInvocationTruthPacket.status, "partial");
+      assert.equal(report.capabilityInvocationTruthPacket.status, "partial");
       assert.equal(
-        report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.status,
+        report.capabilityInvocationTruthPacket.realInvocationCoverage.status,
         "partial",
       );
       assert.ok(
@@ -941,7 +1017,7 @@ describe("32 — Meta-theory three product goals and support gates", () => {
         ),
       );
       assert.ok(
-        report.coreLoop.capabilityInvocationTruthPacket.realInvocationCoverage.missingFamilies.includes(
+        report.capabilityInvocationTruthPacket.realInvocationCoverage.missingFamilies.includes(
           "agent_subagent",
         ),
       );

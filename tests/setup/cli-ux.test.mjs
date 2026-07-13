@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { buildI18N } from "../../config/i18n/setup-strings.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const cli = path.join(repoRoot, "bin", "meta-kim.mjs");
@@ -59,7 +60,7 @@ describe("stable package CLI UX", () => {
     for (const command of ["status", "uninstall"]) {
       const result = run(
         cli,
-        [command, "--scope=porject", "--yes"].filter(
+        [command, ...(command === "status" ? ["--lang", "en"] : []), "--scope=porject", "--yes"].filter(
           (arg) => command === "uninstall" || arg !== "--yes",
         ),
       );
@@ -87,9 +88,69 @@ describe("stable package CLI UX", () => {
       rmSync(cwd, { recursive: true, force: true });
     }
   });
+
+  test("status accepts language aliases and keeps concise, detailed, and JSON layers compatible", () => {
+    const locales = [
+      ["en", /Meta_Kim status/],
+      ["zh", /Meta_Kim 状态/],
+      ["ja", /Meta_Kim ステータス/],
+      ["ko", /Meta_Kim 상태/],
+    ];
+    for (const [language, title] of locales) {
+      const concise = run(cli, ["status", "--lang", language]);
+      assert.equal(concise.status, 0, concise.stderr);
+      assert.match(concise.stdout, title);
+      assert.match(concise.stdout, /status --details/);
+      assert.match(concise.stdout, /meta:uninstall/);
+      assert.match(concise.stdout, /meta:uninstall:yes/);
+      assert.match(concise.stdout, /\.meta-kim\/state/);
+      assert.doesNotMatch(concise.stdout, /^A\. /m);
+
+      const equalsForm = run(cli, ["status", `--lang=${language}`, "--json"]);
+      assert.equal(equalsForm.status, 0, equalsForm.stderr);
+      assert.doesNotThrow(() => JSON.parse(equalsForm.stdout));
+    }
+
+    const detailed = run(cli, ["status", "--lang", "en", "--details"]);
+    assert.equal(detailed.status, 0, detailed.stderr);
+    assert.match(detailed.stdout, /A\. Global runtime skills/);
+
+    const localizedHelp = run(cli, ["status", "--lang", "zh", "--help"]);
+    assert.equal(localizedHelp.status, 0, localizedHelp.stderr);
+    assert.match(localizedHelp.stdout, /用法/);
+
+    const localizedError = run(cli, ["status", "--lang", "zh", "--bad"]);
+    assert.equal(localizedError.status, 2);
+    assert.match(localizedError.stderr, /未知的状态选项/);
+  });
+
+  test("status default locale stays consistent between concise and details surfaces", () => {
+    const env = {
+      META_KIM_OUTPUT_LANGUAGE: "",
+      METAKIM_LANG: "",
+      LC_ALL: "",
+      LC_MESSAGES: "",
+      LANG: "ja_JP.UTF-8",
+    };
+    const concise = run(cli, ["status"], env);
+    const detailed = run(cli, ["status", "--details"], env);
+    assert.equal(concise.status, 0, concise.stderr);
+    assert.equal(detailed.status, 0, detailed.stderr);
+    assert.match(concise.stdout, /Meta_Kim ステータス/);
+    assert.match(detailed.stdout, /Meta_Kim インストール足跡/);
+    assert.doesNotMatch(detailed.stdout, /Meta_Kim footprint|Scope: both/);
+  });
 });
 
 describe("setup check is read-only", () => {
+  test("failed sync guidance is available in all supported languages", () => {
+    const i18n = buildI18N({ MIN_NODE_VERSION: 18 });
+    for (const language of ["en", "zh-CN", "ja-JP", "ko-KR"]) {
+      assert.ok(i18n[language].checkOverallFailed);
+      assert.match(i18n[language].checkRepairCommand, /npm run meta:sync/);
+    }
+  });
+
   test("--check does not create profile state", () => {
     const profile = `check-read-only-${process.pid}-${Date.now()}`;
     const profileDir = path.join(repoRoot, ".meta-kim", "state", profile);

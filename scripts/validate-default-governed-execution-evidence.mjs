@@ -161,8 +161,15 @@ function validateProductExperienceEvidence(report) {
   assert.ok(report.coreLoop.peerAgentMeshPacket.peers.length > 0);
   assert.equal(report.coreLoop.visibleMetaTheorySurfacePacket.capabilityInventory.notSkillOnly, true);
   assert.equal(
-    report.coreLoop.visibleMetaTheorySurfacePacket.capabilityInvocationTruth.status,
-    report.coreLoop.capabilityInvocationTruthPacket.status
+    Object.hasOwn(
+      report.coreLoop.visibleMetaTheorySurfacePacket,
+      "capabilityInvocationTruth",
+    ),
+    false,
+  );
+  assert.deepEqual(
+    report.capabilityInvocationTruthPacket,
+    report.coreLoop.capabilityInvocationTruthPacket,
   );
   assert.equal(
     report.coreLoop.visibleMetaTheorySurfacePacket.dynamicWorkflow.status,

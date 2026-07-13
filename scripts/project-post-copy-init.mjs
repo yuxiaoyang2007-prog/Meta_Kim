@@ -5,8 +5,21 @@ import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { detectPython310, formatPythonLauncher, runPythonModule } from "./graphify-runtime.mjs";
+import { resolveProjectRoot } from "../canonical/runtime-assets/shared/hooks/project-root.mjs";
 
-const rootDir = process.cwd();
+const projectRootArgIndex = process.argv.indexOf("--project-root");
+const declaredProjectRoot =
+  projectRootArgIndex >= 0 && process.argv[projectRootArgIndex + 1]
+    ? process.argv[projectRootArgIndex + 1]
+    : null;
+const rootDir = resolveProjectRoot({
+  explicitDeclarations: [declaredProjectRoot, process.env.CLAUDE_PROJECT_DIR],
+});
+if (!rootDir) {
+  // No legitimate project root — do not bootstrap graphify into an arbitrary
+  // cwd. This path is opportunistic/auto; a silent no-op is the correct result.
+  process.exit(0);
+}
 const scriptPath = fileURLToPath(import.meta.url);
 const autoMode = process.argv.includes("--auto");
 const autoWorkerMode = process.argv.includes("--auto-worker");

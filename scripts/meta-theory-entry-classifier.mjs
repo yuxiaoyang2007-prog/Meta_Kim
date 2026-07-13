@@ -1,33 +1,107 @@
 #!/usr/bin/env node
 
 import process from "node:process";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const ENTRY_LEXICON_PATH = path.resolve(
+  SCRIPT_DIR,
+  "../config/governance/entry-classification-lexicon.json",
+);
+const ENTRY_LEXICON = JSON.parse(readFileSync(ENTRY_LEXICON_PATH, "utf8"));
+
+const REQUIRED_LEXICON_CATEGORIES = Object.freeze([
+  "action",
+  "durableOutput",
+  "subjectiveQuality",
+  "fileOrMutationObject",
+  "productBuildObject",
+  "projectUnderstanding",
+]);
+const REQUIRED_LEXICON_LANGUAGES = Object.freeze(["en", "zh", "ja", "ko"]);
+const MAX_TERMS_PER_LANGUAGE = 128;
+const MAX_TERM_LENGTH = 80;
+
+export function validateEntryLexicon(lexicon) {
+  if (lexicon?.schemaVersion !== 1 || !lexicon.categories || typeof lexicon.categories !== "object") {
+    throw new Error(`Unsupported entry classification lexicon: ${ENTRY_LEXICON_PATH}`);
+  }
+  const categoryNames = Object.keys(lexicon.categories).sort();
+  if (categoryNames.join("|") !== [...REQUIRED_LEXICON_CATEGORIES].sort().join("|")) {
+    throw new Error(`Entry lexicon must define exactly: ${REQUIRED_LEXICON_CATEGORIES.join(", ")}`);
+  }
+  for (const categoryName of REQUIRED_LEXICON_CATEGORIES) {
+    const category = lexicon.categories[categoryName];
+    const languageNames = Object.keys(category ?? {}).sort();
+    if (languageNames.join("|") !== [...REQUIRED_LEXICON_LANGUAGES].sort().join("|")) {
+      throw new Error(`${categoryName} must define exactly en, zh, ja, and ko string arrays`);
+    }
+    for (const language of REQUIRED_LEXICON_LANGUAGES) {
+      const terms = category[language];
+      if (!Array.isArray(terms) || terms.length === 0 || terms.length > MAX_TERMS_PER_LANGUAGE) {
+        throw new Error(`${categoryName}.${language} must contain 1-${MAX_TERMS_PER_LANGUAGE} terms`);
+      }
+      const normalized = terms.map((term) => {
+        if (
+          typeof term !== "string" ||
+          !term.trim() ||
+          term !== term.trim() ||
+          term.length > MAX_TERM_LENGTH
+        ) {
+          throw new Error(`${categoryName}.${language} contains an invalid term`);
+        }
+        return term.trim();
+      });
+      if (new Set(normalized).size !== normalized.length) {
+        throw new Error(`${categoryName}.${language} contains duplicate terms`);
+      }
+    }
+  }
+  return lexicon;
+}
+
+validateEntryLexicon(ENTRY_LEXICON);
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function createLexiconMatcher(categoryName) {
+  const category = ENTRY_LEXICON.categories[categoryName];
+  if (!category) throw new Error(`Missing entry lexicon category: ${categoryName}`);
+  const english = category.en.map(escapeRegex).join("|");
+  const substringTerms = ["zh", "ja", "ko"]
+    .flatMap((language) => category[language])
+    .map(escapeRegex)
+    .join("|");
+  const alternatives = [];
+  if (english) alternatives.push(`(?:^|[^A-Za-z0-9_])(?:${english})(?=$|[^A-Za-z0-9_])`);
+  if (substringTerms) alternatives.push(`(?:${substringTerms})`);
+  if (alternatives.length === 0) throw new Error(`Empty entry lexicon matcher: ${categoryName}`);
+  return new RegExp(alternatives.join("|"), "iu");
+}
 
 const EXPLICIT_META_THEORY_RE =
   /(?:^|\b)(?:\/?meta-theory|meta theory|run meta theory|execute meta theory)(?:\b|$)|元理论/u;
 
-const ACTION_RE =
-  /\b(?:build|create|implement|fix|repair|change|update|refactor|plan|start|handle|organize|prioritize|verify|review|audit|generate|write|sync)\b|(?:帮我|开始|处理|整理|规划|修复|验证|审查|检查|生成|写|改|优化|同步|做|拆|拆解|落地)/iu;
+const ACTION_RE = createLexiconMatcher("action");
 
-const DURABLE_OUTPUT_RE =
-  /\b(?:plan|checklist|priority|priorities|recommendation|recommendations|verification|audit|report|artifact|implementation|fixes|tests?|roadmap|launch plan)\b|(?:优先级|修复建议|验证清单|计划|报告|产物|测试|清单|建议|落地|方案|路径|拆解)/iu;
+const DURABLE_OUTPUT_RE = createLexiconMatcher("durableOutput");
 
 const PURE_QUERY_RE =
   /^(?:what|why|how|when|where|who|is|are|can|could|should)\b|^(?:什么|为什么|怎么|如何|是否|能否|可以|介绍|解释|说明)/iu;
 
 const CHINESE_QUERY_WORD_RE = /(?:什么|为什么|怎么|如何|是否|能否|可以吗|吗|介绍|解释|说明)/u;
 
-const SUBJECTIVE_QUALITY_RE =
-  /\b(?:good|bad|beautiful|ugly|smooth|professional|premium|advanced|clean|simple|fast|slow|feels off|hard to use)\b|(?:好看|不好看|顺畅|不顺|高级|专业|简洁|太慢|太快|难用|怪|不对劲)/iu;
+const SUBJECTIVE_QUALITY_RE = createLexiconMatcher("subjectiveQuality");
 
-const FILE_OR_MUTATION_RE =
-  /\b(?:file|code|repo|repository|project|app|page|component|test|config|contract|script)\b|(?:文件|代码|仓库|项目|页面|组件|测试|配置|合同|脚本)/iu;
+const FILE_OR_MUTATION_RE = createLexiconMatcher("fileOrMutationObject");
 
-const PRODUCT_BUILD_OBJECT_RE =
-  /\b(?:app|web app|dashboard|platform|tool|saas|automation|publisher|scheduler|workflow|product|assistant|content)\b|(?:系统|平台|工具|应用|网站|面板|看板|自动发布器|发布器|营销.*器|自动化|工作流|东西|产品|助手|内容)/iu;
+const PRODUCT_BUILD_OBJECT_RE = createLexiconMatcher("productBuildObject");
 
-const PROJECT_UNDERSTANDING_RE =
-  /\b(?:project|repo|repository|codebase|architecture|commerciali[sz]e|market|competitor|business model|strategy|roadmap)\b|(?:项目|仓库|代码库|架构|怎么玩|干啥|做什么|商业化|市场|竞品|商业模式|发展|路线图|战略)/iu;
+const PROJECT_UNDERSTANDING_RE = createLexiconMatcher("projectUnderstanding");
 
 const PARALLEL_AGENT_RE =
   /\b(?:parallel|subagents?|agent team|multi-agent|fan[- ]?out|delegate|spawn|review\s*\+\s*fix\s*\+\s*verify)\b|(?:并行|子智能体|子agent|多个\s*agent|多智能体|编排|分工|派发|噼里啪啦)/iu;

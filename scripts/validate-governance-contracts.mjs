@@ -29,7 +29,7 @@ assert(coreLoop.contractId === "meta-kim-core-loop-contract", "core loop contrac
 assert(
   coreLoop.defaultEntry?.entryScript === "scripts/run-meta-theory-governed-execution.mjs" &&
     coreLoop.defaultEntry?.packageScript === "meta:theory:run" &&
-    pkg.scripts?.["meta:theory:run"] === "node scripts/run-meta-theory-governed-execution.mjs",
+    pkg.scripts?.["meta:theory:run"] === "node scripts/run-meta-theory-governed-execution.mjs --emit-conversation-notice",
   "core loop contract default entry must point to the real meta:theory:run script",
 );
 assert(

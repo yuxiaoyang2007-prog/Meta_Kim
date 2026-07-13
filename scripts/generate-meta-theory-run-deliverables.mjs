@@ -4,7 +4,11 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { readGovernedExecutionRun } from "./run-meta-theory-governed-execution.mjs";
-import { getReportLabelsForPath } from "./meta-kim-i18n.mjs";
+import {
+  getGovernedRunSurfaceLabels,
+  getReportLabels,
+  normalizeOutputLanguage,
+} from "./meta-kim-i18n.mjs";
 import { createReportContext } from "./report-context.mjs";
 
 const reportContext = createReportContext();
@@ -67,29 +71,102 @@ function statusLabel(status, labels) {
   return labels.statusValue(status);
 }
 
-function buildPanelHtml({ run, contract, manifest, labels }) {
+const PANEL_COPY = Object.freeze({
+  en: {
+    offlineExecution: "Run record loaded; use the actual calls shown in this chat",
+    independentReview: "Additional independent verification is not enabled or is still pending.",
+    handoff: (count) => `${count} execution task(s) are assigned and will be merged and reviewed together.`,
+    blockers: (count, approval) => count > 0
+      ? `${count} item(s) still need attention before work can continue.`
+      : approval ? "Approval is required before the next change." : "No user action is currently blocking progress.",
+    result: "Result", risk: "Risk", next: "Next action",
+    runtimeReady: "Release verification complete", runtimePending: "Further verification required",
+    riskClear: "No outstanding runtime verification risk", riskPending: "Current evidence is not yet release-grade",
+    nextClear: "No additional runtime action", nextPending: "Complete runtime verification before release",
+  },
+  "zh-CN": {
+    offlineExecution: "运行记录已读取；以当前聊天中的实际调用结果为准",
+    independentReview: "额外独立复核未启用或待完成。",
+    handoff: (count) => `已安排 ${count} 个执行任务，完成后统一合并与验收。`,
+    blockers: (count, approval) => count > 0
+      ? `仍有 ${count} 项需要处理，完成后才能继续。`
+      : approval ? "下一项变更需要批准后继续。" : "当前没有需要用户处理的阻塞。",
+    result: "结果", risk: "风险", next: "下一步",
+    runtimeReady: "发布验证已完成", runtimePending: "仍需进一步验证",
+    riskClear: "没有待处理的运行验证风险", riskPending: "当前证据尚未达到发布级",
+    nextClear: "无需额外运行操作", nextPending: "发布前完成运行验证",
+  },
+  "ja-JP": {
+    offlineExecution: "実行記録を読み込みました。実際の呼び出し結果は現在のチャットを確認してください",
+    independentReview: "追加の独立検証は未有効化、または完了待ちです。",
+    handoff: (count) => `${count} 件の実行タスクを割り当て、完了後にまとめて統合・確認します。`,
+    blockers: (count, approval) => count > 0
+      ? `続行前に ${count} 件の対応が必要です。`
+      : approval ? "次の変更には承認が必要です。" : "現在、ユーザー対応が必要なブロッカーはありません。",
+    result: "結果", risk: "リスク", next: "次の対応",
+    runtimeReady: "リリース検証完了", runtimePending: "追加検証が必要",
+    riskClear: "未解決の実行検証リスクはありません", riskPending: "現在の証拠はリリース基準に未到達です",
+    nextClear: "追加の実行対応は不要", nextPending: "リリース前に実行検証を完了する",
+  },
+  "ko-KR": {
+    offlineExecution: "실행 기록을 읽었습니다. 실제 호출 결과는 현재 채팅을 기준으로 확인하세요",
+    independentReview: "추가 독립 검증이 활성화되지 않았거나 완료 대기 중입니다.",
+    handoff: (count) => `${count}개의 실행 작업을 배정했으며 완료 후 함께 병합하고 검토합니다.`,
+    blockers: (count, approval) => count > 0
+      ? `계속하려면 ${count}개 항목을 먼저 처리해야 합니다.`
+      : approval ? "다음 변경은 승인 후 진행됩니다." : "현재 사용자 조치가 필요한 차단 요소가 없습니다.",
+    result: "결과", risk: "위험", next: "다음 작업",
+    runtimeReady: "릴리스 검증 완료", runtimePending: "추가 검증 필요",
+    riskClear: "남은 실행 검증 위험이 없습니다", riskPending: "현재 증거는 아직 릴리스 수준이 아닙니다",
+    nextClear: "추가 실행 작업 없음", nextPending: "릴리스 전에 실행 검증 완료",
+  },
+});
+
+export function resolveRunOutputLanguage(run) {
+  return normalizeOutputLanguage(
+    run?.artifact?.resolvedOutputLanguage ?? run?.artifact?.runReport?.language,
+  ) ?? "en";
+}
+
+export function resolvePanelInvocationPresentation({ labels }) {
+  const copy = getGovernedRunSurfaceLabels(labels.htmlLang).invocationPresentation;
+  const panelCopy = PANEL_COPY[labels.htmlLang] ?? PANEL_COPY.en;
+  // This generator reads editable offline artifacts. They are useful context, but never
+  // authority for invocation, failure, availability, exact binding, or live certification.
+  // Future promotion requires a separate explicit input produced by the private external
+  // verifier; do not reuse any field from the editable run JSON as that interface.
+  const executionState = "not_confirmed";
+  const exactBindingState = "exact_binding_pending";
+  const liveCertificationState = "live_certification_pending";
+  const executionLabel = panelCopy.offlineExecution;
+  const exactBindingLabel = copy.certificationStates[exactBindingState];
+  const liveCertificationLabel = copy.certificationStates[liveCertificationState];
+  return {
+    executionState,
+    exactBindingState,
+    liveCertificationState,
+    executionHeading: copy.executionLabel,
+    certificationHeading: copy.certificationLabel,
+    executionLabel,
+    exactBindingLabel,
+    liveCertificationLabel,
+    independentReviewLabel: panelCopy.independentReview,
+    summary: copy.summary(executionLabel, exactBindingLabel),
+    tone: "neutral",
+  };
+}
+
+export function buildPanelHtml({ run, contract, manifest, labels }) {
   const sectionLabels = labels.sections;
+  const panelCopy = PANEL_COPY[labels.htmlLang] ?? PANEL_COPY.en;
+  const invocationPresentation = resolvePanelInvocationPresentation({ run, contract, labels });
   const runtimeRows = contract.runtimeEvidence
     .map(
       (row) => `<tr>
         <td>${escapeHtml(row.runtime)}</td>
-        <td>${escapeHtml(statusLabel(row.status, labels))}</td>
-        <td>${escapeHtml(row.evidenceKind)}</td>
-        <td>${escapeHtml(row.failureClass)}</td>
-        <td>${escapeHtml(labels.boolean(row.strictReleasePass))}</td>
-        <td>${escapeHtml(row.remainingAction)}</td>
-      </tr>`
-    )
-    .join("\n");
-  const ownerRows = contract.ownerHandoff
-    .map(
-      (owner) => `<tr>
-        <td>${escapeHtml(owner.roleDisplayName)}</td>
-        <td>${escapeHtml(owner.owner)}</td>
-        <td>${escapeHtml(owner.shardScope)}</td>
-        <td>${escapeHtml(owner.parallelGroup)}</td>
-        <td>${escapeHtml(owner.mergeOwner)}</td>
-        <td>${escapeHtml(owner.verificationOwner)}</td>
+        <td>${escapeHtml(row.strictReleasePass ? panelCopy.runtimeReady : panelCopy.runtimePending)}</td>
+        <td>${escapeHtml(row.strictReleasePass ? panelCopy.riskClear : panelCopy.riskPending)}</td>
+        <td>${escapeHtml(row.strictReleasePass ? panelCopy.nextClear : panelCopy.nextPending)}</td>
       </tr>`
     )
     .join("\n");
@@ -102,15 +179,7 @@ function buildPanelHtml({ run, contract, manifest, labels }) {
       </li>`
     )
     .join("\n");
-  const blockedItems = contract.blockedReasons
-    .map(
-      (item) => `<li>
-        <strong>${escapeHtml(item.gapId)}</strong>
-        <span>${escapeHtml(item.reason)}</span>
-        <small>${escapeHtml(item.remainingAction)}</small>
-      </li>`
-    )
-    .join("\n");
+  const blockedCount = contract.blockedReasons.filter((item) => item.gapId !== "none").length;
   return `<!doctype html>
 <html lang="${escapeHtml(labels.htmlLang)}">
 <head>
@@ -168,6 +237,26 @@ function buildPanelHtml({ run, contract, manifest, labels }) {
       background: #eef5f3;
     }
     .metric b { display: block; font-size: 22px; color: var(--accent); }
+    .invocation-summary { margin-bottom: 14px; color: var(--ink); font-weight: 650; }
+    .verification-boundary { margin-top: 12px; color: var(--muted); }
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+    }
+    .status-card {
+      margin: 0;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--accent);
+      border-radius: 6px;
+      background: #f8fbfa;
+    }
+    .status-card[data-tone="success"] { border-left-color: var(--ok); }
+    .status-card[data-tone="warning"] { border-left-color: var(--accent-2); }
+    .status-card dt { color: var(--muted); font-size: 13px; }
+    .status-card dd { margin: 4px 0 0; font-size: 17px; font-weight: 700; }
+    .status-card dd + dd { margin-top: 8px; color: var(--muted); font-size: 14px; }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -213,22 +302,34 @@ function buildPanelHtml({ run, contract, manifest, labels }) {
       <h2>${escapeHtml(sectionLabels.decisionSummary)}</h2>
       <p>${escapeHtml(contract.decisionSummary.task)}</p>
     </section>
+    <section aria-labelledby="capability-invocation-title">
+      <h2 id="capability-invocation-title">${escapeHtml(invocationPresentation.executionHeading)} / ${escapeHtml(invocationPresentation.certificationHeading)}</h2>
+      <p class="invocation-summary" role="status" aria-live="polite">${escapeHtml(invocationPresentation.summary)}</p>
+      <div class="status-grid" role="group" aria-label="${escapeHtml(invocationPresentation.summary)}">
+        <dl class="status-card" data-tone="${escapeHtml(invocationPresentation.tone)}" aria-label="${escapeHtml(`${invocationPresentation.executionHeading}: ${invocationPresentation.executionLabel}`)}">
+          <dt>${escapeHtml(invocationPresentation.executionHeading)}</dt>
+          <dd>${escapeHtml(invocationPresentation.executionLabel)}</dd>
+        </dl>
+        <dl class="status-card" data-tone="neutral" aria-label="${escapeHtml(`${invocationPresentation.certificationHeading}: ${invocationPresentation.exactBindingLabel}; ${invocationPresentation.liveCertificationLabel}`)}">
+          <dt>${escapeHtml(invocationPresentation.certificationHeading)}</dt>
+          <dd>${escapeHtml(invocationPresentation.exactBindingLabel)}</dd>
+          <dd>${escapeHtml(invocationPresentation.liveCertificationLabel)}</dd>
+        </dl>
+      </div>
+      <p class="verification-boundary">${escapeHtml(invocationPresentation.independentReviewLabel)}</p>
+    </section>
     <section>
       <h2>${escapeHtml(sectionLabels.ownerHandoff)}</h2>
-      <table>
-        <thead><tr><th>${escapeHtml(labels.role)}</th><th>${escapeHtml(labels.owner)}</th><th>${escapeHtml(labels.taskScope)}</th><th>${escapeHtml(labels.parallelGroup)}</th><th>${escapeHtml(labels.mergeOwner)}</th><th>${escapeHtml(labels.acceptance)}</th></tr></thead>
-        <tbody>${ownerRows}</tbody>
-      </table>
+      <p>${escapeHtml(panelCopy.handoff(contract.ownerHandoff.length))}</p>
     </section>
     <section>
       <h2>${escapeHtml(sectionLabels.blockedApproval)}</h2>
-      <ul>${blockedItems}</ul>
-      <p>${escapeHtml(labels.canonicalWrites)}: ${escapeHtml(contract.approvalRequest.dryRunCanonicalWrites)}; ${escapeHtml(labels.remainingAction)}: ${escapeHtml(contract.approvalRequest.nextAction)}</p>
+      <p>${escapeHtml(panelCopy.blockers(blockedCount, contract.approvalRequest.approvalRequired === true))}</p>
     </section>
     <section>
       <h2>${escapeHtml(sectionLabels.toolEvidenceShort)}</h2>
       <table>
-        <thead><tr><th>${escapeHtml(labels.tool)}</th><th>${escapeHtml(labels.status)}</th><th>${escapeHtml(labels.evidenceKind)}</th><th>${escapeHtml(labels.failureClass)}</th><th>${escapeHtml(labels.releaseGrade)}</th><th>${escapeHtml(labels.remainingAction)}</th></tr></thead>
+        <thead><tr><th>${escapeHtml(labels.tool)}</th><th>${escapeHtml(panelCopy.result)}</th><th>${escapeHtml(panelCopy.risk)}</th><th>${escapeHtml(panelCopy.next)}</th></tr></thead>
         <tbody>${runtimeRows}</tbody>
       </table>
     </section>
@@ -428,6 +529,7 @@ export async function generateRunDeliverables({
 } = {}) {
   const run = await readGovernedExecutionRun({ runId, stateDir });
   const contract = requirePanelContract(run);
+  const outputLanguage = resolveRunOutputLanguage(run);
   const baseOutDir = outDir
     ? path.resolve(outDir)
     : path.join(path.dirname(run.paths.json), `${run.runId}-deliverables`);
@@ -435,13 +537,13 @@ export async function generateRunDeliverables({
 
   const files = {
     panelHtml: path.join(baseOutDir, "run-panel.html"),
-    readabilityReview: path.join(baseOutDir, "readability-review.zh-CN.md"),
-    rubricMarkdown: path.join(baseOutDir, "ai-readable-rubric.zh-CN.md"),
+    readabilityReview: path.join(baseOutDir, `readability-review.${outputLanguage}.md`),
+    rubricMarkdown: path.join(baseOutDir, `ai-readable-rubric.${outputLanguage}.md`),
     rubricJson: path.join(baseOutDir, "ai-readable-rubric.json"),
-    casePack: path.join(baseOutDir, "ai-readable-case-pack.zh-CN.md"),
+    casePack: path.join(baseOutDir, `ai-readable-case-pack.${outputLanguage}.md`),
     manifest: path.join(baseOutDir, "deliverables-manifest.json"),
   };
-  const labels = getReportLabelsForPath(files.readabilityReview);
+  const labels = getReportLabels(outputLanguage);
   const manifest = {
     schemaVersion: "meta-theory-run-deliverables-v0.1",
     runId: run.runId,

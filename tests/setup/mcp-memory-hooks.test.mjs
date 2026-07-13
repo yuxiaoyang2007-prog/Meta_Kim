@@ -5,9 +5,13 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -23,6 +27,10 @@ const repoRoot = path.resolve(
 
 function readRepoFile(...segments) {
   return readFileSync(path.join(repoRoot, ...segments), "utf8");
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function listen(server) {
@@ -1426,11 +1434,12 @@ describe("MCP memory cross-runtime hooks", () => {
   test("installer registers Codex and Cursor lifecycle events", () => {
     const source = readRepoFile("scripts", "install-mcp-memory-hooks.mjs");
 
-    assert.match(source, /settings\.hooks\.SessionStart/);
-    assert.match(source, /settings\.hooks\.UserPromptSubmit/);
-    assert.match(source, /settings\.hooks\.Stop/);
-    assert.match(source, /settings\.hooks\.beforeSubmitPrompt/);
-    assert.match(source, /settings\.hooks\.stop/);
+    assert.match(source, /function buildCodexSettingsValue/);
+    assert.match(source, /SessionStart:/);
+    assert.match(source, /UserPromptSubmit:/);
+    assert.match(source, /function buildCursorSettingsValue/);
+    assert.match(source, /beforeSubmitPrompt:/);
+    assert.match(source, /stop:/);
   });
 
   test("installer honors selected targets without requiring Claude settings", () => {
@@ -1469,6 +1478,585 @@ describe("MCP memory cross-runtime hooks", () => {
       assert.ok(codexHooks.hooks.Stop);
     } finally {
       rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  test("installer blocks malformed or non-object existing settings before any runtime write", () => {
+    const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+    for (const fixture of [
+      {
+        runtime: "claude",
+        settingsRel: [".claude", "settings.json"],
+        existing: '{"hooks":',
+        hookRel: [".claude", "hooks", "mcp_memory_global.py"],
+      },
+      {
+        runtime: "codex",
+        settingsRel: [".codex", "hooks.json"],
+        existing: "[]\n",
+        hookRel: [".codex", "hooks", "meta-kim-memory-save.mjs"],
+      },
+      {
+        runtime: "cursor",
+        settingsRel: [".cursor", "hooks.json"],
+        existing: '"not-an-object"\n',
+        hookRel: [".cursor", "hooks", "meta-kim-memory-save.mjs"],
+      },
+    ]) {
+      const tempHome = mkdtempSync(
+        path.join(os.tmpdir(), `meta-kim-invalid-${fixture.runtime}-settings-`),
+      );
+      try {
+        const settingsPath = path.join(tempHome, ...fixture.settingsRel);
+        mkdirSync(path.dirname(settingsPath), { recursive: true });
+        writeFileSync(settingsPath, fixture.existing, "utf8");
+        const seedConfigPath = path.join(tempHome, ".claude", "hooks", "config.json");
+        const seedConfig = "USER SEED CONFIG MUST STAY UNTOUCHED\n";
+        if (fixture.runtime === "claude") {
+          mkdirSync(path.dirname(seedConfigPath), { recursive: true });
+          writeFileSync(seedConfigPath, seedConfig, "utf8");
+        }
+
+        const result = spawnSync(
+          process.execPath,
+          [installer, "--targets", fixture.runtime],
+          {
+            cwd: repoRoot,
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              HOME: tempHome,
+              USERPROFILE: tempHome,
+              META_KIM_CONFIRM_GLOBAL: fixture.runtime === "claude" ? "1" : "",
+            },
+            timeout: 15000,
+          },
+        );
+        assert.equal(result.status, 1, result.stderr || result.stdout);
+        assert.equal(readFileSync(settingsPath, "utf8"), fixture.existing);
+        assert.equal(existsSync(path.join(tempHome, ...fixture.hookRel)), false);
+        assert.equal(existsSync(path.join(tempHome, ".meta-kim")), false);
+        assert.match(result.stdout + result.stderr, /existing JSON is malformed or is not an object/);
+        assert.match(result.stdout + result.stderr, /Fix the JSON syntax so the root value is an object/);
+        assert.ok((result.stdout + result.stderr).includes(settingsPath));
+        if (fixture.runtime === "claude") {
+          assert.equal(readFileSync(seedConfigPath, "utf8"), seedConfig);
+        }
+      } finally {
+        rmSync(tempHome, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("Claude global settings need one consent gate and fail closed when backup fails", () => {
+    const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+
+    const noConsentHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-claude-consent-"));
+    try {
+      const settingsPath = path.join(noConsentHome, ".claude", "settings.json");
+      mkdirSync(path.dirname(settingsPath), { recursive: true });
+      const original = JSON.stringify({ hooks: {}, userSetting: true }, null, 2) + "\n";
+      writeFileSync(settingsPath, original, "utf8");
+      const denied = spawnSync(process.execPath, [installer, "--targets", "claude"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          HOME: noConsentHome,
+          USERPROFILE: noConsentHome,
+          META_KIM_CONFIRM_GLOBAL: "",
+        },
+        timeout: 15000,
+      });
+      assert.equal(denied.status, 1, denied.stderr || denied.stdout);
+      assert.equal(readFileSync(settingsPath, "utf8"), original);
+      assert.match(denied.stdout + denied.stderr, /explicit consent/);
+    } finally {
+      rmSync(noConsentHome, { recursive: true, force: true });
+    }
+
+    const backupFailureHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-claude-backup-"));
+    try {
+      const settingsPath = path.join(backupFailureHome, ".claude", "settings.json");
+      mkdirSync(path.dirname(settingsPath), { recursive: true });
+      const original = JSON.stringify({ hooks: {}, userSetting: true }, null, 2) + "\n";
+      writeFileSync(settingsPath, original, "utf8");
+      mkdirSync(path.join(backupFailureHome, ".meta-kim"), { recursive: true });
+      writeFileSync(path.join(backupFailureHome, ".meta-kim", "backups"), "blocked", "utf8");
+      const blocked = spawnSync(process.execPath, [installer, "--targets", "claude"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          HOME: backupFailureHome,
+          USERPROFILE: backupFailureHome,
+          META_KIM_CONFIRM_GLOBAL: "1",
+        },
+        timeout: 15000,
+      });
+      assert.equal(blocked.status, 1, blocked.stderr || blocked.stdout);
+      assert.equal(readFileSync(settingsPath, "utf8"), original);
+      assert.match(blocked.stdout + blocked.stderr, /unsafe_backup_root|preserved all targets/);
+    } finally {
+      rmSync(backupFailureHome, { recursive: true, force: true });
+    }
+  });
+
+  test("successful Claude settings backup uses normal HOME-relative files, not NTFS ADS names", () => {
+    const tempHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-claude-backup-ok-"));
+    try {
+      const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+      const settingsPath = path.join(tempHome, ".claude", "settings.json");
+      mkdirSync(path.dirname(settingsPath), { recursive: true });
+      writeFileSync(settingsPath, "{\"hooks\":{},\"sentinel\":\"keep\"}\n", "utf8");
+      const result = spawnSync(process.execPath, [installer, "--targets", "claude"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          HOME: tempHome,
+          USERPROFILE: tempHome,
+          META_KIM_CONFIRM_GLOBAL: "1",
+        },
+        timeout: 15000,
+      });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const backupRoots = readdirSync(path.join(tempHome, ".meta-kim", "backups"));
+      assert.ok(backupRoots.length >= 1);
+      for (const backupRoot of backupRoots) {
+        const backupPath = path.join(
+          tempHome,
+          ".meta-kim",
+          "backups",
+          backupRoot,
+          ".claude",
+          "settings.json",
+        );
+        assert.equal(existsSync(backupPath), true, backupPath);
+        assert.ok(readFileSync(backupPath).length > 0);
+        assert.equal(existsSync(path.join(path.dirname(path.dirname(backupPath)), "C")), false);
+      }
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  test("Codex settings removal is atomic and fail-closed when backup cannot be created", () => {
+    const tempHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-codex-backup-fail-"));
+    try {
+      const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+      const hooksPath = path.join(tempHome, ".codex", "hooks.json");
+      mkdirSync(path.dirname(hooksPath), { recursive: true });
+      const original = JSON.stringify({
+        hooks: { Stop: [{ command: "node meta-kim-memory-save.mjs" }] },
+        sentinel: "keep",
+      }, null, 2) + "\n";
+      writeFileSync(hooksPath, original, "utf8");
+      mkdirSync(path.join(tempHome, ".meta-kim"), { recursive: true });
+      writeFileSync(path.join(tempHome, ".meta-kim", "backups"), "blocked", "utf8");
+      const result = spawnSync(
+        process.execPath,
+        [installer, "--remove", "--targets", "codex"],
+        {
+          cwd: repoRoot,
+          encoding: "utf8",
+          env: { ...process.env, HOME: tempHome, USERPROFILE: tempHome },
+          timeout: 15000,
+        },
+      );
+      assert.equal(result.status, 1, result.stderr || result.stdout);
+      assert.equal(readFileSync(hooksPath, "utf8"), original);
+      assert.match(result.stdout + result.stderr, /preserved|Preserved/);
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  test("installer preserves ordinary user hooks and rejects runtime-root junctions", () => {
+    const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+    const userHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-user-hook-conflict-"));
+    try {
+      const userHook = path.join(userHome, ".codex", "hooks", "meta-kim-memory-save.mjs");
+      mkdirSync(path.dirname(userHook), { recursive: true });
+      writeFileSync(userHook, "USER-OWNED\n", "utf8");
+      const result = spawnSync(process.execPath, [installer, "--targets", "codex"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: { ...process.env, HOME: userHome, USERPROFILE: userHome },
+        timeout: 15000,
+      });
+      assert.equal(result.status, 1, result.stderr || result.stdout);
+      assert.equal(readFileSync(userHook, "utf8"), "USER-OWNED\n");
+      assert.equal(existsSync(path.join(userHome, ".meta-kim", "manifests")), false);
+    } finally {
+      rmSync(userHome, { recursive: true, force: true });
+    }
+
+    for (const runtime of ["claude", "codex", "cursor"]) {
+      const tempHome = mkdtempSync(path.join(os.tmpdir(), `meta-kim-${runtime}-junction-`));
+      const outside = mkdtempSync(path.join(os.tmpdir(), `meta-kim-${runtime}-outside-`));
+      try {
+        const runtimeDir = runtime === "claude" ? ".claude" : `.${runtime}`;
+        const outsideHook = runtime === "claude"
+          ? path.join(outside, "hooks", "mcp_memory_global.py")
+          : path.join(outside, "hooks", "meta-kim-memory-save.mjs");
+        mkdirSync(path.dirname(outsideHook), { recursive: true });
+        writeFileSync(outsideHook, "OUTSIDE-USER\n", "utf8");
+        symlinkSync(outside, path.join(tempHome, runtimeDir), process.platform === "win32" ? "junction" : "dir");
+        const result = spawnSync(process.execPath, [installer, "--targets", runtime], {
+          cwd: repoRoot,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            HOME: tempHome,
+            USERPROFILE: tempHome,
+            META_KIM_CONFIRM_GLOBAL: runtime === "claude" ? "1" : "",
+          },
+          timeout: 15000,
+        });
+        assert.equal(result.status, 1, result.stderr || result.stdout);
+        assert.equal(readFileSync(outsideHook, "utf8"), "OUTSIDE-USER\n");
+      } finally {
+        rmSync(tempHome, { recursive: true, force: true });
+        rmSync(outside, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("late OpenClaw conflict and injected commit failure leave zero managed residue", () => {
+    const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+    const openclawHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-openclaw-late-conflict-"));
+    try {
+      const hookDir = path.join(openclawHome, ".openclaw", "hooks", "mcp-memory-service");
+      mkdirSync(hookDir, { recursive: true });
+      writeFileSync(path.join(hookDir, "handler.ts"), "USER-HANDLER\n", "utf8");
+      const result = spawnSync(process.execPath, [installer, "--targets", "openclaw"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: { ...process.env, HOME: openclawHome, USERPROFILE: openclawHome },
+        timeout: 15000,
+      });
+      assert.equal(result.status, 1, result.stderr || result.stdout);
+      assert.equal(existsSync(path.join(hookDir, "HOOK.md")), false);
+      assert.equal(readFileSync(path.join(hookDir, "handler.ts"), "utf8"), "USER-HANDLER\n");
+      assert.equal(existsSync(path.join(openclawHome, ".meta-kim", "manifests")), false);
+    } finally {
+      rmSync(openclawHome, { recursive: true, force: true });
+    }
+
+    const rollbackHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-codex-rollback-"));
+    try {
+      const result = spawnSync(process.execPath, [installer, "--targets", "codex"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          HOME: rollbackHome,
+          USERPROFILE: rollbackHome,
+          META_KIM_TEST_FAIL_MANAGED_COMMIT_AT: "2",
+        },
+        timeout: 15000,
+      });
+      assert.equal(result.status, 1, result.stderr || result.stdout);
+      assert.equal(existsSync(path.join(rollbackHome, ".codex", "hooks", "meta-kim-memory-save.mjs")), false);
+      assert.equal(existsSync(path.join(rollbackHome, ".codex", "hooks.json")), false);
+      assert.equal(
+        existsSync(path.join(rollbackHome, ".meta-kim", "manifests", "mcp-memory-hooks", "codex.json")),
+        false,
+      );
+    } finally {
+      rmSync(rollbackHome, { recursive: true, force: true });
+    }
+  });
+
+  test("runtime update removes exact stale manifest entries and relinquishes already-missing ones", () => {
+    const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+    const tempHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-stale-managed-"));
+    try {
+      const env = { ...process.env, HOME: tempHome, USERPROFILE: tempHome };
+      const installed = spawnSync(process.execPath, [installer, "--targets", "codex"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env,
+        timeout: 15000,
+      });
+      assert.equal(installed.status, 0, installed.stderr || installed.stdout);
+
+      const stalePath = path.join(tempHome, ".codex", "hooks", "retired-memory-hook.mjs");
+      const missingRel = ".codex/hooks/already-retired-memory-hook.mjs";
+      const staleContent = "// retired managed hook\n";
+      writeFileSync(stalePath, staleContent, "utf8");
+      const manifestPath = path.join(
+        tempHome,
+        ".meta-kim",
+        "manifests",
+        "mcp-memory-hooks",
+        "codex.json",
+      );
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      manifest.files.push(
+        { relPath: ".codex/hooks/retired-memory-hook.mjs", contentHash: sha256(staleContent) },
+        { relPath: missingRel, contentHash: sha256("already absent\n") },
+      );
+      writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+      const updated = spawnSync(process.execPath, [installer, "--targets", "codex"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env,
+        timeout: 15000,
+      });
+      assert.equal(updated.status, 0, updated.stderr || updated.stdout);
+      assert.equal(existsSync(stalePath), false);
+      const nextManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      assert.equal(
+        nextManifest.files.some((entry) =>
+          [".codex/hooks/retired-memory-hook.mjs", missingRel].includes(entry.relPath),
+        ),
+        false,
+      );
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  test("stale managed-file drift blocks the entire update before manifest or peer writes", () => {
+    const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+    const tempHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-stale-drift-"));
+    try {
+      const env = { ...process.env, HOME: tempHome, USERPROFILE: tempHome };
+      const installed = spawnSync(process.execPath, [installer, "--targets", "codex"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env,
+        timeout: 15000,
+      });
+      assert.equal(installed.status, 0, installed.stderr || installed.stdout);
+
+      const stalePath = path.join(tempHome, ".codex", "hooks", "retired-memory-hook.mjs");
+      const originalStale = "// exact old managed hook\n";
+      writeFileSync(stalePath, originalStale, "utf8");
+      const manifestPath = path.join(
+        tempHome,
+        ".meta-kim",
+        "manifests",
+        "mcp-memory-hooks",
+        "codex.json",
+      );
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      manifest.files.push({
+        relPath: ".codex/hooks/retired-memory-hook.mjs",
+        contentHash: sha256(originalStale),
+      });
+      writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      writeFileSync(stalePath, "USER CHANGED THE RETIRED HOOK\n", "utf8");
+
+      const peerPath = path.join(tempHome, ".codex", "hooks", "meta-kim-memory-save.mjs");
+      const settingsPath = path.join(tempHome, ".codex", "hooks.json");
+      const before = {
+        manifest: readFileSync(manifestPath, "utf8"),
+        peer: readFileSync(peerPath, "utf8"),
+        settings: readFileSync(settingsPath, "utf8"),
+      };
+      const blocked = spawnSync(process.execPath, [installer, "--targets", "codex"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env,
+        timeout: 15000,
+      });
+      assert.equal(blocked.status, 1, blocked.stderr || blocked.stdout);
+      assert.match(blocked.stdout + blocked.stderr, /old_hash_mismatch/);
+      assert.equal(readFileSync(stalePath, "utf8"), "USER CHANGED THE RETIRED HOOK\n");
+      assert.equal(readFileSync(manifestPath, "utf8"), before.manifest);
+      assert.equal(readFileSync(peerPath, "utf8"), before.peer);
+      assert.equal(readFileSync(settingsPath, "utf8"), before.settings);
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  test("identical managed updates are no-ops without mtime or backup churn", () => {
+    const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+    const tempHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-managed-noop-"));
+    try {
+      const env = { ...process.env, HOME: tempHome, USERPROFILE: tempHome };
+      const first = spawnSync(process.execPath, [installer, "--targets", "codex"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env,
+        timeout: 15000,
+      });
+      assert.equal(first.status, 0, first.stderr || first.stdout);
+      const hookPath = path.join(tempHome, ".codex", "hooks", "meta-kim-memory-save.mjs");
+      const manifestPath = path.join(
+        tempHome,
+        ".meta-kim",
+        "manifests",
+        "mcp-memory-hooks",
+        "codex.json",
+      );
+      const before = {
+        hookMtime: statSync(hookPath).mtimeMs,
+        manifestMtime: statSync(manifestPath).mtimeMs,
+        backups: existsSync(path.join(tempHome, ".meta-kim", "backups"))
+          ? readdirSync(path.join(tempHome, ".meta-kim", "backups"))
+          : [],
+      };
+      const second = spawnSync(process.execPath, [installer, "--targets", "codex"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env,
+        timeout: 15000,
+      });
+      assert.equal(second.status, 0, second.stderr || second.stdout);
+      assert.match(second.stdout, /already up to date; no managed files were rewritten/);
+      assert.equal(statSync(hookPath).mtimeMs, before.hookMtime);
+      assert.equal(statSync(manifestPath).mtimeMs, before.manifestMtime);
+      const afterBackups = existsSync(path.join(tempHome, ".meta-kim", "backups"))
+        ? readdirSync(path.join(tempHome, ".meta-kim", "backups"))
+        : [];
+      assert.deepEqual(afterBackups, before.backups);
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  test("Claude config is seed-only retained across legacy ownership migration, update, and remove", () => {
+    const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+    const tempHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-claude-seed-only-"));
+    try {
+      const env = {
+        ...process.env,
+        HOME: tempHome,
+        USERPROFILE: tempHome,
+        META_KIM_CONFIRM_GLOBAL: "1",
+      };
+      const first = spawnSync(process.execPath, [installer, "--targets", "claude"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env,
+        timeout: 20000,
+      });
+      assert.equal(first.status, 0, first.stderr || first.stdout);
+      const configPath = path.join(tempHome, ".claude", "hooks", "config.json");
+      const manifestPath = path.join(
+        tempHome,
+        ".meta-kim",
+        "manifests",
+        "mcp-memory-hooks",
+        "claude.json",
+      );
+      const configRel = ".claude/hooks/config.json";
+      const initialConfig = readFileSync(configPath, "utf8");
+      let manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      assert.equal(manifest.files.some((entry) => entry.relPath === configRel), false);
+
+      manifest.files.push({ relPath: configRel, contentHash: sha256(initialConfig) });
+      writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      const customized = '{"user":"customized and retained"}\n';
+      writeFileSync(configPath, customized, "utf8");
+      const updated = spawnSync(process.execPath, [installer, "--targets", "claude"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env,
+        timeout: 20000,
+      });
+      assert.equal(updated.status, 0, updated.stderr || updated.stdout);
+      assert.equal(readFileSync(configPath, "utf8"), customized);
+      manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      assert.equal(manifest.files.some((entry) => entry.relPath === configRel), false);
+
+      const removed = spawnSync(
+        process.execPath,
+        [installer, "--remove", "--targets", "claude"],
+        { cwd: repoRoot, encoding: "utf8", env, timeout: 20000 },
+      );
+      assert.equal(removed.status, 0, removed.stderr || removed.stdout);
+      assert.equal(readFileSync(configPath, "utf8"), customized);
+      assert.equal(existsSync(manifestPath), false);
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  test("OpenClaw check exits nonzero on managed hash mismatch with repair guidance", () => {
+    const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+    const tempHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-openclaw-check-"));
+    try {
+      const env = { ...process.env, HOME: tempHome, USERPROFILE: tempHome };
+      const installed = spawnSync(process.execPath, [installer, "--targets", "openclaw"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env,
+        timeout: 15000,
+      });
+      assert.equal(installed.status, 0, installed.stderr || installed.stdout);
+      const handlerPath = path.join(
+        tempHome,
+        ".openclaw",
+        "hooks",
+        "mcp-memory-service",
+        "handler.ts",
+      );
+      writeFileSync(handlerPath, "USER MODIFIED HANDLER\n", "utf8");
+      const checked = spawnSync(
+        process.execPath,
+        [installer, "--check", "--targets", "openclaw"],
+        { cwd: repoRoot, encoding: "utf8", env, timeout: 15000 },
+      );
+      assert.equal(checked.status, 1, checked.stderr || checked.stdout);
+      assert.match(checked.stdout + checked.stderr, /installed managed file is missing or changed/);
+      assert.match(checked.stdout + checked.stderr, /Repair: node scripts\/install-mcp-memory-hooks\.mjs/);
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  test("OpenClaw removal preserves unmanifested content and removes only exact managed files", () => {
+    const installer = path.join(repoRoot, "scripts", "install-mcp-memory-hooks.mjs");
+    const unownedHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-openclaw-unowned-"));
+    try {
+      const hookDir = path.join(unownedHome, ".openclaw", "hooks", "mcp-memory-service");
+      mkdirSync(hookDir, { recursive: true });
+      writeFileSync(path.join(hookDir, "custom.txt"), "USER-OWNED\n", "utf8");
+      const result = spawnSync(
+        process.execPath,
+        [installer, "--remove", "--targets", "openclaw"],
+        {
+          cwd: repoRoot,
+          encoding: "utf8",
+          env: { ...process.env, HOME: unownedHome, USERPROFILE: unownedHome },
+          timeout: 15000,
+        },
+      );
+      assert.equal(result.status, 1, result.stderr || result.stdout);
+      assert.equal(readFileSync(path.join(hookDir, "custom.txt"), "utf8"), "USER-OWNED\n");
+    } finally {
+      rmSync(unownedHome, { recursive: true, force: true });
+    }
+
+    const managedHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-openclaw-managed-"));
+    try {
+      const env = { ...process.env, HOME: managedHome, USERPROFILE: managedHome };
+      const installed = spawnSync(process.execPath, [installer, "--targets", "openclaw"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env,
+        timeout: 15000,
+      });
+      assert.equal(installed.status, 0, installed.stderr || installed.stdout);
+      const hookDir = path.join(managedHome, ".openclaw", "hooks", "mcp-memory-service");
+      writeFileSync(path.join(hookDir, "custom.txt"), "USER-OWNED\n", "utf8");
+      const removed = spawnSync(
+        process.execPath,
+        [installer, "--remove", "--targets", "openclaw"],
+        { cwd: repoRoot, encoding: "utf8", env, timeout: 15000 },
+      );
+      assert.equal(removed.status, 0, removed.stderr || removed.stdout);
+      assert.equal(readFileSync(path.join(hookDir, "custom.txt"), "utf8"), "USER-OWNED\n");
+      assert.equal(existsSync(path.join(hookDir, "HOOK.md")), false);
+    } finally {
+      rmSync(managedHome, { recursive: true, force: true });
     }
   });
 
@@ -1544,9 +2132,10 @@ describe("MCP memory cross-runtime hooks", () => {
     );
     assert.ok(
       fn.indexOf("askYesNo(t.askMcpMemoryInstall") <
-        fn.indexOf("startMcpMemoryServiceBackground(resolved, memoryEndpoint)"),
+        fn.indexOf("startMcpMemoryServiceBackground("),
       "MCP Memory prompt must run before background autostart",
     );
+    assert.match(fn, /return registrationOk && hooksOk && backgroundOk;/);
   });
 
   test("installer uses PATH-resolved node for shell-portable hook commands", () => {

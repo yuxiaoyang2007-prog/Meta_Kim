@@ -126,7 +126,8 @@ if (policy.sampleRun) evaluateHookRun(policy.sampleRun, policy);
 if (!inputPath) {
   const packageJson = await readJson("package.json");
   assert(packageJson.scripts?.["meta:hook:validate"], "package.json missing meta:hook:validate");
-  assert(packageJson.scripts?.["meta:verify:governance"]?.includes("meta:hook:validate"), "meta:verify:governance must include meta:hook:validate");
+  const governanceChain = `${packageJson.scripts?.["meta:verify:governance"] ?? ""} && ${packageJson.scripts?.["meta:verify:governance:core"] ?? ""}`;
+  assert(governanceChain.includes("meta:hook:validate"), "meta:verify:governance must include meta:hook:validate");
   const skillText = await fs.readFile(repoPath("canonical/skills/meta-theory/SKILL.md"), "utf8");
   for (const term of ["No Hook loop", "Real testing and warning classification"]) {
     assert(skillText.includes(term), `SKILL.md missing ${term}`);

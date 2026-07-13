@@ -241,7 +241,8 @@ describe("SKILL.md structural integrity", async () => {
       assert.match(command, /__META_KIM_PACKAGE_ROOT__\/scripts\/run-meta-theory-governed-execution\.mjs/);
       assert.match(command, /--runtime codex/);
       assert.match(command, /meta:theory:run:notice -- --runtime codex "\$ARGUMENTS"/);
-      assert.match(command, /relay the compact stdout notice/i);
+      assert.match(command, /localized stderr progress snapshots/i);
+      assert.match(command, /stdout as the single final machine-readable JSON summary/i);
       assert.match(command, /Windows\/npm paths strip forwarded flags/i);
       assert.match(pkg.scripts["meta:theory:run:notice"], /--emit-conversation-notice/);
       assert.match(command, /top-level native `spawn_agent`/i);

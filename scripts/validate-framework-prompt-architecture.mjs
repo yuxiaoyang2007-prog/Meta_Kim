@@ -130,7 +130,7 @@ function validateContractShape(contract, pkg) {
   assert.equal(context.promptSprawlBudget.runtimeOnlyLeakTarget, 0);
 
   assert.ok(pkg.scripts?.["meta:prd:prompt-architecture:validate"]?.includes("validate-framework-prompt-architecture.mjs"));
-  assert.ok(pkg.scripts?.["meta:verify:governance"]?.includes("meta:prd:prompt-architecture:validate"));
+  assert.ok(`${pkg.scripts?.["meta:verify:governance"] ?? ""} ${pkg.scripts?.["meta:verify:governance:core"] ?? ""}`.includes("meta:prd:prompt-architecture:validate"));
 }
 
 function validateDefaultArtifact(report) {

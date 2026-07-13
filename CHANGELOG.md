@@ -8,6 +8,69 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## Unreleased
 
+## [2.8.84] - 2026-07-13
+
+### Solved Problem
+
+Meta_Kim's install, update, and cleanup paths still had several ways to confuse "not tracked by Git" with "owned by Meta_Kim." A renamed Hook could remain as a ghost file, an already-correct managed file could be backed up and rewritten again, malformed user settings could be overwritten, and a partial cleanup or runtime mismatch could still look successful. Concurrent setup/cleanup, interrupted writes, Windows Junctions and NTFS alternate data streams also needed one shared safety boundary. At the same time, long release probes could appear stuck and important recovery guidance was not consistently available in the user's language and chat-facing status.
+
+### Fixed
+
+- **Managed files now use one safe transaction lifecycle.** Exact manifest and prior-hash ownership, root/Junction containment, conflict preflight, verified backups, staging, atomic commit, rollback, receipt-bound recovery journals, deterministic paths, and cross-process locks protect install, update, sync, and cleanup operations.
+- **Cleanup is resumable and preserves user state.** Removed or renamed managed entries are retired only with exact ownership proof; drifted, unknown, malformed, seed-only, and user-authored files are preserved with an actionable `partial` or blocked result. Already-correct managed files are true no-ops without backup, rewrite, or mtime churn.
+- **Cross-runtime checks report the real result.** Claude, Codex, Cursor, and OpenClaw Hook/config writes share the safe boundary; `global_only` validates every required Hook dependency pair, OpenClaw check mode exits nonzero on mismatch, and failed setup sync or backup work can no longer be summarized as success.
+- **User guidance stays visible and localized.** Setup, cleanup, status, details, failures, choices, and recovery steps are consistent across English, Simplified Chinese, Japanese, and Korean. Redundant update confirmation was removed, while migration, safety, and next-action guidance remains available in the chat/terminal surface instead of being hidden in generated files.
+- **Release evidence and Windows report writes are more reliable.** Standard verification binds the isolated four-runtime install/update probes to stable source snapshots, emits progress before long operations, and reports a recovery action on failure. Governed-run report replacement now applies a short bounded retry only to transient Windows lock errors and still fails immediately for other error classes.
+- **Large setup safety policy was split into focused modules.** Managed-file transaction and project-bootstrap file-safety logic now live in narrow reusable modules instead of further expanding `setup.mjs` or duplicating call-site guards.
+
+### Verification
+
+- Focused governed-run surface checks passed `12/12`; the full Meta-Theory suite passed `1137/1142` with `0` failures and `5` expected conditional skips.
+- The full setup suite passed `641/642` with `0` failures and `1` expected POSIX-only skip on Windows; integration checks passed `6/6`.
+- Claude Code, Codex, Cursor, and OpenClaw project projections, global Meta-Theory skills/commands, and Claude/Codex global Hooks were synchronized and checked; Graphify was rebuilt and passed freshness verification.
+- One complete `npm run meta:verify:all` run passed all `11/11` standard release-grade stages with `releaseGrade=true`; isolated install and update probes each verified four runtime artifacts. Optional private-attested `live-certified` verification was not requested and remains separate from the ordinary release gate.
+
+## [2.8.83] - 2026-07-12
+
+### Solved Problem
+
+A stray meta-theory activation could previously treat an arbitrary working directory as a project and create `.meta-kim` or `graphify-out` state there. The initial PR fix removed that unsafe fallback, but its project-root logic was duplicated between the activation hook and post-copy initializer, accepted only a Claude-specific explicit root, and did not yet guarantee that every Claude, Codex, Cursor, global-sync, and project-bootstrap path shipped the resolver dependency with the activator. Maintainer entry documents also did not describe the new stable boundary.
+
+### Fixed
+
+- **Project-root resolution now has one shared implementation.** The activation hook and post-copy initializer use `project-root.mjs` instead of maintaining two copies that can drift.
+- **Cross-runtime fallback is safe and ordered.** Trusted explicit declarations win first, a marker-backed cwd project wins over payload input, and only absolute marker-backed runtime payload roots may be used as a final fallback. Relative payload paths and unmarked arbitrary directories are rejected.
+- **Post-copy receives the already resolved root.** The activation hook passes `--project-root` explicitly, so post-copy does not guess a second project location.
+- **Every projection ships a complete dependency set.** Claude, Codex, and Cursor project hooks, global Hook packages, `setup.mjs --project-bootstrap`, package inventory, and managed cleanup include `project-root.mjs` with the activator.
+- **Maintainer guides match runtime truth.** `AGENTS.md` and `CLAUDE.md` now document the resolver priority, no-write fallback, and shared dependency rule without expanding user-facing setup complexity.
+
+### Verification
+
+- Real subprocess tests cover arbitrary temp directories, `.git` and bootstrap markers, nested directories, invalid declarations, cross-runtime payload fields, cross-repository redirect attempts, relative payload rejection, Hook-to-post-copy argument binding, and startup from an actually generated Codex Hook directory.
+- Project and global runtime projections were synchronized for Claude Code, Codex, OpenClaw, and Cursor; Claude/Codex global Hook packages were refreshed with backups.
+- One complete standard release-grade verification run passed all `11/11` stages with `releaseGrade=true`; optional private-attested `live-certified` verification remains a separate, unrequested assurance layer.
+
+## [2.8.82] - 2026-07-12
+
+### Solved Problem
+
+Meta_Kim could report a Codex or Claude subagent capability as unavailable even when the current chat had already shown successful native calls, because user execution truth was flattened together with exact-binding and optional external-certification state. Important run progress also remained too dependent on generated artifacts, while install/update failures, run identity, host-observer evidence, and duplicated verification paths could still produce confusing or unsafe completion claims.
+
+### Fixed
+
+- **User execution truth is separate from internal assurance.** Current native results now drive the chat status: completed, called, partially failed, failed, denied, blocked, genuinely unavailable, and pending are distinct. Missing exact audit association can no longer erase a successful call, and `unavailable` is reserved for an unsupported surface or missing provider with no successful or strictly failed binding.
+- **Chat is the primary human-readable run surface.** Start, route, execution, review, verification, risk, owner handoff, and next action are emitted in the user's language. English, Simplified Chinese, Japanese, and Korean reports and panels avoid raw packet names, provider ids, lane enums, and certification jargon without removing useful guidance.
+- **Editable artifacts cannot certify themselves.** Caller JSON, environment hints, public trust flags, UI badges, fixtures, and ordinary run files cannot mint called/completed or independent-review status. Codex/Claude host observations, content-addressed candidate bundles, pinned trust roots, and the optional private-attested verifier remain fail-closed and separate from the standard release gate.
+- **Governed runs and installers fail closed.** Run ids are path-safe and collision-resistant, explicit overwrites require authorization, latest pointers are atomic, and readback is bound to the requested run. Setup aggregates deployment, MCP, Graphify, and optional-step failures so partial installation cannot report success.
+- **Routing and verification are less fragile.** Natural-language classification covers multilingual UX requests without content-brand hardcoding, visible consumers read the user presentation while strict validators read the top-level audit packet, and the standard verification chain has one canonical orchestrator instead of recursively duplicating stages.
+
+### Verification
+
+- Project and global Meta-Theory projections were synchronized for Claude Code, Codex, OpenClaw, and Cursor; Claude/Codex global hooks were synchronized with backups.
+- Graphify was rebuilt and passed freshness verification.
+- One complete `npm run meta:verify:all` run passed all `11/11` standard release-grade stages with `releaseGrade=true`.
+- Optional private-attested `live-certified` verification was not requested; this does not invalidate the standard release or the actual current-chat call results.
+
 ## [2.8.81] - 2026-07-12
 
 ### Solved Problem

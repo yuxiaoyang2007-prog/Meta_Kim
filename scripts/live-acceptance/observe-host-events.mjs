@@ -7,6 +7,46 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const sha256 = (value) => createHash("sha256").update(String(value), "utf8").digest("hex");
+const META_KIM_BINDING_FIELDS = Object.freeze([
+  "runId",
+  "family",
+  "providerId",
+  "bindingRef",
+  "taskPacketId",
+  "roleInstanceId",
+  "occurredAt",
+  "evidenceKind",
+]);
+const META_KIM_BINDING_FAMILIES = new Set([
+  "agent_subagent",
+  "skill",
+  "mcp",
+  "command_script",
+  "runtime_tool",
+  "hook",
+  "agent_teams_playbook",
+]);
+const META_KIM_BINDING_EVIDENCE_KINDS = new Set([
+  "spawn_agent_result",
+  "agent_task_result",
+  "agent_team_result",
+  "skill_application",
+  "mcp_tool_result",
+  "command_output",
+  "runtime_tool_call",
+  "hook_trigger_event",
+]);
+const META_KIM_BINDING_KIND_BY_FAMILY = Object.freeze({
+  agent_subagent: new Set(["spawn_agent_result", "agent_task_result", "agent_team_result"]),
+  skill: new Set(["skill_application"]),
+  mcp: new Set(["mcp_tool_result"]),
+  command_script: new Set(["command_output"]),
+  runtime_tool: new Set(["runtime_tool_call"]),
+  hook: new Set(["hook_trigger_event"]),
+  agent_teams_playbook: new Set(["agent_team_result"]),
+});
+const MAX_META_KIM_BINDING_JSON = 2048;
+const RUN_SCOPED_BINDING_FAMILIES = new Set(["agent_teams_playbook"]);
 
 export function parseJsonl(text) {
   return String(text ?? "")
@@ -26,9 +66,220 @@ function payloadOf(record) {
   return record?.payload ?? record;
 }
 
+function validateMetaKimBinding(candidate) {
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+  const keys = Object.keys(candidate).sort();
+  if (keys.join("|") !== [...META_KIM_BINDING_FIELDS].sort().join("|")) return null;
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(candidate.runId)) return null;
+  if (!META_KIM_BINDING_FAMILIES.has(candidate.family)) return null;
+  if (!META_KIM_BINDING_EVIDENCE_KINDS.has(candidate.evidenceKind)) return null;
+  if (!META_KIM_BINDING_KIND_BY_FAMILY[candidate.family]?.has(candidate.evidenceKind)) return null;
+  for (const field of ["providerId", "bindingRef"]) {
+    if (
+      typeof candidate[field] !== "string" ||
+      candidate[field].length < 1 ||
+      candidate[field].length > 256 ||
+      /[\u0000-\u001f\u007f]/u.test(candidate[field])
+    ) return null;
+  }
+  const taskRolePair = [candidate.taskPacketId, candidate.roleInstanceId];
+  const nullTaskRolePair = taskRolePair.every((value) => value === null);
+  const stringTaskRolePair = taskRolePair.every(
+    (value) =>
+      typeof value === "string" &&
+      value.length >= 1 &&
+      value.length <= 256 &&
+      !/[\u0000-\u001f\u007f]/u.test(value),
+  );
+  if (
+    (!nullTaskRolePair && !stringTaskRolePair) ||
+    (nullTaskRolePair && !RUN_SCOPED_BINDING_FAMILIES.has(candidate.family))
+  ) return null;
+  if (
+    typeof candidate.occurredAt !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/u.test(candidate.occurredAt) ||
+    !Number.isFinite(Date.parse(candidate.occurredAt))
+  ) return null;
+  const serialized = JSON.stringify(candidate);
+  if (serialized.length > MAX_META_KIM_BINDING_JSON) return null;
+  return Object.fromEntries(META_KIM_BINDING_FIELDS.map((field) => [field, candidate[field]]));
+}
+
+function markerFromText(value) {
+  if (typeof value !== "string" || value.length > 100_000) return null;
+  const open = "<metaKimBinding>";
+  const close = "</metaKimBinding>";
+  const start = value.indexOf(open);
+  if (start < 0 || value.indexOf(open, start + open.length) >= 0) return null;
+  const end = value.indexOf(close, start + open.length);
+  if (end < 0 || value.indexOf(close, end + close.length) >= 0) return null;
+  const raw = value.slice(start + open.length, end);
+  if (!raw || raw.length > MAX_META_KIM_BINDING_JSON) return null;
+  try {
+    return validateMetaKimBinding(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+export function extractMetaKimBinding(input) {
+  let parsed = input;
+  if (typeof input === "string") {
+    const textMarker = markerFromText(input);
+    if (textMarker) return textMarker;
+    if (input.length > MAX_META_KIM_BINDING_JSON) return null;
+    try {
+      parsed = JSON.parse(input);
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const direct = validateMetaKimBinding(parsed.metaKimBinding);
+  if (direct) return direct;
+  for (const field of ["message", "prompt"]) {
+    const nested = markerFromText(parsed[field]);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function rawHostTimestamp(recordValue, payload = null) {
+  const candidate =
+    recordValue?.timestamp ??
+    payload?.timestamp ??
+    payload?.occurred_at ??
+    payload?.occurredAt ??
+    payload?.occurred_at_ms ??
+    null;
+  if (typeof candidate === "number" && Number.isFinite(candidate)) {
+    return new Date(candidate).toISOString();
+  }
+  if (typeof candidate === "string" && Number.isFinite(Date.parse(candidate))) return candidate;
+  return null;
+}
+
+function encryptedBindingPayload(input) {
+  if (typeof input === "string" && input.length <= 100_000) {
+    if (/^gAAAAA[A-Za-z0-9_-]{20,}={0,2}$/u.test(input)) return true;
+    try {
+      return encryptedBindingPayload(JSON.parse(input));
+    } catch {
+      return false;
+    }
+  }
+  if (!input || typeof input !== "object") return false;
+  return Boolean(
+    input.encrypted === true ||
+    input.encrypted_content ||
+    input.encryptedContent ||
+    input.ciphertext ||
+    input.cipher_text ||
+    encryptedBindingPayload(input.message) ||
+    encryptedBindingPayload(input.prompt),
+  );
+}
+
+function commandScriptProviderMatches(input, providerId) {
+  let parsed = input;
+  if (typeof input === "string") {
+    try {
+      parsed = JSON.parse(input);
+    } catch {
+      parsed = { command: input };
+    }
+  }
+  const argv = Array.isArray(parsed?.argv)
+    ? parsed.argv
+    : Array.isArray(parsed?.command)
+      ? parsed.command
+      : null;
+  const command = typeof parsed?.command === "string" ? parsed.command : null;
+  const forbiddenShellSyntax = /[\r\n;&|<>`{}()#^]|\$\{|\$\(|@\(/u;
+  if (command != null && forbiddenShellSyntax.test(command)) return false;
+  if (
+    command != null &&
+    (((command.match(/"/gu) ?? []).length % 2 !== 0) ||
+      ((command.match(/'/gu) ?? []).length % 2 !== 0))
+  ) return false;
+  if (
+    argv != null &&
+    (!argv.every((token) => typeof token === "string") ||
+      argv.some((token) => forbiddenShellSyntax.test(token)))
+  ) return false;
+  const tokens = argv ?? command?.match(/"[^"]*"|'[^']*'|[^\s]+/gu) ?? [];
+  const normalizeToken = (value) =>
+    String(value)
+      .replace(/^["']|["']$/gu, "")
+      .replaceAll("\\", "/")
+      .replace(/^\.\//u, "");
+  const expected = normalizeToken(providerId);
+  const normalized = tokens.map(normalizeToken);
+  if (normalized.length === 0 || !expected) return false;
+  if (normalized[0] === expected) return true;
+  const executable = normalized[0].split("/").at(-1)?.toLowerCase();
+  const directInterpreters = new Set([
+    "node",
+    "node.exe",
+    "python",
+    "python.exe",
+    "python3",
+    "python3.exe",
+    "deno",
+    "deno.exe",
+    "bun",
+    "bun.exe",
+    "ruby",
+    "ruby.exe",
+    "perl",
+    "perl.exe",
+  ]);
+  return directInterpreters.has(executable) && normalized[1] === expected;
+}
+
+export function normalizeObservedEventBinding(event, input, hostOccurredAt = null) {
+  const marker = extractMetaKimBinding(input);
+  if (!marker) {
+    return {
+      ...event,
+      bindingUnavailableReason: encryptedBindingPayload(input)
+        ? "encrypted_payload_without_host_binding_metadata"
+        : "meta_kim_binding_missing_or_invalid",
+    };
+  }
+  if (
+    marker.family === "command_script" &&
+    !commandScriptProviderMatches(input, marker.providerId)
+  ) {
+    return {
+      ...event,
+      hostObservedFamily: event.family,
+      markerOccurredAt: marker.occurredAt,
+      metaKimBinding: marker,
+      bindingUnavailableReason: "command_script_provider_not_in_executed_argv",
+    };
+  }
+  return {
+    ...event,
+    hostObservedFamily: event.family,
+    ...marker,
+    occurredAt: hostOccurredAt,
+    markerOccurredAt: marker.occurredAt,
+    metaKimBinding: marker,
+    bindingUnavailableReason: hostOccurredAt ? null : "raw_host_timestamp_missing",
+  };
+}
+
+function parentAgentPathFor(taskPath) {
+  if (typeof taskPath !== "string" || !taskPath.startsWith("/root/")) return null;
+  const parts = taskPath.split("/").filter(Boolean);
+  if (parts.length < 2) return null;
+  return `/${parts.slice(0, -1).join("/")}`;
+}
+
 function classifyTool(name, namespace = "") {
   const normalized = `${namespace}:${name}`.toLowerCase();
-  if (["spawn_agent", "agent", "task"].includes(String(name).toLowerCase())) {
+  if (["spawn_agent", "followup_task", "agent", "task"].includes(String(name).toLowerCase())) {
     return "agent_subagent";
   }
   if (String(name).toLowerCase() === "skill") return "skill";
@@ -41,16 +292,225 @@ function classifyTool(name, namespace = "") {
   return "runtime_tool";
 }
 
+function completedStatus(value) {
+  return value == null || ["completed", "success", "returned", "verified"].includes(value);
+}
+
+function textFromCodexAgentMessage(item) {
+  if (typeof item?.text === "string") return item.text;
+  const content = item?.content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((entry) => ["input_text", "output_text", "text"].includes(entry?.type) && typeof entry.text === "string")
+    .map((entry) => entry.text)
+    .join("");
+}
+
+function deterministicMessageId({ sessionId, line, text, turnId = null, author = null }) {
+  return `message-${sha256(JSON.stringify({ sessionId, line, text, turnId, author })).slice(0, 24)}`;
+}
+
+function matchesExpectedObservation(observation, expected = {}) {
+  return (
+    (!expected.sessionId || observation.sessionId === expected.sessionId) &&
+    (!expected.messageId || observation.messageId === expected.messageId) &&
+    (!expected.textSha256 || observation.textSha256 === expected.textSha256)
+  );
+}
+
+export function observeCodexAssistantMessages(text, expected = {}) {
+  const records = parseJsonl(text);
+  const threadId = records
+    .map((record) =>
+      record.value?.type === "session_meta"
+        ? record.value?.payload?.id ?? record.value?.payload?.session_id ?? null
+        : record.value?.type === "thread.started"
+          ? record.value.thread_id ?? null
+          : null,
+    )
+    .find(Boolean) ?? null;
+  const observations = [];
+  for (const record of records) {
+    if (["session_meta", "thread.started"].includes(record.value?.type)) continue;
+    if (
+      record.value?.type === "event_msg" &&
+      record.value?.payload?.type === "agent_message"
+    ) {
+      const payload = record.value.payload;
+      const messageText = typeof payload.message === "string" ? payload.message : "";
+      const phase = payload.phase;
+      if (
+        !threadId ||
+        !messageText ||
+        !["commentary", "final"].includes(phase) ||
+        payload.agent_thread_id != null ||
+        payload.child_thread_id != null
+      ) continue;
+      const turnId = payload.internal_chat_message_metadata_passthrough?.turn_id ?? null;
+      const messageId = payload.id ?? deterministicMessageId({
+        sessionId: threadId,
+        line: record.line,
+        text: messageText,
+        turnId,
+      });
+      const observation = {
+        observerFormat: "codex_desktop_assistant_message_v1",
+        observationKind: "assistant_message",
+        runtime: "codex",
+        eventId: messageId,
+        messageId,
+        sessionId: threadId,
+        text: messageText,
+        textSha256: sha256(messageText),
+        resultStatus: "completed",
+        mainThreadChat: true,
+        phase,
+        completionBoundary: `event_msg:${phase}`,
+        sourceLines: [record.line],
+      };
+      if (matchesExpectedObservation(observation, expected)) observations.push(observation);
+      continue;
+    }
+    if (record.value?.type !== "item.completed" || record.value?.item?.type !== "agent_message") continue;
+    const item = record.value.item;
+    const messageText = textFromCodexAgentMessage(item);
+    const sessionId = item.thread_id ?? item.session_id ?? threadId;
+    const messageId = item.id ?? item.message_id ?? null;
+    if (
+      !messageText ||
+      !sessionId ||
+      !messageId ||
+      item.agent_thread_id != null ||
+      item.child_thread_id != null ||
+      sessionId !== threadId ||
+      !completedStatus(item.status) ||
+      item.error != null ||
+      item.is_error === true
+    ) continue;
+    const observation = {
+      observerFormat: "codex_assistant_message_v1",
+      observationKind: "assistant_message",
+      runtime: "codex",
+      eventId: messageId,
+      messageId,
+      sessionId,
+      text: messageText,
+      textSha256: sha256(messageText),
+      resultStatus: "completed",
+      mainThreadChat: true,
+      sourceLines: [record.line],
+    };
+    if (matchesExpectedObservation(observation, expected)) observations.push(observation);
+  }
+  return observations;
+}
+
+export function observeClaudeAssistantMessages(text, expected = {}) {
+  const records = parseJsonl(text);
+  const rootSessionId = records
+    .map((record) => {
+      const payload = payloadOf(record.value);
+      if (
+        record.value?.type !== "assistant" ||
+        payload?.agent_id != null ||
+        payload?.agentId != null ||
+        payload?.agent_thread_id != null ||
+        payload?.child_thread_id != null ||
+        payload?.parent_tool_use_id != null
+      ) return null;
+      return payload?.session_id ?? payload?.sessionId ?? null;
+    })
+    .find(Boolean) ?? null;
+  const observations = [];
+  for (const record of records) {
+    const payload = payloadOf(record.value);
+    if (record.value?.type !== "assistant" || !payload?.message) continue;
+    const message = payload.message;
+    const messageText = Array.isArray(message.content)
+      ? message.content
+          .filter((item) => item?.type === "text" && typeof item.text === "string")
+          .map((item) => item.text)
+          .join("")
+      : "";
+    const sessionId = payload.session_id ?? payload.sessionId ?? null;
+    const messageId = message.id ?? null;
+    const stopReason = message.stop_reason ?? message.stopReason ?? null;
+    if (
+      !messageText ||
+      !sessionId ||
+      !rootSessionId ||
+      sessionId !== rootSessionId ||
+      !messageId ||
+      payload.agent_id != null ||
+      payload.agentId != null ||
+      payload.agent_thread_id != null ||
+      payload.child_thread_id != null ||
+      payload.parent_tool_use_id != null ||
+      !["end_turn", "tool_use", "stop_sequence", "max_tokens"].includes(stopReason) ||
+      payload.error != null ||
+      payload.is_error === true
+    ) continue;
+    const observation = {
+      observerFormat: "claude_assistant_message_v1",
+      observationKind: "assistant_message",
+      runtime: "claude",
+      eventId: messageId,
+      messageId,
+      sessionId,
+      text: messageText,
+      textSha256: sha256(messageText),
+      resultStatus: "completed",
+      mainThreadChat: true,
+      stopReason,
+      sourceLines: [record.line],
+    };
+    if (matchesExpectedObservation(observation, expected)) observations.push(observation);
+  }
+  return observations;
+}
+
 export function observeCodexJsonl(text) {
   const records = parseJsonl(text);
   const calls = new Map();
   const outputs = new Map();
   const agentStarts = new Map();
   const agentCompletions = new Map();
+  const agentMessages = new Map();
+  const childAuthoredMessages = [];
   let threadId = null;
   for (const record of records) {
     const payload = payloadOf(record.value);
+    if (record.value?.type === "session_meta") {
+      threadId = record.value?.payload?.id ?? record.value?.payload?.session_id ?? threadId;
+      continue;
+    }
     if (record.value?.type === "thread.started") threadId = record.value.thread_id ?? null;
+    if (
+      record.value?.type === "response_item" &&
+      payload?.type === "agent_message" &&
+      typeof payload.author === "string" &&
+      typeof payload.recipient === "string"
+    ) {
+      const messageText = textFromCodexAgentMessage(payload);
+      const turnId = payload.internal_chat_message_metadata_passthrough?.turn_id ?? null;
+      if (messageText) {
+        childAuthoredMessages.push({
+          line: record.line,
+          observedAt: rawHostTimestamp(record.value, payload),
+          item: payload,
+          text: messageText,
+          author: payload.author,
+          recipient: payload.recipient,
+          messageId: payload.id ?? deterministicMessageId({
+            sessionId: threadId,
+            line: record.line,
+            text: messageText,
+            turnId,
+            author: payload.author,
+          }),
+        });
+      }
+    }
     if (record.value?.type === "item.started" && record.value?.item?.id) {
       const item = record.value.item;
       const mappedName = item.type === "command_execution"
@@ -58,6 +518,7 @@ export function observeCodexJsonl(text) {
         : item.name ?? item.tool_name ?? item.type;
       calls.set(item.id, {
         line: record.line,
+        observedAt: rawHostTimestamp(record.value, item),
         payload: {
           type: "function_call",
           call_id: item.id,
@@ -71,12 +532,34 @@ export function observeCodexJsonl(text) {
     }
     if (record.value?.type === "item.completed" && record.value?.item?.id) {
       const item = record.value.item;
+      if (item.type === "agent_message") {
+        const messageText = textFromCodexAgentMessage(item);
+        const childId = item.agent_thread_id ?? item.child_thread_id ?? null;
+        const taskPath = item.task_path ?? item.path ?? null;
+        if (
+          messageText &&
+          completedStatus(item.status) &&
+          item.error == null &&
+          item.is_error !== true
+        ) {
+          const entry = {
+            line: record.line,
+            observedAt: rawHostTimestamp(record.value, item),
+            item,
+            text: messageText,
+          };
+          if (childId) agentMessages.set(`child:${childId}`, entry);
+          if (taskPath) agentMessages.set(`path:${taskPath}`, entry);
+          if (item.call_id) agentMessages.set(`call:${item.call_id}`, entry);
+        }
+      }
       const commandCompletedSuccessfully =
         item.type !== "command_execution" ||
         (Number.isInteger(item.exit_code) && item.exit_code === 0);
       if (["completed", "success"].includes(item.status) && commandCompletedSuccessfully) {
         outputs.set(item.id, {
           line: record.line,
+          observedAt: rawHostTimestamp(record.value, item),
           payload: {
             type: "function_call_output",
             call_id: item.id,
@@ -89,7 +572,13 @@ export function observeCodexJsonl(text) {
     }
     if (payload?.type === "function_call") {
       const callId = payload.call_id ?? payload.callId;
-      if (callId) calls.set(callId, { line: record.line, payload });
+      if (callId) {
+        calls.set(callId, {
+          line: record.line,
+          observedAt: rawHostTimestamp(record.value, payload),
+          payload: { ...payload, session_id: payload.session_id ?? payload.sessionId ?? threadId },
+        });
+      }
     }
     if (payload?.type === "function_call_output") {
       const callId = payload.call_id ?? payload.callId;
@@ -116,25 +605,50 @@ export function observeCodexJsonl(text) {
         (explicitExitCode !== undefined && Number(explicitExitCode) !== 0) ||
         /(?:^|\n)\s*(?:exit code|exit_code)\s*[:=]\s*[1-9]\d*\b/i.test(outputText) ||
         /(?:^|\n)\s*(?:error|failed)\s*:/i.test(outputText);
-      if (callId && !failed) outputs.set(callId, { line: record.line, payload });
+      if (callId && !failed) {
+        outputs.set(callId, {
+          line: record.line,
+          observedAt: rawHostTimestamp(record.value, payload),
+          payload,
+        });
+      }
     }
-    if (payload?.type === "sub_agent_activity" && payload?.kind === "started") {
-      const callId = payload.event_id ?? payload.call_id;
-      if (callId) agentStarts.set(callId, { line: record.line, payload });
+    if (
+      payload?.type === "sub_agent_activity" &&
+      ["started", "interacted"].includes(payload?.kind)
+    ) {
+      const callId = payload.event_id ?? payload.call_id ?? payload.parent_call_id ?? payload.request_id;
+      const activity = {
+        line: record.line,
+        observedAt: rawHostTimestamp(record.value, payload),
+        payload,
+      };
+      if (callId) agentStarts.set(callId, activity);
+      const childId = payload.agent_thread_id ?? payload.child_thread_id;
+      const taskPath = payload.agent_path ?? payload.task_path ?? payload.path;
+      if (childId) agentStarts.set(`child:${childId}`, activity);
+      if (taskPath) agentStarts.set(`path:${taskPath}`, activity);
     }
     if (
       payload?.type === "sub_agent_activity" &&
       ["completed", "task_complete", "result", "returned"].includes(payload?.kind)
     ) {
-      const callId = payload.event_id ?? payload.call_id;
+      const callId = payload.event_id ?? payload.call_id ?? payload.parent_call_id ?? payload.request_id;
       const childId = payload.agent_thread_id ?? payload.child_thread_id;
+      const taskPath = payload.agent_path ?? payload.task_path ?? payload.path;
       const completionStatus = payload.status ?? payload.result_status ?? payload.outcome;
       const completionSucceeded =
         payload.success === true ||
         ["success", "completed", "returned", "verified"].includes(completionStatus);
       if (!completionSucceeded || payload.error != null || payload.is_error === true) continue;
-      if (callId) agentCompletions.set(callId, { line: record.line, payload });
-      if (childId) agentCompletions.set(`child:${childId}`, { line: record.line, payload });
+      const completion = {
+        line: record.line,
+        observedAt: rawHostTimestamp(record.value, payload),
+        payload,
+      };
+      if (callId) agentCompletions.set(callId, completion);
+      if (childId) agentCompletions.set(`child:${childId}`, completion);
+      if (taskPath) agentCompletions.set(`path:${taskPath}`, completion);
     }
   }
   const events = [];
@@ -147,24 +661,88 @@ export function observeCodexJsonl(text) {
       ? "mcp"
       : classifyTool(name, namespace);
     const agentStart = agentStarts.get(callId);
-    const childSessionId = agentStart?.payload?.agent_thread_id ?? null;
+    const childSessionId = agentStart?.payload?.agent_thread_id ?? agentStart?.payload?.child_thread_id ?? null;
+    const taskPath = agentStart?.payload?.agent_path ?? agentStart?.payload?.task_path ?? agentStart?.payload?.path ?? null;
     const agentCompletion = agentCompletions.get(callId) ??
-      (childSessionId ? agentCompletions.get(`child:${childSessionId}`) : null);
-    if (family === "agent_subagent" && (!childSessionId || !agentCompletion)) continue;
-    events.push({
+      (childSessionId ? agentCompletions.get(`child:${childSessionId}`) : null) ??
+      (taskPath ? agentCompletions.get(`path:${taskPath}`) : null);
+    const storedAgentMessage = agentMessages.get(`call:${callId}`) ??
+      (childSessionId ? agentMessages.get(`child:${childSessionId}`) : null) ??
+      (taskPath ? agentMessages.get(`path:${taskPath}`) : null);
+    const desktopCollaborationLifecycle =
+      family === "agent_subagent" &&
+      ["spawn_agent", "followup_task"].includes(name) &&
+      Boolean(taskPath);
+    const activityKind = agentStart?.payload?.kind;
+    const activityMatchesRequest = name === "followup_task"
+      ? activityKind === "interacted"
+      : ["started", "interacted"].includes(activityKind);
+    const afterLine = Math.max(call.line ?? 0, output.line ?? 0, agentStart?.line ?? 0);
+    const parentAgentPath = parentAgentPathFor(taskPath);
+    const childAuthoredResult = desktopCollaborationLifecycle
+      ? childAuthoredMessages.find(
+          (entry) =>
+            entry.line > afterLine &&
+            entry.author === taskPath &&
+            parentAgentPath != null &&
+            entry.recipient === parentAgentPath,
+        )
+      : null;
+    const storedResultMatches =
+      storedAgentMessage &&
+      storedAgentMessage.line > afterLine &&
+      (storedAgentMessage.item?.agent_thread_id ?? storedAgentMessage.item?.child_thread_id) === childSessionId &&
+      (storedAgentMessage.item?.agent_path ?? storedAgentMessage.item?.task_path ?? storedAgentMessage.item?.path) === taskPath;
+    const desktopReturnedMessage = childAuthoredResult ?? (storedResultMatches ? storedAgentMessage : null);
+    const returnedAgentMessage = desktopReturnedMessage ?? storedAgentMessage;
+    if (family === "agent_subagent" && !childSessionId) continue;
+    if (
+      family === "agent_subagent" &&
+      desktopCollaborationLifecycle &&
+      (!activityMatchesRequest || !desktopReturnedMessage)
+    ) continue;
+    if (
+      family === "agent_subagent" &&
+      !desktopCollaborationLifecycle &&
+      !agentCompletion
+    ) continue;
+    const resultOutput = returnedAgentMessage?.text ?? output.payload.output ?? output.payload.result ?? "";
+    const baseEvent = {
       observerFormat: "codex_host_jsonl_v1",
       family,
       eventId: callId,
       parentEventId: null,
       hostSurface: namespace ? `${namespace}.${name}` : name,
       providerId: namespace ? `${namespace}.${name}` : name,
-      resultStatus: "completed",
+      resultStatus: desktopCollaborationLifecycle ? "returned" : "completed",
       inputDigest: sha256(call.payload.arguments ?? call.payload.input ?? ""),
-      outputDigest: sha256(output.payload.output ?? output.payload.result ?? ""),
+      outputDigest: sha256(resultOutput),
       childSessionId,
+      taskPath,
+      parentAgentPath,
       sessionId: call.payload.session_id ?? output.payload.session_id ?? null,
-      sourceLines: [call.line, output.line, agentStart?.line, agentCompletion?.line].filter(Boolean),
-    });
+      resultMessageId: returnedAgentMessage?.messageId ?? returnedAgentMessage?.item?.id ?? null,
+      resultTextSha256: returnedAgentMessage ? sha256(returnedAgentMessage.text) : null,
+      sourceLines: [
+        call.line,
+        output.line,
+        agentStart?.line,
+        agentCompletion?.line,
+        returnedAgentMessage?.line,
+      ].filter(Boolean),
+      lifecycleEvidence: desktopCollaborationLifecycle
+        ? "desktop_collaboration_returned_agent_message"
+        : "host_call_and_child_completion",
+      completionBoundary: desktopCollaborationLifecycle
+        ? "returned_child_final"
+        : "completed_activity_observed",
+      activityCompletionObserved: Boolean(agentCompletion),
+    };
+    events.push(normalizeObservedEventBinding(
+      baseEvent,
+      call.payload.arguments ?? call.payload.input ?? null,
+      returnedAgentMessage?.observedAt ?? agentCompletion?.observedAt ?? output.observedAt ?? null,
+    ));
   }
   return events;
 }
@@ -175,7 +753,14 @@ function claudeContentRecords(records) {
     const payload = payloadOf(record.value);
     const content = payload?.message?.content ?? payload?.content ?? [];
     if (!Array.isArray(content)) continue;
-    for (const item of content) result.push({ line: record.line, item, payload });
+    for (const item of content) {
+      result.push({
+        line: record.line,
+        observedAt: rawHostTimestamp(record.value, payload),
+        item,
+        payload,
+      });
+    }
   }
   return result;
 }
@@ -196,7 +781,7 @@ export function observeClaudeJsonl(text) {
     const output = results.get(callId);
     if (!output || output.item?.is_error === true) continue;
     const name = call.item.name ?? "unknown";
-    events.push({
+    const baseEvent = {
       observerFormat: "claude_stream_json_v1",
       family: classifyTool(name),
       eventId: callId,
@@ -215,14 +800,27 @@ export function observeClaudeJsonl(text) {
       batchId: call.payload?.message?.id ?? null,
       sessionId: call.payload?.session_id ?? output.payload?.session_id ?? null,
       sourceLines: [call.line, output.line],
-    });
+    };
+    const callInput = call.item.input ?? null;
+    const callMarker = extractMetaKimBinding(callInput);
+    events.push(normalizeObservedEventBinding(
+      baseEvent,
+      callMarker?.family === "hook" ? null : callInput,
+      output.observedAt ?? call.observedAt ?? null,
+    ));
   }
   const hookStarts = new Map();
   for (const record of records) {
     const payload = payloadOf(record.value);
     if (record.value?.type === "system" && record.value?.subtype === "hook_started") {
       const hookId = record.value.hook_id ?? payload?.hook_id;
-      if (hookId) hookStarts.set(hookId, { line: record.line, payload: record.value });
+      if (hookId) {
+        hookStarts.set(hookId, {
+          line: record.line,
+          observedAt: rawHostTimestamp(record.value, payload),
+          payload: record.value,
+        });
+      }
       continue;
     }
     if (record.value?.type === "system" && record.value?.subtype === "hook_response") {
@@ -234,7 +832,7 @@ export function observeClaudeJsonl(text) {
       const hookName = record.value.hook_name ?? started.payload?.hook_name ?? "hook";
       const parentEventId =
         record.value.tool_use_id ?? started.payload?.tool_use_id ?? null;
-      events.push({
+      const baseHookEvent = {
         observerFormat: "claude_hook_event_v1",
         family: "hook",
         eventId: `hook:${hookId}`,
@@ -248,14 +846,20 @@ export function observeClaudeJsonl(text) {
         sessionId: record.value.session_id ?? started.payload?.session_id ?? null,
         sourceLines: [started.line, record.line],
         correlationScope: parentEventId ? "tool_call" : "session",
-      });
+      };
+      const parentCallInput = parentEventId ? calls.get(parentEventId)?.item?.input ?? null : null;
+      events.push(normalizeObservedEventBinding(
+        baseHookEvent,
+        parentCallInput,
+        rawHostTimestamp(record.value, payload) ?? started.observedAt ?? null,
+      ));
       continue;
     }
     const hook = payload?.hook_event ?? payload?.hookEvent ?? payload;
     if (!["hook_success", "hook_additional_context"].includes(hook?.type)) continue;
     const eventId = hook.tool_use_id ?? hook.toolUseID ?? hook.event_id;
     if (!eventId) continue;
-    events.push({
+    const baseHookEvent = {
       observerFormat: "claude_hook_event_v1",
       family: "hook",
       eventId: `hook:${eventId}:${hook.hookName ?? hook.hook_name ?? "unknown"}`,
@@ -268,7 +872,13 @@ export function observeClaudeJsonl(text) {
       childSessionId: null,
       sessionId: payload?.session_id ?? null,
       sourceLines: [record.line],
-    });
+    };
+    const parentCallInput = calls.get(eventId)?.item?.input ?? null;
+    events.push(normalizeObservedEventBinding(
+      baseHookEvent,
+      parentCallInput,
+      rawHostTimestamp(record.value, payload),
+    ));
   }
   return events;
 }
@@ -322,16 +932,27 @@ async function main() {
     : runtime === "claude"
       ? observeClaudeJsonl(raw)
       : observeMcpClientJsonl(raw);
+  const assistantMessages = runtime === "codex"
+    ? observeCodexAssistantMessages(raw)
+    : runtime === "claude"
+      ? observeClaudeAssistantMessages(raw)
+      : [];
   const report = {
     schemaVersion: "clean-room-host-observation-v0.1",
     runtime,
     sourceArtifact: path.resolve(inputPath),
     sourceSha256: sha256(raw),
     events,
+    assistantMessages,
   };
   await fs.writeFile(path.resolve(outputPath), `${JSON.stringify(report, null, 2)}\n`, "utf8");
-  process.stdout.write(`${JSON.stringify({ status: events.length > 0 ? "observed" : "no_events", eventCount: events.length })}\n`);
-  if (events.length === 0) process.exitCode = 1;
+  const observed = events.length > 0 || assistantMessages.length > 0;
+  process.stdout.write(`${JSON.stringify({
+    status: observed ? "observed" : "no_events",
+    eventCount: events.length,
+    assistantMessageCount: assistantMessages.length,
+  })}\n`);
+  if (!observed) process.exitCode = 1;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

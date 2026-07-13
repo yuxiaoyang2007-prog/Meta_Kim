@@ -98,6 +98,462 @@ function normalizeLangCode(code) {
   return LANG_ALIASES[lower] || trimmed;
 }
 
+const SUPPORTED_OUTPUT_LANGUAGES = Object.freeze(["en", "zh-CN", "ja-JP", "ko-KR"]);
+
+export function normalizeOutputLanguage(code) {
+  if (code == null || String(code).trim() === "") return null;
+  const normalized = normalizeLangCode(code);
+  if (/^zh(?:[-_]|$)/iu.test(normalized)) return "zh-CN";
+  if (/^ja(?:[-_]|$)/iu.test(normalized)) return "ja-JP";
+  if (/^ko(?:[-_]|$)/iu.test(normalized)) return "ko-KR";
+  if (/^en(?:[-_]|$)/iu.test(normalized)) return "en";
+  return SUPPORTED_OUTPUT_LANGUAGES.includes(normalized) ? normalized : null;
+}
+
+export function detectLatestInputLanguage(input) {
+  const text = String(input ?? "");
+  if (/[\u3040-\u30ff]/u.test(text)) return "ja-JP";
+  if (/[\uac00-\ud7af]/u.test(text)) return "ko-KR";
+  if (/[\u3400-\u9fff]/u.test(text)) return "zh-CN";
+  if (/[A-Za-z]/u.test(text)) return "en";
+  return null;
+}
+
+/**
+ * Resolve report/chat language without making generated artifacts the authority.
+ * Priority: explicit API option -> CLI option -> environment -> latest user input -> system locale.
+ */
+export function resolveOutputLanguage({
+  explicitLanguage = null,
+  cliLanguage = null,
+  latestInput = null,
+  environmentLanguage = process.env.META_KIM_OUTPUT_LANGUAGE,
+  systemLanguage = null,
+} = {}) {
+  let detectedSystemLanguage = systemLanguage;
+  if (!detectedSystemLanguage) {
+    try {
+      detectedSystemLanguage = Intl.DateTimeFormat().resolvedOptions().locale;
+    } catch {
+      detectedSystemLanguage = null;
+    }
+  }
+  const candidates = [
+    ["explicit_option", explicitLanguage],
+    ["cli_option", cliLanguage],
+    ["environment", environmentLanguage],
+    ["latest_user_input", detectLatestInputLanguage(latestInput)],
+    ["system_locale", detectedSystemLanguage],
+  ];
+  for (const [source, candidate] of candidates) {
+    const language = normalizeOutputLanguage(candidate);
+    if (language) return { language, source };
+  }
+  return { language: "en", source: "default" };
+}
+
+/** One CLI-language resolver for summary and detailed status surfaces. */
+export function resolveMetaKimCliLanguage(cliLanguage = null, options = {}) {
+  const environmentLanguage = [
+    options.environmentLanguage,
+    process.env.META_KIM_OUTPUT_LANGUAGE,
+    process.env.METAKIM_LANG,
+    process.env.LC_ALL,
+    process.env.LC_MESSAGES,
+    process.env.LANG,
+  ].find((value) => value != null && String(value).trim() !== "");
+  return resolveOutputLanguage({
+    cliLanguage,
+    environmentLanguage,
+    systemLanguage: options.systemLanguage ?? null,
+  });
+}
+
+const STATUS_CLI_COPY = Object.freeze({
+  en: {
+    usageHeading: "Usage", optionsHeading: "Options",
+    hooksNote: "Global hooks are opt-in. Pass --with-global-hooks only when Meta_Kim may update\nClaude Code, Codex, or Cursor user-level hook wiring.",
+    helpOption: "Show this help without changing files", versionOption: "Show the installed package version",
+    usage: "meta-kim status [--lang <en|zh|ja|ko>] [--details|--verbose|--json|--diff] [--scope=global|project|both]",
+    unknown: (option) => `unknown status option '${option}'`,
+    invalidScope: (scope) => `invalid scope '${scope}'; expected global, project, or both`,
+    missingLang: "missing value for '--lang'", usageHint: "Run 'meta-kim --help' for usage.",
+    title: "Meta_Kim status", scope: "Scope", found: "Managed items found", manifest: "Manifest entries",
+    runtimes: "Runtimes", portable: "Portable between machines", yes: "yes", no: "no", none: "none",
+    portabilityReason: "Local .meta-kim/state may contain machine-specific profile, host, and absolute-path history; exclude it from zip/package handoff.",
+    uninstallDryRun: "Safe cleanup preview: npm run meta:uninstall",
+    uninstallApply: "Apply reviewed cleanup: npm run meta:uninstall:yes",
+    details: "Full file-level details: meta-kim status --details", machine: "Machine-readable status: meta-kim status --json",
+    diff: "Manifest drift check: meta-kim status --diff",
+  },
+  "zh-CN": {
+    usageHeading: "用法", optionsHeading: "选项",
+    hooksNote: "全局 Hook 默认不启用。仅当允许 Meta_Kim 更新 Claude Code、Codex 或 Cursor\n的用户级 Hook 配置时，才传入 --with-global-hooks。",
+    helpOption: "显示帮助且不修改文件", versionOption: "显示已安装的软件包版本",
+    usage: "meta-kim status [--lang <en|zh|ja|ko>] [--details|--verbose|--json|--diff] [--scope=global|project|both]",
+    unknown: (option) => `未知的状态选项 '${option}'`, invalidScope: (scope) => `无效范围 '${scope}'；应为 global、project 或 both`,
+    missingLang: "'--lang' 缺少语言值", usageHint: "运行 'meta-kim --help' 查看用法。",
+    title: "Meta_Kim 状态", scope: "检查范围", found: "发现的受管项目", manifest: "清单记录",
+    runtimes: "运行时", portable: "可跨机器直接迁移", yes: "是", no: "否", none: "无",
+    portabilityReason: "本地 .meta-kim/state 可能包含本机 profile、host 和绝对路径历史；打包或迁移时请排除。",
+    uninstallDryRun: "安全清理预览：npm run meta:uninstall",
+    uninstallApply: "确认预览后执行清理：npm run meta:uninstall:yes",
+    details: "查看文件级完整明细：meta-kim status --details", machine: "查看机器可读状态：meta-kim status --json",
+    diff: "检查清单漂移：meta-kim status --diff",
+  },
+  "ja-JP": {
+    usageHeading: "使い方", optionsHeading: "オプション",
+    hooksNote: "グローバル Hook は任意です。Meta_Kim に Claude Code、Codex、Cursor の\nユーザーレベル Hook 更新を許可する場合のみ --with-global-hooks を指定してください。",
+    helpOption: "ファイルを変更せずヘルプを表示", versionOption: "インストール済みパッケージのバージョンを表示",
+    usage: "meta-kim status [--lang <en|zh|ja|ko>] [--details|--verbose|--json|--diff] [--scope=global|project|both]",
+    unknown: (option) => `不明な status オプション '${option}'`, invalidScope: (scope) => `無効な範囲 '${scope}'。global、project、both のいずれかを指定してください`,
+    missingLang: "'--lang' の値がありません", usageHint: "使い方は 'meta-kim --help' を実行してください。",
+    title: "Meta_Kim ステータス", scope: "対象範囲", found: "検出した管理対象", manifest: "マニフェスト項目",
+    runtimes: "ランタイム", portable: "別マシンへそのまま移行可能", yes: "はい", no: "いいえ", none: "なし",
+    portabilityReason: "ローカル .meta-kim/state には端末固有の profile、host、絶対パス履歴が含まれる場合があります。zip/package から除外してください。",
+    uninstallDryRun: "安全なクリーンアップ確認：npm run meta:uninstall",
+    uninstallApply: "確認後にクリーンアップ実行：npm run meta:uninstall:yes",
+    details: "ファイル単位の詳細：meta-kim status --details", machine: "機械可読ステータス：meta-kim status --json",
+    diff: "マニフェスト差分：meta-kim status --diff",
+  },
+  "ko-KR": {
+    usageHeading: "사용법", optionsHeading: "옵션",
+    hooksNote: "전역 Hook은 선택 사항입니다. Meta_Kim이 Claude Code, Codex 또는 Cursor의\n사용자 수준 Hook 설정을 업데이트해도 될 때만 --with-global-hooks를 지정하세요.",
+    helpOption: "파일을 변경하지 않고 도움말 표시", versionOption: "설치된 패키지 버전 표시",
+    usage: "meta-kim status [--lang <en|zh|ja|ko>] [--details|--verbose|--json|--diff] [--scope=global|project|both]",
+    unknown: (option) => `알 수 없는 status 옵션 '${option}'`, invalidScope: (scope) => `잘못된 범위 '${scope}'입니다. global, project, both 중 하나여야 합니다`,
+    missingLang: "'--lang' 값이 없습니다", usageHint: "사용법은 'meta-kim --help'를 실행하세요.",
+    title: "Meta_Kim 상태", scope: "검사 범위", found: "발견된 관리 항목", manifest: "매니페스트 항목",
+    runtimes: "런타임", portable: "다른 컴퓨터로 바로 이동 가능", yes: "예", no: "아니요", none: "없음",
+    portabilityReason: "로컬 .meta-kim/state에는 컴퓨터별 profile, host, 절대 경로 기록이 포함될 수 있으므로 zip/package 전달에서 제외하세요.",
+    uninstallDryRun: "안전한 정리 미리보기: npm run meta:uninstall",
+    uninstallApply: "검토 후 정리 실행: npm run meta:uninstall:yes",
+    details: "파일별 전체 상세 보기: meta-kim status --details", machine: "기계 판독 상태 보기: meta-kim status --json",
+    diff: "매니페스트 차이 확인: meta-kim status --diff",
+  },
+});
+
+export function getStatusCliCopy(language) {
+  return STATUS_CLI_COPY[normalizeOutputLanguage(language) ?? "en"] ?? STATUS_CLI_COPY.en;
+}
+
+const META_RUN_STATUS_COPY = Object.freeze({
+  en: {
+    labels: { inactive: "meta_governance_status=inactive", active: "meta_governance_active", completed: "completed", current: "current", next: "next", blocked: "blocked", none: "none", separator: "=", listSeparator: ",", missing: "meta_governance_latest=missing", latestRun: "latest_run", task: "task", status: "status", publicReady: "public_ready", summary: "summary", ownerHandoff: "owner_handoff", runtimeEvidence: "runtime_evidence", releaseBoundary: "release_boundary", report: "report", nextCommand: "next_command", title: "Latest governed run" },
+    values: { pass: "passed", partial: "partially complete", failed: "failed", blocked: "blocked", pending: "pending", unknown: "unknown", true: "yes", false: "no", none: "none", inactive: "inactive", session_stop: "session stopped", local_continuity_or_new_run_only: "continue from local context or start a new run" },
+  },
+  "zh-CN": {
+    labels: { inactive: "Meta_Kim 治理状态：未运行", active: "Meta_Kim 治理进行中", completed: "已完成", current: "当前", next: "下一步", blocked: "阻塞", none: "无", reason: "原因", continuation: "如何继续", separator: "：", listSeparator: "、", title: "最近一次治理运行", missing: "最近没有治理运行", latestRun: "运行编号", task: "任务", status: "状态", publicReady: "可交付", summary: "结果摘要", ownerHandoff: "负责人交接", runtimeEvidence: "运行时证据", releaseBoundary: "剩余风险", report: "详细报告", nextCommand: "查看详情" },
+    values: { pass: "通过", partial: "部分完成", failed: "失败", blocked: "受阻", pending: "等待中", unknown: "未知", true: "是", false: "否", none: "无", inactive: "未运行", session_stop: "会话已停止", local_continuity_or_new_run_only: "从本地上下文继续或开始新运行" },
+  },
+  "ja-JP": {
+    labels: { inactive: "Meta_Kim ガバナンス：停止中", active: "Meta_Kim ガバナンス実行中", completed: "完了", current: "現在", next: "次", blocked: "ブロック", none: "なし", reason: "理由", continuation: "再開方法", separator: "：", listSeparator: "、", title: "最新のガバナンス実行", missing: "ガバナンス実行はまだありません", latestRun: "実行 ID", task: "タスク", status: "状態", publicReady: "公開準備", summary: "結果概要", ownerHandoff: "担当引き継ぎ", runtimeEvidence: "ランタイム証拠", releaseBoundary: "残るリスク", report: "詳細レポート", nextCommand: "詳細を開く" },
+    values: { pass: "合格", partial: "一部完了", failed: "失敗", blocked: "ブロック中", pending: "保留中", unknown: "不明", true: "はい", false: "いいえ", none: "なし", inactive: "停止中", session_stop: "セッション停止", local_continuity_or_new_run_only: "ローカル文脈から再開するか新規実行を開始" },
+  },
+  "ko-KR": {
+    labels: { inactive: "Meta_Kim 거버넌스: 비활성", active: "Meta_Kim 거버넌스 진행 중", completed: "완료", current: "현재", next: "다음", blocked: "차단", none: "없음", reason: "이유", continuation: "계속하는 방법", separator: ": ", listSeparator: ", ", title: "최근 거버넌스 실행", missing: "아직 거버넌스 실행이 없습니다", latestRun: "실행 ID", task: "작업", status: "상태", publicReady: "공개 준비", summary: "결과 요약", ownerHandoff: "담당자 인계", runtimeEvidence: "런타임 증거", releaseBoundary: "남은 위험", report: "상세 보고서", nextCommand: "상세 보기" },
+    values: { pass: "통과", partial: "부분 완료", failed: "실패", blocked: "차단됨", pending: "대기 중", unknown: "알 수 없음", true: "예", false: "아니요", none: "없음", inactive: "비활성", session_stop: "세션 중지", local_continuity_or_new_run_only: "로컬 컨텍스트에서 계속하거나 새 실행 시작" },
+  },
+});
+
+export function getMetaRunStatusCopy(language) {
+  return META_RUN_STATUS_COPY[normalizeOutputLanguage(language) ?? "en"] ?? META_RUN_STATUS_COPY.en;
+}
+
+const GOVERNED_RUN_SURFACE_LABELS = Object.freeze({
+  en: {
+    invocationPresentation: {
+      executionLabel: "User-visible execution state",
+      certificationLabel: "Run record and independent review",
+      rawAuditLabel: "Strict audit detail (machine state, not the user-facing result)",
+      executionStates: {
+        completed: "Completed (call result returned)",
+        called: "Called",
+        called_or_completed: "Called (observed by host)",
+        called_with_failures: "Called (some invocations failed)",
+        failed: "Call failed",
+        denied: "Call denied",
+        blocked: "Call blocked",
+        not_confirmed: "Run record pending linkage (use the actual call results in this chat)",
+        unavailable: "Unavailable",
+      },
+      certificationStates: {
+        exact_binding_verified: "Run record linked",
+        exact_binding_pending: "Run record linkage pending",
+        live_certified: "Additional independent review completed",
+        live_certification_pending: "Additional independent review not completed (does not change this run's actual calls)",
+      },
+      summary: (execution, exactBinding) => `${execution}; ${exactBinding}`,
+      userSummary: (state, execution) => {
+        if (state === "completed") return `${execution}. The call result returned and its run record is linked. An additional independent review can still be requested for higher assurance; it does not change the actual call made in this run.`;
+        if (state === "called") return `${execution}. The call result returned, while its run record still needs full linkage. An additional independent review can check that record; it does not change the actual call made in this run.`;
+        if (state === "called_with_failures") return `${execution}. Some call results returned and some calls failed; the run record still needs full linkage. An additional independent review can check that record; it does not change the calls already made in this run.`;
+        if (["failed", "denied", "blocked"].includes(state)) return `${execution}. The host-observed call did not complete successfully; its failure record is linked. An additional independent review can check the record but cannot turn this call into a success.`;
+        if (state === "unavailable") return `${execution}. No successful call result was returned because the runtime reported the capability unavailable.`;
+        return `${execution}. No successful call result is linked yet. The actual call result in this chat remains the primary result; an additional independent review can be requested without changing this run.`;
+      },
+    },
+    notice: {
+      progress: "Progress and stages", route: "Route and ownership", closure: "Result, risk, and next action",
+      startReason: "Start reason", spine: "8-stage spine", workflow: "11-phase workflow",
+      workflowStatus: "11-phase status", currentStage: "Current phase", blockedStage: "Blocked phase",
+      card: "Card decisions", cardSummary: "Card summary", businessFlow: "Business flow",
+      businessFlowFallback: "Work is organized dynamically for this task",
+      visibleSurface: "Chat shows who coordinates the work, which capability is responsible, how collaboration is progressing, and where review checkpoints remain.",
+      result: "Current result", risk: "Risk or blocker", next: "Next action",
+      resultDetail: (status) => status === "pass" ? "The requested work and its checks are complete." : "The work is partially complete; remaining evidence or user confirmation is still needed.",
+      riskDetail: (blockedCount) => blockedCount > 0 ? `${blockedCount} workflow area(s) still need attention.` : "No confirmed blocking workflow area; final evidence may still be pending.",
+      nextDetail: "Review the visible result and confirm the remaining acceptance point.",
+      workflowDetail: "The workflow is active; completed work, waiting items, and intentionally skipped work are tracked without exposing internal codes.",
+      currentDetail: "The run is moving through closure, verification, and user acceptance.",
+      spineDetail: "The run confirms the goal, checks evidence, selects a route, performs the work, reviews it, and verifies the result.",
+      cardDetail: "Only decisions that can change scope, risk, or acceptance are surfaced to the user.",
+      verificationDetail: (status) => status === "pass" ? "Verification checks are complete." : "Verification still needs evidence or user acceptance.",
+    },
+    events: {
+      runStart: (runId) => `Run started (${runId}); locking intent before capability discovery.`,
+      fetch: (count) => `Fetch complete: ${count} capability records checked.`,
+      thinking: (_owner, count) => `The route is ready. Meta_Kim coordination will organize ${count} work stream(s).`,
+      execution: (status, peers, handoffs) =>
+        status === "called"
+          ? `Subagents were called and observed by the host; ${peers} collaborating role(s) are coordinating ${handoffs} handoff(s).`
+          : status === "blocked_by_host"
+            ? `Host dispatch failed or was denied; ${peers} collaborating role(s) and ${handoffs} planned handoff(s) are affected.`
+            : `Preparing dispatch and waiting for host confirmation; ${peers} collaborating role(s) have ${handoffs} planned handoff(s).`,
+      review: () => "Quality review is checking the result, evidence boundaries, and user-facing clarity.",
+      closure: () => "The closure check is consolidating the result, verification, and next action.",
+    },
+    report: {
+      status: "Status", goal: "User goal", orchestration: "Work coordination and calls",
+      owner: "Responsible coordination", providers: "Call record",
+      mesh: "Collaboration", control: "Workflow overview", stages: "Stage progress",
+      verification: "Verification and next action", peers: "peers", handoffs: "handoffs",
+      nodes: "nodes", edges: "edges", state: "state", checkpoints: "checkpoints", next: "Next action",
+      coordinator: "Meta_Kim coordination",
+      collaborationDetail: (peers, handoffs) => `${peers} collaborating role(s) with ${handoffs} planned handoff(s).`,
+      controlDetail: (nodes, edges, checkpoints) => `The workflow map contains ${nodes} steps, ${edges} connections, and ${checkpoints} review checkpoints.`,
+    },
+  },
+  "zh-CN": {
+    invocationPresentation: {
+      executionLabel: "用户看到的执行状态",
+      certificationLabel: "运行记录与独立复核",
+      rawAuditLabel: "严格审计明细（机器状态，不等同用户提示）",
+      executionStates: {
+        completed: "已完成（调用结果已返回）",
+        called: "已调用",
+        called_or_completed: "已调用（宿主已观察）",
+        called_with_failures: "已调用（部分失败）",
+        failed: "调用失败",
+        denied: "调用被拒绝",
+        blocked: "调用被阻止",
+        not_confirmed: "运行记录待关联（以当前聊天中的实际调用结果为准）",
+        unavailable: "不可用",
+      },
+      certificationStates: {
+        exact_binding_verified: "运行记录已关联",
+        exact_binding_pending: "运行记录待关联",
+        live_certified: "额外独立复核已完成",
+        live_certification_pending: "额外独立复核未完成（不影响本次实际调用）",
+      },
+      summary: (execution, exactBinding) => `${execution}，${exactBinding}`,
+      userSummary: (state, execution) => {
+        if (state === "completed") return `${execution}。调用结果已返回，运行记录已关联；如需更高保证，可以再做一次独立复核，但不会改变本次实际调用。`;
+        if (state === "called") return `${execution}。调用结果已返回，运行记录仍待完整关联；可以再做一次独立复核来核对记录，但不会改变本次实际调用。`;
+        if (state === "called_with_failures") return `${execution}。部分调用已返回、部分调用失败，运行记录仍待完整关联；可以再做一次独立复核来核对记录，但不会改变本次已经发生的调用。`;
+        if (["failed", "denied", "blocked"].includes(state)) return `${execution}。宿主观察到的调用未成功完成，失败记录已关联；可以追加独立复核来核对记录，但不会把本次调用变成成功。`;
+        if (state === "unavailable") return `${execution}。运行环境已明确报告不可用，本次没有成功的调用结果。`;
+        return `${execution}。目前尚未关联到成功的调用结果；以当前聊天中的实际调用结果为准，也可以追加独立复核，且不会改变本次运行。`;
+      },
+    },
+    notice: {
+      progress: "进度与阶段", route: "路线与负责人", closure: "结果、风险与下一步",
+      startReason: "开始原因", spine: "8 阶段", workflow: "11 阶段", workflowStatus: "11阶段状态",
+      currentStage: "当前阶段", blockedStage: "阻塞阶段", card: "发牌", cardSummary: "发牌摘要",
+      businessFlow: "业务流", businessFlowFallback: "按当前任务动态组织工作内容",
+      visibleSurface: "聊天窗口会说明谁在协调、由什么能力负责、协作进展如何，以及还剩哪些复核点。",
+      result: "当前结果", risk: "风险或阻塞", next: "下一步",
+      resultDetail: (status) => status === "pass" ? "本次工作及相关检查已完成。" : "本次工作已部分完成，仍需补充证据或等待用户确认。",
+      riskDetail: (blockedCount) => blockedCount > 0 ? `仍有 ${blockedCount} 个业务环节需要处理。` : "没有已确认的业务阻塞，但最终证据可能仍待补齐。",
+      nextDetail: "请查看当前可见结果，并确认剩余验收点。",
+      workflowDetail: "业务流程正在推进；已完成、等待处理和有意跳过的事项均已记录，但不展示内部编码。",
+      currentDetail: "当前正在进行闭环、验证和用户验收。",
+      spineDetail: "本轮会确认目标、核对证据、选择路线、执行工作、审查质量并验证结果。",
+      cardDetail: "只有会改变范围、风险或验收方式的决策才会提示用户。",
+      verificationDetail: (status) => status === "pass" ? "验证检查已完成。" : "验证仍需补充证据或等待用户验收。",
+    },
+    events: {
+      runStart: (runId) => `运行已开始（${runId}）；先锁定意图，再发现能力。`,
+      fetch: (count) => `Fetch 已完成：检查了 ${count} 条能力记录。`,
+      thinking: (_owner, count) => `路线已经确定，Meta_Kim 协调能力将组织 ${count} 条工作线。`,
+      execution: (status, peers, handoffs) =>
+        status === "called"
+          ? `已调用子代理并由宿主观察；${peers} 个协作角色正在衔接 ${handoffs} 次交接。`
+          : status === "blocked_by_host"
+            ? `宿主调用失败或被拒绝；${peers} 个协作角色和 ${handoffs} 次计划交接受到影响。`
+            : `正在准备派发并等待宿主确认；${peers} 个协作角色计划进行 ${handoffs} 次交接。`,
+      review: () => "质量审查正在检查结果、证据边界和用户可读性。",
+      closure: () => "闭环检查正在汇总结果、验证结论和下一步。",
+    },
+    report: {
+      status: "状态", goal: "用户目标", orchestration: "工作协调与调用情况",
+      owner: "协调能力", providers: "调用记录", mesh: "协作情况", control: "工作流概览",
+      stages: "阶段进展", verification: "验证与下一步", peers: "协作角色", handoffs: "交接",
+      nodes: "nodes", edges: "edges", state: "state", checkpoints: "checkpoints", next: "下一步",
+      coordinator: "Meta_Kim 协调能力",
+      collaborationDetail: (peers, handoffs) => `${peers} 个协作角色，计划完成 ${handoffs} 次交接。`,
+      controlDetail: (nodes, edges, checkpoints) => `工作流包含 ${nodes} 个步骤、${edges} 条衔接关系和 ${checkpoints} 个复核点。`,
+    },
+  },
+  "ja-JP": {
+    invocationPresentation: {
+      executionLabel: "ユーザー向け実行状態",
+      certificationLabel: "実行記録と独立レビュー",
+      rawAuditLabel: "厳格な監査詳細（機械状態。ユーザー向け結果とは別）",
+      executionStates: {
+        completed: "完了（呼び出し結果を受信）",
+        called: "呼び出し済み",
+        called_or_completed: "呼び出し済み（ホストで観測）",
+        called_with_failures: "呼び出し済み（一部失敗）",
+        failed: "呼び出し失敗",
+        denied: "呼び出し拒否",
+        blocked: "呼び出しがブロックされました",
+        not_confirmed: "実行記録は関連付け待ちです（現在のチャット内の実際の呼び出し結果を基準にします）",
+        unavailable: "利用不可",
+      },
+      certificationStates: {
+        exact_binding_verified: "実行記録を関連付け済み",
+        exact_binding_pending: "実行記録の関連付け待ち",
+        live_certified: "追加の独立レビューが完了",
+        live_certification_pending: "追加の独立レビューは未完了（今回の実際の呼び出しには影響しません）",
+      },
+      summary: (execution, exactBinding) => `${execution}、${exactBinding}`,
+      userSummary: (state, execution) => {
+        if (state === "completed") return `${execution}。呼び出し結果が返り、実行記録も関連付けられています。必要なら追加の独立レビューを行えますが、今回の実際の呼び出しは変わりません。`;
+        if (state === "called") return `${execution}。呼び出し結果は返りましたが、実行記録の関連付けはまだ完了していません。追加の独立レビューで記録を確認できますが、今回の実際の呼び出しは変わりません。`;
+        if (state === "called_with_failures") return `${execution}。一部の呼び出し結果が返り、一部は失敗しました。実行記録の関連付けはまだ完了していません。追加の独立レビューを行っても、今回すでに行われた呼び出しは変わりません。`;
+        if (["failed", "denied", "blocked"].includes(state)) return `${execution}。ホストで観測された呼び出しは正常に完了せず、失敗記録は関連付けられています。独立レビューを追加しても、この呼び出しが成功に変わることはありません。`;
+        if (state === "unavailable") return `${execution}。実行環境から利用不可と明示され、成功した呼び出し結果はありません。`;
+        return `${execution}。成功した呼び出し結果はまだ関連付けられていません。現在のチャット内の実際の結果を基準とし、今回の実行を変えずに独立レビューを追加できます。`;
+      },
+    },
+    notice: {
+      progress: "進捗とステージ", route: "ルートと担当", closure: "結果、リスク、次の対応",
+      startReason: "開始理由", spine: "8 ステージ", workflow: "11 フェーズ", workflowStatus: "11 フェーズ状態",
+      currentStage: "現在のフェーズ", blockedStage: "ブロック中のフェーズ", card: "カード判断", cardSummary: "カード要約",
+      businessFlow: "業務フロー", businessFlowFallback: "このタスクに合わせて作業内容を動的に整理",
+      visibleSurface: "チャットでは、調整担当、責任を持つ機能、協働の進捗、残っている確認点を説明します。",
+      result: "現在の結果", risk: "リスクまたはブロッカー", next: "次の対応",
+      resultDetail: (status) => status === "pass" ? "今回の作業と確認は完了しました。" : "作業は一部完了しており、追加の証拠またはユーザー確認が必要です。",
+      riskDetail: (blockedCount) => blockedCount > 0 ? `${blockedCount} 個の業務領域に対応が必要です。` : "確認済みの業務ブロッカーはありませんが、最終証拠が未完了の場合があります。",
+      nextDetail: "現在の表示結果を確認し、残りの受け入れ項目を確定してください。",
+      workflowDetail: "業務フローは進行中です。完了、待機、意図的な省略を内部コードなしで追跡しています。",
+      currentDetail: "現在は完了確認、検証、ユーザー受け入れを進めています。",
+      spineDetail: "目標確認、証拠確認、ルート選択、実行、レビュー、検証の順で進めます。",
+      cardDetail: "範囲、リスク、受け入れ方法を変える判断だけをユーザーに提示します。",
+      verificationDetail: (status) => status === "pass" ? "検証チェックは完了しました。" : "検証には追加の証拠またはユーザー受け入れが必要です。",
+    },
+    events: {
+      runStart: (runId) => `実行を開始しました（${runId}）。能力探索の前に意図を確定します。`,
+      fetch: (count) => `Fetch 完了: ${count} 件の能力記録を確認しました。`,
+      thinking: (_owner, count) => `ルートが確定し、Meta_Kim の調整機能が ${count} 本の作業ラインを整理します。`,
+      execution: (status, peers, handoffs) =>
+        status === "called"
+          ? `サブエージェントを呼び出し、ホストで観測しました。${peers} 個の協働役割が ${handoffs} 回の引き継ぎを調整しています。`
+          : status === "blocked_by_host"
+            ? `ホスト呼び出しが失敗または拒否され、${peers} 個の協働役割と ${handoffs} 回の予定引き継ぎに影響しています。`
+            : `ディスパッチを準備し、ホスト確認を待っています。${peers} 個の協働役割に ${handoffs} 回の引き継ぎ予定があります。`,
+      review: () => "品質レビューで結果、証拠境界、読みやすさを確認しています。",
+      closure: () => "完了確認で結果、検証内容、次の対応を整理しています。",
+    },
+    report: {
+      status: "状態", goal: "ユーザー目標", orchestration: "作業調整と呼び出し状況",
+      owner: "調整担当", providers: "呼び出し記録", mesh: "協働状況", control: "作業フロー概要",
+      stages: "ステージ進捗", verification: "検証と次の対応", peers: "協働役割", handoffs: "引き継ぎ",
+      nodes: "nodes", edges: "edges", state: "state", checkpoints: "checkpoints", next: "次の対応",
+      coordinator: "Meta_Kim 調整機能",
+      collaborationDetail: (peers, handoffs) => `${peers} 個の協働役割と ${handoffs} 回の予定引き継ぎがあります。`,
+      controlDetail: (nodes, edges, checkpoints) => `作業フローは ${nodes} 個の手順、${edges} 本のつながり、${checkpoints} 個の確認点で構成されます。`,
+    },
+  },
+  "ko-KR": {
+    invocationPresentation: {
+      executionLabel: "사용자 표시 실행 상태",
+      certificationLabel: "실행 기록과 독립 검토",
+      rawAuditLabel: "엄격한 감사 상세(기계 상태이며 사용자 표시 결과와 별도)",
+      executionStates: {
+        completed: "완료(호출 결과 수신)",
+        called: "호출됨",
+        called_or_completed: "호출됨(호스트에서 관찰)",
+        called_with_failures: "호출됨(일부 실패)",
+        failed: "호출 실패",
+        denied: "호출 거부됨",
+        blocked: "호출 차단됨",
+        not_confirmed: "실행 기록 연결 대기 중(현재 채팅의 실제 호출 결과 기준)",
+        unavailable: "사용 불가",
+      },
+      certificationStates: {
+        exact_binding_verified: "실행 기록 연결 완료",
+        exact_binding_pending: "실행 기록 연결 대기",
+        live_certified: "추가 독립 검토 완료",
+        live_certification_pending: "추가 독립 검토 미완료(이번 실제 호출에는 영향 없음)",
+      },
+      summary: (execution, exactBinding) => `${execution}, ${exactBinding}`,
+      userSummary: (state, execution) => {
+        if (state === "completed") return `${execution}. 호출 결과가 반환되었고 실행 기록도 연결되었습니다. 더 높은 보장이 필요하면 추가 독립 검토를 요청할 수 있지만 이번 실제 호출은 바뀌지 않습니다.`;
+        if (state === "called") return `${execution}. 호출 결과는 반환되었지만 실행 기록 연결은 아직 완료되지 않았습니다. 추가 독립 검토로 기록을 확인할 수 있지만 이번 실제 호출은 바뀌지 않습니다.`;
+        if (state === "called_with_failures") return `${execution}. 일부 호출 결과는 반환되었고 일부 호출은 실패했습니다. 실행 기록 연결은 아직 완료되지 않았으며, 추가 독립 검토를 해도 이번에 이미 수행된 호출은 바뀌지 않습니다.`;
+        if (["failed", "denied", "blocked"].includes(state)) return `${execution}. 호스트에서 관찰된 호출이 성공적으로 완료되지 않았고 실패 기록은 연결되었습니다. 독립 검토를 추가해도 이 호출이 성공으로 바뀌지는 않습니다.`;
+        if (state === "unavailable") return `${execution}. 실행 환경에서 사용할 수 없다고 명확히 보고했으며 성공한 호출 결과는 없습니다.`;
+        return `${execution}. 성공한 호출 결과가 아직 연결되지 않았습니다. 현재 채팅의 실제 결과를 기준으로 하며, 이번 실행을 바꾸지 않고 독립 검토를 추가할 수 있습니다.`;
+      },
+    },
+    notice: {
+      progress: "진행 상황과 단계", route: "경로와 담당자", closure: "결과, 위험, 다음 조치",
+      startReason: "시작 이유", spine: "8단계", workflow: "11단계", workflowStatus: "11단계 상태",
+      currentStage: "현재 단계", blockedStage: "차단된 단계", card: "카드 판단", cardSummary: "카드 요약",
+      businessFlow: "업무 흐름", businessFlowFallback: "현재 작업에 맞춰 작업 내용을 동적으로 구성",
+      visibleSurface: "채팅에서는 조정 담당, 책임 기능, 협업 진행 상황, 남은 검토 지점을 설명합니다.",
+      result: "현재 결과", risk: "위험 또는 차단 항목", next: "다음 조치",
+      resultDetail: (status) => status === "pass" ? "이번 작업과 관련 확인을 완료했습니다." : "작업이 일부 완료되었으며 추가 증거나 사용자 확인이 필요합니다.",
+      riskDetail: (blockedCount) => blockedCount > 0 ? `${blockedCount}개 업무 영역에 추가 대응이 필요합니다.` : "확인된 업무 차단 요소는 없지만 최종 증거가 남아 있을 수 있습니다.",
+      nextDetail: "현재 표시된 결과를 검토하고 남은 승인 항목을 확인해 주세요.",
+      workflowDetail: "업무 흐름이 진행 중이며 완료, 대기, 의도적으로 생략한 항목을 내부 코드 없이 추적합니다.",
+      currentDetail: "현재 마감, 검증, 사용자 승인을 진행하고 있습니다.",
+      spineDetail: "목표 확인, 증거 확인, 경로 선택, 실행, 검토, 검증 순서로 진행합니다.",
+      cardDetail: "범위, 위험, 승인 방식을 바꾸는 결정만 사용자에게 표시합니다.",
+      verificationDetail: (status) => status === "pass" ? "검증 확인을 완료했습니다." : "검증에 추가 증거나 사용자 승인이 필요합니다.",
+    },
+    events: {
+      runStart: (runId) => `실행을 시작했습니다(${runId}). 능력 탐색 전에 의도를 확정합니다.`,
+      fetch: (count) => `Fetch 완료: ${count}개 능력 기록을 확인했습니다.`,
+      thinking: (_owner, count) => `경로가 확정되었고 Meta_Kim 조정 기능이 ${count}개 작업 흐름을 정리합니다.`,
+      execution: (status, peers, handoffs) =>
+        status === "called"
+          ? `서브에이전트를 호출했고 호스트에서 관찰했습니다. ${peers}개 협업 역할이 ${handoffs}회 인계를 조정합니다.`
+          : status === "blocked_by_host"
+            ? `호스트 호출이 실패했거나 거부되어 ${peers}개 협업 역할과 ${handoffs}회 예정 인계에 영향을 줍니다.`
+            : `디스패치를 준비하고 호스트 확인을 기다립니다. ${peers}개 협업 역할에 ${handoffs}회 인계가 예정되어 있습니다.`,
+      review: () => "품질 검토에서 결과, 증거 경계, 사용자 가독성을 확인하고 있습니다.",
+      closure: () => "마감 확인에서 결과, 검증 내용, 다음 조치를 정리하고 있습니다.",
+    },
+    report: {
+      status: "상태", goal: "사용자 목표", orchestration: "작업 조정 및 호출 상황",
+      owner: "조정 담당", providers: "호출 기록", mesh: "협업 상황", control: "작업 흐름 개요",
+      stages: "단계 진행", verification: "검증과 다음 조치", peers: "협업 역할", handoffs: "인계",
+      nodes: "nodes", edges: "edges", state: "state", checkpoints: "checkpoints", next: "다음 조치",
+      coordinator: "Meta_Kim 조정 기능",
+      collaborationDetail: (peers, handoffs) => `${peers}개 협업 역할과 ${handoffs}회 예정 인계가 있습니다.`,
+      controlDetail: (nodes, edges, checkpoints) => `작업 흐름은 ${nodes}개 단계, ${edges}개 연결, ${checkpoints}개 검토 지점으로 구성됩니다.`,
+    },
+  },
+});
+
+export function getGovernedRunSurfaceLabels(lang) {
+  const normalized = normalizeOutputLanguage(lang) ?? "en";
+  return GOVERNED_RUN_SURFACE_LABELS[normalized] ?? GOVERNED_RUN_SURFACE_LABELS.en;
+}
+
 function detectLang() {
   const cliIdx = process.argv.indexOf("--lang");
   if (cliIdx >= 0 && process.argv[cliIdx + 1]) {
@@ -1263,9 +1719,9 @@ const REPORT_STRINGS = {
       routeDetail: (count) =>
         `Interpreted the natural-language request and checked ${count} capability type(s).`,
       handoff: "Owner handoff",
-      handoffDetail: (count, owner, lanes = "") =>
-        lanes
-          ? `${owner} prepared ${count} worker handoff(s) from the user's short request: ${lanes}.`
+      handoffDetail: (count, owner, workAreas = "") =>
+        workAreas
+          ? `${owner} prepared ${count} worker handoff(s) from the user's short request across these work areas: ${workAreas}.`
           : `${owner} prepared ${count} worker handoff(s) from the user's short request.`,
       verification: "Verification",
       verificationDetail: (status) =>
@@ -1323,7 +1779,7 @@ const REPORT_STRINGS = {
       order: "Order",
       does: "Does",
       notRequired: "not required",
-      mcpProviderBoundary: "MCP provider boundary",
+      mcpProviderBoundary: "MCP integration boundary",
       noExecutionTasks: "No execution worker task was required.",
       executionResult: (count) =>
         `Execution runs ${count} worker task(s), reports each result, then hands the run to Review.`,
@@ -1433,7 +1889,7 @@ const REPORT_STRINGS = {
         `repeat #${repeatOrdinal}, ${repeatReason}`,
       progressDiscoveries: {
         clarify: "the goal or acceptance boundary may change the route",
-        "shrink-scope": "the route has multiple lanes and needs a tighter boundary",
+        "shrink-scope": "the route has multiple work areas and needs a tighter boundary",
         options: "more than one viable path exists",
         risk: "runtime or external-platform risk can preempt execution",
         execute: "owner, route, and verification are ready for bounded work",
@@ -1682,9 +2138,9 @@ const REPORT_STRINGS = {
       routeDetail: (count) =>
         `已把许愿式自然语言需求转成路线，并检查 ${count} 类能力。`,
       handoff: "Owner 交接",
-      handoffDetail: (count, owner, lanes = "") =>
-        lanes
-          ? `${owner} 已从用户短句准备 ${count} 个 worker 交接：${lanes}。`
+      handoffDetail: (count, owner, workAreas = "") =>
+        workAreas
+          ? `${owner} 已从用户短句准备 ${count} 个工作交接，涉及：${workAreas}。`
           : `${owner} 已从用户短句准备 ${count} 个 worker 交接。`,
       verification: "验证",
       verificationDetail: (status) =>
@@ -1742,7 +2198,7 @@ const REPORT_STRINGS = {
       order: "顺序",
       does: "做的事情",
       notRequired: "不需要",
-      mcpProviderBoundary: "MCP provider 边界",
+      mcpProviderBoundary: "MCP 接入边界",
       noExecutionTasks: "本次不需要执行 worker 任务。",
       executionResult: (count) =>
         `执行阶段会运行 ${count} 个 worker 任务，逐项报告结果，然后交给 Review。`,
@@ -2105,9 +2561,9 @@ const REPORT_STRINGS = {
       routeDetail: (count) =>
         `願望に近い自然言語の依頼を解釈し、${count} 種類の能力を確認しました。`,
       handoff: "Owner 引き渡し",
-      handoffDetail: (count, owner, lanes = "") =>
-        lanes
-          ? `${owner} がユーザーの短い依頼から ${count} 個の worker 引き渡しを準備しました: ${lanes}.`
+      handoffDetail: (count, owner, workAreas = "") =>
+        workAreas
+          ? `${owner} がユーザーの短い依頼から ${count} 個の作業引き渡しを準備しました。対象: ${workAreas}.`
           : `${owner} がユーザーの短い依頼から ${count} 個の worker 引き渡しを準備しました。`,
       verification: "検証",
       verificationDetail: (status) =>
@@ -2165,7 +2621,7 @@ const REPORT_STRINGS = {
       order: "順序",
       does: "行うこと",
       notRequired: "不要",
-      mcpProviderBoundary: "MCP provider 境界",
+      mcpProviderBoundary: "MCP 接続境界",
       noExecutionTasks: "この実行では execution worker task は不要です。",
       executionResult: (count) =>
         `Execution は ${count} 個の worker task を実行し、各結果を報告してから Review に渡します。`,
@@ -2526,9 +2982,9 @@ const REPORT_STRINGS = {
       routeDetail: (count) =>
         `희망형 자연어 요청을 해석하고 ${count}개 능력 유형을 확인했습니다.`,
       handoff: "Owner 인계",
-      handoffDetail: (count, owner, lanes = "") =>
-        lanes
-          ? `${owner} 가 사용자의 짧은 요청에서 ${count}개 worker 인계를 준비했습니다: ${lanes}.`
+      handoffDetail: (count, owner, workAreas = "") =>
+        workAreas
+          ? `${owner} 가 사용자의 짧은 요청에서 ${count}개 작업 인계를 준비했습니다. 대상: ${workAreas}.`
           : `${owner} 가 사용자의 짧은 요청에서 ${count}개 worker 인계를 준비했습니다.`,
       verification: "검증",
       verificationDetail: (status) =>
@@ -2586,7 +3042,7 @@ const REPORT_STRINGS = {
       order: "순서",
       does: "하는 일",
       notRequired: "필요 없음",
-      mcpProviderBoundary: "MCP provider 경계",
+      mcpProviderBoundary: "MCP 연동 경계",
       noExecutionTasks: "이번 실행에는 execution worker task 가 필요하지 않습니다.",
       executionResult: (count) =>
         `Execution 은 ${count}개 worker task 를 실행하고 각 결과를 보고한 뒤 Review 로 넘깁니다.`,

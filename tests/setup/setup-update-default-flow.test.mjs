@@ -15,8 +15,16 @@ const readmeEn = readFileSync(path.join(repoRoot, "README.md"), "utf8");
 const readmeZh = readFileSync(path.join(repoRoot, "README.zh-CN.md"), "utf8");
 
 describe("setup update default flow", () => {
+  test("update does not add a redundant final confirmation or map cancellation to complete", () => {
+    assert.doesNotMatch(source, /updateConfirmCopy/);
+    assert.doesNotMatch(source, /return summarizeInstallStatus\(\[\]\)/);
+  });
   const source = readFileSync(path.join(repoRoot, "setup.mjs"), "utf8");
   const i18nStrings = readFileSync(path.join(repoRoot, "config", "i18n", "setup-strings.mjs"), "utf8");
+  const projectFileSafetySource = readFileSync(
+    path.join(repoRoot, "scripts", "project-bootstrap-file-safety.mjs"),
+    "utf8",
+  );
 
   test("--update takes precedence over non-TTY silent install mode", () => {
     const mainSource = source.slice(source.indexOf("async function main()"));
@@ -131,11 +139,28 @@ describe("setup update default flow", () => {
     );
   });
 
-  test("repo-local setup checks honor global-only mode and active targets", () => {
+  test("repo-local setup checks validate the global-only hook dependency pairs and active targets", () => {
     assert.match(
       source,
-      /function checkProjectRuntimeSync\(runtimes, targetContext\) \{[\s\S]*?targetContext\.localOverrides\?\.projectProjectionMode !== "global_only"[\s\S]*?checkSync\(runtimes, targetContext\.activeTargets\);/,
-      "repo-local runtime sync checks must be skipped when local overrides declare global_only",
+      /function checkProjectRuntimeSync\(runtimes, targetContext\) \{[\s\S]*?projectProjectionMode === "global_only"[\s\S]*?return checkGlobalOnlyProjectHookPairs\(\);[\s\S]*?return checkSync\(runtimes, targetContext\.activeTargets\);/,
+      "global_only must validate its project hook dependency set instead of returning true unconditionally",
+    );
+    assert.match(source, /function checkGlobalOnlyProjectHookPairs\(\)/);
+    assert.match(source, /\.claude\/hooks[\s\S]*?\.codex\/hooks[\s\S]*?\.cursor\/hooks/);
+    assert.match(source, /activate-meta-theory-spine\.mjs/);
+    assert.match(source, /project-root\.mjs/);
+    const pairCheckStart = source.indexOf("function checkGlobalOnlyProjectHookPairs");
+    const pairCheckEnd = source.indexOf("function checkProjectRuntimeSync", pairCheckStart);
+    const pairCheckSource = source.slice(pairCheckStart, pairCheckEnd);
+    assert.match(pairCheckSource, /readFileSync\(activator, "utf8"\)/);
+    assert.match(pairCheckSource, /activatorExists && resolverExists && importsResolver/);
+    assert.doesNotMatch(
+      source.slice(
+        source.indexOf("function checkProjectRuntimeSync"),
+        source.indexOf("function reportProjectRuntimeSyncResult"),
+      ),
+      /return true;/,
+      "global_only sync checks must not keep the old unconditional success path",
     );
 
     const checkOnlyStart = source.indexOf("if (checkOnly) {");
@@ -143,9 +168,15 @@ describe("setup update default flow", () => {
     const checkOnlySource = source.slice(checkOnlyStart, checkOnlyEnd);
     assert.match(
       checkOnlySource,
-      /checkProjectRuntimeSync\(detectedRuntimes, targetContext\)/,
+      /const syncOk = checkProjectRuntimeSync\(detectedRuntimes, targetContext\)/,
       "--check must route through the global-only-aware sync check",
     );
+    const checkOnlyBranch = source.slice(
+      checkOnlyStart,
+      source.indexOf("if (updateMode)", checkOnlyStart),
+    );
+    assert.match(checkOnlyBranch, /reportProjectRuntimeSyncResult\(syncOk\)/);
+    assert.match(checkOnlyBranch, /process\.exit\(syncOk \? 0 : 1\)/);
     assert.doesNotMatch(
       checkOnlySource,
       /checkSync\(detectedRuntimes, targetContext\.supportedTargets\)/,
@@ -171,9 +202,11 @@ describe("setup update default flow", () => {
     const runCheckSource = source.slice(runCheckStart, runCheckEnd);
     assert.match(
       runCheckSource,
-      /checkProjectRuntimeSync\(runtimes, targetContext\)/,
+      /const syncOk = checkProjectRuntimeSync\(runtimes, targetContext\)/,
       "runCheck() must route through the global-only-aware sync check",
     );
+    assert.match(runCheckSource, /reportProjectRuntimeSyncResult\(syncOk\)/);
+    assert.match(runCheckSource, /return syncOk;/);
     assert.doesNotMatch(
       runCheckSource,
       /checkSync\(runtimes, targetContext\.supportedTargets\)/,
@@ -194,6 +227,27 @@ describe("setup update default flow", () => {
       localStateSource,
       /"\.meta-kim\/state\/default\/project-bootstrap\.json"/,
       "cleanup can remove the old bootstrap manifest without deleting the whole local state root",
+    );
+  });
+
+  test("cleanup exposes retryable failure states and keeps the manifest until retry closes", () => {
+    assert.match(projectFileSafetySource, /const PROJECT_CLEANUP_RETRYABLE_REASONS = new Map/);
+    assert.match(projectFileSafetySource, /\["backup_failed_preserved", "partial"\]/);
+    assert.match(projectFileSafetySource, /\["manifest_hash_mismatch_preserved", "partial"\]/);
+    assert.match(projectFileSafetySource, /\["legacy_manifest_missing_hash_preserved", "partial"\]/);
+    assert.match(projectFileSafetySource, /\["unsafe_realpath_or_link_preserved", "blocked"\]/);
+    assert.match(
+      source,
+      /preserveManifest: retryableBeforeLocalState\.length > 0/,
+    );
+    assert.match(
+      source,
+      /ok: results\.every\(\(result\) => result\.status === "ok"\)/,
+    );
+    assert.doesNotMatch(source, /metaKimProjectionSignature/);
+    assert.match(
+      source,
+      /rel === "\.claude\/project-task-state\.json"[\s\S]*?!projectRemovalProof\(targetDir, rel\)/,
     );
   });
 
@@ -299,7 +353,10 @@ describe("setup update default flow", () => {
     assert.match(source, /runProjectCleanupCli/);
     assert.match(source, /--cleanup-projects/);
     assert.doesNotMatch(source, /includeSelfCleanup/);
-    assert.match(source, /if \(deployDirs\.length > 0\) \{\s*await copyToDeployDirs\(activeTargets, deployDirs\);/);
+    assert.match(
+      source,
+      /if \(deployDirs\.length > 0\) \{\s*const deployResults = await copyToDeployDirs\(activeTargets, deployDirs\);[\s\S]*?deployResults\.length === deployDirs\.length &&\s*deployResults\.every\(\(item\) => item\.status === "ok"\)/,
+    );
     assert.match(source, /copyToDeployDirs\(activeTargets, targetDirs\)/);
     assert.match(source, /projectDeployProtectionNote/);
     assert.match(source, /projectCleanupProtectionNote/);
@@ -359,6 +416,23 @@ describe("setup update default flow", () => {
     );
     assert.match(source, /writeProjectBootstrapManifest\(targetDir, plan, backup, cleanup\)/);
     assert.match(source, /createProjectBootstrapBackup\(targetDir, plan\.files\)/);
+    const manifestWriteStart = source.indexOf("function writeProjectBootstrapManifest");
+    const manifestWriteEnd = source.indexOf("const PROJECT_HOOK_DIRS_BY_PLATFORM", manifestWriteStart);
+    const manifestWriteSource = source.slice(manifestWriteStart, manifestWriteEnd);
+    assert.match(manifestWriteSource, /executeSafeManagedFileTransaction\(/);
+    assert.match(manifestWriteSource, /phase: "manifest"/);
+    assert.match(manifestWriteSource, /lockKey: "project-bootstrap-manifest"/);
+    assert.doesNotMatch(manifestWriteSource, /writeJsonObject\(manifestPath/);
+    assert.match(
+      source,
+      /const PROJECT_MUTATION_SESSION_LOCK_KEY = "project-mutation-session"/,
+    );
+    assert.equal(
+      (source.match(/lockKey: PROJECT_MUTATION_SESSION_LOCK_KEY/g) ?? []).length,
+      2,
+      "bootstrap and cleanup must share the same outer project mutation lock",
+    );
+    assert.doesNotMatch(source, /project-(?:bootstrap|cleanup)-session/);
   });
 
   test("project install restores hooks while global cleanup removes project hook residue", () => {
@@ -393,7 +467,10 @@ describe("setup update default flow", () => {
     const cleanupStart = source.indexOf("async function cleanupProjectRedundancyDirs");
     const cleanupEnd = source.indexOf("async function copyToDeployDirs", cleanupStart);
     const cleanupSource = source.slice(cleanupStart, cleanupEnd);
-    assert.match(cleanupSource, /migrateProjectMetaKimHooksForBootstrap\(activeTargets, targetDir\)/);
+    assert.match(
+      cleanupSource,
+      /migrateProjectMetaKimHooksForBootstrap\(\s*activeTargets,\s*targetDir,?\s*\)/,
+    );
     assert.match(cleanupSource, /cleanupProjectHookConfigs\(activeTargets, targetDir\)/);
 
     const cleanupConfigStart = source.indexOf("function cleanupProjectHookConfigs");

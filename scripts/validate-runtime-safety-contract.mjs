@@ -123,7 +123,7 @@ assert(
   "package script must point to the runtime safety validator",
 );
 assert(
-  String(pkg.scripts?.["meta:verify:governance"] ?? "").includes(
+  `${pkg.scripts?.["meta:verify:governance"] ?? ""} ${pkg.scripts?.["meta:verify:governance:core"] ?? ""}`.includes(
     `npm run ${contract.releaseGate.packageScript}`,
   ),
   "meta:verify:governance must run runtime safety validation",

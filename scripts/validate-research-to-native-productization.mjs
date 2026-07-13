@@ -158,7 +158,7 @@ function validateContractShape(contract, pkg) {
   assert.deepEqual(contract.i18nNativeContentExpansion.languages, LANGUAGES);
 
   assert.ok(pkg.scripts?.["meta:prd:research-native:validate"]?.includes("validate-research-to-native-productization.mjs"));
-  assert.ok(pkg.scripts?.["meta:verify:governance"]?.includes("meta:prd:research-native:validate"));
+  assert.ok(`${pkg.scripts?.["meta:verify:governance"] ?? ""} ${pkg.scripts?.["meta:verify:governance:core"] ?? ""}`.includes("meta:prd:research-native:validate"));
 }
 
 function validateDefaultArtifact(report) {

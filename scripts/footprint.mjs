@@ -35,6 +35,7 @@ import {
   resolveRuntimeHomeInfo,
   supportedTargetIds,
 } from "./meta-kim-sync-config.mjs";
+import { resolveMetaKimCliLanguage } from "./meta-kim-i18n.mjs";
 
 // Intentionally NOT importing `isGlobalMetaKimManagedHookCommand` /
 // `isRepoMetaKimHookCommand` from claude-settings-merge.mjs.
@@ -223,23 +224,7 @@ const MSG = {
 };
 
 function resolveLang(cliLang) {
-  const pick = (value) => {
-    if (!value) return null;
-    const v = String(value).toLowerCase();
-    if (v.startsWith("zh")) return "zh-CN";
-    if (v.startsWith("ja")) return "ja-JP";
-    if (v.startsWith("ko")) return "ko-KR";
-    if (v.startsWith("en")) return "en";
-    return null;
-  };
-  return (
-    pick(cliLang) ||
-    pick(process.env.METAKIM_LANG) ||
-    pick(process.env.LC_ALL) ||
-    pick(process.env.LC_MESSAGES) ||
-    pick(process.env.LANG) ||
-    "en"
-  );
+  return resolveMetaKimCliLanguage(cliLang).language;
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

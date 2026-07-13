@@ -1,11 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import os from "node:os";
 
 const repoRoot = join(import.meta.dirname, "..", "..");
+
+test("doctor-governance uses the same explicit runtime-check contract as meta:check", () => {
+  const source = readFileSync(join(repoRoot, "scripts", "doctor-governance.mjs"), "utf8");
+  assert.match(
+    source,
+    /"--check",\s*"--scope",\s*"project",\s*"--targets",\s*"claude,codex"/,
+  );
+});
 
 test("doctor-governance accepts healthy global hooks when project hooks are intentionally empty", () => {
   const root = mkdtempSync(join(os.tmpdir(), "meta-kim-doctor-global-hooks-"));

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-11T06:30:49.824Z",
+  "generatedAt": "2026-07-12T15:07:43.537Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -20,7 +20,7 @@
   "summary": {
     "totalAgents": 9,
     "totalSkills": 17,
-    "totalHooks": 22,
+    "totalHooks": 23,
     "totalMcpServers": 1,
     "totalMcpTools": 4,
     "totalPlugins": 4,
@@ -33,25 +33,25 @@
       "scope": "local_project_projection_when_present",
       "note": "Canonical totals count source inventory entries; runtimeActualCounts counts generated local projection files/settings when those gitignored runtime folders exist.",
       "canonicalInventory": {
-        "hooks": 22,
+        "hooks": 23,
         "commands": 7
       },
       "claude": {
         "projectionPresent": true,
-        "hookCommandEntries": 12,
-        "hookFiles": 16,
+        "hookCommandEntries": 14,
+        "hookFiles": 17,
         "commandFiles": 3
       },
       "codex": {
         "projectionPresent": true,
         "hookCommandEntries": 12,
-        "hookFiles": 16,
+        "hookFiles": 17,
         "commandFiles": 3
       },
       "cursor": {
         "projectionPresent": true,
         "hookCommandEntries": 11,
-        "hookFiles": 16,
+        "hookFiles": 17,
         "commandFiles": 0
       },
       "openclaw": {
@@ -162,8 +162,8 @@
         "type": "agents",
         "namespace": "canonical",
         "path": "canonical/agents/meta-chrysalis.md",
-        "size": 32712,
-        "modified": "2026-05-28T18:47:28.789Z",
+        "size": 32722,
+        "modified": "2026-07-11T11:37:44.839Z",
         "layer": "meta",
         "executionBlock": true
       },
@@ -244,8 +244,8 @@
         "type": "skills",
         "namespace": "canonical",
         "path": "canonical/skills/meta-theory/SKILL.md",
-        "size": 74941,
-        "modified": "2026-07-10T19:51:34.847Z"
+        "size": 79730,
+        "modified": "2026-07-12T12:36:34.587Z"
       },
       "repo:canonical:same-set-reusable-flow-for-project-file-inventor": {
         "id": "same-set-reusable-flow-for-project-file-inventor",
@@ -360,8 +360,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/runtime-codex.md",
         "relativePath": "runtime-codex.md",
-        "size": 26108,
-        "modified": "2026-07-10T19:52:09.222Z"
+        "size": 28507,
+        "modified": "2026-07-12T12:04:56.248Z"
       },
       "repo:canonical-reference:spine-state": {
         "id": "spine-state",
@@ -398,8 +398,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs",
         "relativePath": "activate-meta-theory-spine.mjs",
-        "size": 16976,
-        "modified": "2026-07-10T18:58:31.010Z",
+        "size": 17574,
+        "modified": "2026-07-12T14:29:31.530Z",
         "canonicalPath": "canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs",
         "adapterPath": "canonical/runtime-assets/claude/hooks/activate-meta-theory-spine.mjs"
       },
@@ -412,6 +412,16 @@
         "size": 30329,
         "modified": "2026-06-23T11:44:06.347Z",
         "canonicalPath": "canonical/runtime-assets/shared/hooks/meta-kim-memory-save.mjs"
+      },
+      "repo:canonical-runtime-assets:project-root.mjs": {
+        "id": "project-root.mjs",
+        "type": "hooks",
+        "namespace": "canonical-runtime-assets",
+        "path": "canonical/runtime-assets/shared/hooks/project-root.mjs",
+        "relativePath": "project-root.mjs",
+        "size": 2355,
+        "modified": "2026-07-12T14:34:19.474Z",
+        "canonicalPath": "canonical/runtime-assets/shared/hooks/project-root.mjs"
       },
       "repo:canonical-runtime-assets:skip-reminder.mjs": {
         "id": "skip-reminder.mjs",
@@ -440,8 +450,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/shared/hooks/spine-state.mjs",
         "relativePath": "spine-state.mjs",
-        "size": 49066,
-        "modified": "2026-07-11T06:30:07.560Z",
+        "size": 49043,
+        "modified": "2026-07-11T06:31:00.500Z",
         "canonicalPath": "canonical/runtime-assets/shared/hooks/spine-state.mjs",
         "adapterPath": "canonical/runtime-assets/claude/hooks/spine-state.mjs"
       },

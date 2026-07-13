@@ -35,6 +35,7 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -44,12 +45,23 @@ import {
   writeFileSync,
   rmSync,
   statSync,
+  lstatSync,
+  realpathSync,
+  renameSync,
+  unlinkSync,
 } from "node:fs";
 import { readdir } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { join, dirname, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { resolveMemoryEndpoint } from "./memory-endpoint.mjs";
+import {
+  executeSafeManagedFileTransaction,
+  normalizeManagedRelPath,
+  sha256Buffer,
+  sha256ManagedFile,
+  validateManagedManifest,
+} from "./safe-managed-file-operations.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
@@ -121,6 +133,13 @@ const CLAUDE_SETTINGS = join(homedir(), ".claude", "settings.json");
 const CODEX_HOME = join(homedir(), ".codex");
 const CURSOR_HOME = join(homedir(), ".cursor");
 const OPENCLAW_HOME = join(homedir(), ".openclaw");
+const RUNTIME_MANIFEST_DIR = join(
+  homedir(),
+  ".meta-kim",
+  "manifests",
+  "mcp-memory-hooks",
+);
+const RUNTIME_MANIFEST_SCHEMA = "meta-kim-memory-hook-files-v2";
 const CROSS_RUNTIME_HOOK_FILE = "meta-kim-memory-save.mjs";
 const VALID_TARGETS = new Set(["claude", "codex", "cursor", "openclaw"]);
 const DEFAULT_TARGETS = ["claude", "codex", "cursor", "openclaw"];
@@ -150,6 +169,24 @@ function fail(msg) {
 
 // Global flag for force-update mode
 let FORCE_UPDATE = false;
+let claudeConsentWarningShown = false;
+
+function requireClaudeGlobalSettingsConsent({ explicitRemove = false } = {}) {
+  const allowed =
+    explicitRemove ||
+    FORCE_UPDATE ||
+    process.env.META_KIM_CONFIRM_GLOBAL === "1";
+  if (allowed) return true;
+  if (!claudeConsentWarningShown) {
+    warn(
+      "Refusing to write to user-global Claude settings without explicit consent. " +
+      "Pass --force or set META_KIM_CONFIRM_GLOBAL=1 to allow global mutation. " +
+      `Target: ${CLAUDE_SETTINGS}`,
+    );
+    claudeConsentWarningShown = true;
+  }
+  return false;
+}
 
 function parseTargets(argv) {
   const valueFromEquals = argv.find((arg) => arg.startsWith("--targets="));
@@ -275,34 +312,6 @@ function checkServerHealthStatus(endpoint = configuredMemoryEndpoint()) {
   return isMemoryProcessRunning() ? "unknown" : "down";
 }
 
-function ensureDir(dir) {
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-    info(`Created ${dir}`);
-  }
-}
-
-function backupBeforeForce(filePath) {
-  if (!filePath || !existsSync(filePath)) return null;
-  try {
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupRoot = join(
-      homedir(),
-      ".meta-kim",
-      "backups",
-      `pre-force-${stamp}`,
-    );
-    const safeBase = String(filePath).replace(/[\\/]+/g, "__");
-    const backupPath = join(backupRoot, safeBase);
-    mkdirSync(dirname(backupPath), { recursive: true });
-    copyFileSync(filePath, backupPath);
-    return backupPath;
-  } catch (err) {
-    warn(`Backup failed for ${filePath}: ${err.message}`);
-    return null;
-  }
-}
-
 function filesEqual(a, b) {
   if (!existsSync(a) || !existsSync(b)) return false;
   try {
@@ -310,27 +319,6 @@ function filesEqual(a, b) {
   } catch {
     return false;
   }
-}
-
-function copyDir(src, dest) {
-  if (!existsSync(src)) return false;
-  ensureDir(dest);
-  for (const entry of readdirSyncCompat(src)) {
-    const srcPath = join(src, entry.name);
-    const destPath = join(dest, entry.name);
-    if (entry.isDirectory()) {
-      copyDir(srcPath, destPath);
-    } else if (!existsSync(destPath) || !filesEqual(srcPath, destPath)) {
-      copyFileSync(srcPath, destPath);
-    }
-  }
-  return true;
-}
-
-function readdirSyncCompat(dir) {
-  return statSync(dir).isDirectory()
-    ? readdirSync(dir, { withFileTypes: true })
-    : [];
 }
 
 function commandToken(value) {
@@ -345,151 +333,6 @@ function nodeHookCommand(hookPath, args = []) {
   // the call operator. Use the PATH-resolved `node` binary and quote only
   // script/argument tokens that require it.
   return ["node", hookPath, ...args].map(commandToken).join(" ");
-}
-
-function copyStopHookFile() {
-  if (!existsSync(CANONICAL_STOP_HOOK_SOURCE)) {
-    warn(`Canonical stop hook source missing: ${CANONICAL_STOP_HOOK_SOURCE}`);
-    info("stop-save-progress.mjs will not be installed.");
-    return false;
-  }
-
-  ensureDir(META_KIM_HOOKS_DIR);
-
-  if (
-    existsSync(STOP_HOOK_TARGET) &&
-    filesEqual(CANONICAL_STOP_HOOK_SOURCE, STOP_HOOK_TARGET)
-  ) {
-    ok(`Stop hook already up-to-date: ${STOP_HOOK_TARGET}`);
-  } else {
-    try {
-      copyFileSync(CANONICAL_STOP_HOOK_SOURCE, STOP_HOOK_TARGET);
-      ok(`Stop hook copied → ${STOP_HOOK_TARGET}`);
-    } catch (err) {
-      warn(`Failed to copy stop hook: ${err.message}`);
-    }
-  }
-
-  // Also copy the MCP Memory save hook
-  if (!existsSync(CANONICAL_MEMORY_SAVE_HOOK_SOURCE)) {
-    warn(
-      `Memory save hook source missing: ${CANONICAL_MEMORY_SAVE_HOOK_SOURCE}`,
-    );
-  } else if (
-    existsSync(MEMORY_SAVE_HOOK_TARGET) &&
-    filesEqual(CANONICAL_MEMORY_SAVE_HOOK_SOURCE, MEMORY_SAVE_HOOK_TARGET)
-  ) {
-    ok(`Memory save hook already up-to-date: ${MEMORY_SAVE_HOOK_TARGET}`);
-  } else {
-    try {
-      copyFileSync(CANONICAL_MEMORY_SAVE_HOOK_SOURCE, MEMORY_SAVE_HOOK_TARGET);
-      ok(`Memory save hook copied → ${MEMORY_SAVE_HOOK_TARGET}`);
-    } catch (err) {
-      warn(`Failed to copy memory save hook: ${err.message}`);
-    }
-  }
-
-  return true;
-}
-
-async function copyCommandsDir() {
-  if (!existsSync(CANONICAL_COMMANDS_DIR)) {
-    ok("No commands to install (canonical/commands/ not found)");
-    return true;
-  }
-
-  try {
-    const entries = await readdir(CANONICAL_COMMANDS_DIR, {
-      withFileTypes: true,
-    });
-    if (entries.length === 0) {
-      ok("No commands to install (canonical/commands/ is empty)");
-      return true;
-    }
-
-    ensureDir(COMMANDS_TARGET_DIR);
-    let installed = 0;
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const srcDir = join(CANONICAL_COMMANDS_DIR, entry.name);
-      const destDir = join(COMMANDS_TARGET_DIR, entry.name);
-
-      // Read SKILL.md from source
-      const srcSkill = join(srcDir, "SKILL.md");
-      if (!existsSync(srcSkill)) {
-        warn(`Skipping ${entry.name}: SKILL.md not found`);
-        continue;
-      }
-
-      ensureDir(destDir);
-      const destSkill = join(destDir, "SKILL.md");
-
-      if (existsSync(destSkill) && filesEqual(srcSkill, destSkill)) {
-        ok(`Command "${entry.name}" already up-to-date`);
-      } else {
-        copyFileSync(srcSkill, destSkill);
-        ok(`Command "${entry.name}" installed → ${destSkill}`);
-      }
-      installed++;
-    }
-
-    if (installed > 0) {
-      info(
-        `${installed} command(s) available: ${entries.map((e) => "/" + e.name).join(", ")}`,
-      );
-    }
-    return true;
-  } catch (err) {
-    warn(`Failed to install commands: ${err.message}`);
-    return false;
-  }
-}
-
-function copyHookFile() {
-  if (!existsSync(CANONICAL_HOOK_SOURCE)) {
-    fail(`Canonical hook source missing: ${CANONICAL_HOOK_SOURCE}`);
-    info(
-      "This is a Meta_Kim packaging bug — canonical/runtime-assets/claude/memory-hooks/ should ship with the repo.",
-    );
-    return false;
-  }
-
-  if (filesEqual(CANONICAL_HOOK_SOURCE, HOOK_TARGET)) {
-    ok(`Hook already up-to-date: ${HOOK_TARGET}`);
-    return true;
-  }
-
-  try {
-    copyFileSync(CANONICAL_HOOK_SOURCE, HOOK_TARGET);
-    ok(`Hook copied → ${HOOK_TARGET}`);
-    return true;
-  } catch (err) {
-    fail(`Failed to copy hook: ${err.message}`);
-    return false;
-  }
-}
-
-function seedConfigIfMissing() {
-  if (existsSync(CONFIG_TARGET)) {
-    ok(`Config already present (preserved): ${CONFIG_TARGET}`);
-    return true;
-  }
-
-  if (!existsSync(CANONICAL_CONFIG_TEMPLATE)) {
-    warn(`Config template missing: ${CANONICAL_CONFIG_TEMPLATE}`);
-    info("Hook will use defaults from environment variables.");
-    return false;
-  }
-
-  try {
-    copyFileSync(CANONICAL_CONFIG_TEMPLATE, CONFIG_TARGET);
-    ok(`Config seeded → ${CONFIG_TARGET}`);
-    return true;
-  } catch (err) {
-    warn(`Failed to seed config: ${err.message}`);
-    return false;
-  }
 }
 
 function isValidPythonCommand(cmd) {
@@ -597,256 +440,6 @@ function pickPythonCommand() {
   return "python3"; // python3 is less likely to be a Store shim on Windows
 }
 
-function registerSessionStartHook() {
-  if (!existsSync(CLAUDE_SETTINGS)) {
-    warn(`${CLAUDE_SETTINGS} not found — skipping hook registration`);
-    return false;
-  }
-
-  // F4 fix: require explicit --force (FORCE_UPDATE) or META_KIM_CONFIRM_GLOBAL to write to user-global settings
-  if (!FORCE_UPDATE && !process.env.META_KIM_CONFIRM_GLOBAL) {
-    warn(
-      "Refusing to write to user-global settings without explicit consent. " +
-      "Pass --force or set META_KIM_CONFIRM_GLOBAL=1 to allow global mutation. " +
-      `Target: ${CLAUDE_SETTINGS}`,
-    );
-    return false;
-  }
-
-  try {
-    const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
-    const pythonCmd = pickPythonCommand();
-
-    const existingBlocks = settings.hooks?.SessionStart ?? [];
-    let existingEntry = null;
-    let existingBlockIndex = -1;
-    let existingHookIndex = -1;
-
-    // Find existing MCP memory hook entry
-    for (let i = 0; i < existingBlocks.length; i++) {
-      const block = existingBlocks[i];
-      if (!block?.hooks) continue;
-      for (let j = 0; j < block.hooks.length; j++) {
-        const hook = block.hooks[j];
-        if (hook?.command?.includes("mcp_memory_global.py")) {
-          existingEntry = hook;
-          existingBlockIndex = i;
-          existingHookIndex = j;
-          break;
-        }
-      }
-      if (existingEntry) break;
-    }
-
-    // If no existing entry, add a new one
-    if (!existingEntry) {
-      const nextSettings = {
-        ...settings,
-        hooks: {
-          ...(settings.hooks ?? {}),
-          SessionStart: [
-            ...existingBlocks,
-            {
-              matcher: "*",
-              hooks: [
-                {
-                  type: "command",
-                  command: `${pythonCmd} "${HOOK_TARGET}"`,
-                },
-              ],
-            },
-          ],
-        },
-      };
-
-      writeFileSync(
-        CLAUDE_SETTINGS,
-        JSON.stringify(nextSettings, null, 2) + "\n",
-      );
-      ok("SessionStart hook registered in settings.json");
-      return true;
-    }
-
-    // Extract current Python command from existing entry
-    const currentCmd = existingEntry.command?.match(/^([^"\s]+)/)?.[1] || "";
-    const needsUpdate = FORCE_UPDATE || !isValidPythonCommand(currentCmd);
-
-    if (!needsUpdate) {
-      ok("SessionStart hook already registered with valid Python path");
-      return true;
-    }
-
-    // Need to update the existing entry
-    if (FORCE_UPDATE) {
-      backupBeforeForce(CLAUDE_SETTINGS);
-    }
-    const updatedBlocks = [...existingBlocks];
-    updatedBlocks[existingBlockIndex] = {
-      ...updatedBlocks[existingBlockIndex],
-      hooks: [...updatedBlocks[existingBlockIndex].hooks],
-    };
-    updatedBlocks[existingBlockIndex].hooks[existingHookIndex] = {
-      type: "command",
-      command: `${pythonCmd} "${HOOK_TARGET}"`,
-    };
-
-    const nextSettings = {
-      ...settings,
-      hooks: {
-        ...(settings.hooks ?? {}),
-        SessionStart: updatedBlocks,
-      },
-    };
-
-    writeFileSync(
-      CLAUDE_SETTINGS,
-      JSON.stringify(nextSettings, null, 2) + "\n",
-    );
-
-    if (FORCE_UPDATE) {
-      ok("SessionStart hook Python path updated (force mode)");
-    } else {
-      warn("SessionStart hook had invalid Python path - auto-fixed");
-      info(`Old: ${currentCmd}`);
-      info(`New: ${pythonCmd}`);
-    }
-    return true;
-  } catch (err) {
-    warn(`Failed to register hook: ${err.message}`);
-    return false;
-  }
-}
-
-function removeSessionStartHook() {
-  if (!existsSync(CLAUDE_SETTINGS)) return;
-  try {
-    const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
-    if (!settings.hooks?.SessionStart) return;
-
-    const filteredBlocks = settings.hooks.SessionStart.map((block) => ({
-      ...block,
-      hooks: (block?.hooks ?? []).filter(
-        (h) => !h?.command?.includes("mcp_memory_global.py"),
-      ),
-    })).filter((block) => (block.hooks ?? []).length > 0);
-
-    const nextHooks = { ...settings.hooks };
-    if (filteredBlocks.length === 0) {
-      delete nextHooks.SessionStart;
-    } else {
-      nextHooks.SessionStart = filteredBlocks;
-    }
-
-    const nextSettings = { ...settings, hooks: nextHooks };
-    if (Object.keys(nextHooks).length === 0) delete nextSettings.hooks;
-
-    writeFileSync(
-      CLAUDE_SETTINGS,
-      JSON.stringify(nextSettings, null, 2) + "\n",
-    );
-    ok("SessionStart hook removed from settings.json");
-  } catch (err) {
-    warn(`Failed to remove hook: ${err.message}`);
-  }
-}
-
-function registerStopHook() {
-  if (!existsSync(CLAUDE_SETTINGS)) {
-    warn(`${CLAUDE_SETTINGS} not found — skipping Stop hook registration`);
-    return false;
-  }
-
-  try {
-    const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
-
-    const existingBlocks = settings.hooks?.Stop ?? [];
-    const hasSaveProgress = existingBlocks.some((b) =>
-      b?.hooks?.some((h) => h?.command?.includes("stop-save-progress.mjs")),
-    );
-    const hasMemorySave = existingBlocks.some((b) =>
-      b?.hooks?.some((h) => h?.command?.includes("stop-memory-save.mjs")),
-    );
-
-    if (hasSaveProgress && hasMemorySave) {
-      ok("Stop hooks already registered");
-      return true;
-    }
-
-    const newHooks = [];
-    if (!hasMemorySave) {
-      newHooks.push({
-        type: "command",
-        command: `node "${MEMORY_SAVE_HOOK_TARGET}"`,
-      });
-    }
-    if (!hasSaveProgress) {
-      newHooks.push({
-        type: "command",
-        command: `node "${STOP_HOOK_TARGET}"`,
-      });
-    }
-
-    const nextSettings = {
-      ...settings,
-      hooks: {
-        ...(settings.hooks ?? {}),
-        Stop: [
-          ...existingBlocks,
-          {
-            matcher: "*",
-            hooks: newHooks,
-          },
-        ],
-      },
-    };
-
-    writeFileSync(
-      CLAUDE_SETTINGS,
-      JSON.stringify(nextSettings, null, 2) + "\n",
-    );
-    ok(`Stop hook(s) registered in settings.json (+${newHooks.length})`);
-    return true;
-  } catch (err) {
-    warn(`Failed to register Stop hook: ${err.message}`);
-    return false;
-  }
-}
-
-function removeStopHook() {
-  if (!existsSync(CLAUDE_SETTINGS)) return;
-  try {
-    const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
-    if (!settings.hooks?.Stop) return;
-
-    const filteredBlocks = settings.hooks.Stop.map((block) => ({
-      ...block,
-      hooks: (block?.hooks ?? []).filter(
-        (h) =>
-          !h?.command?.includes("stop-save-progress.mjs") &&
-          !h?.command?.includes("stop-memory-save.mjs"),
-      ),
-    })).filter((block) => (block.hooks ?? []).length > 0);
-
-    const nextHooks = { ...settings.hooks };
-    if (filteredBlocks.length === 0) {
-      delete nextHooks.Stop;
-    } else {
-      nextHooks.Stop = filteredBlocks;
-    }
-
-    const nextSettings = { ...settings, hooks: nextHooks };
-    if (Object.keys(nextHooks).length === 0) delete nextSettings.hooks;
-
-    writeFileSync(
-      CLAUDE_SETTINGS,
-      JSON.stringify(nextSettings, null, 2) + "\n",
-    );
-    ok("Stop hook removed from settings.json");
-  } catch (err) {
-    warn(`Failed to remove Stop hook: ${err.message}`);
-  }
-}
-
 function readJsonFile(filePath, fallback = {}) {
   if (!existsSync(filePath)) return fallback;
   try {
@@ -857,27 +450,42 @@ function readJsonFile(filePath, fallback = {}) {
   }
 }
 
-function copyCrossRuntimeMemoryHook(runtimeHome) {
-  if (!existsSync(CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE)) {
-    warn(
-      `Cross-runtime memory hook source missing: ${CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE}`,
-    );
-    return null;
-  }
+function isJsonObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
 
-  const hooksDir = crossRuntimeMemoryHookDir(runtimeHome);
-  ensureDir(hooksDir);
-  const target = join(hooksDir, CROSS_RUNTIME_HOOK_FILE);
-  if (
-    existsSync(target) &&
-    filesEqual(CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE, target)
-  ) {
-    ok(`Cross-runtime memory hook already up-to-date: ${target}`);
-  } else {
-    copyFileSync(CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE, target);
-    ok(`Cross-runtime memory hook copied -> ${target}`);
+function readExistingJsonObjectStrict(filePath, fallback) {
+  if (!existsSync(filePath)) return { ok: true, value: fallback, existed: false };
+  try {
+    const value = JSON.parse(readFileSync(filePath, "utf8"));
+    if (!isJsonObject(value)) {
+      return { ok: false, path: filePath, reason: "existing_json_root_not_object" };
+    }
+    return { ok: true, value, existed: true };
+  } catch (error) {
+    return {
+      ok: false,
+      path: filePath,
+      reason: "existing_json_malformed",
+      detail: error.message,
+    };
   }
-  return target;
+}
+
+function readSelectedRuntimeSettingsStrict(targets) {
+  const specs = [
+    ["claude", CLAUDE_SETTINGS, { hooks: {} }],
+    ["codex", join(CODEX_HOME, "hooks.json"), { hooks: {} }],
+    ["cursor", join(CURSOR_HOME, "hooks.json"), { version: 1, hooks: {} }],
+  ];
+  const values = {};
+  for (const [runtime, filePath, fallback] of specs) {
+    if (!targets.includes(runtime)) continue;
+    const parsed = readExistingJsonObjectStrict(filePath, fallback);
+    if (!parsed.ok) return { ...parsed, runtime };
+    values[runtime] = parsed.value;
+  }
+  return { ok: true, values };
 }
 
 function crossRuntimeMemoryHookDir(runtimeHome) {
@@ -901,166 +509,431 @@ function findInstalledCrossRuntimeMemoryHook(runtimeHome) {
   ) ?? null;
 }
 
-function registerCodexMemoryHook(hookPath) {
-  const hooksJson = join(CODEX_HOME, "hooks.json");
-  const settings = readJsonFile(hooksJson, { hooks: {} });
-  if (!settings.hooks) settings.hooks = {};
-
-  const withoutMemoryBlocks = (eventName) =>
-    (Array.isArray(settings.hooks[eventName]) ? settings.hooks[eventName] : [])
-      .map((block) => {
-        const hooks = (block?.hooks ?? []).filter(
-          (hook) =>
-            !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
-        );
-        return hooks.length > 0 ? { ...block, hooks } : null;
-      })
-      .filter(Boolean);
-
-  settings.hooks.SessionStart = [
-    {
-      matcher: "startup|resume",
-      hooks: [
-        {
-          type: "command",
-          command: nodeHookCommand(hookPath, ["--event", "session-start"]),
-          timeout: 10,
-          statusMessage: "Loading Meta_Kim memory",
-        },
-      ],
-    },
-    ...withoutMemoryBlocks("SessionStart"),
-  ];
-  settings.hooks.UserPromptSubmit = [
-    {
-      hooks: [
-        {
-          type: "command",
-          command: nodeHookCommand(hookPath, ["--event", "user-prompt"]),
-          timeout: 10,
-        },
-      ],
-    },
-    ...withoutMemoryBlocks("UserPromptSubmit"),
-  ];
-  settings.hooks.Stop = [
-    {
-      hooks: [
-        {
-          type: "command",
-          command: nodeHookCommand(hookPath, ["--event", "stop"]),
-          timeout: 10,
-        },
-      ],
-    },
-    ...withoutMemoryBlocks("Stop"),
-  ];
-  backupBeforeForce(hooksJson);
-  writeFileSync(hooksJson, JSON.stringify(settings, null, 2) + "\n");
-  ok(`Codex lifecycle memory hooks registered first in ${hooksJson}`);
-  return true;
+function listRegularFiles(rootDir) {
+  if (!existsSync(rootDir) || lstatSync(rootDir).isSymbolicLink()) return null;
+  const files = [];
+  const visit = (dirPath) => {
+    for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) return false;
+      const entryPath = join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        if (!visit(entryPath)) return false;
+      } else if (entry.isFile()) {
+        files.push(relative(rootDir, entryPath).replace(/\\/g, "/"));
+      } else return false;
+    }
+    return true;
+  };
+  return visit(rootDir) ? files.sort() : null;
 }
 
-function registerCursorMemoryHook(hookPath) {
-  const hooksJson = join(CURSOR_HOME, "hooks.json");
-  const settings = readJsonFile(hooksJson, { version: 1, hooks: {} });
-  if (!settings.hooks) settings.hooks = {};
-
-  const withoutMemoryHooks = (eventName) =>
-    (Array.isArray(settings.hooks[eventName])
-      ? settings.hooks[eventName]
-      : []
-    ).filter(
-      (hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
-    );
-
-  settings.hooks.beforeSubmitPrompt = [
-    {
-      command: nodeHookCommand(hookPath, ["--event", "user-prompt"]),
-      timeout: 10,
-    },
-    ...withoutMemoryHooks("beforeSubmitPrompt"),
-  ];
-  settings.hooks.stop = [
-    {
-      command: nodeHookCommand(hookPath, ["--event", "stop"]),
-      timeout: 10,
-    },
-    ...withoutMemoryHooks("stop"),
-  ];
-  backupBeforeForce(hooksJson);
-  writeFileSync(hooksJson, JSON.stringify(settings, null, 2) + "\n");
-  ok(`Cursor prompt/stop memory hooks registered first in ${hooksJson}`);
-  return true;
+function homeRel(filePath) {
+  return normalizeManagedRelPath(relative(homedir(), filePath));
 }
 
-function installOpenClawMemoryHook() {
-  if (!existsSync(CANONICAL_OPENCLAW_MEMORY_HOOK_DIR)) {
-    warn(
-      `OpenClaw memory hook source missing: ${CANONICAL_OPENCLAW_MEMORY_HOOK_DIR}`,
-    );
-    return false;
+function runtimeManifestPath(runtime) {
+  return join(RUNTIME_MANIFEST_DIR, `${runtime}.json`);
+}
+
+function readRuntimeManagedManifest(runtime) {
+  const path = runtimeManifestPath(runtime);
+  if (!existsSync(path)) return null;
+  return validateManagedManifest(readJsonFile(path, null), {
+    schemaVersion: RUNTIME_MANIFEST_SCHEMA,
+  });
+}
+
+function canonicalFileSpecs(runtime) {
+  const specs = [];
+  const add = (source, target) => specs.push({ source, target, relPath: homeRel(target) });
+  if (runtime === "claude") {
+    add(CANONICAL_HOOK_SOURCE, HOOK_TARGET);
+    add(CANONICAL_STOP_HOOK_SOURCE, STOP_HOOK_TARGET);
+    add(CANONICAL_MEMORY_SAVE_HOOK_SOURCE, MEMORY_SAVE_HOOK_TARGET);
+    const commandFiles = listRegularFiles(CANONICAL_COMMANDS_DIR) ?? [];
+    for (const relPath of commandFiles) {
+      add(join(CANONICAL_COMMANDS_DIR, relPath), join(COMMANDS_TARGET_DIR, relPath));
+    }
+  } else if (runtime === "codex") {
+    add(CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE, join(crossRuntimeMemoryHookDir(CODEX_HOME), CROSS_RUNTIME_HOOK_FILE));
+  } else if (runtime === "cursor") {
+    add(CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE, join(crossRuntimeMemoryHookDir(CURSOR_HOME), CROSS_RUNTIME_HOOK_FILE));
+  } else if (runtime === "openclaw") {
+    for (const relPath of listRegularFiles(CANONICAL_OPENCLAW_MEMORY_HOOK_DIR) ?? []) {
+      add(
+        join(CANONICAL_OPENCLAW_MEMORY_HOOK_DIR, relPath),
+        join(OPENCLAW_HOME, "hooks", "mcp-memory-service", relPath),
+      );
+    }
   }
-  const targetDir = join(OPENCLAW_HOME, "hooks", "mcp-memory-service");
-  copyDir(CANONICAL_OPENCLAW_MEMORY_HOOK_DIR, targetDir);
-  ok(`OpenClaw MCP memory hook installed -> ${targetDir}`);
-  return true;
+  return specs.filter((spec) => spec.relPath && existsSync(spec.source));
 }
 
-function installCrossRuntimeMemoryHooks(targets) {
-  const results = [];
+function isSeedOnlyRetainedPath(runtime, relPath) {
+  return runtime === "claude" && relPath === homeRel(CONFIG_TARGET);
+}
+
+function seedOnlyOperations(runtime) {
+  if (
+    runtime !== "claude" ||
+    existsSync(CONFIG_TARGET) ||
+    !existsSync(CANONICAL_CONFIG_TEMPLATE)
+  ) return [];
+  return [{
+    kind: "write",
+    phase: "auxiliary",
+    relPath: homeRel(CONFIG_TARGET),
+    content: readFileSync(CANONICAL_CONFIG_TEMPLATE),
+    expectedOldHash: null,
+  }];
+}
+
+function buildClaudeSettingsValue(settings) {
+  const pythonCmd = pickPythonCommand();
+  const without = (eventName, needles) => (settings.hooks?.[eventName] ?? [])
+    .map((block) => ({
+      ...block,
+      hooks: (block?.hooks ?? []).filter(
+        (hook) => !needles.some((needle) => String(hook?.command ?? "").includes(needle)),
+      ),
+    }))
+    .filter((block) => (block.hooks ?? []).length > 0);
+  return {
+    ...settings,
+    hooks: {
+      ...(settings.hooks ?? {}),
+      SessionStart: [
+        ...without("SessionStart", ["mcp_memory_global.py"]),
+        { matcher: "*", hooks: [{ type: "command", command: `${pythonCmd} "${HOOK_TARGET}"` }] },
+      ],
+      Stop: [
+        ...without("Stop", ["stop-save-progress.mjs", "stop-memory-save.mjs"]),
+        {
+          matcher: "*",
+          hooks: [
+            { type: "command", command: `node "${MEMORY_SAVE_HOOK_TARGET}"` },
+            { type: "command", command: `node "${STOP_HOOK_TARGET}"` },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function buildCodexSettingsValue(settings) {
+  const hookPath = join(crossRuntimeMemoryHookDir(CODEX_HOME), CROSS_RUNTIME_HOOK_FILE);
+  const without = (eventName) => (settings.hooks?.[eventName] ?? [])
+    .map((block) => {
+      const hooks = (block?.hooks ?? []).filter(
+        (hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
+      );
+      return hooks.length > 0 ? { ...block, hooks } : null;
+    })
+    .filter(Boolean);
+  return {
+    ...settings,
+    hooks: {
+      ...(settings.hooks ?? {}),
+      SessionStart: [{ matcher: "startup|resume", hooks: [{ type: "command", command: nodeHookCommand(hookPath, ["--event", "session-start"]), timeout: 10, statusMessage: "Loading Meta_Kim memory" }] }, ...without("SessionStart")],
+      UserPromptSubmit: [{ hooks: [{ type: "command", command: nodeHookCommand(hookPath, ["--event", "user-prompt"]), timeout: 10 }] }, ...without("UserPromptSubmit")],
+      Stop: [{ hooks: [{ type: "command", command: nodeHookCommand(hookPath, ["--event", "stop"]), timeout: 10 }] }, ...without("Stop")],
+    },
+  };
+}
+
+function buildCursorSettingsValue(settings) {
+  const hookPath = join(crossRuntimeMemoryHookDir(CURSOR_HOME), CROSS_RUNTIME_HOOK_FILE);
+  const without = (eventName) => (settings.hooks?.[eventName] ?? []).filter(
+    (hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
+  );
+  return {
+    ...settings,
+    hooks: {
+      ...(settings.hooks ?? {}),
+      beforeSubmitPrompt: [{ command: nodeHookCommand(hookPath, ["--event", "user-prompt"]), timeout: 10 }, ...without("beforeSubmitPrompt")],
+      stop: [{ command: nodeHookCommand(hookPath, ["--event", "stop"]), timeout: 10 }, ...without("stop")],
+    },
+  };
+}
+
+function jsonOperation(filePath, value, phase = "content") {
+  const content = JSON.stringify(value, null, 2) + "\n";
+  const currentHash = sha256ManagedFile(filePath);
+  if (currentHash === sha256Buffer(Buffer.from(content))) return null;
+  return {
+    kind: "write",
+    relPath: homeRel(filePath),
+    content,
+    expectedOldHash: currentHash,
+    phase,
+  };
+}
+
+function blockedTransaction(reason, nextAction, relPath = null) {
+  return {
+    ok: false,
+    status: "blocked",
+    reason,
+    nextAction,
+    ...(relPath ? { relPath } : {}),
+  };
+}
+
+function blockedExistingSettingsTransaction(existingSettings) {
+  const relPath = homeRel(existingSettings.path) ?? existingSettings.path;
+  warn(
+    `Preserved ${existingSettings.runtime} settings: existing JSON is malformed or is not an object (${existingSettings.path})`,
+  );
+  const result = blockedTransaction(
+    `${existingSettings.reason}:${existingSettings.runtime}`,
+    `Fix the JSON syntax so the root value is an object, then retry. Meta_Kim did not change any selected file. Target: ${existingSettings.path}`,
+    relPath,
+  );
+  info(`Recovery: ${result.nextAction}`);
+  return result;
+}
+
+function reportTransactionResult(label, result) {
+  if (result.recovery && result.recovery !== "none") {
+    ok(`${label}: recovered interrupted transaction state (${result.recovery}).`);
+  }
+  if (result.ok && result.status === "noop") {
+    ok(`${label}: already up to date; no managed files were rewritten.`);
+    return;
+  }
+  if (result.ok) return;
+
+  const location = result.relPath ? ` (${result.relPath})` : "";
+  if (result.status === "locked") {
+    warn(`${label} is waiting on another installer: ${result.reason}${location}`);
+  } else if (result.status === "recovery_required") {
+    warn(`${label} needs transaction recovery before it can continue: ${result.reason}${location}`);
+  } else {
+    warn(`${label} preserved all targets: ${result.reason}${location}`);
+  }
+  if (result.nextAction) info(`Recovery: ${result.nextAction}`);
+}
+
+function installSelectedRuntimeFilesTransactional(targets) {
+  if (targets.includes("claude") && !requireClaudeGlobalSettingsConsent()) {
+    return blockedTransaction(
+      "claude_global_consent_required",
+      "Pass --force or set META_KIM_CONFIRM_GLOBAL=1, then retry.",
+    );
+  }
+  const existingSettings = readSelectedRuntimeSettingsStrict(targets);
+  if (!existingSettings.ok) {
+    return blockedExistingSettingsTransaction(existingSettings);
+  }
+  const operations = [];
+  const manifestOperations = [];
+  for (const runtime of targets) {
+    const specs = canonicalFileSpecs(runtime);
+    if (specs.length === 0) continue;
+    const oldManifestPath = runtimeManifestPath(runtime);
+    const oldManifestRaw = existsSync(oldManifestPath) ? readJsonFile(oldManifestPath, null) : null;
+    const oldManifest = oldManifestRaw
+      ? validateManagedManifest(oldManifestRaw, { schemaVersion: RUNTIME_MANIFEST_SCHEMA })
+      : null;
+    if (oldManifestRaw && !oldManifest) {
+      warn(`Preserved runtime ${runtime}: ownership manifest is invalid or empty`);
+      return blockedTransaction(
+        `invalid_runtime_manifest:${runtime}`,
+        "Preserve the runtime files and repair or remove only the invalid ownership manifest after inspection.",
+      );
+    }
+    const oldMap = new Map((oldManifest?.files ?? []).map((entry) => [entry.relPath, entry.contentHash]));
+    const nextFiles = [];
+    const nextPaths = new Set(specs.map((spec) => spec.relPath));
+    for (const entry of oldManifest?.files ?? []) {
+      if (nextPaths.has(entry.relPath) || isSeedOnlyRetainedPath(runtime, entry.relPath)) {
+        continue;
+      }
+      operations.push({
+        kind: "remove",
+        phase: "content",
+        relPath: entry.relPath,
+        expectedOldHash: entry.contentHash,
+        allowManagedMissingRemove: true,
+      });
+    }
+    for (const spec of specs) {
+      const content = readFileSync(spec.source);
+      const contentHash = sha256Buffer(content);
+      nextFiles.push({ relPath: spec.relPath, contentHash });
+      operations.push({
+        kind: "write",
+        phase: "content",
+        relPath: spec.relPath,
+        content,
+        expectedOldHash: oldMap.get(spec.relPath) ?? null,
+        authorizedAdoptIdentical: true,
+        allowManagedMissingCreate: true,
+      });
+    }
+    operations.push(...seedOnlyOperations(runtime));
+    const manifestValue = {
+      schemaVersion: RUNTIME_MANIFEST_SCHEMA,
+      runtime,
+      files: nextFiles,
+    };
+    const manifestOperation = jsonOperation(oldManifestPath, manifestValue, "manifest");
+    if (manifestOperation) manifestOperations.push(manifestOperation);
+  }
+
+  if (targets.includes("claude")) {
+    const operation = jsonOperation(
+      CLAUDE_SETTINGS,
+      buildClaudeSettingsValue(existingSettings.values.claude),
+      "auxiliary",
+    );
+    if (operation) operations.push(operation);
+  }
   if (targets.includes("codex")) {
-    const codexHook = copyCrossRuntimeMemoryHook(CODEX_HOME);
-    results.push(codexHook ? registerCodexMemoryHook(codexHook) : false);
+    const operation = jsonOperation(
+      join(CODEX_HOME, "hooks.json"),
+      buildCodexSettingsValue(existingSettings.values.codex),
+      "auxiliary",
+    );
+    if (operation) operations.push(operation);
   }
   if (targets.includes("cursor")) {
-    const cursorHook = copyCrossRuntimeMemoryHook(CURSOR_HOME);
-    results.push(cursorHook ? registerCursorMemoryHook(cursorHook) : false);
+    const operation = jsonOperation(
+      join(CURSOR_HOME, "hooks.json"),
+      buildCursorSettingsValue(existingSettings.values.cursor),
+      "auxiliary",
+    );
+    if (operation) operations.push(operation);
   }
-  if (targets.includes("openclaw")) {
-    results.push(installOpenClawMemoryHook());
-  }
-  return results.length === 0 || results.every(Boolean);
+  operations.push(...manifestOperations);
+
+  const result = executeSafeManagedFileTransaction({
+    trustedRoot: homedir(),
+    backupRoot: join(homedir(), ".meta-kim", "backups"),
+    operations,
+    transactionLabel: "mcp-memory-install",
+    lockKey: "mcp-memory-hooks",
+  });
+  reportTransactionResult("Runtime hook install", result);
+  return result;
 }
 
-function removeCrossRuntimeMemoryHooks(targets) {
-  for (const [runtimeHome, hooksFile, eventNames] of [
-    [CODEX_HOME, "hooks.json", ["SessionStart", "UserPromptSubmit", "Stop"]],
-    [CURSOR_HOME, "hooks.json", ["beforeSubmitPrompt", "stop"]],
+function stripClaudeSettingsValue(settings) {
+  const hooks = { ...(settings.hooks ?? {}) };
+  for (const [eventName, needles] of [
+    ["SessionStart", ["mcp_memory_global.py"]],
+    ["Stop", ["stop-save-progress.mjs", "stop-memory-save.mjs"]],
   ]) {
-    if (runtimeHome === CODEX_HOME && !targets.includes("codex")) continue;
-    if (runtimeHome === CURSOR_HOME && !targets.includes("cursor")) continue;
-    const hooksJson = join(runtimeHome, hooksFile);
-    if (!existsSync(hooksJson)) continue;
-    const settings = readJsonFile(hooksJson, null);
-    if (!settings?.hooks) continue;
-    for (const eventName of eventNames) {
-      if (!settings.hooks[eventName]) continue;
-      settings.hooks[eventName] = settings.hooks[eventName]
-        .map((block) => {
-          if (block?.command) {
-            return String(block.command).includes(CROSS_RUNTIME_HOOK_FILE)
-              ? null
-              : block;
-          }
-          const hooks = (block?.hooks ?? []).filter(
-            (hook) =>
-              !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
-          );
-          return hooks.length > 0 ? { ...block, hooks } : null;
-        })
-        .filter(Boolean);
-      if (settings.hooks[eventName].length === 0)
-        delete settings.hooks[eventName];
+    hooks[eventName] = (hooks[eventName] ?? [])
+      .map((block) => ({
+        ...block,
+        hooks: (block?.hooks ?? []).filter(
+          (hook) => !needles.some((needle) => String(hook?.command ?? "").includes(needle)),
+        ),
+      }))
+      .filter((block) => (block.hooks ?? []).length > 0);
+    if (hooks[eventName].length === 0) delete hooks[eventName];
+  }
+  const next = { ...settings, hooks };
+  if (Object.keys(hooks).length === 0) delete next.hooks;
+  return next;
+}
+
+function stripCrossRuntimeSettingsValue(runtime, settings) {
+  const home = runtime === "codex" ? CODEX_HOME : CURSOR_HOME;
+  const eventNames = runtime === "codex"
+    ? ["SessionStart", "UserPromptSubmit", "Stop"]
+    : ["beforeSubmitPrompt", "stop"];
+  const hooks = { ...(settings.hooks ?? {}) };
+  for (const eventName of eventNames) {
+    hooks[eventName] = (hooks[eventName] ?? [])
+      .map((block) => {
+        if (block?.command) return String(block.command).includes(CROSS_RUNTIME_HOOK_FILE) ? null : block;
+        const nested = (block?.hooks ?? []).filter(
+          (hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
+        );
+        return nested.length > 0 ? { ...block, hooks: nested } : null;
+      })
+      .filter(Boolean);
+    if (hooks[eventName].length === 0) delete hooks[eventName];
+  }
+  return { ...settings, hooks };
+}
+
+function removeSelectedRuntimeFilesTransactional(targets) {
+  const existingSettings = readSelectedRuntimeSettingsStrict(targets);
+  if (!existingSettings.ok) {
+    return blockedExistingSettingsTransaction(existingSettings);
+  }
+  const operations = [];
+  const manifestOperations = [];
+  for (const runtime of targets) {
+    const manifestPath = runtimeManifestPath(runtime);
+    const raw = existsSync(manifestPath) ? readJsonFile(manifestPath, null) : null;
+    const manifest = raw
+      ? validateManagedManifest(raw, { schemaVersion: RUNTIME_MANIFEST_SCHEMA })
+      : null;
+    if (raw && !manifest) {
+      warn(`Preserved runtime ${runtime}: ownership manifest is invalid or empty`);
+      return blockedTransaction(
+        `invalid_runtime_manifest:${runtime}`,
+        "Preserve the runtime files and repair or remove only the invalid ownership manifest after inspection.",
+      );
     }
-    backupBeforeForce(hooksJson);
-    writeFileSync(hooksJson, JSON.stringify(settings, null, 2) + "\n");
+    if (!manifest) {
+      const openClawTarget = join(OPENCLAW_HOME, "hooks", "mcp-memory-service");
+      const hasManagedCandidate =
+        canonicalFileSpecs(runtime).some((spec) => existsSync(spec.target)) ||
+        (runtime === "openclaw" && existsSync(openClawTarget));
+      if (hasManagedCandidate) {
+        warn(`Preserved runtime ${runtime}: managed files exist without an ownership manifest`);
+        return blockedTransaction(
+          `ownership_manifest_missing:${runtime}`,
+          "Run the installer to restore ownership evidence, or inspect the files before removing them manually.",
+        );
+      }
+      continue;
+    }
+    for (const entry of manifest.files) {
+      if (isSeedOnlyRetainedPath(runtime, entry.relPath)) continue;
+      operations.push({
+        kind: "remove",
+        phase: "content",
+        relPath: entry.relPath,
+        expectedOldHash: entry.contentHash,
+        allowManagedMissingRemove: true,
+      });
+    }
+    manifestOperations.push({
+      kind: "remove",
+      phase: "manifest",
+      relPath: homeRel(manifestPath),
+      expectedOldHash: sha256ManagedFile(manifestPath),
+    });
   }
 
-  const openclawHookDir = join(OPENCLAW_HOME, "hooks", "mcp-memory-service");
-  if (targets.includes("openclaw") && existsSync(openclawHookDir)) {
-    rmSync(openclawHookDir, { recursive: true, force: true });
+  if (targets.includes("claude") && existsSync(CLAUDE_SETTINGS)) {
+    const next = stripClaudeSettingsValue(existingSettings.values.claude);
+    const op = next ? jsonOperation(CLAUDE_SETTINGS, next, "auxiliary") : null;
+    if (op) operations.push(op);
   }
+  for (const runtime of ["codex", "cursor"]) {
+    const path = join(runtime === "codex" ? CODEX_HOME : CURSOR_HOME, "hooks.json");
+    if (!targets.includes(runtime) || !existsSync(path)) continue;
+    const next = stripCrossRuntimeSettingsValue(runtime, existingSettings.values[runtime]);
+    const op = next ? jsonOperation(path, next, "auxiliary") : null;
+    if (op) operations.push(op);
+  }
+  operations.push(...manifestOperations);
+  const result = executeSafeManagedFileTransaction({
+    trustedRoot: homedir(),
+    backupRoot: join(homedir(), ".meta-kim", "backups"),
+    operations,
+    transactionLabel: "mcp-memory-remove",
+    lockKey: "mcp-memory-hooks",
+  });
+  reportTransactionResult("Runtime hook removal", result);
+  return result;
 }
 
 // ── Commands ────────────────────────────────────────────
@@ -1069,30 +942,8 @@ async function install(targets) {
   console.log(`\n${bold("Installing MCP Memory runtime hooks...")}\n`);
   info(`Targets: ${targetListText(targets)}`);
 
-  let sessionStartOk = true;
-  let stopOk = true;
-
-  if (targets.includes("claude")) {
-    ensureDir(HOOKS_TARGET_DIR);
-
-    const hookCopied = copyHookFile();
-    if (!hookCopied) {
-      console.log(
-        `\n${red("Installation aborted: hook file could not be placed.")}\n`,
-      );
-      process.exit(2);
-    }
-
-    seedConfigIfMissing();
-    copyStopHookFile();
-    await copyCommandsDir();
-    sessionStartOk = registerSessionStartHook();
-    stopOk = registerStopHook();
-  } else {
-    ok("Claude MCP memory hooks skipped (claude not selected)");
-  }
-
-  const crossRuntimeOk = installCrossRuntimeMemoryHooks(targets);
+  const transaction = installSelectedRuntimeFilesTransactional(targets);
+  if (!targets.includes("claude")) ok("Claude MCP memory hooks skipped (claude not selected)");
 
   console.log("");
   info("Checking MCP Memory Service health...");
@@ -1112,11 +963,13 @@ async function install(targets) {
     );
   }
 
-  if (!sessionStartOk || !stopOk || !crossRuntimeOk) {
+  if (!transaction.ok) {
     warn(
-      "Some hooks were not registered — restart runtimes or review hook config",
+      "Runtime hook installation did not complete; selected runtime files were preserved.",
     );
-    console.log(`\n${yellow("Done with warnings.")} Restart selected runtimes to load hooks.\n`);
+    console.log(
+      `\n${yellow("Done with warnings.")} Follow the recovery guidance, retry, and restart runtimes only after installation succeeds.\n`,
+    );
     process.exit(1);
   }
 
@@ -1125,49 +978,106 @@ async function install(targets) {
   );
 }
 
+function addCheckIssue(issues, message) {
+  issues.push(message);
+  warn(message);
+}
+
+function verifyRuntimeManagedState(runtime, issues) {
+  const manifestPath = runtimeManifestPath(runtime);
+  if (!existsSync(manifestPath)) {
+    addCheckIssue(issues, `${runtime}: ownership manifest is missing`);
+    return null;
+  }
+  const manifest = readRuntimeManagedManifest(runtime);
+  if (!manifest) {
+    addCheckIssue(issues, `${runtime}: ownership manifest is invalid or empty`);
+    return null;
+  }
+
+  const expectedSpecs = canonicalFileSpecs(runtime);
+  const expected = new Map(expectedSpecs.map((spec) => [spec.relPath, spec]));
+  const owned = new Map(manifest.files.map((entry) => [entry.relPath, entry]));
+  for (const spec of expectedSpecs) {
+    const entry = owned.get(spec.relPath);
+    if (!entry) {
+      addCheckIssue(issues, `${runtime}: managed file is missing from the manifest (${spec.relPath})`);
+      continue;
+    }
+    const canonicalHash = sha256ManagedFile(spec.source);
+    if (entry.contentHash !== canonicalHash) {
+      addCheckIssue(issues, `${runtime}: manifest hash differs from the current canonical file (${spec.relPath})`);
+      continue;
+    }
+    const installedHash = sha256ManagedFile(join(homedir(), spec.relPath));
+    if (installedHash !== entry.contentHash) {
+      addCheckIssue(issues, `${runtime}: installed managed file is missing or changed (${spec.relPath})`);
+    }
+  }
+  for (const entry of manifest.files) {
+    if (!expected.has(entry.relPath)) {
+      const qualifier = isSeedOnlyRetainedPath(runtime, entry.relPath)
+        ? "seed-only config is still incorrectly owned"
+        : "stale managed entry remains";
+      addCheckIssue(issues, `${runtime}: ${qualifier} (${entry.relPath})`);
+    }
+  }
+  return manifest;
+}
+
 function check(targets) {
   console.log(`\n${bold("Checking MCP Memory hook installation...")}\n`);
   info(`Targets: ${targetListText(targets)}`);
+  const issues = [];
 
   const sourceExists = existsSync(CANONICAL_HOOK_SOURCE);
   if (targets.includes("claude")) {
     sourceExists
       ? ok(`Canonical source present: ${CANONICAL_HOOK_SOURCE}`)
-      : fail(`Canonical source MISSING: ${CANONICAL_HOOK_SOURCE}`);
+      : addCheckIssue(issues, `Canonical source MISSING: ${CANONICAL_HOOK_SOURCE}`);
 
     const targetExists = existsSync(HOOK_TARGET);
     targetExists
       ? ok(`Hook installed: ${HOOK_TARGET}`)
-      : warn(`Hook not installed at ${HOOK_TARGET}`);
+      : addCheckIssue(issues, `Hook not installed at ${HOOK_TARGET}`);
 
     if (sourceExists && targetExists) {
       const inSync = filesEqual(CANONICAL_HOOK_SOURCE, HOOK_TARGET);
       inSync
         ? ok("Hook content in sync with canonical")
-        : warn("Hook content DIFFERS from canonical (run install to update)");
+        : addCheckIssue(issues, "Hook content DIFFERS from canonical (run install to update)");
     }
 
     const configExists = existsSync(CONFIG_TARGET);
     configExists
       ? ok(`Config present: ${CONFIG_TARGET}`)
-      : warn(`Config missing: ${CONFIG_TARGET}`);
+      : addCheckIssue(issues, `Config missing: ${CONFIG_TARGET}`);
 
     const settingsExists = existsSync(CLAUDE_SETTINGS);
     if (settingsExists) {
       try {
         const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
-        const registered = (settings.hooks?.SessionStart ?? []).some((b) =>
+        const sessionRegistered = (settings.hooks?.SessionStart ?? []).some((b) =>
           b?.hooks?.some((h) => h?.command?.includes("mcp_memory_global.py")),
         );
-        registered
+        sessionRegistered
           ? ok("SessionStart hook registered in settings.json")
-          : warn("SessionStart hook NOT registered");
+          : addCheckIssue(issues, "SessionStart hook NOT registered");
+        for (const hookName of ["stop-save-progress.mjs", "stop-memory-save.mjs"]) {
+          const registered = (settings.hooks?.Stop ?? []).some((block) =>
+            block?.hooks?.some((hook) => String(hook?.command ?? "").includes(hookName)),
+          );
+          registered
+            ? ok(`Stop hook registered: ${hookName}`)
+            : addCheckIssue(issues, `Stop hook NOT registered: ${hookName}`);
+        }
       } catch {
-        warn("Could not parse settings.json");
+        addCheckIssue(issues, "Could not parse settings.json");
       }
     } else {
-      warn(`settings.json not found: ${CLAUDE_SETTINGS}`);
+      addCheckIssue(issues, `settings.json not found: ${CLAUDE_SETTINGS}`);
     }
+    verifyRuntimeManagedState("claude", issues);
   } else {
     ok("Claude MCP memory checks skipped (claude not selected)");
   }
@@ -1186,7 +1096,8 @@ function check(targets) {
     const hookFile = findInstalledCrossRuntimeMemoryHook(runtimeHome);
     hookFile
       ? ok(`${label} memory hook installed: ${hookFile}`)
-      : warn(
+      : addCheckIssue(
+          issues,
           `${label} memory hook missing: ${crossRuntimeMemoryHookCandidates(runtimeHome).join(" or ")}`,
         );
     const cfg = readJsonFile(join(runtimeHome, hooksFile), null);
@@ -1204,16 +1115,18 @@ function check(targets) {
         : false;
       registered
         ? ok(`${label} ${eventName} memory hook registered`)
-        : warn(`${label} ${eventName} memory hook NOT registered`);
+        : addCheckIssue(issues, `${label} ${eventName} memory hook NOT registered`);
     }
+    verifyRuntimeManagedState(targetId, issues);
   }
 
   const openclawHookDir = join(OPENCLAW_HOME, "hooks", "mcp-memory-service");
   if (targets.includes("openclaw")) {
-    existsSync(join(openclawHookDir, "HOOK.md")) &&
-    existsSync(join(openclawHookDir, "handler.ts"))
-      ? ok(`OpenClaw MCP memory hook installed: ${openclawHookDir}`)
-      : warn(`OpenClaw MCP memory hook missing: ${openclawHookDir}`);
+    const before = issues.length;
+    const manifest = verifyRuntimeManagedState("openclaw", issues);
+    if (manifest && issues.length === before) {
+      ok(`OpenClaw MCP memory hook manifest and hashes verified: ${openclawHookDir}`);
+    }
   }
 
   const endpoint = configuredMemoryEndpoint();
@@ -1229,7 +1142,18 @@ function check(targets) {
     printMemoryPortDiagnostic(endpoint);
   }
 
+  if (issues.length > 0) {
+    warn(`${issues.length} hook installation issue(s) found.`);
+    info(
+      `Repair: node scripts/install-mcp-memory-hooks.mjs --targets ${targets.join(",")}` +
+      (targets.includes("claude") ? " --force" : ""),
+    );
+    info("Then rerun this --check command. User files and drifted managed files will be preserved.");
+  } else {
+    ok("All selected runtime hook files, manifests, and registrations match.");
+  }
   console.log("");
+  return { ok: issues.length === 0, issueCount: issues.length, issues };
 }
 
 function remove(targets) {
@@ -1238,20 +1162,11 @@ function remove(targets) {
   );
   info(`Targets: ${targetListText(targets)}`);
 
-  if (targets.includes("claude")) {
-    removeSessionStartHook();
-    removeStopHook();
-  }
-  removeCrossRuntimeMemoryHooks(targets);
-  info(`Hook file retained (manual delete: rm "${HOOK_TARGET}")`);
-  info(
-    `Stop hook files retained (manual delete: rm "${STOP_HOOK_TARGET}" "${MEMORY_SAVE_HOOK_TARGET}")`,
-  );
-  info(
-    "Cross-runtime hook files retained in ~/.codex/hooks, ~/.cursor/hooks, and ~/.openclaw/hooks",
-  );
-  info(`Config retained (manual delete: rm "${CONFIG_TARGET}")`);
-  ok("Done.\n");
+  const transaction = removeSelectedRuntimeFilesTransactional(targets);
+  info("Only exact manifest-managed files were removed; unknown or drifted files were preserved.");
+  if (transaction.ok) ok("Done.\n");
+  else warn("Removal was partial; preserved files require ownership or backup repair.\n");
+  return transaction;
 }
 
 // ── Main ────────────────────────────────────────────────
@@ -1268,8 +1183,12 @@ if (args.includes("--force")) {
 }
 
 async function main() {
-  if (args.includes("--check")) check(targets);
-  else if (args.includes("--remove")) remove(targets);
+  if (args.includes("--check")) {
+    if (!check(targets).ok) process.exitCode = 1;
+  }
+  else if (args.includes("--remove")) {
+    if (!remove(targets).ok) process.exitCode = 1;
+  }
   else await install(targets);
 }
 

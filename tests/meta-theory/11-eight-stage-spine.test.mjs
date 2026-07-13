@@ -406,8 +406,17 @@ function runActivateHook(existingState, payload, options = {}) {
   try {
     const hookDir = join(cwd, "hooks");
     mkdirSync(hookDir, { recursive: true });
+    // A real project session runs this hook from a project root. Mark the temp
+    // dir as a legit project (.git) so the project-root gate activates the
+    // spine here instead of correctly skipping an unmarked temp dir.
+    mkdirSync(join(cwd, ".git"), { recursive: true });
     const sourceDir = "canonical/runtime-assets/shared/hooks";
-    for (const fileName of ["activate-meta-theory-spine.mjs", "spine-state.mjs", "utils.mjs"]) {
+    for (const fileName of [
+      "activate-meta-theory-spine.mjs",
+      "project-root.mjs",
+      "spine-state.mjs",
+      "utils.mjs",
+    ]) {
       copyFileSync(
         join(REPO_ROOT, sourceDir, fileName),
         join(hookDir, fileName),

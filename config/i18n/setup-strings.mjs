@@ -1,3 +1,58 @@
+export const PROJECT_BOOTSTRAP_CHOICE_COPY = {
+  en: {
+    readyHeader: "Project ready", readyQuestion: "Meta_Kim project bootstrap is current. No project-specific files or repeated confirmation are needed.", continueLabel: "Continue",
+    bootstrapHeader: "Project bootstrap", runtimeRequirement: "Claude Code must use AskUserQuestion and Codex must use request_user_input before --apply. Compatibility runtimes may show a labeled chat decision card.",
+    understanding: (targets) => `AI understanding: this directory needs Meta_Kim project-specific context, config, state, or confirmed overrides for ${targets}.`,
+    additions: (status, reason) => `AI additions: dry-run status is ${status}; ${reason}`,
+    route: "Capability route: reuse global runtime capabilities first, then apply only confirmed project-specific state.",
+    candidates: (conflicts, pending, conflictCount, globalCount) => `Candidate paths: ${conflicts ? "resolve conflicts, inspect only, or skip" : "apply now, inspect only, or skip"}. Pending project writes: ${pending}; conflicts: ${conflictCount}; global writes: ${globalCount}.`,
+    apply: "Apply project bootstrap (Recommended)", applyBlocked: "Apply after resolving conflicts", inspect: "Inspect only", skip: "Skip project-local writes",
+    continueExpected: "Continue without project-specific writes.", continueAdvantage: "Avoids repeated prompts and leaves the project unchanged.", continueRisk: "No current risk.", continueVerify: "Dry-run reports ready and zero writes.",
+    applyExpected: "Write confirmed project-specific files and the bootstrap manifest.", applyAdvantage: "Current files will not require repeated confirmation.", applyRisk: "Only dry-run-listed files are changed after ownership and backup checks.", applyBlockedRisk: "Conflicts remain blocked; unknown user files are preserved.", applyVerify: "A second dry-run must report ready and zero pending writes.",
+    inspectExpected: "Keep the dry-run plan without writing.", inspectAdvantage: "Lets the owner review generated content first.", inspectRisk: "Project-specific state may remain stale.", inspectVerify: "The manifest is unchanged and the next run may ask again.",
+    skipExpected: "Continue without project-specific files.", skipAdvantage: "Leaves a global-capability-only project untouched.", skipRisk: "Project overrides and state remain disabled.", skipVerify: "The run must not claim project-governed readiness.",
+  },
+  "zh-CN": {
+    readyHeader: "项目已就绪", readyQuestion: "Meta_Kim 项目初始化已是最新，无需写入项目专用文件或重复确认。", continueLabel: "继续",
+    bootstrapHeader: "项目初始化", runtimeRequirement: "Claude Code 必须在 --apply 前使用 AskUserQuestion，Codex 必须使用 request_user_input；兼容运行时可展示带标签的聊天决策卡。",
+    understanding: (targets) => `AI 理解：此目录需要面向 ${targets} 的 Meta_Kim 项目专用上下文、配置、状态或已确认覆盖。`,
+    additions: (status, reason) => `AI 补充：dry-run 状态为 ${status}；${reason}`,
+    route: "能力路径：优先复用全局运行时能力，只应用已确认的项目专用状态。",
+    candidates: (conflicts, pending, conflictCount, globalCount) => `候选路径：${conflicts ? "解决冲突、仅检查或跳过" : "立即应用、仅检查或跳过"}。待写项目文件：${pending}；冲突：${conflictCount}；全局写入：${globalCount}。`,
+    apply: "应用项目初始化（推荐）", applyBlocked: "解决冲突后应用", inspect: "仅检查", skip: "跳过项目级写入",
+    continueExpected: "继续运行，不写项目专用文件。", continueAdvantage: "避免重复询问并保持项目不变。", continueRisk: "当前无风险。", continueVerify: "dry-run 显示已就绪且写入为零。",
+    applyExpected: "写入已确认的项目专用文件和初始化清单。", applyAdvantage: "文件未变化时不再重复确认。", applyRisk: "仅在所有权和备份校验后修改 dry-run 清单中的文件。", applyBlockedRisk: "冲突保持阻断，未知用户文件会被保留。", applyVerify: "再次 dry-run 必须显示已就绪且待写为零。",
+    inspectExpected: "保留 dry-run 计划，不写文件。", inspectAdvantage: "可先检查生成内容。", inspectRisk: "项目专用状态可能仍然陈旧。", inspectVerify: "清单不变，下次运行可能再次询问。",
+    skipExpected: "继续运行但不应用项目专用文件。", skipAdvantage: "保持只使用全局能力的项目不变。", skipRisk: "项目覆盖和状态不会启用。", skipVerify: "不得声称项目治理已就绪。",
+  },
+  "ja-JP": {
+    readyHeader: "プロジェクト準備完了", readyQuestion: "Meta_Kim のプロジェクト初期化は最新です。専用ファイルの書き込みや再確認は不要です。", continueLabel: "続行",
+    bootstrapHeader: "プロジェクト初期化", runtimeRequirement: "--apply の前に Claude Code は AskUserQuestion、Codex は request_user_input を使用する必要があります。互換 runtime はラベル付き決定カードを表示できます。",
+    understanding: (targets) => `AI の理解: このディレクトリには ${targets} 向けの Meta_Kim 固有 context、config、state、または確認済み override が必要です。`,
+    additions: (status, reason) => `AI の補足: dry-run の状態は ${status}；${reason}`,
+    route: "能力ルート: global runtime 能力を優先し、確認済みのプロジェクト固有状態だけを適用します。",
+    candidates: (conflicts, pending, conflictCount, globalCount) => `候補: ${conflicts ? "競合解決、確認のみ、またはスキップ" : "今すぐ適用、確認のみ、またはスキップ"}。書き込み予定: ${pending}；競合: ${conflictCount}；global 書き込み: ${globalCount}。`,
+    apply: "プロジェクト初期化を適用（推奨）", applyBlocked: "競合解決後に適用", inspect: "確認のみ", skip: "プロジェクト書き込みをスキップ",
+    continueExpected: "固有ファイルを書かず続行します。", continueAdvantage: "再確認を避け、プロジェクトを変更しません。", continueRisk: "現在のリスクはありません。", continueVerify: "dry-run は ready、書き込み 0 を示します。",
+    applyExpected: "確認済みの固有ファイルと manifest を書き込みます。", applyAdvantage: "変更がなければ再確認は不要です。", applyRisk: "所有権と backup 検証後、dry-run の一覧だけを変更します。", applyBlockedRisk: "競合はブロックされ、不明なユーザーファイルは保持されます。", applyVerify: "再 dry-run は ready、保留 0 である必要があります。",
+    inspectExpected: "書き込まず dry-run 計画を保持します。", inspectAdvantage: "生成内容を先に確認できます。", inspectRisk: "固有状態が古いままの可能性があります。", inspectVerify: "manifest は変わらず、次回再確認される場合があります。",
+    skipExpected: "固有ファイルを適用せず続行します。", skipAdvantage: "global 能力だけのプロジェクトを変更しません。", skipRisk: "固有 override と state は無効のままです。", skipVerify: "project-governed ready を主張してはいけません。",
+  },
+  "ko-KR": {
+    readyHeader: "프로젝트 준비 완료", readyQuestion: "Meta_Kim 프로젝트 초기화가 최신입니다. 전용 파일 쓰기나 반복 확인이 필요하지 않습니다.", continueLabel: "계속",
+    bootstrapHeader: "프로젝트 초기화", runtimeRequirement: "--apply 전에 Claude Code는 AskUserQuestion, Codex는 request_user_input을 사용해야 합니다. 호환 runtime은 라벨이 있는 결정 카드를 표시할 수 있습니다.",
+    understanding: (targets) => `AI 이해: 이 디렉터리에는 ${targets}용 Meta_Kim 프로젝트 전용 context, config, state 또는 확인된 override가 필요합니다.`,
+    additions: (status, reason) => `AI 보충: dry-run 상태는 ${status}; ${reason}`,
+    route: "능력 경로: 전역 runtime 능력을 먼저 재사용하고 확인된 프로젝트 전용 상태만 적용합니다.",
+    candidates: (conflicts, pending, conflictCount, globalCount) => `후보 경로: ${conflicts ? "충돌 해결, 확인만 또는 건너뛰기" : "지금 적용, 확인만 또는 건너뛰기"}. 예정 쓰기: ${pending}; 충돌: ${conflictCount}; 전역 쓰기: ${globalCount}.`,
+    apply: "프로젝트 초기화 적용(권장)", applyBlocked: "충돌 해결 후 적용", inspect: "확인만", skip: "프로젝트 쓰기 건너뛰기",
+    continueExpected: "전용 파일을 쓰지 않고 계속합니다.", continueAdvantage: "반복 확인을 피하고 프로젝트를 변경하지 않습니다.", continueRisk: "현재 위험이 없습니다.", continueVerify: "dry-run이 ready와 쓰기 0을 표시합니다.",
+    applyExpected: "확인된 전용 파일과 manifest를 씁니다.", applyAdvantage: "변경이 없으면 다시 확인하지 않습니다.", applyRisk: "소유권과 backup 검증 후 dry-run 목록만 변경합니다.", applyBlockedRisk: "충돌은 차단되고 알 수 없는 사용자 파일은 보존됩니다.", applyVerify: "다시 실행한 dry-run은 ready와 대기 0이어야 합니다.",
+    inspectExpected: "쓰지 않고 dry-run 계획만 유지합니다.", inspectAdvantage: "생성 내용을 먼저 검토할 수 있습니다.", inspectRisk: "전용 상태가 오래된 채로 남을 수 있습니다.", inspectVerify: "manifest는 바뀌지 않으며 다음 실행에서 다시 물을 수 있습니다.",
+    skipExpected: "전용 파일을 적용하지 않고 계속합니다.", skipAdvantage: "전역 능력만 쓰는 프로젝트를 변경하지 않습니다.", skipRisk: "전용 override와 state는 비활성 상태입니다.", skipVerify: "project-governed ready를 주장하면 안 됩니다.",
+  },
+};
+
 export function buildI18N({ MIN_NODE_VERSION }) {
   return {
   en: {
@@ -5,6 +60,9 @@ export function buildI18N({ MIN_NODE_VERSION }) {
     modeUpdate: "update",
     modeSilent: "silent",
     modeInteractive: "interactive",
+    checkOverallFailed: "Project runtime sync check failed.",
+    checkRepairCommand:
+      "Repair: run `npm run meta:sync`, then run the check again.",
     /** Shared gate before menu / CLI modes — headings below are titles only, no "step 1/N" */
     preflightHeading: "Environment check",
     nodeOld: (v) => `Node.js v${v} too old, need >=${MIN_NODE_VERSION}`,
@@ -202,6 +260,10 @@ ${r ? `Raw error: ${r}` : ""}
     projectCleanupBatchHeading: (n) =>
       `Cleaning redundant Meta_Kim project-level assets in ${n} project directory/directories`,
     projectCleanupSummary: "Project cleanup summary",
+    projectCleanupCliResult: (passed) =>
+      `Meta_Kim project cleanup: ${passed ? "complete" : "failed"}`,
+    projectCleanupCliTargets: (targets) => `targets=${targets}`,
+    projectCleanupCliProjects: (count) => `cleanedProjects=${count}`,
     // Directory structure explanation
     directoryExplanationHeading: "Directory Structure",
     directoryExplanationIntro: "Meta_Kim creates two levels of directories:",
@@ -263,6 +325,10 @@ ${r ? `Raw error: ${r}` : ""}
       `${p} contains meta-kim-runtime, but its script path is not usable here. This MCP is only for the Meta_Kim source repo; remove the meta-kim-runtime block in copied projects. Agents still load from .claude/.codex/.cursor/openclaw files.`,
     syncOk: "All sync targets verified",
     syncMissing: (p) => `Missing: ${p}`,
+    syncGlobalOnlyHookPairOk: (runtime) =>
+      `${runtime} project hook pair: activator + project-root resolver`,
+    syncGlobalOnlyHookPairFailed: (runtime, detail) =>
+      `${runtime} project hook pair is incomplete: ${detail}`,
     syncPartial: (label, got, need) => `${label}: got ${got}, need ${need}`,
     stepPythonTools: "Optional Python Tools",
     pythonNotFound: "Python 3.10+ not found — skipping graphify",
@@ -450,6 +516,15 @@ Possible causes:
     progressValidate: "Validate installation",
     // Confirm strings
     confirmStartInstall: "Start installation?",
+    projectBootstrapConfirmationReasons: {
+      ready: "Project bootstrap manifest and project-specific files are current; no project write is needed.",
+      conflict: "Existing project files overlap generated paths but ownership is unproven; resolve conflicts before apply.",
+      stale: "The existing project bootstrap manifest uses a different Meta_Kim version.",
+      target_scope_changed: "Selected runtime targets differ from the previous project bootstrap manifest.",
+      missing: "Required project context, config, state, or confirmed overrides are missing.",
+      repair_required: "The bootstrap version is current, but managed files need repair, merge, or recreation.",
+      ready_with_existing_config: "Existing configuration still needs confirmed bootstrap state or pending changes.",
+    },
     footprintTitle: "Installation footprint (from previous run)",
     footprintFirstInstall:
       "First install on this machine — no previous footprint recorded.",
@@ -624,6 +699,8 @@ Possible causes:
       `Updating project-level runtime files in ${n} project director${n === 1 ? "y" : "ies"}`,
     projectDeploySummary: "Project directory update summary",
     projectDeployStatusOk: "updated",
+    projectDeployStatusPartial: "partially cleaned — retry required",
+    projectDeployStatusBlocked: "blocked — fix path safety and retry",
     projectDeployStatusFailed: "failed",
     projectDeployFailed: (dir, msg) => `Failed to update ${dir}: ${msg}`,
     projectDeployMoreTargets: (n) =>
@@ -639,6 +716,8 @@ Possible causes:
     modeUpdate: "更新",
     modeSilent: "静默",
     modeInteractive: "交互式",
+    checkOverallFailed: "项目运行时同步检查未通过。",
+    checkRepairCommand: "修复方法：运行 `npm run meta:sync`，然后重新检查。",
     preflightHeading: "环境检查",
     nodeOld: (v) => `Node.js v${v} 版本过低，需要 >=${MIN_NODE_VERSION}`,
     nodeOk: (v) => `Node.js v${v}`,
@@ -825,6 +904,10 @@ ${r ? `原始错误：${r}` : ""}
     projectCleanupBatchHeading: (n) =>
       `正在清理 ${n} 个项目目录内冗余的 Meta_Kim 项目级资产`,
     projectCleanupSummary: "项目目录清理结果",
+    projectCleanupCliResult: (passed) =>
+      `Meta_Kim 项目清理：${passed ? "完成" : "失败"}`,
+    projectCleanupCliTargets: (targets) => `目标运行时=${targets}`,
+    projectCleanupCliProjects: (count) => `已处理项目数=${count}`,
     // 目录结构说明
     directoryExplanationHeading: "目录结构",
     directoryExplanationIntro: "Meta_Kim 创建两级目录：",
@@ -883,6 +966,10 @@ ${r ? `原始错误：${r}` : ""}
       `${p} 包含 meta-kim-runtime，但这里的脚本路径不可用。这个 MCP 只给 Meta_Kim 源仓库使用；复制到普通项目时请删除 meta-kim-runtime 这一块。Agent 仍会从 .claude/.codex/.cursor/openclaw 文件加载。`,
     syncOk: "所有同步目标验证通过",
     syncMissing: (p) => `缺失：${p}`,
+    syncGlobalOnlyHookPairOk: (runtime) =>
+      `${runtime} 项目 Hook 依赖完整：activator + project-root resolver`,
+    syncGlobalOnlyHookPairFailed: (runtime, detail) =>
+      `${runtime} 项目 Hook 依赖不完整：${detail}`,
     syncPartial: (label, got, need) => `${label}：实际 ${got}，需要 ${need}`,
     stepPythonTools: "可选 Python 工具",
     pythonNotFound: "未检测到 Python 3.10+ — 跳过 graphify",
@@ -1062,6 +1149,15 @@ ${r ? `原始错误：${r}` : ""}
     progressValidate: "验证安装",
     // 确认字符串
     confirmStartInstall: "开始安装？",
+    projectBootstrapConfirmationReasons: {
+      ready: "项目初始化清单和项目专用文件均为最新，无需写入。",
+      conflict: "现有项目文件与生成路径重叠，但所有权未经证明；应用前必须先解决冲突。",
+      stale: "现有项目初始化清单使用了不同的 Meta_Kim 版本。",
+      target_scope_changed: "所选运行时目标与上次项目初始化清单不同。",
+      missing: "缺少必需的项目上下文、配置、状态或已确认覆盖。",
+      repair_required: "初始化版本为最新，但受管文件需要修复、合并或重建。",
+      ready_with_existing_config: "现有配置仍需确认初始化状态或应用待处理变更。",
+    },
     footprintTitle: "安装足迹（上次安装记录）",
     footprintFirstInstall: "首次安装 — 无历史足迹可显示。",
     footprintRefreshNote: "本次安装将刷新上述条目。",
@@ -1223,6 +1319,8 @@ ${r ? `原始错误：${r}` : ""}
     projectDeployBatchHeading: (n) => `正在更新 ${n} 个项目目录的项目级运行时文件`,
     projectDeploySummary: "项目目录更新结果",
     projectDeployStatusOk: "已更新",
+    projectDeployStatusPartial: "部分完成，需要重试",
+    projectDeployStatusBlocked: "已阻断，请修复路径安全问题后重试",
     projectDeployStatusFailed: "失败",
     projectDeployFailed: (dir, msg) => `更新 ${dir} 失败：${msg}`,
     projectDeployMoreTargets: (n) => `另外 ${n} 个项目目录也已更新。`,
@@ -1237,6 +1335,9 @@ ${r ? `原始错误：${r}` : ""}
     modeUpdate: "更新",
     modeSilent: "サイレント",
     modeInteractive: "インタラクティブ",
+    checkOverallFailed: "プロジェクト runtime の同期チェックに失敗しました。",
+    checkRepairCommand:
+      "修復: `npm run meta:sync` を実行してから、もう一度チェックしてください。",
     preflightHeading: "環境チェック",
     nodeOld: (v) =>
       `Node.js v${v} は古すぎます。>=${MIN_NODE_VERSION} が必要です`,
@@ -1435,6 +1536,10 @@ ${r ? `生エラー：${r}` : ""}
     projectCleanupBatchHeading: (n) =>
       `${n} 個のプロジェクトディレクトリで冗長な Meta_Kim プロジェクトレベル資産を整理中`,
     projectCleanupSummary: "プロジェクトディレクトリ整理結果",
+    projectCleanupCliResult: (passed) =>
+      `Meta_Kim プロジェクト整理：${passed ? "完了" : "失敗"}`,
+    projectCleanupCliTargets: (targets) => `対象 runtime=${targets}`,
+    projectCleanupCliProjects: (count) => `処理済みプロジェクト数=${count}`,
     // ディレクトリ構造説明
     directoryExplanationHeading: "ディレクトリ構造",
     directoryExplanationIntro: "Meta_Kim は 2 つのレベルのディレクトリを作成：",
@@ -1496,6 +1601,10 @@ ${r ? `生エラー：${r}` : ""}
       `${p} に meta-kim-runtime がありますが、この場所ではスクリプトパスを使用できません。この MCP は Meta_Kim ソースリポジトリ専用です。コピー先プロジェクトでは meta-kim-runtime ブロックを削除してください。Agents は .claude/.codex/.cursor/openclaw ファイルから引き続き読み込まれます。`,
     syncOk: "すべての同期ターゲット検証済み",
     syncMissing: (p) => `不足：${p}`,
+    syncGlobalOnlyHookPairOk: (runtime) =>
+      `${runtime} project Hook ペア：activator + project-root resolver`,
+    syncGlobalOnlyHookPairFailed: (runtime, detail) =>
+      `${runtime} project Hook ペアが不完全です：${detail}`,
     syncPartial: (label, got, need) => `${label}：実際 ${got}、必要 ${need}`,
     stepPythonTools: "オプション Python ツール",
     pythonNotFound: "Python 3.10+ が見つかりません — graphify をスキップ",
@@ -1691,6 +1800,15 @@ ${r ? `生エラー：${r}` : ""}
     progressValidate: "インストールを検証",
     // 確認文字列
     confirmStartInstall: "インストールを開始しますか？",
+    projectBootstrapConfirmationReasons: {
+      ready: "初期化 manifest とプロジェクト固有ファイルは最新で、書き込みは不要です。",
+      conflict: "既存ファイルが生成パスと重なり、所有権を確認できません。適用前に競合を解決してください。",
+      stale: "既存の初期化 manifest は異なる Meta_Kim バージョンを使用しています。",
+      target_scope_changed: "選択した runtime 対象が前回の初期化 manifest と異なります。",
+      missing: "必要な project context、config、state、または確認済み override が不足しています。",
+      repair_required: "初期化バージョンは最新ですが、管理対象ファイルの修復、merge、または再作成が必要です。",
+      ready_with_existing_config: "既存 config には確認済み初期化 state または保留変更が必要です。",
+    },
     footprintTitle: "インストール足跡（前回の記録）",
     footprintFirstInstall:
       "このマシンでの初回インストール — 前回の足跡はありません。",
@@ -1867,6 +1985,8 @@ ${r ? `生エラー：${r}` : ""}
       `${n} 件のプロジェクトディレクトリでプロジェクト用ランタイムファイルを更新中`,
     projectDeploySummary: "プロジェクトディレクトリ更新結果",
     projectDeployStatusOk: "更新済み",
+    projectDeployStatusPartial: "一部完了 — 再試行が必要です",
+    projectDeployStatusBlocked: "ブロック — パスの安全性を修正して再試行してください",
     projectDeployStatusFailed: "失敗",
     projectDeployFailed: (dir, msg) => `${dir} の更新に失敗しました：${msg}`,
     projectDeployMoreTargets: (n) =>
@@ -1882,6 +2002,9 @@ ${r ? `生エラー：${r}` : ""}
     modeUpdate: "업데이트",
     modeSilent: "자동",
     modeInteractive: "대화형",
+    checkOverallFailed: "프로젝트 runtime 동기화 확인에 실패했습니다.",
+    checkRepairCommand:
+      "복구: `npm run meta:sync`를 실행한 뒤 다시 확인하세요.",
     preflightHeading: "환경 확인",
     nodeOld: (v) =>
       `Node.js v${v} 버전이 너무 낮습니다. >=${MIN_NODE_VERSION} 필요`,
@@ -2076,6 +2199,10 @@ ${r ? `원본 오류：${r}` : ""}
     projectCleanupBatchHeading: (n) =>
       `${n}개 프로젝트 디렉터리의 중복 Meta_Kim 프로젝트 레벨 자산 정리 중`,
     projectCleanupSummary: "프로젝트 디렉터리 정리 결과",
+    projectCleanupCliResult: (passed) =>
+      `Meta_Kim 프로젝트 정리: ${passed ? "완료" : "실패"}`,
+    projectCleanupCliTargets: (targets) => `대상 runtime=${targets}`,
+    projectCleanupCliProjects: (count) => `처리한 프로젝트 수=${count}`,
     // 디렉토리 구조 설명
     directoryExplanationHeading: "디렉토리 구조",
     directoryExplanationIntro: "Meta_Kim 은 두 레벨의 디렉토리 생성：",
@@ -2136,6 +2263,10 @@ ${r ? `원본 오류：${r}` : ""}
       `${p}에 meta-kim-runtime이 있지만 이 위치에서는 스크립트 경로를 사용할 수 없습니다. 이 MCP는 Meta_Kim 소스 저장소 전용입니다. 복사한 일반 프로젝트에서는 meta-kim-runtime 블록을 삭제하세요. Agents는 계속 .claude/.codex/.cursor/openclaw 파일에서 로드됩니다.`,
     syncOk: "모든 동기화 대상 확인 완료",
     syncMissing: (p) => `누락: ${p}`,
+    syncGlobalOnlyHookPairOk: (runtime) =>
+      `${runtime} 프로젝트 Hook 쌍: activator + project-root resolver`,
+    syncGlobalOnlyHookPairFailed: (runtime, detail) =>
+      `${runtime} 프로젝트 Hook 쌍이 불완전합니다: ${detail}`,
     syncPartial: (label, got, need) => `${label}: 실제 ${got}, 필요 ${need}`,
     stepPythonTools: "선택적 Python 도구",
     pythonNotFound: "Python 3.10+ 없음 — graphify 건너뜀",
@@ -2322,6 +2453,15 @@ ${r ? `원본 오류：${r}` : ""}
     progressValidate: "설치 검증",
     // 확인 문자열
     confirmStartInstall: "설치를 시작할까요?",
+    projectBootstrapConfirmationReasons: {
+      ready: "초기화 manifest와 프로젝트 전용 파일이 최신이므로 쓰기가 필요하지 않습니다.",
+      conflict: "기존 파일이 생성 경로와 겹치지만 소유권이 확인되지 않았습니다. 적용 전에 충돌을 해결하세요.",
+      stale: "기존 초기화 manifest가 다른 Meta_Kim 버전을 사용합니다.",
+      target_scope_changed: "선택한 runtime 대상이 이전 초기화 manifest와 다릅니다.",
+      missing: "필수 프로젝트 context, config, state 또는 확인된 override가 없습니다.",
+      repair_required: "초기화 버전은 최신이지만 관리 파일의 복구, 병합 또는 재생성이 필요합니다.",
+      ready_with_existing_config: "기존 config에는 확인된 초기화 state 또는 대기 변경이 필요합니다.",
+    },
     footprintTitle: "설치 발자국 (이전 설치 기록)",
     footprintFirstInstall: "이 머신에서 첫 설치 — 이전 발자국이 없습니다.",
     footprintRefreshNote: "설치 실행 시 위 항목들이 갱신됩니다.",
@@ -2495,6 +2635,8 @@ ${r ? `원본 오류：${r}` : ""}
       `프로젝트 디렉터리 ${n}개의 프로젝트용 런타임 파일 업데이트 중`,
     projectDeploySummary: "프로젝트 디렉터리 업데이트 결과",
     projectDeployStatusOk: "업데이트됨",
+    projectDeployStatusPartial: "일부 완료 — 재시도가 필요합니다",
+    projectDeployStatusBlocked: "차단됨 — 경로 안전 문제를 수정한 뒤 재시도하세요",
     projectDeployStatusFailed: "실패",
     projectDeployFailed: (dir, msg) => `${dir} 업데이트 실패: ${msg}`,
     projectDeployMoreTargets: (n) =>

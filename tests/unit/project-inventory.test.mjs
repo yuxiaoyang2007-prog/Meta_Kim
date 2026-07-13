@@ -49,9 +49,18 @@ describe("project inventory and standard test-suite coverage", () => {
       'node scripts/run-node-tests.mjs "tests/integration/*.test.mjs"',
     );
     assert.match(packageJson.scripts["meta:verify:governance"], /meta:test:integration/);
-    assert.match(packageJson.scripts["meta:verify:governance"], /meta:test:governance/);
-    assert.match(packageJson.scripts["meta:verify:all:chain"], /meta:test:inventory/);
-    assert.match(packageJson.scripts["meta:verify:all:chain"], /meta:test:unit/);
+    assert.match(packageJson.scripts["meta:verify:governance:core"], /meta:test:governance/);
+    assert.equal(
+      packageJson.scripts["meta:verify:all:chain"],
+      "npm run meta:verify:all",
+      "the compatibility chain must delegate to the authoritative runner instead of duplicating its stages",
+    );
+    assert.match(packageJson.scripts["meta:theory:run"], /--emit-conversation-notice/);
+    assert.equal(
+      packageJson.scripts["meta:theory:run:notice"],
+      packageJson.scripts["meta:theory:run"],
+    );
+    assert.match(packageJson.scripts["meta:theory:run:json"], /--no-emit-conversation-notice/);
     assert.match(packageJson.scripts["meta:test:unit"], /meta:test:poc-design-gate/);
   });
 });
