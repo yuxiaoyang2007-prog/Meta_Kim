@@ -17,6 +17,7 @@ import path from "node:path";
 import { afterEach, test } from "node:test";
 
 import {
+  buildGlobalCapabilityInventoryArgs,
   normalizeInstallerSkillsFilter,
   resolveSkillTargetDir,
   transactionalReplaceMetaSkillTargets,
@@ -104,23 +105,51 @@ test("setup-compatible empty --skills is accepted while real missing values fail
   assert.deepEqual(normalizeInstallerSkillsFilter([]), []);
   assert.throws(() => validateInstallerArgs(["--targets", ""]), /requires a value/);
   assert.throws(() => validateInstallerArgs(["--skills"]), /requires a value/);
+  for (const language of ["en", "zh", "zh-CN", "ja", "ja-JP", "ko", "ko-KR"]) {
+    assert.doesNotThrow(() => validateInstallerArgs([`--lang=${language}`]));
+  }
+  for (const language of ["", "-x", "en-US", "../../tmp", "unknown"]) {
+    assert.throws(
+      () => validateInstallerArgs([`--lang=${language}`]),
+      /requires (?:a value|one of)/,
+    );
+  }
+  assert.throws(() => validateInstallerArgs(["--lang", "-x"]), /requires a value/);
+  assert.deepEqual(buildGlobalCapabilityInventoryArgs(["claude", "codex"], "ja-JP"), [
+    "--lang",
+    "ja-JP",
+    "--runtime-inventory-only",
+    "--targets",
+    "claude,codex",
+  ]);
 });
 
-test("explicit empty --skills installs zero dependencies", () => {
-  const root = tempRoot();
-  const result = spawnSync(
-    process.execPath,
-    [installer, "--targets", "claude,codex", "--skills", "", "--skip-plugins", "--skip-inventory-refresh"],
-    {
-      cwd: repoRoot,
-      env: childEnv(root, path.join(root, "unused")),
-      encoding: "utf8",
-    },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.equal(existsSync(path.join(root, ".agents", "skills", "meta-skill-creator")), false);
-  assert.equal(existsSync(path.join(root, "custom", "claude-home", "skills", "meta-skill-creator")), false);
-  assert.equal(existsSync(path.join(root, "custom", "deep", "codex-home", "skills", "meta-skill-creator")), false);
+test("split and equals language forms produce the same localized zero-write output", () => {
+  for (const languageArgs of [["--lang", "zh-CN"], ["--lang=zh"]]) {
+    const root = tempRoot();
+    const result = spawnSync(
+      process.execPath,
+      [
+        installer,
+        ...languageArgs,
+        "--targets",
+        "openclaw",
+        "--skills",
+        "",
+        "--dry-run",
+        "--skip-plugins",
+        "--skip-inventory-refresh",
+      ],
+      {
+        cwd: repoRoot,
+        env: childEnv(root, path.join(root, "unused"), { META_KIM_LANG: "en" }),
+        encoding: "utf8",
+      },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(`${result.stdout}\n${result.stderr}`, /未选择任何第三方技能仓库/u);
+    assert.deepEqual(readdirSync(root), []);
+  }
 });
 
 test("custom CODEX_HOME still resolves the official Codex skill under OS user home", () => {
@@ -263,16 +292,24 @@ test("child process rejects compat junction and never touches old skill-creator 
   assert.equal(existsSync(path.join(root, "custom", "claude-home", "skills", "meta-skill-creator")), false);
 });
 
-test("help and unknown arguments are zero-write", () => {
-  for (const args of [["--help"], ["-h"], ["--unknown-option"]]) {
+test("help and invalid arguments are zero-write", () => {
+  for (const args of [
+    ["--help"],
+    ["-h"],
+    ["--unknown-option"],
+    ["--help", "--lang=../../tmp"],
+  ]) {
     const root = tempRoot();
     const result = spawnSync(process.execPath, [installer, ...args], {
       cwd: repoRoot,
       env: { ...process.env, HOME: root, USERPROFILE: root },
       encoding: "utf8",
     });
-    if (args[0] === "--unknown-option") assert.notEqual(result.status, 0);
-    else assert.equal(result.status, 0);
+    if (args.length === 1 && ["--help", "-h"].includes(args[0])) {
+      assert.equal(result.status, 0);
+    } else {
+      assert.notEqual(result.status, 0);
+    }
     assert.deepEqual(readdirSync(root), []);
   }
 });

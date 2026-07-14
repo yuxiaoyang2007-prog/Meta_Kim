@@ -55,7 +55,13 @@ import {
   checkNetworkx,
 } from "./scripts/graphify-runtime.mjs";
 import { resolveManifestSkillSubdir } from "./scripts/install-platform-config.mjs";
-import { buildNodeScriptSpawn } from "./scripts/node-spawn-config.mjs";
+import {
+  SETUP_NODE_CHILD,
+  buildGlobalMetaTheorySyncArgs,
+  buildGlobalSkillsInstallerArgs,
+  buildNodeScriptSpawn,
+  buildSetupNodeChildSpawn,
+} from "./scripts/node-spawn-config.mjs";
 import {
   CODEX_BUSINESS_ROLE_AGENT_IDS,
   CODEX_RUNTIME_ADAPTER_AGENT_IDS,
@@ -4343,8 +4349,8 @@ async function runQuickDeploy() {
       : {};
     const targets = platformId === "all" ? "claude" : platformId;
     const installResult = runNodeScript(
-      "scripts/install-global-skills-all-runtimes.mjs",
-      ["--targets", targets, "--skills", ""],
+      SETUP_NODE_CHILD.GLOBAL_SKILLS_INSTALLER,
+      buildGlobalSkillsInstallerArgs({ targets, skillIds: [] }),
       proxyEnv,
     );
     return installResult.status === 0;
@@ -4353,7 +4359,7 @@ async function runQuickDeploy() {
   await withProgress(t.progressSyncMeta, () => {
     const targets = platformId === "all" ? "claude" : platformId;
     const syncResult = runNodeScript(
-      "scripts/sync-global-meta-theory.mjs",
+      SETUP_NODE_CHILD.GLOBAL_META_THEORY_SYNC,
       metaTheoryGlobalSyncArgs(targets),
     );
     return syncResult.status === 0;
@@ -4913,15 +4919,17 @@ async function rememberProjectProjectionMode(mode) {
   });
 }
 
-function runNodeScript(scriptRelative, extraArgs = [], envOverrides = {}) {
-  // Automatically pass --lang to child scripts
-  const langArgs = currentLangCode ? ["--lang", currentLangCode] : [];
-  const spawnConfig = buildNodeScriptSpawn(
+function runNodeScript(
+  childId,
+  extraArgs = [],
+  envOverrides = {},
+) {
+  const spawnConfig = buildSetupNodeChildSpawn(
     process.execPath,
     PROJECT_DIR,
-    scriptRelative,
+    childId,
     extraArgs,
-    langArgs,
+    currentLangCode,
   );
   const mergedOptions = {
     ...spawnConfig.options,
@@ -4941,7 +4949,7 @@ function refreshGlobalCapabilityInventory(activeTargets = []) {
     Array.isArray(activeTargets) && activeTargets.length > 0
       ? ["--runtime-inventory-only", "--targets", activeTargets.join(",")]
       : ["--runtime-inventory-only"];
-  const result = runNodeScript("scripts/discover-global-capabilities.mjs", targetArgs, {
+  const result = runNodeScript(SETUP_NODE_CHILD.CAPABILITY_DISCOVERY, targetArgs, {
     META_KIM_LANG: currentLangCode,
   });
   if (result.status === 0) {
@@ -4955,19 +4963,7 @@ function refreshGlobalCapabilityInventory(activeTargets = []) {
 }
 
 function metaTheoryGlobalSyncArgs(targets, withGlobalHooks = false) {
-  const targetList = Array.isArray(targets) ? targets.join(",") : String(targets);
-  const syncArgs = ["--targets", targetList];
-  const hookTargets = targetList
-    .split(",")
-    .map((target) => target.trim())
-    .filter(Boolean);
-  if (
-    withGlobalHooks &&
-    hookTargets.some((target) => ["claude", "codex"].includes(target))
-  ) {
-    syncArgs.push("--with-global-hooks");
-  }
-  return syncArgs;
+  return buildGlobalMetaTheorySyncArgs({ targets, withGlobalHooks });
 }
 
 function nonClaudeGlobalRuntimeHookTargets(targets) {
@@ -4990,7 +4986,7 @@ function syncNonClaudeGlobalRuntimeHooks(targets, withGlobalHooks = false) {
   if (!withGlobalHooks) return true;
   const hookTargets = nonClaudeGlobalRuntimeHookTargets(targets);
   if (hookTargets.length === 0) return true;
-  const syncResult = runNodeScript("scripts/sync-runtimes.mjs", [
+  const syncResult = runNodeScript(SETUP_NODE_CHILD.RUNTIME_SYNC, [
     "--scope",
     "global",
     "--targets",
@@ -5171,7 +5167,7 @@ async function autoConfigure(installScope = "project", activeTargets = []) {
   if (activeTargets.length > 0) {
     syncArgs.push("--targets", activeTargets.join(","));
   }
-  const syncResult = runNodeScript("scripts/sync-runtimes.mjs", syncArgs);
+  const syncResult = runNodeScript(SETUP_NODE_CHILD.RUNTIME_SYNC, syncArgs);
   if (syncResult.status === 0) {
     ok(t.okRepoSynced);
     return true;
@@ -6412,11 +6408,12 @@ async function validate() {
     );
     ok(t.agentPrompts(summary.presentCount));
   }
-  const validateSpawn = buildNodeScriptSpawn(
+  const validateSpawn = buildSetupNodeChildSpawn(
     process.execPath,
     PROJECT_DIR,
-    "scripts/validate-project.mjs",
+    SETUP_NODE_CHILD.PROJECT_VALIDATION,
     ["--context", "install"],
+    currentLangCode,
   );
   const validateResult = spawnSync(
     validateSpawn.command,
@@ -7147,18 +7144,13 @@ async function runInstall() {
         const proxyEnv = localOverrides.gitProxy
           ? { META_KIM_GIT_PROXY: localOverrides.gitProxy }
           : {};
-        const skillArgs =
-          selectedSkillIds.length > 0
-            ? [
-                "--targets",
-                activeTargets.join(","),
-                "--skills",
-                selectedSkillIds.join(","),
-              ]
-            : ["--targets", activeTargets.join(","), "--skills", ""];
+        const skillArgs = buildGlobalSkillsInstallerArgs({
+          targets: activeTargets,
+          skillIds: selectedSkillIds,
+        });
         // ).concat(["--log-file", INSTALL_LOG_FILE]);
         const installResult = runNodeScript(
-          "scripts/install-global-skills-all-runtimes.mjs",
+          SETUP_NODE_CHILD.GLOBAL_SKILLS_INSTALLER,
           skillArgs,
           proxyEnv,
         );
@@ -7175,7 +7167,7 @@ async function runInstall() {
     stepNum++;
     const metaSyncOk = await withProgress(t.stepLabel(stepNum, t.progressSyncMeta), () => {
       const syncResult = runNodeScript(
-        "scripts/sync-global-meta-theory.mjs",
+        SETUP_NODE_CHILD.GLOBAL_META_THEORY_SYNC,
         metaTheoryGlobalSyncArgs(activeTargets, setupWithGlobalHooks),
       );
       const runtimeHooksOk = syncNonClaudeGlobalRuntimeHooks(
@@ -7361,7 +7353,7 @@ async function runUpdate() {
   // ── 3. sync-runtimes (scope from user selection) ──────────────────
   if (needProject) {
     info(t.updateSyncProjectFiles);
-    const syncResult = runNodeScript("scripts/sync-runtimes.mjs", [
+    const syncResult = runNodeScript(SETUP_NODE_CHILD.RUNTIME_SYNC, [
       "--scope",
       updateScope,
       "--targets",
@@ -7380,19 +7372,14 @@ async function runUpdate() {
     const proxyEnv = localOverrides.gitProxy
       ? { META_KIM_GIT_PROXY: localOverrides.gitProxy }
       : {};
-    const updateSkillArgs =
-      updateSkillIds.length > 0
-        ? [
-            "--update",
-            "--targets",
-            activeTargets.join(","),
-            "--skills",
-            updateSkillIds.join(","),
-          ]
-        : ["--update", "--targets", activeTargets.join(","), "--skills", ""];
+    const updateSkillArgs = buildGlobalSkillsInstallerArgs({
+      targets: activeTargets,
+      skillIds: updateSkillIds,
+      update: true,
+    });
     // ).concat(["--log-file", INSTALL_LOG_FILE]);
     const updateInstallResult = runNodeScript(
-      "scripts/install-global-skills-all-runtimes.mjs",
+      SETUP_NODE_CHILD.GLOBAL_SKILLS_INSTALLER,
       updateSkillArgs,
       proxyEnv,
     );
@@ -7410,7 +7397,7 @@ async function runUpdate() {
   console.log("");
   if (needGlobal) {
     const updateSyncResult = runNodeScript(
-      "scripts/sync-global-meta-theory.mjs",
+      SETUP_NODE_CHILD.GLOBAL_META_THEORY_SYNC,
       metaTheoryGlobalSyncArgs(activeTargets, setupWithGlobalHooks),
     );
     const runtimeHooksOk = syncNonClaudeGlobalRuntimeHooks(

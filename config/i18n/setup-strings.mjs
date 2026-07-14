@@ -559,46 +559,44 @@ Possible causes:
     warnSkillsInstallFailed: `
 ⚠ Global skills install failed
 
-Possible causes:
-1. Directory locked (EBUSY) → Close Explorer/IDE, wait for antivirus, then retry
-2. Network error → Check proxy settings with: node setup.mjs --prompt-proxy
-3. Repo not found → Verify the skill repository URL is correct
+Primary cause: use the first exact error printed above. Apply the guidance below only when the log explicitly shows the matching condition:
+1. If the log contains EBUSY or "resource busy" → Close Explorer/IDE on the skills folder and wait for antivirus/indexing to finish. After the path is released, only consider removing the exact temporary path Meta_Kim reported for this failed run; first confirm it is inside the selected runtime's skills/plugins root and is not user-owned. Never delete temporary directories by wildcard.
+2. If the log reports a network or Git fetch error → Check the connection and proxy settings with: node setup.mjs --prompt-proxy
+3. If the log says the repository was not found → Verify the skill repository URL is correct
 
-→ Fix: Run: node setup.mjs --update
-→ Hint: If EBUSY, close programs holding the skills folder, then manually delete any *.staged-* temp dirs.
+→ Next step: Fix the first exact error, then retry: node setup.mjs --update
 `,
     warnMetaTheorySyncFailed: `
 ⚠ meta-theory sync failed
 
-Possible causes:
-1. Directory locked → Close programs holding ~/.claude/skills/
-2. Permission denied → Check write permissions on global skills dir
-3. Network error → Verify proxy settings
+Primary cause: use the first exact error printed above. Apply the guidance below only when the log explicitly shows the matching condition:
+1. If the log reports EBUSY or a locked directory → Close programs holding the selected runtime's Meta_Kim skills/plugins directory
+2. If the log reports permission denied → Check write permissions on that selected runtime directory
+3. If the log reports a network error → Verify the connection and proxy settings
 
-→ Fix: Run: node scripts/sync-global-meta-theory.mjs --targets claude
+→ Next step: Fix the first exact error, then retry the selected runtimes: node setup.mjs --update
 `,
     warnSkillsUpdateFailed: `
 ⚠ Global skills update failed
 
-Possible causes:
-1. Directory locked (EBUSY) → Close Explorer/IDE, wait for antivirus, then retry
-2. Git fetch failed → Check network/proxy connection
-3. Conflicts → Review staged files and resolve manually
+Primary cause: use the first exact error printed above. Apply the guidance below only when the log explicitly shows the matching condition:
+1. If the log contains EBUSY or "resource busy" → Close Explorer/IDE on the skills folder and wait for antivirus/indexing to finish. After the path is released, only consider removing the exact temporary path Meta_Kim reported for this failed run; first confirm it is inside the selected runtime's skills/plugins root and is not user-owned. Never delete temporary directories by wildcard.
+2. If the log reports a Git fetch or network error → Check the connection and proxy settings
+3. If the log reports a file conflict → Review the staged files and resolve the conflict manually
 
-→ Hint: If EBUSY, close programs holding the skills folder, then manually delete any *.staged-* temp dirs.
-→ Fix: Run: node setup.mjs --update
+→ Next step: Fix the first exact error, then retry: node setup.mjs --update
 `,
     warnSkillsUpdateFailedHint:
-      "If the log shows EBUSY or 'resource busy', close Explorer/IDE on the skills folder, wait for antivirus/indexing to finish, then retry. You can delete leftover *.staged-* dirs manually once nothing holds the path.",
+      "If the log shows EBUSY or 'resource busy', close Explorer/IDE on the skills folder and wait for antivirus/indexing to finish. Only consider removing the exact temporary path Meta_Kim reported for this failed run after confirming it is inside the selected runtime's skills/plugins root and is not user-owned; never delete by wildcard.",
     warnMetaTheoryUpdateFailed: `
 ⚠ meta-theory sync failed
 
-Possible causes:
-1. Directory locked → Close programs holding ~/.claude/skills/
-2. Permission denied → Check write permissions on global skills dir
-3. Network error → Verify proxy settings
+Primary cause: use the first exact error printed above. Apply the guidance below only when the log explicitly shows the matching condition:
+1. If the log reports EBUSY or a locked directory → Close programs holding the selected runtime's Meta_Kim skills/plugins directory
+2. If the log reports permission denied → Check write permissions on that selected runtime directory
+3. If the log reports a network error → Verify the connection and proxy settings
 
-→ Fix: Run: node scripts/sync-global-meta-theory.mjs --targets claude
+→ Next step: Fix the first exact error, then retry the selected runtimes: node setup.mjs --update
 `,
     warnManifestLoadFail: (msg) => `Failed to load skills manifest: ${msg}`,
     labelOptional: "(optional)",
@@ -1191,46 +1189,44 @@ ${r ? `原始错误：${r}` : ""}
     warnSkillsInstallFailed: `
 ⚠ 全局技能安装失败
 
-可能原因：
-1. 目录被锁定（EBUSY）→ 关闭资源管理器/IDE，等待杀毒/索引完成后重试
-2. 网络错误 → 使用 node setup.mjs --prompt-proxy 检查代理设置
-3. 仓库未找到 → 验证技能仓库 URL 是否正确
+主要原因：以上方第一条精确错误为准。仅当日志明确出现对应情况时，再使用下面的处理方法：
+1. 若日志含 EBUSY 或“目录被占用” → 关闭占用 skills 目录的资源管理器/IDE，等待杀毒与索引结束；目录释放后，只考虑处理 Meta_Kim 在本次失败日志中明确报告的那个临时路径，并先确认它位于当前所选运行时的 skills/plugins 根目录内且不属于用户资产；不要使用通配符删除临时目录
+2. 若日志明确提示网络错误或 Git fetch 失败 → 检查网络连接，并运行 node setup.mjs --prompt-proxy 检查代理设置
+3. 若日志提示仓库未找到 → 验证技能仓库 URL 是否正确
 
-修复：node setup.mjs --update
-提示：如遇 EBUSY，先关闭占用 skills 目录的程序，然后手动删除残留的 *.staged-* 临时目录。
+下一步：先修复上方第一条精确错误，再重试：node setup.mjs --update
 `,
     warnMetaTheorySyncFailed: `
 ⚠ meta-theory 同步失败
 
-可能原因：
-1. 目录被锁定 → 关闭占用 ~/.claude/skills/ 的程序
-2. 权限被拒绝 → 检查全局技能目录的写入权限
-3. 网络错误 → 验证代理设置
+主要原因：以上方第一条精确错误为准。仅当日志明确出现对应情况时，再使用下面的处理方法：
+1. 若日志提示 EBUSY 或目录被锁定 → 关闭占用当前所选运行时 Meta_Kim skills/plugins 目录的程序
+2. 若日志提示权限被拒绝 → 检查该所选运行时目录的写入权限
+3. 若日志提示网络错误 → 检查网络连接与代理设置
 
-修复：node scripts/sync-global-meta-theory.mjs --targets claude
+下一步：先修复上方第一条精确错误，再重试当前所选运行时：node setup.mjs --update
 `,
     warnSkillsUpdateFailed: `
 ⚠ 全局技能更新失败
 
-可能原因：
-1. 目录被锁定（EBUSY）→ 关闭资源管理器/IDE，等待杀毒/索引完成后重试
-2. Git fetch 失败 → 检查网络/代理连接
-3. 冲突 → 查看 staged 文件并手动解决
+主要原因：以上方第一条精确错误为准。仅当日志明确出现对应情况时，再使用下面的处理方法：
+1. 若日志含 EBUSY 或“目录被占用” → 关闭占用 skills 目录的资源管理器/IDE，等待杀毒与索引结束；目录释放后，只考虑处理 Meta_Kim 在本次失败日志中明确报告的那个临时路径，并先确认它位于当前所选运行时的 skills/plugins 根目录内且不属于用户资产；不要使用通配符删除临时目录
+2. 若日志明确提示 Git fetch 或网络错误 → 检查网络连接与代理设置
+3. 若日志明确提示文件冲突 → 查看 staged 文件并手动解决冲突
 
-提示：如遇 EBUSY，先关闭占用 skills 目录的程序，然后手动删除残留的 *.staged-* 临时目录。
-修复：node setup.mjs --update
+下一步：先修复上方第一条精确错误，再重试：node setup.mjs --update
 `,
     warnSkillsUpdateFailedHint:
-      "若日志含 EBUSY/目录被占用：请先关闭对该目录的资源管理器窗口与 IDE 监视、等待杀毒/索引结束后再重试；解锁后可手动删除残留的 *.staged-* 临时目录。",
+      "若日志含 EBUSY/目录被占用：请先关闭占用该目录的资源管理器窗口与 IDE 监视，并等待杀毒/索引结束。仅在确认 Meta_Kim 本次失败日志报告的那个临时路径位于当前所选运行时的 skills/plugins 根目录内且不属于用户资产后，才考虑处理该精确路径；不要使用通配符删除。",
     warnMetaTheoryUpdateFailed: `
 ⚠ meta-theory 同步失败
 
-可能原因：
-1. 目录被锁定 → 关闭占用 ~/.claude/skills/ 的程序
-2. 权限被拒绝 → 检查全局技能目录的写入权限
-3. 网络错误 → 验证代理设置
+主要原因：以上方第一条精确错误为准。仅当日志明确出现对应情况时，再使用下面的处理方法：
+1. 若日志提示 EBUSY 或目录被锁定 → 关闭占用当前所选运行时 Meta_Kim skills/plugins 目录的程序
+2. 若日志提示权限被拒绝 → 检查该所选运行时目录的写入权限
+3. 若日志提示网络错误 → 检查网络连接与代理设置
 
-修复：node scripts/sync-global-meta-theory.mjs --targets claude
+下一步：先修复上方第一条精确错误，再重试当前所选运行时：node setup.mjs --update
 `,
     warnManifestLoadFail: (msg) => `加载技能清单失败：${msg}`,
     labelOptional: "（可选）",
@@ -1843,46 +1839,44 @@ ${r ? `生エラー：${r}` : ""}
     warnSkillsInstallFailed: `
 ⚠ グローバルスキルインストール失敗
 
-考えられる原因：
-1. ディレクトリがロックされています（EBUSY）→ エクスプローラー/IDE を閉じ、ウイルス対策/インデックス完了を待ってから再試行
-2. ネットワークエラー → node setup.mjs --prompt-proxy でプロキシ設定を確認
-3. リポジトリが見つかりません → スキルリポジトリの URL が正しいか確認
+主な原因：上に表示された最初の正確なエラーを基準にしてください。ログに該当する状態が明示されている場合に限り、次の対処を行ってください：
+1. ログに EBUSY または「resource busy」がある場合 → スキルフォルダを開いているエクスプローラー/IDE を閉じ、ウイルス対策/インデックス処理の完了を待つ。パスの解放後は、Meta_Kim が今回の失敗ログで明示した一時パスだけを処理候補とし、選択中ランタイムの skills/plugins ルート内にあり、ユーザー所有データではないことを先に確認する。ワイルドカードで一時ディレクトリを削除しないでください
+2. ログにネットワークエラーまたは Git fetch 失敗がある場合 → 接続を確認し、node setup.mjs --prompt-proxy でプロキシ設定を確認
+3. ログにリポジトリ未検出がある場合 → スキルリポジトリの URL が正しいか確認
 
-修正：node setup.mjs --update
-ヒント：EBUSY の場合、スキルフォルダを使用しているプログラムを閉じてから、*.staged-* の一時ディレクトリを手動で削除してください。
+次の手順：最初の正確なエラーを修正してから再試行：node setup.mjs --update
 `,
     warnMetaTheorySyncFailed: `
 ⚠ meta-theory 同期失敗
 
-考えられる原因：
-1. ディレクトリがロックされています → ~/.claude/skills/ を使用しているプログラムを閉じる
-2. 権限が拒否されました → グローバルスキルディレクトリの書き込み権限を確認
-3. ネットワークエラー → プロキシ設定を確認
+主な原因：上に表示された最初の正確なエラーを基準にしてください。ログに該当する状態が明示されている場合に限り、次の対処を行ってください：
+1. ログに EBUSY またはディレクトリのロックがある場合 → 選択中ランタイムの Meta_Kim skills/plugins ディレクトリを使用しているプログラムを閉じる
+2. ログに権限拒否がある場合 → その選択中ランタイムディレクトリの書き込み権限を確認
+3. ログにネットワークエラーがある場合 → 接続とプロキシ設定を確認
 
-修正：node scripts/sync-global-meta-theory.mjs --targets claude
+次の手順：最初の正確なエラーを修正してから選択中ランタイムを再試行：node setup.mjs --update
 `,
     warnSkillsUpdateFailed: `
 ⚠ グローバルスキル更新失敗
 
-考えられる原因：
-1. ディレクトリがロックされています（EBUSY）→ エクスプローラー/IDE を閉じ、ウイルス対策/インデックス完了を待ってから再試行
-2. Git fetch に失敗しました → ネットワーク/プロキシ接続を確認
-3. 競合 → ステージされたファイルを確認し、手動で解決
+主な原因：上に表示された最初の正確なエラーを基準にしてください。ログに該当する状態が明示されている場合に限り、次の対処を行ってください：
+1. ログに EBUSY または「resource busy」がある場合 → スキルフォルダを開いているエクスプローラー/IDE を閉じ、ウイルス対策/インデックス処理の完了を待つ。パスの解放後は、Meta_Kim が今回の失敗ログで明示した一時パスだけを処理候補とし、選択中ランタイムの skills/plugins ルート内にあり、ユーザー所有データではないことを先に確認する。ワイルドカードで一時ディレクトリを削除しないでください
+2. ログに Git fetch 失敗またはネットワークエラーがある場合 → 接続とプロキシ設定を確認
+3. ログにファイル競合がある場合 → ステージされたファイルを確認し、競合を手動で解決
 
-ヒント：EBUSY の場合、スキルフォルダを使用しているプログラムを閉じてから、*.staged-* の一時ディレクトリを手動で削除してください。
-修正：node setup.mjs --update
+次の手順：最初の正確なエラーを修正してから再試行：node setup.mjs --update
 `,
     warnSkillsUpdateFailedHint:
-      "ログに EBUSY 等がある場合: スキルフォルダを開いているエクスプローラー/IDE を閉じ、ウイルス対策/インデックス完了を待って再実行。*.staged-* は解放後に手動削除可。",
+      "ログに EBUSY 等がある場合: スキルフォルダを開いているエクスプローラー/IDE を閉じ、ウイルス対策/インデックス完了を待つ。Meta_Kim が今回の失敗ログで明示した一時パスが選択中ランタイムの skills/plugins ルート内にあり、ユーザー所有データではないと確認できた場合に限り、その正確なパスだけを処理候補とする。ワイルドカードで削除しないでください。",
     warnMetaTheoryUpdateFailed: `
 ⚠ meta-theory 同期失敗
 
-考えられる原因：
-1. ディレクトリがロックされています → ~/.claude/skills/ を使用しているプログラムを閉じる
-2. 権限が拒否されました → グローバルスキルディレクトリの書き込み権限を確認
-3. ネットワークエラー → プロキシ設定を確認
+主な原因：上に表示された最初の正確なエラーを基準にしてください。ログに該当する状態が明示されている場合に限り、次の対処を行ってください：
+1. ログに EBUSY またはディレクトリのロックがある場合 → 選択中ランタイムの Meta_Kim skills/plugins ディレクトリを使用しているプログラムを閉じる
+2. ログに権限拒否がある場合 → その選択中ランタイムディレクトリの書き込み権限を確認
+3. ログにネットワークエラーがある場合 → 接続とプロキシ設定を確認
 
-修正：node scripts/sync-global-meta-theory.mjs --targets claude
+次の手順：最初の正確なエラーを修正してから選択中ランタイムを再試行：node setup.mjs --update
 `,
     warnManifestLoadFail: (msg) => `スキルマニフェストの読み込みに失敗：${msg}`,
     labelOptional: "（オプション）",
@@ -2495,46 +2489,44 @@ ${r ? `원본 오류：${r}` : ""}
     warnSkillsInstallFailed: `
 ⚠ 전역 스킬 설치 실패
 
-가능한 원인：
-1. 디렉토리가 잠겨 있습니다（EBUSY）→ 탐색기/IDE를 닫고, 백신/인덱싱이 끝난 뒤 재시도
-2. 네트워크 오류 → node setup.mjs --prompt-proxy 로 프록시 설정 확인
-3. 리포지토리를 찾을 수 없음 → 스킬 리포지토리 URL이 올바른지 확인
+주요 원인: 위에 표시된 첫 번째 정확한 오류를 기준으로 판단하세요. 로그에 해당 상태가 명시된 경우에만 아래 해결 방법을 적용하세요:
+1. 로그에 EBUSY 또는 "resource busy"가 있으면 → skills 폴더를 열어 둔 탐색기/IDE를 닫고 백신/인덱싱이 끝날 때까지 기다리세요. 경로가 해제된 뒤에는 Meta_Kim이 이번 실패 로그에서 명시한 정확한 임시 경로만 처리 대상으로 삼고, 선택한 런타임의 skills/plugins 루트 안에 있으며 사용자 소유 데이터가 아닌지 먼저 확인하세요. 와일드카드로 임시 폴더를 삭제하지 마세요
+2. 로그에 네트워크 오류 또는 Git fetch 실패가 있으면 → 연결을 확인하고 node setup.mjs --prompt-proxy 로 프록시 설정을 점검하세요
+3. 로그에 리포지토리를 찾을 수 없다고 나오면 → 스킬 리포지토리 URL이 올바른지 확인하세요
 
-수정：node setup.mjs --update
-힌트：EBUSY인 경우 skills 폴더를 사용하는 프로그램을 닫은 후 *.staged-* 임시 폴더를 수동으로 삭제하세요.
+다음 단계: 첫 번째 정확한 오류를 먼저 해결한 뒤 다시 실행하세요: node setup.mjs --update
 `,
     warnMetaTheorySyncFailed: `
 ⚠ meta-theory 동기화 실패
 
-가능한 원인：
-1. 디렉토리가 잠겨 있습니다 → ~/.claude/skills/ 를 사용하는 프로그램 닫기
-2. 권한 거부 → 전역 스킬 디렉토리의 쓰기 권한 확인
-3. 네트워크 오류 → 프록시 설정 확인
+주요 원인: 위에 표시된 첫 번째 정확한 오류를 기준으로 판단하세요. 로그에 해당 상태가 명시된 경우에만 아래 해결 방법을 적용하세요:
+1. 로그에 EBUSY 또는 디렉토리 잠금이 있으면 → 선택한 런타임의 Meta_Kim skills/plugins 디렉토리를 사용하는 프로그램을 닫으세요
+2. 로그에 권한 거부가 있으면 → 해당 런타임 디렉토리의 쓰기 권한을 확인하세요
+3. 로그에 네트워크 오류가 있으면 → 연결과 프록시 설정을 확인하세요
 
-수정：node scripts/sync-global-meta-theory.mjs --targets claude
+다음 단계: 첫 번째 정확한 오류를 먼저 해결한 뒤 선택한 런타임을 다시 실행하세요: node setup.mjs --update
 `,
     warnSkillsUpdateFailed: `
 ⚠ 전역 스킬 업데이트 실패
 
-가능한 원인：
-1. 디렉토리가 잠겨 있습니다（EBUSY）→ 탐색기/IDE를 닫고, 백신/인덱싱이 끝난 뒤 재시도
-2. Git fetch 실패 → 네트워크/프록시 연결 확인
-3. 충돌 → 스테이지된 파일을 확인하고 수동으로 해결
+주요 원인: 위에 표시된 첫 번째 정확한 오류를 기준으로 판단하세요. 로그에 해당 상태가 명시된 경우에만 아래 해결 방법을 적용하세요:
+1. 로그에 EBUSY 또는 "resource busy"가 있으면 → skills 폴더를 열어 둔 탐색기/IDE를 닫고 백신/인덱싱이 끝날 때까지 기다리세요. 경로가 해제된 뒤에는 Meta_Kim이 이번 실패 로그에서 명시한 정확한 임시 경로만 처리 대상으로 삼고, 선택한 런타임의 skills/plugins 루트 안에 있으며 사용자 소유 데이터가 아닌지 먼저 확인하세요. 와일드카드로 임시 폴더를 삭제하지 마세요
+2. 로그에 Git fetch 실패 또는 네트워크 오류가 있으면 → 연결과 프록시 설정을 확인하세요
+3. 로그에 파일 충돌이 있으면 → 스테이징된 파일을 확인하고 충돌을 수동으로 해결하세요
 
-힌트：EBUSY인 경우 skills 폴더를 사용하는 프로그램을 닫은 후 *.staged-* 임시 폴더를 수동으로 삭제하세요.
-수정：node setup.mjs --update
+다음 단계: 첫 번째 정확한 오류를 먼저 해결한 뒤 다시 실행하세요: node setup.mjs --update
 `,
     warnSkillsUpdateFailedHint:
-      "로그에 EBUSY 등이 있으면: 탐색기/IDE로 skills 폴더를 닫고, 후원/인덱싱이 끝난 뒤 재시도. 잠금 해제 후 *.staged-* 폴더는 수동 삭제 가능.",
+      "로그에 EBUSY 등이 있으면: skills 폴더를 연 탐색기/IDE를 닫고 백신/인덱싱이 끝날 때까지 기다리세요. Meta_Kim이 이번 실패 로그에서 명시한 임시 경로가 선택한 런타임의 skills/plugins 루트 안에 있고 사용자 소유 데이터가 아니라고 확인한 경우에만 그 정확한 경로를 처리 대상으로 삼으세요. 와일드카드로 삭제하지 마세요.",
     warnMetaTheoryUpdateFailed: `
 ⚠ meta-theory 동기화 실패
 
-가능한 원인：
-1. 디렉토리가 잠겨 있습니다 → ~/.claude/skills/ 를 사용하는 프로그램 닫기
-2. 권한 거부 → 전역 스킬 디렉토리의 쓰기 권한 확인
-3. 네트워크 오류 → 프록시 설정 확인
+주요 원인: 위에 표시된 첫 번째 정확한 오류를 기준으로 판단하세요. 로그에 해당 상태가 명시된 경우에만 아래 해결 방법을 적용하세요:
+1. 로그에 EBUSY 또는 디렉토리 잠금이 있으면 → 선택한 런타임의 Meta_Kim skills/plugins 디렉토리를 사용하는 프로그램을 닫으세요
+2. 로그에 권한 거부가 있으면 → 해당 런타임 디렉토리의 쓰기 권한을 확인하세요
+3. 로그에 네트워크 오류가 있으면 → 연결과 프록시 설정을 확인하세요
 
-수정：node scripts/sync-global-meta-theory.mjs --targets claude
+다음 단계: 첫 번째 정확한 오류를 먼저 해결한 뒤 선택한 런타임을 다시 실행하세요: node setup.mjs --update
 `,
     warnManifestLoadFail: (msg) => `스킬 매니페스트 로드 실패：${msg}`,
     labelOptional: "(선택)",

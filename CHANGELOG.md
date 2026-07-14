@@ -8,6 +8,27 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## Unreleased
 
+## [2.8.85] - 2026-07-13
+
+### Solved Problem
+
+An update launched through `setup.mjs` could fail before doing any work because the parent forwarded `--lang` to every child script, including strict child CLIs that did not support it. The failure was then followed by generic EBUSY, network, and conflict guesses, so Codex and other runtime users could be told to repair Claude-specific paths even though the exact argument error was already visible. The standard release checks exercised the installer directly and therefore did not prove the real setup-to-child argument contract.
+
+### Fixed
+
+- **Setup now uses explicit child CLI contracts.** Install, update, and quick deploy share production argument builders; localized children receive the selected language, while strict global Meta-Theory sync receives only supported arguments. Unknown child contracts and legacy argument-array calls fail loudly instead of silently dropping language.
+- **Installer language handling is complete and fail-closed.** Split and equals forms are equivalent, only supported language codes and aliases are accepted, and nested capability discovery inherits the same effective language.
+- **The real parent-to-child boundary is regression-tested.** Setup's production builders generate the quick-deploy/install/update argv accepted by the real installer validator, while strict global sync is executed in isolated runtime homes and proves both language exclusion and zero writes.
+- **Failure guidance is accurate across four languages.** English, Simplified Chinese, Japanese, and Korean prioritize the first exact error, make lock/network/permission/conflict advice conditional, use runtime-neutral recovery commands, and preserve useful cleanup guidance without recommending wildcard deletion of user-owned directories.
+- **The selected language remains consistent through final validation.** Runtime sync, capability discovery, dependency installation, and project validation no longer switch back to the host language mid-run.
+
+### Verification
+
+- Focused merged setup, language, strict-parser, and UX checks passed `109/109`; a final bounded language/validation check passed `63/63`.
+- The complete setup suite passed `648/649` with `0` failures and `1` expected POSIX-only skip on Windows.
+- Three independent correctness, security, and UX/test reviews closed every Critical/HIGH finding; the second review reported `0` Critical and `0` HIGH.
+- One complete `npm run meta:verify:all` run passed the standard release gate with `releaseGrade=true`; optional private-attested `live-certified` verification was not requested.
+
 ## [2.8.84] - 2026-07-13
 
 ### Solved Problem

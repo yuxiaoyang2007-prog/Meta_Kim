@@ -54,13 +54,18 @@ describe("sync-global-meta-theory hook policy", () => {
 
   test("unknown and incomplete options fail closed without writing", async () => {
     await withTempRuntimeHomes(async ({ env, root }) => {
-      for (const args of [["--typo"], ["--targets"], ["--targets="]]) {
+      for (const args of [
+        ["--typo"],
+        ["--lang", "zh-CN"],
+        ["--targets"],
+        ["--targets="],
+      ]) {
         await assert.rejects(
           () => runScript(args, env),
           (error) => {
             assert.match(
               error.stderr,
-              /Unknown option: --typo|--targets requires a comma-separated value/,
+              /Unknown option: --(?:typo|lang)|--targets requires a comma-separated value/,
             );
             return true;
           },

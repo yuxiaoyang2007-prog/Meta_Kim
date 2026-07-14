@@ -13,6 +13,7 @@
  *   --plugins-only    only run `claude plugin install` (no git clones)
  *   --skip-plugins    skip `claude plugin install` even if defaults apply
  *   --skills=id,...   install only these manifest skill ids (omit = all)
+ *   --lang <code>     localize installer output (en, zh-CN, ja-JP, ko-KR)
  *   --prefer-local-dependencies
  *                     prefer local sibling dependency checkouts for testing
  *
@@ -67,7 +68,7 @@ import {
   resolveTargetContext,
   resolveRuntimeHomeDir,
 } from "./meta-kim-sync-config.mjs";
-import { t } from "./meta-kim-i18n.mjs";
+import { LANG, t } from "./meta-kim-i18n.mjs";
 import {
   buildCodexHooksJson,
   buildCursorHooksJson,
@@ -136,6 +137,16 @@ function spawnCliSync(command, commandArgs = [], options = {}) {
   );
 }
 
+function buildGlobalCapabilityInventoryArgs(activeTargets = [], language = LANG) {
+  return [
+    "--lang",
+    language,
+    "--runtime-inventory-only",
+    "--targets",
+    activeTargets.join(","),
+  ];
+}
+
 function refreshGlobalCapabilityInventory(activeTargets = []) {
   if (dryRun) {
     console.log(
@@ -150,15 +161,13 @@ function refreshGlobalCapabilityInventory(activeTargets = []) {
     process.execPath,
     [
       path.join(repoRoot, "scripts", "discover-global-capabilities.mjs"),
-      "--runtime-inventory-only",
-      "--targets",
-      activeTargets.join(","),
+      ...buildGlobalCapabilityInventoryArgs(activeTargets),
     ],
     {
       cwd: repoRoot,
       stdio: "inherit",
       shell: false,
-      env: process.env,
+      env: { ...process.env, META_KIM_LANG: LANG },
     },
   );
   if (result.status === 0) {
@@ -205,7 +214,25 @@ const INSTALLER_VALUE_FLAGS = new Set([
   "--scope",
   "--proxy",
   "--log-file",
+  "--lang",
 ]);
+const INSTALLER_LANGUAGE_VALUES = new Set([
+  "en",
+  "zh",
+  "zh-CN",
+  "ja",
+  "ja-JP",
+  "ko",
+  "ko-KR",
+]);
+
+function validateInstallerLanguage(value) {
+  if (!INSTALLER_LANGUAGE_VALUES.has(value)) {
+    throw new Error(
+      "--lang requires one of: en, zh, zh-CN, ja, ja-JP, ko, ko-KR",
+    );
+  }
+}
 
 function installerHelpText() {
   return [
@@ -215,6 +242,7 @@ function installerHelpText() {
     "  --update                    update installed skills",
     "  --targets <ids>             comma-separated runtime ids",
     "  --skills <ids>              comma-separated skill ids",
+    "  --lang <code>               localize output (en, zh, zh-CN, ja, ja-JP, ko, ko-KR)",
     "  --dry-run                   print actions without writing",
     "  --plugins-only              install native plugin bundles only",
     "  --skip-plugins, --no-plugins",
@@ -235,18 +263,22 @@ function validateInstallerArgs(argv) {
     const flag = equalsIndex === -1 ? arg : arg.slice(0, equalsIndex);
     if (INSTALLER_VALUE_FLAGS.has(flag)) {
       if (equalsIndex !== -1) {
-        if (!arg.slice(equalsIndex + 1) && flag !== "--skills") {
+        const value = arg.slice(equalsIndex + 1);
+        if (!value && flag !== "--skills") {
           throw new Error(`${flag} requires a value`);
         }
+        if (flag === "--lang") validateInstallerLanguage(value);
         continue;
       }
+      const value = argv[index + 1];
       if (
-        argv[index + 1] === undefined ||
-        (argv[index + 1] === "" && flag !== "--skills") ||
-        argv[index + 1].startsWith("--")
+        value === undefined ||
+        (value === "" && flag !== "--skills") ||
+        (flag === "--lang" ? value.startsWith("-") : value.startsWith("--"))
       ) {
         throw new Error(`${flag} requires a value`);
       }
+      if (flag === "--lang") validateInstallerLanguage(value);
       index += 1;
       continue;
     }
@@ -255,11 +287,11 @@ function validateInstallerArgs(argv) {
 }
 
 if (directInvocation) {
+  validateInstallerArgs(cliArgs);
   if (cliArgs.includes("--help") || cliArgs.includes("-h")) {
     console.log(installerHelpText());
     process.exit(0);
   }
-  validateInstallerArgs(cliArgs);
 }
 
 const preferLocalDependencies = cliArgs.includes("--prefer-local-dependencies");
@@ -5386,6 +5418,7 @@ export {
   extractArchiveInto,
   readResponseBodyBounded,
   validateArchiveMembers,
+  buildGlobalCapabilityInventoryArgs,
   assertRealPathContained,
   normalizeInstallerSkillsFilter,
   resolveCompatibilitySkillRoots,

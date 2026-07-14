@@ -447,7 +447,7 @@ describe("capability index inheritance chain", () => {
     assert.match(setupSource, /function refreshGlobalCapabilityInventory\(activeTargets = \[\]\)/);
     assert.match(
       setupSource,
-      /runNodeScript\("scripts\/discover-global-capabilities\.mjs", targetArgs, \{\s*META_KIM_LANG: currentLangCode,\s*\}\)/,
+      /runNodeScript\(SETUP_NODE_CHILD\.CAPABILITY_DISCOVERY, targetArgs, \{\s*META_KIM_LANG: currentLangCode,\s*\}\)/,
       "setup.mjs must run global discovery directly for the selected runtime targets",
     );
     assert.match(

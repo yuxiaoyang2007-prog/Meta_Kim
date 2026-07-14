@@ -559,6 +559,10 @@ function detectLang() {
   if (cliIdx >= 0 && process.argv[cliIdx + 1]) {
     return normalizeLangCode(process.argv[cliIdx + 1]);
   }
+  const equalsArg = process.argv.find((arg) => arg.startsWith("--lang="));
+  if (equalsArg) {
+    return normalizeLangCode(equalsArg.slice("--lang=".length));
+  }
   const envLang = process.env.META_KIM_LANG;
   if (envLang) return normalizeLangCode(envLang);
   // Heuristic: Windows with CJK system → Chinese

@@ -614,6 +614,10 @@ console.log("forced rebuild ok");
 
   test("install uses scoped validation and release validation keeps graphify check", () => {
     const setupSrc = readFileSync(path.join(root, "setup.mjs"), "utf8");
+    const childContractSrc = readFileSync(
+      path.join(root, "scripts", "node-spawn-config.mjs"),
+      "utf8",
+    );
     const verifyRunner = readFileSync(
       path.join(root, "scripts", "run-verify-all.mjs"),
       "utf8",
@@ -621,7 +625,11 @@ console.log("forced rebuild ok");
 
     assert.match(
       setupSrc,
-      /"scripts\/validate-project\.mjs"[\s\S]*\["--context", "install"\]/,
+      /SETUP_NODE_CHILD\.PROJECT_VALIDATION,[\s\S]*\["--context", "install"\]/,
+    );
+    assert.match(
+      childContractSrc,
+      /\[SETUP_NODE_CHILD\.PROJECT_VALIDATION\][\s\S]*scriptRelative: "scripts\/validate-project\.mjs"[\s\S]*languageOption: true/,
     );
     assert.match(verifyRunner, /meta:graphify:check/);
   });

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildGlobalMetaTheorySyncArgs } from "../../scripts/node-spawn-config.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const syncManifest = JSON.parse(
@@ -510,11 +511,20 @@ describe("setup update default flow", () => {
       "fresh installs must not silently enable global hooks",
     );
     assert.match(source, /function metaTheoryGlobalSyncArgs\(targets, withGlobalHooks = false\)/);
-    assert.match(source, /\["claude", "codex"\]\.includes\(target\)/);
-    assert.match(
-      source,
-      /if \(\s*withGlobalHooks &&[\s\S]*?syncArgs\.push\("--with-global-hooks"\);/,
+    assert.deepEqual(
+      buildGlobalMetaTheorySyncArgs({
+        targets: ["claude", "cursor"],
+        withGlobalHooks: true,
+      }),
+      ["--targets", "claude,cursor", "--with-global-hooks"],
       "sync-global-meta-theory must receive --with-global-hooks only after setup opt-in",
+    );
+    assert.deepEqual(
+      buildGlobalMetaTheorySyncArgs({
+        targets: ["cursor", "openclaw"],
+        withGlobalHooks: true,
+      }),
+      ["--targets", "cursor,openclaw"],
     );
     assert.match(
       source,
