@@ -122,6 +122,118 @@ function markerFromText(value) {
   }
 }
 
+function bindingFromJsonEnvelope(value) {
+  if (typeof value !== "string" || value.length > 100_000) return null;
+  try {
+    const envelope = JSON.parse(value);
+    if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) return null;
+    return validateMetaKimBinding(envelope.metaKimBinding);
+  } catch {
+    return null;
+  }
+}
+
+const CODEX_OWNER_BINDING_MODES = new Set([
+  "native_custom_agent",
+  "run_scoped_owner_contract",
+]);
+
+function boundedJsonObject(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string" || value.length > 100_000) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function boundedCodexIdentity(value) {
+  return typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.trim().length <= 128 &&
+    !/[\u0000-\u001f\u007f]/u.test(value)
+    ? value.trim()
+    : null;
+}
+
+function codexWorkerEnvelope(input) {
+  const parsedInput = boundedJsonObject(input);
+  return boundedJsonObject(parsedInput?.message);
+}
+
+function codexOwnerBindingClaim(envelope) {
+  const modeCandidates = [envelope?.ownerBindingMode].filter((value) => value != null);
+  const nativeAgentTypeCandidates = [envelope?.nativeAgentType].filter((value) => value != null);
+  const modes = [...new Set(modeCandidates.map((value) => String(value).trim()))];
+  const nativeAgentTypes = [
+    ...new Set(nativeAgentTypeCandidates.map((value) => boundedCodexIdentity(value))),
+  ];
+  if (
+    modes.length !== 1 ||
+    modes.length > 1 ||
+    modes.some((mode) => !CODEX_OWNER_BINDING_MODES.has(mode)) ||
+    nativeAgentTypes.includes(null) ||
+    nativeAgentTypes.length > 1
+  ) {
+    return { valid: false, mode: null, nativeAgentType: null };
+  }
+  return {
+    valid: true,
+    mode: modes[0] ?? null,
+    nativeAgentType: nativeAgentTypes[0] ?? null,
+  };
+}
+
+export function observeCodexOwnerBinding(input) {
+  const parsedInput = boundedJsonObject(input);
+  const envelope = codexWorkerEnvelope(parsedInput);
+  const hasAgentType = Object.prototype.hasOwnProperty.call(parsedInput ?? {}, "agent_type");
+  const nativeAgentType = hasAgentType ? boundedCodexIdentity(parsedInput.agent_type) : null;
+  const ownerBindingMode = nativeAgentType
+    ? "native_custom_agent"
+    : "run_scoped_owner_contract";
+  const claim = codexOwnerBindingClaim(envelope);
+  let mismatchReason = null;
+  if (hasAgentType && !nativeAgentType) {
+    mismatchReason = "invalid_host_agent_type";
+  } else if (!claim.valid) {
+    mismatchReason = "invalid_owner_binding_mode_claim";
+  } else if (claim.mode && claim.mode !== ownerBindingMode) {
+    mismatchReason = "claimed_owner_binding_mode_mismatch";
+  } else if (claim.nativeAgentType && claim.nativeAgentType !== nativeAgentType) {
+    mismatchReason = "claimed_native_agent_type_mismatch";
+  } else if (claim.nativeAgentType && ownerBindingMode !== "native_custom_agent") {
+    mismatchReason = "native_agent_type_claim_without_host_agent_type";
+  } else if (
+    ownerBindingMode === "native_custom_agent" &&
+    envelope?.ownerAgent !== nativeAgentType
+  ) {
+    mismatchReason = "native_agent_type_owner_mismatch";
+  } else if (
+    ownerBindingMode === "native_custom_agent" &&
+    (
+      envelope?.ownerDefinition?.format !== "codex_custom_agent_toml" ||
+      envelope?.ownerDefinition?.nativeCustomAgentEligible !== true ||
+      envelope?.ownerDefinition?.nativeAgentName !== nativeAgentType ||
+      !/\.toml$/iu.test(String(envelope?.ownerSource ?? envelope?.ownerDefinition?.sourceRef ?? ""))
+    )
+  ) {
+    mismatchReason = "native_custom_agent_owner_definition_not_validated_toml";
+  }
+  return {
+    ownerBindingMode,
+    nativeAgentType,
+    claimedOwnerBindingMode: claim.mode,
+    ownerBindingModeEvidence: nativeAgentType
+      ? "tool_input.agent_type"
+      : "tool_input.agent_type_absent",
+    ownerBindingModeValidation: mismatchReason ? "mismatch" : "matched_or_host_derived",
+    ownerBindingMismatchReason: mismatchReason,
+  };
+}
+
 export function extractMetaKimBinding(input) {
   let parsed = input;
   if (typeof input === "string") {
@@ -138,7 +250,7 @@ export function extractMetaKimBinding(input) {
   const direct = validateMetaKimBinding(parsed.metaKimBinding);
   if (direct) return direct;
   for (const field of ["message", "prompt"]) {
-    const nested = markerFromText(parsed[field]);
+    const nested = markerFromText(parsed[field]) ?? bindingFromJsonEnvelope(parsed[field]);
     if (nested) return nested;
   }
   return null;
@@ -237,7 +349,70 @@ function commandScriptProviderMatches(input, providerId) {
   return directInterpreters.has(executable) && normalized[1] === expected;
 }
 
+function skillProviderMatches(input, providerId) {
+  const parsed = boundedJsonObject(input);
+  const actualProvider = [
+    parsed?.skill,
+    parsed?.skillId,
+    parsed?.skill_id,
+    parsed?.providerId,
+  ]
+    .map((value) => boundedCodexIdentity(value))
+    .find(Boolean);
+  return Boolean(actualProvider) && actualProvider === providerId;
+}
+
+function mcpProviderMatches(event, providerId) {
+  return typeof providerId === "string" &&
+    providerId.length > 0 &&
+    event?.hostSurface === providerId;
+}
+
+function markerBindingRefJoinsProvider(marker) {
+  const family = boundedCodexIdentity(marker?.family);
+  const providerId = boundedCodexIdentity(marker?.providerId);
+  const bindingRef = boundedCodexIdentity(marker?.bindingRef);
+  return Boolean(family && providerId && bindingRef) &&
+    bindingRef.includes(`:${family}:${providerId}`);
+}
+
+function exactHostSurfaceBindingMatches(event, marker) {
+  return marker?.providerId === event?.hostSurface &&
+    markerBindingRefJoinsProvider(marker);
+}
+
+function agentSubagentBindingMatches(input, marker) {
+  const parsedInput = boundedJsonObject(input);
+  const envelope = codexWorkerEnvelope(parsedInput);
+  const ownerAgent = boundedCodexIdentity(envelope?.ownerAgent);
+  if (!ownerAgent || marker?.family !== "agent_subagent") return false;
+  if (
+    boundedCodexIdentity(envelope?.taskPacketId) !== marker.taskPacketId ||
+    boundedCodexIdentity(envelope?.roleInstanceId) !== marker.roleInstanceId
+  ) return false;
+
+  const providerId = boundedCodexIdentity(marker.providerId);
+  const providerMatchesOwner = providerId === ownerAgent ||
+    providerId?.endsWith(`:${ownerAgent}`) === true;
+  if (!providerMatchesOwner) return false;
+
+  const bindingRef = boundedCodexIdentity(marker.bindingRef);
+  const providerJoin = `:agent_subagent:${providerId}`;
+  const taskPacketJoin = marker.taskPacketId;
+  return Boolean(bindingRef) &&
+    bindingRef.includes(providerJoin) &&
+    (bindingRef.startsWith(`${taskPacketJoin}:`) || bindingRef.endsWith(`:${taskPacketJoin}`));
+}
+
 export function normalizeObservedEventBinding(event, input, hostOccurredAt = null) {
+  if (event?.ownerBindingModeValidation === "mismatch") {
+    return {
+      ...event,
+      hostObservedFamily: event.family,
+      bindingUnavailableReason:
+        event.ownerBindingMismatchReason ?? "owner_binding_mode_mismatch",
+    };
+  }
   const marker = extractMetaKimBinding(input);
   if (!marker) {
     return {
@@ -257,6 +432,53 @@ export function normalizeObservedEventBinding(event, input, hostOccurredAt = nul
       markerOccurredAt: marker.occurredAt,
       metaKimBinding: marker,
       bindingUnavailableReason: "command_script_provider_not_in_executed_argv",
+    };
+  }
+  if (marker.family === "skill" && !skillProviderMatches(input, marker.providerId)) {
+    return {
+      ...event,
+      hostObservedFamily: event.family,
+      markerOccurredAt: marker.occurredAt,
+      bindingUnavailableReason: "skill_provider_not_in_host_input",
+    };
+  }
+  if (marker.family === "mcp" && !mcpProviderMatches(event, marker.providerId)) {
+    return {
+      ...event,
+      hostObservedFamily: event.family,
+      markerOccurredAt: marker.occurredAt,
+      bindingUnavailableReason: "mcp_provider_does_not_match_host_surface",
+    };
+  }
+  if (marker.family === "hook" && !exactHostSurfaceBindingMatches(event, marker)) {
+    return {
+      ...event,
+      hostObservedFamily: event.family,
+      markerOccurredAt: marker.occurredAt,
+      bindingUnavailableReason: "hook_binding_does_not_match_host_surface",
+    };
+  }
+  if (
+    marker.family === "runtime_tool" &&
+    !exactHostSurfaceBindingMatches(event, marker)
+  ) {
+    return {
+      ...event,
+      hostObservedFamily: event.family,
+      markerOccurredAt: marker.occurredAt,
+      bindingUnavailableReason: "runtime_tool_binding_does_not_match_host_surface",
+    };
+  }
+  if (
+    marker.family === "agent_subagent" &&
+    CODEX_OWNER_BINDING_MODES.has(event?.ownerBindingMode) &&
+    !agentSubagentBindingMatches(input, marker)
+  ) {
+    return {
+      ...event,
+      hostObservedFamily: event.family,
+      markerOccurredAt: marker.occurredAt,
+      bindingUnavailableReason: "agent_binding_does_not_match_owner_envelope",
     };
   }
   return {
@@ -707,6 +929,10 @@ export function observeCodexJsonl(text) {
       !agentCompletion
     ) continue;
     const resultOutput = returnedAgentMessage?.text ?? output.payload.output ?? output.payload.result ?? "";
+    const toolInput = call.payload.arguments ?? call.payload.input ?? null;
+    const ownerBindingObservation = family === "agent_subagent"
+      ? observeCodexOwnerBinding(toolInput)
+      : {};
     const baseEvent = {
       observerFormat: "codex_host_jsonl_v1",
       family,
@@ -737,10 +963,11 @@ export function observeCodexJsonl(text) {
         ? "returned_child_final"
         : "completed_activity_observed",
       activityCompletionObserved: Boolean(agentCompletion),
+      ...ownerBindingObservation,
     };
     events.push(normalizeObservedEventBinding(
       baseEvent,
-      call.payload.arguments ?? call.payload.input ?? null,
+      toolInput,
       returnedAgentMessage?.observedAt ?? agentCompletion?.observedAt ?? output.observedAt ?? null,
     ));
   }

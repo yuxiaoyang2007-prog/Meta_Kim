@@ -1,0 +1,35 @@
+{
+  "$schema": "./contracts/distribution.schema.json",
+  "schemaVersion": 1,
+  "project": {
+    "repository": "https://github.com/KimYx0207/Meta_Kim",
+    "npxSpec": "github:KimYx0207/Meta_Kim"
+  },
+  "installDefaults": {
+    "interactiveScope": "global",
+    "silentScope": "global"
+  },
+  "repositoryPolicy": {
+    "defaultHttpsBase": "https://github.com",
+    "trustedHosts": [
+      "github.com"
+    ]
+  },
+  "sourceHosts": {
+    "github": {
+      "host": "github.com",
+      "webBase": "https://github.com",
+      "apiBase": "https://api.github.com"
+    }
+  },
+  "documentation": {
+    "claudeCode": "https://docs.anthropic.com/en/docs/claude-code"
+  },
+  "contact": {
+    "website": "https://www.aiking.dev/",
+    "github": "https://github.com/KimYx0207",
+    "feishu": "https://my.feishu.cn/wiki/OhQ8wqntFihcI1kWVDlcNdpznFf",
+    "x": "https://x.com/KimYx0207",
+    "wechat": "老金带你玩AI"
+  }
+}

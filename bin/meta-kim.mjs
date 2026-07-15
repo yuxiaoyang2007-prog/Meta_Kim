@@ -11,6 +11,7 @@ import {
 } from "../scripts/meta-kim-i18n.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const callerCwd = process.cwd();
 const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const rawArgs = process.argv.slice(2);
 while (["meta-kim", "--"].includes(rawArgs[0])) rawArgs.shift();
@@ -42,6 +43,7 @@ ${status.usageHeading}:
   meta-kim doctor
   meta-kim uninstall [--yes] [--deep] [--scope=global|project|both]
   meta-kim project bootstrap [--project-dir <dir>] [--dry-run|--apply] [--json]
+  meta-kim project capability copy --project-dir <dir> --runtime <runtime> --type <agent|skill|command> --id <id> --source <path> --mode <create|iterate> [--apply] [--json]
 
 ${status.hooksNote}
 
@@ -132,7 +134,12 @@ function run(relativeScript, args = []) {
   const result = spawnSync(process.execPath, [join(root, relativeScript), ...args], {
     cwd: root,
     stdio: "inherit",
-    env: process.env,
+    env: {
+      ...process.env,
+      // The public bin is the trust boundary for relative CLI paths. Never let
+      // a polluted parent environment retarget project mutations.
+      META_KIM_CALLER_CWD: callerCwd,
+    },
   });
   process.exit(result.status === null ? 1 : result.status);
 }
@@ -207,8 +214,13 @@ switch (command) {
     run("scripts/uninstall.mjs", commandArgs);
     break;
   case "project":
-    if (commandArgs[0] !== "bootstrap") fail("the only project subcommand is 'bootstrap'");
-    validateSetupOptions(commandArgs.slice(1));
-    run("setup.mjs", ["--project-bootstrap", ...commandArgs.slice(1)]);
+    if (commandArgs[0] === "bootstrap") {
+      validateSetupOptions(commandArgs.slice(1));
+      run("setup.mjs", ["--project-bootstrap", ...commandArgs.slice(1)]);
+    }
+    if (commandArgs[0] === "capability" && commandArgs[1] === "copy") {
+      run("scripts/project-capability-copy.mjs", commandArgs.slice(2));
+    }
+    fail("project subcommand must be 'bootstrap' or 'capability copy'");
     break;
 }

@@ -2425,10 +2425,31 @@
         "candidateTaskShape"
       ],
       "unresolvedQuestionRequiredFields": [
+        "questionId",
         "question",
         "questionTarget",
         "decisionImpact",
+        "impactPriority",
+        "dependsOn",
+        "evidenceRefs",
+        "recommendationState",
+        "recommendedAnswer",
+        "recommendationRationale",
+        "userAnswer",
+        "answerEvidenceRefs",
+        "invalidatedBy",
         "status"
+      ],
+      "unresolvedQuestionStatusEnum": [
+        "open",
+        "answered",
+        "skipped",
+        "invalidated"
+      ],
+      "recommendationStateEnum": [
+        "recommended",
+        "preference_only",
+        "insufficient_evidence"
       ],
       "questionTargetEnum": [
         "wrong_goal_risk",
@@ -2441,15 +2462,82 @@
       "choiceGateSkipAllowedWhen": [
         "trivial",
         "no_branching_choice",
-        "explicit_auto_proceed"
+        "explicit_auto_proceed",
+        "stopped_by_user"
       ],
       "solutionChoiceStateEnum": [
         "confirmed",
+        "pending_user_choice",
         "trivial",
         "no_branching_choice",
-        "explicit_auto_proceed"
+        "explicit_auto_proceed",
+        "stopped_by_user"
       ],
-      "description": "Thinking-stage pre-decision frame for non-trivial executable work before AskUserQuestion, native choice, or compatibility fallback. It must list unresolvedQuestions, present contentEvidence-backed candidate solution paths, and record solutionChoiceState before detailed orchestration is locked. Codex and Claude Code cannot use compatibility fallback as completion evidence for required branch-changing decisions. A skipped choice must include skipSource and skipSafetyRationale, and may only use strict skip reasons. Read-only/queryBypass is a safety and path-classification boundary, not a choice-surface skip reason by itself; use no_branching_choice only when no user answer would change route, scope, risk, owner, permission, non-goal, or acceptance. It contains candidate orchestration paths and trade-offs only; it is not a finalized dispatchEnvelopePacket, dispatchBoard, or workerTaskPacket."
+      "planChallengeState": {
+        "requiredFields": [
+          "active",
+          "authorizationRequired",
+          "sideEffectActions",
+          "executionAllowed",
+          "phase",
+          "triggerReasons",
+          "triggerEvidence",
+          "triggerEvidenceRefs",
+          "decisionEvidence",
+          "selectedQuestionId",
+          "currentQuestion",
+          "pendingUserChoice",
+          "stopRequested",
+          "stopReason",
+          "controlEvidence",
+          "sharedUnderstandingConfirmed",
+          "sharedUnderstandingEvidenceRefs",
+          "executionAuthorization",
+          "chatSummaryRef"
+        ],
+        "phaseEnum": [
+          "inactive",
+          "awaiting_user_answer",
+          "awaiting_understanding_confirmation",
+          "awaiting_execution_authorization",
+          "ready_for_execution",
+          "execution_denied",
+          "stopped_by_user"
+        ],
+        "triggerReasonEnum": [
+          "explicit_user_request",
+          "material_risk",
+          "evidence_contradiction"
+        ],
+        "executionAuthorizationRequiredFields": [
+          "state",
+          "source",
+          "scope"
+          ,"scopeActions"
+          ,"trusted"
+          ,"binding"
+          ,"evidenceRefs"
+          ,"scopeCoversActions"
+        ],
+        "executionAuthorizationStateEnum": [
+          "not_required",
+          "not_requested",
+          "authorized",
+          "denied"
+        ],
+        "summaryRequiredFields": [
+          "confirmedDecisions",
+          "openRisks",
+          "nextStep",
+          "visibleLines"
+        ],
+        "activationRule": "Activate only when the user explicitly requests a plan challenge or Fetch/Thinking records material risk or contradictory evidence. Low-risk work with no branch-changing choice remains inactive.",
+        "questionSelectionRule": "Select exactly one highest-impact open question. Answered, skipped, and invalidated questions remain in unresolvedQuestions as history; invalidated dependencies are never selected.",
+        "recommendationRule": "A recommendation is optional. Preference-only questions use preference_only and evidence-insufficient questions use insufficient_evidence without inventing a recommended answer.",
+        "authorizationRule": "sharedUnderstandingConfirmed is derived only from trusted evidence bound to plan-challenge-understanding-confirmation and is never execution authorization. Mutation requires trusted evidence bound to all concrete sideEffectActions; untrusted or incomplete scope remains pending. Explicit denial enters execution_denied without another authorization prompt. Caller-supplied invalidation is ignored, and stopped runs remain executionAllowed=false.",
+        "continuationRule": "Cross-turn continuation accepts only a validator-passing prior artifact from the same governed output directory with the same task fingerprint and a pending phase. The current host verifier must bind the exact previous run id, and the runner may append at most one phase-appropriate current decision to restored history. Terminal runs cannot resume and prior artifacts cannot be overwritten."
+      },
+      "description": "Thinking-stage pre-decision frame for non-trivial executable work before AskUserQuestion, native choice, or compatibility fallback. It must list unresolvedQuestions, present contentEvidence-backed candidate solution paths, and record solutionChoiceState before detailed orchestration is locked. Its optional risk-adaptive planChallengeState reuses unresolvedQuestions as the single question ledger; it does not create a ninth stage or a parallel truth source. Codex and Claude Code cannot use compatibility fallback as completion evidence for required branch-changing decisions. A skipped choice must include skipSource and skipSafetyRationale, and may only use strict skip reasons. Read-only/queryBypass is a safety and path-classification boundary, not a choice-surface skip reason by itself; use no_branching_choice only when no user answer would change route, scope, risk, owner, permission, non-goal, or acceptance. It contains candidate orchestration paths and trade-offs only; it is not a finalized dispatchEnvelopePacket, dispatchBoard, or workerTaskPacket."
     },
     "intentPacket": {
       "requiredFields": [
@@ -3597,6 +3685,12 @@
         "sourceProjects",
         "deliveryShellsUsed",
         "blockedBy"
+      ],
+      "planChallengeSummaryFields": [
+        "confirmedDecisions",
+        "openRisks",
+        "nextStep",
+        "visibleLines"
       ]
     },
     "compactionPacket": {

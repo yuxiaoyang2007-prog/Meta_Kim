@@ -246,11 +246,57 @@ test("private attestation schema defines strict binding, isolation, and bundle c
   assert.equal(validate(positive), true, JSON.stringify(validate.errors));
   positive.observedBindings[0].evidenceKind = "agent_team_result";
   assert.equal(validate(positive), false);
+
+  const nativeAgent = baseReport({ rawArtifactSha256: "d".repeat(64) });
+  Object.assign(nativeAgent.requiredBindings[0], {
+    family: "agent_subagent",
+    ownerBindingMode: "native_custom_agent",
+    nativeAgentType: "meta-prism",
+  });
+  Object.assign(nativeAgent.observedBindings[0], {
+    family: "agent_subagent",
+    ownerBindingMode: "native_custom_agent",
+    nativeAgentType: "meta-prism",
+    evidenceKind: "spawn_agent_result",
+  });
+  assert.equal(validate(nativeAgent), true, JSON.stringify(validate.errors));
 });
 
 test("complete signed-report shape accepts exact task/lane identities and content-addressed bundle refs", () => {
   const report = baseReport({ rawArtifactSha256: "d".repeat(64) });
   assert.deepEqual(validatePrivateAttestedReportShape(report), []);
+});
+
+test("private verifier rejects run-scoped Agent evidence for a native custom Agent requirement", () => {
+  const report = baseReport({ rawArtifactSha256: "d".repeat(64) });
+  report.target = "codex_cli";
+  report.isolation.codexSharedSkillRootContaminates = false;
+  Object.assign(report.requiredBindings[0], {
+    family: "agent_subagent",
+    providerId: "global:meta-prism",
+    bindingRef: "task-1:agent_subagent:global:meta-prism",
+    taskPacketId: "task-1",
+    roleInstanceId: "review-1",
+    ownerBindingMode: "native_custom_agent",
+    nativeAgentType: "meta-prism",
+  });
+  Object.assign(report.observedBindings[0], {
+    family: "agent_subagent",
+    providerId: "global:meta-prism",
+    bindingRef: "task-1:agent_subagent:global:meta-prism",
+    taskPacketId: "task-1",
+    roleInstanceId: "review-1",
+    ownerBindingMode: "run_scoped_owner_contract",
+    nativeAgentType: null,
+    evidenceKind: "spawn_agent_result",
+    hostSurface: "collaboration.spawn_agent",
+    target: "codex_cli",
+  });
+  assert.deepEqual(validatePrivateAttestedReportShape(report), []);
+  const result = verifyPrivateAttestedExactBindingReport(report);
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.startsWith("exact_binding_match_count:")));
+  assert.ok(result.errors.some((error) => error.startsWith("unselected_observed_binding:")));
 });
 
 test("shape validation rejects missing isolation and Codex shared-skill contamination", () => {

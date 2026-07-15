@@ -70,6 +70,24 @@ After changing canonical sources, sync projections instead of hand-forking runti
 
 Open-source boundary: runtime projection directories are generated local outputs, not GitHub source. `.claude/`, `.codex/`, `.agents/`, `.cursor/`, `openclaw/`, `.mcp.json`, and `codex/` must stay gitignored and excluded from package files. The nine governance agents are sourced from `canonical/agents/`. Codex `.toml` projection is limited to those governance mirrors; execution-layer labels such as `worker`, `explorer`, `frontend`, `backend`, `test`, `review`, `analysis`, `verify`, or `docs` are not Meta_Kim projection targets.
 
+## Install Scope And Runtime Sedimentation
+
+Keep two independent scope decisions separate:
+
+- `setup.mjs` install/update offers an interactive `global` or `project` choice and accepts the same choice explicitly through `--scope global|project` for non-interactive use. `global_only` describes install-generated projection scope: it keeps only the dependency-closed Claude/Codex/Cursor project Hook package needed to enter governance and does not install durable project agents, skills, commands, capability indexes, MCP entries, Codex config examples, or OpenClaw project projections.
+- Distribution scope and existing project topology are independent. A normal `global` install/update still refreshes every current, explicit, or saved directory that already has a valid Meta_Kim project-bootstrap manifest, using the configured bootstrap merge/delta policy. With no existing managed project, it creates no project projection and asks no extra question. Normal install/update never turns this refresh into cleanup; project cleanup remains an explicit cleanup command.
+- Under `project_bootstrap_merge_delta`, files recorded by the project-bootstrap manifest remain Meta_Kim-managed: generated projections are transaction-backed-up and replaced with the current package version, while shared JSON and managed text blocks are merged. This replacement rule does not apply to unknown user files or `runtime_sedimented_project_copy` capabilities; both remain preserved.
+- Governed runtime sedimentation is a different lifecycle. When a run proves that an Agent, Skill, or Command must be created or iterated for the current project, write or copy it into that runtime's native project directory and record it as `runtime_sedimented_project_copy`. Global dependency install/update and `global_only` cleanup must never overwrite or remove that independent project copy.
+- Global discovery does not imply project copying. If a discovered global Agent, Skill, or Command already fits and no iteration is requested, bind it with `use_global_directly` and leave the project untouched. Copy only when the capability needs project-specific iteration (`copy_to_project_for_modification`) or must be newly created for the project (`create_project_local_capability`).
+
+The install manifest records `install_projection` ownership, retains records for runtime targets not selected by the current update, and stores exact hash plus size for managed files. The independent `.meta-kim/state/default/project-capabilities.json` manifest records `runtime_sedimented_project_copy` / `preserve_project_copy` ownership for project Agent, Skill, and Command paths. Bootstrap planning, actual writes, stale cleanup, and explicit redundancy cleanup must all consult that manifest and preserve those paths. Unknown files and runtime-sedimented project copies are preserved; drift inside bootstrap-manifest-owned generated projections follows the configured merge/delta replacement-and-backup policy. A manifest recording or flush failure makes install/update partial or failed; it must not be reported as success.
+
+Configuration files have four ownership classes: canonical source, install projection, runtime-sedimented project copy, and local/user state. Merged user configuration is never treated as whole-file Meta_Kim ownership; cleanup removes only the exact Meta_Kim fragment or an exact manifest-owned generated file.
+
+Release verification for install/update must exercise the real packed CLI: create the npm package, install that package in an isolated location, and run its install and update entrypoints. Running repository source directly is useful development evidence but is not packed-product truth.
+
+Do not impose arbitrary source line-count gates. Architecture tests should enforce entrypoint responsibility, dependency direction, source/projection boundaries, and observable behavior. `setup.mjs` is a CLI façade; new domain logic belongs in focused modules with their own tests.
+
 ## Codex Runtime Map
 
 When this repository is opened in Codex:
@@ -128,7 +146,7 @@ For a real execution demand, the default path must prove the whole provider chai
 Capability-first has a mechanical hook path on Claude Code, Codex, and Cursor, but the default mode is progressive. During the grace window it warns unless `META_KIM_CAPABILITY_GATE=block` is set; do not describe the default as immediate hard-deny. Hooks are last-resort fuses for key behavior only. They should block missing intent, missing Fetch evidence, missing capability discovery, missing owner/loadout, known-unsupported runtime/OS, missing memory strategy, or unsafe meta-agent mutation. They should not block merely because optional packet parameters are absent; detailed completeness belongs to validators, Review, and public-ready gates.
 
 - **Claude Code**: enforced via the PreToolUse hook `enforce-agent-dispatch.mjs` (deny payload `{hookSpecificOutput.permissionDecision: "deny"}` when the effective mode is `block`). The gate covers `Agent` dispatches in stages `execution`, `review`, `meta_review`, `verification`, `evolution` unless `fetchRecord.capabilitySearchPerformed === true`. Discovery stages `critical`, `fetch`, `thinking` are exempt except for execution-intent dispatch before design-time readiness.
-- **Codex CLI**: enforced via PreToolUse hook (same `enforce-agent-dispatch.mjs` script projected to `.codex/hooks/`). Matcher includes `"Bash|apply_patch|Edit|Write|MultiEdit|NotebookEdit|Agent|spawn_agent"`, but Codex hook coverage is runtime-version dependent; do not treat it as an all-tool policy engine. Registered at `scripts/runtime-hook-mapping.mjs:213-219`.
+- **Codex CLI**: enforced via PreToolUse hook (same `enforce-agent-dispatch.mjs` script projected to `.codex/hooks/`). Matcher includes `"Bash|apply_patch|Edit|Write|MultiEdit|NotebookEdit|Agent|spawn_agent|followup_task|collaboration\\.followup_task"`, but Codex hook coverage is runtime-version dependent; do not treat it as an all-tool policy engine. It is generated by `buildCodexHooksJson` in `scripts/runtime-hook-mapping.mjs`; do not document a line-number contract.
 - **Cursor**: mechanically enforced via the official `preToolUse` hook surface with `failClosed: true` (crash defaults to deny). Uses exit code 2 + stderr deny reason or stdout JSON `{"permission":"deny",...}`. Registered at `scripts/runtime-hook-mapping.mjs:269-280`.
 - **OpenClaw**: current Meta_Kim tool-blocking enforcement is declarative-only — hard refusal prose in workspace `HEARTBEAT.md` and `SOUL.md` (`executionBlock=true`). OpenClaw internal hooks cover command/lifecycle automation, and typed plugin hooks are the official blocking/canceling policy surface, but Meta_Kim has not installed a typed plugin enforcement adapter yet. See `canonical/runtime-assets/openclaw/DECLARED_GAP.md` for the full boundary declaration.
 
@@ -164,6 +182,8 @@ That means:
 - Execution work is dispatched to agents, skills, commands, MCP capabilities, runtime tools, or workers selected by Thinking instead of collapsing into the main thread
 
 For Codex, meta-theory / governed Meta_Kim activation is user-visible authorization for safe native fan-out when Thinking proves multiple independent worker lanes and DAG/collision/workspace/external-write safety. Direct subagent/delegation/parallel-agent wording and structured governance-chain requests such as `Critical Thinking -> Fetch -> Deep Thinking -> Review` are strong activation examples, not exclusive gates. The main thread scopes, delegates, reviews, and synthesizes; it does not become the all-purpose executor for complex work. Native choice remains required only when route, scope, risk, or acceptance materially branches. Live delegation still requires the current Codex host to expose the top-level native `spawn_agent` surface; if it is absent, block or declare degraded mode instead of falling back to a legacy namespaced spawn API or silently serializing.
+
+Codex owner binding is schema-adaptive and truth-preserving. Use the single field `ownerBindingMode`: `native_custom_agent` is allowed only when the active `spawn_agent` schema exposes `agent_type` and the selected owner is a validated Codex TOML custom-agent definition; pass its declared name as `nativeAgentType`/`agent_type`, and wait for a successful host result before calling it invoked or completed. Otherwise use `run_scoped_owner_contract` with no `nativeAgentType`. Markdown owners, `task_name`, nicknames, badges, and `runtimeInstanceAlias` never prove native owner loading.
 
 ### Production Correctness Before Execution
 
@@ -237,6 +257,7 @@ Rules:
 - Prefer short role names over long task descriptions.
 - Do not put concrete work items into `roleDisplayName`; put shard or task scope in `roleInstanceId`, `shardScope`, `parallelGroup`, `dependsOn`, `mergeOwner`, and collision boundaries.
 - If the same owner runs multiple parallel instances, keep the same coarse `roleDisplayName` and separate instances with `roleInstanceId`.
+- Normal chat and run panels must show `ownerAgent` separately from `runtimeInstanceAlias` and retain the Agent, Skill, Command, MCP, runtime-tool, and Hook selected-versus-actual ledger with each next action.
 
 ## Eight-Stage Spine
 

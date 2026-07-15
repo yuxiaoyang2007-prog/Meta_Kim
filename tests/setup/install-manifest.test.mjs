@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 import {
   mkdtempSync,
+  mkdirSync,
   existsSync,
   readFileSync,
   writeFileSync,
@@ -15,7 +16,9 @@ import {
   CATEGORY_LABELS,
   SCHEMA_VERSION,
   createEmpty,
+  fileIntegritySync,
   listByCategory,
+  manifestFileEntryMatches,
   manifestPathFor,
   openRecorder,
   readManifest,
@@ -289,6 +292,52 @@ describe("install-manifest schema + helpers", () => {
     });
   });
 
+  test("recordFile captures exact size and sha256 for safe ownership", () => {
+    withTmpDir((dir) => {
+      const managedFile = path.join(dir, "managed.mjs");
+      writeFileSync(managedFile, "export default true;\n");
+      const recorder = openRecorder({
+        scope: "project",
+        repoRoot: dir,
+        metaKimVersion: "x",
+      });
+      recorder.recordFile(managedFile, {
+        category: CATEGORIES.E,
+        source: "sync-runtimes",
+        purpose: "project-hook",
+        ownershipClass: "install_projection",
+        runtimeTarget: "codex",
+      });
+      recorder.flush();
+      const entry = readManifest(manifestPathFor("project", dir)).entries[0];
+      assert.deepEqual(
+        { size: entry.size, sha256: entry.sha256 },
+        fileIntegritySync(managedFile),
+      );
+      assert.equal(entry.ownershipClass, "install_projection");
+      assert.equal(entry.runtimeTarget, "codex");
+      assert.equal(manifestFileEntryMatches(entry), true);
+    });
+  });
+
+  test("flush cannot report success when a file ownership record lacks integrity", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "meta-kim-manifest-failure-"));
+    try {
+      const recorder = openRecorder({ scope: "project", repoRoot: dir });
+      recorder.recordFile(path.join(dir, "missing.mjs"), {
+        category: CATEGORIES.E,
+        source: "sync-runtimes",
+        ownershipClass: "install_projection",
+      });
+      const result = await recorder.flush();
+      assert.equal(result.ok, false);
+      assert.match(result.error, /cannot record file integrity/);
+      assert.equal(existsSync(manifestPathFor("project", dir)), false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("openRecorder replaceSources drops stale source entries only", () => {
     withTmpDir((dir) => {
       let manifest = createEmpty({
@@ -317,7 +366,10 @@ describe("install-manifest schema + helpers", () => {
         repoRoot: dir,
         replaceSources: ["sync-runtimes"],
       });
-      recorder.recordFile(path.join(dir, ".codex", "new.toml"), {
+      const newFile = path.join(dir, ".codex", "new.toml");
+      mkdirSync(path.dirname(newFile), { recursive: true });
+      writeFileSync(newFile, "enabled = true\n");
+      recorder.recordFile(newFile, {
         category: CATEGORIES.G,
         source: "sync-runtimes",
         purpose: "project-settings",
@@ -332,6 +384,44 @@ describe("install-manifest schema + helpers", () => {
           path.join(dir, ".git", "hooks", "post-commit"),
         ].sort(),
       );
+    });
+  });
+
+  test("default recorder preserves ownership for runtime targets not selected this run", () => {
+    withTmpDir((dir) => {
+      const openclawFile = path.join(dir, "openclaw", "skills", "meta-theory", "SKILL.md");
+      mkdirSync(path.dirname(openclawFile), { recursive: true });
+      writeFileSync(openclawFile, "openclaw projection\n");
+      let manifest = createEmpty({ scope: "project", repoRoot: dir, metaKimVersion: "x" });
+      const openclawIntegrity = fileIntegritySync(openclawFile);
+      manifest = record(manifest, {
+        path: openclawFile,
+        category: CATEGORIES.D,
+        source: "sync-runtimes",
+        purpose: "project-skill",
+        kind: "file",
+        ownershipClass: "install_projection",
+        runtimeTarget: "openclaw",
+        ...openclawIntegrity,
+      });
+      writeManifest(manifestPathFor("project", dir), manifest);
+
+      const codexFile = path.join(dir, ".codex", "hooks", "managed.mjs");
+      mkdirSync(path.dirname(codexFile), { recursive: true });
+      writeFileSync(codexFile, "codex projection\n");
+      const recorder = openRecorder({ scope: "project", repoRoot: dir });
+      recorder.recordFile(codexFile, {
+        category: CATEGORIES.E,
+        source: "sync-runtimes",
+        purpose: "project-hook",
+        ownershipClass: "install_projection",
+        runtimeTarget: "codex",
+      });
+      recorder.flush();
+
+      const next = readManifest(manifestPathFor("project", dir));
+      assert.equal(next.entries.some((entry) => entry.path === openclawFile), true);
+      assert.equal(next.entries.some((entry) => entry.path === codexFile), true);
     });
   });
 });

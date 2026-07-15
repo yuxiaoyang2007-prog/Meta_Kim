@@ -13,6 +13,7 @@ describe("setup CLI policy", () => {
   test("accepts supported boolean, separate-value, and equals-value arguments", () => {
     assert.equal(validateSetupCliArgs(["--check", "--silent", "--with-global-hooks"]), true);
     assert.equal(validateSetupCliArgs(["--lang", "zh-CN", "--targets=claude,codex"]), true);
+    assert.equal(validateSetupCliArgs(["--silent", "--scope=project"]), true);
     assert.equal(validateSetupCliArgs(["--project-dir", "D:/work", "--dry-run"]), true);
     assert.ok(SETUP_BOOLEAN_ARGS.includes("--project-bootstrap"));
     assert.ok(SETUP_VALUE_ARGS.includes("--deploy-dir"));
@@ -20,7 +21,11 @@ describe("setup CLI policy", () => {
 
   test("normalizes every equals-value form to the same separate-value contract", () => {
     for (const option of SETUP_VALUE_ARGS) {
-      const value = option === "--project-dir" ? "D:/work=space" : "value=part";
+      const value = option === "--project-dir"
+        ? "D:/work=space"
+        : option === "--scope"
+          ? "project"
+          : "value=part";
       assert.deepEqual(
         normalizeSetupCliArgs([`${option}=${value}`]),
         [option, value],
@@ -54,6 +59,15 @@ describe("setup CLI policy", () => {
       () => validateSetupCliArgs(["--typo"]),
       (error) => error instanceof SetupCliPolicyError &&
         error.message === "unknown option '--typo'" && error.showHelp === true,
+    );
+  });
+
+  test("scope accepts only the explicit global/project install contract", () => {
+    assert.equal(validateSetupCliArgs(["--scope", "global"]), true);
+    assert.equal(validateSetupCliArgs(["--scope=project"]), true);
+    assert.throws(
+      () => validateSetupCliArgs(["--scope", "both"]),
+      /expected global or project/,
     );
   });
 

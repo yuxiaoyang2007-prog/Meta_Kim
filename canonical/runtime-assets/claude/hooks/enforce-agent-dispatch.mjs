@@ -781,7 +781,191 @@ async function allowObservedModeExecution(state) {
 }
 
 function isAgentDispatchTool(name) {
-  return name === "Agent" || name === "Task" || name === "spawn_agent";
+  const normalized = String(name ?? "").split(/[.:/]/u).at(-1);
+  return ["Agent", "Task", "spawn_agent", "followup_task"].includes(normalized);
+}
+
+function normalizedDispatchToolName(name) {
+  return String(name ?? "").split(/[.:/]/u).at(-1);
+}
+
+const CODEX_OWNER_BINDING_MODES = new Set([
+  "native_custom_agent",
+  "run_scoped_owner_contract",
+]);
+
+function boundedCodexIdentity(value) {
+  return typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.trim().length <= 128 &&
+    !/[\u0000-\u001f\u007f]/u.test(value)
+    ? value.trim()
+    : null;
+}
+
+function codexOwnerBindingClaim(envelope) {
+  const modeCandidates = [envelope?.ownerBindingMode].filter((value) => value != null);
+  const agentTypeCandidates = [envelope?.nativeAgentType].filter((value) => value != null);
+  const normalizedModes = [...new Set(modeCandidates.map((value) => String(value).trim()))];
+  const normalizedAgentTypes = [
+    ...new Set(agentTypeCandidates.map((value) => boundedCodexIdentity(value))),
+  ];
+  if (
+    normalizedModes.length !== 1 ||
+    normalizedModes.length > 1 ||
+    normalizedModes.some((mode) => !CODEX_OWNER_BINDING_MODES.has(mode)) ||
+    normalizedAgentTypes.includes(null) ||
+    normalizedAgentTypes.length > 1
+  ) {
+    return { valid: false, mode: null, nativeAgentType: null };
+  }
+  return {
+    valid: true,
+    mode: normalizedModes[0] ?? null,
+    nativeAgentType: normalizedAgentTypes[0] ?? null,
+  };
+}
+
+function codexOwnerBindingFromHostInput(input, envelope) {
+  const hasAgentType = Object.prototype.hasOwnProperty.call(input ?? {}, "agent_type");
+  const nativeAgentType = hasAgentType ? boundedCodexIdentity(input.agent_type) : null;
+  if (hasAgentType && !nativeAgentType) {
+    return {
+      met: false,
+      mode: null,
+      nativeAgentType: null,
+      missing: ["valid host agent_type when the field is present"],
+    };
+  }
+  const mode = nativeAgentType ? "native_custom_agent" : "run_scoped_owner_contract";
+  const claim = codexOwnerBindingClaim(envelope);
+  const missing = [];
+  if (!claim.valid) missing.push("valid and unambiguous owner binding mode claim");
+  if (!claim.mode) missing.push("explicit ownerBindingMode");
+  if (claim.mode && claim.mode !== mode) {
+    missing.push(`claimed owner binding mode matching actual host schema (${mode})`);
+  }
+  if (claim.nativeAgentType && claim.nativeAgentType !== nativeAgentType) {
+    missing.push("claimed nativeAgentType matching the actual host agent_type");
+  }
+  if (claim.nativeAgentType && mode !== "native_custom_agent") {
+    missing.push("nativeAgentType claim only when host agent_type is present");
+  }
+  if (mode === "native_custom_agent" && envelope?.ownerAgent !== nativeAgentType) {
+    missing.push("ownerAgent matching the actual host agent_type");
+  }
+  if (mode === "native_custom_agent") {
+    const ownerDefinition = envelope?.ownerDefinition;
+    if (
+      ownerDefinition?.format !== "codex_custom_agent_toml" ||
+      ownerDefinition?.nativeCustomAgentEligible !== true ||
+      ownerDefinition?.nativeAgentName !== nativeAgentType
+    ) {
+      missing.push("validated Codex TOML ownerDefinition matching agent_type");
+    }
+    if (!/\.toml$/iu.test(String(envelope?.ownerSource ?? ownerDefinition?.sourceRef ?? ""))) {
+      missing.push("Codex TOML ownerSource for native_custom_agent");
+    }
+  }
+  if (mode === "run_scoped_owner_contract" && claim.nativeAgentType) {
+    missing.push("nativeAgentType omitted for run_scoped_owner_contract");
+  }
+  return {
+    met: missing.length === 0,
+    mode,
+    nativeAgentType,
+    claimedMode: claim.mode,
+    missing,
+  };
+}
+
+function validateMetaKimBinding(candidate, envelope) {
+  const fields = [
+    "runId", "family", "providerId", "bindingRef", "taskPacketId",
+    "roleInstanceId", "occurredAt", "evidenceKind",
+  ];
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return false;
+  if (Object.keys(candidate).sort().join("|") !== fields.sort().join("|")) return false;
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(candidate.runId ?? "")) return false;
+  if (candidate.family !== "agent_subagent" || candidate.evidenceKind !== "spawn_agent_result") return false;
+  if (
+    !candidate.providerId ||
+    !candidate.bindingRef ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/u.test(candidate.occurredAt ?? "") ||
+    !Number.isFinite(Date.parse(candidate.occurredAt))
+  ) return false;
+  if (!String(candidate.bindingRef).includes(`${candidate.runId}:agent_subagent:${candidate.providerId}`)) return false;
+  return candidate.taskPacketId === envelope.taskPacketId &&
+    candidate.roleInstanceId === envelope.roleInstanceId &&
+    String(candidate.providerId).endsWith(`:${envelope.ownerAgent}`);
+}
+
+function checkCodexWorkerInvocationEnvelope(input, tool) {
+  const normalizedTool = normalizedDispatchToolName(tool);
+  if (!new Set(["spawn_agent", "followup_task"]).has(normalizedTool)) {
+    return { met: true, missing: [] };
+  }
+  if (normalizedTool === "followup_task" && (typeof input?.target !== "string" || !input.target.trim())) {
+    return { met: false, missing: ["followup_task target runtime instance id"] };
+  }
+  const raw = input?.message;
+  if (typeof raw !== "string" || !raw.trim()) {
+    return { met: false, missing: ["clear-text Codex worker invocation envelope"] };
+  }
+  if (/^gAAAAA[A-Za-z0-9_-]{20,}={0,2}$/u.test(raw.trim())) {
+    return { met: false, missing: ["verifiable owner binding; encrypted message cannot be inspected by the hook"] };
+  }
+  let envelope;
+  try {
+    envelope = JSON.parse(raw);
+  } catch {
+    return { met: false, missing: ["valid JSON Codex worker invocation envelope"] };
+  }
+  const missing = [];
+  if (envelope?.schemaVersion !== "codex-native-worker-invocation-v0.2") missing.push("schemaVersion v0.2");
+  for (const field of ["taskPacketId", "roleDisplayName", "roleInstanceId", "ownerAgent", "ownerSource"]) {
+    if (typeof envelope?.[field] !== "string" || !envelope[field].trim()) missing.push(field);
+  }
+  if (envelope?.ownerKind !== "agent") missing.push("ownerKind=agent");
+  if (!envelope?.capabilityLoadout || typeof envelope.capabilityLoadout !== "object" || Array.isArray(envelope.capabilityLoadout)) {
+    missing.push("capabilityLoadout");
+  }
+  if (!envelope?.coordination || typeof envelope.coordination !== "object" || !envelope.coordination.mergeOwner) {
+    missing.push("coordination.mergeOwner");
+  }
+  if (!validateMetaKimBinding(envelope?.metaKimBinding, envelope)) missing.push("strict metaKimBinding");
+  const ownerBinding = codexOwnerBindingFromHostInput(input, envelope);
+  missing.push(...ownerBinding.missing);
+  return { met: missing.length === 0, missing, envelope, ownerBinding };
+}
+
+function checkCodexEnvelopeAgainstState(envelope, state, ownerBinding = null) {
+  const packets = Array.isArray(state?.workerTaskPackets) ? state.workerTaskPackets : [];
+  const packet = packets.find((candidate) => candidate?.taskPacketId === envelope?.taskPacketId);
+  if (!packet) return { met: false, missing: ["matching state workerTaskPacket"] };
+  const missing = [];
+  const expectedOwnerSource = packet.ownerSource ?? packet.codexSpawnBinding?.ownerSource ?? null;
+  if (packet.ownerAgent !== envelope.ownerAgent) missing.push("ownerAgent matching workerTaskPacket");
+  if (packet.roleInstanceId !== envelope.roleInstanceId) missing.push("roleInstanceId matching workerTaskPacket");
+  if (packet.roleDisplayName !== envelope.roleDisplayName) missing.push("roleDisplayName matching workerTaskPacket");
+  if (!expectedOwnerSource || expectedOwnerSource !== envelope.ownerSource) missing.push("ownerSource matching discovered provider");
+  if (packet.mergeOwner !== envelope.coordination?.mergeOwner) missing.push("mergeOwner matching workerTaskPacket");
+  if ((packet.parallelGroup ?? null) !== (envelope.coordination?.parallelGroup ?? null)) {
+    missing.push("parallelGroup matching workerTaskPacket");
+  }
+  if ((packet.weapon ?? null) !== (envelope.capabilityLoadout?.weapon ?? null)) {
+    missing.push("weapon matching workerTaskPacket");
+  }
+  if ((packet.dependency ?? null) !== (envelope.capabilityLoadout?.dependency ?? null)) {
+    missing.push("dependency matching workerTaskPacket");
+  }
+  if (
+    ownerBinding?.mode === "native_custom_agent" &&
+    packet.ownerAgent !== ownerBinding.nativeAgentType
+  ) {
+    missing.push("native host agent_type matching workerTaskPacket ownerAgent");
+  }
+  return { met: missing.length === 0, missing };
 }
 
 function dispatchIntentText(input) {
@@ -789,7 +973,6 @@ function dispatchIntentText(input) {
     input?.description,
     input?.prompt,
     input?.message,
-    input?.task_name,
     input?.agent_type,
     input?.subagent_type,
     JSON.stringify(input?.items || []),
@@ -1262,7 +1445,7 @@ if (isAgentDispatchTool(toolName)) {
     "unknown";
   const metaName = extractMetaAgentName(
     toolInput?.description,
-    [toolInput?.prompt, toolInput?.message, toolInput?.task_name, toolInput?.agent_type]
+    [toolInput?.prompt, toolInput?.message, toolInput?.agent_type]
       .filter(Boolean)
       .join(" "),
   );
@@ -1401,7 +1584,6 @@ if (isAgentDispatchTool(toolName)) {
         toolInput?.prompt,
         toolInput?.description,
         toolInput?.message,
-        toolInput?.task_name,
         toolInput?.agent_type,
         toolInput?.subagent_type,
         JSON.stringify(toolInput?.items || []),
@@ -1438,6 +1620,29 @@ if (isAgentDispatchTool(toolName)) {
           `Capability node binding violation: dispatch target "${dispatchTarget}" ` +
             `does not match worker task ownerAgent "${matchedTaskPacket.ownerAgent}" ` +
             `for ${matchedTaskPacket.taskPacketId}.`,
+        );
+      }
+    }
+  }
+
+  if (detectHookRuntime() === "codex" && !state.queryBypass) {
+    const envelopeGate = checkCodexWorkerInvocationEnvelope(toolInput, toolName);
+    if (!envelopeGate.met) {
+      exitAfterDeny(
+        `Codex owner-binding evidence is malformed or unverifiable; dispatch stays blocked until inspectable binding evidence is supplied. ` +
+          `Missing: ${envelopeGate.missing.join(", ")}. task_name and followup target are runtime instance labels, not owner identity.`,
+      );
+    }
+    if (envelopeGate.envelope) {
+      const stateBindingGate = checkCodexEnvelopeAgainstState(
+        envelopeGate.envelope,
+        state,
+        envelopeGate.ownerBinding,
+      );
+      if (!stateBindingGate.met) {
+        exitAfterDeny(
+          `Codex owner-binding evidence does not match the Thinking worker packet. ` +
+            `Missing: ${stateBindingGate.missing.join(", ")}.`,
         );
       }
     }

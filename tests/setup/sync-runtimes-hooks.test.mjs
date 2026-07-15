@@ -8,12 +8,14 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
+import { createHash } from "node:crypto";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..", "..");
@@ -190,6 +192,77 @@ describe("runtime hook sync contract", () => {
     }
   });
 
+  test("global_only cleanup rejects a project runtime-root Junction without reading outside", () => {
+    const tempRoot = createTempSourceRepoFixture();
+    const outsideRoot = mkdtempSync(join(os.tmpdir(), "meta-kim-global-only-outside-"));
+    try {
+      mkdirSync(join(tempRoot, ".meta-kim"), { recursive: true });
+      writeFileSync(join(tempRoot, ".meta-kim", "local.overrides.json"), `${JSON.stringify({ projectProjectionMode: "global_only" }, null, 2)}\n`);
+      mkdirSync(join(tempRoot, ".agents"), { recursive: true });
+      writeFileSync(join(outsideRoot, "outside.txt"), "preserve\n");
+      symlinkSync(outsideRoot, join(tempRoot, ".agents", "skills"), process.platform === "win32" ? "junction" : "dir");
+
+      const result = runProjectSyncFromFixture(tempRoot);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr + result.stdout, /Refusing to follow a project symlink or Junction/u);
+      assert.equal(readFileSync(join(outsideRoot, "outside.txt"), "utf8"), "preserve\n");
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+      rmSync(outsideRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("global_only cleanup preserves descendant files inside a runtime-sedimented Skill root", () => {
+    const tempRoot = createTempSourceRepoFixture();
+    try {
+      const stateRoot = join(tempRoot, ".meta-kim", "state", "default");
+      const skillRoot = join(tempRoot, ".agents", "skills", "custom-project-skill");
+      const skillFile = join(skillRoot, "SKILL.md");
+      const childFile = join(skillRoot, "references", "user-note.md");
+      mkdirSync(join(skillRoot, "references"), { recursive: true });
+      mkdirSync(stateRoot, { recursive: true });
+      writeFileSync(skillFile, "# custom skill\n");
+      writeFileSync(childFile, "# user note\n");
+      writeFileSync(join(tempRoot, ".meta-kim", "local.overrides.json"), `${JSON.stringify({ projectProjectionMode: "global_only" }, null, 2)}\n`);
+      writeFileSync(join(stateRoot, "project-capabilities.json"), `${JSON.stringify({
+        schemaVersion: "meta-kim-project-capabilities-v0.1",
+        capabilities: [{
+          type: "skill",
+          ownershipClass: "runtime_sedimented_project_copy",
+          dependencyUpdatePolicy: "preserve_project_copy",
+          files: [{ relPath: ".agents/skills/custom-project-skill/SKILL.md" }],
+        }],
+      }, null, 2)}\n`);
+      const childBytes = readFileSync(childFile);
+      const now = new Date().toISOString();
+      writeFileSync(join(tempRoot, ".meta-kim", "install-manifest.json"), `${JSON.stringify({
+        schemaVersion: 1,
+        scope: "project",
+        metaKimVersion: "test",
+        repoRoot: tempRoot,
+        createdAt: now,
+        updatedAt: now,
+        entries: [{
+          path: childFile,
+          category: "D",
+          source: "sync-runtimes",
+          purpose: "project-skill",
+          kind: "file",
+          installedAt: now,
+          sha256: createHash("sha256").update(childBytes).digest("hex"),
+          size: childBytes.length,
+        }],
+      }, null, 2)}\n`);
+
+      const result = runProjectSyncFromFixture(tempRoot);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(readFileSync(childFile, "utf8"), "# user note\n");
+      assert.equal(readFileSync(skillFile, "utf8"), "# custom skill\n");
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   test("global sync includes the meta-theory spine activation hook package", () => {
     const source = readFileSync(
       join(repoRoot, "scripts/sync-global-meta-theory.mjs"),
@@ -242,7 +315,11 @@ describe("runtime hook sync contract", () => {
         true,
       );
       assert.equal(existsSync(join(codexHome, "hooks.json")), true);
-      assert.equal(existsSync(join(codexHome, "hooks", "graphify-context.mjs")), false);
+      assert.equal(
+        existsSync(join(codexHome, "hooks", "graphify-context.mjs")),
+        true,
+        "an unmanifested same-name root hook is user/unknown state and must be preserved",
+      );
       assert.equal(existsSync(join(codexHome, "hooks", "custom-user-hook.mjs")), true);
     } finally {
       rmSync(root, { recursive: true, force: true });

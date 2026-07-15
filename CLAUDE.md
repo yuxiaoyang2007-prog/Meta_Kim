@@ -72,6 +72,24 @@ Other runtime mirrors are also projections of the same canonical layer:
 
 When trees disagree, update the canonical source and run sync. Do not maintain parallel prompt forks.
 
+## Install Scope And Runtime Sedimentation
+
+Install scope and governed runtime sedimentation are separate contracts:
+
+- `setup.mjs` install/update offers an interactive `global` or `project` choice and accepts `--scope global|project` for non-interactive use. In `global_only`, install sync keeps only the dependency-closed Claude/Codex/Cursor project Hook entry package and does not materialize durable project agents, skills, commands, capability indexes, MCP entries, Codex config examples, or OpenClaw project projections.
+- Distribution scope does not erase existing project topology. A normal `global` install/update automatically refreshes only current, explicit, or saved directories with a valid project-bootstrap manifest, using the configured project merge/delta strategy. No valid project state means no project copy and no extra confirmation. Cleanup is a separate explicit operation and never runs as a normal global install/update side effect.
+- Under `project_bootstrap_merge_delta`, bootstrap-manifest-owned generated projections are backed up inside the transaction and replaced with the current package version; shared JSON and managed text blocks merge instead. Unknown user files and `runtime_sedimented_project_copy` capabilities are outside that replacement boundary and remain preserved.
+- If a governed run proves a current-project Agent, Skill, or Command must be created or iterated, write or copy it into the runtime-native project directory. Record that asset as `runtime_sedimented_project_copy`; later global dependency or install projection updates must preserve it.
+- A global search hit that already fits and needs no iteration stays global: use `use_global_directly` and do not copy it into the project. Only project-specific iteration uses `copy_to_project_for_modification`; a real project gap uses `create_project_local_capability`.
+
+The install manifest records install-generated files as `install_projection`, retains records for runtimes not selected during the current update, and stores exact hash plus size. The separate `.meta-kim/state/default/project-capabilities.json` manifest owns `runtime_sedimented_project_copy` / `preserve_project_copy` Agent, Skill, and Command paths. Project bootstrap plan, write, stale cleanup, and explicit cleanup all read that ownership before mutation. Unknown and runtime-sedimented files are preserved; drift in bootstrap-manifest-owned generated projections follows the configured merge/delta replacement-and-backup policy. Manifest recording or flush failure cannot be presented as successful install/update.
+
+Treat canonical source, install projection, runtime-sedimented project copies, and local/user configuration as different ownership classes. For merged configuration, remove only Meta_Kim-owned fragments; never infer whole-file ownership from its location.
+
+Install/update release claims require real packed-product evidence: pack the npm artifact, install that artifact into an isolated location, then run the packed CLI install and update paths. Repository-source execution alone is not packed CLI truth.
+
+Do not use arbitrary line counts as architecture gates. Verify CLI entrypoint responsibility, dependency direction, module boundaries, and behavior. `setup.mjs` remains a façade; new domain behavior belongs in focused modules with focused tests.
+
 ## Meta-Theory Dispatch Is Mandatory
 
 When `meta-theory` is activated by `/meta-theory`, skill auto-detection, or an equivalent trigger, the 8-stage spine is mandatory.
@@ -185,6 +203,8 @@ Keep three names separate:
 Rules:
 
 - `roleDisplayName` is a run-scoped task-packet label, not a durable agent identity and not a projection file.
+- Cross-runtime handoffs use one `ownerBindingMode`: Codex may use `native_custom_agent` only for a validated Codex TOML owner selected through a schema-confirmed `agent_type`; otherwise it uses `run_scoped_owner_contract`. A runtime alias or task label never substitutes for `ownerAgent`.
+- User-visible status keeps Agent, Skill, Command, MCP, runtime-tool, and Hook provider/source, selected state, actual state, and next action; it does not reduce the handoff to an Agent-only sentence.
 - Do not expose random personal nicknames as the primary agent name.
 - Prefer short role names over long task sentences.
 - Do not put concrete work items into `roleDisplayName`; when the same role has parallel shards, keep the same coarse role name and put shard scope in `roleInstanceId` / `shardScope`.

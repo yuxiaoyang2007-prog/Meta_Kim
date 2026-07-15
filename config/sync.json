@@ -45,7 +45,35 @@
       ".meta-kim/cache",
       ".meta-kim/backups",
       ".meta-kim/local.overrides.json"
-    ]
+    ],
+    "existingProjectProjectionUpdate": {
+      "discoveryOrder": [
+        "explicit_project_dirs",
+        "saved_project_dirs",
+        "current_working_directory"
+      ],
+      "managedStateMarker": ".meta-kim/state/default/project-bootstrap.json",
+      "globalDistributionAction": "update_existing_project_projection",
+      "projectUpdateStrategy": "project_bootstrap_merge_delta",
+      "managedProjectionUpdate": "replace_with_transaction_backup",
+      "noManagedProjectAction": "do_not_materialize_project_projection",
+      "cleanupMode": "explicit_only"
+    },
+    "projectCapabilityOwnership": {
+      "manifestPath": ".meta-kim/state/default/project-capabilities.json",
+      "schemaVersion": "meta-kim-project-capabilities-v0.1",
+      "protectedCapabilityTypes": [
+        "agent",
+        "skill",
+        "command"
+      ],
+      "preserveOwnershipClasses": [
+        "runtime_sedimented_project_copy"
+      ],
+      "preserveDependencyUpdatePolicies": [
+        "preserve_project_copy"
+      ]
+    }
   },
   "generatedTargets": {
     "claude": [

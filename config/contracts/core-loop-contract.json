@@ -114,10 +114,14 @@
         "thinkingPacket.parallelGroups",
         "thinkingPacket.dependencyPolicy",
         "thinkingPacket.omittedLanesWithReason",
+        "preDecisionOptionFrame.planChallengeState",
+        "preDecisionOptionFrame.unresolvedQuestions",
         "dynamicWorkflowRuntimePacket.capabilityBindingRows",
         "agentTeamsPlaybookPacket",
         "peerAgentMeshPacket.peers",
         "capabilityInvocationTruthPacket",
+        "capabilityLedgerPacket.families",
+        "projectCustomizationPacket.decision",
         "visibleMetaTheorySurfacePacket",
         "governanceAgentResultPackets",
         "conductorConsumptionEvidence"
@@ -153,7 +157,7 @@
     },
     {
       "stage": "Execution",
-      "requiredInputs": ["thinkingPacket", "workerTaskPackets", "sideEffectLedgerPacket"],
+      "requiredInputs": ["thinkingPacket", "workerTaskPackets", "sideEffectLedgerPacket", "preDecisionOptionFrame.planChallengeState"],
       "requiredOutputs": [
         "conductorConsumptionEvidence",
         "agUiStageEvents",
@@ -165,6 +169,10 @@
         "peerAgentMeshPacket.handoffs",
         "agentTeamsPlaybookPacket",
         "capabilityInvocationTruthPacket.rows",
+        "capabilityLedgerPacket.families",
+        "projectCustomizationPacket",
+        "executionResult.executionAllowed",
+        "executionResult.executionGate",
         "executionResult.workerResultPackets",
         "executionResult.workerExecutionEvidence",
         "executionResult.mergeResult"
@@ -174,8 +182,9 @@
         "selected worker cannot execute",
         "unsafe mutation",
         "missing approval for external write or global install"
+        ,"active plan challenge is not ready_for_execution or executionAllowed is false"
       ],
-      "blockingGates": ["unsafe_mutation", "external_write_without_approval", "global_write_without_approval"],
+      "blockingGates": ["unsafe_mutation", "external_write_without_approval", "global_write_without_approval", "plan_challenge_not_ready"],
       "warningGates": ["low-risk local wording edit"],
       "defaultOwner": "selected worker or selected capability provider",
       "decisionResponsibilities": {
@@ -287,6 +296,8 @@
         "performanceCostBudget",
         "goalContractPacket",
         "capabilityInvocationTruthPacket",
+        "capabilityLedgerPacket",
+        "projectCustomizationPacket",
         "visibleMetaTheorySurfacePacket",
         "userPerceptionPacket",
         "productExperiencePacket",
@@ -499,6 +510,33 @@
       "hostInvocationRequestPacket must list every selected executable family that still needs a Claude Code/Codex host adapter call and the exact trusted evidence required",
       "selected_not_invoked is never execution pass for a selected executable family",
       "capabilityInvocationProbePacket proves readiness/callability only and never contributes to realInvocationCoverage or product-experience live evidence"
+    ],
+    "capabilityLedgerRequirements": [
+      "families covers agent_subagent, skill, command_script, mcp, runtime_tool, and hook",
+      "every family records providerId, source, selected, state, invocationTruthBoundary, and nextAction",
+      "user-visible chat and report consume the same ledger instead of an agent-only summary",
+      "discovered, selected, configured, host-visible, and invoked states remain distinct"
+    ],
+    "projectCustomizationRequirements": [
+      "decision is use_global_directly, upgrade_existing_owner, or create_project_local_capability",
+      "decision records reason, targetPath, verification, and rollback",
+      "global candidates and existing project candidates are checked before a project-local create decision",
+      "use_global_directly never copies a reusable global capability into the project",
+      "create_project_local_capability requires project-specific need, review, approval, native project target, verification, rollback, and a runtime_sedimented_project_copy ownership record",
+      "upgrade_existing_owner that changes an Agent, Skill, or Command copies it into the native project directory before modification and protects it from dependency updates",
+      "the decision packet never claims that a candidate was written, loaded, or invoked"
+    ],
+    "planChallengeRequirements": [
+      "activate only for an explicit user request, material risk, or contradictory evidence",
+      "leave low-risk no-branching work unchanged",
+      "select exactly one highest-impact open question while retaining answered, skipped, and invalidated history",
+      "store dependencies, evidence, and recommendation state on preDecisionOptionFrame.unresolvedQuestions instead of creating a parallel question source",
+      "do not invent recommendations for preference-only or insufficient-evidence questions",
+      "shared understanding never implies execution authorization",
+      "authorization evidence is trusted, bound to the current side-effect set, and covers every concrete sideEffectAction",
+      "active non-ready or stopped challenges set executionAllowed=false before canonical writeback, project capability copy, or other execution side effects",
+      "pending host choice data reports required_not_invoked and never claims a native popup was shown",
+      "chat summary data includes confirmed decisions, open risks, and next step"
     ],
     "userPerceptionRequirements": [
       "what_to_do",

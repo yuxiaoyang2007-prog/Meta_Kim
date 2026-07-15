@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { promises as fs } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { GOVERNANCE_OWNERS, OS_TARGETS, RUNTIMES, classifyTaskShape, exists, readJson, repoPath, scoreRoute, stateDir, supportScore, toPosix } from "./governance-lib.mjs";
 import { CAPABILITY_GAP_DECISION_CONTRACT, decideCapabilityGap } from "./capability-gap-mvp.mjs";
@@ -17,14 +17,61 @@ async function readStateJson(name, fallback) {
 }
 
 const task = argValue("--task", "");
+const requestedRouteRunId = argValue("--run-id", null);
 const runtimeArg = argValue("--runtime", "auto");
 const osArg = argValue("--os", "auto");
 const json = process.argv.includes("--json");
+const codexHostToolSchemaRaw =
+  argValue("--codex-host-tool-schema", null) ??
+  process.env.META_KIM_CODEX_HOST_TOOL_SCHEMA ??
+  null;
 const runtime = runtimeArg === "auto" ? "codex" : runtimeArg;
 const osTarget = osArg === "auto" ? "windows" : osArg;
 const taskShape = classifyTaskShape(task);
 const taskText = String(task ?? "").toLowerCase();
 const entryClassification = classifyMetaTheoryEntry(task);
+
+function normalizeCodexHostToolSchema(raw) {
+  if (!raw) {
+    return {
+      status: "not_observed",
+      hostSurface: "spawn_agent",
+      inputProperties: [],
+      ownerSelectorField: null,
+      evidenceSource: null,
+    };
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    const hostSurface = parsed?.hostSurface ?? parsed?.name ?? "spawn_agent";
+    const properties = parsed?.inputSchema?.properties ?? parsed?.parameters?.properties ?? parsed?.properties ?? {};
+    const inputProperties = Array.isArray(parsed?.inputProperties)
+      ? parsed.inputProperties.filter((value) => typeof value === "string")
+      : Object.keys(properties);
+    const ownerSelectorField = inputProperties.includes("agent_type") ? "agent_type" : null;
+    const evidenceSource = parsed?.evidenceSource ?? parsed?.source ?? null;
+    const currentHostSchema =
+      ["active_host_tool_schema", "runtime_adapter_tool_schema"].includes(evidenceSource) &&
+      /spawn_agent$/iu.test(String(hostSurface));
+    return {
+      status: currentHostSchema ? "observed" : "untrusted_or_wrong_surface",
+      hostSurface,
+      inputProperties,
+      ownerSelectorField: currentHostSchema ? ownerSelectorField : null,
+      evidenceSource,
+    };
+  } catch {
+    return {
+      status: "invalid",
+      hostSurface: "spawn_agent",
+      inputProperties: [],
+      ownerSelectorField: null,
+      evidenceSource: null,
+    };
+  }
+}
+
+const codexHostToolSchema = normalizeCodexHostToolSchema(codexHostToolSchemaRaw);
 const choicePolicy = entryClassification.ambiguityPacket?.choicePolicy ?? "no_choice_needed";
 const subjectiveRouteChoice = entryClassification.triggerReason === "subjective_quality_ambiguous";
 const stateDirRef = toPosix(path.relative(repoPath("."), stateDir));
@@ -280,6 +327,9 @@ function compactAgent(entry, source) {
     own: entry.own ?? null,
     boundary: entry.boundary ?? null,
     trigger: entry.trigger ?? null,
+    metadata: entry.metadata ?? null,
+    validCustomAgentDefinition: entry.validCustomAgentDefinition ?? entry.metadata?.validCustomAgentDefinition ?? null,
+    customAgentDefinitionErrors: entry.customAgentDefinitionErrors ?? entry.metadata?.customAgentDefinitionErrors ?? [],
   };
 }
 
@@ -338,8 +388,33 @@ async function projectRuntimeAgents() {
     const entries = await fs.readdir(absDir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith(extension)) continue;
-      const id = entry.name.slice(0, -extension.length);
+      const inventoryId = entry.name.slice(0, -extension.length);
+      let id = inventoryId;
       const layer = id.startsWith("meta-") ? "meta" : "execution";
+      let metadata = null;
+      let validCustomAgentDefinition = null;
+      let customAgentDefinitionErrors = [];
+      if (runtimeName === "codex") {
+        const content = await fs.readFile(path.join(absDir, entry.name), "utf8");
+        const scalar = (key) => {
+          const triple = content.match(new RegExp(`^${key}\\s*=\\s*(?:\"\"\"|''')([\\s\\S]*?)(?:\"\"\"|''')`, "mu"));
+          if (triple) return triple[1].trim();
+          const single = content.match(new RegExp(`^${key}\\s*=\\s*[\"']([^\"']+)[\"']`, "mu"));
+          return single?.[1]?.trim() ?? null;
+        };
+        metadata = {
+          name: scalar("name"),
+          description: scalar("description"),
+          developer_instructions: scalar("developer_instructions"),
+        };
+        customAgentDefinitionErrors = [
+          ...(!metadata.name ? ["missing_name"] : []),
+          ...(!metadata.description ? ["missing_description"] : []),
+          ...(!metadata.developer_instructions ? ["missing_developer_instructions"] : []),
+        ];
+        validCustomAgentDefinition = customAgentDefinitionErrors.length === 0;
+        if (validCustomAgentDefinition) id = metadata.name;
+      }
       agents.push({
         id,
         layer,
@@ -347,6 +422,10 @@ async function projectRuntimeAgents() {
         runtime: runtimeName,
         sourceRef: toPosix(path.join(dir, entry.name)),
         executionBlock: layer === "meta",
+        metadata,
+        validCustomAgentDefinition,
+        customAgentDefinitionErrors,
+        inventoryId,
       });
     }
   }
@@ -1448,7 +1527,10 @@ function buildCapabilityTeamBlueprint(lanes, omittedLanesWithReason, evidence) {
         runtime === "codex" &&
         (lane.codexSpawnBinding ??
           codexSpawnBindingForOwner(lane.ownerAgent, lane.ownerKind, lane.laneId))
-          ? "Codex native spawn_agent task with owner contract carried in the bounded message"
+          ? (lane.codexSpawnBinding ?? codexSpawnBindingForOwner(lane.ownerAgent, lane.ownerKind, lane.laneId))
+              ?.ownerBindingMode === "native_custom_agent"
+            ? "Codex native custom-agent request using the schema-confirmed agent_type owner selector"
+            : "Codex run-scoped worker request carrying the selected owner contract in the bounded message"
           : lanes.length >= 2
             ? "host subagent/custom-agent when available; otherwise workerTaskPacket"
           : "single workerTaskPacket",
@@ -1473,19 +1555,124 @@ function normalizeCodexTaskName(value) {
   return `${base}_${digest}`;
 }
 
-function buildCodexWorkerMessage(ownerId, ownerKind, roleInstanceId, taskPacket = null) {
+function resolveRouteRunId(value) {
+  if (value != null) {
+    const normalized = String(value).trim();
+    if (
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(normalized) ||
+      normalized === "." ||
+      normalized === ".."
+    ) {
+      throw new Error("Invalid --run-id: expected a safe 1-128 character run identifier.");
+    }
+    return normalized;
+  }
+  return `route-${Date.now().toString(36)}-${randomUUID().replaceAll("-", "").slice(0, 16)}`;
+}
+
+const routeRunId = resolveRouteRunId(requestedRouteRunId);
+const routeOccurredAt = new Date().toISOString();
+
+function codexProviderId(provider, ownerId) {
+  const scope = provider?.source === "local_global_agent_inventory"
+    ? "global"
+    : provider?.source === "project_runtime_agent_inventory"
+      ? "project"
+      : provider?.source ?? "runtime";
+  return `${scope}:${ownerId}`;
+}
+
+function codexOwnerSource(provider) {
+  if (!provider) return null;
+  if (provider.source !== "local_global_agent_inventory") return provider.sourceRef ?? null;
+  const sourceRef = String(provider.sourceRef ?? "").replace(/\\/g, "/");
+  if (sourceRef.startsWith("~/")) return sourceRef;
+  const platform = String(provider.platformId ?? "").toLowerCase();
+  if (platform === "codex" || platform === "codexapp") return `~/.codex/agents/${sourceRef}`;
+  if (platform === "claudecode" || platform === "claude_code") return `~/.claude/agents/${sourceRef}`;
+  if (platform === "cursor") return `~/.cursor/agents/${sourceRef}`;
+  return `global-agent:${sourceRef}`;
+}
+
+function codexOwnerDefinition(provider) {
+  const sourceRef = String(provider?.sourceRef ?? "").replace(/\\/g, "/");
+  const isCodexRuntimeProvider =
+    provider?.runtime === "codex" ||
+    ["codex", "codexapp"].includes(String(provider?.platformId ?? "").toLowerCase());
+  const isToml = /(?:^|\/)agents\/[^/]+\.toml$/iu.test(sourceRef) || /\.toml$/iu.test(sourceRef);
+  const metadata = provider?.metadata ?? {};
+  const requiredMetadataPresent = ["name", "description", "developer_instructions"].every(
+    (field) => typeof metadata?.[field] === "string" && metadata[field].trim().length > 0,
+  );
+  const nativeNameMatchesInventory = metadata?.name === provider?.id;
+  const definitionValidated = provider?.validCustomAgentDefinition === true ||
+    (requiredMetadataPresent && nativeNameMatchesInventory);
+  const nativeCustomAgentEligible = Boolean(
+    isCodexRuntimeProvider && isToml && definitionValidated && nativeNameMatchesInventory,
+  );
+  return {
+    format: nativeCustomAgentEligible ? "codex_custom_agent_toml" : "non_native_owner_definition",
+    sourceRef: codexOwnerSource(provider),
+    nativeAgentName: requiredMetadataPresent ? metadata.name : null,
+    nativeCustomAgentEligible,
+    validationErrors: provider?.customAgentDefinitionErrors ?? [
+      ...(!isToml ? ["owner_source_is_not_toml"] : []),
+      ...(!requiredMetadataPresent ? ["required_codex_agent_fields_missing"] : []),
+      ...(metadata?.name && !nativeNameMatchesInventory ? ["native_name_does_not_match_selected_owner"] : []),
+    ],
+    reason: nativeCustomAgentEligible
+      ? "Owner was discovered from a Codex TOML custom-agent definition; native binding still requires an active host owner selector and a successful invocation."
+      : "Owner is not backed by a validated Codex TOML custom-agent definition whose declared name matches the selected owner identity, so it can only bind through the run-scoped owner contract.",
+  };
+}
+
+function roleDisplayNameForOwner(ownerId) {
+  const owner = String(ownerId ?? "").toLowerCase();
+  if (/test|qa|verify/.test(owner)) return "test";
+  if (/backend|security|api|server/.test(owner)) return "backend";
+  if (/frontend|react|ui|accessibility/.test(owner)) return "frontend";
+  if (/review|architect/.test(owner)) return "review";
+  if (/search|analysis|explor/.test(owner)) return "analysis";
+  if (/docs?|content/.test(owner)) return "docs";
+  return "worker";
+}
+
+function buildCodexWorkerMessage(ownerId, ownerKind, roleInstanceId, taskPacket = null, provider = null) {
   const taskPacketId = taskPacket?.taskPacketId ?? `worker-task:${roleInstanceId ?? ownerId}`;
-  return JSON.stringify({
-    schemaVersion: "codex-native-worker-message-v0.1",
+  const resolvedRoleInstanceId = taskPacket?.roleInstanceId ?? roleInstanceId ?? ownerId;
+  const roleDisplayName = taskPacket?.roleDisplayName ?? ownerId;
+  const ownerSource = taskPacket?.ownerSource ?? codexOwnerSource(provider);
+  const capabilityLoadout = taskPacket?.capabilityLoadout ?? {
+    weapon: taskPacket?.weapon ?? null,
+    dependency: taskPacket?.dependency ?? null,
+  };
+  const ownerDefinition = codexOwnerDefinition(provider);
+  const ownerBindingMode = taskPacket?.ownerBindingMode ?? "run_scoped_owner_contract";
+  const nativeAgentType = ownerBindingMode === "native_custom_agent"
+    ? taskPacket?.nativeAgentType ?? ownerId
+    : null;
+  const metaKimBinding = {
+    runId: routeRunId,
+    family: "agent_subagent",
+    providerId: codexProviderId(provider, ownerId),
+    bindingRef: `${routeRunId}:agent_subagent:${codexProviderId(provider, ownerId)}:${taskPacketId}`,
     taskPacketId,
-    roleInstanceId: taskPacket?.roleInstanceId ?? roleInstanceId ?? ownerId,
+    roleInstanceId: resolvedRoleInstanceId,
+    occurredAt: routeOccurredAt,
+    evidenceKind: "spawn_agent_result",
+  };
+  return JSON.stringify({
+    schemaVersion: "codex-native-worker-invocation-v0.2",
+    taskPacketId,
+    roleDisplayName,
+    roleInstanceId: resolvedRoleInstanceId,
     ownerAgent: ownerId,
     ownerKind,
-    ownerSource: taskPacket?.ownerSource ?? null,
-    capabilityLoadout: {
-      weapon: taskPacket?.weapon ?? null,
-      dependency: taskPacket?.dependency ?? null,
-    },
+    ownerSource,
+    ownerBindingMode,
+    nativeAgentType,
+    ownerDefinition,
+    capabilityLoadout,
     scope: {
       purpose: taskPacket?.purpose ?? `Execute the bounded worker task owned by ${ownerId}.`,
       decisionImpact: taskPacket?.decisionImpact ?? null,
@@ -1505,6 +1692,7 @@ function buildCodexWorkerMessage(ownerId, ownerKind, roleInstanceId, taskPacket 
       verificationOwner: taskPacket?.verificationOwner ?? "meta-prism",
       verification: taskPacket?.verification ?? "Run the lane-specific checks named by the work order.",
     },
+    metaKimBinding,
   });
 }
 
@@ -1515,25 +1703,70 @@ function codexSpawnBindingForOwner(ownerId, ownerKind = "agent", roleInstanceId 
     ...runtimeScopedLocalGlobalAgents,
   ].find((agent) => agent.id === ownerId);
   if (!provider) return null;
-  return {
+  const ownerSource = codexOwnerSource(provider);
+  const ownerDefinition = codexOwnerDefinition(provider);
+  const ownerSelectorField = codexHostToolSchema.ownerSelectorField;
+  const ownerBindingMode =
+    ownerDefinition.nativeCustomAgentEligible && ownerSelectorField
+      ? "native_custom_agent"
+      : "run_scoped_owner_contract";
+  const nativeAgentType = ownerBindingMode === "native_custom_agent" ? ownerId : null;
+  const message = buildCodexWorkerMessage(ownerId, ownerKind, roleInstanceId, {
+    ...taskPacket,
+    ownerSource,
+    ownerBindingMode,
+    nativeAgentType,
+  }, provider);
+  const followupMessage = buildCodexWorkerMessage(ownerId, ownerKind, roleInstanceId, {
+    ...taskPacket,
+    ownerSource,
+    ownerBindingMode: "run_scoped_owner_contract",
+    nativeAgentType: null,
+  }, provider);
+  const binding = {
     hostSurface: "spawn_agent",
-    spawnMode: "native_task",
+    supportedHostSurfaces: ["spawn_agent", "followup_task"],
     task_name: normalizeCodexTaskName(taskPacket?.taskPacketId ?? roleInstanceId ?? ownerId),
     fork_turns: "none",
-    message: buildCodexWorkerMessage(ownerId, ownerKind, roleInstanceId, {
-      ...taskPacket,
-      ownerSource: provider.source,
-    }),
+    message,
+    followupTaskTemplate: {
+      hostSurface: "followup_task",
+      target: null,
+      targetPolicy: "existing_runtime_instance_id_only_not_owner_identity",
+      message: followupMessage,
+      ownerBindingMode: "run_scoped_owner_contract",
+      nativeAgentType: null,
+    },
     ownerAgent: ownerId,
     ownerKind,
-    ownerSource: provider.source,
+    ownerSource,
+    ownerBindingMode,
+    nativeAgentType,
+    ownerSelectorField,
+    ownerDefinition,
+    nativeCustomAgentCandidate: {
+      eligibleOwnerDefinition: ownerDefinition.nativeCustomAgentEligible,
+      requiredHostSelector: "agent_type_or_equivalent",
+      requiredInvocationResult: "successful_before_invoked_or_completed_presentation",
+      promotionRule:
+        "Schema-confirmed agent_type plus a Codex TOML owner may select the native request mode; only a successful host result may mark that request invoked or completed.",
+    },
     sourceRef: provider.sourceRef,
     runtimeInstanceAlias: null,
     visibleBindingRequired: true,
     hostSurfaceProbeRequired: true,
-    invocationReadiness: "requires_current_host_spawn_agent_surface",
+    hostToolSchemaEvidence: codexHostToolSchema,
+    invocationReadiness: ownerBindingMode === "native_custom_agent"
+      ? "native_custom_agent_request_ready_success_still_requires_host_result"
+      : ownerDefinition.nativeCustomAgentEligible
+        ? "run_scoped_ready_native_custom_agent_requires_host_schema"
+      : "run_scoped_ready_owner_is_not_codex_toml",
     unavailablePolicy: "block_or_declare_degraded_without_legacy_fallback",
   };
+  if (ownerBindingMode === "native_custom_agent") {
+    binding[ownerSelectorField] = ownerId;
+  }
+  return binding;
 }
 
 function selectExecutionOwner() {
@@ -1554,7 +1787,14 @@ function selectExecutionOwner() {
     }
     return null;
   };
+  const implementationMutationRequested =
+    productBuildExecutionRequested() ||
+    /\b(?:fix|implement|build|refactor|rebuild|migrate|write|edit|update|repair|code)\b|修复|实现|构建|重构|迁移|写入|编辑|更新|改代码|搞定/iu.test(taskText);
   const preferenceGroups = [
+    ...(implementationMutationRequested ? [{
+      terms: ["security", "backend", "hook", "routing", "runtime", "code", "安全", "后端", "钩子", "路由", "运行时", "修复", "实现"],
+      owners: ["backend-security-coder", "backend", "build-error-resolver", "code-reviewer", "worker"],
+    }] : []),
     {
       terms: ["agent", "subagent", "owner", "search", "discover", "find", "智能体", "代理", "搜索", "寻找", "发现"],
       owners: ["codebase-search", "search-specialist", "analysis", "worker", "backend"],
@@ -1859,7 +2099,7 @@ function buildParallelExecutionLanes() {
     const safetyEvidence = deriveLaneSafetyEvidence(segment, laneId);
     lanes.push({
       laneId,
-      roleDisplayName: segment.laneHint,
+      roleDisplayName: roleDisplayNameForOwner(provider.id),
       ownerKind: provider.kind,
       ownerAgent: provider.id,
       codexSpawnBinding: codexSpawnBindingForOwner(provider.id, provider.kind, laneId),
@@ -2749,14 +2989,16 @@ const workerTaskPacketDrafts = selectedWorkerLanes
         purpose: lane.purpose,
         decisionImpact: lane.decisionImpact,
       };
+      const codexSpawnBinding = codexSpawnBindingForOwner(
+        lane.ownerAgent,
+        lane.ownerKind ?? "agent",
+        lane.laneId,
+        taskPacket,
+      );
       return {
         ...taskPacket,
-        codexSpawnBinding: codexSpawnBindingForOwner(
-          lane.ownerAgent,
-          lane.ownerKind ?? "agent",
-          lane.laneId,
-          taskPacket,
-        ),
+        ownerSource: codexSpawnBinding?.ownerSource ?? null,
+        codexSpawnBinding,
       };
     })
   : recommendedRoute
@@ -2769,7 +3011,7 @@ const workerTaskPacketDrafts = selectedWorkerLanes
           taskPacketId: `worker-task:${roleInstanceId}:1`,
           ownerKind: "agent",
           ownerAgent: selectedOwner,
-          roleDisplayName: selectedOwner?.replace(/^meta-/, "") ?? "unknown",
+          roleDisplayName: roleDisplayNameForOwner(selectedOwner),
           roleInstanceId,
           weapon: recommendedRoute.weapon,
           dependency: recommendedRoute.dependency,
@@ -2788,14 +3030,16 @@ const workerTaskPacketDrafts = selectedWorkerLanes
           purpose: `Execute route ${recommendedRoute.id} within its declared scope.`,
           decisionImpact: "Single-worker route selected by Thinking.",
         };
+        const codexSpawnBinding = codexSpawnBindingForOwner(
+          selectedOwner,
+          "agent",
+          roleInstanceId,
+          taskPacket,
+        );
         return [{
           ...taskPacket,
-          codexSpawnBinding: codexSpawnBindingForOwner(
-            selectedOwner,
-            "agent",
-            roleInstanceId,
-            taskPacket,
-          ),
+          ownerSource: codexSpawnBinding?.ownerSource ?? null,
+          codexSpawnBinding,
         }];
       })()
     : [];
@@ -2846,6 +3090,10 @@ const safeFanoutReady =
       packet.workspaceIsolation !== "unproven",
   ) &&
   scopesArePairwiseDisjoint(workerTaskPacketDrafts);
+const unprovenMultiLaneExecution =
+  Array.isArray(recommendedRoute?.parallelExecutionLanes) &&
+  recommendedRoute.parallelExecutionLanes.length >= 2 &&
+  !safeFanoutReady;
 
 const routeExecutionGate = {
   canPreviewRoute: true,
@@ -2854,7 +3102,8 @@ const routeExecutionGate = {
     !globalInventoryFreshness.refreshRequiredBeforeExecution &&
     !capabilityGapBlocksExecution &&
     !criticalChoiceBlocksExecution &&
-    !thinkingChoiceBlocksExecution,
+    !thinkingChoiceBlocksExecution &&
+    !unprovenMultiLaneExecution,
   blockedBy: [
     ...(!recommendedRoute ? ["missing_recommended_route"] : []),
     ...(recommendedRoute && recommendedRoute.score < 85 ? ["route_requires_confirmation_or_more_fetch"] : []),
@@ -2862,6 +3111,7 @@ const routeExecutionGate = {
     ...(capabilityGapBlocksExecution ? ["capability_gap_decision_blocks_execution"] : []),
     ...(criticalChoiceBlocksExecution ? ["native_choice_surface_required_before_execution"] : []),
     ...(thinkingChoiceBlocksExecution ? ["thinking_route_choice_required_before_execution"] : []),
+    ...(unprovenMultiLaneExecution ? ["parallel_lane_safety_not_proven"] : []),
   ],
   returnToStage: !recommendedRoute
     ? "Thinking"
@@ -2870,6 +3120,8 @@ const routeExecutionGate = {
     : criticalChoiceBlocksExecution
       ? "Critical"
     : thinkingChoiceBlocksExecution
+      ? "Thinking"
+    : unprovenMultiLaneExecution
       ? "Thinking"
     : recommendedRoute.score < 85 || globalInventoryFreshness.refreshRequiredBeforeExecution
       ? "Fetch"
@@ -2885,6 +3137,8 @@ const routeExecutionGate = {
         ? "The input has a route-changing ambiguity and requires a trusted native choice-surface answer before Execution."
       : thinkingChoiceBlocksExecution
         ? "The user intent is calibrated, but the fetched capability route still has multiple product/design execution paths; Thinking needs a trusted native route choice before Execution."
+      : unprovenMultiLaneExecution
+        ? "Multiple execution lanes were drafted, but shard scope, workspace isolation, or collision boundaries are still unproven; return to Thinking instead of presenting the route as execution-ready."
       : globalInventoryFreshness.refreshRequiredBeforeExecution
         ? "Cached provider evidence is missing or older than 14 days; route preview is allowed, but Execution must refresh capability discovery first."
         : "Cached provider evidence is fresh enough and the route has execution-grade owner/provider/verification binding.",

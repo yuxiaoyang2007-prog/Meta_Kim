@@ -74,6 +74,10 @@ import {
   buildCursorHooksJson,
   buildHookPromptAdapterSource,
 } from "./runtime-hook-mapping.mjs";
+import {
+  MetaKimConfigError,
+  loadMetaKimConfig,
+} from "./meta-kim-config-loader.mjs";
 
 // ── ANSI colors (matching setup.mjs) ─────────────────────────────────
 
@@ -394,8 +398,6 @@ async function setupTeeStdout(logFilePath) {
   return logFilePath;
 }
 
-const logFileResolved = await setupTeeStdout(parseLogFileArg(cliArgs));
-
 const PROXY_ENV_KEYS = [
   "HTTP_PROXY",
   "HTTPS_PROXY",
@@ -540,68 +542,31 @@ let useDirectConnection = false;
 /** User configured --proxy / META_KIM_GIT_PROXY: prefer that env for git (no misleading "direct failed" first). */
 const preferGitProxyFirst = Boolean(gitProxy);
 
-/**
- * Load skills manifest from shared config (single source of truth)
- * Same as setup.mjs - ensures consistency across all installation paths
- */
-function loadSkillsManifest() {
-  const manifestPath = path.join(repoRoot, "config", "skills.json");
+function loadInstallerConfig() {
+  let config;
   try {
-    const raw = readFileSync(manifestPath, "utf8");
-    const manifest = JSON.parse(raw);
-
-    // Allow env var override
-    const skillOwner =
-      process.env.META_KIM_SKILL_OWNER || manifest.skillOwner || "KimYx0207";
-
-    // Transform manifest to script’s format
-    const skillRepos = [];
-
-    for (const skill of manifest.skills) {
-      const repo = skill.repo.replace("${skillOwner}", skillOwner);
-      const fullUrl = `https://github.com/${repo}.git`;
-      const localRepoPath = resolveLocalDependencyRepo(repo);
-
-      const subdir = resolveManifestSkillSubdir(skill, os.platform());
-
-      skillRepos.push({
-        id: skill.id,
-        repo: fullUrl,
-        ...(localRepoPath ? { localRepoPath } : {}),
-        ...(subdir ? { subdir } : {}),
-        targets: skill.targets || ["claude", "codex", "openclaw"],
-        ...(skill.claudePlugin ? { claudePlugin: skill.claudePlugin } : {}),
-        ...(skill.codexPlugin ? { codexPlugin: skill.codexPlugin } : {}),
-        ...(skill.cursorPlugin ? { cursorPlugin: skill.cursorPlugin } : {}),
-        ...(skill.installRoot ? { installRoot: skill.installRoot } : {}),
-        ...(skill.pluginHookCompat ? { pluginHookCompat: true } : {}),
-        ...(skill.installMethod ? { installMethod: skill.installMethod } : {}),
-        ...(skill.upstreamPackage
-          ? { upstreamPackage: skill.upstreamPackage }
-          : {}),
-        ...(skill.upstreamProfile ? { upstreamProfile: skill.upstreamProfile } : {}),
-        ...(skill.legacyNames ? { legacyNames: skill.legacyNames } : {}),
-        ...(skill.hookSubdirs ? { hookSubdirs: skill.hookSubdirs } : {}),
-        ...(skill.hookConfigFiles
-          ? { hookConfigFiles: skill.hookConfigFiles }
-          : {}),
-        ...(skill.fallbackContentDir
-          ? { fallbackContentDir: skill.fallbackContentDir }
-          : {}),
-        ...(skill.hookExtraFiles
-          ? { hookExtraFiles: skill.hookExtraFiles }
-          : {}),
-        ...(skill.hookSettingsMerge
-          ? { hookSettingsMerge: skill.hookSettingsMerge }
-          : {}),
-      });
-    }
-
-    return { skillRepos };
-  } catch (err) {
-    console.warn(`${C.yellow}⚠${C.reset} ${t.failManifestLoad(err.message)}`);
-    return { skillRepos: [] };
+    config = loadMetaKimConfig({ repoRoot });
+  } catch (error) {
+    const prefix =
+      error instanceof MetaKimConfigError
+        ? `Meta_Kim configuration error [${error.code}]`
+        : "Meta_Kim configuration error";
+    console.error(`${prefix}: ${error.message}`);
+    process.exit(2);
   }
+
+  const skillRepos = config.skills.skills.map((skill) => {
+    const localRepoPath = resolveLocalDependencyRepo(skill.repository.fullName);
+    const subdir = resolveManifestSkillSubdir(skill, os.platform());
+    return {
+      ...skill,
+      repo: skill.repository.cloneUrl,
+      repoFullName: skill.repository.fullName,
+      ...(localRepoPath ? { localRepoPath } : {}),
+      ...(subdir ? { subdir } : {}),
+    };
+  });
+  return { ...config, skillRepos };
 }
 
 function applySkillsIdFilter(skillRepos, filterIds) {
@@ -623,8 +588,8 @@ function applySkillsIdFilter(skillRepos, filterIds) {
   return { repos: picked, unknownIds };
 }
 
-const manifestLoad = loadSkillsManifest();
-let SKILL_REPOS = manifestLoad.skillRepos;
+const installerConfig = loadInstallerConfig();
+let SKILL_REPOS = installerConfig.skillRepos;
 function normalizeInstallerSkillsFilter(parsedSkills) {
   return parsedSkills;
 }
@@ -644,9 +609,8 @@ if (skillsArg !== null) {
   }
 }
 
-let CLAUDE_PLUGIN_SPECS = SKILL_REPOS.map((s) => s.claudePlugin).filter(
-  Boolean,
-);
+let CLAUDE_PLUGIN_SPECS = SKILL_REPOS.map((s) => s.claudePlugin).filter(Boolean);
+const logFileResolved = await setupTeeStdout(parseLogFileArg(cliArgs));
 
 function loadGlobalManagedSkillPaths() {
   const manifest = readManifest(manifestPathFor("global"));
@@ -901,6 +865,44 @@ async function replaceTargetDir(targetDir, stagedDir) {
   if (oldMoved) {
     await rmDirWithRetry(backupDir);
   }
+}
+
+async function directoryContentEqual(leftDir, rightDir) {
+  let leftEntries;
+  let rightEntries;
+  try {
+    [leftEntries, rightEntries] = await Promise.all([
+      fs.readdir(leftDir, { withFileTypes: true }),
+      fs.readdir(rightDir, { withFileTypes: true }),
+    ]);
+  } catch {
+    return false;
+  }
+  const sortEntries = (entries) => [...entries].sort((a, b) => a.name.localeCompare(b.name));
+  const left = sortEntries(leftEntries);
+  const right = sortEntries(rightEntries);
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    const leftEntry = left[index];
+    const rightEntry = right[index];
+    if (leftEntry.name !== rightEntry.name) return false;
+    const leftPath = path.join(leftDir, leftEntry.name);
+    const rightPath = path.join(rightDir, rightEntry.name);
+    if (leftEntry.isDirectory() && rightEntry.isDirectory()) {
+      if (!(await directoryContentEqual(leftPath, rightPath))) return false;
+      continue;
+    }
+    if (leftEntry.isFile() && rightEntry.isFile()) {
+      const [leftBytes, rightBytes] = await Promise.all([
+        fs.readFile(leftPath),
+        fs.readFile(rightPath),
+      ]);
+      if (!leftBytes.equals(rightBytes)) return false;
+      continue;
+    }
+    return false;
+  }
+  return true;
 }
 
 const MAX_CONCURRENT_CLONES = 3;
@@ -2922,13 +2924,14 @@ async function installClaudePlugins() {
   // Auto-register plugin marketplaces if not already present.
   // This is needed on fresh Mac/Linux installs where marketplaces are not
   // pre-registered (unlike Windows which has them installed by default).
-  // Registry: marketplace-id -> GitHub repo URL (marketplace.json's "name" field
-  // becomes the marketplace-id used in "plugin@marketplace" spec).
-  const MARKETPLACE_URLS = {
-    ecc: "https://github.com/affaan-m/ECC",
-    "superpowers-marketplace":
-      "https://github.com/obra/superpowers-marketplace",
-  };
+  // Registry is derived from config/skills.json. A plugin with no declared
+  // marketplace/version source is rejected by the shared config preflight.
+  const MARKETPLACE_URLS = Object.fromEntries(
+    SKILL_REPOS.filter((skill) => skill.claudePlugin).map((skill) => [
+      skill.marketplace.id,
+      skill.marketplace.repository.cloneUrl,
+    ]),
+  );
 
   if (dryRun) {
     const neededMarketplaces = new Set(
@@ -3163,9 +3166,14 @@ async function installClaudePlugins() {
    * Returns version string or null if unreachable/unparseable.
    * Version source: .claude-plugin/marketplace.json → plugins[].version
    */
-  async function fetchLatestPluginVersion(repoFull) {
-    // repoFull format: "owner/repo"
-    const url = `https://api.github.com/repos/${repoFull}/contents/.claude-plugin%2Fmarketplace.json`;
+  async function fetchLatestPluginVersion(versionSource) {
+    const repoFull = versionSource.repository.fullName;
+    const encodedManifestPath = versionSource.manifestPath
+      .split("/")
+      .filter(Boolean)
+      .map(encodeURIComponent)
+      .join("/");
+    const url = `${versionSource.apiBase}/repos/${repoFull}/contents/${encodedManifestPath}`;
     try {
       const res = await fetch(url, {
         headers: {
@@ -3179,7 +3187,9 @@ async function installClaudePlugins() {
       const m = JSON.parse(content);
       // marketplace.json format: { plugins: [{ name, version, ... }] }
       if (m.plugins && Array.isArray(m.plugins)) {
-        const found = m.plugins.find((p) => p.name);
+        const found = m.plugins.find(
+          (plugin) => plugin.name === versionSource.pluginName,
+        );
         return found?.version ?? null;
       }
       // Fallback: top-level version (some older formats)
@@ -3191,17 +3201,9 @@ async function installClaudePlugins() {
 
   for (const spec of CLAUDE_PLUGIN_SPECS) {
     const bareName = spec.split("@")[0];
-    // Parse repo from spec: "owner/repo"
-    // spec format is "bareName@marketplace" — resolve repo from skills.json manifest
-    const pluginRepoMap = {
-      superpowers: "obra/superpowers",
-      ecc: "affaan-m/ECC",
-      "code-simplifier": "claude-plugins-official/code-simplifier",
-      "rust-analyzer-lsp": "claude-plugins-official/rust-analyzer-lsp",
-      "claude-md-management": "claude-plugins-official/claude-md-management",
-      "pyright-lsp": "claude-plugins-official/pyright-lsp",
-    };
-    const repoFull = pluginRepoMap[bareName] ?? `${bareName}/${bareName}`;
+    const repoSpec = SKILL_REPOS.find((skill) => skill.claudePlugin === spec);
+    const versionSource = repoSpec.versionSource;
+    const repoFull = versionSource.repository.fullName;
     // Look up by full spec ("bareName@marketplace"), not bare name.
     // installed_plugins.json can carry stale cross-marketplace entries for the
     // same bare name (e.g. both "superpowers@claude-plugins-official" and
@@ -3222,7 +3224,7 @@ async function installClaudePlugins() {
       }
     } else {
       // Update mode: fetch latest from GitHub and compare
-      const latestVersion = await fetchLatestPluginVersion(repoFull);
+      const latestVersion = await fetchLatestPluginVersion(versionSource);
       if (latestVersion) {
         if (localVersion === latestVersion) {
           console.log(
@@ -3891,6 +3893,13 @@ async function deployStagedSkill(stagedPath, targetDir, skillId, subdirPath) {
       `${C.yellow}⊘${C.reset} ${C.dim}${t.skipExists(targetDir)}${C.reset}`,
     );
     await sanitizeManagedSkillTarget(skillId, targetDir);
+    return true;
+  }
+
+  if (targetExists && !targetEmpty && await directoryContentEqual(stagedPath, targetDir)) {
+    console.log(
+      `${C.yellow}⊘${C.reset} ${C.dim}${t.skipExists(targetDir)}${C.reset}`,
+    );
     return true;
   }
 
@@ -5422,6 +5431,7 @@ export {
   assertRealPathContained,
   normalizeInstallerSkillsFilter,
   resolveCompatibilitySkillRoots,
+  directoryContentEqual,
   resolveOsUserHome,
   resolveSkillTargetDir,
   transactionalReplaceMetaSkillTargets,

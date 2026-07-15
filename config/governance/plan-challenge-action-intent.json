@@ -1,0 +1,104 @@
+{
+  "schemaVersion": "plan-challenge-action-intent-v1",
+  "regexFlags": "iu",
+  "readOnlyPatterns": [
+    "只读|仅分析|只分析|只检查|仅检查|不要修改|不修改|无需修改|不要写入|不写入|不要执行|不执行|无需执行|不要发布|不发布|不要部署|不部署",
+    "read[- ]?only|analysis\\s+only|check\\s+only|(?:do\\s+not|don't)\\s+(?:edit|modify|write|execute|release|deploy)|without\\s+(?:editing|modifying|writing|executing|releasing|deploying)"
+  ],
+  "documentationContextPatterns": [
+    "文档|说明|指南|README|措辞|文字|描述|文案",
+    "documentation|docs?|guide|wording|copy\\s*text"
+  ],
+  "documentationExecutionOverridePatterns": [
+    "真实(?:发布|部署|迁移|权限变更)|实际(?:发布|部署|迁移|权限变更)",
+    "execute\\s+(?:the\\s+)?(?:release|deployment|migration)|perform\\s+(?:the\\s+)?(?:release|deployment|migration)"
+  ],
+  "quotedSpanPatterns": [
+    "“[^”]*”",
+    "‘[^’]*’",
+    "\"[^\"]*\""
+  ],
+  "clauseSplitPattern": "(?:[，,。！？!?；;\\n]+|但(?:是)?|不过|而是|\\bbut\\b|\\binstead(?:\\s+of)?\\b)",
+  "nonExecutionContextPatterns": [
+    "是什么意思|什么含义|如何理解|解释(?:一下)?(?:这句话|这个说法|这个术语)?|术语定义",
+    "是否应该|应不应该|要不要|可否|能否|是否可以|讨论(?:一下)?是否|评估(?:一下)?是否",
+    "what\\s+does.+mean|what\\s+is\\s+the\\s+meaning|explain\\s+(?:this|the\\s+phrase)|should\\s+we|whether\\s+we\\s+should|discuss\\s+whether"
+  ],
+  "actions": [
+    {
+      "action": "local_file_mutation",
+      "skipWhenDocumentationOnly": false,
+      "patterns": [
+        "修改|调整|修复|实现|创建|新建|写入|安装|更新|编辑|提交",
+        "edit|modify|fix|implement|create|write|install|update|commit"
+      ]
+    },
+    {
+      "action": "external_release",
+      "skipWhenDocumentationOnly": true,
+      "patterns": [
+        "(?:^|[，。；：,;:\\s])(?:请|帮我|现在|直接|立即|继续|要)?\\s*(?:发布|上线)(?=$|[，。！？,;!?.\\s]|这个|该|新|到|至|版本|应用|产品|内容|结果|包)",
+        "(?:直接|立即)\\s*(?:发布|上线)(?=$|[，。！？,;!?.\\s]|到|至)",
+        "(?:把|将).{0,40}(?:发布|上线)",
+        "(?:后|然后|随后|再)\\s*(?:(?:把|将)\\s*)?[^。！？\\n]{0,30}?(?:发布|上线)(?=$|[，。！？,;!?.\\s]|到|至)",
+        "\\b(?:release|publish)\\s+(?!(?:summary|notes?|plan|guide|tool|automation)\\b)(?:this|the|an?|to|on|now|version|package|app|content|result)\\b"
+      ]
+    },
+    {
+      "action": "production_deploy",
+      "skipWhenDocumentationOnly": true,
+      "patterns": [
+        "(?:^|[，。；：,;:\\s])(?:请|帮我|现在|直接|立即|继续|要)?\\s*部署(?=$|[，。！？,;!?.\\s]|到|至|这个|该|新|旧|生产|应用|项目|服务|系统|版本|包)",
+        "(?:直接|立即)\\s*部署(?=$|[，。！？,;!?.\\s]|到|至)",
+        "(?:把|将).{0,40}部署",
+        "(?:后|然后|随后|再)\\s*(?:(?:把|将)\\s*)?[^。！？\\n]{0,30}?部署(?=$|[，。！？,;!?.\\s]|到|至)",
+        "\\bdeploy\\s+(?:this|the|an?|to|into)\\b"
+      ]
+    },
+    {
+      "action": "permission_change",
+      "skipWhenDocumentationOnly": true,
+      "patterns": [
+        "权限(?:变更|修改|授予|撤销)",
+        "change\\s+permission|grant\\s+permission|revoke\\s+permission"
+      ]
+    },
+    {
+      "action": "data_migration",
+      "skipWhenDocumentationOnly": true,
+      "patterns": [
+        "(?:执行|开始|进行|立即)?\\s*迁移(?:数据|数据库|到|至)",
+        "(?:把|将).{0,40}迁移",
+        "\\bmigrat(?:e|ing)\\s+(?:data|database|this|the|to)\\b"
+      ]
+    },
+    {
+      "action": "purchase_commitment",
+      "skipWhenDocumentationOnly": true,
+      "patterns": [
+        "购买|采购|付款|支付|年度套餐",
+        "purchase|procure|payment|annual\\s+plan"
+      ]
+    },
+    {
+      "action": "destructive_change",
+      "skipWhenDocumentationOnly": true,
+      "patterns": [
+        "删除|覆盖|破坏性",
+        "delete|overwrite|destructive"
+      ],
+      "negationPatterns": [
+        "(?:拒绝|避免|禁止|不要|不得|不允许|防止|保留).{0,16}(?:删除|覆盖|破坏性)",
+        "(?:do\\s+not|don't|never|avoid|prevent|refuse\\s+to|must\\s+not).{0,24}(?:delete|overwrite|destructive)"
+      ]
+    },
+    {
+      "action": "global_install",
+      "skipWhenDocumentationOnly": true,
+      "patterns": [
+        "全局安装",
+        "global\\s+install"
+      ]
+    }
+  ]
+}

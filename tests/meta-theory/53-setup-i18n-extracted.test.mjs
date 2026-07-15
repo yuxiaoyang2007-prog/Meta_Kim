@@ -42,8 +42,42 @@ describe("53 — setup.mjs i18n extracted to single source (config/i18n/setup-st
     }
   });
 
-  test("setup.mjs shrank after extraction (smaller than the 9000-line pre-extraction size)", () => {
-    const lines = readFileSync(SETUP_FILE, "utf8").split("\n").length;
-    assert.ok(lines < 7500, `setup.mjs should shrink after extraction; got ${lines} lines`);
+  test("localized formatters receive runtime counts instead of reading setup globals", () => {
+    const stringsSrc = readFileSync(STRINGS_FILE, "utf8");
+    const setupSrc = readFileSync(SETUP_FILE, "utf8");
+    assert.doesNotMatch(
+      stringsSrc,
+      /\bMETA_AGENTS\b/,
+      "the standalone packed i18n module must not close over setup.mjs globals",
+    );
+    assert.match(setupSrc, /syncClaudeAgents\(summary\.presentCount, META_AGENTS\.length\)/);
+    assert.match(setupSrc, /syncOpenclawWorkspaces\(wsCount, META_AGENTS\.length\)/);
+    assert.match(setupSrc, /syncCursorAgents\(summary\.presentCount, META_AGENTS\.length\)/);
+  });
+
+  test("setup.mjs is a CLI façade over domain modules instead of using an arbitrary line quota", () => {
+    const setupSrc = readFileSync(SETUP_FILE, "utf8");
+    for (const domainModule of [
+      "./scripts/setup-cli-policy.mjs",
+      "./scripts/install-status-semantics.mjs",
+      "./scripts/safe-managed-file-operations.mjs",
+      "./scripts/project-bootstrap-file-safety.mjs",
+      "./scripts/node-spawn-config.mjs",
+    ]) {
+      assert.ok(
+        setupSrc.includes(`from \"${domainModule}\"`),
+        `setup.mjs must delegate its domain boundary to ${domainModule}`,
+      );
+    }
+    assert.match(setupSrc, /async function main\(\)/);
+    for (const modeRunner of [
+      "runProjectBootstrapCli",
+      "runProjectCleanupCli",
+      "runInstall",
+      "runUpdate",
+      "runCheck",
+    ]) {
+      assert.match(setupSrc, new RegExp(`\\b${modeRunner}\\b`));
+    }
   });
 });

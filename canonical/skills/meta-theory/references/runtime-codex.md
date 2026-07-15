@@ -13,6 +13,10 @@ Codex Execution is capability-wide, not agent-only. When Thinking selects a capa
 - runtime tools such as `apply_patch`, browser, Playwright, data widgets, or other loaded tool surfaces
 - prompt/rule providers as `applied`, not as external tool calls
 
+The normal chat surface must render one compact capability ledger from the same strict truth rows used by the run artifact. At minimum, show Agent/subagent, Skill, Command/script, MCP, runtime tool, and Hook with: selected provider, global/project source, whether it was selected, its actual invocation state, and the next required action. Do not collapse this ledger into an Agent-only sentence. A Codex task badge or `followup_task` update remains a run-scoped host label; map it back to the professional owner and source, and never present “智能体已更新” as if a durable Agent definition changed.
+
+Every governed Codex route must also produce a `projectCustomizationPacket` before durable capability creation or upgrade. Its decision is exactly one of `use_global_directly`, `upgrade_existing_owner`, or `create_project_local_capability`, with reason, target path, verification, and rollback. Global reuse wins when the existing contract fits. A project-local Agent, Skill, Command, MCP merge, Hook, or runtime tool is created only after a project-specific gap is proved and the Type B lifecycle approves the native project target. The packet is a decision record, not proof that a file was written, discovered by Codex, or invoked.
+
 `runtimeInvocationPlanPacket` records selected executable bindings, externally observed evidence, and missing bindings. `hostInvocationRequestPacket` is the adapter handoff for missing work. The Node runner must not treat a request, readiness probe, fixture, self-test, or caller-supplied trust flag as proof. Only an external Codex event observer may promote a binding after matching the host call, result, run/session/event ids, provider/task binding, timestamp, and observation artifact hash. `capabilityInvocationTruthPacket.realInvocationCoverage.status` must be `pass` for product-experience pass. `selected_not_invoked` is valid truth, but it is never completion evidence.
 
 ## Honest Subagent Contract
@@ -46,15 +50,17 @@ Trust-surface distinction: removing lifecycle and assistant-presentation trust s
 
 Capability resolution stops when a qualified existing provider is found. Missing an exact Skill or declining an optional external Skill install does not make the route degraded when an existing owner plus native `spawn_agent` can execute the lane. External discovery runs only for a proven local multi-provider gap; fallback/degraded labels require an actual host-surface, permission, or owner failure.
 
-## Codex Native spawn_agent Contract
+## Codex Adaptive spawn_agent Owner Contract
 
-Current Codex native fan-out uses the top-level `spawn_agent` surface with exactly three routing inputs:
+Inspect the active top-level `spawn_agent` schema before building the request. Every request uses these base inputs:
 
 - `task_name`: a lowercase letters/digits/underscores lane identifier derived from `roleInstanceId` or `taskPacketId`; it is not the durable `ownerAgent`
 - `message`: the bounded worker work order, including `taskPacketId`, `ownerAgent`, owner source, capability/loadout, scope, output contract, collision boundary, and merge owner
 - `fork_turns`: the smallest sufficient context window; default to `none` when the bounded message is complete, and use `all` or a positive integer string only when the lane genuinely requires parent-turn context
 
-Do not pass `agent_type` or `fork_context`, and do not discover or fall back to a legacy namespaced spawn API. The professional owner remains governance metadata in the worker packet and bounded message; Codex's runtime task name or incidental nickname must never be presented as proof that a durable custom agent type was loaded. If the top-level native `spawn_agent` surface is unavailable or rejects its current schema, record `subagentCapabilityStatus=unavailable` with the exact tool/schema evidence and block or declare degraded mode instead of silently serializing.
+Use exactly one `ownerBindingMode`. Select `native_custom_agent` and pass `nativeAgentType` plus the schema-confirmed `agent_type` only when the owner is discovered from a validated Codex TOML definition whose declared `name` matches the selected owner. The TOML `name` is the native identity; the filename is only inventory provenance and must be normalized to that name or rejected for native binding. Schema exposure makes the native request possible; only a successful host result makes it invoked/completed. Otherwise select `run_scoped_owner_contract`, omit `nativeAgentType`/`agent_type`, and carry the professional owner in `message`. Markdown owners, `task_name`, nicknames, badges, and `runtimeInstanceAlias` never prove native owner loading. Do not pass unsupported fields or fall back to a legacy namespaced spawn API.
+
+Normal chat and the run panel must use one truth ledger for Agent/subagent, Skill, Command/script, MCP, runtime tool, and Hook. Each row preserves provider, global/project source, selected state, actual invocation state, and next action. Show `ownerAgent` and `runtimeInstanceAlias` separately; never let a host task label impersonate the professional owner.
 
 When native `spawn_agent` is available and the run is fan-out authorized through meta-theory / governed Meta_Kim activation, direct subagent/delegation/parallel-agent wording, a structured governance-chain request, or a completed native choice surface, the Codex main thread MUST spawn all independent workers (same `parallelGroup`) in one assistant turn — not one per turn. Per-turn serial spawning in authorized `fan_out_ready` state is fake parallelism. If the route is fan-out eligible but runtime authorization or the callable host surface is missing, stop before live subagent dispatch and record the degraded/blocked state instead of silently serializing.
 

@@ -23,6 +23,35 @@ const binding = Object.freeze({
 });
 const marker = `<metaKimBinding>${JSON.stringify(binding)}</metaKimBinding>`;
 
+function codexRunScopedEnvelope(metaKimBinding, ownerAgent) {
+  return {
+    schemaVersion: "codex-native-worker-invocation-v0.2",
+    taskPacketId: metaKimBinding.taskPacketId,
+    roleDisplayName: "test",
+    roleInstanceId: metaKimBinding.roleInstanceId,
+    ownerAgent,
+    ownerSource: `~/.codex/agents/${ownerAgent}.toml`,
+    ownerBindingMode: "run_scoped_owner_contract",
+    nativeAgentType: null,
+    capabilityLoadout: { skill: "meta-theory", runtimeTool: "node:test" },
+    metaKimBinding,
+  };
+}
+
+function codexNativeEnvelope(metaKimBinding, ownerAgent) {
+  return {
+    ...codexRunScopedEnvelope(metaKimBinding, ownerAgent),
+    ownerBindingMode: "native_custom_agent",
+    nativeAgentType: ownerAgent,
+    ownerDefinition: {
+      format: "codex_custom_agent_toml",
+      sourceRef: `~/.codex/agents/${ownerAgent}.toml`,
+      nativeAgentName: ownerAgent,
+      nativeCustomAgentEligible: true,
+    },
+  };
+}
+
 test("Codex CLI main-thread completed agent_message exposes exact session, message, and text hash fields", () => {
   const text = "Route selected before execution.";
   const raw = jsonl([
@@ -164,7 +193,10 @@ test("sanitized real Codex Desktop followup shape correlates interacted handoff 
         id: "fc-1",
         name: "followup_task",
         namespace: "collaboration",
-        arguments: JSON.stringify({ target: "/root/review", message: `Review the surface. ${marker}` }),
+        arguments: JSON.stringify({
+          target: "/root/review",
+          message: JSON.stringify(codexRunScopedEnvelope(binding, "code-architect")),
+        }),
         call_id: "call-real-1",
       },
     },
@@ -218,6 +250,173 @@ test("sanitized real Codex Desktop followup shape correlates interacted handoff 
   assert.equal(event.parentAgentPath, "/root");
   assert.match(event.resultMessageId, /^message-[a-f0-9]{24}$/u);
   assert.equal(event.sourceLines.length, 4);
+});
+
+test("Codex followup_task keeps the reused task label separate from the bound professional owner", () => {
+  const reusedTaskPath = "/root/status_validator_consumer";
+  const professionalBinding = {
+    ...binding,
+    providerId: "global:test-automator",
+    bindingRef: "task-runtime:agent_subagent:global:test-automator",
+    roleInstanceId: "dispatch-regression",
+  };
+  const raw = jsonl([
+    { type: "session_meta", payload: { id: "desktop-followup-owner-session" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "followup_task",
+        namespace: "collaboration",
+        call_id: "call-followup-owner",
+        arguments: JSON.stringify({
+          target: reusedTaskPath,
+          message: JSON.stringify(
+            codexRunScopedEnvelope(professionalBinding, "test-automator"),
+          ),
+        }),
+      },
+    },
+    {
+      type: "event_msg",
+      payload: {
+        type: "sub_agent_activity",
+        kind: "interacted",
+        event_id: "call-followup-owner",
+        agent_thread_id: "child-followup-owner",
+        agent_path: reusedTaskPath,
+      },
+    },
+    {
+      type: "response_item",
+      payload: { type: "function_call_output", call_id: "call-followup-owner", output: "delivered" },
+    },
+    {
+      type: "response_item",
+      payload: {
+        type: "agent_message",
+        author: reusedTaskPath,
+        recipient: "/root",
+        content: [{ type: "input_text", text: "Regression result." }],
+      },
+    },
+  ]);
+
+  const [event] = observeCodexJsonl(raw);
+  assert.equal(event.hostSurface, "collaboration.followup_task");
+  assert.equal(event.taskPath, reusedTaskPath);
+  assert.equal(event.providerId, "global:test-automator");
+  assert.equal(event.metaKimBinding.providerId, "global:test-automator");
+  assert.notEqual(event.taskPath, event.providerId);
+  assert.equal(event.roleInstanceId, "dispatch-regression");
+});
+
+test("Codex followup_task without a binding is host activity, not proof of a professional owner", () => {
+  const reusedTaskPath = "/root/status_panel_rework";
+  const raw = jsonl([
+    { type: "session_meta", payload: { id: "desktop-followup-unbound-session" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "followup_task",
+        namespace: "collaboration",
+        call_id: "call-followup-unbound",
+        arguments: JSON.stringify({ target: reusedTaskPath, message: "Continue the old task." }),
+      },
+    },
+    {
+      type: "event_msg",
+      payload: {
+        type: "sub_agent_activity",
+        kind: "interacted",
+        event_id: "call-followup-unbound",
+        agent_thread_id: "child-followup-unbound",
+        agent_path: reusedTaskPath,
+      },
+    },
+    {
+      type: "response_item",
+      payload: { type: "function_call_output", call_id: "call-followup-unbound", output: "delivered" },
+    },
+    {
+      type: "response_item",
+      payload: {
+        type: "agent_message",
+        author: reusedTaskPath,
+        recipient: "/root",
+        content: [{ type: "input_text", text: "Unbound result." }],
+      },
+    },
+  ]);
+
+  const [event] = observeCodexJsonl(raw);
+  assert.equal(event.hostSurface, "collaboration.followup_task");
+  assert.equal(event.providerId, "collaboration.followup_task");
+  assert.equal(event.taskPath, reusedTaskPath);
+  assert.equal(event.metaKimBinding ?? null, null);
+  assert.notEqual(event.providerId, "global:test-automator");
+});
+
+test("Codex native owner evidence rejects a marker bound to a different Agent", () => {
+  const ownerAgent = "meta-prism";
+  const forgedBinding = {
+    ...binding,
+    providerId: "global:test-automator",
+    bindingRef: "task-runtime:agent_subagent:global:test-automator",
+  };
+  const raw = jsonl([
+    { type: "session_meta", payload: { id: "desktop-native-owner-mismatch" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "spawn_agent",
+        namespace: "collaboration",
+        call_id: "call-native-owner-mismatch",
+        arguments: JSON.stringify({
+          task_name: "review_lane",
+          agent_type: ownerAgent,
+          message: JSON.stringify(codexNativeEnvelope(forgedBinding, ownerAgent)),
+        }),
+      },
+    },
+    {
+      type: "event_msg",
+      payload: {
+        type: "sub_agent_activity",
+        kind: "started",
+        event_id: "call-native-owner-mismatch",
+        agent_thread_id: "child-native-owner-mismatch",
+        agent_path: "/root/review_lane",
+      },
+    },
+    {
+      type: "response_item",
+      payload: {
+        type: "function_call_output",
+        call_id: "call-native-owner-mismatch",
+        output: "accepted",
+      },
+    },
+    {
+      type: "response_item",
+      payload: {
+        type: "agent_message",
+        author: "/root/review_lane",
+        recipient: "/root",
+        content: [{ type: "input_text", text: "Review result." }],
+      },
+    },
+  ]);
+
+  const [event] = observeCodexJsonl(raw);
+  assert.equal(event.ownerBindingMode, "native_custom_agent");
+  assert.equal(event.nativeAgentType, ownerAgent);
+  assert.equal(event.bindingUnavailableReason, "agent_binding_does_not_match_owner_envelope");
+  assert.equal(event.bindingRef, undefined);
+  assert.equal(event.metaKimBinding, undefined);
+  assert.notEqual(event.providerId, forgedBinding.providerId);
 });
 
 test("strict metaKimBinding rejects partial, extra, malformed, and CLI-flag-like markers", () => {
@@ -320,10 +519,181 @@ test("command_script binding requires a simple direct provider invocation", () =
   }
 });
 
-test("real-shaped Codex spawn request extracts a bounded marker without retaining the prompt", () => {
+test("task_name, nickname, and task path never prove a professional owner identity", () => {
+  const ownerLikeLabel = "test-automator";
+  const taskPath = `/root/${ownerLikeLabel}`;
+  const raw = jsonl([
+    { type: "session_meta", payload: { id: "owner-like-label-session" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "spawn_agent",
+        namespace: "collaboration",
+        call_id: "owner-like-label-call",
+        arguments: JSON.stringify({
+          task_name: ownerLikeLabel,
+          nickname: ownerLikeLabel,
+          message: "Run the bounded test shard without a professional owner binding.",
+        }),
+      },
+    },
+    {
+      type: "event_msg",
+      payload: {
+        type: "sub_agent_activity",
+        kind: "started",
+        event_id: "owner-like-label-call",
+        agent_thread_id: "owner-like-label-child",
+        agent_path: taskPath,
+        nickname: ownerLikeLabel,
+      },
+    },
+    {
+      type: "response_item",
+      payload: {
+        type: "function_call_output",
+        call_id: "owner-like-label-call",
+        output: JSON.stringify({ nickname: ownerLikeLabel, status: "started" }),
+      },
+    },
+    {
+      type: "response_item",
+      payload: {
+        type: "agent_message",
+        author: taskPath,
+        recipient: "/root",
+        content: [{ type: "input_text", text: "Unbound result." }],
+      },
+    },
+  ]);
+
+  const [event] = observeCodexJsonl(raw);
+  assert.equal(event.taskPath, taskPath);
+  assert.equal(event.providerId, "collaboration.spawn_agent");
+  assert.notEqual(event.providerId, `global:${ownerLikeLabel}`);
+  assert.notEqual(event.ownerAgent, ownerLikeLabel);
+  assert.equal(event.metaKimBinding ?? null, null);
+});
+
+test("Skill and MCP family matches do not satisfy a different exact provider binding", () => {
+  const observations = [
+    {
+      expectedFamily: "skill",
+      binding: {
+        ...binding,
+        family: "skill",
+        providerId: "meta-theory",
+        bindingRef: "task-runtime:skill:meta-theory",
+        evidenceKind: "skill_application",
+      },
+      call: {
+        name: "Skill",
+        namespace: "",
+        arguments: { skill: "different-skill" },
+      },
+    },
+    {
+      expectedFamily: "mcp",
+      binding: {
+        ...binding,
+        family: "mcp",
+        providerId: "mcp__memory.search_memory",
+        bindingRef: "task-runtime:mcp:mcp__memory.search_memory",
+        evidenceKind: "mcp_tool_result",
+      },
+      call: {
+        name: "save_memory",
+        namespace: "mcp__memory",
+        arguments: { text: "different exact MCP tool" },
+      },
+    },
+  ];
+
+  for (const fixture of observations) {
+    const raw = jsonl([
+      { timestamp: "2026-07-14T12:10:00.000Z", type: "thread.started", thread_id: `${fixture.expectedFamily}-mismatch-session` },
+      {
+        timestamp: "2026-07-14T12:10:01.000Z",
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          name: fixture.call.name,
+          namespace: fixture.call.namespace,
+          call_id: `${fixture.expectedFamily}-mismatch-call`,
+          arguments: JSON.stringify({
+            ...fixture.call.arguments,
+            metaKimBinding: fixture.binding,
+          }),
+        },
+      },
+      {
+        timestamp: "2026-07-14T12:10:02.000Z",
+        type: "response_item",
+        payload: {
+          type: "function_call_output",
+          call_id: `${fixture.expectedFamily}-mismatch-call`,
+          output: "ok",
+        },
+      },
+    ]);
+    const [event] = observeCodexJsonl(raw);
+    assert.equal(event.family, fixture.expectedFamily);
+    assert.equal(event.hostObservedFamily, fixture.expectedFamily);
+    assert.equal(event.bindingRef, undefined);
+    assert.notEqual(event.providerId, fixture.binding.providerId);
+  }
+});
+
+test("runtime_tool binding requires the exact host tool name and namespace", () => {
+  const runtimeBinding = {
+    ...binding,
+    family: "runtime_tool",
+    providerId: "functions.fake_tool",
+    bindingRef: "task-runtime:runtime_tool:functions.fake_tool",
+    evidenceKind: "runtime_tool_call",
+  };
+  const raw = jsonl([
+    { timestamp: "2026-07-14T12:20:00.000Z", type: "thread.started", thread_id: "runtime-tool-mismatch" },
+    {
+      timestamp: "2026-07-14T12:20:01.000Z",
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "shell_command",
+        namespace: "functions",
+        call_id: "runtime-tool-mismatch-call",
+        arguments: JSON.stringify({ command: "node -v", metaKimBinding: runtimeBinding }),
+      },
+    },
+    {
+      timestamp: "2026-07-14T12:20:02.000Z",
+      type: "response_item",
+      payload: {
+        type: "function_call_output",
+        call_id: "runtime-tool-mismatch-call",
+        output: "Exit code: 0\nv24",
+        exit_code: 0,
+      },
+    },
+  ]);
+
+  const [event] = observeCodexJsonl(raw);
+  assert.equal(event.family, "runtime_tool");
+  assert.equal(event.hostSurface, "functions.shell_command");
+  assert.equal(event.providerId, "functions.shell_command");
+  assert.equal(event.bindingRef, undefined);
+  assert.equal(event.metaKimBinding, undefined);
+  assert.equal(
+    event.bindingUnavailableReason,
+    "runtime_tool_binding_does_not_match_host_surface",
+  );
+});
+
+test("real-shaped Codex spawn request extracts a bounded envelope without retaining the prompt", () => {
   const raw = jsonl([
     { timestamp: "2026-07-12T06:10:00.000Z", type: "session_meta", payload: { id: "spawn-session" } },
-    { timestamp: "2026-07-12T06:10:01.000Z", type: "response_item", payload: { type: "function_call", name: "spawn_agent", namespace: "collaboration", call_id: "spawn-call", arguments: JSON.stringify({ message: `Do bounded work. ${marker}` }) } },
+    { timestamp: "2026-07-12T06:10:01.000Z", type: "response_item", payload: { type: "function_call", name: "spawn_agent", namespace: "collaboration", call_id: "spawn-call", arguments: JSON.stringify({ message: JSON.stringify(codexRunScopedEnvelope(binding, "code-architect")) }) } },
     { timestamp: "2026-07-12T06:10:02.000Z", type: "event_msg", payload: { type: "sub_agent_activity", kind: "started", event_id: "spawn-call", agent_thread_id: "spawn-child", agent_path: "/root/spawn-child" } },
     { timestamp: "2026-07-12T06:10:03.000Z", type: "response_item", payload: { type: "function_call_output", call_id: "spawn-call", output: "started" } },
     { timestamp: "2026-07-12T06:10:04.000Z", type: "response_item", payload: { type: "agent_message", author: "/root/spawn-child", recipient: "/root", content: [{ type: "input_text", text: "done" }] } },
@@ -334,6 +704,38 @@ test("real-shaped Codex spawn request extracts a bounded marker without retainin
   assert.equal(event.occurredAt, "2026-07-12T06:10:04.000Z");
   assert.equal("prompt" in event, false);
   assert.equal("arguments" in event, false);
+});
+
+test("real v0.2 Codex worker JSON envelope binds professional owner evidence without an XML marker", () => {
+  const workerEnvelope = codexRunScopedEnvelope(binding, "code-architect");
+  const raw = jsonl([
+    { timestamp: "2026-07-12T06:20:00.000Z", type: "session_meta", payload: { id: "spawn-envelope-session" } },
+    {
+      timestamp: "2026-07-12T06:20:01.000Z",
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "spawn_agent",
+        namespace: "collaboration",
+        call_id: "spawn-envelope-call",
+        arguments: JSON.stringify({
+          task_name: "dispatch_regression",
+          fork_turns: "none",
+          message: JSON.stringify(workerEnvelope),
+        }),
+      },
+    },
+    { timestamp: "2026-07-12T06:20:02.000Z", type: "event_msg", payload: { type: "sub_agent_activity", kind: "started", event_id: "spawn-envelope-call", agent_thread_id: "spawn-envelope-child", agent_path: "/root/dispatch_regression" } },
+    { timestamp: "2026-07-12T06:20:03.000Z", type: "response_item", payload: { type: "function_call_output", call_id: "spawn-envelope-call", output: "started" } },
+    { timestamp: "2026-07-12T06:20:04.000Z", type: "response_item", payload: { type: "agent_message", author: "/root/dispatch_regression", recipient: "/root", content: [{ type: "input_text", text: "done" }] } },
+  ]);
+
+  assert.deepEqual(extractMetaKimBinding(JSON.stringify({ message: JSON.stringify(workerEnvelope) })), binding);
+  const [event] = observeCodexJsonl(raw);
+  assert.deepEqual(event.metaKimBinding, binding);
+  assert.equal(event.providerId, binding.providerId);
+  assert.equal(event.taskPath, "/root/dispatch_regression");
+  assert.notEqual(event.providerId, event.taskPath);
 });
 
 test("real-shaped Claude Task extracts metaKimBinding from immutable input prompt", () => {
@@ -406,6 +808,70 @@ test("Claude hook inherits a hook marker only from its correlated parent call", 
   assert.equal(bound[0].hostSurface, "PreToolUse");
   assert.equal(bound[0].parentEventId, "parent-tool-call");
   assert.equal(bound[0].occurredAt, "2026-07-12T06:50:04.123456Z");
+});
+
+test("Claude hook binding cannot substitute another hook phase", () => {
+  const preToolUseBinding = {
+    ...binding,
+    family: "hook",
+    providerId: "PreToolUse",
+    bindingRef: "task-runtime:hook:PreToolUse",
+    evidenceKind: "hook_trigger_event",
+  };
+  const raw = jsonl([
+    {
+      timestamp: "2026-07-14T12:30:01.000Z",
+      type: "assistant",
+      session_id: "hook-phase-mismatch",
+      message: {
+        id: "hook-phase-parent",
+        content: [{
+          type: "tool_use",
+          id: "hook-phase-tool-call",
+          name: "Bash",
+          input: {
+            prompt: `Run. <metaKimBinding>${JSON.stringify(preToolUseBinding)}</metaKimBinding>`,
+          },
+        }],
+      },
+    },
+    {
+      timestamp: "2026-07-14T12:30:02.000Z",
+      type: "user",
+      session_id: "hook-phase-mismatch",
+      message: {
+        content: [{ type: "tool_result", tool_use_id: "hook-phase-tool-call", content: "done" }],
+      },
+    },
+    {
+      timestamp: "2026-07-14T12:30:03.000Z",
+      type: "system",
+      subtype: "hook_started",
+      hook_id: "post-hook",
+      hook_name: "PostToolUse",
+      tool_use_id: "hook-phase-tool-call",
+      session_id: "hook-phase-mismatch",
+    },
+    {
+      timestamp: "2026-07-14T12:30:04.000Z",
+      type: "system",
+      subtype: "hook_response",
+      hook_id: "post-hook",
+      hook_name: "PostToolUse",
+      tool_use_id: "hook-phase-tool-call",
+      exit_code: 0,
+      outcome: "success",
+      session_id: "hook-phase-mismatch",
+    },
+  ]);
+
+  const event = observeClaudeJsonl(raw).find((candidate) => candidate.family === "hook");
+  assert.ok(event);
+  assert.equal(event.hostSurface, "PostToolUse");
+  assert.equal(event.providerId, "PostToolUse");
+  assert.equal(event.bindingRef, undefined);
+  assert.equal(event.metaKimBinding, undefined);
+  assert.equal(event.bindingUnavailableReason, "hook_binding_does_not_match_host_surface");
 });
 
 test("encrypted tool payload is not decrypted and reports why binding is unavailable", () => {

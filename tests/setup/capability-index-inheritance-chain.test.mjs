@@ -467,7 +467,7 @@ describe("capability index inheritance chain", () => {
     );
     assert.match(
       setupSource,
-      /await refreshGlobalCapabilityInventory\(activeTargets\);\s*\n\s*}\s*\n\s*\/\/ ── 6\. checkSync/,
+      /await refreshGlobalCapabilityInventory\(activeTargets\);\s*\n\s*}\s*\n\s*\/\/ Copy runtime files before validating their final target state/,
       "update flow must refresh the global capability inventory before final sync checks",
     );
 

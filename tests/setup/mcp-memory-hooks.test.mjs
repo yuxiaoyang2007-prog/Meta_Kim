@@ -1621,6 +1621,8 @@ describe("MCP memory cross-runtime hooks", () => {
         timeout: 15000,
       });
       assert.equal(result.status, 0, result.stderr || result.stdout);
+      const installedSettings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      assert.equal(installedSettings.sentinel, "keep");
       const backupRoots = readdirSync(path.join(tempHome, ".meta-kim", "backups"));
       assert.ok(backupRoots.length >= 1);
       for (const backupRoot of backupRoots) {
@@ -2108,7 +2110,10 @@ describe("MCP memory cross-runtime hooks", () => {
   test("setup passes active targets to the MCP memory hook installer", () => {
     const source = readRepoFile("setup.mjs");
 
-    assert.match(source, /runMcpMemoryHookInstaller\(activeTargets\)/);
+    assert.match(
+      source,
+      /runMcpMemoryHookInstaller\(activeTargets,\s*\{\s*allowClaudeGlobalSettings:\s*want && activeTargets\.includes\("claude"\),\s*\}\)/,
+    );
     assert.match(source, /\["--targets", activeTargets\.join\(",\"\)\]/);
     assert.match(source, /installMcpMemoryServiceStep\(true, activeTargets\)/);
     assert.match(source, /installMcpMemoryServiceStep\(false, activeTargets\)/);
@@ -2127,7 +2132,8 @@ describe("MCP memory cross-runtime hooks", () => {
       "MCP Memory prompt must run before existing-install detection so installed/update paths remain optional",
     );
     assert.ok(
-      fn.indexOf("askYesNo(t.askMcpMemoryInstall") < fn.indexOf("runMcpMemoryHookInstaller(activeTargets)"),
+      fn.indexOf("askYesNo(t.askMcpMemoryInstall") <
+        fn.indexOf("runMcpMemoryHookInstaller(activeTargets, {"),
       "MCP Memory prompt must run before hook registration",
     );
     assert.ok(

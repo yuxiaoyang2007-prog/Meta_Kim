@@ -1,6 +1,15 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync, promises as fs } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+  promises as fs,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import os from "node:os";
@@ -20,6 +29,24 @@ import {
 } from "./meta-kim-i18n.mjs";
 import { buildAgentProjectionTargets } from "./runtime-tool-profiles.mjs";
 import { getProfilePaths } from "./meta-kim-local-state.mjs";
+import { resolveRuntimeHomeDir } from "./meta-kim-sync-config.mjs";
+import { copyProjectCapability } from "./project-capability-copy.mjs";
+import {
+  buildPlanChallengeState,
+  parsePlanChallengeControl,
+  planChallengeAuthorizationBinding,
+  selectHighestImpactOpenQuestion,
+} from "./governed-execution/plan-challenge-policy.mjs";
+import {
+  bindVerifiedHostPlanChallengeDecision,
+  loadPlanChallengeContinuationCandidate,
+} from "./governed-execution/plan-challenge-host-continuation.mjs";
+export {
+  buildPlanChallengeState,
+  parsePlanChallengeControl,
+  planChallengeAuthorizationBinding,
+  selectHighestImpactOpenQuestion,
+};
 import {
   buildAgentTeamsWaves,
   buildFanoutSafetyPacket,
@@ -2437,6 +2464,8 @@ function buildConversationNotice({
     edgeCount: Math.max(TRACE_SPINE.length - 1, 0),
     state: "structural_ready",
     checkpointCount: 0,
+    capabilityLedgerLines: [],
+    projectCustomizationSummary: null,
   };
   const blocks = [
     {
@@ -2464,6 +2493,10 @@ function buildConversationNotice({
         surface.providerPresentationSummary
           ? `${surfaceLabels.report.providers}: ${surface.providerPresentationSummary}`
           : `${surfaceLabels.report.providers}: state=${surface.providerInvocationState}; selected=${(surface.providerBindings ?? []).join(", ") || "none"}`,
+        ...((surface.capabilityLedgerLines ?? []).map((line) => `${surfaceLabels.capabilityLedger.title}: ${line}`)),
+        ...(surface.projectCustomizationSummary
+          ? [`${surfaceLabels.capabilityLedger.projectDecisionLabel}: ${surface.projectCustomizationSummary}`]
+          : []),
         `${surfaceLabels.report.mesh}: ${surfaceLabels.report.collaborationDetail(surface.peerCount, surface.handoffCount)}`,
         `${surfaceLabels.report.control}: ${surfaceLabels.report.controlDetail(surface.nodeCount, surface.edgeCount, surface.checkpointCount)}`,
         copy.visibleSurface,
@@ -2896,6 +2929,13 @@ function buildLocalizedGovernedRunReport({
     "",
     `- ${report.owner}: ${report.coordinator}`,
     `- ${report.providers}: ${capabilityInvocationPresentationPacket?.userSummary ?? invocationCopy.userSummary("not_confirmed", invocationCopy.executionStates.not_confirmed)}`,
+    "",
+    `### ${surface.capabilityLedger.title}`,
+    "",
+    ...((visibleMetaTheorySurfacePacket?.capabilityLedger?.families ?? []).map(
+      (family) => `- ${family.displayLine}`,
+    )),
+    `- ${surface.capabilityLedger.projectDecisionLabel}: ${visibleMetaTheorySurfacePacket?.capabilityLedger?.projectCustomization?.summary ?? "missing"}`,
     `- ${report.mesh}: ${report.collaborationDetail(mesh.peerCount ?? 0, mesh.handoffCount ?? 0)}`,
     `- ${report.control}: ${report.controlDetail(control.nodeCount ?? 0, control.edgeCount ?? 0, control.checkpointCount ?? 0)}`,
     "",
@@ -3260,6 +3300,7 @@ function buildRunReportPanelContract({
   visibleMetaTheorySurfacePacket,
   capabilityInvocationTruthPacket,
   capabilityInvocationPresentationPacket,
+  capabilityLedgerPacket,
   paths,
 }) {
   const blockedGaps = orchestrationReport.capabilityGaps.filter((gap) => gap.blocked);
@@ -3341,6 +3382,14 @@ function buildRunReportPanelContract({
       taskPacketId: packet.taskPacketId,
       roleDisplayName: packet.roleDisplayName,
       owner: packet.owner,
+      ownerAgent: packet.ownerAgent ?? packet.owner,
+      ownerSource: packet.ownerSource ?? null,
+      ownerBindingMode: packet.ownerBindingMode ?? "run_scoped_owner_contract",
+      nativeAgentType:
+        packet.ownerBindingMode === "native_custom_agent"
+          ? packet.nativeAgentType ?? null
+          : null,
+      runtimeInstanceAlias: packet.runtimeInstanceAlias || null,
       parallelGroup: packet.parallelGroup,
       mergeOwner: packet.mergeOwner,
       verificationOwner: "verify",
@@ -3392,6 +3441,22 @@ function buildRunReportPanelContract({
       langGraph: visibleMetaTheorySurfacePacket?.langGraph ?? null,
     },
     capabilityInvocationPresentation: visibleInvocationPresentation,
+    capabilityLedger: {
+      status: capabilityLedgerPacket?.status ?? "missing",
+      title: capabilityLedgerPacket?.title ?? "Capability use in this run",
+      families: (capabilityLedgerPacket?.families ?? []).map((family) => ({
+        family: family.family,
+        familyLabel: family.familyLabel,
+        displayProvider: family.displayProvider,
+        displaySource: family.displaySource,
+        selected: family.selected,
+        state: family.state,
+        stateLabel: family.stateLabel,
+        nextAction: family.nextAction,
+        displayLine: family.displayLine,
+      })),
+      projectCustomization: capabilityLedgerPacket?.projectCustomization ?? null,
+    },
     cardPlan: {
       dealerOwner: cardPlanPacket.dealerOwner,
       cardEventCount: cardPlanPacket.cardEvents.length,
@@ -3935,6 +4000,43 @@ function capabilityProviderRefs(providers) {
   return uniqueStrings((providers ?? []).map((provider) => capabilityProviderRef(provider)));
 }
 
+function asksOnlyForCapabilityCreationDecision(line) {
+  const text = String(line ?? "");
+  const explicitlyForbidsMutation =
+    /(?:只做|仅做|只需|仅需)(?:判断|评估|分析|检查|审查)|不要(?:写入|创建|新建|生成|修改|落盘|执行)|不(?:要|需)(?:写入|创建|新建|生成|修改|落盘|执行)|只读|read[- ]?only|do\s+not\s+(?:write|create|modify|apply)|without\s+(?:writing|creating|modifying|applying)/iu.test(text);
+  if (explicitlyForbidsMutation) return true;
+  const asksWhether =
+    /是否(?:需要|应该|要)?(?:创建|新建|生成|固化|沉淀)|需不需要(?:创建|新建|生成|固化|沉淀)|要不要(?:创建|新建|生成|固化|沉淀)|有没有必要(?:创建|新建|生成|固化|沉淀)|whether\s+(?:we\s+)?(?:need|should)\s+to\s+(?:create|add|persist|generate)|do\s+we\s+need\s+to\s+(?:create|add|persist|generate)/iu.test(text);
+  if (!asksWhether) return false;
+  const alsoAuthorizesMutation =
+    /(?:请|直接|立即|马上|务必)(?:把|将)?\s*(?:创建|新建|生成|固化|沉淀|写入|安装|新增|添加|升级)|(?:创建|新建|生成|固化|沉淀|写入|安装|新增|添加|升级)(?:到|至|在)(?:当前|本)?项目|项目(?:里|内)长期维护|(?:please\s+)?(?:create|add|persist|generate)\s+(?:it|this|the\s+capability)\s+(?:now|in\s+the\s+project)/iu.test(text);
+  return !alsoAuthorizesMutation;
+}
+
+function explicitCapabilityIdFromLine(line, decision) {
+  const keyword = decision === "create_agent"
+    ? "agent|智能体|代理"
+    : decision === "create_skill"
+      ? "skill|技能"
+      : decision === "create_command"
+        ? "command|命令"
+        : null;
+  if (!keyword) return null;
+  const match = String(line ?? "").match(
+    new RegExp(`(?:${keyword})\\s*(?:名为|叫做|called|named|:|：)?\\s*[\\x60'\"]?([a-z0-9][a-z0-9._-]{1,79})`, "iu"),
+  );
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
+function durableCapabilitySpecificationReady(line, explicitCapabilityId) {
+  if (!explicitCapabilityId) return false;
+  const text = String(line ?? "");
+  return (
+    text.length >= explicitCapabilityId.length + 16 &&
+    /负责|用于|处理|审查|审核|验证|生成|同步|检查|执行|维护|拒绝|边界|responsib|purpose|handles?|reviews?|verif|generat|sync|check|execute|maintain|refus|boundary/iu.test(text)
+  );
+}
+
 function durableCapabilityRequestsFromTask(task, runId = "meta-run") {
   const lines = String(task ?? "")
     .split(/\r?\n|。|；|;/u)
@@ -3942,33 +4044,58 @@ function durableCapabilityRequestsFromTask(task, runId = "meta-run") {
     .filter(Boolean);
   const requests = [];
   for (const [index, line] of lines.entries()) {
+    if (asksOnlyForCapabilityCreationDecision(line)) continue;
     const lower = line.toLowerCase();
-    const decision = /\bmcp\b|mcp provider|mcp 工具|mcp服务|mcp provider 边界/i.test(line)
+    const explicitDeclaredDecision = /(?:\bagent\b|智能体|代理)\s*(?:名为|叫做|called|named|:|：)?\s*[\x60'"]?[a-z0-9][a-z0-9._-]{1,79}/iu.test(line)
+      ? "create_agent"
+      : /(?:\bskill\b|技能)\s*(?:名为|叫做|called|named|:|：)?\s*[\x60'"]?[a-z0-9][a-z0-9._-]{1,79}/iu.test(line)
+        ? "create_skill"
+        : /(?:\bcommand\b|命令)\s*(?:名为|叫做|called|named|:|：)?\s*[\x60'"]?[a-z0-9][a-z0-9._-]{1,79}/iu.test(line)
+          ? "create_command"
+          : null;
+    const decision = explicitDeclaredDecision ?? (/\bmcp\b|mcp provider|mcp 工具|mcp服务|mcp provider 边界/i.test(line)
       ? "create_mcp_provider"
+      : /\bhook\b|钩子/i.test(line)
+        ? "create_hook"
+        : /\bcommand\b|命令/i.test(line)
+          ? "create_command"
       : /脚本|script|json/.test(lower)
         ? "create_script"
-        : /\bagent\b|owner|负责人|长期/.test(lower)
+        : /\bagent\b|智能体|代理|owner|负责人|长期/u.test(lower)
           ? "create_agent"
           : /\bskill\b|技能|标准|standard|沉淀|可复用|reusable|recurring|重复/.test(lower)
             ? "create_skill"
-            : null;
+            : null);
     if (!decision) continue;
-    const explicitNeed = /需要|should|candidate|沉淀|可复用|reusable|recurring|重复|长期|keeps recurring/i.test(line);
+    const explicitNeed = /需要|should|candidate|沉淀|可复用|直接复用|复用|reusable|reuse|recurring|重复|长期|迭代|修改|升级|定制|新建|创建|keeps recurring|iterate|modify|upgrade|customize|create/i.test(line);
     if (!explicitNeed) continue;
+    const explicitCapabilityId = explicitCapabilityIdFromLine(line, decision);
     const requestedCapability =
       decision === "create_skill" && /prd\s*review\s*standard/i.test(line)
         ? "prd-review-standard-skill"
-        : safeSlug(line).slice(0, 80) || `${decision}-${index + 1}`;
+        : explicitCapabilityId ?? (safeSlug(line).slice(0, 80) || `${decision}-${index + 1}`);
     requests.push({
       requestId: `${runId}-durable-${index + 1}`,
       sourceText: line,
       requestedCapability,
+      explicitCapabilityId,
+      specificationReady: durableCapabilitySpecificationReady(line, explicitCapabilityId),
       decision,
+      requestedAction:
+        /迭代|修改|升级|定制|iterate|modify|upgrade|customize/i.test(line)
+          ? "iterate"
+          : /新建|创建|create|new project/i.test(line)
+            ? "create"
+            : "reuse",
       candidateType:
         decision === "create_agent"
           ? "agent"
           : decision === "create_skill"
             ? "skill"
+            : decision === "create_command"
+              ? "command"
+              : decision === "create_hook"
+                ? "hook"
             : decision === "create_script"
               ? "script"
               : "mcp_provider",
@@ -4702,7 +4829,16 @@ function buildDynamicWorkflowRuntimePacket({
       laneId,
       laneLabel,
       roleDisplayName: packet.roleDisplayName,
+      ownerAgent: packet.ownerAgent ?? packet.owner,
       owner: packet.owner,
+      ownerSource: packet.ownerSource ?? "owner_source_unresolved",
+      ownerSourceRef: packet.ownerSourceRef ?? packet.sourceRef ?? null,
+      ownerBindingMode: packet.ownerBindingMode ?? "run_scoped_owner_contract",
+      nativeAgentType:
+        packet.ownerBindingMode === "native_custom_agent"
+          ? packet.nativeAgentType ?? null
+          : null,
+      runtimeInstanceAlias: packet.runtimeInstanceAlias || null,
       ownerMode: packet.ownerMode,
       executionMode: packet.executionMode,
       selectedBy: packet.businessFlowLaneId
@@ -4722,6 +4858,28 @@ function buildDynamicWorkflowRuntimePacket({
       commands,
       runtimeTools,
       hookMatches: buildHookMatchesForPacket(packet),
+      providerSources: {
+        skill: (packet.skillLoadout ?? []).map((provider) => ({
+          id: capabilityProviderRef(provider),
+          source: provider?.source ?? "selected_skill_loadout",
+          sourceRef: provider?.sourceRef ?? capabilityProviderRef(provider),
+        })),
+        mcp: (packet.mcpLoadout ?? []).map((provider) => ({
+          id: capabilityProviderRef(provider),
+          source: provider?.source ?? "selected_mcp_loadout",
+          sourceRef: provider?.sourceRef ?? capabilityProviderRef(provider),
+        })),
+        command_script: (packet.commandLoadout ?? []).map((provider) => ({
+          id: capabilityProviderRef(provider),
+          source: provider?.source ?? "selected_command_loadout",
+          sourceRef: provider?.sourceRef ?? capabilityProviderRef(provider),
+        })),
+        runtime_tool: (packet.toolLoadout ?? []).map((provider) => ({
+          id: capabilityProviderRef(provider),
+          source: provider?.source ?? "selected_runtime_tool_loadout",
+          sourceRef: provider?.sourceRef ?? capabilityProviderRef(provider),
+        })),
+      },
       abstractPromptCapability: {
         contractRef: "config/contracts/prompt-abstract-capability-contract.json",
         status: "applied_as_foundational_prompt_capability",
@@ -4887,6 +5045,7 @@ function countBy(values) {
 const CAPABILITY_INVOCATION_STATES = [
   "invoked",
   "applied",
+  "failed",
   "host_visible_observed",
   "selected_not_invoked",
   "discovered_not_selected",
@@ -4945,6 +5104,8 @@ function observerArtifactContainsEvent({
   bindingRef,
   resultStatus,
   observerFormat,
+  ownerBindingMode = null,
+  nativeAgentType = null,
 }) {
   if (
     typeof observerArtifactPath !== "string" ||
@@ -4969,7 +5130,9 @@ function observerArtifactContainsEvent({
       (record.providerId === providerId || record.hostSurface === providerId) &&
       record.bindingRef === bindingRef &&
       record.resultStatus === resultStatus &&
-      record.observerFormat === observerFormat,
+      record.observerFormat === observerFormat &&
+      (!ownerBindingMode || record.ownerBindingMode === ownerBindingMode) &&
+      (ownerBindingMode !== "native_custom_agent" || record.nativeAgentType === nativeAgentType),
     );
   } catch {
     return false;
@@ -5016,6 +5179,12 @@ export function normalizeHostInvocationEvidence(input, {
         const observerFormat = item?.observerFormat ?? null;
         const observerArtifactPath = item?.observerArtifactPath ?? null;
         const observerArtifactSha256 = item?.observerArtifactSha256 ?? null;
+        const ownerBindingMode = item?.family === "agent_subagent"
+          ? item?.ownerBindingMode ?? "run_scoped_owner_contract"
+          : null;
+        const nativeAgentType = ownerBindingMode === "native_custom_agent"
+          ? item?.nativeAgentType ?? null
+          : null;
         const hasEvidenceRef =
           typeof evidenceRef === "string" ? evidenceRef.trim().length > 0 : Boolean(evidenceRef);
         const hasProvider = Boolean(providerId || hostSurface);
@@ -5051,7 +5220,19 @@ export function normalizeHostInvocationEvidence(input, {
           bindingRef,
           resultStatus,
           observerFormat,
+          ownerBindingMode,
+          nativeAgentType,
         });
+        const ownerBindingValid =
+          item?.family !== "agent_subagent" ||
+          ownerBindingMode === "run_scoped_owner_contract" ||
+          (
+            ownerBindingMode === "native_custom_agent" &&
+            typeof nativeAgentType === "string" &&
+            nativeAgentType.length > 0 &&
+            item?.ownerDefinitionFormat === "codex_custom_agent_toml" &&
+            /\.toml$/iu.test(String(item?.ownerSource ?? ""))
+          );
         const proofValid =
           attestation === HOST_OBSERVER_ATTESTATION &&
           acceptedStates.has(state) &&
@@ -5068,6 +5249,7 @@ export function normalizeHostInvocationEvidence(input, {
           Boolean(bindingRef) &&
           runMatches &&
           observerArtifactVerified;
+        const bindingProofValid = proofValid && ownerBindingValid;
         return {
           family: item?.family,
           state,
@@ -5087,12 +5269,17 @@ export function normalizeHostInvocationEvidence(input, {
           observerArtifactPath,
           observerArtifactSha256,
           observerArtifactVerified,
+          ownerBindingMode,
+          nativeAgentType,
+          ownerDefinitionFormat: item?.ownerDefinitionFormat ?? null,
+          ownerSource: item?.ownerSource ?? null,
+          runtimeInstanceAlias: item?.runtimeInstanceAlias ?? null,
           synthetic: item?.synthetic === true,
-          proofValid,
-          rejectionReason: proofValid
+          proofValid: bindingProofValid,
+          rejectionReason: bindingProofValid
             ? null
             : "caller-supplied evidence cannot promote itself; live promotion requires a private external-observer attestation plus a fresh successful exact binding join",
-          passEligible: item?.passEligible !== false && proofValid,
+          passEligible: item?.passEligible !== false && bindingProofValid,
         };
       })
       .filter((item) => item.family);
@@ -5334,37 +5521,98 @@ function buildSelectedInvocationBindings({
 }) {
   const rows = dynamicWorkflowRuntimePacket?.capabilityBindingRows ?? [];
   const bindings = [];
-  const add = ({ family, providerId, bindingRef, taskPacketId = null }) => {
-    if (!providerId || !bindingRef) return;
-    if (bindings.some((item) => item.family === family && item.bindingRef === bindingRef)) return;
-    bindings.push({ family, providerId, bindingRef, taskPacketId });
+  const add = ({
+    family,
+    providerId,
+    bindingRef,
+    taskPacketId = null,
+    source = "selected_provider_source_unresolved",
+    sourceRef = null,
+  }) => {
+    if (!providerId || !bindingRef) return null;
+    const existing = bindings.find((item) => item.family === family && item.bindingRef === bindingRef);
+    if (existing) return existing;
+    const binding = { family, providerId, bindingRef, taskPacketId, source, sourceRef };
+    bindings.push(binding);
+    return binding;
   };
+  const providerSource = (row, family, providerId) =>
+    (row.providerSources?.[family] ?? []).find((provider) => provider.id === providerId) ?? {};
   for (const row of rows) {
     const taskPacketId = row.taskPacketId ?? row.laneId ?? "unknown-task";
     for (const providerId of row.skills ?? []) {
-      add({ family: "skill", providerId, bindingRef: `${taskPacketId}:skill:${providerId}`, taskPacketId });
+      const provider = providerSource(row, "skill", providerId);
+      add({
+        family: "skill",
+        providerId,
+        bindingRef: `${taskPacketId}:skill:${providerId}`,
+        taskPacketId,
+        source: provider.source,
+        sourceRef: provider.sourceRef,
+      });
     }
     for (const providerId of row.mcp ?? []) {
-      add({ family: "mcp", providerId, bindingRef: `${taskPacketId}:mcp:${providerId}`, taskPacketId });
+      const provider = providerSource(row, "mcp", providerId);
+      add({
+        family: "mcp",
+        providerId,
+        bindingRef: `${taskPacketId}:mcp:${providerId}`,
+        taskPacketId,
+        source: provider.source,
+        sourceRef: provider.sourceRef,
+      });
     }
     for (const providerId of row.commands ?? []) {
-      add({ family: "command_script", providerId, bindingRef: `${taskPacketId}:command_script:${providerId}`, taskPacketId });
+      const provider = providerSource(row, "command_script", providerId);
+      add({
+        family: "command_script",
+        providerId,
+        bindingRef: `${taskPacketId}:command_script:${providerId}`,
+        taskPacketId,
+        source: provider.source,
+        sourceRef: provider.sourceRef,
+      });
     }
     for (const providerId of row.runtimeTools ?? []) {
-      add({ family: "runtime_tool", providerId, bindingRef: `${taskPacketId}:runtime_tool:${providerId}`, taskPacketId });
+      const provider = providerSource(row, "runtime_tool", providerId);
+      add({
+        family: "runtime_tool",
+        providerId,
+        bindingRef: `${taskPacketId}:runtime_tool:${providerId}`,
+        taskPacketId,
+        source: provider.source,
+        sourceRef: provider.sourceRef,
+      });
     }
     for (const hook of row.hookMatches ?? []) {
       const providerId = hook?.hookId ?? hook?.id;
-      add({ family: "hook", providerId, bindingRef: `${taskPacketId}:hook:${providerId}`, taskPacketId });
+      add({
+        family: "hook",
+        providerId,
+        bindingRef: `${taskPacketId}:hook:${providerId}`,
+        taskPacketId,
+        source: "project_or_canonical_hook_match",
+        sourceRef: hook?.sourceRef ?? hook?.hookPath ?? providerId,
+      });
     }
     if (runtimeSubagentInvocationPacket?.fanoutEligible) {
-      const providerId = row.owner ?? row.roleDisplayName ?? "runtime-subagent";
-      add({
+      const providerId = row.ownerAgent ?? row.owner ?? row.roleDisplayName ?? "runtime-subagent";
+      const binding = add({
         family: "agent_subagent",
         providerId,
         bindingRef: `${taskPacketId}:agent_subagent:${providerId}`,
         taskPacketId,
+        source: row.ownerSource ?? "owner_source_unresolved",
+        sourceRef: row.ownerSourceRef ?? providerId,
       });
+      if (binding) {
+        binding.ownerAgent = row.ownerAgent ?? row.owner ?? null;
+        binding.ownerBindingMode = row.ownerBindingMode ?? "run_scoped_owner_contract";
+        binding.nativeAgentType = row.ownerBindingMode === "native_custom_agent"
+          ? row.nativeAgentType ?? null
+          : null;
+        binding.runtimeInstanceAlias = row.runtimeInstanceAlias ?? null;
+      }
     }
   }
   if (agentTeamsPlaybookPacket?.selected === true) {
@@ -5375,6 +5623,27 @@ function buildSelectedInvocationBindings({
     });
   }
   return bindings;
+}
+
+export function exactInvocationBindingMatches(required, observed) {
+  if (
+    observed?.family !== required?.family ||
+    observed?.providerId !== required?.providerId ||
+    observed?.bindingRef !== required?.bindingRef
+  ) return false;
+  if (required?.family !== "agent_subagent") return true;
+
+  const requiredMode = required.ownerBindingMode ?? "run_scoped_owner_contract";
+  const observedMode = observed.ownerBindingMode ?? "run_scoped_owner_contract";
+  if (requiredMode !== observedMode) return false;
+  if (requiredMode === "native_custom_agent") {
+    return typeof required.nativeAgentType === "string" &&
+      required.nativeAgentType.length > 0 &&
+      observed.nativeAgentType === required.nativeAgentType;
+  }
+  return requiredMode === "run_scoped_owner_contract" &&
+    required.nativeAgentType == null &&
+    observed.nativeAgentType == null;
 }
 
 function buildRuntimeInvocationPlanPacket({
@@ -5397,40 +5666,78 @@ function buildRuntimeInvocationPlanPacket({
   });
   const selectedFamilies = new Set(requiredBindings.map((binding) => binding.family));
 
-  const satisfiedBindings = requiredBindings.filter((binding) =>
-    evidence.some((item) =>
+  const satisfiedBindings = requiredBindings.flatMap((binding) => {
+    const observed = evidence.find((item) =>
       item.passEligible === true &&
-      item.family === binding.family &&
-      item.providerId === binding.providerId &&
-      item.bindingRef === binding.bindingRef &&
+      exactInvocationBindingMatches(binding, item) &&
       ["invoked", "returned", "verified", "applied"].includes(item.state),
-    ),
-  );
-  const satisfiedBindingRefs = new Set(satisfiedBindings.map((binding) => binding.bindingRef));
+    );
+    if (!observed) return [];
+    return [{
+      ...binding,
+      ownerBindingMode: binding.family === "agent_subagent"
+        ? observed.ownerBindingMode ?? "run_scoped_owner_contract"
+        : binding.ownerBindingMode,
+      nativeAgentType: observed.ownerBindingMode === "native_custom_agent"
+        ? observed.nativeAgentType ?? null
+        : null,
+      runtimeInstanceAlias: observed.runtimeInstanceAlias ?? binding.runtimeInstanceAlias ?? null,
+    }];
+  });
+  const failureStates = new Set(["failed", "failure", "error", "denied", "blocked", "unsupported"]);
+  const observedFailureState = (item) =>
+    [item?.state, item?.status, item?.resultStatus]
+      .filter(Boolean)
+      .map((value) => String(value).toLowerCase())
+      .find((value) => failureStates.has(value)) ?? null;
+  const failedBindings = requiredBindings.flatMap((binding) => {
+    const observed = evidence.find((item) =>
+      exactInvocationBindingMatches(binding, item) && observedFailureState(item),
+    );
+    if (!observed) return [];
+    const failureState = observedFailureState(observed);
+    return [{
+      ...binding,
+      state: failureState,
+      resultStatus: String(observed.resultStatus ?? observed.status ?? failureState).toLowerCase(),
+      failureReason: observed.rejectionReason ?? observed.bindingUnavailableReason ?? null,
+    }];
+  });
   const requiredFamilies = [...selectedFamilies];
   const missingBindings = requiredBindings.filter(
-    (binding) => !satisfiedBindingRefs.has(binding.bindingRef),
+    (binding) =>
+      !satisfiedBindings.some((observed) => exactInvocationBindingMatches(binding, observed)) &&
+      !failedBindings.some((observed) => exactInvocationBindingMatches(binding, observed)),
   );
   const missingFamilies = requiredFamilies.filter((family) =>
     missingBindings.some((binding) => binding.family === family),
   );
+  const failedFamilies = requiredFamilies.filter((family) =>
+    failedBindings.some((binding) => binding.family === family),
+  );
   const invokedFamilies = requiredFamilies.filter((family) =>
-    !missingBindings.some((binding) => binding.family === family),
+    !missingFamilies.includes(family) && !failedFamilies.includes(family),
   );
   return {
     schemaVersion: "runtime-invocation-plan-v0.1",
     runId,
-    status: missingFamilies.length === 0 ? "pass" : "partial",
+    status: missingFamilies.length === 0 && failedFamilies.length === 0 ? "pass" : "partial",
     requiredFamilies,
     invokedFamilies,
     missingFamilies,
+    failedFamilies,
     requiredBindings,
     invokedBindings: satisfiedBindings,
+    failedBindings,
     missingBindings,
     evidence,
     requests: requiredFamilies.map((family) => ({
       family,
-      state: invokedFamilies.includes(family) ? "invoked_or_applied" : "selected_not_invoked",
+      state: invokedFamilies.includes(family)
+        ? "invoked_or_applied"
+        : failedFamilies.includes(family)
+          ? "failed"
+          : "selected_not_invoked",
       requiredEvidence:
         family === "agent_subagent" || family === "agent_teams_playbook"
           ? "host Agent/spawn_agent/Agent Team tool-call evidence"
@@ -5726,11 +6033,15 @@ function buildCapabilityInvocationTruthPacket({
     hostEvidenceForFamily(family).some((item) => item.state === "applied");
   const requiredBindings = runtimeInvocationPlanPacket?.requiredBindings ?? [];
   const missingBindings = runtimeInvocationPlanPacket?.missingBindings ?? [];
+  const failedBindings = runtimeInvocationPlanPacket?.failedBindings ?? [];
   const familyHasRequiredBindings = (family) =>
     requiredBindings.some((binding) => binding.family === family);
+  const familyHasFailedBindings = (family) =>
+    failedBindings.some((binding) => binding.family === family);
   const familyFullyObserved = (family) =>
     familyHasRequiredBindings(family) &&
-    !missingBindings.some((binding) => binding.family === family);
+    !missingBindings.some((binding) => binding.family === family) &&
+    !failedBindings.some((binding) => binding.family === family);
   const hostEvidenceRefs = (family) =>
     hostEvidenceForFamily(family)
       .map((item) => item.evidenceRef ?? `${item.evidenceKind}:${item.providerId}`)
@@ -5764,6 +6075,8 @@ function buildCapabilityInvocationTruthPacket({
       family: "agent_subagent",
       state: familyFullyObserved("agent_subagent") || externalAgentSpawned
         ? "invoked"
+        : familyHasFailedBindings("agent_subagent")
+          ? "failed"
         : runtimeSubagentInvocationPacket?.status === "unavailable"
           ? "unavailable"
         : runtimeSubagentInvocationPacket?.status === "not_authorized"
@@ -5831,6 +6144,8 @@ function buildCapabilityInvocationTruthPacket({
         ? "invoked"
         : familyFullyObserved("skill") && familyAppliedByHost("skill")
           ? "applied"
+          : familyHasFailedBindings("skill")
+            ? "failed"
           : hasSelected((row) => row.skills.length > 0)
             ? "selected_not_invoked"
             : inventoryTypes.has("skill")
@@ -5853,6 +6168,8 @@ function buildCapabilityInvocationTruthPacket({
       family: "mcp",
       state: familyFullyObserved("mcp")
         ? "invoked"
+        : familyHasFailedBindings("mcp")
+          ? "failed"
         : hasSelected((row) => row.mcp.length > 0)
           ? "selected_not_invoked"
         : inventoryTypes.has("mcp")
@@ -5874,6 +6191,8 @@ function buildCapabilityInvocationTruthPacket({
       family: "hook",
       state: familyFullyObserved("hook")
         ? "invoked"
+        : familyHasFailedBindings("hook")
+          ? "failed"
         : hasSelected((row) => row.hookMatches.length > 0)
           ? "selected_not_invoked"
           : inventoryTypes.has("hook")
@@ -5910,6 +6229,8 @@ function buildCapabilityInvocationTruthPacket({
       family: "command_script",
       state: familyFullyObserved("command_script")
         ? "invoked"
+        : familyHasFailedBindings("command_script")
+          ? "failed"
         : hasSelected((row) => row.commands.length > 0)
           ? "selected_not_invoked"
         : inventoryTypes.has("command")
@@ -5933,6 +6254,8 @@ function buildCapabilityInvocationTruthPacket({
       family: "runtime_tool",
       state: familyFullyObserved("runtime_tool")
         ? "invoked"
+        : familyHasFailedBindings("runtime_tool")
+          ? "failed"
         : hasSelected((row) => row.runtimeTools.length > 0)
           ? "selected_not_invoked"
         : inventoryTypes.has("tool")
@@ -6021,9 +6344,10 @@ function buildCapabilityInvocationTruthPacket({
     rows.find((row) => row.family === "agent_teams_playbook")?.state !== "invoked" ||
     familyInvokedByHost("agent_teams_playbook");
   const realInvocationRequiredFamilies = [...new Set(requiredBindings.map((binding) => binding.family))];
-  const realInvocationMissingFamilies = [...new Set(missingBindings.map((binding) => binding.family))];
+  const unresolvedBindings = [...missingBindings, ...failedBindings];
+  const realInvocationMissingFamilies = [...new Set(unresolvedBindings.map((binding) => binding.family))];
   const invocationCoverage = evaluateInvocationCoverage({
-    missingBindings,
+    missingBindings: unresolvedBindings,
     capabilityInvocationProbePacket,
   });
   const selectedExecutableInvocationPass = invocationCoverage.realStatus === "pass";
@@ -6068,6 +6392,7 @@ function buildCapabilityInvocationTruthPacket({
       missingFamilies: realInvocationMissingFamilies,
       requiredBindings,
       invokedBindings: runtimeInvocationPlanPacket?.invokedBindings ?? [],
+      failedBindings,
       missingBindings,
       hostEvidenceCount: normalizedHostInvocationEvidence.filter((item) => item.passEligible).length,
       rejectedEvidenceCount: normalizedHostInvocationEvidence.filter((item) => !item.passEligible).length,
@@ -6116,18 +6441,10 @@ function buildCapabilityInvocationPresentation({
   const agentRow = rows.find((row) => row.family === "agent_subagent") ?? null;
   const hostVisibleRow = rows.find((row) => row.family === "app_visible_subagent") ?? null;
   const coverage = capabilityInvocationTruthPacket?.realInvocationCoverage ?? {};
-  const requiredAgentBindings = (coverage.requiredBindings ?? []).filter(
-    (binding) => binding?.family === "agent_subagent",
-  );
-  const invokedAgentBindings = (coverage.invokedBindings ?? []).filter(
-    (binding) => binding?.family === "agent_subagent",
-  );
-  const missingAgentBindings = (coverage.missingBindings ?? []).filter(
-    (binding) => binding?.family === "agent_subagent",
-  );
-  const failedAgentBindings = (coverage.failedBindings ?? []).filter(
-    (binding) => binding?.family === "agent_subagent",
-  );
+  const requiredBindings = coverage.requiredBindings ?? [];
+  const invokedBindings = coverage.invokedBindings ?? [];
+  const missingBindings = coverage.missingBindings ?? [];
+  const failedBindings = coverage.failedBindings ?? [];
   const bindingKey = (binding) =>
     binding?.bindingRef && binding?.providerId
       ? `${binding.bindingRef}\u0000${binding.providerId}`
@@ -6144,32 +6461,32 @@ function buildCapabilityInvocationPresentation({
     [binding?.state, binding?.status, binding?.resultStatus]
       .filter(Boolean)
       .some((value) => failedStates.has(String(value).toLowerCase()));
-  const successfulInvokedBindings = invokedAgentBindings.filter(
+  const successfulInvokedBindings = invokedBindings.filter(
     (binding) => bindingKey(binding) && !invocationFailed(binding),
   );
-  const failedInvokedBindings = invokedAgentBindings.filter(invocationFailed);
+  const failedInvokedBindings = invokedBindings.filter(invocationFailed);
   const successfulKeys = new Set(successfulInvokedBindings.map(bindingKey));
-  const inferredMissingBindings = requiredAgentBindings.filter(
+  const inferredMissingBindings = requiredBindings.filter(
     (binding) => !successfulKeys.has(bindingKey(binding)),
   );
   const failedOrMissingKeys = new Set(
-    [...missingAgentBindings, ...inferredMissingBindings, ...failedAgentBindings, ...failedInvokedBindings]
+    [...missingBindings, ...inferredMissingBindings, ...failedBindings, ...failedInvokedBindings]
       .map((binding) => bindingKey(binding) ?? JSON.stringify(binding))
       .filter(Boolean),
   );
   const successfulBindingCount = successfulInvokedBindings.length;
   const failureCount = failedOrMissingKeys.size;
-  const exactMatchedBindingCount = requiredAgentBindings.filter((binding) =>
+  const exactMatchedBindingCount = requiredBindings.filter((binding) =>
     successfulKeys.has(bindingKey(binding)),
   ).length;
   const exactAllSuccess =
-    requiredAgentBindings.length > 0 &&
-    exactMatchedBindingCount === requiredAgentBindings.length &&
+    requiredBindings.length > 0 &&
+    exactMatchedBindingCount === requiredBindings.length &&
     failureCount === 0;
   const calledWithFailures = successfulBindingCount > 0 && failureCount > 0;
   const calledWithoutExactMatch =
     successfulBindingCount > 0 && failureCount === 0 && !exactAllSuccess;
-  const verifiedFailureResults = failedAgentBindings.map((binding) =>
+  const verifiedFailureResults = failedBindings.map((binding) =>
     String(binding?.resultStatus ?? binding?.status ?? binding?.state ?? "failed").toLowerCase(),
   );
   const verifiedFailureState = verifiedFailureResults.includes("denied")
@@ -6181,7 +6498,7 @@ function buildCapabilityInvocationPresentation({
         : null;
   const genuinelyUnavailable =
     successfulBindingCount === 0 &&
-    failedAgentBindings.length === 0 &&
+    failedBindings.length === 0 &&
     runtimeSubagentInvocationPacket?.availabilityDisposition === "genuinely_unavailable" &&
     ["unsupported", "provider_missing_or_unusable", "missing_provider"].includes(
       runtimeSubagentInvocationPacket?.status,
@@ -6221,9 +6538,9 @@ function buildCapabilityInvocationPresentation({
       successfulBindingCount,
       exactMatchedBindingCount,
       failedBindingCount: failureCount,
-      verifiedFailedBindingCount: failedAgentBindings.length,
+      verifiedFailedBindingCount: failedBindings.length,
       missingBindingCount: new Set(
-        [...missingAgentBindings, ...inferredMissingBindings]
+        [...missingBindings, ...inferredMissingBindings]
           .map((binding) => bindingKey(binding) ?? JSON.stringify(binding)),
       ).size,
       unverifiedHostHintCount: hostVisibleRow?.selectedCount ?? 0,
@@ -6245,6 +6562,906 @@ function buildUserCapabilityInvocationPresentation(packet = null) {
   };
 }
 
+const PROJECT_CUSTOMIZATION_DECISIONS = [
+  "use_global_directly",
+  "upgrade_existing_owner",
+  "create_project_local_capability",
+];
+
+function projectCustomizationTarget({ runtime, candidateType, requestedCapability }) {
+  const slug = safeSlug(requestedCapability || candidateType || "project-capability").slice(0, 80);
+  const runtimeName = normalizeRouteRuntime(runtime);
+  const targets = {
+    codex: {
+      agent: `.codex/agents/${slug}.toml`,
+      skill: `.agents/skills/${slug}/SKILL.md`,
+      command: `.codex/commands/${slug}.md`,
+      hook: `.codex/hooks/${slug}.mjs`,
+      mcp_provider: `.mcp.json#${slug}`,
+      script: `scripts/${slug}.mjs`,
+    },
+    claude_code: {
+      agent: `.claude/agents/${slug}.md`,
+      skill: `.claude/skills/${slug}/SKILL.md`,
+      command: `.claude/commands/${slug}.md`,
+      hook: `.claude/hooks/${slug}.mjs`,
+      mcp_provider: `.mcp.json#${slug}`,
+      script: `scripts/${slug}.mjs`,
+    },
+    cursor: {
+      agent: `.cursor/agents/${slug}.md`,
+      skill: `.cursor/skills/${slug}/SKILL.md`,
+      command: `.cursor/rules/${slug}.mdc`,
+      hook: `.cursor/hooks/${slug}.mjs`,
+      mcp_provider: `.cursor/mcp.json#${slug}`,
+      script: `scripts/${slug}.mjs`,
+    },
+    openclaw: {
+      agent: `openclaw/workspaces/${slug}/`,
+      skill: `openclaw/skills/${slug}/SKILL.md`,
+      command: `openclaw/skills/${slug}/SKILL.md`,
+      hook: `openclaw/hooks/${slug}.mjs`,
+      mcp_provider: `openclaw/openclaw.template.json#${slug}`,
+      script: `scripts/${slug}.mjs`,
+    },
+  };
+  return (targets[runtimeName] ?? targets.codex)[candidateType] ?? `scripts/${slug}.mjs`;
+}
+
+function activeProjectRoot() {
+  return path.resolve(process.env.META_KIM_CALLER_CWD || process.cwd());
+}
+
+function relativeToActiveProject(filePath) {
+  return path.relative(activeProjectRoot(), filePath).replaceAll("\\", "/");
+}
+
+function discoveredAgentCandidate(id, runtime, scope) {
+  const runtimeName = normalizeRouteRuntime(runtime);
+  const projectRoot = activeProjectRoot();
+  const roots = scope === "project"
+    ? {
+        codex: [path.join(projectRoot, ".codex", "agents", `${id}.toml`)],
+        claude_code: [path.join(projectRoot, ".claude", "agents", `${id}.md`)],
+        cursor: [path.join(projectRoot, ".cursor", "agents", `${id}.md`)],
+        openclaw: [path.join(projectRoot, "openclaw", "workspaces", id)],
+      }
+    : {
+        codex: [
+          path.join(homeDir(), ".codex", "agents", `${id}.toml`),
+          path.join(homeDir(), ".codex", "agents", `${id}.md`),
+        ],
+        claude_code: [path.join(homeDir(), ".claude", "agents", `${id}.md`)],
+        cursor: [path.join(homeDir(), ".cursor", "agents", `${id}.md`)],
+        openclaw: [path.join(homeDir(), ".openclaw", `workspace-${id}`)],
+      };
+  const matchedPath = (roots[runtimeName] ?? roots.codex).find((candidatePath) => existsSync(candidatePath));
+  if (!matchedPath) return null;
+  const sourceRef = scope === "project"
+    ? relativeToActiveProject(matchedPath)
+    : `~/${path.relative(homeDir(), matchedPath).replaceAll("\\", "/")}`;
+  return {
+    id,
+    type: "agents",
+    source: scope === "project" ? "project_runtime_agent_inventory" : "local_global_agent_inventory",
+    sourceRef,
+    capabilityScope: scope,
+  };
+}
+
+function discoveredAgentDirectoryCandidates(runtime, scope) {
+  const runtimeName = normalizeRouteRuntime(runtime);
+  const projectRoot = activeProjectRoot();
+  const directories = scope === "project"
+    ? {
+        codex: path.join(projectRoot, ".codex", "agents"),
+        claude_code: path.join(projectRoot, ".claude", "agents"),
+        cursor: path.join(projectRoot, ".cursor", "agents"),
+      }
+    : {
+        codex: path.join(homeDir(), ".codex", "agents"),
+        claude_code: path.join(homeDir(), ".claude", "agents"),
+        cursor: path.join(homeDir(), ".cursor", "agents"),
+      };
+  const directory = directories[runtimeName];
+  if (!directory || !existsSync(directory)) return [];
+  try {
+    return readdirSync(directory, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /\.(?:toml|md)$/i.test(entry.name))
+      .map((entry) => {
+        const id = entry.name.replace(/\.(?:toml|md)$/i, "");
+        const filePath = path.join(directory, entry.name);
+        return {
+          id,
+          type: "agents",
+          source: scope === "project" ? "project_runtime_agent_inventory" : "local_global_agent_inventory",
+          sourceRef: scope === "project"
+            ? relativeToActiveProject(filePath)
+            : `~/${path.relative(homeDir(), filePath).replaceAll("\\", "/")}`,
+          capabilityScope: scope,
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
+function discoveredCapabilityDirectoryCandidates(runtime, scope, candidateType) {
+  const runtimeName = normalizeRouteRuntime(runtime);
+  const projectRoot = activeProjectRoot();
+  const runtimeId = runtimeName === "claude_code" ? "claude" : runtimeName;
+  const runtimeHome = scope === "global" ? resolveRuntimeHomeDir(runtimeId) : null;
+  const roots = candidateType === "skill"
+    ? scope === "project"
+      ? {
+          codex: [path.join(projectRoot, ".agents", "skills"), path.join(projectRoot, ".codex", "skills")],
+          claude_code: [path.join(projectRoot, ".claude", "skills")],
+          cursor: [path.join(projectRoot, ".cursor", "skills")],
+          openclaw: [path.join(projectRoot, "openclaw", "skills")],
+        }
+      : {
+          codex: [path.join(runtimeHome, "skills"), path.join(homeDir(), ".agents", "skills")],
+          claude_code: [path.join(runtimeHome, "skills")],
+          cursor: [path.join(runtimeHome, "skills")],
+          openclaw: [path.join(runtimeHome, "skills")],
+        }
+    : scope === "project"
+      ? {
+          codex: [path.join(projectRoot, ".codex", "commands")],
+          claude_code: [path.join(projectRoot, ".claude", "commands")],
+          cursor: [path.join(projectRoot, ".cursor", "commands"), path.join(projectRoot, ".cursor", "rules")],
+          openclaw: [path.join(projectRoot, "openclaw", "skills")],
+        }
+      : {
+          codex: [path.join(runtimeHome, "commands")],
+          claude_code: [path.join(runtimeHome, "commands")],
+          cursor: [path.join(runtimeHome, "commands"), path.join(runtimeHome, "rules")],
+          openclaw: [path.join(runtimeHome, "skills")],
+        };
+  const candidates = [];
+  for (const directory of roots[runtimeName] ?? roots.codex) {
+    if (!directory || !existsSync(directory)) continue;
+    try {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const filePath = candidateType === "skill"
+          ? entry.isDirectory()
+            ? path.join(directory, entry.name, "SKILL.md")
+            : null
+          : entry.isFile() && /\.(?:md|mdc)$/i.test(entry.name)
+            ? path.join(directory, entry.name)
+            : entry.isDirectory()
+              ? ["command.md", "SKILL.md"]
+                  .map((name) => path.join(directory, entry.name, name))
+                  .find((candidate) => existsSync(candidate)) ?? null
+              : null;
+        if (!filePath || !existsSync(filePath)) continue;
+        const id = candidateType === "skill"
+          ? entry.name
+          : entry.name.replace(/\.(?:md|mdc)$/i, "");
+        candidates.push({
+          id,
+          type: candidateType === "skill" ? "skills" : "commands",
+          source: scope === "project" ? "project_runtime_capability_inventory" : "local_global_capability_inventory",
+          sourceRef: scope === "project"
+            ? relativeToActiveProject(filePath)
+            : `~/${path.relative(homeDir(), filePath).replaceAll("\\", "/")}`,
+          capabilityScope: scope,
+        });
+      }
+    } catch {
+      // A missing or unreadable runtime root is simply not a usable candidate.
+    }
+  }
+  return candidates;
+}
+
+function projectCustomizationCandidateSets(ownerDiscoveryPacket, candidateType, runtime) {
+  const ownerNames = ownerDiscoveryPacket?.candidateExistingExecutionOwners ?? [];
+  const discoveredProjectAgents = ownerNames
+    .map((id) => discoveredAgentCandidate(id, runtime, "project"))
+    .filter(Boolean);
+  const discoveredGlobalAgents = ownerNames
+    .map((id) => discoveredAgentCandidate(id, runtime, "global"))
+    .filter(Boolean);
+  const projectAgents = [
+    ...(ownerDiscoveryPacket?.projectRuntimeAgents ?? []),
+    ...discoveredProjectAgents,
+    ...discoveredAgentDirectoryCandidates(runtime, "project"),
+  ];
+  const globalAgents = [
+    ...(ownerDiscoveryPacket?.localGlobalAgents ?? []),
+    ...discoveredGlobalAgents,
+    ...discoveredAgentDirectoryCandidates(runtime, "global"),
+  ];
+  const projectProviders = ownerDiscoveryPacket?.projectRuntimeCapabilityProviders ?? [];
+  const reusableProviders = ownerDiscoveryPacket?.candidateReusableCapabilityProviders ?? [];
+  const globalProviders = [
+    ...(ownerDiscoveryPacket?.localGlobalCapabilityProviders ?? []),
+    ...reusableProviders.filter((provider) => String(provider?.sourceRef ?? "").startsWith("~/")),
+  ];
+  const typeMatches = (provider) => {
+    const type = String(provider?.type ?? provider?.providerType ?? "").toLowerCase();
+    if (candidateType === "skill") return type === "skills" || type === "skill";
+    if (candidateType === "command" || candidateType === "script") {
+      return type === "commands" || type === "command" || type === "runtimetools";
+    }
+    if (candidateType === "mcp_provider") return type === "mcpservers" || type === "mcptools" || type === "mcp";
+    if (candidateType === "hook") return type === "hooks" || type === "hook";
+    return false;
+  };
+  if (candidateType === "agent") {
+    return {
+      project: projectAgents.map((candidate) => ({ ...candidate, capabilityScope: "project" })),
+      global: globalAgents.map((candidate) => ({ ...candidate, capabilityScope: "global" })),
+    };
+  }
+  const discoveredProjectProviders = ["skill", "command", "script"].includes(candidateType)
+    ? discoveredCapabilityDirectoryCandidates(runtime, "project", candidateType === "skill" ? "skill" : "command")
+    : [];
+  const discoveredGlobalProviders = ["skill", "command", "script"].includes(candidateType)
+    ? discoveredCapabilityDirectoryCandidates(runtime, "global", candidateType === "skill" ? "skill" : "command")
+    : [];
+  return {
+    project: [...projectProviders.filter(typeMatches), ...discoveredProjectProviders]
+      .map((candidate) => ({ ...candidate, capabilityScope: "project" })),
+    global: [...globalProviders.filter(typeMatches), ...discoveredGlobalProviders]
+      .map((candidate) => ({ ...candidate, capabilityScope: "global" })),
+  };
+}
+
+function exactRequestedCandidate(candidates, request) {
+  const sourceText = String(request?.sourceText ?? "").toLowerCase();
+  const requested = String(request?.requestedCapability ?? "").toLowerCase();
+  return (candidates ?? [])
+    .slice()
+    .sort(
+      (left, right) =>
+        String(right?.id ?? right?.name ?? "").length -
+        String(left?.id ?? left?.name ?? "").length,
+    )
+    .find((candidate) => {
+    const id = String(candidate?.id ?? candidate?.name ?? "").toLowerCase().trim();
+    return id.length >= 3 && (sourceText.includes(id) || requested === safeSlug(id));
+    }) ?? null;
+}
+
+export function buildProjectCustomizationPacket({
+  task,
+  runId,
+  runtime,
+  orchestrationReport,
+  runtimeInvocationPlanPacket,
+  outputLanguage,
+}) {
+  const requests = durableCapabilityRequestsFromTask(task, runId);
+  const ownerDiscoveryPacket = orchestrationReport?.selectedExecutionRoute?.ownerDiscoveryPacket ?? {};
+  const selectedBindings = runtimeInvocationPlanPacket?.requiredBindings ?? [];
+  const decisions = requests.map((request) => {
+    const candidates = projectCustomizationCandidateSets(ownerDiscoveryPacket, request.candidateType, runtime);
+    const projectCandidate = exactRequestedCandidate(candidates.project, request);
+    const globalCandidate = exactRequestedCandidate(candidates.global, request);
+    const explicitGlobalReuse = /全局|global/i.test(request.sourceText) &&
+      /不要.{0,12}(?:复制|创建|生成|copy|create).{0,12}(?:项目|project)/i.test(request.sourceText);
+    const noIterationGlobalReuse = /(?:全局|global).{0,40}(?:不需要|无需|without|no).{0,12}(?:迭代|修改|升级|定制|iteration|modify|upgrade|custom)|(?:不需要|无需).{0,12}(?:迭代|修改|升级|定制).{0,40}(?:全局|global)/iu.test(request.sourceText);
+    const iterationRequested = request.requestedAction === "iterate" && !noIterationGlobalReuse;
+    const projectSpecific = !explicitGlobalReuse &&
+      /(?:项目|本项目|当前项目|project|repo).{0,12}(?:专用|专属|新增|新建|创建|生成|迭代|修改|specific|local)|(?:专用|专属|specific).{0,12}(?:项目|本项目|project|repo)/i.test(
+        request.sourceText,
+      );
+    const decision = projectCandidate
+      ? (iterationRequested ? "upgrade_existing_owner" : "use_global_directly")
+      : globalCandidate
+        ? (iterationRequested ? "upgrade_existing_owner" : "use_global_directly")
+        : projectSpecific || request.requestedAction === "create"
+          ? "create_project_local_capability"
+          : candidates.global.length > 0
+            ? "upgrade_existing_owner"
+            : "create_project_local_capability";
+    const selectedCandidate = projectCandidate ?? globalCandidate ?? null;
+    const copyGlobalToProject = decision === "upgrade_existing_owner" && Boolean(globalCandidate) && !projectCandidate;
+    const targetPath = decision === "use_global_directly"
+      ? (selectedCandidate?.sourceRef ?? selectedCandidate?.id ?? null)
+      : decision === "upgrade_existing_owner" && projectCandidate
+        ? (selectedCandidate.sourceRef ?? selectedCandidate.id)
+        : projectCustomizationTarget({
+            runtime,
+            candidateType: request.candidateType,
+            requestedCapability: copyGlobalToProject
+              ? globalCandidate.id
+              : request.requestedCapability,
+          });
+    const reason = projectCandidate
+      ? iterationRequested
+        ? `A matching project capability already exists at ${projectCandidate.sourceRef ?? projectCandidate.id}; iterate that project copy instead of creating a duplicate.`
+        : `A matching project capability already exists at ${projectCandidate.sourceRef ?? projectCandidate.id}; reuse it without another copy.`
+      : globalCandidate
+        ? iterationRequested
+          ? `A matching global capability exists at ${globalCandidate.sourceRef ?? globalCandidate.id}, but this request needs project-specific iteration; copy it to ${targetPath} before modification.`
+          : `A matching global capability already exists at ${globalCandidate.sourceRef ?? globalCandidate.id}; reuse it directly without a project copy.`
+        : projectSpecific
+          ? "The request explicitly requires project-specific behavior and no exact project/global provider matched."
+          : candidates.global.length > 0
+            ? "No exact provider matched, but same-family global providers exist; review an existing-owner upgrade before creating a project copy."
+            : "No reusable project or global provider matched this durable capability request.";
+    return {
+      requestId: request.requestId,
+      capabilityType: request.candidateType,
+      requestedCapability: request.requestedCapability,
+      requestText: request.sourceText,
+      creationSpecificationReady: request.specificationReady,
+      decision,
+      reason,
+      targetPath,
+      copyPolicy:
+        decision === "use_global_directly"
+          ? "use_global_directly"
+          : copyGlobalToProject
+            ? "copy_to_project_for_modification"
+            : projectCandidate
+              ? "already_project_local"
+              : "create_project_local_capability",
+      sourceCapabilityRef: copyGlobalToProject ? globalCandidate.sourceRef : null,
+      projectOwnershipClass:
+        decision === "use_global_directly" ? null : "runtime_sedimented_project_copy",
+      projectCopyCommand:
+        copyGlobalToProject && ["agent", "skill", "command"].includes(request.candidateType)
+          ? `meta-kim project capability copy --project-dir <project-root> --runtime ${normalizeRouteRuntime(runtime) === "claude_code" ? "claude" : normalizeRouteRuntime(runtime)} --type ${request.candidateType} --id ${safeSlug(globalCandidate.id)} --source <resolved-global-source> --mode iterate --apply --json`
+          : null,
+      globalCandidateChecked: {
+        count: candidates.global.length,
+        matched: Boolean(globalCandidate),
+        providerId: globalCandidate?.id ?? null,
+        sourceRef: globalCandidate?.sourceRef ?? null,
+      },
+      projectCandidateChecked: {
+        count: candidates.project.length,
+        matched: Boolean(projectCandidate),
+        providerId: projectCandidate?.id ?? null,
+        sourceRef: projectCandidate?.sourceRef ?? null,
+      },
+      projectNeed: projectSpecific ? request.sourceText : null,
+      customizationReason: projectSpecific ? reason : null,
+      mergePolicy:
+        request.candidateType === "mcp_provider"
+          ? "additive_merge_preserve_user_state"
+          : decision === "use_global_directly"
+            ? "no_project_copy"
+            : "reviewed_project_local_write",
+      owner: request.candidateType === "agent" ? "meta-genesis" : "meta-artisan",
+      verification: "npm run meta:sync && npm run meta:validate",
+      rollback:
+        decision === "use_global_directly"
+          ? "No project capability file is written; remove only the run-scoped binding if the route changes."
+          : `Remove the unapproved candidate or restore the managed backup for ${targetPath}.`,
+      approvalRequired: decision !== "use_global_directly",
+    };
+  });
+  const priority = {
+    create_project_local_capability: 3,
+    upgrade_existing_owner: 2,
+    use_global_directly: 1,
+  };
+  const primary = decisions
+    .slice()
+    .sort((left, right) => priority[right.decision] - priority[left.decision])[0] ?? null;
+  const decision = primary?.decision ?? "use_global_directly";
+  const reason = primary?.reason ?? (
+    selectedBindings.length > 0
+      ? "The selected route already has reusable capability bindings and the request does not prove a project-specific durable gap."
+      : "No project-specific durable capability was requested; do not create project files for run-scoped work."
+  );
+  const targetPath = primary?.targetPath ?? null;
+  const verification = primary?.verification ?? "npm run discover:global && npm run meta:check:global";
+  const rollback = primary?.rollback ?? "No project capability file is written; remove only the run-scoped binding if the route changes.";
+  const copy = getGovernedRunSurfaceLabels(outputLanguage).capabilityLedger;
+  return {
+    schemaVersion: "project-customization-v0.1",
+    status: "decision_ready",
+    decision,
+    reason,
+    targetPath,
+    verification,
+    rollback,
+    decisions,
+    requestedCapabilityCount: requests.length,
+    selectedBindingCount: selectedBindings.length,
+    globalFirstChecked: true,
+    routeConfirmed: orchestrationReport?.status === "pass",
+    allowedDecisions: PROJECT_CUSTOMIZATION_DECISIONS,
+    requiresApproval: decision !== "use_global_directly",
+    userSummary: copy.projectSummary(copy.projectDecisions[decision], reason),
+    truthBoundary:
+      "This packet records whether to reuse, upgrade, or create. It does not claim that a project capability file was written, loaded by the host, or invoked.",
+  };
+}
+
+const PROJECT_CAPABILITY_MUTATION_MODES = new Set(["auto", "read_only"]);
+const MATERIALIZABLE_PROJECT_CAPABILITY_TYPES = new Set(["agent", "skill", "command"]);
+
+function normalizedProjectCapabilityMutationMode(value) {
+  const mode = String(value ?? "auto").toLowerCase();
+  if (!PROJECT_CAPABILITY_MUTATION_MODES.has(mode)) {
+    throw new Error(`Unsupported project capability mutation mode: ${mode}`);
+  }
+  return mode;
+}
+
+function projectCapabilityRuntime(runtime) {
+  const normalized = normalizeRouteRuntime(runtime);
+  return normalized === "claude_code" ? "claude" : normalized;
+}
+
+function projectCapabilityId(decision) {
+  const preferred =
+    decision?.globalCandidateChecked?.providerId ??
+    decision?.projectCandidateChecked?.providerId ??
+    decision?.requestedCapability ??
+    decision?.capabilityType ??
+    "project-capability";
+  const id = safeSlug(preferred).slice(0, 80);
+  return id.length >= 2 ? id : `cap-${id || "item"}`;
+}
+
+function resolveProjectCapabilitySourceRef(sourceRef, projectRoot) {
+  const ref = String(sourceRef ?? "").trim();
+  if (!ref || ref.startsWith("external:")) return null;
+  if (ref.startsWith("~/")) {
+    return path.resolve(homeDir(), ...ref.slice(2).split("/"));
+  }
+  if (path.isAbsolute(ref)) return path.resolve(ref);
+  return path.resolve(projectRoot, ...ref.replaceAll("\\", "/").split("/"));
+}
+
+function generatedProjectCapabilityContent({ runtime, type, id, runId, reason }) {
+  const description = `Project-local ${type} ${id}, materialized by governed run ${runId}.`;
+  const goal = `Goal: provide the project-local ${type} capability ${id}.`;
+  const responsibility = `Responsibility: fulfill only the confirmed governed-run need. ${reason}`;
+  const refusal = "Refusal boundary: refuse unrelated responsibilities, global configuration mutation, destructive actions, and overwriting user-owned files.";
+  const instruction = [goal, responsibility, refusal].join("\n");
+  if (type === "agent" && runtime === "codex") {
+    return [
+      `name = ${JSON.stringify(id)}`,
+      `description = ${JSON.stringify(description)}`,
+      `developer_instructions = ${JSON.stringify(instruction)}`,
+      "",
+    ].join("\n");
+  }
+  if (type === "agent") {
+    return [
+      "---",
+      `name: ${id}`,
+      `description: ${description}`,
+      "---",
+      "",
+      `# ${id}`,
+      "",
+      `## Goal`,
+      "",
+      goal,
+      "",
+      `## Responsibility`,
+      "",
+      responsibility,
+      "",
+      `## Refusal boundary`,
+      "",
+      refusal,
+      "",
+    ].join("\n");
+  }
+  if (type === "skill") {
+    return [
+      "---",
+      `name: ${id}`,
+      `description: ${description}`,
+      "---",
+      "",
+      `# ${id}`,
+      "",
+      `## Goal`,
+      "",
+      goal,
+      "",
+      `## Responsibility`,
+      "",
+      responsibility,
+      "",
+      `## Refusal boundary`,
+      "",
+      refusal,
+      "",
+    ].join("\n");
+  }
+  return [
+    `# ${id}`,
+    "",
+    `## Goal`,
+    "",
+    goal,
+    "",
+    `## Responsibility`,
+    "",
+    responsibility,
+    "",
+    `## Refusal boundary`,
+    "",
+    refusal,
+    "",
+  ].join("\n");
+}
+
+function generatedProjectCapabilitySource({
+  candidateRoot,
+  runtime,
+  type,
+  id,
+  runId,
+  reason,
+}) {
+  mkdirSync(candidateRoot, { recursive: true });
+  const extension = type === "agent" && runtime === "codex" ? ".toml" : ".md";
+  const sourcePath = path.join(candidateRoot, `${type}-${id}${extension}`);
+  writeFileSync(
+    sourcePath,
+    generatedProjectCapabilityContent({ runtime, type, id, runId, reason }),
+    "utf8",
+  );
+  return sourcePath;
+}
+
+function projectCustomizationUserLine({ decision, result, outputLanguage }) {
+  const language = normalizeOutputLanguage(outputLanguage);
+  const label = `${decision.capabilityType} ${decision.requestedCapability}`;
+  if (result.status === "reused_without_copy") {
+    const existingProjectCopy = decision.projectCandidateChecked?.matched === true;
+    if (language === "zh-CN") {
+      return existingProjectCopy
+        ? `复用已有项目 ${label}，未创建重复副本；位置：${decision.targetPath ?? "已选项目能力"}。`
+        : `复用全局 ${label}，未复制到项目；来源：${decision.targetPath ?? "已选全局能力"}。`;
+    }
+    if (language === "ja-JP") {
+      return existingProjectCopy
+        ? `既存のプロジェクト ${label} を再利用し、重複コピーは作成していません。`
+        : `グローバル ${label} を再利用し、プロジェクトにはコピーしていません。`;
+    }
+    if (language === "ko-KR") {
+      return existingProjectCopy
+        ? `기존 프로젝트 ${label}을 재사용했으며 중복 복사본을 만들지 않았습니다.`
+        : `전역 ${label}을 재사용했으며 프로젝트에는 복사하지 않았습니다.`;
+    }
+    return existingProjectCopy
+      ? `Reused existing project ${label}; no duplicate copy was created.`
+      : `Reused global ${label}; no project copy was created.`;
+  }
+  if (result.status === "applied") {
+    const target = result.targetPaths.join(", ") || decision.targetPath;
+    if (language === "zh-CN") return `已将 ${label} 落到 ${target}；原因：${decision.reason}`;
+    if (language === "ja-JP") return `${label} を ${target} に配置しました。理由: ${decision.reason}`;
+    if (language === "ko-KR") return `${label}을(를) ${target}에 배치했습니다. 이유: ${decision.reason}`;
+    return `Materialized ${label} at ${target}. Reason: ${decision.reason}`;
+  }
+  if (result.status === "not_applied_read_only") {
+    if (language === "zh-CN") return `只读模式：未复制 ${label}；计划位置：${decision.targetPath}。`;
+    return `Read-only mode: ${label} was not copied; planned target: ${decision.targetPath}.`;
+  }
+  if (language === "zh-CN") return `未能落盘 ${label}，不会假称完成；原因：${result.reason}`;
+  return `Failed to materialize ${label}; completion is not claimed. Reason: ${result.reason}`;
+}
+
+export function executeProjectCustomizationPacket({
+  packet,
+  runtime,
+  runId,
+  projectRoot,
+  candidateRoot,
+  mutationMode = "auto",
+  entryClassification = null,
+  outputLanguage = "zh-CN",
+}) {
+  const mode = normalizedProjectCapabilityMutationMode(mutationMode);
+  const root = path.resolve(projectRoot ?? activeProjectRoot());
+  const copyRuntime = projectCapabilityRuntime(runtime);
+  const readOnly =
+    mode === "read_only" ||
+    entryClassification?.path === "fast_path" ||
+    entryClassification?.governedEntry === false;
+  const results = [];
+  const ownsCandidateRoot = !candidateRoot;
+  const resolvedCandidateRoot = candidateRoot ?? mkdtempSync(
+    path.join(os.tmpdir(), "meta-kim-project-capability-candidates-"),
+  );
+  const decisions = (packet?.decisions ?? []).map((decision) => {
+    if (decision.copyPolicy === "use_global_directly") {
+      const result = {
+        requestId: decision.requestId,
+        status: "reused_without_copy",
+        applied: false,
+        targetPaths: [],
+        reason: decision.reason,
+      };
+      results.push(result);
+      return { ...decision, executionStatus: result.status, actualTargetPaths: [] };
+    }
+
+    if (readOnly) {
+      const result = {
+        requestId: decision.requestId,
+        status: "not_applied_read_only",
+        applied: false,
+        targetPaths: [],
+        reason: "project capability mutation is disabled for read-only, check, dry-run, or fast-path execution",
+      };
+      results.push(result);
+      return { ...decision, executionStatus: result.status, actualTargetPaths: [] };
+    }
+
+    if (packet.routeConfirmed !== true) {
+      const result = {
+        requestId: decision.requestId,
+        status: "failed",
+        applied: false,
+        targetPaths: [],
+        reason: "governed_route_not_execution_ready",
+      };
+      results.push(result);
+      return { ...decision, executionStatus: result.status, actualTargetPaths: [] };
+    }
+
+    if (!MATERIALIZABLE_PROJECT_CAPABILITY_TYPES.has(decision.capabilityType)) {
+      const result = {
+        requestId: decision.requestId,
+        status: "failed",
+        applied: false,
+        targetPaths: [],
+        reason: `unsupported_project_capability_type:${decision.capabilityType}`,
+      };
+      results.push(result);
+      return { ...decision, executionStatus: result.status, actualTargetPaths: [] };
+    }
+
+    const id = projectCapabilityId(decision);
+    const copyMode = decision.copyPolicy === "create_project_local_capability" ? "create" : "iterate";
+    if (copyMode === "create" && decision.creationSpecificationReady !== true) {
+      const result = {
+        requestId: decision.requestId,
+        status: "failed",
+        applied: false,
+        targetPaths: [],
+        reason: "insufficient_durable_capability_specification",
+      };
+      results.push(result);
+      return { ...decision, executionStatus: result.status, actualTargetPaths: [] };
+    }
+
+    try {
+      const source = copyMode === "iterate"
+        ? resolveProjectCapabilitySourceRef(
+            decision.sourceCapabilityRef ?? decision.targetPath,
+            root,
+          )
+        : generatedProjectCapabilitySource({
+            candidateRoot: resolvedCandidateRoot,
+            runtime: copyRuntime,
+            type: decision.capabilityType,
+            id,
+            runId,
+            reason: `${decision.requestText ?? "Confirmed project capability request"} ${decision.reason}`,
+          });
+      if (!source || !existsSync(source)) {
+        throw new Error("selected_capability_source_unresolved");
+      }
+      const copyResult = copyProjectCapability({
+        projectDir: root,
+        runtime: copyRuntime,
+        type: decision.capabilityType,
+        id,
+        source,
+        mode: copyMode,
+        apply: true,
+      });
+      if (!copyResult.ok) {
+        const result = {
+          requestId: decision.requestId,
+          status: "failed",
+          applied: false,
+          targetPaths: [],
+          reason: copyResult.transaction?.reason ?? copyResult.status ?? "project_capability_copy_failed",
+          transactionStatus: copyResult.transaction?.status ?? copyResult.status,
+        };
+        results.push(result);
+        return { ...decision, executionStatus: result.status, actualTargetPaths: [] };
+      }
+      const targetPaths = (copyResult.capability?.files ?? []).map((file) => file.relPath);
+      const result = {
+        requestId: decision.requestId,
+        status: "applied",
+        applied: true,
+        targetPaths,
+        reason: decision.reason,
+        transactionStatus: copyResult.transaction?.status ?? copyResult.status,
+        ownershipClass: copyResult.capability?.ownershipClass,
+        dependencyUpdatePolicy: copyResult.capability?.dependencyUpdatePolicy,
+      };
+      results.push(result);
+      return { ...decision, executionStatus: result.status, actualTargetPaths: targetPaths };
+    } catch (error) {
+      const result = {
+        requestId: decision.requestId,
+        status: "failed",
+        applied: false,
+        targetPaths: [],
+        reason: error.message,
+      };
+      results.push(result);
+      return { ...decision, executionStatus: result.status, actualTargetPaths: [] };
+    }
+  });
+
+  const mutationRequired = decisions.some((decision) => decision.copyPolicy !== "use_global_directly");
+  const failedCount = results.filter((result) => result.status === "failed").length;
+  const readOnlyCount = results.filter((result) => result.status === "not_applied_read_only").length;
+  const appliedCount = results.filter((result) => result.status === "applied").length;
+  const noCopyCount = results.filter((result) => result.status === "reused_without_copy").length;
+  const status = failedCount > 0
+    ? "partial"
+    : readOnlyCount > 0
+      ? "read_only"
+      : appliedCount > 0
+        ? "completed"
+        : noCopyCount > 0
+          ? "completed_no_copy"
+          : "not_required";
+  const userSummary = decisions.length === 0
+    ? packet.userSummary
+    : decisions.map((decision, index) => projectCustomizationUserLine({
+        decision,
+        result: results[index],
+        outputLanguage,
+      })).join(" ");
+  const executedPacket = {
+    ...packet,
+    status,
+    decisions,
+    requiresApproval: false,
+    userSummary,
+    execution: {
+      schemaVersion: "project-customization-execution-v0.1",
+      status,
+      mutationMode: mode,
+      mutationRequired,
+      projectRoot: root,
+      lockKey: "project-mutation-session",
+      appliedCount,
+      noCopyCount,
+      readOnlyCount,
+      failedCount,
+      results,
+      manifest: appliedCount > 0
+        ? ".meta-kim/state/default/project-capabilities.json"
+        : null,
+    },
+    truthBoundary:
+      status === "partial"
+        ? "At least one required project capability mutation failed; the run must remain partial and must not claim completion."
+        : status === "read_only"
+          ? "Project capability mutation was intentionally not applied in read-only/check/dry-run mode."
+          : "Project capability write claims are backed by project-capability-copy transaction results; global reuse claims mean no project copy was created.",
+  };
+  if (ownsCandidateRoot) {
+    rmSync(resolvedCandidateRoot, { recursive: true, force: true });
+  }
+  return executedPacket;
+}
+
+function buildCapabilityLedgerPacket({
+  capabilityInvocationTruthPacket,
+  runtimeInvocationPlanPacket,
+  projectCustomizationPacket,
+  outputLanguage,
+}) {
+  const visibleFamilies = [
+    "agent_subagent",
+    "skill",
+    "command_script",
+    "mcp",
+    "runtime_tool",
+    "hook",
+    "prompt_rule",
+  ];
+  const copy = getGovernedRunSurfaceLabels(outputLanguage).capabilityLedger;
+  const truthRows = capabilityInvocationTruthPacket?.rows ?? [];
+  const requiredBindings = runtimeInvocationPlanPacket?.requiredBindings ?? [];
+  const shortProviderName = (value) => {
+    const normalized = String(value ?? "").replaceAll("\\", "/");
+    if (!normalized || normalized === "none") return copy.noneProvider;
+    const parts = normalized.split("/").filter(Boolean);
+    const fileName = parts.at(-1) ?? normalized;
+    const candidate = /^skill\.md$/i.test(fileName) && parts.length > 1
+      ? parts.at(-2)
+      : fileName.replace(/\.(?:toml|md|mjs|json)$/i, "");
+    return candidate.replace(/provider/gi, "capability").replace(/lane/gi, "work-stream");
+  };
+  const sourceLabel = (sources) => {
+    const joined = sources.join(" ").toLowerCase();
+    if (!joined) return copy.sourceLabels.unselected;
+    if (joined.includes("~/." ) || joined.includes("global")) return copy.sourceLabels.global;
+    if (joined.includes("project") || joined.includes(".codex/") || joined.includes(".agents/") || joined.includes(".claude/") || joined.includes(".cursor/")) return copy.sourceLabels.project;
+    if (joined.includes("canonical/")) return copy.sourceLabels.canonical;
+    if (joined.includes("runtime") || joined.includes("shell") || joined.includes("browser")) return copy.sourceLabels.runtime;
+    return copy.sourceLabels.discovered;
+  };
+  const families = visibleFamilies.map((family) => {
+    const truth = truthRows.find((row) => row.family === family) ?? {
+      state: "not_required",
+      selectedCount: 0,
+      truthBoundary: "No capability truth row was produced for this family.",
+    };
+    const bindings = requiredBindings.filter((binding) => binding.family === family);
+    const providerIds = uniqueStrings(bindings.map((binding) => binding.providerId));
+    const sources = uniqueStrings(
+      bindings.flatMap((binding) => [binding.sourceRef, binding.source]).filter(Boolean),
+    );
+    if (family === "prompt_rule" && providerIds.length === 0) {
+      providerIds.push("meta-theory");
+      sources.push("canonical/skills/meta-theory/SKILL.md");
+    }
+    const providerId = providerIds.join(", ") || "none";
+    const source = sources.join(", ") || "not_selected";
+    const displayProvider = providerIds.length > 0
+      ? providerIds.map(shortProviderName).join(", ")
+      : copy.noneProvider;
+    const displaySource = sourceLabel(sources);
+    const state = CAPABILITY_INVOCATION_STATES.includes(truth.state)
+      ? truth.state
+      : "not_required";
+    const familyLabel = copy.familyLabels[family] ?? family;
+    const stateLabel = copy.stateLabels[state] ?? state;
+    const ownerBindingModes = family === "agent_subagent"
+      ? uniqueStrings(bindings.map((binding) => binding.ownerBindingMode).filter(Boolean))
+      : [];
+    const ownerBindingSummary = ownerBindingModes
+      .map((mode) => copy.agentBindingModes?.[mode])
+      .filter(Boolean)
+      .join(" ");
+    const baseDisplayLine = copy.line(familyLabel, displayProvider, stateLabel, displaySource);
+    return {
+      family,
+      familyLabel,
+      providerId,
+      providerIds,
+      source,
+      sources,
+      displayProvider,
+      displaySource,
+      state,
+      stateLabel,
+      selected: (truth.selectedCount ?? 0) > 0,
+      selectedCount: truth.selectedCount ?? 0,
+      invokedCount: truth.invokedCount ?? 0,
+      ownerBindingModes,
+      invocationTruthBoundary: truth.truthBoundary,
+      nextAction: copy.nextActions[state],
+      displayLine: `${baseDisplayLine}${ownerBindingSummary ? ` ${ownerBindingSummary}` : ""} ${copy.nextActions[state]}`,
+    };
+  });
+  return {
+    schemaVersion: "capability-ledger-v0.1",
+    status: "ready",
+    title: copy.title,
+    families,
+    projectCustomization: {
+      decision: projectCustomizationPacket.decision,
+      summary: String(projectCustomizationPacket.userSummary ?? "")
+        .replace(/provider/gi, "capability")
+        .replace(/lane/gi, "work-stream"),
+      targetPath: projectCustomizationPacket.targetPath,
+    },
+    userSummary: families.map((family) => family.displayLine).join(" "),
+    truthBoundary:
+      "The ledger renders strict invocation states without promoting discovery, selection, configuration, host badges, or run-scoped plans into actual calls.",
+  };
+}
+
 function buildVisibleMetaTheorySurfacePacket({
   orchestrationReport,
   langGraphRunPacket,
@@ -6253,6 +7470,8 @@ function buildVisibleMetaTheorySurfacePacket({
   capabilityInvocationProbePacket,
   capabilityInvocationTruthPacket,
   capabilityInvocationPresentationPacket,
+  capabilityLedgerPacket,
+  projectCustomizationPacket,
   agentTeamsPlaybookPacket,
 }) {
   const capabilityRows = orchestrationReport.fetchEvidence.capabilityInventory.map((item) => ({
@@ -6288,7 +7507,9 @@ function buildVisibleMetaTheorySurfacePacket({
     dynamicWorkflowRuntimePacket.status === "pass" &&
     ["pass", "not_required"].includes(agentTeamsPlaybookPacket?.status) &&
     peerAgentMeshPacket.status === "pass" &&
-    capabilityInvocationTruthPacket.status === "pass";
+    capabilityInvocationTruthPacket.status === "pass" &&
+    capabilityLedgerPacket?.status === "ready" &&
+    PROJECT_CUSTOMIZATION_DECISIONS.includes(projectCustomizationPacket?.decision);
   return {
     schemaVersion: "visible-meta-theory-surface-v0.1",
     status: pass ? "pass" : "partial",
@@ -6298,6 +7519,8 @@ function buildVisibleMetaTheorySurfacePacket({
       "dynamic_workflow",
       "capability_inventory_not_skill_only",
       "capability_invocation_presentation",
+      "capability_ledger",
+      "project_customization_decision",
       "agent_teams_playbook",
       "peer_agent_mesh",
       "langgraph_style_control_graph",
@@ -6333,6 +7556,8 @@ function buildVisibleMetaTheorySurfacePacket({
     capabilityInvocationPresentation: buildUserCapabilityInvocationPresentation(
       capabilityInvocationPresentationPacket,
     ),
+    capabilityLedger: capabilityLedgerPacket,
+    projectCustomization: projectCustomizationPacket,
     agentTeamsPlaybook: {
       status: agentTeamsPlaybookPacket?.status ?? "missing",
       selected: agentTeamsPlaybookPacket?.selected === true,
@@ -7107,9 +8332,14 @@ function buildCoreLoopArtifact({
   nativeChoiceEvidenceTrusted,
   agentTeamsPlaybookProvider,
   invokeCapabilityProbes = false,
+  projectRoot = null,
+  projectCapabilityMutationMode = "auto",
+  projectCapabilityCandidateRoot = null,
   runtime = "codex",
   osTarget = "windows",
   outputLanguage = "zh-CN",
+  executionAllowed = true,
+  preDecisionOptionFrame = null,
 }) {
   const routeRuntime = normalizeRouteRuntime(runtime);
   const routeOs = normalizeOsTarget(osTarget);
@@ -7200,14 +8430,22 @@ function buildCoreLoopArtifact({
       owner: packet.owner,
       ownerAgent: packet.ownerAgent,
       executionMode: packet.executionMode,
-      status: requiresApproval ? "blocked_or_needs_approval" : "planned_not_executed",
-      resultKind: requiresApproval
-        ? "approval_gate"
-        : "run_scoped_worker_plan",
-      evidenceKind: requiresApproval
-        ? "approval_required"
-        : "structural_worker_plan",
-      output: requiresApproval
+      status: !executionAllowed
+        ? "blocked_by_plan_challenge"
+        : requiresApproval
+          ? "blocked_or_needs_approval"
+          : "planned_not_executed",
+      resultKind: !executionAllowed
+        ? "plan_challenge_gate"
+        : requiresApproval
+          ? "approval_gate"
+          : "run_scoped_worker_plan",
+      evidenceKind: !executionAllowed
+        ? "plan_challenge_not_ready"
+        : requiresApproval
+          ? "approval_required"
+          : "structural_worker_plan",
+      output: !executionAllowed || requiresApproval
         ? null
         : {
             declaredOutput: packet.output ?? "worker_result",
@@ -7226,9 +8464,11 @@ function buildCoreLoopArtifact({
             "prepare_declared_output_contract",
             "request_external_worker_execution_evidence",
           ],
-      note: requiresApproval
-        ? "Approval is required before this worker can execute."
-        : "The runner produced a bounded worker plan only; it did not execute the worker's command or deliverable.",
+      note: !executionAllowed
+        ? "Execution is blocked until the plan challenge is ready and separately authorized where required."
+        : requiresApproval
+          ? "Approval is required before this worker can execute."
+          : "The runner produced a bounded worker plan only; it did not execute the worker's command or deliverable.",
     };
   });
   const workerExecutionEvidence = workerResultPackets.map((result, index) => {
@@ -7459,6 +8699,30 @@ function buildCoreLoopArtifact({
     runtimeSubagentInvocationPacket,
     outputLanguage,
   });
+  const projectCustomizationPlan = buildProjectCustomizationPacket({
+    task,
+    runId,
+    runtime: routeRuntime,
+    orchestrationReport,
+    runtimeInvocationPlanPacket,
+    outputLanguage,
+  });
+  const projectCustomizationPacket = executeProjectCustomizationPacket({
+    packet: projectCustomizationPlan,
+    runtime: routeRuntime,
+    runId,
+    projectRoot: projectRoot ?? activeProjectRoot(),
+    candidateRoot: projectCapabilityCandidateRoot,
+    mutationMode: projectCapabilityMutationMode,
+    entryClassification,
+    outputLanguage,
+  });
+  const capabilityLedgerPacket = buildCapabilityLedgerPacket({
+    capabilityInvocationTruthPacket,
+    runtimeInvocationPlanPacket,
+    projectCustomizationPacket,
+    outputLanguage,
+  });
   const visibleMetaTheorySurfacePacket = buildVisibleMetaTheorySurfacePacket({
     orchestrationReport,
     langGraphRunPacket,
@@ -7467,6 +8731,8 @@ function buildCoreLoopArtifact({
     capabilityInvocationProbePacket,
     capabilityInvocationTruthPacket,
     capabilityInvocationPresentationPacket,
+    capabilityLedgerPacket,
+    projectCustomizationPacket,
     agentTeamsPlaybookPacket,
   });
   const userPerceptionPacket = buildUserPerceptionPacket({
@@ -7512,6 +8778,9 @@ function buildCoreLoopArtifact({
     ...(productExperiencePacket.status === "product_experience_pass"
       ? []
       : ["productExperiencePacket.status is not product_experience_pass."]),
+    ...(["partial", "read_only"].includes(projectCustomizationPacket.status)
+      ? [`projectCustomizationPacket.status=${projectCustomizationPacket.status}.`]
+      : []),
     ...selectedExecutableTruthGaps.map(
       (gap) => `selected executable capability is not invoked: ${gap}.`,
     ),
@@ -7580,6 +8849,7 @@ function buildCoreLoopArtifact({
     governanceAgentResultPackets,
     conductorConsumptionEvidence,
     dynamicWorkflowDecisionRecord,
+    preDecisionOptionFrame,
     goalContractPacket,
     langGraphRunPacket,
     dynamicWorkflowRuntimePacket,
@@ -7591,6 +8861,8 @@ function buildCoreLoopArtifact({
     capabilityInvocationProbePacket,
     capabilityInvocationTruthPacket,
     capabilityInvocationPresentationPacket,
+    capabilityLedgerPacket,
+    projectCustomizationPacket,
     durableAgentLifecyclePacket,
     visibleMetaTheorySurfacePacket,
     userPerceptionPacket,
@@ -7601,10 +8873,15 @@ function buildCoreLoopArtifact({
     contextEngineeringBudget,
     fileChangeFactCard: {
       stage: "Fetch",
-      mutationPlanned: false,
-      changedFiles: [],
+      mutationPlanned: projectCustomizationPacket.execution.mutationRequired,
+      changedFiles: projectCustomizationPacket.execution.results.flatMap(
+        (result) => result.targetPaths ?? [],
+      ),
       consumer: "coreLoop structural run artifact",
-      overlapDecision: "no direct source mutation in the governed execution run itself",
+      overlapDecision:
+        projectCustomizationPacket.execution.appliedCount > 0
+          ? "project capability mutations used the shared project-mutation-session lock"
+          : "no project capability mutation was applied",
       dataShape:
         "The run writes a governed execution artifact and state events; source edits happen in separate implementation runs.",
       evidenceRef: "coreLoop.fetchPacket.capabilityDiscovery",
@@ -7616,6 +8893,7 @@ function buildCoreLoopArtifact({
       owner: orchestrationReport.orchestrationTaskBoardPacket?.synthesisOwner,
       weapon: "workerTaskPackets",
       workerTaskPackets,
+      projectCustomizationPacket,
       reviewOwner: orchestrationReport.reviewResult?.owner,
       verificationOwner: orchestrationReport.verificationResult?.owner,
       mergeOwner: "meta-conductor",
@@ -7628,11 +8906,20 @@ function buildCoreLoopArtifact({
     },
     executionResult: {
       stage: "Execution",
+      executionAllowed,
+      executionGate: executionAllowed ? "ready" : "blocked_by_plan_challenge",
       mainThreadRole: "scope_delegate_review_synthesize",
       executionOwnerMode: "workerTaskPackets",
       actualWorkerExecution,
-      executionClosure: actualWorkerExecution
+      actualProjectCapabilityMutation:
+        projectCustomizationPacket.execution.appliedCount > 0,
+      projectCapabilityMutation: projectCustomizationPacket.execution,
+      executionClosure: !executionAllowed
+        ? "blocked_by_plan_challenge"
+        : actualWorkerExecution
         ? "run_scoped_worker_executed"
+        : projectCustomizationPacket.execution.appliedCount > 0
+          ? "project_capability_materialized"
         : "worker_execution_blocked_or_not_required",
       workerTaskPacketCount: workerTaskPackets.length,
       workerResultPackets,
@@ -7910,13 +9197,41 @@ function buildWorkflowContractPackets({
   osTarget = "windows",
   outputLanguage = "zh-CN",
   languageSource = "latest_user_input",
+  planChallengeResponses = [],
+  planChallengeControl = null,
+  sharedUnderstandingConfirmed = false,
+  executionAuthorization = null,
+  priorChallengeState = null,
+  contradictionEvidence = [],
+  requestedSideEffectActions = [],
+  planChallengePreview = null,
 }) {
   const routeRuntime = normalizeRouteRuntime(runtime);
   const routeOs = normalizeOsTarget(osTarget);
   const projectRef = `meta-kim-governed-execution-${runId}`;
   const primaryDeliverable = `governed-execution-${runId}`;
   const timestamp = nowIso();
-  const choiceState = "no_branching_choice";
+  const planChallenge = planChallengePreview ?? buildPlanChallengeState({
+    task,
+    responses: planChallengeResponses,
+    control: planChallengeControl,
+    sharedUnderstandingConfirmed,
+    executionAuthorization,
+    priorChallengeState,
+    contradictionEvidence,
+    requestedSideEffectActions,
+    outputLanguage,
+  });
+  const challengePhase = planChallenge.planChallengeState.phase;
+  const requiresUserChoice =
+    planChallenge.planChallengeState.pendingUserChoice.status === "required_not_invoked";
+  const choiceState = challengePhase === "stopped_by_user"
+    ? "stopped_by_user"
+    : requiresUserChoice
+      ? "pending_user_choice"
+      : planChallenge.planChallengeState.active
+        ? "confirmed"
+        : "no_branching_choice";
   const normalizedCardPlanPacket = normalizeCardPlanForWorkflowContract(
     cardPlanPacket,
     outputLanguage,
@@ -8221,14 +9536,17 @@ function buildWorkflowContractPackets({
     complexity: "medium",
   };
   const preDecisionOptionFrame = {
-    decisionTrigger: "No unresolved branch-changing choice remains for this structural run artifact.",
+    decisionTrigger: requiresUserChoice
+      ? "A risk-adaptive plan challenge has one current user choice pending."
+      : "No unresolved branch-changing choice remains for this structural run artifact.",
     contentEvidence: "contentEvidencePacket",
     optionFrame: "Validate the governed execution artifact through the workflow-contract validator.",
     presentedBeforeDecision: true,
     userChoiceState: choiceState,
     builtFromContentEvidence: true,
     contentEvidenceRefs: ["contentEvidencePacket.decisionImpactMap[0]"],
-    unresolvedQuestions: [],
+    unresolvedQuestions: planChallenge.unresolvedQuestions,
+    planChallengeState: planChallenge.planChallengeState,
     candidateOptions: [
       {
         optionId: "single-workflow-artifact",
@@ -8256,11 +9574,19 @@ function buildWorkflowContractPackets({
       },
     ],
     recommendedDefault: "single-workflow-artifact",
-    requiresUserChoice: false,
-    nativeChoiceSurface: "request_user_input",
-    choiceGateSkip: choiceState,
-    skipSource: "no_branching_choice",
-    skipSafetyRationale: "Both candidate paths preserve the same safety boundary; no user answer changes route, scope, risk, owner, or acceptance for this structural artifact run.",
+    requiresUserChoice,
+    nativeChoiceSurface: requiresUserChoice
+      ? "host_adapter_required_not_invoked"
+      : "not_required",
+    choiceGateSkip: requiresUserChoice || choiceState === "confirmed" ? null : choiceState,
+    skipSource: requiresUserChoice
+      ? "pending_host_adapter"
+      : choiceState === "confirmed"
+        ? "user_confirmed"
+        : choiceState,
+    skipSafetyRationale: requiresUserChoice
+      ? "Execution remains blocked until the host adapter returns a trusted answer."
+      : "No unresolved plan-challenge choice permits execution beyond the recorded authorization boundary.",
     solutionChoiceState: choiceState,
     reviewOwner: "meta-prism",
   };
@@ -8607,6 +9933,10 @@ function buildWorkflowContractPackets({
       .slice(0, 2)
       .map((shell) => shell.deliveryShellId),
     blockedBy: strictPublicReadyBlockedBy,
+    confirmedDecisions: planChallenge.summaryData.confirmedDecisions,
+    openRisks: planChallenge.summaryData.openRisks,
+    nextStep: planChallenge.summaryData.nextStep,
+    visibleLines: planChallenge.summaryData.visibleLines,
   };
   const evolutionWritebackPacket = {
     ownerAssessment: "keep-existing",
@@ -8658,14 +9988,18 @@ function buildWorkflowContractPackets({
       intentPacketVersion: "v1",
     },
     intentGatePacket: {
-      ambiguitiesResolved: true,
-      requiresUserChoice: false,
+      ambiguitiesResolved: !requiresUserChoice,
+      requiresUserChoice,
       defaultAssumptions: ["This structural run has no branch-changing user choice remaining."],
-      pendingUserChoices: [],
+      pendingUserChoices: requiresUserChoice
+        ? [planChallenge.planChallengeState.pendingUserChoice.question.displayText]
+        : [],
       userLanguage: outputLanguage,
       languageSource,
-      nativeChoiceSurface: "request_user_input",
-      choiceGateSkip: choiceState,
+      nativeChoiceSurface: requiresUserChoice
+        ? "host_adapter_required_not_invoked"
+        : "not_required",
+      choiceGateSkip: requiresUserChoice || choiceState === "confirmed" ? null : choiceState,
       intentGatePacketVersion: "v1",
     },
     preDecisionOptionFrame,
@@ -8750,7 +10084,7 @@ async function readLatestRunId(stateDir) {
   return latestRunId == null ? null : validateRunId(latestRunId, "latest.json runId");
 }
 
-function selectExecutionRouteArgs({ task, runtime = "codex", os = "windows" }) {
+function selectExecutionRouteArgs({ task, runtime = "codex", os = "windows", runId = null, codexHostToolSchema = null }) {
   const routeRuntime = normalizeRouteRuntime(runtime);
   const routeOs = normalizeOsTarget(os);
   return [
@@ -8762,10 +10096,12 @@ function selectExecutionRouteArgs({ task, runtime = "codex", os = "windows" }) {
     routeOs,
     "--json",
     "--runner-compact",
+    ...(runId ? ["--run-id", runId] : []),
+    ...(codexHostToolSchema ? ["--codex-host-tool-schema", codexHostToolSchema] : []),
   ];
 }
 
-async function selectExecutionRouteInProcess({ task, runtime = "codex", os = "windows", spawnError = null }) {
+async function selectExecutionRouteInProcess({ task, runtime = "codex", os = "windows", runId = null, codexHostToolSchema = null, spawnError = null }) {
   const routeRuntime = normalizeRouteRuntime(runtime);
   const routeOs = normalizeOsTarget(os);
   const originalArgv = process.argv;
@@ -8777,7 +10113,7 @@ async function selectExecutionRouteInProcess({ task, runtime = "codex", os = "wi
     process.argv = [
       process.execPath,
       SELECT_EXECUTION_ROUTE_SCRIPT,
-      ...selectExecutionRouteArgs({ task, runtime: routeRuntime, os: routeOs }),
+      ...selectExecutionRouteArgs({ task, runtime: routeRuntime, os: routeOs, runId, codexHostToolSchema }),
     ];
     console.log = (...args) => stdout.push(args.join(" "));
     console.error = (...args) => stderr.push(args.join(" "));
@@ -8814,10 +10150,10 @@ async function selectExecutionRouteInProcess({ task, runtime = "codex", os = "wi
   }
 }
 
-async function selectExecutionRoute({ task, runtime = "codex", os = "windows" }) {
+async function selectExecutionRoute({ task, runtime = "codex", os = "windows", runId = null, codexHostToolSchema = null }) {
   const routeRuntime = normalizeRouteRuntime(runtime);
   const routeOs = normalizeOsTarget(os);
-  const args = selectExecutionRouteArgs({ task, runtime: routeRuntime, os: routeOs });
+  const args = selectExecutionRouteArgs({ task, runtime: routeRuntime, os: routeOs, runId, codexHostToolSchema });
   const result = spawnSync(
     process.execPath,
     [SELECT_EXECUTION_ROUTE_SCRIPT, ...args],
@@ -8833,6 +10169,8 @@ async function selectExecutionRoute({ task, runtime = "codex", os = "windows" })
       task,
       runtime: routeRuntime,
       os: routeOs,
+      runId,
+      codexHostToolSchema,
       spawnError: result.error,
     });
   }
@@ -9007,7 +10345,26 @@ function buildRouteDrivenWorkerTasks({ runId, routeResult, task }) {
     const taskPacketId = `${runId}-${lane.laneId ?? `route-${index + 1}`}`;
     const roleDisplayName = lane.roleDisplayName ?? draft.roleDisplayName ?? "operations";
     const ownerAgent = lane.ownerAgent ?? draft.ownerAgent ?? route?.owner ?? "meta-conductor";
+    const ownerSource =
+      lane.ownerSource ??
+      draft.codexSpawnBinding?.ownerSource ??
+      draft.ownerSource ??
+      route?.ownerBinding?.source ??
+      "owner_source_unresolved";
+    const ownerSourceRef =
+      lane.sourceRef ??
+      draft.codexSpawnBinding?.sourceRef ??
+      draft.sourceRef ??
+      route?.ownerBinding?.providerEvidenceRef ??
+      null;
     const ownerKind = lane.ownerKind ?? draft.ownerKind ?? "agent";
+    const ownerBindingMode =
+      draft.codexSpawnBinding?.ownerBindingMode ??
+      draft.ownerBindingMode ??
+      "run_scoped_owner_contract";
+    const nativeAgentType = ownerBindingMode === "native_custom_agent"
+      ? draft.codexSpawnBinding?.nativeAgentType ?? draft.nativeAgentType ?? null
+      : null;
     const isVerification = ["test", "review"].includes(roleDisplayName);
     const isEvolution = lane.laneId === "evolution-signal";
     return {
@@ -9018,7 +10375,12 @@ function buildRouteDrivenWorkerTasks({ runId, routeResult, task }) {
       routeId,
       owner: ownerAgent,
       ownerAgent,
+      ownerSource,
+      ownerSourceRef,
       ownerKind,
+      ownerBindingMode,
+      nativeAgentType,
+      ownerDefinition: draft.codexSpawnBinding?.ownerDefinition ?? null,
       ownerMode: "existing-owner",
       executionMode: isVerification || isEvolution ? "verification_execution" : "primary_execution",
       businessRoleId: roleDisplayName,
@@ -9027,6 +10389,7 @@ function buildRouteDrivenWorkerTasks({ runId, routeResult, task }) {
       roleDisplayName,
       roleInstanceId: lane.laneId ?? draft.roleInstanceId ?? `route-${index + 1}`,
       runtimeInstanceAlias: "",
+      runtimeInvocationPlan: draft.codexSpawnBinding ?? null,
       coreProblem: lane.purpose ?? draft.purpose ?? "Run the selected route lane.",
       todayTask: lane.purpose ?? draft.purpose ?? "Run the selected route lane.",
       nonGoals: [
@@ -9126,10 +10489,10 @@ function buildRouteDrivenWorkerTasks({ runId, routeResult, task }) {
   });
 }
 
-async function buildRouteDrivenOrchestration({ task, runId, runtime = "codex", osTarget = "windows" }) {
+async function buildRouteDrivenOrchestration({ task, runId, runtime = "codex", osTarget = "windows", codexHostToolSchema = null }) {
   const routeRuntime = normalizeRouteRuntime(runtime);
   const routeOs = normalizeOsTarget(osTarget);
-  const routeResult = await selectExecutionRoute({ task, runtime: routeRuntime, os: routeOs });
+  const routeResult = await selectExecutionRoute({ task, runtime: routeRuntime, os: routeOs, runId, codexHostToolSchema });
   const route = routeResult.recommendedRoute;
   const providerList = providerListFromRoute(routeResult);
   const workerTaskPackets = buildRouteDrivenWorkerTasks({ runId, routeResult, task });
@@ -9308,19 +10671,25 @@ export async function runMetaTheoryGovernedExecution({
   hostInvocationEvidence = process.env.META_KIM_HOST_INVOCATION_EVIDENCE ?? null,
   hostAssistantMessageEvidence = process.env.META_KIM_HOST_ASSISTANT_MESSAGE_EVIDENCE ?? null,
   nativeChoiceEvidence = process.env.META_KIM_NATIVE_CHOICE_EVIDENCE ?? null,
+  codexHostToolSchema = process.env.META_KIM_CODEX_HOST_TOOL_SCHEMA ?? null,
   nativeChoiceEvidenceTrusted = false,
   invokeCapabilityProbes = false,
+  projectRoot = process.env.META_KIM_CALLER_CWD || process.cwd(),
+  projectCapabilityMutationMode = "auto",
+  planChallengeResponses = [],
+  planChallengeControl = null,
+  sharedUnderstandingConfirmed = false,
+  executionAuthorization = null,
+  planChallengeContradictionEvidence = [],
+  requestedSideEffectActions = [],
+  hostDecisionEvidenceVerifier = null,
+  previousPlanChallengeRunId = null,
 } = {}) {
   const normalizedTask = normalizeTask(task);
   if (!normalizedTask) {
     throw new Error("Missing task for governed meta-theory execution.");
   }
   const taskFingerprint = stableId("task", normalizedTask);
-  const requestedRunId = runId == null ? null : String(runId);
-  const effectiveRunId = validateRunId(
-    requestedRunId ?? uniqueRunId(taskFingerprint),
-    requestedRunId == null ? "generated runId" : "requested runId",
-  );
   const languageResolution = resolveOutputLanguage({
     explicitLanguage: outputLanguage,
     cliLanguage: cliOutputLanguage,
@@ -9329,6 +10698,92 @@ export async function runMetaTheoryGovernedExecution({
   const resolvedOutputLanguage = languageResolution.language;
   const outputDir = artifactDir ? path.resolve(artifactDir) : path.resolve(stateDir);
   await fs.mkdir(outputDir, { recursive: true });
+  const governedSideEffectActions = [
+    ...(Array.isArray(requestedSideEffectActions) ? requestedSideEffectActions : []),
+  ];
+  const requestedPreviousRunId = previousPlanChallengeRunId == null
+    ? null
+    : validateRunId(String(previousPlanChallengeRunId), "previous plan challenge runId");
+  const continuationCandidate = requestedPreviousRunId == null
+    ? null
+    : await loadPlanChallengeContinuationCandidate({
+        artifactPath: resolveOutputFile(outputDir, `${requestedPreviousRunId}.json`),
+        previousRunId: requestedPreviousRunId,
+        taskFingerprint,
+      });
+  const candidatePriorChallengeState = continuationCandidate
+    ? { ...continuationCandidate, trusted: true }
+    : null;
+  const initialPlanChallengePreview = buildPlanChallengeState({
+    task: normalizedTask,
+    priorChallengeState: candidatePriorChallengeState,
+    contradictionEvidence: planChallengeContradictionEvidence,
+    requestedSideEffectActions: governedSideEffectActions,
+    outputLanguage: resolvedOutputLanguage,
+  });
+  let effectivePlanChallengeResponses = [];
+  let effectivePlanChallengeControl = null;
+  let effectiveSharedUnderstandingConfirmed = false;
+  let effectiveExecutionAuthorization = null;
+  let trustedPriorChallengeState = null;
+  if (typeof hostDecisionEvidenceVerifier === "function") {
+    const verifiedDecision = await hostDecisionEvidenceVerifier({
+      task: normalizedTask,
+      previousRunId: requestedPreviousRunId,
+      currentPhase: initialPlanChallengePreview.planChallengeState.phase,
+      pendingUserChoice: initialPlanChallengePreview.planChallengeState.pendingUserChoice,
+      untrustedInput: {
+        responses: planChallengeResponses,
+        control: planChallengeControl,
+        sharedUnderstandingConfirmed,
+        executionAuthorization,
+      },
+    });
+    const boundDecision = bindVerifiedHostPlanChallengeDecision({
+      verifiedDecision,
+      preview: initialPlanChallengePreview,
+      continuationCandidate,
+    });
+    if (boundDecision.accepted) {
+      effectivePlanChallengeResponses = boundDecision.responses;
+      effectivePlanChallengeControl = boundDecision.control;
+      effectiveSharedUnderstandingConfirmed = boundDecision.sharedUnderstandingConfirmed;
+      effectiveExecutionAuthorization = boundDecision.executionAuthorization;
+      trustedPriorChallengeState = boundDecision.priorChallengeState;
+    } else if (requestedPreviousRunId != null) {
+      throw new Error(`Plan challenge continuation rejected: ${boundDecision.reason}.`);
+    }
+  } else if (requestedPreviousRunId != null) {
+    throw new Error(
+      "Plan challenge continuation requires a current host decision evidence verifier.",
+    );
+  }
+  const planChallengePreview = buildPlanChallengeState({
+    task: normalizedTask,
+    priorChallengeState: trustedPriorChallengeState,
+    responses: effectivePlanChallengeResponses,
+    control: effectivePlanChallengeControl,
+    sharedUnderstandingConfirmed: effectiveSharedUnderstandingConfirmed,
+    executionAuthorization: effectiveExecutionAuthorization,
+    contradictionEvidence: planChallengeContradictionEvidence,
+    requestedSideEffectActions: governedSideEffectActions,
+    outputLanguage: resolvedOutputLanguage,
+  });
+  const executionAllowed = planChallengePreview.planChallengeState.executionAllowed === true;
+  const requestedProjectCapabilityMutationMode =
+    normalizedProjectCapabilityMutationMode(projectCapabilityMutationMode);
+  const resolvedProjectCapabilityMutationMode =
+    !executionAllowed
+      ? "read_only"
+      : requestedProjectCapabilityMutationMode;
+  const requestedRunId = runId == null ? null : String(runId);
+  const effectiveRunId = validateRunId(
+    requestedRunId ?? uniqueRunId(taskFingerprint),
+    requestedRunId == null ? "generated runId" : "requested runId",
+  );
+  if (requestedPreviousRunId != null && effectiveRunId === requestedPreviousRunId) {
+    throw new Error("A continuation run must use a new runId instead of overwriting its prior artifact.");
+  }
   const jsonPath = resolveOutputFile(outputDir, `${effectiveRunId}.json`);
   const markdownFileName = `${effectiveRunId}.${resolvedOutputLanguage}.md`;
   const markdownPath = resolveOutputFile(outputDir, markdownFileName);
@@ -9382,6 +10837,7 @@ export async function runMetaTheoryGovernedExecution({
     runId: effectiveRunId,
     runtime: routeRuntime,
     osTarget: routeOs,
+    codexHostToolSchema,
   });
   const capabilityInventoryBus = await writeCapabilityInventory(
     path.join(stateDir, "capability-inventory.json"),
@@ -9421,7 +10877,7 @@ export async function runMetaTheoryGovernedExecution({
     decisionResults,
     approvalEvidence,
     approvalPacket,
-    applyWriteback,
+    applyWriteback: applyWriteback && executionAllowed,
     canonicalRoot,
   });
   await publishProgress(
@@ -9497,6 +10953,9 @@ export async function runMetaTheoryGovernedExecution({
     ["candidate_only", "approved-for-writeback", "none-with-reason"].includes(writebackFlow.status)
       ? "pass"
       : "partial";
+  if (!executionAllowed) {
+    artifactStatus = "partial";
+  }
   let conversationNotice = buildConversationNotice({
     orchestrationReport,
     runtimeEvidence,
@@ -9556,36 +11015,50 @@ export async function runMetaTheoryGovernedExecution({
   const panelContractDefinition = await readJson(RUN_REPORT_PANEL_CONTRACT_PATH);
   const aiReadableStandards = await readJson(AI_READABLE_PRODUCT_STANDARDS_PATH);
   const agentTeamsPlaybookProvider = await resolveAgentTeamsPlaybookProvider(routeRuntime);
-  const coreLoop = buildCoreLoopArtifact({
-    runId: effectiveRunId,
-    task: normalizedTask,
-    orchestrationReport,
-    capabilityInventoryBus,
-    decisionResults,
-    runtimeEvidence,
-    writebackFlow,
-    artifactStatus,
-    cardPlanPacket,
-    stageOperationPlan,
-    conversationNotice,
-    userExperienceNotice,
-    analytics,
-    hostVisibleSubagents,
-    hostInvocationEvidence,
-    nativeChoiceEvidence,
-    nativeChoiceEvidenceTrusted,
-    agentTeamsPlaybookProvider,
-    invokeCapabilityProbes,
-    runtime: routeRuntime,
-    osTarget: routeOs,
-    outputLanguage: resolvedOutputLanguage,
-  });
+  const projectCapabilityCandidateRoot = mkdtempSync(
+    path.join(os.tmpdir(), "meta-kim-project-capability-candidates-"),
+  );
+  let coreLoop;
+  try {
+    coreLoop = buildCoreLoopArtifact({
+      runId: effectiveRunId,
+      task: normalizedTask,
+      orchestrationReport,
+      capabilityInventoryBus,
+      decisionResults,
+      runtimeEvidence,
+      writebackFlow,
+      artifactStatus,
+      cardPlanPacket,
+      stageOperationPlan,
+      conversationNotice,
+      userExperienceNotice,
+      analytics,
+      hostVisibleSubagents,
+      hostInvocationEvidence,
+      nativeChoiceEvidence,
+      nativeChoiceEvidenceTrusted,
+      agentTeamsPlaybookProvider,
+      invokeCapabilityProbes,
+      projectRoot: path.resolve(projectRoot),
+      projectCapabilityMutationMode: resolvedProjectCapabilityMutationMode,
+      projectCapabilityCandidateRoot,
+      runtime: routeRuntime,
+      osTarget: routeOs,
+      outputLanguage: resolvedOutputLanguage,
+      executionAllowed,
+      preDecisionOptionFrame: planChallengePreview,
+    });
+  } finally {
+    rmSync(projectCapabilityCandidateRoot, { recursive: true, force: true });
+  }
   artifactStatus =
     artifactStatus === "pass" &&
     runtimeEvidence.status === "pass" &&
     coreLoop.runtimeInvocationPlanPacket.status === "pass" &&
     coreLoop.hostInvocationRequestPacket.status === "pass" &&
     coreLoop.capabilityInvocationTruthPacket.status === "pass" &&
+    !["partial", "read_only"].includes(coreLoop.projectCustomizationPacket.status) &&
     coreLoop.productExperiencePacket.status === "product_experience_pass"
       ? "pass"
       : "partial";
@@ -9602,6 +11075,9 @@ export async function runMetaTheoryGovernedExecution({
           : null,
         coreLoop.capabilityInvocationTruthPacket.status !== "pass"
           ? `invocation_truth=${coreLoop.capabilityInvocationTruthPacket.status}`
+          : null,
+        ["partial", "read_only"].includes(coreLoop.projectCustomizationPacket.status)
+          ? `project_customization=${coreLoop.projectCustomizationPacket.status}`
           : null,
         coreLoop.productExperiencePacket.status !== "product_experience_pass"
           ? `product_experience=${coreLoop.productExperiencePacket.status}`
@@ -9635,6 +11111,10 @@ export async function runMetaTheoryGovernedExecution({
           : "selected_not_invoked",
       providerBindings,
       providerPresentationSummary: coreLoop.capabilityInvocationPresentationPacket.userSummary,
+      capabilityLedgerLines: coreLoop.capabilityLedgerPacket.families.map(
+        (family) => family.displayLine,
+      ),
+      projectCustomizationSummary: coreLoop.capabilityLedgerPacket.projectCustomization.summary,
       meshMode:
         coreLoop.capabilityInvocationPresentationPacket.executionState === "completed"
           ? "exact_binding_observed"
@@ -9701,6 +11181,8 @@ export async function runMetaTheoryGovernedExecution({
     visibleMetaTheorySurfacePacket: coreLoop.visibleMetaTheorySurfacePacket,
     capabilityInvocationTruthPacket: coreLoop.capabilityInvocationTruthPacket,
     capabilityInvocationPresentationPacket: coreLoop.capabilityInvocationPresentationPacket,
+    capabilityLedgerPacket: coreLoop.capabilityLedgerPacket,
+    projectCustomizationPacket: coreLoop.projectCustomizationPacket,
     productExperiencePacket: coreLoop.productExperiencePacket,
     markdownPath,
   });
@@ -9719,6 +11201,8 @@ export async function runMetaTheoryGovernedExecution({
     visibleMetaTheorySurfacePacket: coreLoop.visibleMetaTheorySurfacePacket,
     capabilityInvocationTruthPacket: coreLoop.capabilityInvocationTruthPacket,
     capabilityInvocationPresentationPacket: coreLoop.capabilityInvocationPresentationPacket,
+    capabilityLedgerPacket: coreLoop.capabilityLedgerPacket,
+    projectCustomizationPacket: coreLoop.projectCustomizationPacket,
     paths: {
       json: jsonPath,
       markdown: markdownPath,
@@ -9739,7 +11223,19 @@ export async function runMetaTheoryGovernedExecution({
     osTarget: routeOs,
     outputLanguage: resolvedOutputLanguage,
     languageSource: languageResolution.source,
+    planChallengeResponses: effectivePlanChallengeResponses,
+    planChallengeControl: effectivePlanChallengeControl,
+    sharedUnderstandingConfirmed: effectiveSharedUnderstandingConfirmed,
+    executionAuthorization: effectiveExecutionAuthorization,
+    priorChallengeState: trustedPriorChallengeState,
+    contradictionEvidence: planChallengeContradictionEvidence,
+    requestedSideEffectActions: governedSideEffectActions,
+    planChallengePreview,
   });
+  coreLoop = {
+    ...coreLoop,
+    preDecisionOptionFrame: workflowContractPackets.preDecisionOptionFrame,
+  };
   const artifact = {
     schemaVersion: 1,
     runId: effectiveRunId,
@@ -9790,6 +11286,8 @@ export async function runMetaTheoryGovernedExecution({
     capabilityInvocationProbePacket: coreLoop.capabilityInvocationProbePacket,
     capabilityInvocationTruthPacket: coreLoop.capabilityInvocationTruthPacket,
     capabilityInvocationPresentationPacket: coreLoop.capabilityInvocationPresentationPacket,
+    capabilityLedgerPacket: coreLoop.capabilityLedgerPacket,
+    projectCustomizationPacket: coreLoop.projectCustomizationPacket,
     durableAgentLifecyclePacket: coreLoop.durableAgentLifecyclePacket,
     visibleMetaTheorySurfacePacket: coreLoop.visibleMetaTheorySurfacePacket,
     userPerceptionPacket: coreLoop.userPerceptionPacket,
@@ -9817,6 +11315,8 @@ export async function runMetaTheoryGovernedExecution({
       capabilityInvocationProbePacket: coreLoop.capabilityInvocationProbePacket,
       capabilityInvocationTruthPacket: coreLoop.capabilityInvocationTruthPacket,
       capabilityInvocationPresentationPacket: coreLoop.capabilityInvocationPresentationPacket,
+      capabilityLedgerPacket: coreLoop.capabilityLedgerPacket,
+      projectCustomizationPacket: coreLoop.projectCustomizationPacket,
       durableAgentLifecyclePacket: coreLoop.durableAgentLifecyclePacket,
       visibleMetaTheorySurfacePacket: coreLoop.visibleMetaTheorySurfacePacket,
       userPerceptionPacket: coreLoop.userPerceptionPacket,
@@ -9998,6 +11498,7 @@ function positionalTask(fallback = null) {
         "--host-visible-subagents",
         "--host-invocation-evidence",
         "--native-choice-evidence",
+        "--codex-host-tool-schema",
         "--runtime",
         "--os",
         "--lang",
@@ -10030,6 +11531,7 @@ function rawPositionals() {
         "--host-visible-subagents",
         "--host-invocation-evidence",
         "--native-choice-evidence",
+        "--codex-host-tool-schema",
         "--runtime",
         "--os",
         "--lang",
@@ -10150,8 +11652,19 @@ async function main() {
       "--native-choice-evidence",
       process.env.META_KIM_NATIVE_CHOICE_EVIDENCE ?? null,
     ),
+    codexHostToolSchema: argValue(
+      "--codex-host-tool-schema",
+      process.env.META_KIM_CODEX_HOST_TOOL_SCHEMA ?? null,
+    ),
     nativeChoiceEvidenceTrusted: false,
     invokeCapabilityProbes: process.argv.includes("--invoke-capability-probes"),
+    projectRoot: process.env.META_KIM_CALLER_CWD || process.cwd(),
+    projectCapabilityMutationMode:
+      process.argv.some((arg) =>
+        ["--dry-run", "--check", "--read-only", "--no-project-capability-writes"].includes(arg),
+      )
+        ? "read_only"
+        : "auto",
   });
   if (report.conversationNotice.emitted && !report.conversationNotice.progressStreamed) {
     process.stderr.write(`${report.conversationNotice.text}\n`);
@@ -10159,10 +11672,33 @@ async function main() {
   process.stdout.write(
     `${JSON.stringify(
       {
-        status: report.status,
+        status:
+          report.preDecisionOptionFrame?.planChallengeState?.pendingUserChoice?.status ===
+          "required_not_invoked"
+            ? "pending_user_choice"
+            : report.preDecisionOptionFrame?.planChallengeState?.phase === "stopped_by_user"
+              ? "stopped_by_user"
+              : report.status,
         runId: report.runId,
+        executionAllowed:
+          report.preDecisionOptionFrame?.planChallengeState?.executionAllowed ?? true,
+        pendingUserChoice:
+          report.preDecisionOptionFrame?.planChallengeState?.pendingUserChoice ?? null,
+        challengeSummary: report.summaryPacket
+          ? {
+              confirmedDecisionCount: report.summaryPacket.confirmedDecisions?.length ?? 0,
+              openRiskCount: report.summaryPacket.openRisks?.length ?? 0,
+              nextStep: report.summaryPacket.nextStep ?? null,
+              visibleLines: report.summaryPacket.visibleLines ?? [],
+            }
+          : null,
+        stopReason:
+          report.preDecisionOptionFrame?.planChallengeState?.stopReason ?? null,
         runtimeProjection: report.runtimeProjectionEvidence.status,
         writeback: report.wardenWritebackFlow.status,
+        projectCustomization: report.projectCustomizationPacket.status,
+        projectCapabilityWrites:
+          report.projectCustomizationPacket.execution?.appliedCount ?? 0,
         report: relative(report.paths.markdown),
         temporaryOutput: temporaryOutputRoot
           ? {

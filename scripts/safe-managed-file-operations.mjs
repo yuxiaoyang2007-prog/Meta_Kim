@@ -622,6 +622,7 @@ export async function withSafeManagedFileLock({
   lockKey = "managed-files",
   controlDirRel = ".meta-kim/transactions",
   injectPauseAfterLockMs = Number(process.env.META_KIM_TEST_PAUSE_SESSION_LOCK_MS || 0),
+  injectPauseReleaseFile = process.env.META_KIM_TEST_SESSION_LOCK_RELEASE_FILE || "",
 }, callback) {
   if (typeof callback !== "function") {
     return resultWithGuidance({ ok: false, status: "blocked", reason: "invalid_lock_callback" });
@@ -644,6 +645,15 @@ export async function withSafeManagedFileLock({
   try {
     if (injectPauseAfterLockMs > 0) {
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, injectPauseAfterLockMs);
+    }
+    if (injectPauseReleaseFile) {
+      const deadline = Date.now() + 30_000;
+      while (!existsSync(injectPauseReleaseFile)) {
+        if (Date.now() >= deadline) {
+          throw new Error("Timed out waiting for the test session-lock release signal");
+        }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      }
     }
     const value = await callback();
     return resultWithGuidance({ ok: true, status: "committed", value });

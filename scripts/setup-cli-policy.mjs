@@ -6,7 +6,7 @@ export const SETUP_BOOLEAN_ARGS = Object.freeze([
 ]);
 
 export const SETUP_VALUE_ARGS = Object.freeze([
-  "--lang", "--skills", "--targets", "--project-dir", "--deploy-dir", "--target-dir",
+  "--lang", "--skills", "--targets", "--scope", "--project-dir", "--deploy-dir", "--target-dir",
 ]);
 
 export class SetupCliPolicyError extends Error {
@@ -36,6 +36,11 @@ export function validateSetupCliArgs(argv = []) {
       const value = normalizedArgv[index + 1];
       if (typeof value !== "string" || !value.trim() || value.startsWith("--")) {
         throw new SetupCliPolicyError(`missing value for ${arg}`);
+      }
+      if (arg === "--scope" && !["global", "project"].includes(value)) {
+        throw new SetupCliPolicyError(
+          `invalid value for --scope: ${value} (expected global or project)`,
+        );
       }
       index += 1;
       continue;

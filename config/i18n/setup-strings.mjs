@@ -302,23 +302,23 @@ ${r ? `Raw error: ${r}` : ""}
     depSummarySome: (ok, total) =>
       `Only ${ok}/${total} dependencies verified — re-run with --update`,
     syncHeading: "Cross-Runtime Sync Check",
-    syncClaudeAgents: (n) => `Claude Code agents: ${n}/${META_AGENTS.length} .md files`,
+    syncClaudeAgents: (n, total) => `Claude Code agents: ${n}/${total} .md files`,
     syncClaudeSkills: "Claude Code skills/meta-theory/SKILL.md",
     syncClaudeHooks: (n) => `Claude Code hooks: ${n} scripts`,
     syncClaudeProjectHooksMigrated:
       "Claude Code project hooks migrated to global hooks; repo-local .claude/hooks is not required",
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
-    syncCodexAgents: (n, total = META_AGENTS.length) =>
+    syncCodexAgents: (n, total) =>
       `Codex agents: ${n}/${total} .toml files`,
     syncCodexSkills: "Codex .agents/skills/meta-theory/SKILL.md",
     syncCodexSkillsGlobal:
       "Codex project skill mirror: .agents/skills/meta-theory/SKILL.md",
-    syncOpenclawWorkspaces: (n) =>
-      `OpenClaw workspaces: ${n}/${META_AGENTS.length} agents — each folder has the 9 required .md files (BOOT, SOUL, …)`,
+    syncOpenclawWorkspaces: (n, total) =>
+      `OpenClaw workspaces: ${n}/${total} agents — each folder has the 9 required .md files (BOOT, SOUL, …)`,
     syncOpenclawSkill: "OpenClaw shared meta-theory",
     syncSharedSkills: "Shared skills/meta-theory/SKILL.md",
-    syncCursorAgents: (n) => `Cursor agents: ${n}/${META_AGENTS.length} .md files`,
+    syncCursorAgents: (n, total) => `Cursor agents: ${n}/${total} .md files`,
     syncCursorSkills: "Cursor skills/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
     mcpRuntimeProjectOnly: (p) =>
@@ -661,6 +661,14 @@ Primary cause: use the first exact error printed above. Apply the guidance below
     projectDeployAsk: "Project directory updates",
     projectDeployProtectionNote:
       "Existing local settings and MCP/hook configs are preserved and merged; only selected directories are touched.",
+    globalManagedProjectRefreshInfo: (n) =>
+      `Detected ${n} managed project${n === 1 ? "" : "s"}. This operation refreshes the global installation and those existing projects with each project's saved runtime targets, using merge/delta updates. It creates no new project projection and never overwrites runtime-sedimented or user-owned files.`,
+    managedProjectRejectedHeading: (n) => `${n} existing project target${n === 1 ? " was" : "s were"} not refreshed:`,
+    managedProjectRejectedDetail: (source, reason) => `Source: ${source}. Reason: ${reason}.`,
+    managedProjectRejectedRepair: "Repair or remove the listed saved/registry target, or run project bootstrap explicitly to recreate a valid manifest, then retry.",
+    managedProjectRejectedStep: "Validate explicit existing project targets",
+    managedProjectRejectedSources: { explicit_project_dirs: "explicit --project-dir", saved_project_dirs: "saved project list", project_registry: "user-level project registry", current_working_directory: "current working directory" },
+    managedProjectRejectedReasons: { target_missing: "directory does not exist", unsafe_project_root: "project root is not a safe real directory", unsafe_manifest_path: "manifest path crosses a symlink or Junction", manifest_missing_or_invalid: "managed project manifest is missing or invalid", invalid_active_targets: "saved runtime targets are missing or unsupported" },
     projectDeployInteractiveHint:
       "Set up a saved project list once, then update every saved project together on future runs.",
     projectDeployPathEntryHint:
@@ -941,23 +949,23 @@ ${r ? `原始错误：${r}` : ""}
     depSummarySome: (ok, total) =>
       `仅 ${ok}/${total} 个依赖验证通过 — 请使用 --update 重新安装`,
     syncHeading: "同步状态检查",
-    syncClaudeAgents: (n) => `Claude Code 智能体: ${n}/${META_AGENTS.length} .md 文件`,
+    syncClaudeAgents: (n, total) => `Claude Code 智能体: ${n}/${total} .md 文件`,
     syncClaudeSkills: "Claude Code 技能/meta-theory/SKILL.md",
     syncClaudeHooks: (n) => `Claude Code 钩子: ${n} 个脚本`,
     syncClaudeProjectHooksMigrated:
       "Claude Code 项目级 hooks 已迁移到全局；不再要求仓库内 .claude/hooks",
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
-    syncCodexAgents: (n, total = META_AGENTS.length) =>
+    syncCodexAgents: (n, total) =>
       `Codex 智能体: ${n}/${total} .toml 文件`,
     syncCodexSkills: "Codex .agents/skills/meta-theory/SKILL.md",
     syncCodexSkillsGlobal:
       "Codex 项目技能镜像：.agents/skills/meta-theory/SKILL.md",
-    syncOpenclawWorkspaces: (n) =>
-      `OpenClaw 工作区：${n}/${META_AGENTS.length} 个智能体，各目录 9 个必备 Markdown 已齐（含 BOOT、SOUL 等；不含子文件夹里的额外文件）`,
+    syncOpenclawWorkspaces: (n, total) =>
+      `OpenClaw 工作区：${n}/${total} 个智能体，各目录 9 个必备 Markdown 已齐（含 BOOT、SOUL 等；不含子文件夹里的额外文件）`,
     syncOpenclawSkill: "OpenClaw 共享 meta-theory",
     syncSharedSkills: "共享技能/meta-theory/SKILL.md",
-    syncCursorAgents: (n) => `Cursor 智能体: ${n}/${META_AGENTS.length} .md 文件`,
+    syncCursorAgents: (n, total) => `Cursor 智能体: ${n}/${total} .md 文件`,
     syncCursorSkills: "Cursor 技能/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
     mcpRuntimeProjectOnly: (p) =>
@@ -1288,6 +1296,14 @@ ${r ? `原始错误：${r}` : ""}
     projectDeployAsk: "项目目录更新",
     projectDeployProtectionNote:
       "已有本地 settings、MCP 和 hook 配置会保留并合并；只会更新你选择的目录。",
+    globalManagedProjectRefreshInfo: (n) =>
+      `检测到 ${n} 个已受管项目。本次会同时刷新全局安装和这些现有项目，并按每个项目已保存的运行时目标执行合并/增量更新；不会新建项目投影，也不会覆盖项目沉淀能力或用户文件。`,
+    managedProjectRejectedHeading: (n) => `有 ${n} 个既有项目目标未刷新：`,
+    managedProjectRejectedDetail: (source, reason) => `来源：${source}。原因：${reason}。`,
+    managedProjectRejectedRepair: "请修复或移除上述已保存/registry 目标，或显式运行项目 bootstrap 重建有效 manifest，然后重试。",
+    managedProjectRejectedStep: "验证显式既有项目目标",
+    managedProjectRejectedSources: { explicit_project_dirs: "显式 --project-dir", saved_project_dirs: "已保存项目列表", project_registry: "用户级项目 registry", current_working_directory: "当前工作目录" },
+    managedProjectRejectedReasons: { target_missing: "目录不存在", unsafe_project_root: "项目根目录不是安全的真实目录", unsafe_manifest_path: "manifest 路径经过 symlink 或 Junction", manifest_missing_or_invalid: "受管项目 manifest 缺失或无效", invalid_active_targets: "已保存的运行时目标为空或不受支持" },
     projectDeployInteractiveHint:
       "先配置一次常用项目目录，后续更新时可一次更新所有已保存项目。",
     projectDeployPathEntryHint:
@@ -1574,23 +1590,23 @@ ${r ? `生エラー：${r}` : ""}
     depSummarySome: (ok, total) =>
       `${ok}/${total} の依存関係のみ検証 — --update で再インストールしてください`,
     syncHeading: "同期状態チェック",
-    syncClaudeAgents: (n) => `Claude Code エージェント: ${n}/${META_AGENTS.length} .md ファイル`,
+    syncClaudeAgents: (n, total) => `Claude Code エージェント: ${n}/${total} .md ファイル`,
     syncClaudeSkills: "Claude Code スキル/meta-theory/SKILL.md",
     syncClaudeHooks: (n) => `Claude Code フック: ${n} スクリプト`,
     syncClaudeProjectHooksMigrated:
       "Claude Code プロジェクト hooks はグローバルへ移行済みです。repo 内 .claude/hooks は不要です",
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
-    syncCodexAgents: (n, total = META_AGENTS.length) =>
+    syncCodexAgents: (n, total) =>
       `Codex エージェント: ${n}/${total} .toml ファイル`,
     syncCodexSkills: "Codex .agents/skills/meta-theory/SKILL.md",
     syncCodexSkillsGlobal:
       "Codex プロジェクトスキルミラー：.agents/skills/meta-theory/SKILL.md",
-    syncOpenclawWorkspaces: (n) =>
-      `OpenClaw ワークスペース: ${n}/${META_AGENTS.length} エージェント — 各フォルダに必須の .md 9 件（BOOT、SOUL など）`,
+    syncOpenclawWorkspaces: (n, total) =>
+      `OpenClaw ワークスペース: ${n}/${total} エージェント — 各フォルダに必須の .md 9 件（BOOT、SOUL など）`,
     syncOpenclawSkill: "OpenClaw 共有 meta-theory",
     syncSharedSkills: "共有スキル/meta-theory/SKILL.md",
-    syncCursorAgents: (n) => `Cursor エージェント: ${n}/${META_AGENTS.length} .md ファイル`,
+    syncCursorAgents: (n, total) => `Cursor エージェント: ${n}/${total} .md ファイル`,
     syncCursorSkills: "Cursor スキル/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
     mcpRuntimeProjectOnly: (p) =>
@@ -1942,6 +1958,14 @@ ${r ? `生エラー：${r}` : ""}
     projectDeployAsk: "プロジェクトディレクトリ更新",
     projectDeployProtectionNote:
       "既存のローカル settings、MCP、hook 設定は保持してマージします。選択したディレクトリだけを更新します。",
+    globalManagedProjectRefreshInfo: (n) =>
+      `管理済みプロジェクトを ${n} 件検出しました。今回はグローバル環境と既存プロジェクトを、各プロジェクトに保存されたランタイム対象でマージ／差分更新します。新しいプロジェクト投影は作成せず、プロジェクトに定着した機能やユーザーファイルを上書きしません。`,
+    managedProjectRejectedHeading: (n) => `${n} 件の既存プロジェクト対象を更新できませんでした：`,
+    managedProjectRejectedDetail: (source, reason) => `参照元：${source}。理由：${reason}。`,
+    managedProjectRejectedRepair: "表示された保存済み／registry 対象を修復または削除するか、project bootstrap を明示的に実行して有効な manifest を再作成してから再試行してください。",
+    managedProjectRejectedStep: "明示された既存プロジェクト対象を検証",
+    managedProjectRejectedSources: { explicit_project_dirs: "明示的な --project-dir", saved_project_dirs: "保存済みプロジェクト一覧", project_registry: "ユーザーレベル project registry", current_working_directory: "現在の作業ディレクトリ" },
+    managedProjectRejectedReasons: { target_missing: "ディレクトリが存在しません", unsafe_project_root: "プロジェクトルートが安全な実ディレクトリではありません", unsafe_manifest_path: "manifest パスが symlink または Junction を経由しています", manifest_missing_or_invalid: "管理対象プロジェクトの manifest がないか無効です", invalid_active_targets: "保存済みランタイム対象が空か未対応です" },
     projectDeployInteractiveHint:
       "プロジェクトリストを一度保存すると、以後の更新で保存済みプロジェクトをまとめて更新できます。",
     projectDeployPathEntryHint:
@@ -2234,23 +2258,23 @@ ${r ? `원본 오류：${r}` : ""}
     depSummarySome: (ok, total) =>
       `${ok}/${total}개 의존성만 확인 — --update로 재설치하세요`,
     syncHeading: "동기화 상태 확인",
-    syncClaudeAgents: (n) => `Claude Code 에이전트: ${n}/${META_AGENTS.length} .md 파일`,
+    syncClaudeAgents: (n, total) => `Claude Code 에이전트: ${n}/${total} .md 파일`,
     syncClaudeSkills: "Claude Code 스킬/meta-theory/SKILL.md",
     syncClaudeHooks: (n) => `Claude Code 훅: ${n} 스크립트`,
     syncClaudeProjectHooksMigrated:
       "Claude Code 프로젝트 hooks는 전역 hooks로 이전되었습니다. repo-local .claude/hooks는 필요하지 않습니다",
     syncClaudeSettings: "Claude Code .claude/settings.json",
     syncClaudeMcp: "Claude Code .mcp.json",
-    syncCodexAgents: (n, total = META_AGENTS.length) =>
+    syncCodexAgents: (n, total) =>
       `Codex 에이전트: ${n}/${total} .toml 파일`,
     syncCodexSkills: "Codex .agents/skills/meta-theory/SKILL.md",
     syncCodexSkillsGlobal:
       "Codex 프로젝트 스킬 미러: .agents/skills/meta-theory/SKILL.md",
-    syncOpenclawWorkspaces: (n) =>
-      `OpenClaw 워크스페이스: ${n}/${META_AGENTS.length} 에이전트 — 각 폴더에 필수 .md 9개(BOOT, SOUL 등)`,
+    syncOpenclawWorkspaces: (n, total) =>
+      `OpenClaw 워크스페이스: ${n}/${total} 에이전트 — 각 폴더에 필수 .md 9개(BOOT, SOUL 등)`,
     syncOpenclawSkill: "OpenClaw 공유 meta-theory",
     syncSharedSkills: "공유 스킬/meta-theory/SKILL.md",
-    syncCursorAgents: (n) => `Cursor 에이전트: ${n}/${META_AGENTS.length} .md 파일`,
+    syncCursorAgents: (n, total) => `Cursor 에이전트: ${n}/${total} .md 파일`,
     syncCursorSkills: "Cursor 스킬/meta-theory/SKILL.md",
     syncCursorMcp: "Cursor .cursor/mcp.json",
     mcpRuntimeProjectOnly: (p) =>
@@ -2590,6 +2614,14 @@ ${r ? `원본 오류：${r}` : ""}
     projectDeployAsk: "프로젝트 디렉터리 업데이트",
     projectDeployProtectionNote:
       "기존 로컬 settings, MCP, hook 구성은 보존하고 병합합니다. 선택한 디렉터리만 업데이트합니다.",
+    globalManagedProjectRefreshInfo: (n) =>
+      `관리 중인 프로젝트 ${n}개를 감지했습니다. 이번 업데이트는 각 프로젝트에 저장된 런타임 대상을 사용해 전역 설치와 기존 프로젝트를 병합/증분 방식으로 새로 고칩니다. 새 프로젝트 투영을 만들지 않으며 프로젝트에 정착된 기능이나 사용자 파일을 덮어쓰지 않습니다.`,
+    managedProjectRejectedHeading: (n) => `기존 프로젝트 대상 ${n}개를 새로 고치지 못했습니다:`,
+    managedProjectRejectedDetail: (source, reason) => `출처: ${source}. 이유: ${reason}.`,
+    managedProjectRejectedRepair: "표시된 저장/registry 대상을 수정하거나 제거하거나, project bootstrap을 명시적으로 실행해 유효한 manifest를 다시 만든 뒤 재시도하세요.",
+    managedProjectRejectedStep: "명시된 기존 프로젝트 대상 검증",
+    managedProjectRejectedSources: { explicit_project_dirs: "명시적 --project-dir", saved_project_dirs: "저장된 프로젝트 목록", project_registry: "사용자 수준 project registry", current_working_directory: "현재 작업 디렉터리" },
+    managedProjectRejectedReasons: { target_missing: "디렉터리가 없습니다", unsafe_project_root: "프로젝트 루트가 안전한 실제 디렉터리가 아닙니다", unsafe_manifest_path: "manifest 경로가 symlink 또는 Junction을 통과합니다", manifest_missing_or_invalid: "관리 프로젝트 manifest가 없거나 유효하지 않습니다", invalid_active_targets: "저장된 런타임 대상이 비어 있거나 지원되지 않습니다" },
     projectDeployInteractiveHint:
       "프로젝트 목록을 한 번 저장하면 이후 업데이트에서 저장된 모든 프로젝트를 함께 업데이트할 수 있습니다.",
     projectDeployPathEntryHint:

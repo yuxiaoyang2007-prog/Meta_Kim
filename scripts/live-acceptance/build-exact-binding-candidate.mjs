@@ -7,6 +7,10 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const SUCCESS_RESULTS = new Set(["success", "completed", "returned", "verified", "applied"]);
+const AGENT_OWNER_BINDING_MODES = new Set([
+  "native_custom_agent",
+  "run_scoped_owner_contract",
+]);
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const LOCAL_SENSITIVE_RETENTION_POLICY = Object.freeze({
   classification: "local_sensitive",
@@ -67,8 +71,42 @@ function workerPacketsFrom(artifact) {
   );
 }
 
+function normalizedAgentOwnerBinding(binding) {
+  if (binding?.family !== "agent_subagent") return {};
+  const ownerBindingMode = binding.ownerBindingMode ?? "run_scoped_owner_contract";
+  if (!AGENT_OWNER_BINDING_MODES.has(ownerBindingMode)) {
+    throw new Error(`agent_owner_binding_mode_invalid:${bindingKeyBase(binding)}`);
+  }
+  const nativeAgentType = ownerBindingMode === "native_custom_agent"
+    ? binding.nativeAgentType
+    : null;
+  if (
+    ownerBindingMode === "native_custom_agent" &&
+    (typeof nativeAgentType !== "string" || !nativeAgentType.trim())
+  ) {
+    throw new Error(`agent_native_type_invalid:${bindingKeyBase(binding)}`);
+  }
+  if (
+    ownerBindingMode === "run_scoped_owner_contract" &&
+    binding.nativeAgentType != null
+  ) {
+    throw new Error(`run_scoped_native_type_must_be_null:${bindingKeyBase(binding)}`);
+  }
+  return { ownerBindingMode, nativeAgentType };
+}
+
+function bindingKeyBase(item) {
+  return `${item?.family}:${item?.bindingRef}`;
+}
+
 function bindingKey(item) {
-  return `${item.family}:${item.bindingRef}`;
+  const ownerBinding = normalizedAgentOwnerBinding(item);
+  return JSON.stringify([
+    item?.family,
+    item?.bindingRef,
+    ownerBinding.ownerBindingMode ?? null,
+    ownerBinding.nativeAgentType ?? null,
+  ]);
 }
 
 function normalizeRequiredBindings(artifact) {
@@ -93,6 +131,7 @@ function normalizeRequiredBindings(artifact) {
       bindingRef: binding.bindingRef,
       taskPacketId,
       roleInstanceId,
+      ...normalizedAgentOwnerBinding(binding),
     };
   });
   const keys = bindings.map(bindingKey);

@@ -8,6 +8,8 @@
  *   node setup.mjs --update     # Update installed skills
  *   node setup.mjs --check      # Environment check only
  *   node setup.mjs --silent     # Non-interactive (CI / scripts)
+ *   node setup.mjs --scope global|project
+ *                                # Explicit install/update destination
  *   node setup.mjs --skills a,b # Limit global skill repos (non-interactive / CI)
  *   node setup.mjs --with-global-hooks
  *                                # Opt in to global hook wiring for selected runtimes
@@ -122,10 +124,29 @@ import {
   installStep,
   summarizeInstallStatus,
 } from "./scripts/install-status-semantics.mjs";
+import {
+  MetaKimConfigError,
+  loadMetaKimConfig,
+} from "./scripts/meta-kim-config-loader.mjs";
+import {
+  isProtectedProjectCapabilityPath,
+  loadProtectedProjectCapabilityPaths,
+  protectedProjectCapabilityIntersects,
+} from "./scripts/project-capability-ownership.mjs";
+import {
+  classifyProjectProjectionUpdate,
+} from "./scripts/project-bootstrap-update-policy.mjs";
+import {
+  joinProjectRegistry,
+  listJoinedProjectRegistryEntries,
+} from "./scripts/project-registry.mjs";
+import { resolveExistingManagedProjectCandidates } from "./scripts/existing-managed-projects.mjs";
 
 // ── Config ──────────────────────────────────────────────
 
 const PROJECT_DIR = resolve(import.meta.dirname || ".");
+const PROJECT_PLAN_CONTENT = Symbol("projectPlanContent");
+const CALLER_CWD = resolve(process.env.META_KIM_CALLER_CWD || process.cwd());
 const SKILLS_DIR = join(resolveRuntimeHomeDir("claude"), "skills");
 const PROXY = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || "";
 const isWin = platform() === "win32";
@@ -157,6 +178,9 @@ const saveProjectDirsMode = args.includes("--save-project-dirs");
 const setupWithGlobalHooks =
   args.includes("--with-global-hooks") ||
   process.env.META_KIM_WITH_GLOBAL_HOOKS === "1";
+const skipOptionalTools = process.env.META_KIM_SKIP_OPTIONAL_TOOLS === "1";
+const preferLocalDependencies =
+  process.env.META_KIM_PREFER_LOCAL_DEPENDENCIES === "1";
 
 function writeUtf8BomFileSync(path, content) {
   writeFileSync(
@@ -205,7 +229,7 @@ function normalizeProjectDeployDir(rawDir) {
   if (!raw) return null;
   if (raw.startsWith("~/")) return join(homedir(), raw.slice(2));
   if (raw.startsWith("~\\")) return join(homedir(), raw.slice(2));
-  return resolve(raw);
+  return isAbsolute(raw) ? resolve(raw) : resolve(CALLER_CWD, raw);
 }
 
 function uniqueProjectDeployDirs(dirs) {
@@ -244,47 +268,35 @@ function parseProjectDeployDirArgs(argv = args) {
 
 const cliProjectDeployDirs = parseProjectDeployDirArgs(args);
 
-/** Load skills manifest from shared config (single source of truth) */
-function loadSkillsManifest() {
-  const manifestPath = join(PROJECT_DIR, "config", "skills.json");
-  try {
-    const raw = readFileSync(manifestPath, "utf8");
-    const manifest = JSON.parse(raw);
-
-    // Allow env var override
-    const skillOwner =
-      process.env.META_KIM_SKILL_OWNER || manifest.skillOwner || "KimYx0207";
-
-    // Transform manifest to legacy format for compatibility
-    return {
-      skillOwner,
-      externalUrls: manifest.externalUrls || {},
-      skills: manifest.skills.map((skill) => {
-        const repo = skill.repo.replace("${skillOwner}", skillOwner);
-        const subdir = resolveManifestSkillSubdir(skill, platform(), {
-          fallbackToFindskillPack: true,
-        });
-
-        return {
-          name: skill.id,
-          repo,
-          subdir,
-          claudePlugin: skill.claudePlugin,
-          defaultSelected: skill.defaultSelected ?? true,
-          targets: skill.targets || ["claude", "codex", "openclaw"],
-        };
-      }),
-    };
-  } catch (err) {
-    warn(t.warnManifestLoadFail(err.message));
-    return { skillOwner: "KimYx0207", externalUrls: {}, skills: [] };
-  }
+let metaKimConfig;
+try {
+  metaKimConfig = loadMetaKimConfig({ repoRoot: PROJECT_DIR });
+} catch (error) {
+  const prefix =
+    error instanceof MetaKimConfigError
+      ? `Meta_Kim configuration error [${error.code}]`
+      : "Meta_Kim configuration error";
+  console.error(`${prefix}: ${error.message}`);
+  process.exit(2);
 }
 
-const skillsManifest = loadSkillsManifest();
+const skillsManifest = {
+  skillOwner: metaKimConfig.skills.skillOwner,
+  skills: metaKimConfig.skills.skills.map((skill) => ({
+    name: skill.id,
+    repo: skill.repository.source,
+    repoUrl: skill.repository.cloneUrl,
+    subdir: resolveManifestSkillSubdir(skill, platform(), {
+      fallbackToFindskillPack: true,
+    }),
+    claudePlugin: skill.claudePlugin,
+    defaultSelected: skill.defaultSelected ?? true,
+    targets: skill.targets,
+  })),
+};
 const SKILL_OWNER = skillsManifest.skillOwner;
 const SKILLS = skillsManifest.skills;
-const EXTERNAL_URLS = skillsManifest.externalUrls;
+const DISTRIBUTION = metaKimConfig.distribution;
 
 function getDefaultSkillIds() {
   return SKILLS.filter((s) => s.defaultSelected).map((s) => s.name);
@@ -339,6 +351,10 @@ let quickDeployDirs = []; // set by quick deploy / project deploy exports
 function detectNpxMode() {
   const normalized = PROJECT_DIR.replace(/\\/g, "/").toLowerCase();
   return normalized.includes("_npx") || normalized.includes("npm-cache");
+}
+
+function isSourceCheckout() {
+  return existsSync(join(PROJECT_DIR, ".git"));
 }
 
 if (langArg) {
@@ -1449,7 +1465,7 @@ ${teammates || "- None"}
 `;
 }
 
-function buildOpenClawWorkspacePlans(targetDir) {
+function buildOpenClawWorkspacePlans(targetDir, protectedPaths) {
   const agents = loadSetupAgents();
   const teamDirectory = buildSetupOpenClawTeamDirectory(agents);
   const builders = {
@@ -1471,12 +1487,13 @@ function buildOpenClawWorkspacePlans(targetDir) {
         builders[fileName](agent),
         targetDir,
         `generated:openclaw-workspace:${agent.id}:${fileName}`,
+        protectedPaths,
       ),
     ),
   );
 }
 
-function projectHookGeneratedPlans(platformId, targetDir) {
+function projectHookGeneratedPlans(platformId, targetDir, protectedPaths) {
   const plans = [];
   const relDir = PROJECT_HOOK_REL_DIRS_BY_PLATFORM[platformId];
   const hookNames = PROJECT_HOOK_SOURCE_CANDIDATES[platformId] ?? [];
@@ -1489,18 +1506,20 @@ function projectHookGeneratedPlans(platformId, targetDir) {
         content,
         targetDir,
         `generated:project-hook:${platformId}:${hookName}`,
+        protectedPaths,
       ));
     }
   }
   if (platformId === "openclaw") {
-    plans.push(...buildOpenClawWorkspacePlans(targetDir));
+    plans.push(...buildOpenClawWorkspacePlans(targetDir, protectedPaths));
   }
   return plans;
 }
 
-function writeProjectGeneratedHooks(platformId, targetDir) {
+function writeProjectGeneratedHooks(platformId, targetDir, protectedPaths) {
   let count = 0;
-  for (const plan of projectHookGeneratedPlans(platformId, targetDir)) {
+  for (const plan of projectHookGeneratedPlans(platformId, targetDir, protectedPaths)) {
+    if (plan.action === "skip") continue;
     const content = plan.content;
     if (!content) continue;
     const destPath = join(targetDir, plan.relPath);
@@ -1882,9 +1901,10 @@ function plannedProtectedProjectDeployText(srcPath, destPath, relPath, targetDir
   return mergeManagedTextBlockPreserveBase(base, generated, rel);
 }
 
-function copyProjectDeployFile(srcPath, destPath, relPath, targetDir) {
+function copyProjectDeployFile(srcPath, destPath, relPath, targetDir, protectedPaths) {
   const rel = normalizeDeployRelPath(relPath);
   if (shouldSkipProjectDeployPath(rel)) return 0;
+  if (isProtectedProjectCapabilityPath(destPath, protectedPaths)) return 0;
   mkdirSync(dirname(destPath), { recursive: true });
   if (DEPLOY_PROTECTED_JSON_PATHS.has(rel)) {
     return mergeProtectedProjectDeployFile(srcPath, destPath, rel, targetDir);
@@ -1910,9 +1930,16 @@ function copyDirRecursive(src, dest, context = {}) {
       count += copyDirRecursive(srcPath, destPath, {
         sourceRoot,
         targetDir,
+        protectedPaths: context.protectedPaths,
       });
     } else {
-      count += copyProjectDeployFile(srcPath, destPath, relPath, targetDir);
+      count += copyProjectDeployFile(
+        srcPath,
+        destPath,
+        relPath,
+        targetDir,
+        context.protectedPaths,
+      );
     }
   }
   return count;
@@ -1996,7 +2023,9 @@ function collectDeployFilePlansFromRoot(srcRoot, destRoot, context = {}) {
           sourceRoot,
           targetDir,
           managedRelPaths: context.managedRelPaths,
+          managedFileMap: context.managedFileMap,
           destRelBase: context.destRelBase,
+          protectedPaths: context.protectedPaths,
         }),
       );
     } else {
@@ -2008,66 +2037,77 @@ function collectDeployFilePlansFromRoot(srcRoot, destRoot, context = {}) {
 
 function projectDeployFilePlan(srcPath, destPath, relPath, targetDir, context = {}) {
   const rel = normalizeDeployRelPath(relPath);
-  const skipped = shouldSkipProjectDeployPath(rel);
+  const protectedProjectCapability = isProtectedProjectCapabilityPath(
+    destPath,
+    context.protectedPaths,
+  );
+  const skipped = shouldSkipProjectDeployPath(rel) || protectedProjectCapability;
   const protectedJson = DEPLOY_PROTECTED_JSON_PATHS.has(rel);
   const protectedText = DEPLOY_PROTECTED_TEXT_PATHS.has(rel);
-  const exists = existsSync(destPath);
-  const contentStatus = projectDeployFileContentStatus(srcPath, destPath, rel, {
-    skipped,
-    protectedJson,
-    protectedText,
-    targetDir,
+  const safeTarget = projectPlanningPathInfo(targetDir, rel);
+  if (!safeTarget) {
+    return {
+      relPath: rel,
+      source: normalizeDeployRelPath(relative(PROJECT_DIR, srcPath)),
+      exists: true,
+      contentStatus: "unsafe",
+      ownership: "unsafe_path",
+      action: "conflict",
+      effectiveAction: "conflict",
+      mergePolicy: "unsafe_realpath_or_link_preserved",
+      skipReason: null,
+      conflictReason: "unsafe_realpath_or_link_preserved",
+    };
+  }
+  const exists = existsSync(safeTarget.target);
+  const plannedContent = protectedJson
+    ? `${JSON.stringify(plannedProtectedProjectDeployJson(srcPath, safeTarget.target, rel, targetDir), null, 2)}\n`
+    : protectedText
+      ? plannedProtectedProjectDeployText(srcPath, safeTarget.target, rel, targetDir)
+      : readFileSync(srcPath);
+  const sourceHash = createHash("sha256").update(plannedContent).digest("hex");
+  const currentHash = exists ? projectFileHash(safeTarget.target) : null;
+  const previousEntry = context.managedFileMap?.get(rel) ?? null;
+  const classification = classifyProjectProjectionUpdate({
+    exists,
+    currentHash,
+    sourceHash,
+    previousManifestEntry: previousEntry,
+    protectedProjectCapability,
+    mergeOwnedConfig: protectedJson || protectedText,
+    managedProjectionUpdate:
+      existingProjectProjectionUpdatePolicy().managedProjectionUpdate,
   });
-  const managedByManifest = context.managedRelPaths?.has(rel) === true;
-  const metaKimOwnedPath = isMetaKimNamespacedProjectPath(rel);
-  const unknownExistingConflict =
-    exists &&
-    contentStatus !== "same" &&
-    !skipped &&
-    !protectedJson &&
-    !protectedText &&
-    !managedByManifest &&
-    !metaKimOwnedPath;
+  const contentStatus = skipped
+    ? "skip"
+    : classification.action === "unchanged"
+      ? "same"
+      : "different";
   const mergePolicy = skipped
     ? "never_touch"
     : protectedJson
       ? "additive_preserve_user_state_json"
       : protectedText
         ? "managed_block_preserve_user_text"
-        : unknownExistingConflict
+        : classification.action === "conflict"
           ? "user_owned_existing_file_conflict"
-        : exists
-          ? managedByManifest
+          : classification.action === "replace"
             ? "manifest_managed_projection_replace"
-            : "meta_kim_namespaced_projection_replace"
-          : "generated_projection_create";
+            : "generated_projection_create";
   return {
     relPath: rel,
     source: normalizeDeployRelPath(relative(PROJECT_DIR, srcPath)),
+    [PROJECT_PLAN_CONTENT]: plannedContent,
     exists,
     contentStatus,
-    ownership: skipped
-      ? "local_state"
-      : protectedJson || protectedText
-        ? "shared_config_merge"
-        : managedByManifest
-          ? "manifest_managed"
-          : metaKimOwnedPath
-            ? "meta_kim_owned"
-            : exists
-              ? "unknown_existing"
-              : "new_file",
+    ownership: skipped && !protectedProjectCapability ? "local_state" : classification.ownership,
     action: skipped
       ? "skip"
       : protectedText
         ? "merge"
         : exists && protectedJson
         ? "merge"
-        : unknownExistingConflict
-          ? "conflict"
-        : exists
-          ? "replace"
-          : "create",
+      : classification.action,
     effectiveAction:
       skipped || contentStatus === "same"
         ? "unchanged"
@@ -2075,49 +2115,72 @@ function projectDeployFilePlan(srcPath, destPath, relPath, targetDir, context = 
           ? "merge"
           : exists && protectedJson
           ? "merge"
-          : unknownExistingConflict
-            ? "conflict"
-          : exists
-            ? "replace"
-            : "create",
-    mergePolicy,
+          : classification.action,
+    mergePolicy: protectedProjectCapability ? "preserve_project_copy" : mergePolicy,
+    skipReason: protectedProjectCapability
+      ? "protected_project_capability"
+      : skipped
+        ? "local_state_or_runtime_config"
+        : null,
+    conflictReason: classification.action === "conflict" ? classification.reason : null,
+    oldInstalledHash: classification.oldInstalledHash ?? null,
+    currentHash,
+    sourceHash,
   };
 }
 
-function projectGeneratedFilePlan(relPath, content, targetDir, source) {
+function projectGeneratedFilePlan(relPath, content, targetDir, source, protectedPaths) {
   const rel = normalizeDeployRelPath(relPath);
   const destPath = join(targetDir, rel);
-  const exists = existsSync(destPath);
-  const current = exists ? readFileSync(destPath, "utf8") : null;
-  const contentStatus = !exists ? "missing" : current === content ? "same" : "different";
-  const manifestManaged = previousProjectManagedRelPaths(targetDir).has(rel);
-  const unknownExistingConflict = exists && !manifestManaged && contentStatus !== "same";
+  const protectedProjectCapability = isProtectedProjectCapabilityPath(
+    destPath,
+    protectedPaths,
+  );
+  const safeTarget = projectPlanningPathInfo(targetDir, rel);
+  if (!safeTarget) {
+    return { relPath: rel, source, content, exists: true, contentStatus: "unsafe", ownership: "unsafe_path", action: "conflict", effectiveAction: "conflict", mergePolicy: "unsafe_realpath_or_link_preserved", skipReason: null, conflictReason: "unsafe_realpath_or_link_preserved" };
+  }
+  const exists = existsSync(safeTarget.target);
+  const currentHash = exists ? projectFileHash(safeTarget.target) : null;
+  const sourceHash = createHash("sha256").update(content).digest("hex");
+  const previousEntry = previousProjectManagedFileMap(targetDir).get(rel) ?? null;
+  const classification = classifyProjectProjectionUpdate({
+    exists,
+    currentHash,
+    sourceHash,
+    previousManifestEntry: previousEntry,
+    protectedProjectCapability,
+    managedProjectionUpdate:
+      existingProjectProjectionUpdatePolicy().managedProjectionUpdate,
+  });
+  const contentStatus = classification.action === "unchanged" ? "same" : exists ? "different" : "missing";
   return {
     relPath: rel,
     source,
-    content,
+    [PROJECT_PLAN_CONTENT]: content,
     exists,
     contentStatus,
-    ownership: manifestManaged
-      ? "manifest_managed"
-      : unknownExistingConflict
-        ? "unknown_existing"
-      : isMetaKimNamespacedProjectPath(rel)
-      ? "meta_kim_owned"
-      : exists
-        ? "unknown_existing"
-        : "new_file",
-    action: unknownExistingConflict ? "conflict" : exists ? "replace" : "create",
-    effectiveAction: contentStatus === "same"
+    ownership: classification.ownership,
+    action: protectedProjectCapability
+      ? "skip"
+      : classification.action,
+    effectiveAction: protectedProjectCapability
       ? "unchanged"
-      : unknownExistingConflict
-        ? "conflict"
-        : exists
-          ? "replace"
-          : "create",
-    mergePolicy: exists
-      ? "meta_kim_namespaced_projection_replace"
-      : "generated_projection_create",
+      : contentStatus === "same"
+      ? "unchanged"
+      : classification.action,
+    mergePolicy: protectedProjectCapability
+      ? "preserve_project_copy"
+      : classification.action === "replace"
+        ? "manifest_managed_projection_replace"
+        : classification.action === "conflict"
+          ? "user_owned_existing_file_conflict"
+          : "generated_projection_create",
+    skipReason: protectedProjectCapability ? "protected_project_capability" : null,
+    conflictReason: classification.action === "conflict" ? classification.reason : null,
+    oldInstalledHash: classification.oldInstalledHash ?? null,
+    currentHash,
+    sourceHash,
   };
 }
 
@@ -2146,6 +2209,8 @@ function collectProjectDeployPlan(activeTargets, targetDir) {
   const plans = [];
   const seen = new Set();
   const managedRelPaths = previousProjectManagedRelPaths(targetDir);
+  const managedFileMap = previousProjectManagedFileMap(targetDir);
+  const protectedPaths = loadProtectedProjectCapabilityPaths(targetDir, PROJECT_DIR);
   for (const platformId of activeTargets) {
     for (const root of projectDeployRootsForPlatform(platformId)) {
       const src = join(PROJECT_DIR, root.srcRel);
@@ -2154,14 +2219,16 @@ function collectProjectDeployPlan(activeTargets, targetDir) {
         sourceRoot: root.destRel !== root.srcRel ? src : PROJECT_DIR,
         targetDir,
         managedRelPaths,
+        managedFileMap,
         destRelBase: root.destRel !== root.srcRel ? root.destRel : null,
+        protectedPaths,
       })) {
         if (seen.has(plan.relPath)) continue;
         seen.add(plan.relPath);
         plans.push(plan);
       }
     }
-    for (const plan of projectHookGeneratedPlans(platformId, targetDir)) {
+    for (const plan of projectHookGeneratedPlans(platformId, targetDir, protectedPaths)) {
       if (seen.has(plan.relPath)) continue;
       seen.add(plan.relPath);
       plans.push(plan);
@@ -2199,17 +2266,83 @@ function readSyncSourceChain() {
 }
 
 function projectBootstrapManifestPath(targetDir) {
-  return join(targetDir, ".meta-kim", "state", "default", "project-bootstrap.json");
+  const marker = existingProjectProjectionUpdatePolicy().managedStateMarker;
+  return join(targetDir, ...marker.split("/"));
+}
+
+function missingProjectTargetHasNoLinkedAncestor(targetDir) {
+  let current = resolve(targetDir);
+  while (!existsSync(current)) {
+    const parent = dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+  while (true) {
+    const stats = lstatSync(current);
+    if (stats.isSymbolicLink() || !stats.isDirectory()) return false;
+    const parent = dirname(current);
+    if (parent === current) return true;
+    current = parent;
+  }
+}
+
+function projectPlanningPathInfo(targetDir, relPath) {
+  if (existsSync(targetDir)) {
+    return safeProjectPathInfo(targetDir, relPath, { allowMissing: true });
+  }
+  if (!missingProjectTargetHasNoLinkedAncestor(targetDir)) return null;
+  const rel = normalizeDeployRelPath(relPath);
+  if (!rel || rel.split("/").some((part) => !part || part === "." || part === "..")) {
+    return null;
+  }
+  return {
+    root: resolve(targetDir),
+    rel,
+    target: join(resolve(targetDir), ...rel.split("/")),
+    missingAt: resolve(targetDir),
+  };
+}
+
+function existingProjectProjectionUpdatePolicy() {
+  const policy =
+    metaKimConfig.syncConfig?.projectMaterializationPolicy
+      ?.existingProjectProjectionUpdate;
+  const validDiscovery = new Set([
+    "explicit_project_dirs",
+    "saved_project_dirs",
+    "current_working_directory",
+  ]);
+  if (
+    !policy ||
+    !Array.isArray(policy.discoveryOrder) ||
+    policy.discoveryOrder.length === 0 ||
+    policy.discoveryOrder.some((item) => !validDiscovery.has(item)) ||
+    typeof policy.managedStateMarker !== "string" ||
+    !policy.managedStateMarker ||
+    policy.globalDistributionAction !== "update_existing_project_projection" ||
+    policy.projectUpdateStrategy !== "project_bootstrap_merge_delta" ||
+    policy.managedProjectionUpdate !== "replace_with_transaction_backup" ||
+    policy.noManagedProjectAction !== "do_not_materialize_project_projection" ||
+    policy.cleanupMode !== "explicit_only"
+  ) {
+    throw new Error("Invalid existing project projection update policy in config/sync.json");
+  }
+  return policy;
 }
 
 function readProjectBootstrapManifest(targetDir) {
-  const manifestPath = projectBootstrapManifestPath(targetDir);
-  if (!existsSync(manifestPath)) return null;
+  const marker = existingProjectProjectionUpdatePolicy().managedStateMarker;
+  if (!existsSync(targetDir)) return null;
+  const info = safeProjectPathInfo(targetDir, marker, { allowMissing: true });
+  if (!info) throw new Error("Unsafe project bootstrap manifest path");
+  if (!existsSync(info.target)) return null;
+  let parsed;
   try {
-    return JSON.parse(readFileSync(manifestPath, "utf8"));
+    parsed = JSON.parse(readFileSync(info.target, "utf8"));
   } catch {
     return null;
   }
+  return parsed;
 }
 
 function previousProjectManagedRelPaths(targetDir) {
@@ -2326,6 +2459,11 @@ function removeUntrackedProjectPath(targetDir, relPath, skipped, options = {}) {
   const rel = normalizeDeployRelPath(relPath);
   const root = resolve(targetDir);
   const absPath = resolve(targetDir, rel);
+  const protectedPaths = loadProtectedProjectCapabilityPaths(targetDir, PROJECT_DIR);
+  if (protectedProjectCapabilityIntersects(rel, protectedPaths)) {
+    skipped.push({ relPath: rel, reason: "protected_project_capability_preserved" });
+    return false;
+  }
   const safePath = safeProjectPathInfo(targetDir, rel);
   if (!safePath) {
     skipped.push({ relPath: rel, reason: "unsafe_realpath_or_link_preserved" });
@@ -2437,6 +2575,8 @@ function removeStaleManagedProjectAssets(
       .map((relPath) => normalizeDeployRelPath(relPath))
       .filter(Boolean),
   );
+  const protectedPaths = loadProtectedProjectCapabilityPaths(targetDir, PROJECT_DIR);
+  for (const relPath of protectedPaths.relativePaths) preserveRelPaths.add(relPath);
   const currentRelPaths = new Set(
     currentFilePlans.map((file) => normalizeDeployRelPath(file.relPath)).filter(Boolean),
   );
@@ -2456,7 +2596,10 @@ function removeStaleManagedProjectAssets(
     ? Array.from(new Set([...previousRelPaths, ...currentRelPaths]))
     : Array.from(previousRelPaths);
   for (const relPath of cleanupSources) {
-    if (preserveRelPaths.has(relPath)) continue;
+    if (
+      preserveRelPaths.has(relPath) ||
+      protectedProjectCapabilityIntersects(relPath, protectedPaths)
+    ) continue;
     if (!removeCurrentManaged && currentRelPaths.has(relPath)) continue;
     if (!isProjectLocalCapabilityAsset(relPath)) continue;
     const absPath = resolve(targetDir, relPath);
@@ -3342,89 +3485,21 @@ function assertNoProjectBootstrapConflicts(plan) {
   );
 }
 
-function createProjectBootstrapBackup(targetDir, filePlans) {
-  const existing = filePlans.filter(
-    (plan) =>
+function projectBootstrapTransactionBackupDescriptor(filePlans) {
+  const entries = filePlans
+    .filter((plan) =>
       plan.action !== "skip" &&
       plan.effectiveAction !== "unchanged" &&
       plan.effectiveAction !== "conflict" &&
-      existsSync(join(targetDir, plan.relPath)),
-  );
-  if (existing.length === 0) {
-    return { created: false, fileCount: 0, entries: [] };
-  }
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupRoot = join(targetDir, ".meta-kim", "backups", "project-bootstrap", stamp);
-  const entries = [];
-  for (const plan of existing) {
-    const from = join(targetDir, plan.relPath);
-    const to = join(backupRoot, plan.relPath);
-    mkdirSync(dirname(to), { recursive: true });
-    cpSync(from, to);
-    entries.push({
-      relPath: plan.relPath,
-      mergePolicy: plan.mergePolicy,
-      backupRelPath: normalizeDeployRelPath(relative(targetDir, to)),
-    });
-  }
-  const manifest = {
-    schemaVersion: "meta-kim-project-bootstrap-backup-v0.1",
-    createdAt: new Date().toISOString(),
-    targetDir,
-    entries,
-  };
-  writeJsonObject(join(backupRoot, "backup-manifest.json"), manifest);
+      plan.exists)
+    .map((plan) => ({ relPath: plan.relPath, mergePolicy: plan.mergePolicy }));
   return {
-    created: true,
-    backupRoot,
-    backupRelPath: normalizeDeployRelPath(relative(targetDir, backupRoot)),
+    created: entries.length > 0,
+    managedByTransaction: true,
+    backupRootPattern: ".meta-kim/backups/project-bootstrap-transaction/project-bootstrap-apply-*",
     fileCount: entries.length,
     entries,
   };
-}
-
-function writeProjectBootstrapManifest(targetDir, plan, backup, cleanup = null) {
-  const manifestPath = projectBootstrapManifestPath(targetDir);
-  const manifest = {
-    schemaVersion: "meta-kim-project-bootstrap-v0.1",
-    appliedAt: new Date().toISOString(),
-    metaKimVersion: readPackageVersion(),
-    activeTargets: plan.state.activeTargets,
-    sourceChain: plan.sourceChain,
-    stateBeforeApply: plan.state,
-    protectedMergeDecisions: plan.decisions,
-    backup,
-    cleanup,
-    managedFiles: plan.files
-      .filter(
-        (file) => file.action !== "skip" && file.effectiveAction !== "conflict",
-      )
-      .map((file) => ({
-        ...file,
-        contentHash: projectFileHash(join(targetDir, file.relPath)),
-      })),
-    skippedFiles: plan.files.filter((file) => file.action === "skip"),
-  };
-  const transaction = executeSafeManagedFileTransaction({
-    trustedRoot: targetDir,
-    backupRoot: join(targetDir, ".meta-kim", "backups"),
-    operations: [{
-      kind: "write",
-      phase: "manifest",
-      relPath: ".meta-kim/state/default/project-bootstrap.json",
-      content: JSON.stringify(manifest, null, 2) + "\n",
-      expectedOldHash: projectFileHash(manifestPath),
-      allowManagedMissingCreate: true,
-    }],
-    transactionLabel: "project-bootstrap-manifest",
-    lockKey: "project-bootstrap-manifest",
-  });
-  if (!transaction.ok) {
-    throw new Error(
-      `Project bootstrap manifest write blocked: ${transaction.reason ?? transaction.status}`,
-    );
-  }
-  return manifestPath;
 }
 
 // Per-platform project-level hook directories. Mirrors RUNTIME_HOOK_CAPABILITIES
@@ -3631,7 +3706,13 @@ async function migrateProjectMetaKimHooksForBootstrap(activeTargets, targetDir) 
 const PROJECT_MUTATION_SESSION_LOCK_KEY = "project-mutation-session";
 async function applyProjectBootstrapToDir(activeTargets, targetDir) {
   if (!existsSync(targetDir)) {
+    if (!missingProjectTargetHasNoLinkedAncestor(targetDir)) {
+      throw new Error("Project bootstrap blocked: target path has an unsafe linked ancestor");
+    }
     mkdirSync(targetDir, { recursive: true });
+  }
+  if (!safeProjectPathInfo(targetDir, ".meta-kim", { allowMissing: true })) {
+    throw new Error("Project bootstrap blocked: unsafe .meta-kim path or Junction");
   }
   const session = await withSafeManagedFileLock(
     {
@@ -3649,48 +3730,143 @@ async function applyProjectBootstrapToDir(activeTargets, targetDir) {
       "Wait for the active project operation to finish, then rerun project bootstrap dry-run before apply.";
     throw error;
   }
+  await joinProjectRegistry({
+    repoPath: targetDir,
+    runtimeFamily: "shared",
+    sourceType: "project_bootstrap",
+    sourceRef: "setup-project-bootstrap",
+  });
   return session.value;
 }
-async function runProjectBootstrapApplyUnlocked(activeTargets, targetDir) {
-  const legacyCleanup = removeLegacyProjectCapabilityEntrypoints(targetDir, activeTargets);
-  let plan = buildProjectBootstrapPlan(activeTargets, targetDir);
-  const cleanup = mergeProjectCleanupResults(
-    legacyCleanup,
-    removeStaleManagedProjectAssets(targetDir, plan.files),
-  );
-  const strippedHookConfigs = stripStaleProjectHookConfigs(targetDir, plan.files);
-  cleanup.strippedHookConfigs = strippedHookConfigs;
-  reportProjectAssetCleanup(cleanup, { reason: "project_retarget" });
-  if (cleanup.removed.length > 0 || strippedHookConfigs.length > 0) {
-    plan = buildProjectBootstrapPlan(activeTargets, targetDir);
+
+function projectBootstrapTransactionalPlan(plan, targetDir, backup) {
+  const operations = [];
+  const cleanup = { removed: [], skipped: [], backups: [], strippedHookConfigs: [] };
+  const currentRelPaths = new Set(plan.files.map((file) => file.relPath));
+  const protectedPaths = loadProtectedProjectCapabilityPaths(targetDir, PROJECT_DIR);
+  const hookConfigPaths = new Set([".claude/settings.json", ".codex/hooks.json", ".cursor/hooks.json"]);
+
+  for (const [relPath, previousEntry] of previousProjectManagedFileMap(targetDir)) {
+    if (currentRelPaths.has(relPath) || protectedProjectCapabilityIntersects(relPath, protectedPaths)) continue;
+    const info = safeProjectPathInfo(targetDir, relPath, { allowMissing: true });
+    if (!info) {
+      cleanup.skipped.push({ relPath, reason: "unsafe_realpath_or_link_preserved" });
+      continue;
+    }
+    if (!existsSync(info.target)) continue;
+    const currentHash = projectFileHash(info.target);
+    if (currentHash !== previousEntry.contentHash) {
+      cleanup.skipped.push({ relPath, reason: "manifest_hash_mismatch_preserved" });
+      continue;
+    }
+    if (hookConfigPaths.has(relPath)) {
+      const current = readJsonObjectIfExists(info.target);
+      if (!current) {
+        cleanup.skipped.push({ relPath, reason: "invalid_managed_config_preserved" });
+        continue;
+      }
+      const stripped = `${JSON.stringify(stripProjectMetaKimHooksFromHookConfig(current), null, 2)}\n`;
+      if (createHash("sha256").update(stripped).digest("hex") !== currentHash) {
+        operations.push({ kind: "write", phase: "content", relPath, content: stripped, expectedOldHash: currentHash });
+        cleanup.strippedHookConfigs.push(relPath);
+      }
+      continue;
+    }
+    if (!isProjectLocalCapabilityAsset(relPath)) continue;
+    operations.push({ kind: "remove", phase: "content", relPath, expectedOldHash: currentHash });
+    cleanup.removed.push(relPath);
   }
+
+  for (const file of plan.files) {
+    if (["skip", "unchanged", "conflict"].includes(file.effectiveAction) || file.action === "skip") continue;
+    operations.push({
+      kind: "write",
+      phase: "content",
+      relPath: file.relPath,
+      content: file[PROJECT_PLAN_CONTENT],
+      expectedOldHash: file.currentHash,
+      allowManagedMissingCreate: true,
+    });
+  }
+
+  const manifest = {
+    schemaVersion: "meta-kim-project-bootstrap-v0.1",
+    appliedAt: new Date().toISOString(),
+    metaKimVersion: readPackageVersion(),
+    activeTargets: plan.state.activeTargets,
+    sourceChain: plan.sourceChain,
+    stateBeforeApply: plan.state,
+    protectedMergeDecisions: plan.decisions,
+    backup,
+    cleanup,
+    managedFiles: plan.files
+      .filter((file) => file.action !== "skip" && file.effectiveAction !== "conflict")
+      .map((file) => ({ ...file, contentHash: file.sourceHash ?? file.currentHash })),
+    skippedFiles: plan.files.filter((file) => file.action === "skip").map((file) => ({ ...file })),
+  };
+  const manifestRelPath = existingProjectProjectionUpdatePolicy().managedStateMarker;
+  operations.push({
+    kind: "write",
+    phase: "manifest",
+    relPath: manifestRelPath,
+    content: `${JSON.stringify(manifest, null, 2)}\n`,
+    expectedOldHash: projectFileHash(projectBootstrapManifestPath(targetDir)),
+    allowManagedMissingCreate: true,
+  });
+  return { operations, cleanup, manifest };
+}
+
+async function runProjectBootstrapApplyUnlocked(activeTargets, targetDir) {
+  const plan = buildProjectBootstrapPlan(activeTargets, targetDir);
+  // This is the last read-only gate. No backup, cleanup, strip, projection, or
+  // manifest write may happen before every file conflict is known.
   assertNoProjectBootstrapConflicts(plan);
-  if (plan.state.status === "ready") {
+  const currentRelPaths = new Set(plan.files.map((file) => file.relPath));
+  const hasStaleManifestEntries = [...previousProjectManagedFileMap(targetDir).keys()]
+    .some((relPath) => !currentRelPaths.has(relPath));
+  if (plan.state.status === "ready" && !hasStaleManifestEntries) {
     return {
       ...plan,
       mode: "apply",
       applied: false,
       noOp: true,
       backup: { created: false, fileCount: 0, entries: [] },
-      cleanup,
+      cleanup: { removed: [], skipped: [], backups: [], strippedHookConfigs: [] },
       manifestPath: projectBootstrapManifestPath(targetDir),
     };
   }
-  const backup = createProjectBootstrapBackup(targetDir, plan.files);
-  if (!existsSync(targetDir)) {
-    mkdirSync(targetDir, { recursive: true });
+  // Backups are created by the same journaled transaction as content and
+  // manifest commits. This descriptor is write-free and safe to embed in the
+  // manifest before the transaction chooses its nonce-specific backup path.
+  const backup = projectBootstrapTransactionBackupDescriptor(plan.files);
+  const transactionPlan = projectBootstrapTransactionalPlan(plan, targetDir, backup);
+  const transaction = executeSafeManagedFileTransaction({
+    trustedRoot: targetDir,
+    backupRoot: join(targetDir, ".meta-kim", "backups", "project-bootstrap-transaction"),
+    operations: transactionPlan.operations,
+    transactionLabel: "project-bootstrap-apply",
+    lockKey: "project-bootstrap-apply",
+  });
+  if (!transaction.ok) {
+    const error = new Error(`Project bootstrap transaction blocked: ${transaction.reason ?? transaction.status}`);
+    error.status = transaction.status === "rolled_back" ? "failed" : "blocked";
+    error.repairAction = transaction.nextAction;
+    throw error;
   }
-  for (const platformId of activeTargets) {
-    deployPlatformFiles(platformId, targetDir);
+  transactionPlan.cleanup.backups.push(...(transaction.backups ?? []));
+  for (const relPath of transactionPlan.cleanup.removed) {
+    pruneEmptyProjectDirs(targetDir, relPath);
   }
-  const manifestPath = writeProjectBootstrapManifest(targetDir, plan, backup, cleanup);
+  reportProjectAssetCleanup(transactionPlan.cleanup, { reason: "project_retarget" });
+  const manifestPath = projectBootstrapManifestPath(targetDir);
   const afterPlan = buildProjectBootstrapPlan(activeTargets, targetDir);
   return {
     ...afterPlan,
     mode: "apply",
     applied: true,
     backup,
-    cleanup,
+    cleanup: transactionPlan.cleanup,
+    transaction,
     manifestPath,
   };
 }
@@ -3729,6 +3905,7 @@ function projectBootstrapFailureResult(targetDir, activeTargets, error) {
 function deployPlatformFiles(platformId, targetDir) {
   let fileCount = 0;
   const targetIsRepo = resolve(targetDir) === resolve(PROJECT_DIR);
+  const protectedPaths = loadProtectedProjectCapabilityPaths(targetDir, PROJECT_DIR);
   const copyIfExists = (srcRel, destRel) => {
     const src = join(PROJECT_DIR, srcRel);
     const dest = join(targetDir, destRel);
@@ -3746,16 +3923,23 @@ function deployPlatformFiles(platformId, targetDir) {
       fileCount += copyDirRecursive(src, dest, {
         sourceRoot: PROJECT_DIR,
         targetDir,
+        protectedPaths,
       });
     } else {
-      fileCount += copyProjectDeployFile(src, dest, relPath, targetDir);
+      fileCount += copyProjectDeployFile(
+        src,
+        dest,
+        relPath,
+        targetDir,
+        protectedPaths,
+      );
     }
   };
 
   for (const root of projectDeployRootsForPlatform(platformId)) {
     copyIfExists(root.srcRel, root.destRel);
   }
-  fileCount += writeProjectGeneratedHooks(platformId, targetDir);
+  fileCount += writeProjectGeneratedHooks(platformId, targetDir, protectedPaths);
   return fileCount;
 }
 
@@ -3765,6 +3949,65 @@ function printPostCopyBootstrapHint() {
 
 function savedProjectDeployDirsFrom(overrides) {
   return uniqueProjectDeployDirs(overrides?.projectDeployDirs || []);
+}
+
+function callerProjectOverrides() {
+  return readJsonObjectIfExists(
+    join(CALLER_CWD, ".meta-kim", "local.overrides.json"),
+  ) ?? {};
+}
+
+async function existingManagedProjectDeployDirs() {
+  const policy = existingProjectProjectionUpdatePolicy();
+  const packageOverrides = await loadLocalOverrides();
+  const savedDirs = uniqueProjectDeployDirs([
+    ...savedProjectDeployDirsFrom(packageOverrides),
+    ...savedProjectDeployDirsFrom(callerProjectOverrides()),
+  ]);
+  const registryDirs = (await listJoinedProjectRegistryEntries()).map((entry) => entry.repoRoot);
+  const candidatesBySource = {
+    explicit_project_dirs: cliProjectDeployDirs.map((targetDir) => ({ targetDir, source: "explicit_project_dirs" })),
+    saved_project_dirs: [
+      ...savedDirs.map((targetDir) => ({ targetDir, source: "saved_project_dirs" })),
+      ...registryDirs.map((targetDir) => ({ targetDir, source: "project_registry" })),
+    ],
+    current_working_directory: [{ targetDir: CALLER_CWD, source: "current_working_directory" }],
+  };
+  const candidates = [];
+  const seen = new Set();
+  for (const candidate of policy.discoveryOrder.flatMap((source) => candidatesBySource[source] ?? [])) {
+    const targetDir = resolve(candidate.targetDir);
+    const key = isWin ? targetDir.replace(/\\/gu, "/").toLowerCase() : targetDir;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ ...candidate, targetDir });
+  }
+
+  const resolution = resolveExistingManagedProjectCandidates(candidates, {
+    manifestRelPath: policy.managedStateMarker,
+  });
+  for (const deployment of resolution.deployments) {
+    if (deployment.source === "saved_project_dirs") {
+      await joinProjectRegistry({ repoPath: deployment.targetDir, runtimeFamily: "shared", sourceType: "project_bootstrap", sourceRef: "legacy-local-overrides" });
+    }
+  }
+  return resolution;
+}
+
+async function existingManagedProjectDeployments() {
+  return existingManagedProjectDeployDirs();
+}
+
+function reportRejectedManagedProjectTargets(rejected) {
+  if (!Array.isArray(rejected) || rejected.length === 0 || jsonOutputMode) return;
+  warn(t.managedProjectRejectedHeading(rejected.length));
+  for (const item of rejected) {
+    console.log(`${C.yellow}  • ${item.targetDir}${C.reset}`);
+    const source = t.managedProjectRejectedSources?.[item.source] ?? item.source;
+    const reason = t.managedProjectRejectedReasons?.[item.reason] ?? item.reason;
+    console.log(`${C.dim}    ${t.managedProjectRejectedDetail(source, reason)}${C.reset}`);
+  }
+  console.log(`${C.dim}${t.managedProjectRejectedRepair}${C.reset}`);
 }
 
 function projectDeployConfigDisplayPath() {
@@ -3778,6 +4021,14 @@ async function saveProjectDeployDirs(dirs) {
     ...localOverrides,
     projectDeployDirs: normalized,
   });
+  for (const targetDir of normalized) {
+    await joinProjectRegistry({
+      repoPath: targetDir,
+      runtimeFamily: "shared",
+      sourceType: "project_bootstrap",
+      sourceRef: "setup-save-project-dirs",
+    });
+  }
   info(t.projectDeploySavedTargets(normalized.length));
   console.log(
     `${C.dim}${t.projectDeploySavedPathHint(projectDeployConfigDisplayPath())}${C.reset}`,
@@ -3875,7 +4126,7 @@ async function askDeployDirectory() {
   }
 
   if (silentMode) {
-    return [];
+    return uniqueProjectDeployDirs([CALLER_CWD]);
   }
 
   console.log(`${C.dim}${t.projectDeployProtectionNote}${C.reset}`);
@@ -4240,17 +4491,37 @@ async function cleanupProjectRedundancyDirs(activeTargets, targetDirs) {
 }
 
 async function copyToDeployDirs(activeTargets, targetDirs) {
-  const dirs = uniqueProjectDeployDirs(targetDirs);
-  if (dirs.length === 0) return [];
+  const deployments = [];
+  const seen = new Set();
+  for (const candidate of targetDirs) {
+    const targetDir = resolve(typeof candidate === "string" ? candidate : candidate.targetDir);
+    const key = process.platform === "win32" ? targetDir.toLowerCase() : targetDir;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deployments.push({
+      targetDir,
+      activeTargets: typeof candidate === "string"
+        ? activeTargets
+        : normalizeTargets(candidate.activeTargets),
+    });
+  }
+  if (deployments.length === 0) return [];
 
-  heading(t.projectDeployBatchHeading(dirs.length));
+  heading(t.projectDeployBatchHeading(deployments.length));
   console.log(`${C.dim}${t.projectDeployProtectionNote}${C.reset}`);
 
   const results = [];
-  for (const targetDir of dirs) {
+  for (const deployment of deployments) {
+    const { targetDir } = deployment;
     try {
-      const result = await copyToDeployDir(activeTargets, targetDir);
-      results.push({ dir: targetDir, status: "ok", manifestPath: result.manifestPath });
+      const result = await copyToDeployDir(deployment.activeTargets, targetDir);
+      results.push({
+        dir: targetDir,
+        activeTargets: deployment.activeTargets,
+        status: "ok",
+        manifestPath: result.manifestPath,
+        stateStatus: result.state?.status ?? "unknown",
+      });
     } catch (error) {
       const msg = error?.message || String(error);
       warn(t.projectDeployFailed(targetDir, msg));
@@ -4350,7 +4621,11 @@ async function runQuickDeploy() {
     const targets = platformId === "all" ? "claude" : platformId;
     const installResult = runNodeScript(
       SETUP_NODE_CHILD.GLOBAL_SKILLS_INSTALLER,
-      buildGlobalSkillsInstallerArgs({ targets, skillIds: [] }),
+      buildGlobalSkillsInstallerArgs({
+        targets,
+        skillIds: [],
+        preferLocalDependencies,
+      }),
       proxyEnv,
     );
     return installResult.status === 0;
@@ -4381,11 +4656,24 @@ async function runQuickDeploy() {
  * Returns: 'project' | 'global'
  */
 async function askInstallScope() {
-  if (silentMode) return "global";
+  const scopeArgIndex = args.indexOf("--scope");
+  const explicitScope = scopeArgIndex >= 0 ? args[scopeArgIndex + 1] : null;
+  const configuredDefault = silentMode
+    ? DISTRIBUTION.installDefaults.silentScope
+    : DISTRIBUTION.installDefaults.interactiveScope;
+  if (explicitScope || silentMode) {
+    const selected = explicitScope || configuredDefault;
+    const pickedLabel =
+      selected === "project"
+        ? t.installScopeProjectLabel
+        : t.installScopeGlobalLabel;
+    info(t.selectedScope(pickedLabel));
+    return selected;
+  }
 
   heading(t.installScopeHeading);
 
-  const scopes = [
+  const scopeDefinitions = [
     {
       id: "global",
       label: t.installScopeGlobalLabel,
@@ -4397,6 +4685,10 @@ async function askInstallScope() {
       desc: t.installScopeProjectDesc,
     },
   ];
+  const scopes = [
+    ...scopeDefinitions.filter((scope) => scope.id === configuredDefault),
+    ...scopeDefinitions.filter((scope) => scope.id !== configuredDefault),
+  ];
 
   const idx = await keyboardSelect(
     t.installScopePrompt,
@@ -4406,7 +4698,7 @@ async function askInstallScope() {
     })),
   );
 
-  const selected = scopes[idx]?.id || "global";
+  const selected = scopes[idx]?.id || configuredDefault;
   const pickedLabel =
     {
       project: t.installScopeProjectLabel,
@@ -4585,7 +4877,7 @@ function checkSync(
         expectedAgentProjectionFiles(".md"),
       );
       if (summary.missing.length === 0)
-        ok(t.syncClaudeAgents(summary.presentCount));
+        ok(t.syncClaudeAgents(summary.presentCount, META_AGENTS.length));
       else {
         warn(
           t.syncPartial(
@@ -4698,7 +4990,7 @@ function checkSync(
       wsCount === META_AGENTS.length &&
       completeAgents === META_AGENTS.length
     ) {
-      ok(t.syncOpenclawWorkspaces(wsCount));
+      ok(t.syncOpenclawWorkspaces(wsCount, META_AGENTS.length));
     } else {
       warn(
         t.syncPartial(
@@ -4723,7 +5015,7 @@ function checkSync(
         expectedAgentProjectionFiles(".md"),
       );
       if (summary.missing.length === 0)
-        ok(t.syncCursorAgents(summary.presentCount));
+        ok(t.syncCursorAgents(summary.presentCount, META_AGENTS.length));
       else {
         warn(
           t.syncPartial(
@@ -4851,9 +5143,7 @@ async function detectRuntimes() {
     console.log(`${C.dim}${t.noRuntimeHint1}${C.reset}`);
     console.log(
       `${C.dim}${fmt(t.noRuntimeHint2, {
-        claudeCodeDocs:
-          EXTERNAL_URLS.claudeCodeDocs ||
-          "https://docs.anthropic.com/en/docs/claude-code",
+        claudeCodeDocs: DISTRIBUTION.documentation.claudeCode,
       })}${C.reset}`,
     );
     console.log("");
@@ -4911,12 +5201,20 @@ async function selectActiveTargets(runtimes) {
   return chosenTargets;
 }
 
-async function rememberProjectProjectionMode(mode) {
-  const localOverrides = await loadLocalOverrides();
-  await writeLocalOverrides({
-    ...localOverrides,
-    projectProjectionMode: mode,
-  });
+function rememberProjectProjectionMode(targetDirs) {
+  let ok = true;
+  for (const targetDir of uniqueProjectDeployDirs(targetDirs)) {
+    const relPath = ".meta-kim/local.overrides.json";
+    const current = readJsonObjectIfExists(join(targetDir, relPath)) ?? {};
+    const result = writeProjectManagedTransaction(
+      targetDir,
+      relPath,
+      `${JSON.stringify({ ...current, projectProjectionMode: "project" }, null, 2)}\n`,
+      "project-projection-mode",
+    );
+    if (!result.ok) ok = false;
+  }
+  return ok;
 }
 
 function runNodeScript(
@@ -4936,6 +5234,7 @@ function runNodeScript(
     env: {
       ...process.env,
       ...envOverrides,
+      META_KIM_VERSION: readPackageVersion(),
     },
   };
   return spawnSync(spawnConfig.command, spawnConfig.args, mergedOptions);
@@ -5226,7 +5525,7 @@ function installSkill(skill) {
 
   if (skill.subdir) return installSkillFromSubdir(skill, target, proxy);
 
-  const url = `https://github.com/${skill.repo}.git`;
+  const url = skill.repoUrl;
   const cloneResult = run(
     `git ${proxy} clone --depth 1 "${url}" "${target}"`.trim(),
   );
@@ -5239,7 +5538,7 @@ function installSkill(skill) {
 }
 
 function installSkillFromSubdir(skill, target, proxy) {
-  const url = `https://github.com/${skill.repo}.git`;
+  const url = skill.repoUrl;
   const tmp = join(tmpdir(), `meta-kim-skill-${Date.now()}`);
   try {
     const cloneResult = run(
@@ -5719,7 +6018,10 @@ function resolvePythonForMemoryService(detectedPython) {
   return { python: venvLauncher, venvCreated: true, venvDir };
 }
 
-async function runMcpMemoryHookInstaller(activeTargets = DEFAULT_TARGETS.map((target) => target.id)) {
+async function runMcpMemoryHookInstaller(
+  activeTargets = DEFAULT_TARGETS.map((target) => target.id),
+  { allowClaudeGlobalSettings = false } = {},
+) {
   const hookScript = join(
     PROJECT_DIR,
     "scripts",
@@ -5736,12 +6038,17 @@ async function runMcpMemoryHookInstaller(activeTargets = DEFAULT_TARGETS.map((ta
     "scripts/install-mcp-memory-hooks.mjs",
     ["--targets", activeTargets.join(",")],
   );
+  const childEnv =
+    allowClaudeGlobalSettings && activeTargets.includes("claude")
+      ? { ...process.env, META_KIM_CONFIRM_GLOBAL: "1" }
+      : undefined;
   let result;
   await withProgress(t.mcpMemoryHookInstalling, async () => {
     result = spawnSync(spawnDesc.command, spawnDesc.args, {
       ...spawnDesc.options,
       stdio: ["ignore", "pipe", "pipe"],
       encoding: "utf8",
+      ...(childEnv ? { env: childEnv } : {}),
     });
   });
 
@@ -6349,7 +6656,9 @@ async function installMcpMemoryServiceStep(inUpdateMode = false, activeTargets =
   // Step 4.7 — auto-install runtime memory hooks so the full pipeline
   // (pip package → .mcp.json → hook files → runtime registration →
   // health check) runs from a single `node setup.mjs` invocation.
-  const hooksOk = await runMcpMemoryHookInstaller(activeTargets);
+  const hooksOk = await runMcpMemoryHookInstaller(activeTargets, {
+    allowClaudeGlobalSettings: want && activeTargets.includes("claude"),
+  });
 
   // Step 4.8 — start the HTTP server in background and configure boot auto-start
   const backgroundOk = await startMcpMemoryServiceBackground(
@@ -6398,29 +6707,48 @@ function upgradeNetworkx(python) {
 
 // ── Step 5: Validate + next steps ───────────────────────
 
-async function validate() {
+async function validateInstalledArtifacts({
+  installScope,
+  activeTargets,
+  projectSyncOk = true,
+  projectDeployResults = [],
+}) {
   heading(t.stepValidate);
-  const agentsDir = join(PROJECT_DIR, ".claude", "agents");
-  if (existsSync(agentsDir)) {
-    const summary = summarizeExpectedFiles(
-      readdirSync(agentsDir).filter((f) => f.endsWith(".md")),
-      expectedAgentProjectionFiles(".md"),
+  if (installScope === "global") {
+    const projectReady = projectDeployResults.every(
+      (result) => result.status === "ok" && result.stateStatus === "ready",
     );
-    ok(t.agentPrompts(summary.presentCount));
+    const checkResult = runNodeScript(
+      SETUP_NODE_CHILD.GLOBAL_META_THEORY_SYNC,
+      [...metaTheoryGlobalSyncArgs(activeTargets, setupWithGlobalHooks), "--check"],
+    );
+    if (checkResult.status === 0 && projectReady) {
+      ok(t.validationPassed);
+      return true;
+    }
+    warn(`${t.setupError} ${t.stepValidate}`);
+    return false;
   }
-  const validateSpawn = buildSetupNodeChildSpawn(
-    process.execPath,
-    PROJECT_DIR,
-    SETUP_NODE_CHILD.PROJECT_VALIDATION,
-    ["--context", "install"],
-    currentLangCode,
-  );
-  const validateResult = spawnSync(
-    validateSpawn.command,
-    validateSpawn.args,
-    validateSpawn.options,
-  );
-  if (validateResult.status === 0) {
+
+  if (!projectSyncOk) {
+    warn(`${t.setupError} ${t.stepValidate}`);
+    return false;
+  }
+  if (projectDeployResults.length > 0) {
+    const allTargetsReady = projectDeployResults.every(
+      (result) => result.status === "ok" && result.stateStatus === "ready",
+    );
+    if (allTargetsReady) {
+      ok(t.validationPassed);
+      return true;
+    }
+    warn(`${t.setupError} ${t.stepValidate}`);
+    return false;
+  }
+
+  // A source checkout can be its own project target. A packed distribution is
+  // only a staging source and must not pass project scope without a real target.
+  if (isSourceCheckout()) {
     ok(t.validationPassed);
     return true;
   }
@@ -6527,10 +6855,7 @@ function showNextSteps(runtimes, selectedTargets = detectedTargetIds(runtimes)) 
   ) {
     console.log(`${C.yellow}${t.noRuntimeGetStarted}${C.reset}`);
     console.log(
-      `${C.dim}${
-        EXTERNAL_URLS.claudeCodeDocs ||
-        "https://docs.anthropic.com/en/docs/claude-code"
-      }${C.reset}`,
+      `${C.dim}${DISTRIBUTION.documentation.claudeCode}${C.reset}`,
     );
   }
 
@@ -6538,11 +6863,12 @@ function showNextSteps(runtimes, selectedTargets = detectedTargetIds(runtimes)) 
   console.log(`${C.bold}${t.usefulCommands}${C.reset}
 `);
   if (hasDeployDirs) {
+    const npxPrefix = `npx --yes ${DISTRIBUTION.project.npxSpec} meta-kim`;
     console.log(
-      `${C.dim}npx --yes github:KimYx0207/Meta_Kim meta-kim -- --update${C.reset}`,
+      `${C.dim}${npxPrefix} -- --update${C.reset}`,
     );
     console.log(
-      `${C.dim}npx --yes github:KimYx0207/Meta_Kim meta-kim -- --check${C.reset}`,
+      `${C.dim}${npxPrefix} -- --check${C.reset}`,
     );
   } else {
     console.log(
@@ -6586,7 +6912,10 @@ function showNextSteps(runtimes, selectedTargets = detectedTargetIds(runtimes)) 
   );
   console.log(`${C.dim}${t.layer1Label} — ${t.layer1Note}${C.reset}`);
   console.log(`${C.dim}${t.layer2Label} — ${t.layer2Note}${C.reset}`);
-  console.log(`${C.dim}${t.layer3Label} — ${t.layer3Note}${C.reset}`);
+  const memoryEndpoint = resolveMemoryEndpoint();
+  console.log(
+    `${C.dim}${t.layer3Label} — ${t.mcpMemoryEndpointSelected(memoryEndpoint.endpointUrl)}${C.reset}`,
+  );
   console.log("");
   console.log(`${C.bold}${C.cyan}● ${t.installLocationsHeading}${C.reset}`);
   console.log(
@@ -6601,7 +6930,7 @@ function showNextSteps(runtimes, selectedTargets = detectedTargetIds(runtimes)) 
   console.log("");
   console.log(`${C.bold}${C.cyan}● ${t.usefulCommandsHeading}${C.reset}`);
   if (hasDeployDirs) {
-    const npxPrefix = "npx --yes github:KimYx0207/Meta_Kim meta-kim";
+    const npxPrefix = `npx --yes ${DISTRIBUTION.project.npxSpec} meta-kim`;
     console.log(`${C.dim}  ${npxPrefix} status          # ${t.cmdWhereStatus}${C.reset}`);
     console.log(`${C.dim}  ${npxPrefix} status --diff   # ${t.cmdWhereStatusDiff}${C.reset}`);
     console.log(`${C.dim}  ${npxPrefix} doctor          # ${t.cmdDoctor}${C.reset}`);
@@ -6729,14 +7058,11 @@ function bannerLogo() {
     }, 0);
 
   const contacts = [
-    `Website: ${EXTERNAL_URLS.author?.website || "https://www.aiking.dev/"}`,
-    `GitHub:  ${EXTERNAL_URLS.author?.github || "https://github.com/KimYx0207"}`,
-    `X:       ${EXTERNAL_URLS.author?.x || "https://x.com/KimYx0207"}`,
-    `Feishu:  ${
-      EXTERNAL_URLS.author?.feishu ||
-      "https://my.feishu.cn/wiki/OhQ8wqntFihcI1kWVDlcNdpznFf"
-    }`,
-    "WeChat:  \u8001\u91d1\u5e26\u4f60\u73a9AI",
+    `Website: ${DISTRIBUTION.contact.website}`,
+    `GitHub:  ${DISTRIBUTION.contact.github}`,
+    `X:       ${DISTRIBUTION.contact.x}`,
+    `Feishu:  ${DISTRIBUTION.contact.feishu}`,
+    `WeChat:  ${DISTRIBUTION.contact.wechat}`,
   ];
 
   const padVis = (s, width) => s + " ".repeat(Math.max(0, width - dw(s)));
@@ -6855,7 +7181,7 @@ async function runProjectBootstrapCli() {
   }
   const targetContext = await resolveTargetContext(args);
   const activeTargets = targetContext.activeTargets;
-  const targetDirs = cliProjectDeployDirs.length > 0 ? cliProjectDeployDirs : [process.cwd()];
+  const targetDirs = cliProjectDeployDirs.length > 0 ? cliProjectDeployDirs : [CALLER_CWD];
   const applyMode = projectBootstrapApply && !projectBootstrapDryRun;
   const results = [];
   let ok = true;
@@ -7033,7 +7359,6 @@ async function runInstall() {
   const installScope = await askInstallScope();
   const needProject = installScope === "project";
   const needGlobal = installScope === "global";
-  await rememberProjectProjectionMode(needGlobal ? "global_only" : "project");
 
   // Ask proxy configuration (saves to localOverrides)
   await askProxyConfig();
@@ -7047,8 +7372,12 @@ async function runInstall() {
   showDirectoryExplanation();
 
   // Ask project deploy directories BEFORE confirm (so user decides upfront)
-  const deployDirs = needProject ? await askDeployDirectory() : [];
-  const cleanupDirs = needGlobal ? await askProjectCleanupDirectory() : [];
+  const managedProjectResolution = needProject
+    ? { deployments: await askDeployDirectory(), rejected: [] }
+    : await existingManagedProjectDeployments();
+  const deployDirs = managedProjectResolution.deployments;
+  reportRejectedManagedProjectTargets(managedProjectResolution.rejected);
+  if (needGlobal) info(t.globalManagedProjectRefreshInfo(deployDirs.length));
 
   // Show installation overview
   showInstallOverview(
@@ -7066,19 +7395,14 @@ async function runInstall() {
 
   console.log();
 
-  if (cleanupDirs.length > 0) {
-    const cleanupResults = await cleanupProjectRedundancyDirs(activeTargets, cleanupDirs);
-    stepResults.push(
-      installStep(
-        t.projectCleanupBatchHeading(cleanupDirs.length),
-        cleanupResults.length === cleanupDirs.length &&
-          cleanupResults.every((item) => item.status === "ok"),
-      ),
-    );
-  }
-
   // 步骤计数
   let stepNum = 0;
+  const explicitRejectedTargets = managedProjectResolution.rejected.filter(
+    (item) => item.source === "explicit_project_dirs",
+  );
+  if (explicitRejectedTargets.length > 0) {
+    stepResults.push(installStep(t.managedProjectRejectedStep, false));
+  }
 
   // 项目目录更新
   if (needProject) {
@@ -7147,6 +7471,7 @@ async function runInstall() {
         const skillArgs = buildGlobalSkillsInstallerArgs({
           targets: activeTargets,
           skillIds: selectedSkillIds,
+          preferLocalDependencies,
         });
         // ).concat(["--log-file", INSTALL_LOG_FILE]);
         const installResult = runNodeScript(
@@ -7193,20 +7518,21 @@ async function runInstall() {
 
   // [Optional] Python tools (graphify)
   stepNum++;
-  const pythonToolsOk = await withProgress(
-    t.stepLabel(stepNum, t.progressInstallPython),
-    async () => {
-      const wantPython = await askYesNo(t.askPythonToolsUpdate, true);
-      if (wantPython) {
-        return await installPythonTools(activeTargets, false, PROJECT_DIR, {
-          projectWiring: needProject,
-        });
-      } else {
-        skip(`${C.dim}${t.pythonToolsSkipped}${C.reset}`);
-        return INSTALL_STEP_OUTCOME.SKIPPED;
-      }
-    },
-  );
+  const pythonToolsOk = skipOptionalTools
+    ? (skip(`${C.dim}${t.pythonToolsSkipped}${C.reset}`), INSTALL_STEP_OUTCOME.SKIPPED)
+    : await withProgress(
+        t.stepLabel(stepNum, t.progressInstallPython),
+        async () => {
+          const wantPython = await askYesNo(t.askPythonToolsUpdate, true);
+          if (wantPython) {
+            return await installPythonTools(activeTargets, false, PROJECT_DIR, {
+              projectWiring: needProject,
+            });
+          }
+          skip(`${C.dim}${t.pythonToolsSkipped}${C.reset}`);
+          return INSTALL_STEP_OUTCOME.SKIPPED;
+        },
+      );
   stepResults.push(
     installStep(
       t.progressInstallPython,
@@ -7217,12 +7543,12 @@ async function runInstall() {
 
   // [Optional] MCP Memory Service (Layer 3)
   stepNum++;
-  const mcpMemoryOk = await withProgress(
-    t.stepLabel(stepNum, t.progressInstallMcpMemory),
-    async () => {
-      return await installMcpMemoryServiceStep(false, activeTargets);
-    },
-  );
+  const mcpMemoryOk = skipOptionalTools
+    ? (skip(`${C.dim}${t.mcpMemorySkipped}${C.reset}`), INSTALL_STEP_OUTCOME.SKIPPED)
+    : await withProgress(
+        t.stepLabel(stepNum, t.progressInstallMcpMemory),
+        async () => installMcpMemoryServiceStep(false, activeTargets),
+      );
   stepResults.push(
     installStep(
       t.progressInstallMcpMemory,
@@ -7231,33 +7557,56 @@ async function runInstall() {
     ),
   );
 
-  // 验证：项目路径检查 repo-local；全局路径只跑项目完整性校验
+  // Copy runtime files to user-chosen project directories (if opted in earlier)
+  let deployResults = [];
+  if (deployDirs.length > 0) {
+    deployResults = await copyToDeployDirs(activeTargets, deployDirs);
+    stepResults.push(
+      installStep(
+        t.projectDeployBatchHeading(deployDirs.length),
+        deployResults.length === deployDirs.length &&
+          deployResults.every(
+            (item) => item.status === "ok" && item.stateStatus === "ready",
+          ),
+      ),
+    );
+  }
+
+  // Validate the installed global/project artifacts. Public package installs
+  // must not depend on maintainer-only repository files such as .gitignore.
   stepNum++;
   let runtimeSyncOk = true;
   const validationOk = await withProgress(t.stepLabel(stepNum, t.progressValidate), async () => {
     if (needProject) {
       runtimeSyncOk = checkSync(runtimes, activeTargets);
     }
-    return await validate();
+    return validateInstalledArtifacts({
+      installScope,
+      activeTargets,
+      projectSyncOk: runtimeSyncOk,
+      projectDeployResults: deployResults,
+    });
   });
   if (needProject) {
     stepResults.push(installStep(t.syncHeading, runtimeSyncOk));
   }
   stepResults.push(installStep(t.progressValidate, validationOk));
 
-  // Copy runtime files to user-chosen project directories (if opted in earlier)
-  if (deployDirs.length > 0) {
-    const deployResults = await copyToDeployDirs(activeTargets, deployDirs);
-    stepResults.push(
-      installStep(
-        t.projectDeployBatchHeading(deployDirs.length),
-        deployResults.length === deployDirs.length &&
-          deployResults.every((item) => item.status === "ok"),
-      ),
+  if (
+    needProject &&
+    summarizeInstallStatus(stepResults).status === "complete" &&
+    deployResults.some((item) => item.status === "ok")
+  ) {
+    const stateOk = rememberProjectProjectionMode(
+      deployResults.filter((item) => item.status === "ok").map((item) => item.dir),
     );
+    stepResults.push(installStep(t.projectDeploySummary, stateOk));
   }
 
-  const result = summarizeInstallStatus(stepResults);
+  let result = {
+    ...summarizeInstallStatus(stepResults),
+    rejectedManagedProjects: managedProjectResolution.rejected,
+  };
 
   if (result.status === "complete") {
     console.log(`\n${C.bold}${C.green}✓ ${t.installComplete}${C.reset}\n`);
@@ -7286,25 +7635,20 @@ async function runUpdate() {
   const updateScope = await askInstallScope();
   const needProject = updateScope === "project";
   const needGlobal = updateScope === "global";
-  await rememberProjectProjectionMode(needGlobal ? "global_only" : "project");
 
   // Ask proxy configuration (saves to localOverrides)
   await askProxyConfig();
 
   // Ask project deploy directories BEFORE update starts
-  const deployDirs = needProject ? await askDeployDirectory() : [];
-  const cleanupDirs = needGlobal ? await askProjectCleanupDirectory() : [];
-
-  if (cleanupDirs.length > 0) {
-    const cleanupResults = await cleanupProjectRedundancyDirs(activeTargets, cleanupDirs);
-    stepResults.push(
-      installStep(
-        t.projectCleanupBatchHeading(cleanupDirs.length),
-        cleanupResults.length === cleanupDirs.length &&
-          cleanupResults.every((item) => item.status === "ok"),
-      ),
-    );
+  const managedProjectResolution = needProject
+    ? { deployments: await askDeployDirectory(), rejected: [] }
+    : await existingManagedProjectDeployments();
+  const deployDirs = managedProjectResolution.deployments;
+  reportRejectedManagedProjectTargets(managedProjectResolution.rejected);
+  if (managedProjectResolution.rejected.some((item) => item.source === "explicit_project_dirs")) {
+    stepResults.push(installStep(t.managedProjectRejectedStep, false));
   }
+  if (needGlobal) info(t.globalManagedProjectRefreshInfo(deployDirs.length));
 
   // ── 1. npm install (always — new code may have new deps) ────────────
   info(t.updateNpm);
@@ -7318,14 +7662,18 @@ async function runUpdate() {
 
   // ── 2. [Optional] Python tools (graphify) ─────────────────────────
   console.log("");
-  const wantPython = await askYesNo(t.askPythonToolsUpdate, true);
   let pythonToolsOutcome = INSTALL_STEP_OUTCOME.SKIPPED;
-  if (wantPython) {
-    pythonToolsOutcome = await installPythonTools(activeTargets, true, PROJECT_DIR, {
-      projectWiring: needProject,
-    });
-  } else {
+  if (skipOptionalTools) {
     skip(`${C.dim}${t.pythonToolsSkipped}${C.reset}`);
+  } else {
+    const wantPython = await askYesNo(t.askPythonToolsUpdate, true);
+    if (wantPython) {
+      pythonToolsOutcome = await installPythonTools(activeTargets, true, PROJECT_DIR, {
+        projectWiring: needProject,
+      });
+    } else {
+      skip(`${C.dim}${t.pythonToolsSkipped}${C.reset}`);
+    }
   }
   stepResults.push(
     installStep(
@@ -7337,7 +7685,9 @@ async function runUpdate() {
 
   // ── 2.5 [Optional] MCP Memory Service (Layer 3) ─────────────────
   console.log("");
-  const mcpMemoryOk = await installMcpMemoryServiceStep(true, activeTargets);
+  const mcpMemoryOk = skipOptionalTools
+    ? (skip(`${C.dim}${t.mcpMemorySkipped}${C.reset}`), INSTALL_STEP_OUTCOME.SKIPPED)
+    : await installMcpMemoryServiceStep(true, activeTargets);
   stepResults.push(
     installStep(
       t.progressInstallMcpMemory,
@@ -7376,6 +7726,7 @@ async function runUpdate() {
       targets: activeTargets,
       skillIds: updateSkillIds,
       update: true,
+      preferLocalDependencies,
     });
     // ).concat(["--log-file", INSTALL_LOG_FILE]);
     const updateInstallResult = runNodeScript(
@@ -7421,7 +7772,22 @@ async function runUpdate() {
     await refreshGlobalCapabilityInventory(activeTargets);
   }
 
-  // ── 6. checkSync (repo-local, project scope) ───────────────────────
+  // Copy runtime files before validating their final target state.
+  let deployResults = [];
+  if (deployDirs.length > 0) {
+    deployResults = await copyToDeployDirs(activeTargets, deployDirs);
+    stepResults.push(
+      installStep(
+        t.projectDeployBatchHeading(deployDirs.length),
+        deployResults.length === deployDirs.length &&
+          deployResults.every(
+            (item) => item.status === "ok" && item.stateStatus === "ready",
+          ),
+      ),
+    );
+  }
+
+  // ── 6. Validate installed artifacts, not the package source tree ───
   if (needGlobal) {
     stepResults.push(
       installStep(
@@ -7435,20 +7801,31 @@ async function runUpdate() {
     updateRuntimeSyncOk = checkSync(runtimes, activeTargets);
     stepResults.push(installStep(t.syncHeading, updateRuntimeSyncOk));
   }
-  stepResults.push(installStep(t.progressValidate, await validate()));
-
-  // Copy runtime files to user-chosen project directories (if opted in earlier)
-  if (deployDirs.length > 0) {
-    const deployResults = await copyToDeployDirs(activeTargets, deployDirs);
-    stepResults.push(
-      installStep(
-        t.projectDeployBatchHeading(deployDirs.length),
-        deployResults.length === deployDirs.length &&
-          deployResults.every((item) => item.status === "ok"),
-      ),
+  stepResults.push(
+    installStep(
+      t.progressValidate,
+      await validateInstalledArtifacts({
+        installScope: updateScope,
+        activeTargets,
+        projectSyncOk: updateRuntimeSyncOk,
+        projectDeployResults: deployResults,
+      }),
+    ),
+  );
+  if (
+    needProject &&
+    summarizeInstallStatus(stepResults).status === "complete" &&
+    deployResults.some((item) => item.status === "ok")
+  ) {
+    const stateOk = rememberProjectProjectionMode(
+      deployResults.filter((item) => item.status === "ok").map((item) => item.dir),
     );
+    stepResults.push(installStep(t.projectDeploySummary, stateOk));
   }
-  const result = summarizeInstallStatus(stepResults);
+  let result = {
+    ...summarizeInstallStatus(stepResults),
+    rejectedManagedProjects: managedProjectResolution.rejected,
+  };
   if (result.status === "complete") {
     console.log(`\n${C.bold}${C.green}✓ ${t.updateComplete}${C.reset}\n`);
   } else {

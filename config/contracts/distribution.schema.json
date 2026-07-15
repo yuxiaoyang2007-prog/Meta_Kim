@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meta-kim.dev/contracts/distribution.schema.json",
+  "title": "Meta_Kim Distribution Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "project",
+    "installDefaults",
+    "repositoryPolicy",
+    "sourceHosts",
+    "documentation",
+    "contact"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "npxSpec"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "npxSpec": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "installDefaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "interactiveScope",
+        "silentScope"
+      ],
+      "properties": {
+        "interactiveScope": {
+          "type": "string",
+          "enum": [
+            "global",
+            "project"
+          ]
+        },
+        "silentScope": {
+          "type": "string",
+          "enum": [
+            "global",
+            "project"
+          ]
+        }
+      }
+    },
+    "repositoryPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultHttpsBase",
+        "trustedHosts"
+      ],
+      "properties": {
+        "defaultHttpsBase": {
+          "type": "string",
+          "format": "uri"
+        },
+        "trustedHosts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "sourceHosts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "github"
+      ],
+      "properties": {
+        "github": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "host",
+            "webBase",
+            "apiBase"
+          ],
+          "properties": {
+            "host": {
+              "type": "string",
+              "minLength": 1
+            },
+            "webBase": {
+              "type": "string",
+              "format": "uri"
+            },
+            "apiBase": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        }
+      }
+    },
+    "documentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claudeCode"
+      ],
+      "properties": {
+        "claudeCode": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "contact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "website",
+        "github",
+        "feishu",
+        "x",
+        "wechat"
+      ],
+      "properties": {
+        "website": {
+          "type": "string",
+          "format": "uri"
+        },
+        "github": {
+          "type": "string",
+          "format": "uri"
+        },
+        "feishu": {
+          "type": "string",
+          "format": "uri"
+        },
+        "x": {
+          "type": "string",
+          "format": "uri"
+        },
+        "wechat": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

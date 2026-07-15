@@ -104,7 +104,7 @@ describe("install result aggregation", () => {
     assert.match(source, /process\.exit\(result\.exitCode\)/);
     assert.match(
       source,
-      /deployResults\.length === deployDirs\.length &&\s*deployResults\.every\(\(item\) => item\.status === "ok"\)/,
+      /deployResults\.length === deployDirs\.length &&\s*deployResults\.every\([\s\S]*?item\.status === "ok" && item\.stateStatus === "ready"/,
     );
     assert.doesNotMatch(
       source,

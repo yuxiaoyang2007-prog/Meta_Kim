@@ -93,6 +93,17 @@ describe("setup child CLI contracts", () => {
     }
   });
 
+  test("packed acceptance can explicitly route dependency installs to local fixtures", () => {
+    const args = buildGlobalSkillsInstallerArgs({
+      targets: ["claude", "codex"],
+      skillIds: ["planning-with-files"],
+      update: true,
+      preferLocalDependencies: true,
+    });
+    assert.ok(args.includes("--prefer-local-dependencies"));
+    assert.doesNotThrow(() => validateInstallerArgs(args));
+  });
+
   test("strict global sync gets no language option and executes zero-write target discovery", () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "meta-kim-child-contract-"));
     const env = {

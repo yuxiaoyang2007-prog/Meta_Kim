@@ -835,7 +835,7 @@ Interactive update flow:
 | Command | Purpose |
 | --- | --- |
 | `npm run meta:sync` | Sync from canonical sources to all four runtimes |
-| `npm run meta:check:runtimes` | Check the default formal project projections (Claude Code + Codex); use explicit runtime targets for broader checks |
+| `npm run meta:check:runtimes` | Check the configured project projection mode; pass explicit runtime targets only when intentionally validating full project mirrors |
 | `npm run meta:validate` | Validate repository integrity |
 | `npm run meta:verify:all` | Full validation, including runtime smoke checks |
 
@@ -907,11 +907,14 @@ More advanced commands (`meta:validate:run`, `meta:eval:agents`, `meta:eval:agen
 
 ### Q: I installed via `npx`, where are my files?
 
-Meta_Kim writes to 3 places:
+Meta_Kim uses two distinct scopes; a normal global install does not populate the current project with durable runtime mirrors:
 
-1. **Current directory** — `.claude/`, `.codex/`, `.cursor/`, `openclaw/` runtime projections for THIS project
-2. **Your home** — `~/.claude/skills/meta-theory/` (plus `.codex / .cursor / .openclaw`) for global skills shared across all projects
-3. **Manifest** — `~/.meta-kim/install-manifest.json` tracks everything for safe rollback
+1. **Your home** — `~/.claude/`, `~/.codex/`, `~/.cursor/`, and `~/.openclaw/` hold globally reusable assets selected for those runtimes.
+2. **Global manifest** — `~/.meta-kim/install-manifest.json` tracks managed global files for safe update and rollback.
+
+Project runtime mirrors are created by an explicit project install/bootstrap or by governed runtime sedimentation. In `global_only`, installation itself may retain only the minimal project Hook dependency closure required by the host contract. If a later governed run creates or iterates an Agent, Skill, or Command, Meta_Kim copies it into the current project with independent ownership so dependency updates cannot replace that project version.
+
+One exception is intentional: if a global install/update detects a project that already has a valid Meta_Kim bootstrap manifest, it refreshes that existing project with the project's own saved runtime targets and merge/delta policy while also updating the global installation. It does not create a new project projection, and it preserves runtime-sedimented capabilities and user-owned files.
 
 From a global install, run `meta-kim status` from any directory to see the full footprint. With npx, repeat `npx --yes github:KimYx0207/Meta_Kim meta-kim status` and replace `status` with `check`, `doctor`, `update`, or `uninstall` as needed. These commands resolve scripts from the package rather than the current directory. Repository maintainers can keep using the equivalent `npm run meta:*` commands.
 

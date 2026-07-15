@@ -180,7 +180,9 @@
         "providerId": { "$ref": "#/$defs/boundedString" },
         "bindingRef": { "$ref": "#/$defs/boundedString" },
         "taskPacketId": { "$ref": "#/$defs/nullableBoundedString" },
-        "roleInstanceId": { "$ref": "#/$defs/nullableBoundedString" }
+        "roleInstanceId": { "$ref": "#/$defs/nullableBoundedString" },
+        "ownerBindingMode": { "enum": ["native_custom_agent", "run_scoped_owner_contract"] },
+        "nativeAgentType": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 }
       },
       "oneOf": [
         {
@@ -195,6 +197,37 @@
           "properties": {
             "taskPacketId": { "type": "null" },
             "roleInstanceId": { "type": "null" }
+          }
+        }
+      ],
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "required": ["family"],
+            "properties": { "family": { "const": "agent_subagent" } }
+          },
+          "then": {
+            "type": "object",
+            "required": ["ownerBindingMode", "nativeAgentType"],
+            "allOf": [
+              {
+                "if": { "properties": { "ownerBindingMode": { "const": "native_custom_agent" } } },
+                "then": { "properties": { "nativeAgentType": { "type": "string", "minLength": 1, "maxLength": 128 } } }
+              },
+              {
+                "if": { "properties": { "ownerBindingMode": { "const": "run_scoped_owner_contract" } } },
+                "then": { "properties": { "nativeAgentType": { "type": "null" } } }
+              }
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                { "required": ["ownerBindingMode"] },
+                { "required": ["nativeAgentType"] }
+              ]
+            }
           }
         }
       ]
@@ -226,6 +259,8 @@
             "bindingRef": { "$ref": "#/$defs/boundedString" },
             "taskPacketId": { "$ref": "#/$defs/nullableBoundedString" },
             "roleInstanceId": { "$ref": "#/$defs/nullableBoundedString" },
+            "ownerBindingMode": { "enum": ["native_custom_agent", "run_scoped_owner_contract"] },
+            "nativeAgentType": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
             "hostSurface": { "$ref": "#/$defs/boundedString" },
             "evidenceKind": { "$ref": "#/$defs/boundedString" },
             "runId": { "$ref": "#/$defs/boundedString" },
@@ -260,7 +295,29 @@
         },
         {
           "if": { "type": "object", "properties": { "family": { "const": "agent_subagent" } } },
-          "then": { "type": "object", "properties": { "evidenceKind": { "enum": ["spawn_agent_result", "agent_task_result"] } } }
+          "then": {
+            "type": "object",
+            "required": ["ownerBindingMode", "nativeAgentType"],
+            "properties": { "evidenceKind": { "enum": ["spawn_agent_result", "agent_task_result"] } },
+            "allOf": [
+              {
+                "if": { "properties": { "ownerBindingMode": { "const": "native_custom_agent" } } },
+                "then": { "properties": { "nativeAgentType": { "type": "string", "minLength": 1, "maxLength": 128 } } }
+              },
+              {
+                "if": { "properties": { "ownerBindingMode": { "const": "run_scoped_owner_contract" } } },
+                "then": { "properties": { "nativeAgentType": { "type": "null" } } }
+              }
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                { "required": ["ownerBindingMode"] },
+                { "required": ["nativeAgentType"] }
+              ]
+            }
+          }
         },
         {
           "if": { "type": "object", "properties": { "family": { "const": "mcp" } } },

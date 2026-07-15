@@ -8,6 +8,7 @@ import process from "node:process";
 import {
   buildRuntimeProjectionEvidence,
   classifyProjectionFailure,
+  exactInvocationBindingMatches,
   evaluateInvocationCoverage,
   readGovernedExecutionRun,
   runMetaTheoryGovernedExecution,
@@ -35,6 +36,42 @@ const trustedNativeChoiceEvidence = [
 ];
 
 describe("32 — Meta-theory three product goals and support gates", () => {
+  test("Agent invocation joins require exact owner binding mode and native Agent identity", () => {
+    const base = {
+      family: "agent_subagent",
+      providerId: "global:meta-prism",
+      bindingRef: "task-1:agent_subagent:global:meta-prism",
+    };
+    assert.equal(
+      exactInvocationBindingMatches(
+        { ...base, ownerBindingMode: "run_scoped_owner_contract", nativeAgentType: null },
+        { ...base, ownerBindingMode: "run_scoped_owner_contract", nativeAgentType: null },
+      ),
+      true,
+    );
+    assert.equal(
+      exactInvocationBindingMatches(
+        { ...base, ownerBindingMode: "native_custom_agent", nativeAgentType: "meta-prism" },
+        { ...base, ownerBindingMode: "run_scoped_owner_contract", nativeAgentType: null },
+      ),
+      false,
+    );
+    assert.equal(
+      exactInvocationBindingMatches(
+        { ...base, ownerBindingMode: "native_custom_agent", nativeAgentType: "meta-prism" },
+        { ...base, ownerBindingMode: "native_custom_agent", nativeAgentType: "different-agent" },
+      ),
+      false,
+    );
+    assert.equal(
+      exactInvocationBindingMatches(
+        { family: "mcp", providerId: "mcp.selected", bindingRef: "task:mcp:mcp.selected" },
+        { family: "mcp", providerId: "mcp.selected", bindingRef: "task:mcp:mcp.selected" },
+      ),
+      true,
+    );
+  });
+
   test("real invocation coverage ignores unavailable callable probes when exact bindings are observed", () => {
     const coverage = evaluateInvocationCoverage({
       missingBindings: [],

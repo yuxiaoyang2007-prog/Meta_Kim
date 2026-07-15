@@ -27,6 +27,34 @@ Pass condition for exiting the loop: `intentConfirmationState` is `confirmed` or
 
 Adaptive termination: the dispatcher may exit the loop early when all intent dimensions reach high confidence, even if loop budget remains. Record `earlyExitReason` when this happens.
 
+## Plan-Challenge State
+
+Plan challenge is an optional state overlay on Critical, Fetch, Thinking, and Review; it is not another stage. It activates from explicit user challenge intent, actionable irreversible/high-cost or permission-sensitive side-effect intent, or a material contradiction backed by trusted Fetch/Thinking evidence. Clear low-risk reversible work remains inactive; risky vocabulary by itself is not an activation signal.
+
+Minimum state:
+
+- `planChallengeState.active`: whether a valid trigger exists.
+- `planChallengeState.phase`: `inactive` | `awaiting_user_answer` | `awaiting_understanding_confirmation` | `awaiting_execution_authorization` | `ready_for_execution` | `execution_denied` | `stopped_by_user`.
+- `planChallengeState.triggerReasons`: explicit user request, actionable material risk, or trusted evidence contradiction.
+- `currentHighestImpactQuestion`: the one unresolved user decision eligible to appear this turn, or `null`.
+- `questionDecisionImpact`: which outcome, scope, route, risk, authorization, or acceptance boundary the answer changes.
+- `recommendedAnswer`: evidence-supported default plus reason, trade-off, uncertainty, or `null` for preference-only decisions.
+- `resolvedDecisions`: decisions already answered or accepted; they cannot be re-asked without new invalidating evidence.
+- `invalidatedQuestions`: pending questions closed because a prior answer made them irrelevant.
+- `challengeControl`: `continue` | `accept_recommendation` | `skip` | `summarize_stop`; the last control covers both visible summarize-now and stop actions.
+- `challengeStopReason`: `user_requested_summary_stop` after `summarize_stop`, otherwise `null`.
+- `sharedUnderstandingConfirmed`: derived boolean backed by `sharedUnderstandingEvidenceRefs`; a caller-provided boolean is never confirmation evidence.
+- `executionAuthorization`: trusted authorization evidence with exact scope, or `not_required`, `not_requested`, or `denied`.
+- `executionAllowed`: the single fail-closed scoped gate consumed by every side-effecting path.
+
+`sharedUnderstandingConfirmed=true` never implies authorization or `executionAllowed=true`. Require authorization only when the next step mutates files or state, installs globally, publishes, deploys, deletes, pays, changes permissions, writes externally, or causes another side effect. Trusted authorization needs non-empty evidence, binding `planChallengeAuthorizationBinding(sideEffectActions)`, and scope actions covering all of them. Explicit denial enters `execution_denied`, keeps execution blocked, and does not ask again. `executionAllowed=true` only when the challenge is inactive under the existing governed route, or active at `ready_for_execution`; all other active phases keep it false. Canonical writeback and project copy consume this same exact-scope gate, and non-ready execution remains candidate/read-only. A read-only session closes after its chat summary without an authorization prompt. Fetch must resolve discoverable facts before selecting a question.
+
+State promotion is fail-closed. Without a trusted current-host user answer or authorization event, the corresponding phase remains awaiting user decision. The runner emits `pendingUserChoice` with `required_not_invoked` for host handling and does not claim a popup. A response applies only with `trusted=true`, binding `plan-challenge-response:<questionId>`, and non-empty evidence references. Caller-authored JSON, flags, environment variables, booleans, unbound answer/status objects, authorization objects, or invalidation fields cannot answer a question, confirm understanding, authorize execution, or invalidate a dependency. Caller-requested invalidation is always ignored; only the governed dependency/answer resolver invalidates questions. `summarize_stop` system-invalidates all remaining open questions and sets phase `stopped_by_user` plus stop reason `user_requested_summary_stop`.
+
+For the public governed runner, serialized `trusted` or `historical` fields are still caller data. Only a host-owned verifier callback capability may return one current-run decision; the runner ignores serialized history, understanding confirmation, and authorization for mutation. To continue across turns, `previousPlanChallengeRunId` must resolve inside the same governed output directory to a validator-passing prior artifact with the same task fingerprint and a non-terminal pending phase. The current callback must bind that exact `continuationRunId`; the runner restores the prior ledger, applies at most one decision valid for the current phase, writes a new run artifact, and never overwrites the previous run. No signature or public key is implied. Without that host capability the honest result remains pending, while the conversation host can continue the user-visible decision flow directly.
+
+Visible closure always includes confirmed decisions, unresolved risks, and next step in chat. Questions, controls, pending state, stop reason, and outcome use the resolved `zh-CN`, `en-US`, `ja-JP`, or `ko-KR` locale without cross-locale Chinese leakage. A separate durable human-readable record is allowed only for a long-lived, hard-to-reverse decision.
+
 ## Required Outputs
 
 - Critical: `surfaceRequest`, `realProductProblem`, `realIntent`, `userPainValue`, `successCriteria`, `intentFrameAssessment`, `undecidedUserChoices`, `nonGoals`, `blockingUnknowns`, `noQuotaClarification`, `intentCard`, `intentConfirmationState`.
@@ -37,7 +65,7 @@ Adaptive termination: the dispatcher may exit the loop early when all intent dim
 - Meta-Review: standard checks on `reviewPacket`.
 - Verification: `verificationPacket`.
 - Evolution: `evolutionWritebackPacket`.
-- User-facing closure: `whyChanged`, `whatChanged`, `userImpact`, `verificationEvidence`, `remainingLimits`.
+- User-facing closure: `whyChanged`, `whatChanged`, `userImpact`, `verificationEvidence`, `remainingLimits`; when plan challenge ran, also show confirmed decisions, unresolved risks, and next step directly in chat.
 
 ## Hidden Skeleton
 

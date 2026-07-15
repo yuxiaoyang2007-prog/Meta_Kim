@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { planChallengeAuthorizationBinding } from "./governed-execution/plan-challenge-policy.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -1606,6 +1607,18 @@ function validatePreDecisionOptionFrame(contract, artifact) {
     "status",
   ];
   const questionTargets = policy.questionTargetEnum ?? [];
+  const questionStatuses = policy.unresolvedQuestionStatusEnum ?? [
+    "open",
+    "answered",
+    "skipped",
+    "invalidated",
+  ];
+  const recommendationStates = policy.recommendationStateEnum ?? [
+    "recommended",
+    "preference_only",
+    "insufficient_evidence",
+  ];
+  const questionIds = new Set();
   for (const [index, question] of packet.unresolvedQuestions.entries()) {
     ensureObject(
       question,
@@ -1616,6 +1629,15 @@ function validatePreDecisionOptionFrame(contract, artifact) {
       questionFields,
       `preDecisionOptionFrame.unresolvedQuestions[${index}]`,
     );
+    ensureString(
+      question.questionId,
+      `preDecisionOptionFrame.unresolvedQuestions[${index}].questionId`,
+    );
+    ensure(
+      !questionIds.has(question.questionId),
+      `preDecisionOptionFrame.unresolvedQuestions contains duplicate questionId ${question.questionId}.`,
+    );
+    questionIds.add(question.questionId);
     ensureString(
       question.question,
       `preDecisionOptionFrame.unresolvedQuestions[${index}].question`,
@@ -1634,9 +1656,502 @@ function validatePreDecisionOptionFrame(contract, artifact) {
       `preDecisionOptionFrame.unresolvedQuestions[${index}].decisionImpact must explain what execution, scope, risk, owner, or acceptance branch the answer changes.`,
     );
     ensure(
-      ["open", "closed", "skipped"].includes(question.status),
-      `preDecisionOptionFrame.unresolvedQuestions[${index}].status must be open, closed, or skipped.`,
+      questionStatuses.includes(question.status),
+      `preDecisionOptionFrame.unresolvedQuestions[${index}].status must be ${questionStatuses.join(", ")}.`,
     );
+    ensure(
+      Number.isInteger(question.impactPriority) && question.impactPriority >= 1,
+      `preDecisionOptionFrame.unresolvedQuestions[${index}].impactPriority must be a positive integer.`,
+    );
+    ensureStringArray(
+      question.dependsOn,
+      `preDecisionOptionFrame.unresolvedQuestions[${index}].dependsOn`,
+    );
+    ensureArray(
+      question.evidenceRefs,
+      `preDecisionOptionFrame.unresolvedQuestions[${index}].evidenceRefs`,
+    );
+    validateEvidenceRefArray(
+      artifact,
+      question.evidenceRefs,
+      `preDecisionOptionFrame.unresolvedQuestions[${index}].evidenceRefs`,
+    );
+    ensureEnum(
+      question.recommendationState,
+      recommendationStates,
+      `preDecisionOptionFrame.unresolvedQuestions[${index}].recommendationState`,
+    );
+    ensureString(
+      question.recommendationRationale,
+      `preDecisionOptionFrame.unresolvedQuestions[${index}].recommendationRationale`,
+    );
+    if (question.recommendationState === "recommended") {
+      ensureString(
+        question.recommendedAnswer,
+        `preDecisionOptionFrame.unresolvedQuestions[${index}].recommendedAnswer`,
+      );
+    } else {
+      ensure(
+        question.recommendedAnswer === null || question.recommendedAnswer === "",
+        `preDecisionOptionFrame.unresolvedQuestions[${index}].recommendedAnswer must be empty when recommendationState is not recommended.`,
+      );
+    }
+    if (question.status === "answered") {
+      ensureString(
+        question.userAnswer,
+        `preDecisionOptionFrame.unresolvedQuestions[${index}].userAnswer`,
+      );
+      validateEvidenceRefArray(
+        artifact,
+        question.answerEvidenceRefs,
+        `preDecisionOptionFrame.unresolvedQuestions[${index}].answerEvidenceRefs`,
+      );
+    }
+    if (question.status === "invalidated") {
+      ensureString(
+        question.invalidatedBy,
+        `preDecisionOptionFrame.unresolvedQuestions[${index}].invalidatedBy`,
+      );
+      ensure(
+        question.invalidatedBy === "user_requested_summary_stop" ||
+          question.invalidatedBy.startsWith("answer:") ||
+          packet.unresolvedQuestions.some(
+            (candidate) => candidate.questionId === question.invalidatedBy,
+          ),
+        `preDecisionOptionFrame.unresolvedQuestions[${index}].invalidatedBy must be a producer-derived answer, stop control, or dependency reference.`,
+      );
+    }
+  }
+  for (const [index, question] of packet.unresolvedQuestions.entries()) {
+    for (const dependencyId of question.dependsOn) {
+      ensure(
+        dependencyId !== question.questionId && questionIds.has(dependencyId),
+        `preDecisionOptionFrame.unresolvedQuestions[${index}].dependsOn references an unknown or self dependency ${dependencyId}.`,
+      );
+    }
+  }
+  if (packet.planChallengeState != null) {
+    const challenge = packet.planChallengeState;
+    const challengePolicy = policy.planChallengeState ?? {};
+    ensureObject(challenge, "preDecisionOptionFrame.planChallengeState");
+    ensureFields(
+      challenge,
+      challengePolicy.requiredFields ?? [],
+      "preDecisionOptionFrame.planChallengeState",
+    );
+    ensure(
+      typeof challenge.active === "boolean",
+      "preDecisionOptionFrame.planChallengeState.active must be a boolean.",
+    );
+    ensure(
+      typeof challenge.authorizationRequired === "boolean",
+      "preDecisionOptionFrame.planChallengeState.authorizationRequired must be a boolean.",
+    );
+    ensureStringArray(
+      challenge.sideEffectActions,
+      "preDecisionOptionFrame.planChallengeState.sideEffectActions",
+    );
+    ensure(
+      new Set(challenge.sideEffectActions).size === challenge.sideEffectActions.length,
+      "preDecisionOptionFrame.planChallengeState.sideEffectActions must not contain duplicates.",
+    );
+    ensure(
+      typeof challenge.executionAllowed === "boolean",
+      "preDecisionOptionFrame.planChallengeState.executionAllowed must be a boolean.",
+    );
+    ensureEnum(
+      challenge.phase,
+      challengePolicy.phaseEnum ?? [],
+      "preDecisionOptionFrame.planChallengeState.phase",
+    );
+    ensureStringArray(
+      challenge.triggerReasons,
+      "preDecisionOptionFrame.planChallengeState.triggerReasons",
+    );
+    for (const reason of challenge.triggerReasons) {
+      ensureEnum(
+        reason,
+        challengePolicy.triggerReasonEnum ?? [],
+        "preDecisionOptionFrame.planChallengeState.triggerReasons[]",
+      );
+    }
+    ensureObjectArray(
+      challenge.triggerEvidence,
+      "preDecisionOptionFrame.planChallengeState.triggerEvidence",
+    );
+    for (const [index, evidence] of challenge.triggerEvidence.entries()) {
+      ensureFields(
+        evidence,
+        ["evidenceId", "kind", "source", "excerpt", "trusted", "binding"],
+        `preDecisionOptionFrame.planChallengeState.triggerEvidence[${index}]`,
+      );
+      ensure(
+        evidence.trusted === true,
+        `preDecisionOptionFrame.planChallengeState.triggerEvidence[${index}] must be trusted producer evidence.`,
+      );
+    }
+    ensureArray(
+      challenge.triggerEvidenceRefs,
+      "preDecisionOptionFrame.planChallengeState.triggerEvidenceRefs",
+    );
+    if (challenge.active) {
+      validateEvidenceRefArray(
+        artifact,
+        challenge.triggerEvidenceRefs,
+        "preDecisionOptionFrame.planChallengeState.triggerEvidenceRefs",
+      );
+    } else {
+      ensure(
+        challenge.triggerEvidenceRefs.length === 0 && challenge.triggerEvidence.length === 0,
+        "inactive plan challenge must not claim trigger evidence.",
+      );
+    }
+    ensureObjectArray(
+      challenge.decisionEvidence,
+      "preDecisionOptionFrame.planChallengeState.decisionEvidence",
+    );
+    for (const [index, evidence] of challenge.decisionEvidence.entries()) {
+      ensureFields(
+        evidence,
+        ["evidenceId", "kind", "binding", "sourceRefs", "sequence", "historical", "trusted"],
+        `preDecisionOptionFrame.planChallengeState.decisionEvidence[${index}]`,
+      );
+      ensure(
+        evidence.trusted === true,
+        `preDecisionOptionFrame.planChallengeState.decisionEvidence[${index}] must be trusted host-adapter evidence.`,
+      );
+      ensureString(
+        evidence.binding,
+        `preDecisionOptionFrame.planChallengeState.decisionEvidence[${index}].binding`,
+      );
+      ensureStringArray(
+        evidence.sourceRefs,
+        `preDecisionOptionFrame.planChallengeState.decisionEvidence[${index}].sourceRefs`,
+      );
+      ensure(
+        evidence.sourceRefs.length >= 1,
+        `preDecisionOptionFrame.planChallengeState.decisionEvidence[${index}].sourceRefs must not be empty.`,
+      );
+      if (evidence.kind === "question_response") {
+        ensure(
+          Number.isInteger(evidence.sequence) && evidence.sequence >= 1,
+          `preDecisionOptionFrame.planChallengeState.decisionEvidence[${index}].sequence must record selected-question order.`,
+        );
+        ensure(
+          typeof evidence.historical === "boolean",
+          `preDecisionOptionFrame.planChallengeState.decisionEvidence[${index}].historical must identify replayed history versus the current answer.`,
+        );
+      }
+    }
+    const decisionEvidenceIds = challenge.decisionEvidence.map((item) => item.evidenceId);
+    const questionResponseEvidence = challenge.decisionEvidence.filter(
+      (item) => item.kind === "question_response",
+    );
+    const questionResponseSequences = questionResponseEvidence.map((item) => item.sequence);
+    ensure(
+      new Set(decisionEvidenceIds).size === decisionEvidenceIds.length,
+      "plan challenge decision evidence ids must be unique.",
+    );
+    ensure(
+      new Set(questionResponseSequences).size === questionResponseSequences.length,
+      "plan challenge question response sequences must be unique.",
+    );
+    ensure(
+      questionResponseEvidence.filter((item) => item.historical === false).length <= 1,
+      "plan challenge may record at most one current-run question response.",
+    );
+    for (const [index, question] of packet.unresolvedQuestions.entries()) {
+      if (!["answered", "skipped"].includes(question.status)) continue;
+      ensureArray(
+        question.answerEvidenceRefs,
+        `preDecisionOptionFrame.unresolvedQuestions[${index}].answerEvidenceRefs`,
+      );
+      ensure(
+        question.answerEvidenceRefs.length > 0,
+        `preDecisionOptionFrame.unresolvedQuestions[${index}] closed by user decision must retain evidence.`,
+      );
+      validateEvidenceRefArray(
+        artifact,
+        question.answerEvidenceRefs,
+        `preDecisionOptionFrame.unresolvedQuestions[${index}].answerEvidenceRefs`,
+      );
+      const expectedResponseBinding = `plan-challenge-response:${question.questionId}`;
+      ensure(
+        question.answerEvidenceRefs.some((ref) => {
+          const evidence = getPathValue(artifact, ref);
+          return (
+            (evidence?.kind === "question_response" &&
+              evidence.binding === expectedResponseBinding) ||
+            (ref === "preDecisionOptionFrame.planChallengeState.controlEvidence" &&
+              evidence?.trusted === true &&
+              ["accept_recommendation", "skip"].includes(evidence.action))
+          );
+        }),
+        `preDecisionOptionFrame.unresolvedQuestions[${index}] answer evidence must bind to its question or trusted question control.`,
+      );
+    }
+    ensure(
+      typeof challenge.sharedUnderstandingConfirmed === "boolean",
+      "preDecisionOptionFrame.planChallengeState.sharedUnderstandingConfirmed must be a boolean.",
+    );
+    ensureStringArray(
+      challenge.sharedUnderstandingEvidenceRefs,
+      "preDecisionOptionFrame.planChallengeState.sharedUnderstandingEvidenceRefs",
+    );
+    if (challenge.sharedUnderstandingConfirmed) {
+      validateEvidenceRefArray(
+        artifact,
+        challenge.sharedUnderstandingEvidenceRefs,
+        "preDecisionOptionFrame.planChallengeState.sharedUnderstandingEvidenceRefs",
+      );
+      ensure(
+        challenge.sharedUnderstandingEvidenceRefs.every(
+          (ref) =>
+            getPathValue(artifact, ref)?.kind === "shared_understanding_confirmation" &&
+            getPathValue(artifact, ref)?.binding === "plan-challenge-understanding-confirmation",
+        ),
+        "shared understanding evidence must be trusted and bound to plan-challenge-understanding-confirmation.",
+      );
+    } else {
+      ensure(
+        challenge.sharedUnderstandingEvidenceRefs.length === 0,
+        "unconfirmed shared understanding must not claim evidence refs.",
+      );
+    }
+    ensureObject(
+      challenge.executionAuthorization,
+      "preDecisionOptionFrame.planChallengeState.executionAuthorization",
+    );
+    ensureFields(
+      challenge.executionAuthorization,
+      challengePolicy.executionAuthorizationRequiredFields ?? [],
+      "preDecisionOptionFrame.planChallengeState.executionAuthorization",
+    );
+    ensureEnum(
+      challenge.executionAuthorization.state,
+      challengePolicy.executionAuthorizationStateEnum ?? [],
+      "preDecisionOptionFrame.planChallengeState.executionAuthorization.state",
+    );
+    ensureString(
+      challenge.executionAuthorization.source,
+      "preDecisionOptionFrame.planChallengeState.executionAuthorization.source",
+    );
+    ensureString(
+      challenge.executionAuthorization.scope,
+      "preDecisionOptionFrame.planChallengeState.executionAuthorization.scope",
+    );
+    ensureStringArray(
+      challenge.executionAuthorization.scopeActions,
+      "preDecisionOptionFrame.planChallengeState.executionAuthorization.scopeActions",
+    );
+    ensure(
+      typeof challenge.executionAuthorization.trusted === "boolean",
+      "preDecisionOptionFrame.planChallengeState.executionAuthorization.trusted must be a boolean.",
+    );
+    ensureString(
+      challenge.executionAuthorization.binding,
+      "preDecisionOptionFrame.planChallengeState.executionAuthorization.binding",
+    );
+    ensureStringArray(
+      challenge.executionAuthorization.evidenceRefs,
+      "preDecisionOptionFrame.planChallengeState.executionAuthorization.evidenceRefs",
+    );
+    ensure(
+      typeof challenge.executionAuthorization.scopeCoversActions === "boolean",
+      "preDecisionOptionFrame.planChallengeState.executionAuthorization.scopeCoversActions must be a boolean.",
+    );
+    const expectedAuthorizationBinding = planChallengeAuthorizationBinding(
+      challenge.sideEffectActions,
+    );
+    ensure(
+      challenge.executionAuthorization.binding === expectedAuthorizationBinding,
+      "preDecisionOptionFrame.planChallengeState.executionAuthorization.binding must match the current side-effect action set.",
+    );
+    const scopeCoversActions = challenge.sideEffectActions.every((action) =>
+      challenge.executionAuthorization.scopeActions.includes(action),
+    );
+    ensure(
+      challenge.executionAuthorization.scopeCoversActions === scopeCoversActions,
+      "preDecisionOptionFrame.planChallengeState.executionAuthorization.scopeCoversActions must match concrete action coverage.",
+    );
+    if (["authorized", "denied"].includes(challenge.executionAuthorization.state)) {
+      ensure(
+        challenge.executionAuthorization.trusted === true,
+        "authorized or denied executionAuthorization must be trusted.",
+      );
+      validateEvidenceRefArray(
+        artifact,
+        challenge.executionAuthorization.evidenceRefs,
+        "preDecisionOptionFrame.planChallengeState.executionAuthorization.evidenceRefs",
+      );
+      ensure(
+        challenge.executionAuthorization.evidenceRefs.every(
+          (ref) =>
+            getPathValue(artifact, ref)?.kind === "execution_authorization" &&
+            getPathValue(artifact, ref)?.binding === expectedAuthorizationBinding,
+        ),
+        "execution authorization evidence must be bound to the current side-effect action set.",
+      );
+    }
+    if (challenge.executionAuthorization.state === "authorized") {
+      ensure(
+        scopeCoversActions,
+        "authorized executionAuthorization must cover every concrete side-effect action.",
+      );
+    }
+    ensureObject(
+      challenge.pendingUserChoice,
+      "preDecisionOptionFrame.planChallengeState.pendingUserChoice",
+    );
+    ensureEnum(
+      challenge.pendingUserChoice.status,
+      ["required_not_invoked", "not_required"],
+      "preDecisionOptionFrame.planChallengeState.pendingUserChoice.status",
+    );
+    ensureArray(
+      challenge.pendingUserChoice.controls,
+      "preDecisionOptionFrame.planChallengeState.pendingUserChoice.controls",
+    );
+    ensureString(challenge.chatSummaryRef, "preDecisionOptionFrame.planChallengeState.chatSummaryRef");
+    ensure(
+      challenge.chatSummaryRef === "summaryPacket",
+      "preDecisionOptionFrame.planChallengeState.chatSummaryRef must reference summaryPacket.",
+    );
+    ensure(
+      challenge.active === (challenge.triggerReasons.length > 0),
+      "preDecisionOptionFrame.planChallengeState.active must match whether a trigger reason exists.",
+    );
+    ensure(
+      challenge.authorizationRequired ===
+        (challenge.active && challenge.sideEffectActions.length > 0),
+      "preDecisionOptionFrame.planChallengeState.authorizationRequired must match active concrete side effects.",
+    );
+    const eligibleOpen = packet.unresolvedQuestions
+      .filter(
+        (question) =>
+          question.status === "open" &&
+          question.dependsOn.every(
+            (dependencyId) =>
+              packet.unresolvedQuestions.find((candidate) => candidate.questionId === dependencyId)?.status === "answered",
+          ),
+      )
+      .sort(
+        (left, right) =>
+          right.impactPriority - left.impactPriority ||
+          left.questionId.localeCompare(right.questionId),
+      );
+    ensure(
+      challenge.selectedQuestionId === (eligibleOpen[0]?.questionId ?? null),
+      "preDecisionOptionFrame.planChallengeState.selectedQuestionId must be the single highest-impact eligible open question.",
+    );
+    const awaitingUserInput = [
+      "awaiting_user_answer",
+      "awaiting_understanding_confirmation",
+      "awaiting_execution_authorization",
+    ].includes(challenge.phase);
+    ensure(
+      challenge.pendingUserChoice.status ===
+        (awaitingUserInput ? "required_not_invoked" : "not_required"),
+      "preDecisionOptionFrame.planChallengeState.pendingUserChoice.status must match the current phase.",
+    );
+    if (awaitingUserInput) {
+      ensureObject(
+        challenge.pendingUserChoice.question,
+        "preDecisionOptionFrame.planChallengeState.pendingUserChoice.question",
+      );
+      ensureString(
+        challenge.pendingUserChoice.question.binding,
+        "preDecisionOptionFrame.planChallengeState.pendingUserChoice.question.binding",
+      );
+      ensureString(
+        challenge.pendingUserChoice.question.displayText,
+        "preDecisionOptionFrame.planChallengeState.pendingUserChoice.question.displayText",
+      );
+      ensure(
+        challenge.pendingUserChoice.controls.length >= 1,
+        "preDecisionOptionFrame.planChallengeState.pendingUserChoice.controls must expose user actions while input is pending.",
+      );
+    } else {
+      ensure(
+        challenge.pendingUserChoice.question === null,
+        "preDecisionOptionFrame.planChallengeState.pendingUserChoice.question must be null when no user choice is pending.",
+      );
+      ensure(
+        challenge.pendingUserChoice.controls.length === 0,
+        "preDecisionOptionFrame.planChallengeState.pendingUserChoice.controls must be empty when no choice is pending.",
+      );
+    }
+    ensure(
+      challenge.executionAllowed ===
+        (!challenge.active || challenge.phase === "ready_for_execution"),
+      "preDecisionOptionFrame.planChallengeState.executionAllowed must fail closed until an active challenge is ready_for_execution.",
+    );
+    if (!challenge.active) {
+      ensure(
+        challenge.phase === "inactive" &&
+          challenge.authorizationRequired === false &&
+          challenge.executionAuthorization.state === "not_required",
+        "inactive plan challenge must preserve the low-risk path without an authorization gate.",
+      );
+    }
+    if (challenge.phase === "ready_for_execution") {
+      ensure(
+        challenge.selectedQuestionId === null &&
+          packet.unresolvedQuestions.every((question) => question.status !== "open"),
+        "ready_for_execution requires every challenge question to be closed and no selected question.",
+      );
+      ensure(
+        challenge.sharedUnderstandingConfirmed === true,
+        "ready_for_execution requires shared understanding confirmation.",
+      );
+      ensure(
+        challenge.authorizationRequired === false ||
+          challenge.executionAuthorization.state === "authorized",
+        "ready_for_execution requires separate execution authorization when authorizationRequired=true.",
+      );
+    }
+    if (challenge.executionAuthorization.state === "denied") {
+      ensure(
+        challenge.phase === "execution_denied" &&
+          challenge.executionAllowed === false &&
+          challenge.pendingUserChoice.status === "not_required",
+        "denied execution authorization must be terminal and must not ask again.",
+      );
+    }
+    if (challenge.active && challenge.phase !== "ready_for_execution") {
+      ensure(
+        challenge.executionAllowed === false && artifact.status !== "pass",
+        "active non-ready plan challenge must block execution and prevent a pass artifact.",
+      );
+      ensure(
+        artifact.wardenWritebackFlow?.status !== "approved-for-writeback",
+        "active non-ready plan challenge must block canonical writeback.",
+      );
+      ensure(
+        Number(artifact.projectCustomizationPacket?.execution?.appliedCount ?? 0) === 0,
+        "active non-ready plan challenge must block project capability writes.",
+      );
+      ensure(
+        artifact.coreLoop?.executionResult?.executionAllowed === false &&
+          artifact.coreLoop?.executionResult?.executionGate === "blocked_by_plan_challenge",
+        "active non-ready plan challenge must be represented as blocked in the core Execution result.",
+      );
+    }
+    if (
+      challenge.sharedUnderstandingConfirmed === true &&
+      challenge.authorizationRequired === true &&
+      !["authorized", "denied"].includes(challenge.executionAuthorization.state)
+    ) {
+      ensure(
+        challenge.phase === "awaiting_execution_authorization",
+        "shared understanding alone must not advance an authorization-required challenge to execution.",
+      );
+    }
+    const summaryFields = challengePolicy.summaryRequiredFields ?? [];
+    ensureFields(artifact.summaryPacket, summaryFields, "summaryPacket");
+    ensureArray(artifact.summaryPacket.confirmedDecisions, "summaryPacket.confirmedDecisions");
+    ensureArray(artifact.summaryPacket.openRisks, "summaryPacket.openRisks");
+    ensureString(artifact.summaryPacket.nextStep, "summaryPacket.nextStep");
   }
   ensureArray(packet.candidateOptions, "preDecisionOptionFrame.candidateOptions");
   ensure(
@@ -1710,16 +2225,16 @@ function validatePreDecisionOptionFrame(contract, artifact) {
   }
   if (packet.requiresUserChoice === true) {
     ensure(
-      packet.solutionChoiceState === "confirmed",
-      "preDecisionOptionFrame.solutionChoiceState must be confirmed before dispatch artifacts are finalized when user choice is required.",
+      packet.solutionChoiceState === "pending_user_choice",
+      "preDecisionOptionFrame.solutionChoiceState must remain pending_user_choice while a host choice is required.",
     );
     ensure(
       packet.choiceGateSkip === null || packet.choiceGateSkip === undefined,
       "preDecisionOptionFrame.choiceGateSkip must be empty when user choice is required.",
     );
     ensure(
-      packet.skipSource === "user_confirmed" || packet.skipSource === "native_choice",
-      "preDecisionOptionFrame.skipSource must show user confirmation when choice is required.",
+      packet.skipSource === "pending_host_adapter",
+      "preDecisionOptionFrame.skipSource must record pending_host_adapter while the choice has not been invoked.",
     );
   }
   if (packet.solutionChoiceState === "confirmed") {

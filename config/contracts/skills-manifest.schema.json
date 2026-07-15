@@ -7,6 +7,10 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "skillOwner", "skills"],
   "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
     "schemaVersion": {
       "type": "integer",
       "minimum": 1,
@@ -14,22 +18,28 @@
     },
     "skillOwner": {
       "type": "string",
+      "minLength": 1,
       "description": "Default GitHub owner/organization for skill repositories (can be overridden via META_KIM_SKILL_OWNER env var)"
     },
     "skills": {
       "type": "array",
+      "minItems": 1,
       "description": "List of third-party skill repositories to install",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["id", "repo"],
         "properties": {
           "id": {
             "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$",
             "description": "Unique identifier for the skill (used as directory name)"
           },
           "repo": {
             "type": "string",
-            "description": "GitHub repository path (owner/repo or full URL). Can use ${skillOwner} placeholder."
+            "minLength": 1,
+            "description": "Repository source as owner/repo, HTTPS URL, or trusted SSH URL. Can use ${skillOwner} placeholder."
           },
           "subdir": {
             "type": "string",
@@ -70,6 +80,45 @@
             "type": "string",
             "description": "Cursor plugin marketplace identifier when the package should be installed through Cursor's native plugin flow instead of a skills/ fallback"
           },
+          "marketplace": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "repository"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "repository": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Marketplace repository source; normalized by the shared config loader."
+              }
+            }
+          },
+          "versionSource": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["provider", "repository", "manifestPath"],
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": ["github-contents"]
+              },
+              "repository": {
+                "type": "string",
+                "minLength": 1
+              },
+              "manifestPath": {
+                "type": "string",
+                "minLength": 1
+              },
+              "pluginName": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
           "capabilities": {
             "type": "array",
             "description": "Runtime-neutral capabilities provided by this skill.",
@@ -100,6 +149,11 @@
             "description": "Per-runtime fallback or degraded behavior notes.",
             "additionalProperties": { "type": "string" }
           },
+          "fallbackContentDir": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Repository subdirectory used as a non-native plugin fallback."
+          },
           "defaultSelected": {
             "type": "boolean",
             "description": "If false, setup does not pre-select this repo in the dependency multi-select (default: true)"
@@ -127,6 +181,8 @@
           "targets": {
             "type": "array",
             "description": "Which runtimes this skill applies to. If omitted, applies to all runtimes.",
+            "minItems": 1,
+            "uniqueItems": true,
             "items": {
               "type": "string",
               "enum": [
@@ -153,10 +209,25 @@
               "items": { "type": "string" }
             }
           },
+          "globalHookSubdirs": {
+            "type": "object",
+            "description": "Per-runtime hook directories under the runtime home.",
+            "additionalProperties": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          },
           "hookConfigFiles": {
             "type": "object",
             "description": "Per-runtime hook config files within the repo to deploy alongside hooks.",
             "additionalProperties": { "type": "string" }
+          },
+          "globalHookConfigFiles": {
+            "type": "object",
+            "description": "Per-runtime global hook configuration paths.",
+            "additionalProperties": { "type": "string", "minLength": 1 }
           },
           "hookExtraFiles": {
             "type": "object",
@@ -185,24 +256,6 @@
                 "timeout": { "type": "integer", "description": "Hook timeout in milliseconds" }
               }
             }
-          }
-        }
-      }
-    },
-    "externalUrls": {
-      "type": "object",
-      "description": "External URLs referenced in Meta_Kim (for centralized management)",
-      "properties": {
-        "claudeCodeDocs": {
-          "type": "string",
-          "description": "Official Claude Code documentation URL"
-        },
-        "author": {
-          "type": "object",
-          "properties": {
-            "website": { "type": "string" },
-            "github": { "type": "string" },
-            "feishu": { "type": "string" }
           }
         }
       }

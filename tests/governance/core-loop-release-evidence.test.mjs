@@ -221,6 +221,16 @@ test("release-grade requires a stable captured source snapshot and all-runtime i
     false,
   );
   assert.equal(
+    computeReleaseGrade({
+      results: standardResults,
+      startIndex: 0,
+      sourceIntegrity: { releaseEligible: true },
+      globalTargetProof: { status: "passed" },
+      packedUserProof: { status: "failed" },
+    }),
+    false,
+  );
+  assert.equal(
     compareReleaseSourceSnapshots(
       {
         captureOk: true,
@@ -299,6 +309,7 @@ test("release preflight rejects a source mutation inside the probe window", () =
       };
       return { status: "passed" };
     },
+    runPackedProbe: () => ({ status: "passed" }),
   });
 
   assert.equal(preflight.globalTargetProof.status, "passed");
@@ -409,6 +420,10 @@ test("all-runtime release preflight performs real isolated install and update ar
         environment: process.env,
         onProgress,
       }),
+      runPackedProbe: () => ({
+        status: "passed",
+        sourcePolicy: "npm_pack_extracted_public_cli",
+      }),
     });
     const proof = preflight.globalTargetProof;
     assert.equal(proof.status, "passed", proof.error);
@@ -422,6 +437,11 @@ test("all-runtime release preflight performs real isolated install and update ar
     assert.equal(proof.artifactProof.length, 4);
     assert.equal(proof.identicalArtifactHash, true);
     assert.equal(proof.sourcePolicy, "external_declared_dependency_no_local_fallback");
+    assert.equal(preflight.packedUserProof.status, "passed");
+    assert.equal(
+      preflight.packedUserProof.sourcePolicy,
+      "npm_pack_extracted_public_cli",
+    );
     assert.equal(progress[0].event, "release_preflight_start");
     assert.ok(progress[0].expectedDurationMs >= 360_000);
     assert.deepEqual(

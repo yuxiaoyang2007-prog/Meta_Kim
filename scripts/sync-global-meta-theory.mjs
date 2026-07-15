@@ -4,7 +4,7 @@
  * Flags: --check, --print-targets, --with-global-hooks (opt into global hook copy + settings merge where supported).
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -314,6 +314,82 @@ async function pathExists(targetPath) {
   }
 }
 
+async function writeUtf8FileIfChanged(targetPath, content) {
+  let current = null;
+  try {
+    current = await fs.readFile(targetPath, "utf8");
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  if (current === content) {
+    return false;
+  }
+
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.writeFile(targetPath, content, "utf8");
+  return true;
+}
+
+async function fsyncDirectoryBestEffort(directoryPath) {
+  let handle = null;
+  try {
+    handle = await fs.open(directoryPath, "r");
+    await handle.sync();
+  } catch {
+    // Directory fsync is unavailable on some Windows/filesystem combinations.
+    // The staged file itself is still fsynced before the atomic rename.
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+async function writeUtf8FileAtomic(targetPath, content, failureId) {
+  assertHomeBound(targetPath);
+  await assertRealHomeBound(targetPath);
+
+  const parentDir = path.dirname(targetPath);
+  await fs.mkdir(parentDir, { recursive: true });
+  const existingStat = await fs.stat(targetPath).catch((error) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  const stagePath = path.join(
+    parentDir,
+    `.${path.basename(targetPath)}.meta-kim-staged-${process.pid}-${randomUUID()}`,
+  );
+  assertHomeBound(stagePath);
+  await assertRealHomeBound(stagePath);
+
+  let handle = null;
+  let renamed = false;
+  try {
+    handle = await fs.open(stagePath, "wx", existingStat?.mode ?? 0o600);
+    await handle.writeFile(content, "utf8");
+    await handle.sync();
+    await handle.close();
+    handle = null;
+
+    if (existingStat) {
+      await fs.chmod(stagePath, existingStat.mode);
+    }
+    if (process.env.META_KIM_TEST_FAIL_ATOMIC_SETTINGS_WRITE === failureId) {
+      throw new Error(`Injected atomic settings write failure: ${failureId}`);
+    }
+
+    await fs.rename(stagePath, targetPath);
+    renamed = true;
+    await fsyncDirectoryBestEffort(parentDir);
+  } finally {
+    await handle?.close().catch(() => {});
+    if (!renamed) {
+      await fs.rm(stagePath, { force: true }).catch(() => {});
+    }
+  }
+}
+
 async function backupExistingPath(targetPath, { family, label }) {
   assertHomeBound(targetPath);
   await assertRealHomeBound(targetPath);
@@ -576,21 +652,32 @@ async function copyCanonicalSkill(targetDir, targetId) {
   assertHomeBound(targetDir);
   await assertRealHomeBound(targetDir);
   await fs.mkdir(path.dirname(targetDir), { recursive: true });
-  await fs.rm(targetDir, { recursive: true, force: true });
   await fs.mkdir(targetDir, { recursive: true });
+
+  const expectedFiles = new Set();
   for await (const sourcePath of walkFiles(sourceDir)) {
     const relativePath = path.relative(sourceDir, sourcePath).replace(/\\/g, "/");
+    expectedFiles.add(relativePath);
     const targetPath = path.join(targetDir, ...relativePath.split("/"));
     assertHomeBound(targetPath);
     await assertRealHomeBound(targetPath);
     const content = await fs.readFile(sourcePath, "utf8");
-    await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    await fs.writeFile(
+    await writeUtf8FileIfChanged(
       targetPath,
       renderGlobalSkillContent(content, targetId, relativePath),
-      "utf8",
     );
   }
+
+  // The skill directory is fully Meta_Kim-owned. Retire files removed from the
+  // canonical source without recreating unchanged files and churning mtimes.
+  for await (const targetPath of walkFiles(targetDir)) {
+    const relativePath = path.relative(targetDir, targetPath).replace(/\\/g, "/");
+    if (expectedFiles.has(relativePath)) continue;
+    assertHomeBound(targetPath);
+    await assertRealHomeBound(targetPath);
+    await fs.rm(targetPath, { force: true });
+  }
+
   recordSafe((rec) =>
     rec.recordDir(targetDir, {
       source: "sync-global-meta-theory",
@@ -648,7 +735,7 @@ async function copyRuntimeCommands(targetId, sourceDir) {
     const targetPath = path.join(commandsDir, command.name);
     assertHomeBound(targetPath);
     await assertRealHomeBound(targetPath);
-    await fs.writeFile(targetPath, command.content, "utf8");
+    await writeUtf8FileIfChanged(targetPath, command.content);
     targetPaths.push(targetPath);
     recordSafe((rec) =>
       rec.recordFile(targetPath, {
@@ -1104,7 +1191,7 @@ async function syncClaudeGlobalSettingsHooks() {
     });
   }
 
-  await fs.writeFile(settingsPath, out, "utf8");
+  await writeUtf8FileAtomic(settingsPath, out, "claude-settings");
   console.log(`Merged Meta_Kim hooks into ${settingsPath}`);
   recordSettingsMerge();
 }
@@ -1254,7 +1341,7 @@ async function syncCodexGlobalHooksJson() {
     });
   }
 
-  await fs.writeFile(hooksJsonPath, out, "utf8");
+  await writeUtf8FileAtomic(hooksJsonPath, out, "codex-hooks");
   console.log(`Merged Meta_Kim hooks into ${hooksJsonPath}`);
   recordHooksJsonMerge();
 }
@@ -1517,9 +1604,12 @@ async function runSync() {
     throw new Error(`Missing canonical skill source: ${sourceSkillFile}`);
   }
   await assertCanonicalSkillFrontmatter();
+  const packageVersion = JSON.parse(
+    await fs.readFile(path.join(repoRoot, "package.json"), "utf8"),
+  ).version;
   manifestRecorder = openRecorder({
     scope: "global",
-    metaKimVersion: process.env.META_KIM_VERSION ?? null,
+    metaKimVersion: packageVersion,
   });
 
   for (const target of cleanupTargets) {

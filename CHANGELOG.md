@@ -8,6 +8,27 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## Unreleased
 
+## [2.8.86] - 2026-07-14
+
+### Solved Problem
+
+Global installation and project execution had been treated as if they were the same lifecycle. This could leave users unsure why project runtime files existed after choosing a global install, while a later global update could either miss an already managed project or risk overwriting a capability that had been intentionally customized for that project. Agent, Skill, Command, MCP, Hook, and tool status also did not consistently distinguish discovery, selection, host invocation, execution, and optional external certification. Separately, Issue #48 exposed two packed-update defects: the `npx` package was validated against a maintainer-only `.gitignore`, and an approved optional MCP Memory step did not forward its scoped Claude settings authorization.
+
+### Fixed
+
+- **Install scope and project capability ownership are now independent.** Users can install or update globally or for a project. A global update refreshes only projects already carrying a valid Meta_Kim bootstrap manifest; it does not create new project projections. Capabilities discovered globally are used directly unless the run must create or modify them for the current project, in which case the project copy receives independent sedimented ownership and is preserved by later global operations.
+- **Managed project updates preserve both freshness and user work.** Manifest-owned generated projections are backed up and replaced with the current package version, shared configuration is merged, and unknown or project-sedimented files remain untouched. Planning, writes, stale cleanup, and explicit cleanup all consult the same ownership records.
+- **Governed execution records runtime truth instead of display guesses.** Capability discovery now resolves owner, Agent, Skill, Command/tool, MCP provider, Hook, and verification path before mutation. User-facing status separates selected, requested, invoked, returned, failed, and externally certified states; Codex custom Agents are claimed only when the current host and projected TOML both support them.
+- **Material plan changes use a real challenge boundary.** Plan Challenge appears only when scope, risk, acceptance, or implementation shape materially branches. Understanding confirmation remains separate from execution authorization, and ordinary no-branch work is not burdened with redundant acceptance steps.
+- **Issue #48's packed-update failures are fixed.** Packed installs validate shipped product artifacts rather than a source-checkout `.gitignore`. An explicit MCP Memory confirmation now grants authorization only to the selected Claude child operation; the standalone installer remains fail-closed. Global Claude and Codex settings updates also use staged, synced, atomic replacement so an interrupted write cannot truncate user JSON.
+- **Release acceptance now follows the real user path.** The packed CLI exercises install and update for Claude Code, Codex, Cursor, and OpenClaw, including a historical `v2.8.85` to `v2.8.86` update, instead of relying only on repository-source execution.
+
+### Verification
+
+- Focused Issue #48 setup and MCP Memory tests passed `71/71`; global Hook/settings policy tests passed `19/19`, including injected replacement failures for Claude and Codex.
+- Packed-product install/update acceptance covers all four declared runtimes and the previous public release baseline.
+- The standard `npm run meta:verify:all` release gate passed from the final release tree with `releaseGrade=true`; optional private-attested `live-certified` verification was not requested.
+
 ## [2.8.85] - 2026-07-13
 
 ### Solved Problem

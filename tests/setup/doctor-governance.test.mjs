@@ -4,15 +4,40 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import os from "node:os";
+import { buildDoctorSyncCheckPlan } from "../../scripts/doctor-governance.mjs";
 
 const repoRoot = join(import.meta.dirname, "..", "..");
 
-test("doctor-governance uses the same explicit runtime-check contract as meta:check", () => {
-  const source = readFileSync(join(repoRoot, "scripts", "doctor-governance.mjs"), "utf8");
-  assert.match(
-    source,
-    /"--check",\s*"--scope",\s*"project",\s*"--targets",\s*"claude,codex"/,
-  );
+test("the default runtime check respects configured projection mode", () => {
+  const packageJson = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+  const command = packageJson.scripts["meta:check:runtimes"];
+  assert.match(command, /sync-runtimes\.mjs --check --scope project$/u);
+  assert.doesNotMatch(command, /--targets/u);
+});
+
+test("doctor-governance checks the minimal project Hook closure in global_only mode", () => {
+  const plan = buildDoctorSyncCheckPlan({
+    localOverrides: { projectProjectionMode: "global_only" },
+    activeTargets: ["claude", "codex"],
+  });
+
+  assert.equal(plan.skipped, false);
+  assert.equal(plan.projectProjectionMode, "global_only");
+  assert.equal(plan.checkKind, "minimal_hook_closure");
+  assert.deepEqual(plan.args.slice(-3), ["--check", "--scope", "project"]);
+  assert.equal(plan.args.includes("--targets"), false);
+});
+
+test("doctor-governance checks only the active project targets", () => {
+  const plan = buildDoctorSyncCheckPlan({
+    localOverrides: { projectProjectionMode: "project" },
+    activeTargets: ["cursor"],
+  });
+
+  assert.equal(plan.skipped, false);
+  assert.equal(plan.checkKind, "full_project_projection");
+  assert.deepEqual(plan.args.slice(-2), ["--targets", "cursor"]);
+  assert.doesNotMatch(plan.args.join(" "), /claude,codex/);
 });
 
 test("doctor-governance accepts healthy global hooks when project hooks are intentionally empty", () => {
@@ -85,7 +110,7 @@ test("doctor-governance accepts healthy global hooks when project hooks are inte
       },
     );
 
-    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
     assert.match(result.stdout, /Claude global Meta_Kim hooks/);
     assert.doesNotMatch(result.stdout, /missing PreToolUse or PostToolUse/);
   } finally {
@@ -164,7 +189,7 @@ test("doctor-governance accepts native Claude HookPrompt before Meta_Kim spine",
       },
     );
 
-    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
     assert.match(result.stdout, /Claude global Meta_Kim hooks/);
     assert.doesNotMatch(result.stdout, /prompt entry hook/);
   } finally {

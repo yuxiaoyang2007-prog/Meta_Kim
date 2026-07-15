@@ -34,6 +34,10 @@ const ALLOWED_FAMILIES = new Set([
   "runtime_tool",
   "agent_teams_playbook",
 ]);
+const AGENT_OWNER_BINDING_MODES = new Set([
+  "native_custom_agent",
+  "run_scoped_owner_contract",
+]);
 const SHA256_RE = /^[a-f0-9]{64}$/u;
 const MAX_BINDINGS = 256;
 const MAX_EVIDENCE_BYTES = 64 * 1024 * 1024;
@@ -67,6 +71,17 @@ function nonEmptyString(value, maxLength = 512) {
 
 function hasOnlyKeys(value, allowed) {
   return isRecord(value) && Object.keys(value).every((key) => allowed.has(key));
+}
+
+function normalizedAgentOwnerBinding(binding) {
+  if (binding?.family !== "agent_subagent") return {};
+  const ownerBindingMode = binding.ownerBindingMode ?? "run_scoped_owner_contract";
+  return {
+    ownerBindingMode,
+    nativeAgentType: ownerBindingMode === "native_custom_agent"
+      ? binding.nativeAgentType ?? null
+      : null,
+  };
 }
 
 function relativeContainedPath(value) {
@@ -113,6 +128,7 @@ function validateIsolation(isolation, target, errors) {
 function validateBindingShape(binding, observed, errors, index) {
   const requiredKeys = new Set([
     "family", "providerId", "bindingRef", "taskPacketId", "roleInstanceId",
+    "ownerBindingMode", "nativeAgentType",
   ]);
   const observedKeys = new Set([
     ...requiredKeys,
@@ -134,6 +150,28 @@ function validateBindingShape(binding, observed, errors, index) {
   if (!roleInstanceIdValid) errors.push(`binding_roleInstanceId_invalid:${index}`);
   if ((binding.taskPacketId === null) !== (binding.roleInstanceId === null)) {
     errors.push(`binding_task_role_nullability_mismatch:${index}`);
+  }
+  const hasOwnerBindingMode = Object.hasOwn(binding, "ownerBindingMode");
+  const hasNativeAgentType = Object.hasOwn(binding, "nativeAgentType");
+  if (binding.family === "agent_subagent") {
+    if (!hasOwnerBindingMode || !AGENT_OWNER_BINDING_MODES.has(binding.ownerBindingMode)) {
+      errors.push(`binding_ownerBindingMode_invalid:${index}`);
+    }
+    if (!hasNativeAgentType) {
+      errors.push(`binding_nativeAgentType_missing:${index}`);
+    } else if (
+      binding.ownerBindingMode === "native_custom_agent" &&
+      !nonEmptyString(binding.nativeAgentType, 128)
+    ) {
+      errors.push(`binding_nativeAgentType_invalid:${index}`);
+    } else if (
+      binding.ownerBindingMode === "run_scoped_owner_contract" &&
+      binding.nativeAgentType !== null
+    ) {
+      errors.push(`binding_run_scoped_nativeAgentType_invalid:${index}`);
+    }
+  } else if (hasOwnerBindingMode || hasNativeAgentType) {
+    errors.push(`binding_non_agent_owner_identity_forbidden:${index}`);
   }
   if (!observed) return;
   for (const field of [
@@ -342,6 +380,8 @@ function exactBindingKey(binding) {
     binding?.bindingRef,
     typed(binding?.taskPacketId),
     typed(binding?.roleInstanceId),
+    typed(normalizedAgentOwnerBinding(binding).ownerBindingMode ?? null),
+    typed(normalizedAgentOwnerBinding(binding).nativeAgentType ?? null),
   ]);
 }
 
@@ -400,6 +440,7 @@ function normalizedGovernedBindings(artifact) {
       taskPacketId,
       roleInstanceId: binding?.roleInstanceId ??
         (taskPacketId ? roleByTask.get(taskPacketId) ?? null : null),
+      ...normalizedAgentOwnerBinding(binding),
     };
   });
 }
@@ -411,6 +452,15 @@ function compareArtifactBinding(event, signed, key, errors) {
   ]) {
     if ((event?.[field] ?? null) !== (signed?.[field] ?? null)) {
       errors.push(`artifact_observed_binding_mismatch:${key}:${field}`);
+    }
+  }
+  if (event?.family === "agent_subagent" || signed?.family === "agent_subagent") {
+    const eventOwner = normalizedAgentOwnerBinding(event);
+    const signedOwner = normalizedAgentOwnerBinding(signed);
+    for (const field of ["ownerBindingMode", "nativeAgentType"]) {
+      if ((eventOwner[field] ?? null) !== (signedOwner[field] ?? null)) {
+        errors.push(`artifact_observed_binding_mismatch:${key}:${field}`);
+      }
     }
   }
 }
@@ -622,13 +672,7 @@ export function verifyPrivateAttestedExactBindingReport(
     const key = exactBindingKey(binding);
     if (requiredRefs.has(key)) errors.push(`duplicate_required_binding:${key}`);
     requiredRefs.add(key);
-    const matches = observed.filter((item) =>
-      item?.family === binding.family &&
-      item?.providerId === binding.providerId &&
-      item?.bindingRef === binding.bindingRef &&
-      item?.taskPacketId === binding.taskPacketId &&
-      item?.roleInstanceId === binding.roleInstanceId,
-    );
+    const matches = observed.filter((item) => exactBindingKey(item) === key);
     if (matches.length !== 1) {
       errors.push(`exact_binding_match_count:${key}:${matches.length}`);
       unmatchedBindingRefs.push(binding.bindingRef);

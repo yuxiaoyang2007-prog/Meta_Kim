@@ -47,6 +47,7 @@ import {
   readJson,
   fileExists,
 } from "./_helpers.mjs";
+import { buildCodexHooksJson } from "../../scripts/runtime-hook-mapping.mjs";
 
 const DEV_GOV_PATH = `${REPO_ROOT}/canonical/skills/meta-theory/references/dev-governance.md`;
 const SKILL_PATH = `${REPO_ROOT}/canonical/skills/meta-theory/SKILL.md`;
@@ -123,6 +124,7 @@ function minimalNodeBindings() {
         taskPacketId: "task-backend-001",
         ownerMode: "existing-owner",
         ownerAgent: "meta-conductor",
+        ownerSource: "canonical/agents/meta-conductor.md",
         owner: "meta-conductor",
         businessRoleId: "backend",
         roleDisplayName: "backend",
@@ -351,6 +353,49 @@ function runEnforceHook(state, payload, options = {}) {
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
+}
+
+function codexWorkerEnvelope(packet, overrides = {}) {
+  const ownerAgent = overrides.ownerAgent ?? packet.ownerAgent;
+  const taskPacketId = overrides.taskPacketId ?? packet.taskPacketId;
+  const roleInstanceId = overrides.roleInstanceId ?? packet.roleInstanceId;
+  const providerId = overrides.providerId ?? `project:${ownerAgent}`;
+  return JSON.stringify({
+    schemaVersion: "codex-native-worker-invocation-v0.2",
+    taskPacketId,
+    roleDisplayName: overrides.roleDisplayName ?? packet.roleDisplayName,
+    roleInstanceId,
+    ownerAgent,
+    ownerKind: "agent",
+    ownerSource: overrides.ownerSource ?? packet.ownerSource,
+    capabilityLoadout: {
+      weapon: packet.weapon ?? null,
+      dependency: packet.dependency ?? null,
+    },
+    coordination: {
+      mergeOwner: packet.mergeOwner,
+      parallelGroup: packet.parallelGroup ?? null,
+    },
+    metaKimBinding: {
+      runId: "hook-envelope-test",
+      family: "agent_subagent",
+      providerId,
+      bindingRef: `hook-envelope-test:agent_subagent:${providerId}:${taskPacketId}`,
+      taskPacketId,
+      roleInstanceId,
+      occurredAt: "2026-07-14T00:00:00.000Z",
+      evidenceKind: "spawn_agent_result",
+    },
+    ...(overrides.ownerBindingMode
+      ? { ownerBindingMode: overrides.ownerBindingMode }
+      : {}),
+    ...(overrides.nativeAgentType
+      ? { nativeAgentType: overrides.nativeAgentType }
+      : {}),
+    ...(overrides.ownerDefinition
+      ? { ownerDefinition: overrides.ownerDefinition }
+      : {}),
+  });
 }
 
 function runEnforceHookWithState(state, payload, options = {}) {
@@ -1290,6 +1335,19 @@ describe("Part F: gate state enforcement", async () => {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 describe("Part F2: choice surface runtime gate", async () => {
+  test("generated Codex PreToolUse wiring covers followup_task owner checks", () => {
+    const hooksJson = buildCodexHooksJson();
+    const dispatchHook = hooksJson.hooks.PreToolUse.find((entry) =>
+      entry.hooks?.some((hook) =>
+        String(hook.command ?? "").includes("enforce-agent-dispatch.mjs"),
+      ),
+    );
+
+    assert.ok(dispatchHook, "Codex hooks.json must wire the dispatch enforcement hook");
+    assert.match(dispatchHook.matcher, /(?:^|\|)followup_task(?:\||$)/u);
+    assert.match(dispatchHook.matcher, /collaboration\\\.followup_task/u);
+  });
+
   test("auto prompt activation creates observed advisory state instead of managed hard-gate state", () => {
     const { result, nextState } = runActivateHook(null, {
       prompt: "critical and fetch thinking and review 帮我修复 hook 反复卡住的问题",
@@ -3159,18 +3217,236 @@ describe("Part F2: choice surface runtime gate", async () => {
       },
       choiceSurfaceState: "completed",
     };
+    const reviewPacket = {
+      taskPacketId: "thinking-review-001",
+      ownerAgent: "meta-prism",
+      ownerSource: "~/.codex/agents/meta-prism.toml",
+      roleDisplayName: "review",
+      roleInstanceId: "thinking_review",
+      parallelGroup: null,
+      mergeOwner: "meta-conductor",
+    };
+    state.workerTaskPackets.push(reviewPacket);
 
     const result = runEnforceHook(state, {
       tool_name: "spawn_agent",
       tool_input: {
         task_name: "thinking_review",
         fork_turns: "none",
-        message: "Review Thinking packet quality as meta-prism",
+        message: codexWorkerEnvelope(reviewPacket, {
+          ownerBindingMode: "run_scoped_owner_contract",
+        }),
       },
     });
 
     assert.equal(result.status, 0);
     assert.doesNotMatch(result.stdout, /permissionDecision/);
+  });
+
+  test("Codex spawn without agent_type uses the run-scoped owner contract", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...completePreExecutionBindings(),
+      currentStage: "thinking",
+      agentBlueprintPacket: {
+        roles: [{ businessRoleId: "review", ownerAgent: "meta-prism" }],
+      },
+      choiceSurfaceState: "completed",
+    };
+    const packet = {
+      taskPacketId: "thinking-review-run-scoped",
+      ownerAgent: "meta-prism",
+      ownerSource: "canonical/agents/meta-prism.md",
+      roleDisplayName: "review",
+      roleInstanceId: "thinking_review_run_scoped",
+      parallelGroup: null,
+      mergeOwner: "meta-conductor",
+    };
+    state.workerTaskPackets.push(packet);
+
+    const result = runEnforceHook(state, {
+      tool_name: "spawn_agent",
+      tool_input: {
+        task_name: "meta_prism",
+        nickname: "meta-prism",
+        fork_turns: "none",
+        message: codexWorkerEnvelope(packet, {
+          ownerBindingMode: "run_scoped_owner_contract",
+        }),
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.doesNotMatch(result.stdout, /permissionDecision/);
+  });
+
+  test("Codex v0.2 envelope without ownerBindingMode is not sufficient owner evidence", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...completePreExecutionBindings(),
+      currentStage: "thinking",
+      agentBlueprintPacket: {
+        roles: [{ businessRoleId: "review", ownerAgent: "meta-prism" }],
+      },
+      choiceSurfaceState: "completed",
+    };
+    const packet = {
+      taskPacketId: "thinking-review-missing-mode",
+      ownerAgent: "meta-prism",
+      ownerSource: "canonical/agents/meta-prism.md",
+      roleDisplayName: "review",
+      roleInstanceId: "thinking_review_missing_mode",
+      parallelGroup: null,
+      mergeOwner: "meta-conductor",
+    };
+    state.workerTaskPackets.push(packet);
+
+    const result = runEnforceHook(state, {
+      tool_name: "spawn_agent",
+      tool_input: {
+        task_name: "review_without_binding_mode",
+        fork_turns: "none",
+        message: codexWorkerEnvelope(packet),
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /permissionDecision/);
+    assert.match(result.stdout, /owner binding mode/i);
+  });
+
+  test("Codex spawn with agent_type requires a matching native custom agent binding", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...completePreExecutionBindings(),
+      currentStage: "thinking",
+      agentBlueprintPacket: {
+        roles: [{ businessRoleId: "review", ownerAgent: "meta-prism" }],
+      },
+      choiceSurfaceState: "completed",
+    };
+    const packet = {
+      taskPacketId: "thinking-review-native-agent",
+      ownerAgent: "meta-prism",
+      ownerSource: "~/.codex/agents/meta-prism.toml",
+      roleDisplayName: "review",
+      roleInstanceId: "thinking_review_native_agent",
+      parallelGroup: null,
+      mergeOwner: "meta-conductor",
+    };
+    state.workerTaskPackets.push(packet);
+    const nativeEnvelope = codexWorkerEnvelope(packet, {
+      ownerBindingMode: "native_custom_agent",
+      nativeAgentType: "meta-prism",
+      ownerDefinition: {
+        format: "codex_custom_agent_toml",
+        sourceRef: "~/.codex/agents/meta-prism.toml",
+        nativeAgentName: "meta-prism",
+        nativeCustomAgentEligible: true,
+      },
+    });
+
+    const allowed = runEnforceHook(state, {
+      tool_name: "spawn_agent",
+      tool_input: {
+        agent_type: "meta-prism",
+        task_name: "review_shard",
+        nickname: "random-review-nickname",
+        fork_turns: "none",
+        message: nativeEnvelope,
+      },
+    });
+    assert.equal(allowed.status, 0);
+    assert.doesNotMatch(allowed.stdout, /permissionDecision/);
+
+    const mismatched = runEnforceHook(state, {
+      tool_name: "spawn_agent",
+      tool_input: {
+        agent_type: "different-agent",
+        task_name: "meta-prism",
+        nickname: "meta-prism",
+        fork_turns: "none",
+        message: nativeEnvelope,
+      },
+    });
+    assert.equal(mismatched.status, 0);
+    assert.match(mismatched.stdout, /permissionDecision/);
+    assert.match(mismatched.stdout, /agent_type|owner binding/i);
+  });
+
+  test("native_custom_agent rejects a Markdown owner source even when agent_type matches", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...completePreExecutionBindings(),
+      currentStage: "thinking",
+      agentBlueprintPacket: {
+        roles: [{ businessRoleId: "review", ownerAgent: "meta-prism" }],
+      },
+      choiceSurfaceState: "completed",
+    };
+    const packet = {
+      taskPacketId: "thinking-review-native-markdown-source",
+      ownerAgent: "meta-prism",
+      ownerSource: "canonical/agents/meta-prism.md",
+      roleDisplayName: "review",
+      roleInstanceId: "thinking_review_native_markdown_source",
+      parallelGroup: null,
+      mergeOwner: "meta-conductor",
+    };
+    state.workerTaskPackets.push(packet);
+
+    const result = runEnforceHook(state, {
+      tool_name: "spawn_agent",
+      tool_input: {
+        agent_type: "meta-prism",
+        task_name: "review_native_markdown_source",
+        fork_turns: "none",
+        message: codexWorkerEnvelope(packet, {
+          ownerBindingMode: "native_custom_agent",
+          nativeAgentType: "meta-prism",
+        }),
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /permissionDecision/);
+    assert.match(result.stdout, /ownerSource|TOML|native custom agent/i);
+  });
+
+  test("followup_task cannot reuse a runtime label without a professional owner binding", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      ...completePreExecutionBindings(),
+      currentStage: "execution",
+    };
+
+    const result = runEnforceHook(state, {
+      tool_name: "followup_task",
+      tool_input: {
+        target: "/root/status_validator_consumer",
+        message: "Continue the previous task.",
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /permissionDecision/);
+    assert.match(result.stdout, /owner-binding evidence is malformed or unverifiable/i);
+    assert.match(result.stdout, /runtime instance labels, not owner identity/i);
   });
 
   test("apply_patch hook is treated as an execution tool without exhaustive packet blocking", () => {

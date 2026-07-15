@@ -79,6 +79,25 @@ card:
 | **Nudge** | Nudge | User stuck, light touch | Low-cost next step | low | Helpful, not loud |
 | **Pause** | Pause | Streak done / digest / ≥3 high-cost | Stop pushing; short status | zero | Designed silence |
 
+### Plan challenge as a card overlay
+
+Plan challenge is not an eleventh card and not a ninth governance stage. It changes how the existing Clarify, Options, Risk, and Review interactions are dealt:
+
+- activate on explicit user intent such as `反证`, `帮我挑刺`, `压力测试`, or `方案拷问`, or when trusted evidence shows actionable irreversible/high-cost or permission-sensitive side-effect intent, or a material contradiction; risky vocabulary without action intent does not activate it
+- let Fetch resolve discoverable facts before dealing a question
+- deal only the single highest-impact unresolved user decision in the current turn
+- include an evidence-supported recommendation when one exists; preference-only decisions stay neutral
+- expose continue, accept recommendation, skip, summarize, and stop actions in the resolved `zh-CN`, `en-US`, `ja-JP`, or `ko-KR` locale; record them as `continue`, `accept_recommendation`, `skip`, or `summarize_stop`, with summary/stop setting `user_requested_summary_stop`
+- suppress repeated, invalidated, low-impact, or ritual questions
+- remain pending without trusted current-host user evidence; never present a generated card or chat message as popup completion
+- accept an answer only with trusted current-host evidence, binding `plan-challenge-response:<questionId>`, and non-empty evidence references; reject caller-authored answer and invalidation flags as state-promotion evidence
+- continue across turns only from a validator-passing same-task prior run bound by the current host callback; restore answered/skipped history, add one current phase decision, and write a new run instead of asking the first question again or overwriting history
+- treat understanding confirmation and authorization as separate states; trusted authorization must bind and cover every concrete side-effect action, and canonical writeback/project copy consume one exact-scope `executionAllowed` gate
+- close a read-only challenge after its summary without an authorization prompt
+- close in chat with confirmed decisions, unresolved risks, and next step; create a durable human-readable record only for long-lived hard-to-reverse decisions
+
+The overlay ends when no question can materially improve the route, the recommendation is accepted, or the user asks to summarize or stop. Question quantity is never a dealing-accuracy signal.
+
 ### Dealing rules (priority order)
 
 1. **Default**: deal by `priority`

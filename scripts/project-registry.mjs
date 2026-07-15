@@ -92,10 +92,10 @@ export async function detectProjectRegistryEntry({
         `
           SELECT project_ref, repo_root, repo_path_hash, display_name, enrollment_status, created_at, updated_at
           FROM projects
-          WHERE repo_root = ?
+          WHERE project_ref = ?
         `,
       )
-      .get(normalizedRepoPath);
+      .get(projectRef);
 
     if (!row) {
       return {
@@ -130,8 +130,8 @@ function upsertProjectRow(db, { repoPath, enrollmentStatus }) {
       INSERT INTO projects (
         project_ref, repo_root, repo_path_hash, display_name, enrollment_status, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(repo_root) DO UPDATE SET
-        project_ref = excluded.project_ref,
+      ON CONFLICT(project_ref) DO UPDATE SET
+        repo_root = excluded.repo_root,
         repo_path_hash = excluded.repo_path_hash,
         display_name = excluded.display_name,
         enrollment_status = excluded.enrollment_status,
@@ -236,6 +236,7 @@ export async function readProjectRegistryEntry({
   repoPath = process.cwd(),
 } = {}) {
   const normalizedRepoPath = normalizeRepoPath(repoPath);
+  const projectRef = buildProjectRef({ repoPath: normalizedRepoPath });
   const { projectRegistryPath } = getProjectRegistryPaths({ homeDir });
   const db = await openProjectRegistry(projectRegistryPath);
   try {
@@ -251,10 +252,10 @@ export async function readProjectRegistryEntry({
             created_at AS createdAt,
             updated_at AS updatedAt
           FROM projects
-          WHERE repo_root = ?
+          WHERE project_ref = ?
         `,
       )
-      .get(normalizedRepoPath);
+      .get(projectRef);
 
     if (!project) {
       return null;
@@ -296,6 +297,25 @@ export async function readProjectRegistryEntry({
       }));
 
     return { project, platforms, sources };
+  } finally {
+    db.close();
+  }
+}
+
+export async function listJoinedProjectRegistryEntries({ homeDir = os.homedir() } = {}) {
+  const { projectRegistryPath } = getProjectRegistryPaths({ homeDir });
+  const db = await openProjectRegistry(projectRegistryPath);
+  try {
+    return db.prepare(`
+      SELECT
+        project_ref AS projectRef,
+        repo_root AS repoRoot,
+        display_name AS displayName,
+        updated_at AS updatedAt
+      FROM projects
+      WHERE enrollment_status = 'joined'
+      ORDER BY repo_root ASC
+    `).all();
   } finally {
     db.close();
   }

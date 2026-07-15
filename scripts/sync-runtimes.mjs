@@ -5,6 +5,7 @@ import {
   buildMetaKimHooksTemplate,
   mergeGlobalMetaKimHooksIntoSettings,
   mergeRepoClaudeSettings,
+  stripRepoMetaKimHooksFromSettings,
 } from "./claude-settings-merge.mjs";
 import {
   buildCodexHooksJson,
@@ -31,8 +32,20 @@ import {
   resolveRuntimeHomeDir,
 } from "./meta-kim-sync-config.mjs";
 import { t } from "./meta-kim-i18n.mjs";
-import { CATEGORIES, openRecorder } from "./install-manifest.mjs";
+import {
+  CATEGORIES,
+  manifestFileEntryMatches,
+  manifestPathFor,
+  openRecorder,
+  readManifest,
+} from "./install-manifest.mjs";
 import { validateSkillFrontmatter } from "./install-skill-sanitizer.mjs";
+import {
+  collectProtectedProjectCapabilityPaths,
+  loadProjectCapabilityOwnershipPolicy,
+  loadProtectedProjectCapabilityPaths,
+} from "./project-capability-ownership.mjs";
+import { inspectTrustedPath } from "./safe-managed-file-operations.mjs";
 
 const cliArgs = process.argv.slice(2);
 const checkOnly = process.argv.includes("--check");
@@ -46,6 +59,14 @@ const PROJECT_RUNTIME_SKILL_IDS = new Set(["meta-theory"]);
 // --check. Populated even when not in --json mode so callers get deterministic
 // planning data; consumers just ignore it when they do not need it.
 const staleFiles = [];
+
+function assertSafeRepoProjectionPath(filePath, { allowMissing = true } = {}) {
+  if (!isRepoLocalPath(filePath)) return;
+  const relPath = path.relative(repoRoot, filePath).replace(/\\/gu, "/");
+  if (!inspectTrustedPath(repoRoot, relPath, { allowMissing })) {
+    throw new Error(`Refusing to follow a project symlink or Junction: ${relPath}`);
+  }
+}
 
 const SOURCE_REPO_PROJECT_PROJECTION_MARKERS = [
   ".claude/agents",
@@ -178,15 +199,84 @@ async function expectedSourceRepoProjectProjectionAbsence(scope, staleRecords) {
 // Recorder is lazily opened in main() when scope includes "project" so every
 // write point (writeGeneratedFile / writeGeneratedJson) can record through
 // this shared holder without plumbing a recorder arg through every build fn.
-// Failures are swallowed — a manifest glitch must never break sync itself.
+// Recorder failures are surfaced by flush() so sync cannot claim success with
+// incomplete ownership metadata.
 let manifestRecorder = null;
+let projectManifestAtStart = null;
+let runtimeSedimentedProjectPaths = new Set();
 function recordSafe(fn) {
   if (!manifestRecorder) return;
+  fn(manifestRecorder);
+}
+
+function protectedProjectPathKey(filePath) {
+  const resolved = path.resolve(filePath);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+export function collectRuntimeSedimentedProjectPaths(
+  manifest,
+  rootDir = repoRoot,
+  configRoot = repoRoot,
+) {
+  const policy = loadProjectCapabilityOwnershipPolicy(configRoot);
+  const protectedPaths = collectProtectedProjectCapabilityPaths(manifest, rootDir, policy);
+  // Preserve the historical Set API while carrying Skill-directory roots for
+  // descendant write/delete protection.
+  protectedPaths.absolutePaths.absoluteRoots = protectedPaths.absoluteRoots;
+  return protectedPaths.absolutePaths;
+}
+
+async function loadRuntimeSedimentedProjectPaths(rootDir = repoRoot) {
   try {
-    fn(manifestRecorder);
-  } catch {
-    /* recorder never breaks sync */
+    const protectedPaths = loadProtectedProjectCapabilityPaths(rootDir, repoRoot);
+    protectedPaths.absolutePaths.absoluteRoots = protectedPaths.absoluteRoots;
+    return protectedPaths.absolutePaths;
+  } catch (error) {
+    throw new Error(`Cannot safely read project capability ownership: ${error.message}`);
   }
+}
+
+export function isRuntimeSedimentedProjectPath(
+  filePath,
+  protectedPaths = runtimeSedimentedProjectPaths,
+) {
+  const key = protectedProjectPathKey(filePath);
+  if (protectedPaths.has(key)) return true;
+  for (const root of protectedPaths.absoluteRoots ?? []) {
+    const rel = path.relative(root, path.resolve(filePath));
+    if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) return true;
+  }
+  return false;
+}
+
+function forgetRecordedPath(filePath) {
+  if (!manifestRecorder) return;
+  manifestRecorder.forget(filePath);
+}
+
+function exactSyncOwnershipEntry(filePath, installManifest = projectManifestAtStart) {
+  const normalized = protectedProjectPathKey(filePath);
+  return (installManifest?.entries ?? []).find(
+    (entry) =>
+      entry.source === "sync-runtimes" &&
+      entry.kind === "file" &&
+      protectedProjectPathKey(entry.path) === normalized,
+  ) ?? null;
+}
+
+export function inspectProjectProjectionOwnership(
+  filePath,
+  installManifest = projectManifestAtStart,
+  protectedPaths = runtimeSedimentedProjectPaths,
+) {
+  if (isRuntimeSedimentedProjectPath(filePath, protectedPaths)) {
+    return { preserve: true, reason: "runtime_sedimented_project_copy", entry: null };
+  }
+  const entry = exactSyncOwnershipEntry(filePath, installManifest);
+  return entry
+    ? { preserve: false, reason: "install_projection", entry }
+    : { preserve: true, reason: "not_manifest_owned", entry: null };
 }
 
 /**
@@ -271,6 +361,16 @@ export function inferProjectPurpose(category) {
     default:
       return null;
   }
+}
+
+export function inferProjectRuntimeTarget(filePath, rootDir = repoRoot) {
+  if (typeof filePath !== "string" || !filePath) return null;
+  const rel = path.relative(rootDir, filePath).replace(/\\/g, "/");
+  if (rel.startsWith(".claude/") || rel === ".mcp.json") return "claude";
+  if (rel.startsWith(".codex/") || rel.startsWith(".agents/") || rel.startsWith("codex/")) return "codex";
+  if (rel.startsWith(".cursor/")) return "cursor";
+  if (rel.startsWith("openclaw/")) return "openclaw";
+  return null;
 }
 
 /**
@@ -1595,6 +1695,10 @@ ${body}
 }
 
 async function writeGeneratedFile(filePath, nextContent) {
+  assertSafeRepoProjectionPath(filePath);
+  if (isRuntimeSedimentedProjectPath(filePath)) {
+    return { changed: false, preserved: true, reason: "runtime_sedimented_project_copy" };
+  }
   const recordGeneratedFile = () => {
     const category = inferProjectCategory(filePath);
     if (!category) return;
@@ -1603,6 +1707,8 @@ async function writeGeneratedFile(filePath, nextContent) {
         source: "sync-runtimes",
         purpose: inferProjectPurpose(category),
         category,
+        ownershipClass: "install_projection",
+        runtimeTarget: inferProjectRuntimeTarget(filePath),
       }),
     );
   };
@@ -1715,6 +1821,7 @@ function emptyMcpConfigContent() {
 
 async function removeGeneratedPath(filePath) {
   if (!filePath) return { changed: false };
+  assertSafeRepoProjectionPath(filePath);
 
   let exists = false;
   try {
@@ -1739,6 +1846,199 @@ async function removeGeneratedPath(filePath) {
 
   await fs.rm(filePath, { recursive: true, force: true });
   return { changed: true };
+}
+
+export const GLOBAL_ONLY_DURABLE_PROJECTION_ROOTS = [
+  ".claude/agents",
+  ".claude/skills",
+  ".claude/commands",
+  ".claude/capability-index",
+  ".codex/agents",
+  ".agents/skills",
+  ".codex/commands",
+  ".codex/capability-index",
+  ".cursor/agents",
+  ".cursor/skills",
+  ".cursor/rules",
+  ".cursor/capability-index",
+  "codex",
+  "openclaw",
+];
+
+export const GLOBAL_ONLY_WHOLE_FILE_PROJECTIONS = [
+  ".codex/hooks.json",
+  ".cursor/hooks.json",
+];
+
+async function walkFiles(rootPath) {
+  assertSafeRepoProjectionPath(rootPath);
+  let stat;
+  try {
+    stat = await fs.stat(rootPath);
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+  if (stat.isFile()) return [rootPath];
+  if (!stat.isDirectory()) return [];
+  const out = [];
+  for (const entry of await fs.readdir(rootPath, { withFileTypes: true })) {
+    const childPath = path.join(rootPath, entry.name);
+    assertSafeRepoProjectionPath(childPath);
+    if (entry.isFile()) out.push(childPath);
+    else if (entry.isDirectory()) out.push(...await walkFiles(childPath));
+  }
+  return out;
+}
+
+async function removeEmptyTree(rootPath) {
+  assertSafeRepoProjectionPath(rootPath);
+  let entries;
+  try {
+    entries = await fs.readdir(rootPath, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") return;
+    throw error;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) await removeEmptyTree(path.join(rootPath, entry.name));
+  }
+  const remaining = await fs.readdir(rootPath);
+  if (remaining.length === 0 && !checkOnly) await fs.rmdir(rootPath);
+}
+
+async function removeExactlyOwnedProjectionFile(filePath) {
+  assertSafeRepoProjectionPath(filePath);
+  const ownership = inspectProjectProjectionOwnership(filePath);
+  if (ownership.preserve) {
+    return { changed: false, preserved: true, reason: ownership.reason };
+  }
+  const { entry } = ownership;
+  if (!manifestFileEntryMatches(entry, filePath)) {
+    staleFiles.push({
+      path: filePath,
+      category: inferProjectCategory(filePath),
+      action: "preserve",
+      reason: entry.sha256 ? "managed_file_changed" : "legacy_manifest_missing_integrity",
+    });
+    return { changed: false, preserved: true, reason: "ownership_not_exact" };
+  }
+  if (checkOnly) {
+    staleFiles.push({
+      path: filePath,
+      category: inferProjectCategory(filePath),
+      action: "delete",
+    });
+    return { changed: true };
+  }
+  await fs.unlink(filePath);
+  forgetRecordedPath(filePath);
+  return { changed: true };
+}
+
+async function removeExactlyOwnedProjectionTree(relativePath, changedFiles) {
+  const rootPath = path.join(repoRoot, relativePath);
+  const files = await walkFiles(rootPath);
+  for (const filePath of files) {
+    const result = await removeExactlyOwnedProjectionFile(filePath);
+    if (result.changed) changedFiles.push(path.relative(repoRoot, filePath).replace(/\\/g, "/"));
+  }
+  await removeEmptyTree(rootPath);
+}
+
+function stripTomlTable(raw, tableName) {
+  const lines = String(raw ?? "").split(/\r?\n/);
+  const escaped = tableName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const header = new RegExp(`^\\s*\\[${escaped}\\]\\s*(?:#.*)?$`);
+  if (!lines.some((line) => header.test(line))) return String(raw ?? "");
+  const out = [];
+  let skipping = false;
+  for (const line of lines) {
+    if (header.test(line)) {
+      skipping = true;
+      continue;
+    }
+    if (skipping && /^\s*\[/.test(line)) skipping = false;
+    if (!skipping) out.push(line);
+  }
+  return `${out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
+}
+
+async function rewriteGlobalOnlyConfig(filePath, transform, changedFiles) {
+  assertSafeRepoProjectionPath(filePath);
+  if (isRuntimeSedimentedProjectPath(filePath)) return;
+  let current;
+  try {
+    current = await fs.readFile(filePath, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  let next;
+  try {
+    next = transform(current);
+  } catch {
+    return; // Unknown or malformed user configuration is preserved verbatim.
+  }
+  if (next === current) return;
+  const rel = path.relative(repoRoot, filePath).replace(/\\/g, "/");
+  if (checkOnly) {
+    staleFiles.push({ path: filePath, category: inferProjectCategory(filePath), action: "update" });
+  } else {
+    await fs.writeFile(filePath, next, "utf8");
+    forgetRecordedPath(filePath);
+  }
+  changedFiles.push(rel);
+}
+
+async function enforceGlobalOnlyProjectShape(changedFiles) {
+  for (const relativePath of GLOBAL_ONLY_DURABLE_PROJECTION_ROOTS) {
+    await removeExactlyOwnedProjectionTree(relativePath, changedFiles);
+  }
+  for (const relativePath of GLOBAL_ONLY_WHOLE_FILE_PROJECTIONS) {
+    const filePath = path.join(repoRoot, relativePath);
+    const result = await removeExactlyOwnedProjectionFile(filePath);
+    if (result.changed) changedFiles.push(relativePath);
+  }
+
+  await rewriteGlobalOnlyConfig(
+    path.join(repoRoot, ".claude", "settings.json"),
+    (raw) => {
+      const parsed = JSON.parse(raw);
+      const cleaned = stripRepoMetaKimHooksFromSettings(parsed);
+      return JSON.stringify(parsed) === JSON.stringify(cleaned)
+        ? raw
+        : `${JSON.stringify(cleaned, null, 2)}\n`;
+    },
+    changedFiles,
+  );
+  await rewriteGlobalOnlyConfig(
+    path.join(repoRoot, ".mcp.json"),
+    (raw) => {
+      const parsed = JSON.parse(raw);
+      if (!parsed?.mcpServers || typeof parsed.mcpServers !== "object") return raw;
+      if (!Object.prototype.hasOwnProperty.call(parsed.mcpServers, "meta-kim-runtime")) return raw;
+      delete parsed.mcpServers["meta-kim-runtime"];
+      return `${JSON.stringify(parsed, null, 2)}\n`;
+    },
+    changedFiles,
+  );
+  await rewriteGlobalOnlyConfig(
+    path.join(repoRoot, ".cursor", "mcp.json"),
+    (raw) => {
+      const parsed = JSON.parse(raw);
+      if (!parsed?.mcpServers || typeof parsed.mcpServers !== "object") return raw;
+      if (!Object.prototype.hasOwnProperty.call(parsed.mcpServers, "meta-kim-runtime")) return raw;
+      delete parsed.mcpServers["meta-kim-runtime"];
+      return `${JSON.stringify(parsed, null, 2)}\n`;
+    },
+    changedFiles,
+  );
+  await rewriteGlobalOnlyConfig(
+    path.join(repoRoot, ".codex", "config.toml"),
+    (raw) => stripTomlTable(raw, "mcp_servers.meta-kim-runtime"),
+    changedFiles,
+  );
 }
 
 async function removeDirIfEmpty(dirPath) {
@@ -2344,8 +2644,9 @@ const PROJECT_HOOK_FILES_BY_PLATFORM = {
   openclaw: OPENCLAW_PROJECT_HOOK_FILES,
 };
 
-// Remove Meta_Kim-managed hook files from a project hooks dir. No backup
-// (caller's policy). Files NOT on the whitelist (user-authored) are kept.
+// Remove retired install-projection hooks only when manifest + current hash
+// prove exact ownership. Runtime-sedimented project copies and user files are
+// independent project assets and must survive install/global dependency sync.
 async function removeProjectMetaKimHooks(hooksDir, platformId, options = {}) {
   const whitelist = PROJECT_HOOK_FILES_BY_PLATFORM[platformId];
   if (!whitelist || !hooksDir) return [];
@@ -2363,13 +2664,9 @@ async function removeProjectMetaKimHooks(hooksDir, platformId, options = {}) {
     if (!whitelist.has(entry.name)) continue;
     if (keep?.has(entry.name)) continue;
     const target = path.join(hooksDir, entry.name);
-    if (checkOnly) {
-      removed.push(entry.name);
-      continue;
-    }
     try {
-      await fs.unlink(target);
-      removed.push(entry.name);
+      const result = await removeExactlyOwnedProjectionFile(target);
+      if (result.changed) removed.push(entry.name);
     } catch (error) {
       if (error.code !== "ENOENT") {
         console.warn(
@@ -2656,12 +2953,16 @@ Examples:
   // hit the repo (not in --check mode, and only when scope includes project).
   // Global-scope sync is recorded separately by sync-global-meta-theory.mjs.
   if (!checkOnly && (scope === "project" || scope === "both")) {
+    projectManifestAtStart = readManifest(manifestPathFor("project", repoRoot));
+    runtimeSedimentedProjectPaths = await loadRuntimeSedimentedProjectPaths(repoRoot);
     manifestRecorder = openRecorder({
       scope: "project",
       repoRoot,
       metaKimVersion: process.env.META_KIM_VERSION ?? null,
-      replaceSources: ["sync-runtimes"],
     });
+  } else if (scope === "project" || scope === "both") {
+    projectManifestAtStart = readManifest(manifestPathFor("project", repoRoot));
+    runtimeSedimentedProjectPaths = await loadRuntimeSedimentedProjectPaths(repoRoot);
   }
 
   // ── Reverse Mode: Runtime -> Canonical signal propagation ─────────────
@@ -2744,6 +3045,8 @@ Examples:
         changedFiles.push(`${target.display}/${hookName}`);
       }
     }
+
+    await enforceGlobalOnlyProjectShape(changedFiles);
   }
 
   if (selectedTargets.includes("claude")) {
@@ -3942,6 +4245,8 @@ Examples:
     const result = await manifestRecorder.flush();
     if (result.ok) {
       console.log(`✓ ${t.syncInstallManifestOk(result.path, result.entries)}`);
+    } else {
+      throw new Error(`Install manifest update failed: ${result.error ?? "unknown error"}`);
     }
   }
 }

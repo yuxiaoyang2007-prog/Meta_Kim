@@ -911,23 +911,45 @@ async function extractAgentMetadata(filePath) {
   return {};
 }
 
-async function extractCodexAgentMetadata(filePath) {
+export async function extractCodexAgentMetadata(filePath) {
   try {
     const content = await fs.readFile(filePath, "utf8");
-    const metadata = {};
-
-    // 解析 TOML-style key = "value"
-    const lines = content.split(/\r?\n/);
-    for (const line of lines) {
-      const match = line.match(/^(\w+)\s*=\s*["'](.+?)["']/);
-      if (match) {
-        metadata[match[1]] = match[2];
-      }
-    }
-
-    return metadata;
+    const scalar = (key) => {
+      const doubleTriple = content.match(
+        new RegExp(`^${key}\\s*=\\s*\"\"\"([\\s\\S]*?)\"\"\"`, "mu"),
+      );
+      if (doubleTriple) return doubleTriple[1].trim();
+      const singleTriple = content.match(
+        new RegExp(`^${key}\\s*=\\s*'''([\\s\\S]*?)'''`, "mu"),
+      );
+      if (singleTriple) return singleTriple[1].trim();
+      const singleLine = content.match(
+        new RegExp(`^${key}\\s*=\\s*[\"']([^\"']+)[\"']`, "mu"),
+      );
+      return singleLine?.[1]?.trim() ?? null;
+    };
+    const metadata = {
+      name: scalar("name"),
+      description: scalar("description"),
+      developer_instructions: scalar("developer_instructions"),
+    };
+    const customAgentDefinitionErrors = [
+      ...(!metadata.name ? ["missing_name"] : []),
+      ...(!metadata.description ? ["missing_description"] : []),
+      ...(!metadata.developer_instructions ? ["missing_developer_instructions"] : []),
+    ];
+    return {
+      ...metadata,
+      validCustomAgentDefinition: customAgentDefinitionErrors.length === 0,
+      customAgentDefinitionErrors,
+      nativeAgentName: metadata.name,
+    };
   } catch {}
-  return {};
+  return {
+    validCustomAgentDefinition: false,
+    customAgentDefinitionErrors: ["read_or_parse_failed"],
+    nativeAgentName: null,
+  };
 }
 
 async function extractSkillMetadata(filePath) {
@@ -1043,10 +1065,18 @@ async function scanPlatform(platformId, platform) {
                 ...(await extractAgentMetadata(item.path)),
               };
             } else if (item.path.endsWith(".toml")) {
+              const codexMetadata = await extractCodexAgentMetadata(item.path);
               capability.metadata = {
                 ...capability.metadata,
-                ...(await extractCodexAgentMetadata(item.path)),
+                ...codexMetadata,
               };
+              capability.inventoryId = item.id;
+              capability.nativeAgentName = codexMetadata.nativeAgentName;
+              capability.validCustomAgentDefinition = codexMetadata.validCustomAgentDefinition;
+              capability.customAgentDefinitionErrors = codexMetadata.customAgentDefinitionErrors;
+              if (codexMetadata.validCustomAgentDefinition && codexMetadata.nativeAgentName) {
+                capability.id = codexMetadata.nativeAgentName;
+              }
             }
           } else if (type === "skills" && item.path.endsWith("SKILL.md")) {
             capability.metadata = {

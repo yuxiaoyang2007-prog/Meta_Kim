@@ -24,7 +24,7 @@ function loadPrivatePresentationClassifier() {
   const start = source.indexOf("function buildCapabilityInvocationPresentation(");
   const end = source.indexOf("\nfunction buildVisibleMetaTheorySurfacePacket(", start);
   assert.ok(start >= 0 && end > start, "private presentation classifier must remain internal");
-  const functionSource = source.slice(start, end);
+  const functionSource = source.slice(start, end).replace(/^export\s+/gmu, "");
   return new Function(
     "getGovernedRunSurfaceLabels",
     `${functionSource}; return buildCapabilityInvocationPresentation;`,
@@ -458,6 +458,73 @@ describe("55 - governed run identity, language, and chat surface", () => {
     }
   });
 
+  test("chat and report expose capability-family decisions and the project customization decision", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-capability-ledger-surface-"));
+    try {
+      const run = await runMetaTheoryGovernedExecution({
+        task: "帮我检查 Agent、Skill、Command、MCP 是否真的调用，并明确项目级能力是否需要创建",
+        runId: "capability-ledger-surface",
+        outputLanguage: "zh-CN",
+        stateDir: tempDir,
+        dbPath: path.join(tempDir, "runs.sqlite"),
+        emitConversationNotice: true,
+      });
+
+      const ledger = run.capabilityLedgerPacket;
+      assert.equal(ledger.title, "本次能力使用明细");
+      assert.equal(typeof ledger.userSummary, "string");
+      for (const family of ["agent_subagent", "skill", "command_script", "mcp"]) {
+        const row = ledger.families.find((candidate) => candidate.family === family);
+        assert.ok(row, `${family} must be visible in the capability ledger`);
+        assert.equal(typeof row.familyLabel, "string");
+        assert.equal(typeof row.stateLabel, "string");
+        assert.equal(typeof row.invocationTruthBoundary, "string");
+        assert.equal(typeof row.nextAction, "string");
+        assert.ok(row.familyLabel.length > 0);
+        assert.ok(row.nextAction.length > 0);
+      }
+      assert.equal(
+        run.projectCustomizationPacket?.decision,
+        "use_global_directly",
+        "asking whether project capability creation is needed must not be treated as authorization to create",
+      );
+      assert.equal(run.projectCustomizationPacket?.requestedCapabilityCount, 0);
+      assert.equal(run.projectCustomizationPacket?.targetPath, null);
+      assert.equal(typeof run.projectCustomizationPacket?.reason, "string");
+      assert.equal(typeof run.projectCustomizationPacket?.verification, "string");
+      assert.equal(typeof run.projectCustomizationPacket?.rollback, "string");
+      assert.ok(
+        ["use_global_directly", "upgrade_existing_owner", "create_project_local_capability"].includes(
+          run.projectCustomizationPacket?.decision,
+        ),
+      );
+
+      const routeBlock = run.conversationNotice.blocks.find((block) => block.id === "route");
+      const routeText = routeBlock.lines.join("\n");
+      assert.match(routeText, /本次能力使用明细/u);
+      assert.match(routeText, /Agent \/ 子代理/u);
+      assert.match(routeText, /Skill/u);
+      assert.match(routeText, /Command \/ 脚本/u);
+      assert.match(routeText, /MCP/u);
+      assert.match(routeText, /项目能力处理决定/u);
+      assert.doesNotMatch(routeText, /providerId|selected_not_invoked|capabilityLedgerPacket/u);
+
+      const markdown = await readFile(run.paths.markdown, "utf8");
+      assert.match(markdown, /工作协调与调用情况/u);
+      assert.match(markdown, /Agent \/ 子代理/u);
+      assert.match(markdown, /Command \/ 脚本/u);
+      assert.match(markdown, /MCP/u);
+      assert.match(markdown, /项目能力处理决定/u);
+      assert.doesNotMatch(markdown, /providerId|capabilityLedgerPacket/u);
+      assert.equal(
+        run.visibleMetaTheorySurfacePacket.capabilityLedger.userSummary,
+        ledger.userSummary,
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("omitted runId preserves task fingerprint but creates unique run history", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "meta-kim-unique-run-"));
     try {
@@ -824,7 +891,7 @@ describe("55 - governed run identity, language, and chat surface", () => {
         );
         assert.doesNotMatch(
           `${run.conversationNotice.text}\n${markdown}`,
-          /exact binding|exact certification|live certification|精确绑定|精确认证|实时认证|provider|lane/iu,
+          /exact binding|exact certification|live certification|精确绑定|精确认证|实时认证|providerId|bindingRef|parallelGroup|shardScope|runtimeInstanceAlias/iu,
         );
       } finally {
         await rm(tempDir, { recursive: true, force: true });

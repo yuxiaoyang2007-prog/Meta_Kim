@@ -214,6 +214,11 @@ test("governed execution emits a coreLoop artifact summary", () => {
 
   const artifact = JSON.parse(readFileSync(path.join(tempDir, `${runId}.json`), "utf8"));
   assert.equal(artifact.runId, runId);
+  assert.deepEqual(
+    artifact.coreLoop.preDecisionOptionFrame,
+    artifact.preDecisionOptionFrame,
+    "coreLoop and workflow packaging must expose one plan-challenge frame without recomputation drift",
+  );
   assert.equal(artifact.coreLoop.contractRef, "config/contracts/core-loop-contract.json");
   assert.deepEqual(artifact.coreLoop.spine, EXPECTED_STAGES);
   for (const packetName of [

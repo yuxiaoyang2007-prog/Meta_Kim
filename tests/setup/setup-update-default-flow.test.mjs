@@ -12,6 +12,9 @@ const syncManifest = JSON.parse(
 const packageJson = JSON.parse(
   readFileSync(path.join(repoRoot, "package.json"), "utf8"),
 );
+const distribution = JSON.parse(
+  readFileSync(path.join(repoRoot, "config", "distribution.json"), "utf8"),
+);
 const readmeEn = readFileSync(path.join(repoRoot, "README.md"), "utf8");
 const readmeZh = readFileSync(path.join(repoRoot, "README.zh-CN.md"), "utf8");
 
@@ -98,8 +101,15 @@ describe("setup update default flow", () => {
 
     assert.match(
       askScopeSource,
-      /if \(silentMode\) return "global";/,
-      "non-interactive scope default must be the recommended global capability path",
+      /const explicitScope = scopeArgIndex >= 0 \? args\[scopeArgIndex \+ 1\] : null;/,
+      "explicit --scope must take precedence in both interactive and silent setup",
+    );
+    assert.equal(distribution.installDefaults.silentScope, "global");
+    assert.equal(distribution.installDefaults.interactiveScope, "global");
+    assert.match(
+      askScopeSource,
+      /const configuredDefault = silentMode[\s\S]*?DISTRIBUTION\.installDefaults\.silentScope[\s\S]*?DISTRIBUTION\.installDefaults\.interactiveScope/,
+      "interactive and silent defaults must come from the distribution config",
     );
     assert.doesNotMatch(
       askScopeSource,
@@ -122,21 +132,35 @@ describe("setup update default flow", () => {
     );
   });
 
-  test("global scope remembers global-only project projection mode", () => {
+  test("distribution scope and existing project projection state stay separate", () => {
     assert.match(
       source,
-      /async function rememberProjectProjectionMode\(mode\)/,
-      "setup must expose a local override writer for project projection mode",
+      /function rememberProjectProjectionMode\(targetDirs\)/,
+      "setup must update project state only for concrete project targets",
     );
     assert.match(
       source,
-      /projectProjectionMode: mode/,
-      "project projection mode must be persisted in local overrides",
+      /projectProjectionMode: "project"/,
+      "a successfully refreshed managed project remains a project projection",
+    );
+    assert.doesNotMatch(
+      source,
+      /rememberProjectProjectionMode\(needGlobal \? "global_only" : "project"\)|projectProjectionMode: mode/,
+      "choosing global must not eagerly rewrite existing project state to global_only",
     );
     assert.match(
       source,
-      /await rememberProjectProjectionMode\(needGlobal \? "global_only" : "project"\);/,
-      "install/update scope selection must switch global installs to global-only project projection mode",
+      /if \([\s\S]*?needProject &&[\s\S]*?summarizeInstallStatus\(stepResults\)\.status === "complete"[\s\S]*?rememberProjectProjectionMode/,
+      "an explicit project refresh must commit project mode only after the full required install path succeeds",
+    );
+    const updateSource = source.slice(
+      source.indexOf("async function runUpdate()"),
+      source.indexOf("async function runCheck()"),
+    );
+    assert.match(
+      updateSource,
+      /if \(needProject[\s\S]*?rememberProjectProjectionMode/,
+      "explicit project update success must persist project topology",
     );
   });
 
@@ -184,7 +208,7 @@ describe("setup update default flow", () => {
       "--check must not require every supported runtime projection",
     );
 
-    const updateCheckStart = source.indexOf("// ── 6. checkSync (repo-local, project scope)");
+    const updateCheckStart = source.indexOf("// ── 6. Validate installed artifacts");
     const updateCheckEnd = source.indexOf("console.log(`\\n${C.bold}${C.green}✓ ${t.updateComplete}", updateCheckStart);
     const updateCheckSource = source.slice(updateCheckStart, updateCheckEnd);
     assert.match(
@@ -295,7 +319,7 @@ describe("setup update default flow", () => {
     );
   });
 
-  test("silent mode update skips interactive project deploy prompt unless CLI/saved targets are requested", () => {
+  test("silent project scope targets cwd unless CLI/saved targets are requested", () => {
     const deployFunctionStart = source.indexOf(
       "async function askDeployDirectory()",
     );
@@ -305,7 +329,7 @@ describe("setup update default flow", () => {
     );
     const deploySource = source.slice(deployFunctionStart, deployFunctionEnd);
     const silentBranch = deploySource.indexOf("if (silentMode)");
-    const emptyReturn = deploySource.indexOf("return [];", silentBranch);
+    const cwdReturn = deploySource.indexOf("return uniqueProjectDeployDirs([CALLER_CWD]);", silentBranch);
     const selectPrompt = deploySource.indexOf("askSelect(");
 
     assert.ok(
@@ -325,41 +349,63 @@ describe("setup update default flow", () => {
       "askDeployDirectory() must honor saved project targets before silent fallback",
     );
     assert.ok(
-      emptyReturn > silentBranch,
-      "askDeployDirectory() silent/default flow must choose no extra project deploy copy",
+      cwdReturn > silentBranch,
+      "silent project scope must project into the caller cwd instead of the packed source root",
     );
     assert.ok(
       selectPrompt >= 0,
       "askDeployDirectory() must keep the interactive project deploy choice",
     );
     assert.ok(
-      emptyReturn < selectPrompt,
-      "askDeployDirectory() must return [] before prompting for project deploy directory",
+      cwdReturn < selectPrompt,
+      "askDeployDirectory() must resolve the silent cwd before interactive prompting",
     );
   });
 
-  test("install and update separate global cleanup from project directory updates", () => {
+  test("global install/update refreshes only existing managed projects and keeps cleanup explicit", () => {
     assert.match(
       source,
-      /const deployDirs = needProject \? await askDeployDirectory\(\) : \[\];/,
-      "global-only install/update must not ask for or write project deploy directories",
+      /const managedProjectResolution = needProject\s*\? \{ deployments: await askDeployDirectory\(\), rejected: \[\] \}\s*:\s*await existingManagedProjectDeployments\(\);[\s\S]*?const deployDirs = managedProjectResolution\.deployments;/,
+      "global install/update must reuse existing managed project targets without a new prompt",
     );
-    assert.match(
-      source,
-      /const cleanupDirs = needGlobal \? await askProjectCleanupDirectory\(\) : \[\];/,
-      "global install/update may ask for cleanup-only redundant project asset removal",
+    const installSource = source.slice(
+      source.indexOf("async function runInstall()"),
+      source.indexOf("async function runUpdate()"),
     );
-    assert.match(source, /cleanupProjectRedundancyDirs\(activeTargets, cleanupDirs\)/);
+    const updateSource = source.slice(
+      source.indexOf("async function runUpdate()"),
+      source.indexOf("async function runCheck()"),
+    );
+    assert.doesNotMatch(installSource, /askProjectCleanupDirectory|cleanupProjectRedundancyDirs/);
+    assert.doesNotMatch(updateSource, /askProjectCleanupDirectory|cleanupProjectRedundancyDirs/);
     assert.match(source, /projectCleanupMode/);
     assert.match(source, /runProjectCleanupCli/);
     assert.match(source, /--cleanup-projects/);
+    assert.equal(
+      syncManifest.projectMaterializationPolicy.existingProjectProjectionUpdate.cleanupMode,
+      "explicit_only",
+    );
+    assert.equal(
+      syncManifest.projectMaterializationPolicy.existingProjectProjectionUpdate.noManagedProjectAction,
+      "do_not_materialize_project_projection",
+    );
+    const existingProjectResolver = source.slice(
+      source.indexOf("async function existingManagedProjectDeployDirs()"),
+      source.indexOf("function projectDeployConfigDisplayPath", source.indexOf("async function existingManagedProjectDeployDirs()")),
+    );
+    assert.match(existingProjectResolver, /current_working_directory: \[\{ targetDir: CALLER_CWD, source: "current_working_directory" \}\]/);
+    assert.match(existingProjectResolver, /resolveExistingManagedProjectCandidates\(candidates/);
+    assert.doesNotMatch(existingProjectResolver, /mkdirSync|applyProjectBootstrapToDir/);
     assert.doesNotMatch(source, /includeSelfCleanup/);
     assert.match(
       source,
-      /if \(deployDirs\.length > 0\) \{\s*const deployResults = await copyToDeployDirs\(activeTargets, deployDirs\);[\s\S]*?deployResults\.length === deployDirs\.length &&\s*deployResults\.every\(\(item\) => item\.status === "ok"\)/,
+      /let deployResults = \[\];\s*if \(deployDirs\.length > 0\) \{\s*deployResults = await copyToDeployDirs\(activeTargets, deployDirs\);[\s\S]*?deployResults\.length === deployDirs\.length &&[\s\S]*?item\.status === "ok" && item\.stateStatus === "ready"/,
     );
     assert.match(source, /copyToDeployDirs\(activeTargets, targetDirs\)/);
     assert.match(source, /projectDeployProtectionNote/);
+    assert.match(source, /reportRejectedManagedProjectTargets\(managedProjectResolution\.rejected\)/);
+    assert.match(source, /item\.source === "explicit_project_dirs"[\s\S]*?installStep\(t\.managedProjectRejectedStep, false\)/);
+    assert.match(source, /rejectedManagedProjects: managedProjectResolution\.rejected/);
     assert.match(source, /projectCleanupProtectionNote/);
     assert.match(
       i18nStrings,
@@ -415,15 +461,10 @@ describe("setup update default flow", () => {
       source,
       /const bootstrapResult = await applyProjectBootstrapToDir\(activeTargets, targetDir\);/,
     );
-    assert.match(source, /writeProjectBootstrapManifest\(targetDir, plan, backup, cleanup\)/);
-    assert.match(source, /createProjectBootstrapBackup\(targetDir, plan\.files\)/);
-    const manifestWriteStart = source.indexOf("function writeProjectBootstrapManifest");
-    const manifestWriteEnd = source.indexOf("const PROJECT_HOOK_DIRS_BY_PLATFORM", manifestWriteStart);
-    const manifestWriteSource = source.slice(manifestWriteStart, manifestWriteEnd);
-    assert.match(manifestWriteSource, /executeSafeManagedFileTransaction\(/);
-    assert.match(manifestWriteSource, /phase: "manifest"/);
-    assert.match(manifestWriteSource, /lockKey: "project-bootstrap-manifest"/);
-    assert.doesNotMatch(manifestWriteSource, /writeJsonObject\(manifestPath/);
+    assert.match(source, /const transactionPlan = projectBootstrapTransactionalPlan\(plan, targetDir, backup\)/);
+    assert.match(source, /transactionLabel: "project-bootstrap-apply"/);
+    assert.match(source, /phase: "manifest"/);
+    assert.doesNotMatch(source, /createProjectBootstrapBackup\(/);
     assert.match(
       source,
       /const PROJECT_MUTATION_SESSION_LOCK_KEY = "project-mutation-session"/,
@@ -449,12 +490,18 @@ describe("setup update default flow", () => {
     const deployStart = source.indexOf("function deployPlatformFiles");
     const deployEnd = source.indexOf("function buildPostCopyBootstrapScript", deployStart);
     const deploySource = source.slice(deployStart, deployEnd);
-    assert.match(deploySource, /writeProjectGeneratedHooks\(platformId, targetDir\)/);
+    assert.match(
+      deploySource,
+      /writeProjectGeneratedHooks\(platformId, targetDir, protectedPaths\)/,
+    );
 
     const planStart = source.indexOf("function collectProjectDeployPlan");
     const planEnd = source.indexOf("function readPackageVersion", planStart);
     const planSource = source.slice(planStart, planEnd);
-    assert.match(planSource, /projectHookGeneratedPlans\(platformId, targetDir\)/);
+    assert.match(
+      planSource,
+      /projectHookGeneratedPlans\(platformId, targetDir, protectedPaths\)/,
+    );
 
     const protectedJsonStart = source.indexOf("function plannedProtectedProjectDeployJson");
     const protectedJsonEnd = source.indexOf("function plannedProtectedProjectDeployText", protectedJsonStart);
@@ -484,7 +531,7 @@ describe("setup update default flow", () => {
     const bootstrapApplySource = source.slice(bootstrapApplyStart, bootstrapApplyEnd);
     assert.match(
       bootstrapApplySource,
-      /reportProjectAssetCleanup\(cleanup, \{ reason: "project_retarget" \}\)/,
+      /reportProjectAssetCleanup\(transactionPlan\.cleanup, \{ reason: "project_retarget" \}\)/,
       "project install retarget cleanup must use project-specific wording",
     );
     assert.match(
@@ -587,5 +634,60 @@ describe("setup update default flow", () => {
       source,
       /if \(!projectWiring\) \{\s*skip\(t\.graphifyProjectWiringSkipped\);\s*return true;\s*\}/,
     );
+  });
+
+  test("META_KIM_SKIP_OPTIONAL_TOOLS skips Graphify and MCP Memory in install and update", () => {
+    assert.match(source, /const skipOptionalTools = process\.env\.META_KIM_SKIP_OPTIONAL_TOOLS === "1";/);
+    const installStart = source.indexOf("async function runInstall()");
+    const updateStart = source.indexOf("async function runUpdate()");
+    const installSource = source.slice(installStart, updateStart);
+    const updateSource = source.slice(updateStart, source.indexOf("async function runCheck()"));
+    for (const flowSource of [installSource, updateSource]) {
+      assert.match(flowSource, /skipOptionalTools[\s\S]*?INSTALL_STEP_OUTCOME\.SKIPPED/);
+      assert.match(flowSource, /skipOptionalTools[\s\S]*?t\.mcpMemorySkipped/);
+    }
+  });
+
+  test("MCP memory consent is scoped to the selected Claude child installer", () => {
+    const installerStart = source.indexOf("async function runMcpMemoryHookInstaller");
+    const installerEnd = source.indexOf("function checkMcpMemoryService", installerStart);
+    const installerSource = source.slice(installerStart, installerEnd);
+    assert.match(
+      installerSource,
+      /\{ allowClaudeGlobalSettings = false \} = \{\}/,
+      "the child installer must receive an explicit scoped consent parameter",
+    );
+    assert.match(
+      installerSource,
+      /allowClaudeGlobalSettings && activeTargets\.includes\("claude"\)[\s\S]*?META_KIM_CONFIRM_GLOBAL: "1"/,
+      "Claude consent must be injected only when Claude is selected",
+    );
+    assert.match(
+      installerSource,
+      /\.\.\.\(childEnv \? \{ env: childEnv \} : \{\}\)/,
+      "non-Claude child runs must not receive a setup-injected consent env",
+    );
+    assert.doesNotMatch(installerSource, /process\.env\.META_KIM_CONFIRM_GLOBAL\s*=/);
+    assert.doesNotMatch(installerSource, /--force/);
+
+    const memoryStepStart = source.indexOf("async function installMcpMemoryServiceStep");
+    const memoryStepEnd = source.indexOf("function ensureNetworkxCompatibility", memoryStepStart);
+    const memoryStepSource = source.slice(memoryStepStart, memoryStepEnd);
+    assert.match(
+      memoryStepSource,
+      /const want = await askYesNo\(t\.askMcpMemoryInstall, true\);[\s\S]*?allowClaudeGlobalSettings: want && activeTargets\.includes\("claude"\)/,
+      "the setup prompt answer must be the only source of the scoped Claude consent",
+    );
+  });
+
+  test("packed installs validate installed artifacts instead of maintainer repository files", () => {
+    const validationStart = source.indexOf("async function validateInstalledArtifacts");
+    const validationEnd = source.indexOf("function printInstallResult", validationStart);
+    const validationSource = source.slice(validationStart, validationEnd);
+    assert.match(validationSource, /SETUP_NODE_CHILD\.GLOBAL_META_THEORY_SYNC/);
+    assert.match(validationSource, /projectDeployResults/);
+    assert.match(validationSource, /isSourceCheckout\(\)/);
+    assert.doesNotMatch(validationSource, /PROJECT_VALIDATION|validate-project|\.gitignore/);
+    assert.doesNotMatch(source, /await validate\(\)/);
   });
 });

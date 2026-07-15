@@ -56,7 +56,7 @@ const SOURCE_LEAK_PATTERN = new RegExp(
     "wsh" + "obson",
     "anth" + "ropic",
     "skill-" + "creator",
-    "[A-Z]:[\\\\/]",
+    "(?:^|[^A-Za-z])[A-Z]:[\\\\/]",
     "Users[\\\\/]Kim",
   ].join("|"),
   "i"
@@ -150,21 +150,213 @@ function relative(filePath) {
   return relativePath;
 }
 
-function sanitizeProductReportValue(value) {
+const PUBLIC_ROUTE_START =
+  /^\/(?:api|assets|auth|docs|favicon\.ico|graphql|healthz?|oauth|readyz?|static|v\d+)(?:\/|[?#]|$)/i;
+const PATH_BOUNDARIES = new Set([
+  ",",
+  "，",
+  ";",
+  "；",
+  "。",
+  "!",
+  "?",
+  "！",
+  "？",
+  ")",
+  "）",
+  "]",
+  "}",
+  "\r",
+  "\n",
+]);
+const MATCHING_QUOTES = new Map([
+  ['"', '"'],
+  ["'", "'"],
+  ["`", "`"],
+  ["“", "”"],
+  ["‘", "’"],
+]);
+
+function firstMatchAtOrAfter(value, fromIndex, pattern, type) {
+  pattern.lastIndex = fromIndex;
+  let match = pattern.exec(value);
+  while (match) {
+    const previous = value[match.index - 1];
+    if (match.index === 0 || !/[A-Z0-9_./\\]/i.test(previous)) {
+      if (type === "posix" && PUBLIC_ROUTE_START.test(value.slice(match.index))) {
+        match = pattern.exec(value);
+        continue;
+      }
+      return { index: match.index, type, length: match[0].length };
+    }
+    match = pattern.exec(value);
+  }
+  return null;
+}
+
+function findNextAbsolutePathStart(value, fromIndex) {
+  const candidates = [
+    firstMatchAtOrAfter(
+      value,
+      fromIndex,
+      /https?:\/\/[^\s,，;；。)）}"'`]+/gi,
+      "public-url",
+    ),
+    firstMatchAtOrAfter(value, fromIndex, /file:(?:\/{1,3}|\\+)/gi, "file-uri"),
+    firstMatchAtOrAfter(value, fromIndex, /[A-Z]:[\\/]/gi, "windows"),
+    firstMatchAtOrAfter(value, fromIndex, /\\\\[^\\/\s]+[\\/]/g, "unc"),
+    firstMatchAtOrAfter(value, fromIndex, /\/(?![\/\s])/g, "posix"),
+  ].filter(Boolean);
+  if (candidates.length === 0) return null;
+  return candidates.sort((left, right) => left.index - right.index)[0];
+}
+
+function findAbsolutePathEnd(value, startIndex) {
+  const openingQuote = value[startIndex - 1];
+  const closingQuote = MATCHING_QUOTES.get(openingQuote);
+  if (closingQuote) {
+    const quotedEnd = value.indexOf(closingQuote, startIndex);
+    if (quotedEnd !== -1) return quotedEnd;
+  }
+  for (let index = startIndex; index < value.length; index += 1) {
+    if (PATH_BOUNDARIES.has(value[index])) return index;
+  }
+  return value.length;
+}
+
+function sanitizeUrlComponent(rawComponent) {
+  const directlySanitized = redactAbsolutePaths(rawComponent);
+  if (directlySanitized !== rawComponent) return directlySanitized;
+  try {
+    const decoded = decodeURIComponent(rawComponent.replaceAll("+", "%20"));
+    const sanitizedDecoded = redactAbsolutePaths(decoded);
+    if (sanitizedDecoded === decoded) return rawComponent;
+    return encodeURIComponent(sanitizedDecoded)
+      .replaceAll("%3Clocal-path%3E", "<local-path>")
+      .replaceAll("%3Cproject-root%3E", "<project-root>")
+      .replaceAll("%3Cuser-home%3E", "<user-home>");
+  } catch {
+    return rawComponent;
+  }
+}
+
+function sanitizePublicUrlSpan(urlSpan) {
+  const queryIndex = urlSpan.indexOf("?");
+  const hashIndex = urlSpan.indexOf("#");
+  const componentStarts = [queryIndex, hashIndex].filter((index) => index !== -1);
+  if (componentStarts.length === 0) return urlSpan;
+  const baseEnd = Math.min(...componentStarts);
+  const base = urlSpan.slice(0, baseEnd);
+  const queryEnd = hashIndex === -1 ? urlSpan.length : hashIndex;
+  const rawQuery = queryIndex === -1 ? null : urlSpan.slice(queryIndex + 1, queryEnd);
+  const rawHash = hashIndex === -1 ? null : urlSpan.slice(hashIndex + 1);
+  const sanitizedQuery =
+    rawQuery === null
+      ? null
+      : rawQuery
+          .split("&")
+          .map((pair) => {
+            const separator = pair.indexOf("=");
+            if (separator === -1) return sanitizeUrlComponent(pair);
+            const key = sanitizeUrlComponent(pair.slice(0, separator));
+            const entry = sanitizeUrlComponent(pair.slice(separator + 1));
+            return `${key}=${entry}`;
+          })
+          .join("&");
+  const sanitizedHash = rawHash === null ? null : sanitizeUrlComponent(rawHash);
+  if (sanitizedQuery === rawQuery && sanitizedHash === rawHash) return urlSpan;
+  return `${base}${sanitizedQuery === null ? "" : `?${sanitizedQuery}`}${
+    sanitizedHash === null ? "" : `#${sanitizedHash}`
+  }`;
+}
+
+function redactAbsolutePaths(value) {
+  let cursor = 0;
+  let output = "";
+  while (cursor < value.length) {
+    const next = findNextAbsolutePathStart(value, cursor);
+    if (!next) {
+      output += value.slice(cursor);
+      break;
+    }
+    output += value.slice(cursor, next.index);
+    if (next.type === "public-url") {
+      output += sanitizePublicUrlSpan(value.slice(next.index, next.index + next.length));
+      cursor = next.index + next.length;
+      continue;
+    }
+    output += "<local-path>";
+    cursor = findAbsolutePathEnd(value, next.index);
+  }
+  return output;
+}
+
+function sanitizeProductReportString(value) {
+  const normalizedValue = value.trim().replaceAll("\\", "/").toLowerCase();
+  const projectRoots = new Set([
+    REPO_ROOT,
+    REPO_ROOT.replaceAll("\\", "/"),
+  ]);
+  if (
+    [...projectRoots].some(
+      (root) => root.replaceAll("\\", "/").toLowerCase() === normalizedValue,
+    )
+  ) return "<project-root>";
+  const userHome = os.homedir();
+  const homeRoots = new Set([
+    userHome,
+    userHome.replaceAll("\\", "/"),
+  ]);
+  if (
+    [...homeRoots].some(
+      (root) => root.replaceAll("\\", "/").toLowerCase() === normalizedValue,
+    )
+  ) return "<user-home>";
+  const sanitized = value
+    .replace(/skill-creator/gi, "skill-provider")
+    .replace(/gstack/gi, "external-skill-provider")
+    .replace(/gbrain/gi, "external-memory-provider")
+    .replace(/wshobson/gi, "external-provider-author")
+    .replace(/anthropic/gi, "external-model-provider")
+    .replace(/Users[\\/]Kim/gi, "Users/<user>")
+    .replaceAll("route://", "route::");
+  return redactAbsolutePaths(sanitized);
+}
+
+export function sanitizeProductReportValue(value) {
   if (typeof value === "string") {
-    return value
-      .replaceAll("skill-creator", "skill-provider")
-      .replaceAll("route://", "route::");
+    return sanitizeProductReportString(value);
   }
   if (Array.isArray(value)) {
     return value.map((item) => sanitizeProductReportValue(item));
   }
   if (value && typeof value === "object") {
+    const entries = Object.entries(value);
+    const sanitizedKeys = entries.map(([key]) => sanitizeProductReportString(key));
+    const reservedKeys = new Set(sanitizedKeys);
+    const usedKeys = new Set();
+    let pathKeyOrdinal = 1;
+    let collisionKeyOrdinal = 1;
     return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [
-        key,
-        sanitizeProductReportValue(entry),
-      ]),
+      entries.map(([, entry], index) => {
+        let sanitizedKey = sanitizedKeys[index];
+        if (sanitizedKey === "<local-path>") {
+          do {
+            sanitizedKey = `<local-path-key-${pathKeyOrdinal}>`;
+            pathKeyOrdinal += 1;
+          } while (reservedKeys.has(sanitizedKey) || usedKeys.has(sanitizedKey));
+        } else if (usedKeys.has(sanitizedKey)) {
+          do {
+            sanitizedKey = `<sanitized-key-${collisionKeyOrdinal}>`;
+            collisionKeyOrdinal += 1;
+          } while (reservedKeys.has(sanitizedKey) || usedKeys.has(sanitizedKey));
+        }
+        usedKeys.add(sanitizedKey);
+        return [
+          sanitizedKey,
+          sanitizeProductReportValue(entry),
+        ];
+      }),
     );
   }
   return value;

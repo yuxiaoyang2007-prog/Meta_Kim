@@ -9,28 +9,80 @@ function route(task, runtime = "auto", os = "auto", extraArgs = []) {
   return JSON.parse(result.stdout);
 }
 
-function assertNativeCodexSpawn(binding, ownerAgent, packet = null) {
+function assertNativeCodexSpawn(
+  binding,
+  ownerAgent,
+  packet = null,
+  expectedMode = "run_scoped_owner_contract",
+) {
   assert.equal(binding?.hostSurface, "spawn_agent");
-  assert.equal(binding?.spawnMode, "native_task");
+  assert.deepEqual(binding?.supportedHostSurfaces, ["spawn_agent", "followup_task"]);
   assert.equal(binding?.ownerAgent, ownerAgent);
+  assert.equal(binding?.ownerBindingMode, expectedMode);
+  assert.equal(
+    binding?.nativeAgentType,
+    expectedMode === "native_custom_agent" ? ownerAgent : null,
+  );
   assert.match(binding?.task_name ?? "", /^[a-z0-9_]+$/);
   assert.ok((binding?.task_name ?? "").length <= 64);
+  assert.notEqual(binding?.task_name, ownerAgent, "task_name is a run-scoped label, not the professional owner identity");
   assert.equal(binding?.fork_turns, "none");
   assert.equal(typeof binding?.message, "string");
   const message = JSON.parse(binding.message);
   assert.equal(message.ownerAgent, ownerAgent);
   assert.equal(message.ownerKind, "agent");
+  assert.equal(message.ownerBindingMode, expectedMode);
+  assert.equal(
+    message.nativeAgentType,
+    expectedMode === "native_custom_agent" ? ownerAgent : null,
+  );
+  assert.equal(message.ownerDefinition.sourceRef, binding.ownerSource);
+  assert.equal(
+    message.ownerDefinition.nativeCustomAgentEligible,
+    binding.ownerDefinition.nativeCustomAgentEligible,
+  );
+  assert.equal(message.metaKimBinding.family, "agent_subagent");
+  assert.equal(message.metaKimBinding.providerId, `global:${ownerAgent}`);
+  assert.equal(message.metaKimBinding.taskPacketId, message.taskPacketId);
+  assert.equal(message.metaKimBinding.roleInstanceId, message.roleInstanceId);
+  assert.equal(message.metaKimBinding.evidenceKind, "spawn_agent_result");
+  assert.equal(binding?.followupTaskTemplate?.hostSurface, "followup_task");
+  assert.equal(binding?.followupTaskTemplate?.target, null);
+  assert.equal(
+    binding?.followupTaskTemplate?.targetPolicy,
+    "existing_runtime_instance_id_only_not_owner_identity",
+  );
+  const followupMessage = JSON.parse(binding.followupTaskTemplate.message);
+  assert.deepEqual(followupMessage.metaKimBinding, message.metaKimBinding);
+  if (expectedMode === "native_custom_agent") {
+    assert.equal(followupMessage.ownerBindingMode, "run_scoped_owner_contract");
+    assert.equal(followupMessage.nativeAgentType, null);
+  } else {
+    assert.deepEqual(followupMessage, message);
+  }
   assert.equal(message.outputContract.verificationOwner, packet?.verificationOwner ?? "meta-prism");
   if (packet) {
     assert.equal(message.taskPacketId, packet.taskPacketId);
+    assert.equal(message.roleDisplayName, packet.roleDisplayName);
+    assert.notEqual(message.roleDisplayName, binding.task_name);
     assert.equal(message.roleInstanceId, packet.roleInstanceId);
     assert.equal(message.coordination.parallelGroup, packet.parallelGroup);
     assert.equal(message.coordination.mergeOwner, packet.mergeOwner);
     assert.equal(message.scope.purpose, packet.purpose);
   }
   assert.equal(binding?.hostSurfaceProbeRequired, true);
-  assert.equal(binding?.invocationReadiness, "requires_current_host_spawn_agent_surface");
-  assert.equal(Object.hasOwn(binding ?? {}, "agent_type"), false);
+  if (expectedMode === "native_custom_agent") {
+    assert.equal(binding?.ownerSelectorField, "agent_type");
+    assert.equal(binding?.agent_type, ownerAgent);
+    assert.equal(
+      binding?.invocationReadiness,
+      "native_custom_agent_request_ready_success_still_requires_host_result",
+    );
+  } else {
+    assert.equal(binding?.ownerSelectorField, null);
+    assert.match(binding?.invocationReadiness ?? "", /^run_scoped_ready_/u);
+    assert.equal(Object.hasOwn(binding ?? {}, "agent_type"), false);
+  }
   assert.equal(Object.hasOwn(binding ?? {}, "fork_context"), false);
   assert.equal(Object.hasOwn(binding ?? {}, "messageRef"), false);
 }
@@ -444,7 +496,19 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     "Engineering smoke route must bind an MCP provider",
   );
   assert.ok(smoke.recommendedRoute?.selectedCapabilityProviders?.command || smoke.recommendedRoute?.selectedCapabilityProviders?.runtimeTool);
-  assert.equal(smoke.routeExecutionGate?.canEnterExecution, true);
+  const smokeHasUnsafeParallelDrafts =
+    smoke.workerTaskPacketDrafts?.length >= 2 &&
+    smoke.workerTaskPacketDrafts.some(
+      (packet) =>
+        packet.shardScope.length === 0 ||
+        packet.workspaceIsolation === "unproven" ||
+        packet.safetyEvidence?.status !== "proven",
+    );
+  assert.equal(smoke.routeExecutionGate?.canEnterExecution, !smokeHasUnsafeParallelDrafts);
+  if (smokeHasUnsafeParallelDrafts) {
+    assert.ok(smoke.routeExecutionGate?.blockedBy.includes("parallel_lane_safety_not_proven"));
+    assert.equal(smoke.routeExecutionGate?.returnToStage, "Thinking");
+  }
 
   const claudeSmoke = route(
     "Create a provider smoke test that discovers an execution agent, finds a skill provider, finds an MCP provider, and emits a verification command",
@@ -505,6 +569,30 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.codexSpawnBinding,
     codexAgentReuseComplaint.recommendedRoute?.owner,
     codexAgentReuseComplaint.workerTaskPacketDrafts?.[0],
+  );
+
+  const codexAgentTypeSchema = JSON.stringify({
+    hostSurface: "spawn_agent",
+    inputProperties: ["task_name", "message", "agent_type"],
+    evidenceSource: "active_host_tool_schema",
+  });
+  const codexNativeCustomAgentRoute = route(
+    "Critical Thinking Fetch Deep Thinking Review 为什么 Codex 一直创建 agent 而不是找全局 agent",
+    "codex",
+    "windows",
+    ["--codex-host-tool-schema", codexAgentTypeSchema],
+  );
+  assertNativeCodexSpawn(
+    codexNativeCustomAgentRoute.recommendedRoute?.codexSpawnBinding,
+    codexNativeCustomAgentRoute.recommendedRoute?.owner,
+    null,
+    "native_custom_agent",
+  );
+  assertNativeCodexSpawn(
+    codexNativeCustomAgentRoute.workerTaskPacketDrafts?.[0]?.codexSpawnBinding,
+    codexNativeCustomAgentRoute.recommendedRoute?.owner,
+    codexNativeCustomAgentRoute.workerTaskPacketDrafts?.[0],
+    "native_custom_agent",
   );
   assert.equal(
     codexAgentReuseComplaint.capabilityGapDetected,
@@ -611,6 +699,26 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   for (const packet of codexMetaTriggerFanout.workerTaskPacketDrafts) {
     assert.equal(packet.ownerKind, "agent");
     assertNativeCodexSpawn(packet.codexSpawnBinding, packet.ownerAgent, packet);
+  }
+
+  const codexCapabilityCoreComplaint = route(
+    "帮我实现 Agent Skill Command MCP 的调用并修复核心功能 Critical Thinking → Fetch → Deep Thinking → Review",
+    "codex",
+    "windows",
+  );
+  const unsafeDrafts = codexCapabilityCoreComplaint.workerTaskPacketDrafts.filter(
+    (packet) =>
+      packet.shardScope.length === 0 ||
+      packet.workspaceIsolation === "unproven" ||
+      packet.safetyEvidence?.status === "unproven",
+  );
+  if (unsafeDrafts.length > 0) {
+    assert.notEqual(
+      codexCapabilityCoreComplaint.dispatchBoardDraft?.dispatchMode,
+      "fan_out_ready",
+      "An implementation request naming Agent/Skill/Command/MCP must not become safe live fan-out while lane isolation is unproven",
+    );
+    assert.equal(codexCapabilityCoreComplaint.dispatchBoardDraft?.fanoutReadiness?.thinkingApproved, false);
   }
 
   const codexWhitespaceFanout = route(

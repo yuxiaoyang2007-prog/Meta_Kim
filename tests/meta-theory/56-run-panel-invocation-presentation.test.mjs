@@ -5,12 +5,16 @@ import {
   resolvePanelInvocationPresentation,
   resolveRunOutputLanguage,
 } from "../../scripts/generate-meta-theory-run-deliverables.mjs";
-import { getReportLabels } from "../../scripts/meta-kim-i18n.mjs";
+import {
+  getGovernedRunSurfaceLabels,
+  getReportLabels,
+} from "../../scripts/meta-kim-i18n.mjs";
 
 function panelFixture({
   presentation = undefined,
   coverage = undefined,
   runtime = undefined,
+  capabilityLedger = undefined,
   locale = "zh-CN",
   includeRawPrimaryFields = false,
 } = {}) {
@@ -59,6 +63,9 @@ function panelFixture({
   };
   if (presentation !== undefined) {
     contract.capabilityInvocationPresentation = presentation;
+  }
+  if (capabilityLedger !== undefined) {
+    contract.capabilityLedger = capabilityLedger;
   }
   const manifest = {
     files: {
@@ -278,5 +285,93 @@ describe("56 - run panel invocation presentation", () => {
     assert.ok(result.html.includes(`>${result.presentation.executionLabel}<`));
     assert.match(result.html, />运行记录待关联</u);
     assert.doesNotMatch(result.html, />不可用</u);
+  });
+
+  test("keeps a useful user-facing status for every capability family", () => {
+    const capabilityLedger = {
+      status: "ready",
+      families: [
+        ["agent_subagent", "Agent / 子代理", "已选择", "等待宿主调用"],
+        ["skill", "Skill", "已选择", "等待应用并返回结果"],
+        ["command_script", "Command / 脚本", "已调用", "查看命令输出"],
+        ["mcp", "MCP", "部分失败", "重试失败的工具调用"],
+        ["runtime_tool", "运行时工具", "已调用", "查看工具结果"],
+        ["hook", "Hook", "未触发", "满足触发条件后重试"],
+      ].map(([family, familyLabel, stateLabel, nextAction], index) => ({
+        family,
+        familyLabel,
+        providerId: `private-provider-${index}`,
+        providerIds: [`private-provider-${index}`],
+        source: `D:/private/runtime/source-${index}.toml`,
+        sources: [`D:/private/runtime/source-${index}.toml`],
+        displayProvider: `友好能力 ${index + 1}`,
+        displaySource: index % 2 === 0 ? "全局能力" : "项目能力",
+        selected: true,
+        state: `private-state-${index}`,
+        stateLabel,
+        nextAction,
+        displayLine: `${familyLabel}：${stateLabel}；${nextAction}`,
+      })),
+    };
+    const result = panelFixture({ capabilityLedger });
+
+    for (const row of capabilityLedger.families) {
+      assert.match(result.html, new RegExp(row.familyLabel.replace("/", "\\/"), "u"));
+      assert.match(result.html, new RegExp(row.stateLabel, "u"));
+      assert.match(result.html, new RegExp(row.nextAction, "u"));
+      assert.match(result.html, new RegExp(row.displayProvider, "u"));
+      assert.match(result.html, new RegExp(row.displaySource, "u"));
+      assert.doesNotMatch(result.html, new RegExp(row.providerId, "u"));
+      assert.doesNotMatch(result.html, new RegExp(row.state, "u"));
+      assert.doesNotMatch(result.html, new RegExp(row.source.replaceAll("/", "\\/"), "u"));
+    }
+    assert.doesNotMatch(result.html, />none</u);
+  });
+
+  test("mixed success and failure copy never collapses to unavailable", () => {
+    for (const locale of ["en", "zh-CN", "ja-JP", "ko-KR"]) {
+      const copy = getGovernedRunSurfaceLabels(locale).invocationPresentation;
+      const mixedLabel = copy.executionStates.called_with_failures;
+      const unavailableLabel = copy.executionStates.unavailable;
+      const summary = copy.userSummary("called_with_failures", mixedLabel);
+
+      assert.notEqual(mixedLabel, unavailableLabel, locale);
+      assert.ok(summary.includes(mixedLabel), locale);
+      assert.ok(!summary.includes(unavailableLabel), locale);
+    }
+  });
+
+  test("localizes capability table headers and explains an empty ledger in all languages", () => {
+    const expected = {
+      en: {
+        headers: ["Capability", "Provider", "Source", "Status", "Next action"],
+        empty: "No capability was required or selected for this run.",
+      },
+      "zh-CN": {
+        headers: ["能力", "使用项", "来源", "状态", "下一步"],
+        empty: "本次没有需要或已选择的能力。",
+      },
+      "ja-JP": {
+        headers: ["機能", "使用項目", "ソース", "状態", "次の対応"],
+        empty: "今回は必要または選択された機能はありません。",
+      },
+      "ko-KR": {
+        headers: ["기능", "사용 항목", "출처", "상태", "다음 작업"],
+        empty: "이번 실행에는 필요하거나 선택된 기능이 없습니다.",
+      },
+    };
+
+    for (const [locale, copy] of Object.entries(expected)) {
+      const title = getGovernedRunSurfaceLabels(locale).capabilityLedger.title;
+      const result = panelFixture({
+        locale,
+        capabilityLedger: { title, families: [] },
+      });
+      assert.match(result.html, new RegExp(title, "u"), locale);
+      for (const header of copy.headers) {
+        assert.match(result.html, new RegExp(`<th>${header}</th>`, "u"), locale);
+      }
+      assert.match(result.html, new RegExp(copy.empty, "u"), locale);
+    }
   });
 });

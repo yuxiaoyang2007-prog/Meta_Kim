@@ -30,6 +30,7 @@
  *     installedAt: ISO-8601
  *     sha256?:     file checksum when kind === "file"
  *     size?:       bytes when kind === "file"
+ *     ownershipClass?: "install_projection" | "runtime_sedimented_project_copy"
  *     mergedHookCommands?: string[]  (kind === "settings-merge")
  *     mergedSettingsKeys?: string[]  (kind === "settings-merge")
  *     mcpServerName?: string         (kind === "mcp-server")
@@ -228,13 +229,45 @@ export function safeStat(p) {
 }
 
 /**
+ * Return exact on-disk integrity metadata for a managed file.
+ * Recording a file without both fields would make later cleanup unable to
+ * distinguish Meta_Kim output from user-owned content at the same path.
+ */
+export function fileIntegritySync(filePath) {
+  try {
+    const stat = statSync(filePath);
+    if (!stat.isFile()) return null;
+    const content = readFileSync(filePath);
+    return {
+      size: stat.size,
+      sha256: createHash("sha256").update(content).digest("hex"),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function manifestFileEntryMatches(entry, filePath = entry?.path) {
+  if (entry?.kind !== "file" || !entry?.sha256 || !Number.isFinite(entry?.size)) {
+    return false;
+  }
+  const integrity = fileIntegritySync(filePath);
+  return Boolean(
+    integrity &&
+    integrity.size === entry.size &&
+    integrity.sha256 === entry.sha256,
+  );
+}
+
+/**
  * Open a recorder that buffers entries in-memory and writes the manifest
  * on `flush()`. Designed to slot into existing sync scripts without
  * fighting their control flow: open once, call recordXxx() at every
  * write point, flush at the end.
  *
- * Failures are non-fatal — the recorder never throws. Sync scripts must
- * not break just because a manifest entry could not be recorded.
+ * Recording failures are buffered and make `flush()` return `ok: false`.
+ * Callers must propagate that result so a sync cannot report success while
+ * its ownership manifest is incomplete.
  *
  *   const rec = openRecorder({ scope: "global", metaKimVersion: "2.0.13" });
  *   rec.recordFile("/home/kim/.claude/hooks/meta-kim/block-dangerous-bash.mjs",
@@ -256,6 +289,7 @@ export function openRecorder({
   replaceSources = [],
 }) {
   let manifest;
+  const recordErrors = [];
   try {
     manifest =
       readManifest(manifestPathFor(scope, repoRoot)) ??
@@ -278,6 +312,7 @@ export function openRecorder({
     try {
       manifest = record(manifest, entry);
     } catch (e) {
+      recordErrors.push(e?.message ?? String(e));
       if (verbose) console.error(`[manifest] record failed: ${e?.message}`);
     }
   };
@@ -285,17 +320,35 @@ export function openRecorder({
   return {
     recordFile(
       filePath,
-      { source, purpose, category, kind = "file", size, sha256 } = {},
+      {
+        source,
+        purpose,
+        category,
+        kind = "file",
+        size,
+        sha256,
+        ownershipClass,
+        runtimeTarget,
+      } = {},
     ) {
       if (!filePath || !category) return;
+      const integrity = kind === "file" ? fileIntegritySync(filePath) : null;
+      const resolvedSize = size ?? integrity?.size;
+      const resolvedSha256 = sha256 ?? integrity?.sha256;
+      if (kind === "file" && (!Number.isFinite(resolvedSize) || !resolvedSha256)) {
+        recordErrors.push(`cannot record file integrity: ${filePath}`);
+        return;
+      }
       safeRecord({
         path: filePath,
         category,
         source: source ?? "unknown",
         purpose: purpose ?? null,
         kind,
-        size,
-        sha256,
+        size: resolvedSize,
+        sha256: resolvedSha256,
+        ownershipClass: ownershipClass ?? null,
+        runtimeTarget: runtimeTarget ?? null,
       });
     },
     recordDir(dirPath, { source, purpose, category } = {}) {
@@ -358,6 +411,13 @@ export function openRecorder({
       return manifest;
     },
     async flush() {
+      if (recordErrors.length > 0) {
+        return {
+          ok: false,
+          error: `manifest recording incomplete: ${recordErrors.join("; ")}`,
+          errors: [...recordErrors],
+        };
+      }
       try {
         const target = manifestPathFor(scope, repoRoot);
         writeManifest(target, manifest);

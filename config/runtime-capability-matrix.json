@@ -1697,8 +1697,8 @@
           "confidence": "repo_claim",
           "trigger": {
             "userTrigger": "User explicitly requests custom agent or a governed task requires it.",
-            "autoTrigger": "Meta_Kim may select custom agent only after Fetch and Thinking identify it as a valid route component.",
-            "configTrigger": "codex runtime projection and registry configuration.",
+            "autoTrigger": "Meta_Kim may request a native custom agent only when Fetch/Thinking selected a validated Codex TOML owner and the active spawn_agent schema exposes agent_type; otherwise it uses a run-scoped owner contract.",
+            "configTrigger": ".codex/agents/*.toml or a validated global Codex TOML custom-agent definition; Markdown agent files are not Codex native custom-agent definitions.",
             "hookTrigger": "None unless the runtime maps it to a lifecycle event."
           },
           "configLocations": {
@@ -1739,12 +1739,13 @@
             "blockedModes": []
           },
           "evidence": {
-            "source": "local_file",
-            "sourceRef": ".codex/config.toml; .codex/hooks.json; .codex/agents; .agents/skills",
-            "lastVerifiedAt": "2026-06-18",
-            "verificationCommand": "codex --version"
+            "source": "official_docs_and_local_runtime",
+            "sourceRef": "https://developers.openai.com/codex/subagents#custom-agents; .codex/agents/*.toml; active host spawn_agent input schema; correlated successful host result",
+            "lastVerifiedAt": "2026-07-14",
+            "verificationCommand": "official docs fetch on 2026-07-14; npm run meta:check:runtimes; inspect active spawn_agent schema; verify correlated host result",
+            "claim": "Codex custom agents are standalone TOML files with required name, description, and developer_instructions fields; name is the runtime identity, while nicknames are presentation-only."
           },
-          "notes": "Codex support depends on host mode; subagents require explicit request and hooks require trust review."
+          "notes": "ownerBindingMode is native_custom_agent only for a validated TOML owner plus schema-confirmed agent_type request. The invocation is called/completed only after a successful host result. All other owner reuse is run_scoped_owner_contract; task_name and runtimeInstanceAlias never prove owner identity."
         },
         {
           "platform": "codex",

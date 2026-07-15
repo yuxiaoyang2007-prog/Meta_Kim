@@ -106,6 +106,16 @@
       "claudePlugin": "superpowers@superpowers-marketplace",
       "codexPlugin": "superpowers",
       "cursorPlugin": "superpowers",
+      "marketplace": {
+        "id": "superpowers-marketplace",
+        "repository": "obra/superpowers-marketplace"
+      },
+      "versionSource": {
+        "provider": "github-contents",
+        "repository": "obra/superpowers",
+        "manifestPath": ".claude-plugin/marketplace.json",
+        "pluginName": "superpowers"
+      },
       "installMethod": "pluginMarketplace",
       "fallbackContentDir": "skills",
       "targets": [
@@ -120,6 +130,16 @@
       "id": "ecc",
       "repo": "affaan-m/ECC",
       "claudePlugin": "ecc@ecc",
+      "marketplace": {
+        "id": "ecc",
+        "repository": "affaan-m/ECC"
+      },
+      "versionSource": {
+        "provider": "github-contents",
+        "repository": "affaan-m/ECC",
+        "manifestPath": ".claude-plugin/marketplace.json",
+        "pluginName": "ecc"
+      },
       "installMethod": "upstreamCli",
       "upstreamPackage": "ecc-universal@latest",
       "upstreamProfile": "core",
@@ -322,14 +342,5 @@
         "cursor"
       ]
     }
-  ],
-  "externalUrls": {
-    "claudeCodeDocs": "https://docs.anthropic.com/en/docs/claude-code",
-    "author": {
-      "website": "https://www.aiking.dev/",
-      "github": "https://github.com/KimYx0207",
-      "feishu": "https://my.feishu.cn/wiki/OhQ8wqntFihcI1kWVDlcNdpznFf",
-      "x": "https://x.com/KimYx0207"
-    }
-  }
+  ]
 }

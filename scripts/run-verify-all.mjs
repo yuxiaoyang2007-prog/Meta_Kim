@@ -25,6 +25,10 @@ import process from "node:process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createReportContext } from "./report-context.mjs";
+import {
+  PACKED_USER_ACCEPTANCE_EXPECTED_DURATION_MS,
+  runPackedUserInstallUpdateAcceptance,
+} from "./verify-packed-user-install-update.mjs";
 
 export const STAGES = [
   { name: "discover:global", cmd: "npm run discover:global", timeoutMs: 120_000 },
@@ -54,7 +58,8 @@ const ALL_RUNTIME_TARGETS = Object.freeze([
 ]);
 const RELEASE_PROBE_SKILL_ID = "planning-with-files";
 const RELEASE_PROBE_MODE_TIMEOUT_MS = 180_000;
-const RELEASE_PREFLIGHT_EXPECTED_DURATION_MS = RELEASE_PROBE_MODE_TIMEOUT_MS * 2;
+const RELEASE_PREFLIGHT_EXPECTED_DURATION_MS =
+  RELEASE_PROBE_MODE_TIMEOUT_MS * 2 + PACKED_USER_ACCEPTANCE_EXPECTED_DURATION_MS;
 
 function emitProgress(onProgress, event) {
   if (typeof onProgress !== "function") return;
@@ -360,6 +365,8 @@ export function runReleasePreflight({
   captureSnapshot = () => captureReleaseSourceSnapshot(process.cwd()),
   runProbe = ({ onProgress: probeProgress } = {}) =>
     runAllRuntimeGlobalInstallUpdateProbe({ onProgress: probeProgress }),
+  runPackedProbe = ({ onProgress: probeProgress } = {}) =>
+    runPackedUserInstallUpdateAcceptance({ onProgress: probeProgress }),
   onProgress = null,
 } = {}) {
   emitProgress(onProgress, {
@@ -369,9 +376,17 @@ export function runReleasePreflight({
   });
   const invocation = captureSnapshot();
   const globalTargetProof = runProbe({ onProgress });
+  const packedUserProof = globalTargetProof.status === "passed"
+    ? runPackedProbe({ onProgress })
+    : {
+        status: "not_run_after_global_target_failure",
+        sourcePolicy: "npm_pack_extracted_public_cli",
+        error: null,
+      };
   const postProbe = captureSnapshot();
   const result = {
     globalTargetProof,
+    packedUserProof,
     sourceSnapshot: { invocation, postProbe },
     sourceIntegrity: compareReleaseSourceSnapshotSequence([
       { label: "invocation", snapshot: invocation },
@@ -380,10 +395,13 @@ export function runReleasePreflight({
   };
   emitProgress(onProgress, {
     event: "release_preflight_complete",
-    status: globalTargetProof.status,
-    error: globalTargetProof.error ?? null,
+    status:
+      globalTargetProof.status === "passed" && packedUserProof.status === "passed"
+        ? "passed"
+        : "failed",
+    error: globalTargetProof.error ?? packedUserProof.error ?? null,
     nextAction:
-      globalTargetProof.status === "passed"
+      globalTargetProof.status === "passed" && packedUserProof.status === "passed"
         ? null
         : "Resolve the reported install/update probe failure, then rerun node scripts/run-verify-all.mjs.",
   });
@@ -395,9 +413,14 @@ export function computeReleaseGrade({
   startIndex,
   sourceIntegrity = { releaseEligible: true },
   globalTargetProof = { status: "passed" },
+  packedUserProof = { status: "passed" },
 }) {
   if (startIndex !== 0 || results.length < STAGES.length) return false;
-  if (sourceIntegrity.releaseEligible !== true || globalTargetProof.status !== "passed") return false;
+  if (
+    sourceIntegrity.releaseEligible !== true ||
+    globalTargetProof.status !== "passed" ||
+    packedUserProof.status !== "passed"
+  ) return false;
   return STAGES.every(
     (stage, index) =>
       results[index]?.name === stage.name && results[index]?.status === "passed",
@@ -424,12 +447,14 @@ export function computeVerificationClaims({
   startIndex,
   sourceIntegrity,
   globalTargetProof,
+  packedUserProof,
 }) {
   const releaseGrade = computeReleaseGrade({
     results,
     startIndex,
     sourceIntegrity,
     globalTargetProof,
+    packedUserProof,
   });
   const liveCertified = computeLiveCertified({
     requested,
@@ -474,6 +499,20 @@ function printReleasePreflightProgress(progress) {
     }
   } else if (progress.event === "all_runtime_probe_complete" && progress.status === "failed") {
     message = `隔离安装/更新预检未通过；请先处理上方失败原因。`;
+  } else if (progress.event === "packed_user_acceptance_start") {
+    message = "开始验证 npm pack 候选包的真实用户安装、更新和重复更新。";
+  } else if (progress.event === "packed_user_mode_start") {
+    message = `候选包用户入口：开始第 ${progress.ordinal} 次 ${progress.mode}。`;
+  } else if (progress.event === "packed_user_mode_complete") {
+    message = `候选包用户入口：第 ${progress.ordinal} 次 ${progress.mode} 通过。`;
+  } else if (progress.event === "packed_project_mode_start") {
+    message = `候选包项目入口：开始第 ${progress.ordinal} 次 ${progress.mode}。`;
+  } else if (progress.event === "packed_project_mode_complete") {
+    message = `候选包项目入口：第 ${progress.ordinal} 次 ${progress.mode} 通过。`;
+  } else if (progress.event === "packed_user_acceptance_complete") {
+    message = progress.status === "passed"
+      ? "候选包真实用户安装/更新验收通过。"
+      : `候选包真实用户安装/更新验收失败：${progress.error ?? "unknown error"}`;
   } else if (progress.event === "release_preflight_complete") {
     message = progress.status === "passed"
       ? "发布预检完成，继续执行标准验证阶段。"
@@ -597,14 +636,21 @@ const releasePreflight =
             artifactProof: [],
             error: null,
           },
+          packedUserProof: {
+            status: "not_run_for_resumed_diagnostic",
+            sourcePolicy: "npm_pack_extracted_public_cli",
+            error: null,
+          },
         };
       })();
-const { globalTargetProof } = releasePreflight;
+const { globalTargetProof, packedUserProof } = releasePreflight;
 const sourceSnapshotInvocation = releasePreflight.sourceSnapshot.invocation;
 const sourceSnapshotPostProbe = releasePreflight.sourceSnapshot.postProbe;
 let failedStage =
   startIndex === 0 && globalTargetProof.status !== "passed"
     ? { name: "all-runtime-global-install-update-probe" }
+    : startIndex === 0 && packedUserProof.status !== "passed"
+      ? { name: "packed-user-install-update-acceptance" }
     : null;
 const results = [];
 for (let i = startIndex; !failedStage && i < selectedStages.length; i += 1) {
@@ -658,6 +704,7 @@ const verificationClaims = computeVerificationClaims({
   startIndex,
   sourceIntegrity,
   globalTargetProof,
+  packedUserProof,
 });
 const { releaseGrade, liveCertified, liveCertificationStatus } = verificationClaims;
 const report = {
@@ -671,6 +718,8 @@ const report = {
       ? `Resumed verification is diagnostic only; release-grade requires one report containing all ${STAGES.length} standard stages.`
       : globalTargetProof.status !== "passed"
         ? "Release-grade requires successful isolated install and update artifacts for every declared global runtime target."
+      : packedUserProof.status !== "passed"
+        ? "Release-grade requires the npm-packed public CLI to pass isolated fresh install, update, cwd-boundary, manifest, and repeat-update acceptance."
       : !sourceIntegrity.stable
         ? `Source changed during verification: ${sourceIntegrity.mismatchReasons.join(", ")}.`
       : !releaseGrade
@@ -691,6 +740,7 @@ const report = {
   completedAt: new Date().toISOString(),
   releasePreflight: {
     globalTargetProof,
+    packedUserProof,
     sourceSnapshot: {
       invocation: sourceSnapshotInvocation,
       postProbe: sourceSnapshotPostProbe,

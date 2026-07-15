@@ -333,14 +333,13 @@ console.log("forced rebuild ok");
 
     assert.match(body, /applyProjectBootstrapToDir\(activeTargets, targetDir\)/);
     assert.doesNotMatch(applyBody, /writePostCopyBootstrap\(targetDir, activeTargets\)/);
-    assert.match(applyBody, /writeProjectBootstrapManifest\(targetDir, plan, backup, cleanup\)/);
+    assert.match(applyBody, /projectBootstrapTransactionalPlan\(plan, targetDir, backup\)/);
+    assert.match(applyBody, /executeSafeManagedFileTransaction\(\{/);
+    assert.match(applyBody, /transactionLabel: "project-bootstrap-apply"/);
     assert.match(body, /printPostCopyBootstrapHint\(\)/);
     assert.doesNotMatch(body, /installGraphify/);
     assert.doesNotMatch(body, /installPythonTools\(activeTargets, false, targetDir\)/);
-    assert.ok(
-        applyBody.includes("deployPlatformFiles(platformId, targetDir)"),
-      "the project bootstrap apply path must still copy runtime entry/config files",
-    );
+    assert.match(src, /function collectProjectDeployPlan\(activeTargets, targetDir\)/);
   });
 
   test("install and update deploy exports do not treat the staging directory as the final graphify root", () => {
@@ -612,7 +611,7 @@ console.log("forced rebuild ok");
     assert.match(src, /continue;/);
   });
 
-  test("install uses scoped validation and release validation keeps graphify check", () => {
+  test("install validates deployed artifacts while release validation keeps graphify check", () => {
     const setupSrc = readFileSync(path.join(root, "setup.mjs"), "utf8");
     const childContractSrc = readFileSync(
       path.join(root, "scripts", "node-spawn-config.mjs"),
@@ -623,9 +622,14 @@ console.log("forced rebuild ok");
       "utf8",
     );
 
-    assert.match(
-      setupSrc,
-      /SETUP_NODE_CHILD\.PROJECT_VALIDATION,[\s\S]*\["--context", "install"\]/,
+    assert.match(setupSrc, /async function validateInstalledArtifacts/);
+    assert.match(setupSrc, /SETUP_NODE_CHILD\.GLOBAL_META_THEORY_SYNC/);
+    assert.doesNotMatch(
+      setupSrc.slice(
+        setupSrc.indexOf("async function validateInstalledArtifacts"),
+        setupSrc.indexOf("function printInstallResult"),
+      ),
+      /SETUP_NODE_CHILD\.PROJECT_VALIDATION/,
     );
     assert.match(
       childContractSrc,

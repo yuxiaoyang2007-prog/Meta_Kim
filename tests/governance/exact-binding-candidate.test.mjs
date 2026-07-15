@@ -9,6 +9,8 @@ const required = {
   providerId: "meta-prism",
   bindingRef: "task-1:agent_subagent:meta-prism",
   taskPacketId: "task-1",
+  ownerBindingMode: "run_scoped_owner_contract",
+  nativeAgentType: null,
 };
 const artifact = {
   runId,
@@ -57,10 +59,51 @@ describe("exact binding unsigned candidate", () => {
     });
     assert.equal(first.observedBindings[0].providerId, "meta-prism");
     assert.equal(first.observedBindings[0].roleInstanceId, "review-1");
+    assert.equal(first.requiredBindings[0].ownerBindingMode, "run_scoped_owner_contract");
+    assert.equal(first.requiredBindings[0].nativeAgentType, null);
+    assert.equal(first.observedBindings[0].ownerBindingMode, "run_scoped_owner_contract");
+    assert.equal(first.observedBindings[0].nativeAgentType, null);
     assert.deepEqual(first.sourceArtifacts.rawHostJsonl, {
       path: "raw.jsonl",
       sha256: "c".repeat(64),
     });
+  });
+
+  test("rejects run-scoped Agent evidence for a native custom Agent requirement", () => {
+    const nativeRequired = {
+      ...required,
+      ownerBindingMode: "native_custom_agent",
+      nativeAgentType: "meta-prism",
+    };
+    const nativeArtifact = {
+      ...artifact,
+      coreLoop: { runtimeInvocationPlanPacket: { requiredBindings: [nativeRequired] } },
+    };
+    const runScopedEvent = {
+      ...event,
+      ownerBindingMode: "run_scoped_owner_contract",
+      nativeAgentType: null,
+    };
+    const nativeCandidate = build({
+      governedArtifact: nativeArtifact,
+      observation: {
+        runId,
+        events: [{
+          ...event,
+          ownerBindingMode: "native_custom_agent",
+          nativeAgentType: "meta-prism",
+        }],
+      },
+    });
+    assert.equal(nativeCandidate.requiredBindings[0].ownerBindingMode, "native_custom_agent");
+    assert.equal(nativeCandidate.observedBindings[0].nativeAgentType, "meta-prism");
+    assert.throws(
+      () => build({
+        governedArtifact: nativeArtifact,
+        observation: { runId, events: [runScopedEvent] },
+      }),
+      /unselected_or_mismatched_binding|owner_binding_mode_mismatch/,
+    );
   });
 
   test("fails closed on missing, duplicate, provider, task, role, result, and run mismatches", () => {

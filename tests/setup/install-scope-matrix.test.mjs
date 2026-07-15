@@ -67,6 +67,7 @@ test("install scope verification proves global/project target boundaries", () =>
   assert.equal(byId.get("project-cursor").status, "pass");
   assert.equal(byId.get("project-openclaw").status, "pass");
   assert.equal(byId.get("project-default-claude-codex").status, "pass");
+  assert.equal(byId.get("project-default-claude-codex").targetCreatedByDryRun, false);
   assert.equal(byId.get("project-default-claude-codex").postApplyDryRunStatus, "ready");
   assert.equal(byId.get("project-default-claude-codex").postApplyRequiresConfirmation, false);
   assert.equal(byId.get("project-default-claude-codex").postApplyPendingCount, 0);

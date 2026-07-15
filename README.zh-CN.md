@@ -826,7 +826,7 @@ flowchart TB
 | 命令 | 作用 |
 | --- | --- |
 | `npm run meta:sync` | 从 canonical 同步到四端 |
-| `npm run meta:check:runtimes` | 检查默认正式项目投影（Claude Code + Codex）；更广检查需显式指定 runtime targets |
+| `npm run meta:check:runtimes` | 按当前配置检查项目投影模式；仅在明确验收完整项目镜像时传入 runtime targets |
 | `npm run meta:validate` | 项目完整性校验 |
 | `npm run meta:install-scope:verify` | 校验全局/项目安装边界 |
 | `npm run meta:project-cache:verify` | 校验全局 hook 能生成项目本地缓存 |
@@ -898,11 +898,14 @@ Superpowers 在 Claude Code、Codex 和 Cursor 都有原生 plugin 入口。Meta
 
 ### Q：我用 `npx` 装的，文件在哪？
 
-Meta_Kim 把产物写到 3 个地方：
+Meta_Kim 明确区分全局和项目两个作用域；普通全局安装不会把持久运行时镜像写进当前项目：
 
-1. **当前目录** — `.claude/`、`.codex/`、`.cursor/`、`openclaw/` 本项目的工具端镜像
-2. **用户 home** — `~/.claude/skills/meta-theory/`（以及 `.codex / .cursor / .openclaw`）跨项目共享的全局 skill
-3. **清单** — `~/.meta-kim/install-manifest.json` 记录所有改动，支持安全卸载
+1. **用户 home** — `~/.claude/`、`~/.codex/`、`~/.cursor/`、`~/.openclaw/` 保存为对应运行时选择的全局复用能力。
+2. **全局清单** — `~/.meta-kim/install-manifest.json` 记录受管全局文件，支持安全更新和回滚。
+
+项目运行时镜像来自用户明确选择的项目安装/bootstrap，或治理运行中的能力沉淀。在 `global_only` 下，安装本身最多只保留宿主契约要求的最小项目 Hook 依赖闭包；但之后的治理运行只要新建或迭代 Agent、Skill、Command，就会把它复制到当前项目并记录独立 ownership，后续依赖更新不能替换这份项目版本。
+
+有一个刻意保留的特殊场景：如果全局安装/更新检测到某个项目已经有有效的 Meta_Kim bootstrap manifest，它会在更新全局安装的同时，按该项目自己保存的运行时目标和 merge/delta 策略刷新这个既有项目。它不会新建项目投影，也不会覆盖项目沉淀能力或用户文件。
 
 全局安装后，在任意目录运行 `meta-kim status` 即可查看完整足迹。使用 npx 时，重新运行 `npx --yes github:KimYx0207/Meta_Kim meta-kim status`，并可将 `status` 替换为 `check`、`doctor`、`update` 或 `uninstall`。这些命令从安装包解析脚本，不依赖当前目录存在 `package.json`；仓库维护者可继续使用对应的 `npm run meta:*` 命令。
 

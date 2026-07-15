@@ -3,8 +3,8 @@ import { spawnSync } from "node:child_process";
 import process from "node:process";
 import { assert } from "./governance-lib.mjs";
 
-function route(task, runtime = "auto", os = "auto") {
-  const result = spawnSync(process.execPath, ["scripts/select-execution-route.mjs", "--task", task, "--runtime", runtime, "--os", os, "--json"], {
+function route(task, runtime = "auto", os = "auto", extraArgs = []) {
+  const result = spawnSync(process.execPath, ["scripts/select-execution-route.mjs", "--task", task, "--runtime", runtime, "--os", os, "--json", ...extraArgs], {
     encoding: "utf8",
   });
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);
@@ -285,12 +285,13 @@ assert(
 );
 assert(
   codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.hostSurface === "spawn_agent" &&
-    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.spawnMode === "native_task" &&
     codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.ownerAgent === codexAgentReuseComplaint.recommendedRoute?.owner &&
+    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.ownerBindingMode === "run_scoped_owner_contract" &&
+    codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.nativeAgentType === null &&
     codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding?.fork_turns === "none" &&
     !Object.hasOwn(codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding ?? {}, "agent_type") &&
     !Object.hasOwn(codexAgentReuseComplaint.recommendedRoute?.codexSpawnBinding ?? {}, "fork_context"),
-  "Codex global agent reuse must emit an owner-bound native spawn_agent task plan",
+  "Codex global agent reuse must use a run-scoped owner contract when the active host schema does not expose agent_type",
 );
 assert(
   /^[a-z0-9_]+$/.test(codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.codexSpawnBinding?.task_name ?? "") &&
@@ -301,6 +302,24 @@ assert(
   codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.codexSpawnBinding?.visibleBindingRequired === true &&
     codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.codexSpawnBinding?.runtimeInstanceAlias === null,
   "Codex worker packets must require visible owner binding and reserve runtimeInstanceAlias for host nicknames",
+);
+const codexAgentTypeSchema = JSON.stringify({
+  hostSurface: "spawn_agent",
+  inputProperties: ["task_name", "message", "agent_type"],
+  evidenceSource: "active_host_tool_schema",
+});
+const codexNativeAgentReuse = route(
+  "Critical Thinking Fetch Deep Thinking Review 为什么 Codex 一直创建 agent 而不是找全局 agent",
+  "codex",
+  "windows",
+  ["--codex-host-tool-schema", codexAgentTypeSchema],
+);
+assert(
+  codexNativeAgentReuse.recommendedRoute?.codexSpawnBinding?.ownerBindingMode === "native_custom_agent" &&
+    codexNativeAgentReuse.recommendedRoute?.codexSpawnBinding?.nativeAgentType === codexNativeAgentReuse.recommendedRoute?.owner &&
+    codexNativeAgentReuse.recommendedRoute?.codexSpawnBinding?.agent_type === codexNativeAgentReuse.recommendedRoute?.owner &&
+    codexNativeAgentReuse.recommendedRoute?.codexSpawnBinding?.ownerSelectorField === "agent_type",
+  "Codex global agent reuse may emit a native custom-agent request only when trusted active host schema exposes agent_type",
 );
 assert(
   codexAgentReuseComplaint.workerTaskPacketDrafts?.[0]?.ownerAgent === codexAgentReuseComplaint.recommendedRoute?.owner &&

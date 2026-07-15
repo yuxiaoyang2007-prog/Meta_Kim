@@ -73,4 +73,32 @@ describe("project registry", () => {
     assert.equal(detected.registryStatus, "skipped");
     assert.equal(detected.known, false);
   });
+
+  test(
+    "Windows path casing reuses one stable project row",
+    { skip: process.platform !== "win32" },
+    async () => {
+      const homeDir = await fs.mkdtemp(path.join(os.tmpdir(), "meta-kim-home-"));
+      const repoPath = path.join(homeDir, "workspaces", "CaseStableProject");
+
+      const first = await joinProjectRegistry({
+        homeDir,
+        repoPath,
+        runtimeFamily: "codex",
+      });
+      const second = await joinProjectRegistry({
+        homeDir,
+        repoPath: repoPath.toUpperCase(),
+        runtimeFamily: "claude",
+      });
+
+      assert.equal(second.projectRef, first.projectRef);
+      const entry = await readProjectRegistryEntry({ homeDir, repoPath });
+      assert.equal(entry.project.projectRef, first.projectRef);
+      assert.deepEqual(
+        entry.platforms.map((item) => item.platform),
+        ["claude", "codex"],
+      );
+    },
+  );
 });

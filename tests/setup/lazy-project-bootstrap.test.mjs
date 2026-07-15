@@ -205,6 +205,85 @@ test("lazy project bootstrap dry-run exposes source chain and writes nothing", (
   }
 });
 
+test("project bootstrap and explicit cleanup preserve project-owned capabilities and unknown files", () => {
+  const projectDir = tempProject();
+  try {
+    const initial = runBootstrapForTargets(projectDir, "codex", ["--apply"]);
+    assert.equal(initial.ok, true);
+
+    const protectedRel = ".agents/skills/meta-theory/SKILL.md";
+    const ordinaryRel = ".agents/skills/meta-theory/references/dev-governance.md";
+    const unknownRel = ".agents/skills/user-owned-local/SKILL.md";
+    const protectedPath = path.join(projectDir, ...protectedRel.split("/"));
+    const ordinaryPath = path.join(projectDir, ...ordinaryRel.split("/"));
+    const unknownPath = path.join(projectDir, ...unknownRel.split("/"));
+    const protectedContent = "# project-owned capability\n";
+    const unknownContent = "# unknown user file\n";
+    writeFileSync(protectedPath, protectedContent);
+    writeFileSync(ordinaryPath, "# stale managed projection\n");
+    mkdirSync(path.dirname(unknownPath), { recursive: true });
+    writeFileSync(unknownPath, unknownContent);
+
+    const ownershipPath = path.join(
+      projectDir,
+      ".meta-kim",
+      "state",
+      "default",
+      "project-capabilities.json",
+    );
+    writeFileSync(
+      ownershipPath,
+      `${JSON.stringify({
+        schemaVersion: "meta-kim-project-capabilities-v0.1",
+        ownershipScope: "project_runtime_sedimentation",
+        dependencyUpdatePolicy: "preserve_project_copies",
+        capabilities: [
+          {
+            capabilityKey: "codex:skill:meta-theory",
+            runtime: "codex",
+            type: "skill",
+            id: "meta-theory",
+            ownershipClass: "runtime_sedimented_project_copy",
+            dependencyUpdatePolicy: "preserve_project_copy",
+            files: [{ relPath: protectedRel }],
+          },
+        ],
+      }, null, 2)}\n`,
+    );
+
+    const preview = runBootstrapForTargets(projectDir, "codex", ["--dry-run"]);
+    const protectedPlan = preview.results[0].files.find(
+      (entry) => entry.relPath === protectedRel,
+    );
+    assert.equal(protectedPlan.action, "skip");
+    assert.equal(protectedPlan.skipReason, "protected_project_capability");
+
+    const refreshed = runBootstrapForTargets(projectDir, "codex", ["--apply"]);
+    assert.equal(refreshed.ok, true);
+    assert.equal(readFileSync(protectedPath, "utf8"), protectedContent);
+    assert.equal(
+      readFileSync(ordinaryPath, "utf8"),
+      "# stale managed projection\n",
+      "runtime-sedimented skills protect their whole native skill directory",
+    );
+    assert.equal(readFileSync(unknownPath, "utf8"), unknownContent);
+
+    const cleanup = runSetup([
+      "--cleanup-projects",
+      "--targets",
+      "codex",
+      "--project-dir",
+      projectDir,
+      "--json",
+    ]);
+    assert.equal(cleanup.status, 0, cleanup.stderr || cleanup.stdout);
+    assert.equal(readFileSync(protectedPath, "utf8"), protectedContent);
+    assert.equal(readFileSync(unknownPath, "utf8"), unknownContent);
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("lazy project bootstrap dry-run previews backup and rollback without writing", () => {
   const projectDir = tempProject();
   try {
@@ -617,6 +696,14 @@ test("one project mutation lock blocks bootstrap and cleanup without overwriting
 
 test("bootstrap and cleanup mutually exclude each other across real processes", async () => {
   const projectDir = tempProject();
+  const bootstrapRelease = path.join(
+    os.tmpdir(),
+    `meta-kim-bootstrap-release-${process.pid}-${Date.now()}`,
+  );
+  const cleanupRelease = path.join(
+    os.tmpdir(),
+    `meta-kim-cleanup-release-${process.pid}-${Date.now()}`,
+  );
   const sharedLock = path.join(
     projectDir,
     ".meta-kim",
@@ -642,27 +729,37 @@ test("bootstrap and cleanup mutually exclude each other across real processes", 
   ];
   try {
     const bootstrapHolder = spawnSetup(bootstrapArgs, {
-      env: { ...process.env, META_KIM_TEST_PAUSE_SESSION_LOCK_MS: "1500" },
+      env: {
+        ...process.env,
+        META_KIM_TEST_SESSION_LOCK_RELEASE_FILE: bootstrapRelease,
+      },
     });
     const bootstrapResultPromise = collectSpawnResult(bootstrapHolder);
     await waitForPath(sharedLock);
     const cleanupBlocked = runSetup(cleanupArgs);
     assert.equal(cleanupBlocked.status, 1, cleanupBlocked.stderr || cleanupBlocked.stdout);
     assert.equal(JSON.parse(cleanupBlocked.stdout).results[0].status, "blocked");
+    writeFileSync(bootstrapRelease, "release\n", "utf8");
     const bootstrapResult = await bootstrapResultPromise;
     assert.equal(bootstrapResult.status, 0, bootstrapResult.stderr || bootstrapResult.stdout);
 
     const cleanupHolder = spawnSetup(cleanupArgs, {
-      env: { ...process.env, META_KIM_TEST_PAUSE_SESSION_LOCK_MS: "1500" },
+      env: {
+        ...process.env,
+        META_KIM_TEST_SESSION_LOCK_RELEASE_FILE: cleanupRelease,
+      },
     });
     const cleanupResultPromise = collectSpawnResult(cleanupHolder);
     await waitForPath(sharedLock);
     const bootstrapBlocked = runSetup(bootstrapArgs);
     assert.equal(bootstrapBlocked.status, 1, bootstrapBlocked.stderr || bootstrapBlocked.stdout);
     assert.equal(JSON.parse(bootstrapBlocked.stdout).results[0].error.status, "blocked");
+    writeFileSync(cleanupRelease, "release\n", "utf8");
     const cleanupResult = await cleanupResultPromise;
     assert.equal(cleanupResult.status, 0, cleanupResult.stderr || cleanupResult.stdout);
   } finally {
+    rmSync(bootstrapRelease, { force: true });
+    rmSync(cleanupRelease, { force: true });
     rmSync(projectDir, { recursive: true, force: true });
   }
 });
@@ -1996,7 +2093,7 @@ test("lazy project bootstrap detects active target changes separately from versi
   }
 });
 
-test("lazy project bootstrap detects generated file drift even with current manifest", () => {
+test("lazy project bootstrap refreshes manifest-managed drift with a transaction backup", () => {
   const projectDir = tempProject();
   try {
     runBootstrap(projectDir, ["--apply"]);
@@ -2016,14 +2113,34 @@ test("lazy project bootstrap detects generated file drift even with current mani
       plan.writePreview.projectWrites.some(
         (file) =>
           file.relPath === ".codex/hooks/enforce-agent-dispatch.mjs" &&
-          file.action === "replace",
+          file.action === "replace" &&
+          file.backupBeforeApply === true,
       ),
     );
 
-    runBootstrap(projectDir, ["--apply"]);
-    const current = runBootstrap(projectDir, ["--dry-run"]);
-    assert.equal(current.results[0].state.status, "ready");
-    assert.equal(current.results[0].writePreview.projectWrites.length, 0);
+    const apply = runSetup([
+      "--project-bootstrap",
+      "--targets",
+      "claude,codex",
+      "--project-dir",
+      projectDir,
+      "--apply",
+      "--json",
+    ]);
+    assert.equal(apply.status, 0);
+    assert.deepEqual(
+      readFileSync(hookPath),
+      readFileSync(
+        path.join(
+          REPO_ROOT,
+          "canonical",
+          "runtime-assets",
+          "claude",
+          "hooks",
+          "enforce-agent-dispatch.mjs",
+        ),
+      ),
+    );
   } finally {
     rmSync(projectDir, { recursive: true, force: true });
   }

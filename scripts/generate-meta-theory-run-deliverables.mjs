@@ -83,6 +83,10 @@ const PANEL_COPY = Object.freeze({
     runtimeReady: "Release verification complete", runtimePending: "Further verification required",
     riskClear: "No outstanding runtime verification risk", riskPending: "Current evidence is not yet release-grade",
     nextClear: "No additional runtime action", nextPending: "Complete runtime verification before release",
+    capabilityHeaders: ["Capability", "Provider", "Source", "Status", "Next action"],
+    noCapabilities: "No capability was required or selected for this run.",
+    noneProvider: "None",
+    notSelectedSource: "Not selected",
   },
   "zh-CN": {
     offlineExecution: "运行记录已读取；以当前聊天中的实际调用结果为准",
@@ -95,6 +99,10 @@ const PANEL_COPY = Object.freeze({
     runtimeReady: "发布验证已完成", runtimePending: "仍需进一步验证",
     riskClear: "没有待处理的运行验证风险", riskPending: "当前证据尚未达到发布级",
     nextClear: "无需额外运行操作", nextPending: "发布前完成运行验证",
+    capabilityHeaders: ["能力", "使用项", "来源", "状态", "下一步"],
+    noCapabilities: "本次没有需要或已选择的能力。",
+    noneProvider: "无",
+    notSelectedSource: "未选择",
   },
   "ja-JP": {
     offlineExecution: "実行記録を読み込みました。実際の呼び出し結果は現在のチャットを確認してください",
@@ -107,6 +115,10 @@ const PANEL_COPY = Object.freeze({
     runtimeReady: "リリース検証完了", runtimePending: "追加検証が必要",
     riskClear: "未解決の実行検証リスクはありません", riskPending: "現在の証拠はリリース基準に未到達です",
     nextClear: "追加の実行対応は不要", nextPending: "リリース前に実行検証を完了する",
+    capabilityHeaders: ["機能", "使用項目", "ソース", "状態", "次の対応"],
+    noCapabilities: "今回は必要または選択された機能はありません。",
+    noneProvider: "なし",
+    notSelectedSource: "未選択",
   },
   "ko-KR": {
     offlineExecution: "실행 기록을 읽었습니다. 실제 호출 결과는 현재 채팅을 기준으로 확인하세요",
@@ -119,6 +131,10 @@ const PANEL_COPY = Object.freeze({
     runtimeReady: "릴리스 검증 완료", runtimePending: "추가 검증 필요",
     riskClear: "남은 실행 검증 위험이 없습니다", riskPending: "현재 증거는 아직 릴리스 수준이 아닙니다",
     nextClear: "추가 실행 작업 없음", nextPending: "릴리스 전에 실행 검증 완료",
+    capabilityHeaders: ["기능", "사용 항목", "출처", "상태", "다음 작업"],
+    noCapabilities: "이번 실행에는 필요하거나 선택된 기능이 없습니다.",
+    noneProvider: "없음",
+    notSelectedSource: "선택되지 않음",
   },
 });
 
@@ -160,6 +176,30 @@ export function buildPanelHtml({ run, contract, manifest, labels }) {
   const sectionLabels = labels.sections;
   const panelCopy = PANEL_COPY[labels.htmlLang] ?? PANEL_COPY.en;
   const invocationPresentation = resolvePanelInvocationPresentation({ run, contract, labels });
+  const visibleCapabilityFamilies = new Set([
+    "agent_subagent",
+    "skill",
+    "command_script",
+    "mcp",
+    "runtime_tool",
+    "hook",
+  ]);
+  const capabilityLedger = contract.capabilityLedger ?? { title: "Capability use in this run", families: [] };
+  const capabilityLedgerRows = (capabilityLedger.families ?? [])
+    .filter((family) => visibleCapabilityFamilies.has(family.family))
+    .map(
+      (family) => `<tr>
+        <td>${escapeHtml(family.familyLabel ?? family.family)}</td>
+        <td>${escapeHtml(family.displayProvider ?? panelCopy.noneProvider)}</td>
+        <td>${escapeHtml(family.displaySource ?? panelCopy.notSelectedSource)}</td>
+        <td>${escapeHtml(family.stateLabel ?? family.state ?? "not required")}</td>
+        <td>${escapeHtml(family.nextAction ?? "")}</td>
+      </tr>`,
+    )
+    .join("\n");
+  const capabilityHeaders = panelCopy.capabilityHeaders.map((header) => escapeHtml(header));
+  const capabilityLedgerBody = capabilityLedgerRows ||
+    `<tr><td colspan="5">${escapeHtml(panelCopy.noCapabilities)}</td></tr>`;
   const runtimeRows = contract.runtimeEvidence
     .map(
       (row) => `<tr>
@@ -321,6 +361,13 @@ export function buildPanelHtml({ run, contract, manifest, labels }) {
     <section>
       <h2>${escapeHtml(sectionLabels.ownerHandoff)}</h2>
       <p>${escapeHtml(panelCopy.handoff(contract.ownerHandoff.length))}</p>
+    </section>
+    <section>
+      <h2>${escapeHtml(capabilityLedger.title)}</h2>
+      <table>
+        <thead><tr>${capabilityHeaders.map((header) => `<th>${header}</th>`).join("")}</tr></thead>
+        <tbody>${capabilityLedgerBody}</tbody>
+      </table>
     </section>
     <section>
       <h2>${escapeHtml(sectionLabels.blockedApproval)}</h2>

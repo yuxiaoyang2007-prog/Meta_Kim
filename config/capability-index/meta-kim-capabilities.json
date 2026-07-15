@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-12T15:07:43.537Z",
+  "generatedAt": "2026-07-13T23:27:20.242Z",
   "registryName": "meta-kim-capabilities",
   "scope": "repo-canonical",
   "canonicalProjection": "config/capability-index/meta-kim-capabilities.json",
@@ -38,25 +38,25 @@
       },
       "claude": {
         "projectionPresent": true,
-        "hookCommandEntries": 14,
+        "hookCommandEntries": 2,
         "hookFiles": 17,
-        "commandFiles": 3
+        "commandFiles": 0
       },
       "codex": {
         "projectionPresent": true,
-        "hookCommandEntries": 12,
+        "hookCommandEntries": 0,
         "hookFiles": 17,
-        "commandFiles": 3
+        "commandFiles": 0
       },
       "cursor": {
         "projectionPresent": true,
-        "hookCommandEntries": 11,
+        "hookCommandEntries": 0,
         "hookFiles": 17,
         "commandFiles": 0
       },
       "openclaw": {
-        "projectionPresent": true,
-        "hookCommandEntries": 1,
+        "projectionPresent": false,
+        "hookCommandEntries": 0,
         "hookFiles": 0,
         "commandFiles": 0,
         "skillFiles": 0
@@ -244,8 +244,8 @@
         "type": "skills",
         "namespace": "canonical",
         "path": "canonical/skills/meta-theory/SKILL.md",
-        "size": 79730,
-        "modified": "2026-07-12T12:36:34.587Z"
+        "size": 81108,
+        "modified": "2026-07-13T20:36:36.689Z"
       },
       "repo:canonical:same-set-reusable-flow-for-project-file-inventor": {
         "id": "same-set-reusable-flow-for-project-file-inventor",
@@ -360,8 +360,8 @@
         "namespace": "canonical-reference",
         "path": "canonical/skills/meta-theory/references/runtime-codex.md",
         "relativePath": "runtime-codex.md",
-        "size": 28507,
-        "modified": "2026-07-12T12:04:56.248Z"
+        "size": 29754,
+        "modified": "2026-07-13T18:48:34.607Z"
       },
       "repo:canonical-reference:spine-state": {
         "id": "spine-state",
@@ -502,8 +502,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
         "relativePath": "enforce-agent-dispatch.mjs",
-        "size": 60014,
-        "modified": "2026-07-10T19:00:27.861Z",
+        "size": 65485,
+        "modified": "2026-07-13T19:02:29.018Z",
         "canonicalPath": "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs"
       },
       "repo:canonical-runtime-assets:graphify-context.mjs": {
@@ -622,8 +622,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/claude/hooks/subagent-context.mjs",
         "relativePath": "subagent-context.mjs",
-        "size": 1581,
-        "modified": "2026-06-21T08:45:16.446Z",
+        "size": 1878,
+        "modified": "2026-07-13T18:40:07.049Z",
         "canonicalPath": "canonical/runtime-assets/claude/hooks/subagent-context.mjs"
       }
     },
@@ -777,8 +777,8 @@
         "namespace": "canonical-runtime-assets",
         "path": "canonical/runtime-assets/codex/commands/meta-theory.md",
         "relativePath": "meta-theory.md",
-        "size": 7256,
-        "modified": "2026-07-10T12:47:44.834Z"
+        "size": 7557,
+        "modified": "2026-07-12T17:16:06.604Z"
       },
       "repo:canonical-runtime-assets:save-progress": {
         "id": "save-progress",

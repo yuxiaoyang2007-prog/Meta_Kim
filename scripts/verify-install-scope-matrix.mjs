@@ -145,6 +145,7 @@ function parseSetupJson(result) {
 
 function inspectProjectCase(baseDir, entry) {
   const projectDir = path.join(baseDir, entry.id);
+  const targetExistedBeforeDryRun = existsSync(projectDir);
   const targetsArg = entry.targets.join(",");
   const commonArgs = [
     "setup.mjs",
@@ -157,6 +158,7 @@ function inspectProjectCase(baseDir, entry) {
   ];
   const dryResult = runNode([...commonArgs, "--dry-run"]);
   const dryParsed = parseSetupJson(dryResult);
+  const targetCreatedByDryRun = !targetExistedBeforeDryRun && existsSync(projectDir);
   const applyResult = runNode([...commonArgs, "--apply"]);
   const applyParsed = parseSetupJson(applyResult);
   const currentResult = runNode([...commonArgs, "--dry-run"]);
@@ -175,6 +177,7 @@ function inspectProjectCase(baseDir, entry) {
     JSON.stringify(activeTargets) !== JSON.stringify(entry.targets) ? activeTargets : null;
   const ok =
     dryParsed.ok &&
+    !targetCreatedByDryRun &&
     applyParsed.ok &&
     currentParsed.ok &&
     missingExpected.length === 0 &&
@@ -192,6 +195,7 @@ function inspectProjectCase(baseDir, entry) {
     layer: "project",
     targets: entry.targets,
     status: ok ? "pass" : "fail",
+    targetCreatedByDryRun,
     dryRunStatus: dryParsed.payload?.results?.[0]?.state?.status ?? null,
     applyStatus: applyParsed.payload?.results?.[0]?.state?.status ?? null,
     postApplyDryRunStatus: currentParsed.payload?.results?.[0]?.state?.status ?? null,

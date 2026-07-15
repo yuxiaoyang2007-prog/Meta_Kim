@@ -126,7 +126,9 @@ describe("50 — Parallel execution lanes (engineering fan-out)", () => {
       assert.equal(draft.ownerKind, "agent");
       assert.ok(available.has(draft.ownerAgent), `worker owner "${draft.ownerAgent}" must be an existing discovered owner`);
       assert.equal(draft.codexSpawnBinding?.hostSurface, "spawn_agent");
-      assert.equal(draft.codexSpawnBinding?.spawnMode, "native_task");
+      assert.equal(draft.codexSpawnBinding?.ownerBindingMode, "run_scoped_owner_contract");
+      assert.equal(draft.codexSpawnBinding?.nativeAgentType, null);
+      assert.equal(draft.codexSpawnBinding?.ownerSelectorField, null);
       assert.equal(draft.codexSpawnBinding?.ownerAgent, draft.ownerAgent);
       assert.match(draft.codexSpawnBinding?.task_name ?? "", /^[a-z0-9_]+$/);
       assert.equal(draft.codexSpawnBinding?.fork_turns, "none");

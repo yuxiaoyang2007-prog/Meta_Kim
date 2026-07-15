@@ -226,6 +226,39 @@ Non-trivial execution needs one consolidated Decision after Fetch and Thinking, 
 
 Codex visible multi-option choice rule: visible Decisions include at least two options and a recommended default.
 
+### Risk-Adaptive Plan Challenge
+
+Plan challenge is an interaction overlay across Critical, Fetch, Thinking, and Review. It does not alter the eight-stage spine or create another approval layer.
+
+Activation:
+
+- explicit user intent such as `反证`, `帮我挑刺`, `压力测试`, or `方案拷问`
+- an irreversible or high-cost action with concrete mutation or side-effect intent
+- a permission-sensitive side effect the user is asking the run to perform
+- a material contradiction recorded by trusted Fetch or Thinking evidence that changes outcome, scope, route, risk, authorization, or acceptance
+
+Suppress it for clear, low-risk, reversible work unless the user explicitly requests it. A low-risk read-only sentence does not activate automatic challenge merely because it mentions deployment, deletion, credentials, payment, permissions, production, or another risky domain. Automatic activation requires actionable mutation/side-effect intent or trusted contradiction evidence, and begins with a short notice explaining that concrete signal rather than an internal packet dump.
+
+Question selection is impact-first. Fetch resolves discoverable facts. Critical, Thinking, or Review asks only the highest-impact unresolved user decision for that turn. A valid question must identify what changes if the answer differs; otherwise suppress it. Do not bundle unrelated questions, repeat an answered question, or keep questioning to meet a count. If an answer invalidates dependent questions, close them without showing them.
+
+When evidence supports one route, show a recommended answer, reason, material trade-off, and uncertainty. Preference-only questions may present a neutral comparison instead. Expose five user actions in the resolved language when they are actionable: continue questioning, accept the recommendation, skip this question, summarize now, and stop. Record them as `continue`, `accept_recommendation`, `skip`, or `summarize_stop`; summary and stop share `summarize_stop` because both close the questioning immediately. Understanding and authorization phases must not show question-only controls that cannot change their state; their bound response field remains visible and `summarize_stop` remains available. That control records `stopReason=user_requested_summary_stop`, system-invalidates every remaining open question, and carries unresolved risks into the visible closure. Controls are trusted user decisions, not implicit prose guesses.
+
+Until the current runtime returns trusted user-decision evidence, the challenge remains `awaiting_user_answer`, `awaiting_understanding_confirmation`, or `awaiting_execution_authorization` as applicable. The runner emits `pendingUserChoice` for the host adapter with `required_not_invoked`; this records a required user decision, not a claimed popup. A generated card, assistant message, caller-authored JSON, CLI flag, environment variable, or report cannot mark a question answered or claim that a popup appeared. Compatibility chat may display the question, but it remains pending rather than native-choice completion.
+
+The public runner treats all serialized response, history, understanding, and authorization parameters as untrusted. It may consume at most one current-run decision only through a host-owned verifier callback capability; serialized `trusted=true` and `historical=true` fields alone have no authority. Cross-turn continuation loads the prior artifact only from the same governed output directory, validates it, requires the same task fingerprint and a still-pending phase, and requires the current host callback to bind `continuationRunId` to that exact prior run. The runner then restores the validated decision ledger and stamps only the current phase-appropriate answer, understanding confirmation, authorization/denial, or control. It never overwrites the prior artifact or replays caller-supplied history. This is a process-capability boundary, not a signature/public-key claim: if the current host does not expose a verifier adapter, keep the run pending and let the conversation host own the next decision.
+
+Keep understanding and action authority separate:
+
+- `sharedUnderstandingConfirmed`: a derived boolean backed by trusted understanding evidence bound to `plan-challenge-understanding-confirmation`.
+- `executionAuthorization`: trusted evidence of the user-authorized scope, or an explicit denial/not-required state.
+- `executionAllowed`: the single fail-closed gate consumed by every file/state mutation, global install, publish, deploy, deletion, payment, permission change, external write, or other side effect.
+
+Understanding never promotes authorization or `executionAllowed`. A single native choice surface may collect understanding and authorization only when it labels them as separate decisions and returns trusted evidence for each. Understanding confirmation itself requires trusted evidence bound to `plan-challenge-understanding-confirmation`; a naked boolean is ignored. A question response applies only when it is trusted, carries binding `plan-challenge-response:<questionId>`, records its selected-question sequence, and has non-empty evidence references. Caller-supplied booleans, status strings, unbound answers, authorization objects, or invalidation flags are untrusted input and cannot authorize execution, answer a decision, or invalidate a dependent question. Question invalidation comes only from the governed dependency resolver after a trusted answer/control transition. Explicit authorization denial is terminal for the run: show the denial summary, keep `executionAllowed=false`, and do not ask for authorization again.
+
+Do not ask for execution authorization merely to finish a read-only challenge session. When the next step has no side effect, authorization is `not_required` and the session closes after the chat summary without another acceptance step. Trusted authorization requires non-empty evidence, binding `planChallengeAuthorizationBinding(sideEffectActions)`, and scope actions covering every requested action. `executionAllowed` is true for an inactive challenge using the existing governed route, or for an active challenge only at `ready_for_execution`; all other active phases keep it false. Canonical writeback and project-copy mutation consume that same gate, while non-ready routes remain candidate/read-only. No capability-specific flag may bypass it.
+
+Closure is chat-first: confirmed decisions, unresolved risks, and the next action must be visible in the conversation. Render the question, controls, pending state, and outcome in the resolved `zh-CN`, `en-US`, `ja-JP`, or `ko-KR` locale without falling back to Chinese copy in another locale. Create a separate human-readable decision file only when the decision is long-lived and hard to reverse. Routine and reversible decisions do not justify another artifact or acceptance step.
+
 ## Interactive Execution Communication
 
 During multi-stage work, the dispatcher must communicate at natural transition points — not only at the pre-decision gate. This "communicate while working" pattern is mandatory for non-trivial tasks.

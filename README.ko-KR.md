@@ -787,13 +787,15 @@ flowchart TB
 
 ### `npx`로 설치했는데, 파일이 어디에 있나요?
 
-Meta_Kim은 3 곳에 기록합니다:
+Meta_Kim은 설치 범위와 실행 중 프로젝트 정착을 분리합니다:
 
-1. **현재 디렉터리** — `.claude/`, `.codex/`, `.cursor/`, `openclaw/` 이 프로젝트의 런타임 투영
-2. **홈 디렉터리** — `~/.claude/skills/meta-theory/` (및 `.codex / .cursor / .openclaw`) 프로젝트 간 공유되는 전역 스킬
-3. **매니페스트** — `~/.meta-kim/install-manifest.json`이 모든 변경사항을 추적하여 안전한 롤백을 지원
+1. **전역 선택** — 홈 디렉터리의 `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.openclaw/`에 공유 기능을 설치합니다.
+2. **프로젝트 선택** — 명시적으로 선택한 현재 프로젝트에 런타임 투영을 설치합니다.
+3. **실행 중 기능 정착** — 이후 governed run이 Agent, Skill, Command를 새로 만들거나 반복 개선하면 프로젝트 안에 독립 복사본을 만들고, 의존성 업데이트가 덮어쓰지 못하도록 ownership을 기록합니다.
 
-`npx`를 실행한 디렉터리에서 `npm run meta:status` (또는 `node setup.mjs --check`)를 실행하여 전체 풋프린트를 확인하세요. 롤백하려면 `npm run meta:uninstall`을 실행하세요.
+의도적으로 유지하는 예외가 하나 있습니다. 전역 설치/업데이트 중 유효한 Meta_Kim bootstrap manifest가 있는 기존 프로젝트를 발견하면, 전역 설치를 업데이트하는 동시에 그 프로젝트에 저장된 런타임 대상과 merge/delta 정책으로 기존 투영도 새로 고칩니다. 새 프로젝트 투영을 만들지 않으며 프로젝트에 정착된 기능이나 사용자 파일을 덮어쓰지 않습니다.
+
+전역 설치 후에는 어떤 디렉터리에서든 `meta-kim status`로 전체 풋프린트를 확인할 수 있습니다.
 
 ### Meta_Kim은 일반 AI 코딩 보조와 뭐가 다르나요?
 

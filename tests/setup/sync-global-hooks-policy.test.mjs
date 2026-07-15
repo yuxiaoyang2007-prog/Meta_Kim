@@ -725,6 +725,66 @@ Critical -> Fetch -> Thinking -> Review
     });
   });
 
+  test("global settings writes are atomic and preserve user JSON on injected failure", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      const fixtures = [
+        {
+          id: "claude-settings",
+          target: path.join(root, "claude", "settings.json"),
+          args: ["--targets", "claude", "--with-global-hooks"],
+        },
+        {
+          id: "codex-hooks",
+          target: path.join(root, "codex", "hooks.json"),
+          args: ["--targets", "codex", "--with-global-hooks"],
+        },
+      ];
+
+      for (const fixture of fixtures) {
+        await mkdir(path.dirname(fixture.target), { recursive: true });
+        const original = `${JSON.stringify(
+          {
+            unknownUserField: { preserve: true, runtime: fixture.id },
+            hooks: {
+              UserPromptSubmit: [
+                { hooks: [{ type: "command", command: "node user-only.js" }] },
+              ],
+            },
+          },
+          null,
+          2,
+        )}\n`;
+        await writeFile(fixture.target, original, "utf8");
+
+        await assert.rejects(
+          () =>
+            runScript(fixture.args, {
+              ...env,
+              META_KIM_TEST_FAIL_ATOMIC_SETTINGS_WRITE: fixture.id,
+            }),
+          (error) => {
+            assert.match(error.stderr, new RegExp(`Injected atomic settings write failure: ${fixture.id}`));
+            return true;
+          },
+        );
+
+        const preserved = await readFile(fixture.target, "utf8");
+        assert.equal(preserved, original);
+        assert.deepEqual(JSON.parse(preserved).unknownUserField, {
+          preserve: true,
+          runtime: fixture.id,
+        });
+        assert.equal(
+          (await readdir(path.dirname(fixture.target))).some((entry) =>
+            entry.includes(".meta-kim-staged-"),
+          ),
+          false,
+          "failed atomic writes must clean their staged file",
+        );
+      }
+    });
+  });
+
   test("default sync preserves manifest-owned hook records when hooks are skipped", async () => {
     await withTempRuntimeHomes(async ({ env, root }) => {
       await runScript(["--targets", "codex", "--with-global-hooks"], env);

@@ -14,8 +14,14 @@ import {
   buildCursorProjectHooksJson,
   buildCodexGraphifyContextHook,
   buildCodexProjectHooksJson,
+  GLOBAL_ONLY_DURABLE_PROJECTION_ROOTS,
+  GLOBAL_ONLY_WHOLE_FILE_PROJECTIONS,
+  collectRuntimeSedimentedProjectPaths,
   inferProjectCategory,
   inferProjectPurpose,
+  inferProjectRuntimeTarget,
+  inspectProjectProjectionOwnership,
+  isRuntimeSedimentedProjectPath,
 } from "../../scripts/sync-runtimes.mjs";
 import { mergeRepoClaudeSettings } from "../../scripts/claude-settings-merge.mjs";
 import { CATEGORIES } from "../../scripts/install-manifest.mjs";
@@ -50,6 +56,112 @@ describe("sync-runtimes / target selection", () => {
       source,
       /const selectedTargets = cliTargets\.length > 0 \? cliTargets : supportedTargets;/,
     );
+  });
+
+  test("global_only keeps only the project Hook dependency closure as install projection", async () => {
+    const source = await readFsFile("scripts/sync-runtimes.mjs", "utf8");
+    assert.deepEqual(
+      GLOBAL_ONLY_WHOLE_FILE_PROJECTIONS,
+      [".codex/hooks.json", ".cursor/hooks.json"],
+    );
+    for (const forbiddenRoot of [
+      ".claude/agents",
+      ".claude/skills",
+      ".codex/agents",
+      ".agents/skills",
+      ".cursor/agents",
+      "codex",
+      "openclaw",
+    ]) {
+      assert.ok(GLOBAL_ONLY_DURABLE_PROJECTION_ROOTS.includes(forbiddenRoot));
+    }
+    assert.equal(GLOBAL_ONLY_DURABLE_PROJECTION_ROOTS.includes(".claude/hooks"), false);
+    assert.equal(GLOBAL_ONLY_DURABLE_PROJECTION_ROOTS.includes(".codex/hooks"), false);
+    assert.equal(GLOBAL_ONLY_DURABLE_PROJECTION_ROOTS.includes(".cursor/hooks"), false);
+    assert.match(source, /manifestFileEntryMatches\(entry, filePath\)/);
+    assert.match(source, /entry\.source === "sync-runtimes"/);
+    assert.match(source, /await enforceGlobalOnlyProjectShape\(changedFiles\)/);
+    assert.doesNotMatch(source, /replaceSources:\s*\["sync-runtimes"\]/);
+  });
+
+  test("runtime-sedimented project copy wins over matching install-manifest ownership", () => {
+    const relPath = ".agents/skills/custom-project-skill/SKILL.md";
+    const absolutePath = p(...relPath.split("/"));
+    const protectedPaths = collectRuntimeSedimentedProjectPaths(
+      {
+        schemaVersion: "meta-kim-project-capabilities-v0.1",
+        capabilities: [
+          {
+            type: "skill",
+            ownershipClass: "runtime_sedimented_project_copy",
+            policy: "copy_to_project_for_modification",
+            detachedFromDependencyUpdates: true,
+            dependencyUpdatePolicy: "preserve_project_copy",
+            files: [{ relPath }],
+          },
+        ],
+      },
+      REPO,
+      process.cwd(),
+    );
+    assert.equal(
+      isRuntimeSedimentedProjectPath(absolutePath, protectedPaths),
+      true,
+    );
+    const descendantPath = p(".agents", "skills", "custom-project-skill", "references", "user-note.md");
+    assert.equal(
+      isRuntimeSedimentedProjectPath(descendantPath, protectedPaths),
+      true,
+      "sync writes must preserve every descendant of a runtime-sedimented Skill root",
+    );
+    const ownership = inspectProjectProjectionOwnership(
+      absolutePath,
+      {
+        entries: [
+          {
+            path: absolutePath,
+            source: "sync-runtimes",
+            kind: "file",
+            sha256: "still-equal-to-old-install-hash",
+            size: 42,
+          },
+        ],
+      },
+      protectedPaths,
+    );
+    assert.deepEqual(ownership, {
+      preserve: true,
+      reason: "runtime_sedimented_project_copy",
+      entry: null,
+    });
+    assert.deepEqual(
+      inspectProjectProjectionOwnership(
+        descendantPath,
+        { entries: [{ path: descendantPath, source: "sync-runtimes", kind: "file", sha256: "old" }] },
+        protectedPaths,
+      ),
+      { preserve: true, reason: "runtime_sedimented_project_copy", entry: null },
+      "global_only deletion must preserve Skill descendant files even with old install ownership",
+    );
+  });
+
+  test("direct global reuse never creates a protected project path", () => {
+    const protectedPaths = collectRuntimeSedimentedProjectPaths(
+      {
+        schemaVersion: "meta-kim-project-capabilities-v0.1",
+        capabilities: [
+          {
+            type: "skill",
+            ownershipClass: "global_reuse_reference",
+            policy: "use_global_directly",
+            files: [{ relPath: ".agents/skills/global-only/SKILL.md" }],
+          },
+        ],
+      },
+      REPO,
+      process.cwd(),
+    );
+    assert.equal(protectedPaths.size, 0);
   });
 });
 
@@ -235,6 +347,15 @@ describe("sync-runtimes / inferProjectPurpose", () => {
     assert.equal(inferProjectPurpose(null), null);
     assert.equal(inferProjectPurpose(undefined), null);
     assert.equal(inferProjectPurpose("Z"), null);
+  });
+});
+
+describe("sync-runtimes / install projection ownership", () => {
+  test("classifies runtime target independently from ownership class", () => {
+    assert.equal(inferProjectRuntimeTarget(p(".claude/agents/meta-warden.md"), REPO), "claude");
+    assert.equal(inferProjectRuntimeTarget(p(".agents/skills/meta-theory/SKILL.md"), REPO), "codex");
+    assert.equal(inferProjectRuntimeTarget(p(".cursor/rules/meta.mdc"), REPO), "cursor");
+    assert.equal(inferProjectRuntimeTarget(p("openclaw/workspaces/meta-warden/SOUL.md"), REPO), "openclaw");
   });
 });
 
