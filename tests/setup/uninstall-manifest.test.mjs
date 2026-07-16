@@ -1,20 +1,44 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 import {
+  atomicRewriteFileFromSnapshot,
   manifestEntryToFinding,
   findingsFromManifest,
+  orderUninstallActions,
+  removeManagedFileIfUnchanged,
+  removeManagedMcpFragmentFromFile,
+  removeExactManagedDirectory,
+  removeExactManagedRuntimeBundle,
+  revertManagedTomlFragments,
+  stripManagedSettingsFile,
+  writeDurableStagedFile,
 } from "../../scripts/uninstall.mjs";
+import { mcpDefinitionFingerprint } from "../../scripts/global-runtime-mcp.mjs";
 import {
   createEmpty,
   record,
   writeManifest,
   manifestPathFor,
   CATEGORIES,
+  directoryClosureSync,
+  openRecorder,
 } from "../../scripts/install-manifest.mjs";
+import { planCodexAppNativeControls } from "../../scripts/codex-config-merge.mjs";
 
 function withTmpRepo(body) {
   const dir = mkdtempSync(path.join(tmpdir(), "meta-kim-uninstall-"));
@@ -26,6 +50,84 @@ function withTmpRepo(body) {
   }
 }
 
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+const REPO_ROOT = path.join(import.meta.dirname, "..", "..");
+
+function runUninstall(userHome, args) {
+  return spawnSync(
+    process.execPath,
+    [path.join(REPO_ROOT, "scripts", "uninstall.mjs"), ...args],
+    {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        HOME: userHome,
+        USERPROFILE: userHome,
+        META_KIM_CLAUDE_HOME: path.join(userHome, ".claude"),
+        META_KIM_CODEX_HOME: path.join(userHome, ".codex"),
+      },
+    },
+  );
+}
+
+function writeGlobalManifest(userHome, entries) {
+  const manifestPath = path.join(userHome, ".meta-kim", "install-manifest.json");
+  mkdirSync(path.dirname(manifestPath), { recursive: true });
+  const now = new Date().toISOString();
+  writeFileSync(manifestPath, `${JSON.stringify({
+    schemaVersion: 1,
+    scope: "global",
+    metaKimVersion: "test",
+    createdAt: now,
+    updatedAt: now,
+    entries,
+  }, null, 2)}\n`);
+  return manifestPath;
+}
+
+function createManagedBundle(repo) {
+  const bundle = path.join(repo, ".meta-kim", "runtime", "package", "version");
+  const packageRoot = path.join(bundle, "node_modules", "package");
+  const proofByRole = {
+    "package-manifest": path.join(packageRoot, "package.json"),
+    cli: path.join(packageRoot, "bin", "cli.mjs"),
+    server: path.join(packageRoot, "scripts", "mcp", "server.mjs"),
+  };
+  for (const [role, filePath] of Object.entries(proofByRole)) {
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileSync(filePath, `${role}\n`);
+  }
+  const dependency = path.join(bundle, "node_modules", "dependency", "index.js");
+  mkdirSync(path.dirname(dependency), { recursive: true });
+  writeFileSync(dependency, "dependency\n");
+  const closure = directoryClosureSync(bundle);
+  const proofFiles = Object.entries(proofByRole).map(([role, filePath]) => {
+    const bytes = readFileSync(filePath);
+    return { path: filePath, role, size: bytes.length, sha256: sha256(bytes) };
+  });
+  return {
+    bundle,
+    proofByRole,
+    action: {
+      path: bundle,
+      manifestManaged: true,
+      source: "sync-global-meta-theory",
+      purpose: "claude-global-mcp-runtime-bundle",
+      closureSha256: closure.sha256,
+      closureEntryCount: closure.entryCount,
+      proofFiles: proofFiles.map((proof) => ({
+        ...proof,
+        kind: "file",
+        source: "sync-global-meta-theory",
+      })),
+    },
+  };
+}
+
 describe("uninstall / manifestEntryToFinding", () => {
   test("maps a file entry to a file finding", () => {
     const finding = manifestEntryToFinding({
@@ -35,6 +137,7 @@ describe("uninstall / manifestEntryToFinding", () => {
       purpose: "project-settings",
       kind: "file",
       size: 512,
+      sha256: "a".repeat(64),
     });
     assert.equal(finding.kind, "file");
     assert.equal(finding.path, "/repo/.claude/settings.json");
@@ -42,6 +145,8 @@ describe("uninstall / manifestEntryToFinding", () => {
     assert.equal(finding.source, "sync-runtimes");
     assert.equal(finding.purpose, "project-settings");
     assert.equal(finding.size, 512);
+    assert.equal(finding.sha256, "a".repeat(64));
+    assert.equal(finding.manifestManaged, true);
   });
 
   test("maps a dir entry to a dir finding", () => {
@@ -68,6 +173,27 @@ describe("uninstall / manifestEntryToFinding", () => {
     assert.equal(finding.managedHooks[0].matcher, null);
   });
 
+  test("maps structured settings hook fragments as the authoritative ownership record", () => {
+    const fragment = {
+      event: "PreToolUse",
+      matcher: "Bash",
+      hook: {
+        type: "command",
+        command: "node hooks/meta-kim/check.mjs",
+        timeout: 30,
+      },
+    };
+    const finding = manifestEntryToFinding({
+      path: "/home/kim/.claude/settings.json",
+      category: CATEGORIES.C,
+      kind: "settings-merge",
+      mergedHookCommands: ["legacy command must not override the fragment count"],
+      mergedHookFragments: [fragment],
+    });
+    assert.equal(finding.managedHookCount, 1);
+    assert.deepEqual(finding.managedHookFragments, [fragment]);
+  });
+
   test("settings-merge without mergedHookCommands defaults to empty array", () => {
     const finding = manifestEntryToFinding({
       path: "/x/settings.json",
@@ -88,14 +214,17 @@ describe("uninstall / manifestEntryToFinding", () => {
     assert.equal(finding, null);
   });
 
-  test("returns null for mcp-server entries", () => {
+  test("maps mcp-server entries to exact-fragment findings", () => {
     const finding = manifestEntryToFinding({
       path: "/x/.mcp.json",
       category: CATEGORIES.G,
       kind: "mcp-server",
       mcpServerName: "meta_kim_runtime",
+      mcpServerFingerprint: "sha256",
     });
-    assert.equal(finding, null);
+    assert.equal(finding.kind, "mcp-server");
+    assert.equal(finding.mcpServerName, "meta_kim_runtime");
+    assert.equal(finding.mcpServerFingerprint, "sha256");
   });
 
   test("returns null for git-hook entries", () => {
@@ -169,7 +298,7 @@ describe("uninstall / findingsFromManifest", () => {
     });
   });
 
-  test("filters out non-actionable entry kinds (pip/mcp/git-hook)", () => {
+  test("filters out non-actionable entry kinds (pip/git-hook)", () => {
     withTmpRepo((repo) => {
       let m = createEmpty({
         scope: "project",
@@ -236,5 +365,1091 @@ describe("uninstall / findingsFromManifest", () => {
       });
       assert.deepEqual(findings, []);
     });
+  });
+
+  test("attaches bundle proof files without turning them into standalone actions", () => {
+    withTmpRepo((repo) => {
+      const { bundle, action } = createManagedBundle(repo);
+      let manifest = createEmpty({ scope: "project", repoRoot: repo, metaKimVersion: "test" });
+      manifest = record(manifest, {
+        path: bundle,
+        category: CATEGORIES.C,
+        source: "sync-global-meta-theory",
+        purpose: "claude-global-mcp-runtime-bundle",
+        kind: "dir",
+        directoryClosureSha256: action.closureSha256,
+        directoryClosureEntryCount: action.closureEntryCount,
+      });
+      for (const proof of action.proofFiles) {
+        manifest = record(manifest, {
+          path: proof.path,
+          category: CATEGORIES.C,
+          source: "sync-global-meta-theory",
+          purpose: `claude-global-mcp-runtime-bundle:${proof.role}`,
+          kind: "file",
+          size: proof.size,
+          sha256: proof.sha256,
+        });
+      }
+      const invalidExtra = path.join(repo, "outside-candidate.lock");
+      writeFileSync(invalidExtra, "outside\n");
+      manifest = record(manifest, {
+        path: invalidExtra,
+        category: CATEGORIES.C,
+        source: "other-source",
+        purpose: "claude-global-mcp-runtime-bundle:candidate-lock",
+        kind: "file",
+        size: readFileSync(invalidExtra).length,
+        sha256: sha256(readFileSync(invalidExtra)),
+      });
+      writeManifest(manifestPathFor("project", repo), manifest);
+
+      const findings = findingsFromManifest({ scope: "project", repoRoot: repo });
+      assert.equal(findings.length, 1);
+      assert.equal(findings[0].kind, "dir");
+      assert.deepEqual(
+        findings[0].bundleProofFiles.map((proof) => proof.role).sort(),
+        ["candidate-lock", "cli", "package-manifest", "server"],
+      );
+    });
+  });
+});
+
+describe("uninstall / manifest fail-closed CLI", () => {
+  test("global manifest cannot authorize a file outside profile-derived ownership roots", () => {
+    withTmpRepo((home) => {
+      const victim = path.join(home, "user-owned.txt");
+      const bytes = Buffer.from("USER OWNED\n", "utf8");
+      writeFileSync(victim, bytes);
+      writeGlobalManifest(home, [{
+        path: victim,
+        category: CATEGORIES.A,
+        source: "sync-global-meta-theory",
+        purpose: "claude-global-skill",
+        kind: "file",
+        size: bytes.length,
+        sha256: sha256(bytes),
+        installedAt: new Date().toISOString(),
+      }]);
+
+      const result = runUninstall(home, ["--scope=global", "--yes"]);
+      assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.match(`${result.stdout}\n${result.stderr}`, /manifest_entry_untrusted/iu);
+      assert.deepEqual(readFileSync(victim), bytes);
+    });
+  });
+
+  test("a forged Agent purpose cannot delete a user file inside a runtime skill root", () => {
+    withTmpRepo((home) => {
+      const victim = path.join(home, ".claude", "skills", "user-owned.txt");
+      const bytes = Buffer.from("USER OWNED SKILL DATA\n", "utf8");
+      mkdirSync(path.dirname(victim), { recursive: true });
+      writeFileSync(victim, bytes);
+      writeGlobalManifest(home, [{
+        path: victim,
+        category: CATEGORIES.A,
+        source: "sync-global-meta-theory",
+        purpose: "claude-global-agent:forged",
+        kind: "file",
+        size: bytes.length,
+        sha256: sha256(bytes),
+        installedAt: new Date().toISOString(),
+      }]);
+
+      const result = runUninstall(home, ["--scope=global", "--yes"]);
+      assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.match(`${result.stdout}\n${result.stderr}`, /manifest_entry_untrusted/iu);
+      assert.deepEqual(readFileSync(victim), bytes);
+    });
+  });
+
+  test("global projection policy rejects cross-asset kind purpose and Agent-id spoofing", () => {
+    const cases = [
+      {
+        name: "skill root recorded as a file",
+        relPath: [".claude", "skills", "meta-theory"],
+        category: CATEGORIES.A,
+        purpose: "claude-global-skill",
+        kind: "file",
+      },
+      {
+        name: "command path recorded as a hook",
+        relPath: [".claude", "commands", "meta-theory.md"],
+        category: CATEGORIES.A,
+        purpose: "claude-global-hook",
+        kind: "file",
+      },
+      {
+        name: "non-canonical Agent id",
+        relPath: [".claude", "agents", "meta-forged.md"],
+        category: CATEGORIES.A,
+        purpose: "claude-global-agent:meta-forged",
+        kind: "file",
+      },
+      {
+        name: "hook path recorded as a command",
+        relPath: [".claude", "hooks", "meta-kim", "stop-memory-save.mjs"],
+        category: CATEGORIES.B,
+        purpose: "claude-global-command",
+        kind: "file",
+      },
+    ];
+
+    for (const attack of cases) {
+      withTmpRepo((home) => {
+        const victim = path.join(home, ...attack.relPath);
+        const bytes = Buffer.from(`USER OWNED: ${attack.name}\n`, "utf8");
+        mkdirSync(path.dirname(victim), { recursive: true });
+        writeFileSync(victim, bytes);
+        writeGlobalManifest(home, [{
+          path: victim,
+          category: attack.category,
+          source: "sync-global-meta-theory",
+          purpose: attack.purpose,
+          kind: attack.kind,
+          size: bytes.length,
+          sha256: sha256(bytes),
+          installedAt: new Date().toISOString(),
+        }]);
+
+        const result = runUninstall(home, ["--scope=global", "--yes"]);
+        assert.notEqual(
+          result.status,
+          0,
+          `${attack.name}\n${result.stdout}\n${result.stderr}`,
+        );
+        assert.match(`${result.stdout}\n${result.stderr}`, /manifest_entry_untrusted/iu);
+        assert.deepEqual(readFileSync(victim), bytes, attack.name);
+      });
+    }
+  });
+
+  test("OpenClaw child roots cannot fall back to the workspace-wide descriptor", () => {
+    withTmpRepo((home) => {
+      const victim = path.join(home, ".openclaw", "skills", "user-owned.txt");
+      const bytes = Buffer.from("OPENCLAW USER SKILL\n", "utf8");
+      mkdirSync(path.dirname(victim), { recursive: true });
+      writeFileSync(victim, bytes);
+      writeGlobalManifest(home, [{
+        path: victim,
+        category: CATEGORIES.A,
+        source: "sync-runtimes",
+        purpose: "openclaw-global-workspacesRoot",
+        kind: "file",
+        runtimeTarget: "openclaw",
+        size: bytes.length,
+        sha256: sha256(bytes),
+        installedAt: new Date().toISOString(),
+      }]);
+
+      const result = runUninstall(home, ["--scope=global", "--yes"]);
+      assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.match(`${result.stdout}\n${result.stderr}`, /descriptor_identity_mismatch/iu);
+      assert.deepEqual(readFileSync(victim), bytes);
+    });
+  });
+
+  test("OpenClaw workspace ownership is limited to canonical Agent and renderer filenames", () => {
+    for (const relPath of [
+      [".openclaw", "workspace-meta-warden", "PRIVATE.md"],
+      [".openclaw", "workspace-not-a-canonical-agent", "SOUL.md"],
+    ]) {
+      withTmpRepo((home) => {
+        const victim = path.join(home, ...relPath);
+        const bytes = Buffer.from("OPENCLAW USER WORKSPACE DATA\n", "utf8");
+        mkdirSync(path.dirname(victim), { recursive: true });
+        writeFileSync(victim, bytes);
+        writeGlobalManifest(home, [{
+          path: victim,
+          category: CATEGORIES.A,
+          source: "sync-runtimes",
+          purpose: "openclaw-global-workspacesRoot",
+          kind: "file",
+          runtimeTarget: "openclaw",
+          size: bytes.length,
+          sha256: sha256(bytes),
+          installedAt: new Date().toISOString(),
+        }]);
+
+        const result = runUninstall(home, ["--scope=global", "--yes"]);
+        assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+        assert.deepEqual(readFileSync(victim), bytes);
+      });
+    }
+  });
+
+  test("a forged sibling durable bundle with self-authored proofs cannot authorize deletion", () => {
+    withTmpRepo((home) => {
+      const bundle = path.join(
+        home,
+        ".meta-kim",
+        "runtime",
+        "meta-kim",
+        "user-owned",
+      );
+      const packageRoot = path.join(bundle, "node_modules", "meta-kim");
+      const proofPaths = {
+        "package-manifest": path.join(packageRoot, "package.json"),
+        cli: path.join(packageRoot, "bin", "meta-kim.mjs"),
+        server: path.join(packageRoot, "scripts", "mcp", "meta-runtime-server.mjs"),
+      };
+      mkdirSync(path.dirname(proofPaths.cli), { recursive: true });
+      mkdirSync(path.dirname(proofPaths.server), { recursive: true });
+      writeFileSync(proofPaths["package-manifest"], `${JSON.stringify({
+        name: "user-owned",
+        version: "1.0.0",
+        bin: { "meta-kim": "bin/meta-kim.mjs" },
+      })}\n`);
+      writeFileSync(proofPaths.cli, "USER CLI\n");
+      writeFileSync(proofPaths.server, "USER SERVER\n");
+      const closure = directoryClosureSync(bundle);
+      const purpose = "claude-global-mcp-runtime-bundle";
+      const entries = [{
+        path: bundle,
+        category: CATEGORIES.C,
+        source: "sync-global-meta-theory",
+        purpose,
+        kind: "dir",
+        directoryClosureSha256: closure.sha256,
+        directoryClosureEntryCount: closure.entryCount,
+        installedAt: new Date().toISOString(),
+      }];
+      for (const [role, filePath] of Object.entries(proofPaths)) {
+        const bytes = readFileSync(filePath);
+        entries.push({
+          path: filePath,
+          category: CATEGORIES.C,
+          source: "sync-global-meta-theory",
+          purpose: `${purpose}:${role}`,
+          kind: "file",
+          runtimeTarget: "claude",
+          size: bytes.length,
+          sha256: sha256(bytes),
+          installedAt: new Date().toISOString(),
+        });
+      }
+      writeGlobalManifest(home, entries);
+
+      const result = runUninstall(home, ["--scope=global", "--yes"]);
+      assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.match(`${result.stdout}\n${result.stderr}`, /manifest_entry_untrusted/iu);
+      assert.equal(readFileSync(proofPaths.cli, "utf8"), "USER CLI\n");
+      assert.equal(existsSync(bundle), true);
+    });
+  });
+
+  test("profile-derived exact projection files are accepted as merged configuration", () => {
+    withTmpRepo((home) => {
+      const settingsPath = path.join(home, ".codex", "hooks.json");
+      const command = "node hooks/meta-kim/check.mjs";
+      const original = `${JSON.stringify({
+        hooks: {
+          PreToolUse: [{
+            matcher: "Bash",
+            hooks: [{ type: "command", command }],
+          }],
+        },
+      }, null, 2)}\n`;
+      mkdirSync(path.dirname(settingsPath), { recursive: true });
+      writeFileSync(settingsPath, original);
+      writeGlobalManifest(home, [{
+        path: settingsPath,
+        category: CATEGORIES.C,
+        source: "sync-global-meta-theory",
+        purpose: "codex-global-hooks-json-merge",
+        kind: "settings-merge",
+        mergedHookCommands: [command],
+        mergedHookFragments: [{
+          event: "PreToolUse",
+          matcher: "Bash",
+          hook: { type: "command", command },
+        }],
+        installedAt: new Date().toISOString(),
+      }]);
+
+      const result = runUninstall(home, ["--scope=global"]);
+      assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /manifest_entry_untrusted/iu);
+      assert.equal(readFileSync(settingsPath, "utf8"), original);
+    });
+  });
+
+  test("missing manifest exits nonzero without falling back to recursive scan", () => {
+    withTmpRepo((home) => {
+      const unknown = path.join(home, ".claude", "skills", "meta-theory", "user-owned.txt");
+      mkdirSync(path.dirname(unknown), { recursive: true });
+      writeFileSync(unknown, "preserve\n");
+      const result = runUninstall(home, ["--scope=global", "--yes"]);
+      assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.match(`${result.stdout}\n${result.stderr}`, /manifest_missing|manifest-less|manifest/iu);
+      assert.equal(readFileSync(unknown, "utf8"), "preserve\n");
+    });
+  });
+
+  test("explicit legacy scan preserves non-empty recursive directories", () => {
+    withTmpRepo((home) => {
+      const unknown = path.join(home, ".claude", "skills", "meta-theory", "user-owned.txt");
+      mkdirSync(path.dirname(unknown), { recursive: true });
+      writeFileSync(unknown, "preserve\n");
+      const result = runUninstall(home, ["--scope=global", "--no-manifest", "--yes"]);
+      assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.equal(readFileSync(unknown, "utf8"), "preserve\n");
+    });
+  });
+
+  test("corrupt and no-actionable manifests block the real CLI without scan mutation", () => {
+    withTmpRepo((home) => {
+      const unknown = path.join(home, ".claude", "skills", "meta-theory", "user-owned.txt");
+      mkdirSync(path.dirname(unknown), { recursive: true });
+      writeFileSync(unknown, "preserve\n");
+      const manifestPath = writeGlobalManifest(home, []);
+      writeFileSync(manifestPath, "not-json");
+      const corrupt = runUninstall(home, ["--scope=global", "--yes"]);
+      assert.notEqual(corrupt.status, 0, `${corrupt.stdout}\n${corrupt.stderr}`);
+      assert.equal(readFileSync(unknown, "utf8"), "preserve\n");
+
+      writeGlobalManifest(home, []);
+      const empty = runUninstall(home, ["--scope=global", "--yes"]);
+      assert.notEqual(empty.status, 0, `${empty.stdout}\n${empty.stderr}`);
+      assert.equal(readFileSync(unknown, "utf8"), "preserve\n");
+    });
+  });
+});
+
+describe("uninstall / integrity-safe file removal", () => {
+  test("a file changed after preflight is restored instead of deleted", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "managed.txt");
+      const managed = Buffer.from("managed\n", "utf8");
+      const concurrent = Buffer.from("USER CONCURRENT EDIT\n", "utf8");
+      writeFileSync(target, managed);
+
+      const result = removeManagedFileIfUnchanged({
+        path: target,
+        recursive: false,
+        manifestManaged: true,
+        size: managed.length,
+        sha256: sha256(managed),
+      }, {
+        beforeMove: () => writeFileSync(target, concurrent),
+      });
+
+      assert.equal(result.success, false);
+      assert.equal(result.preserved, true);
+      assert.match(result.reason, /post_move_integrity:integrity_mismatch/u);
+      assert.deepEqual(readFileSync(target), concurrent);
+      assert.equal(result.quarantinePath, null);
+    });
+  });
+
+  test("removes an unchanged manifest-owned file", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "agents", "governance.md");
+      mkdirSync(path.dirname(target), { recursive: true });
+      const bytes = Buffer.from("managed\n", "utf8");
+      writeFileSync(target, bytes);
+
+      const result = removeManagedFileIfUnchanged({
+        path: target,
+        recursive: false,
+        manifestManaged: true,
+        size: bytes.length,
+        sha256: sha256(bytes),
+      });
+
+      assert.equal(result.success, true);
+      assert.equal(existsSync(target), false);
+    });
+  });
+
+  test("preserves a manifest-owned file after user modification", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "agents", "governance.md");
+      mkdirSync(path.dirname(target), { recursive: true });
+      const recorded = Buffer.from("managed\n", "utf8");
+      const edited = Buffer.from("user edit\n", "utf8");
+      writeFileSync(target, edited);
+
+      const result = removeManagedFileIfUnchanged({
+        path: target,
+        recursive: false,
+        manifestManaged: true,
+        size: recorded.length,
+        sha256: sha256(recorded),
+      });
+
+      assert.equal(result.success, false);
+      assert.equal(result.preserved, true);
+      assert.equal(result.reason, "integrity_mismatch");
+      assert.deepEqual(readFileSync(target), edited);
+    });
+  });
+
+  test("preserves a manifest-owned file when integrity metadata is incomplete", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "managed.txt");
+      writeFileSync(target, "managed\n");
+      const result = removeManagedFileIfUnchanged({
+        path: target,
+        recursive: false,
+        manifestManaged: true,
+        size: null,
+        sha256: null,
+      });
+      assert.equal(result.reason, "missing_integrity");
+      assert.equal(existsSync(target), true);
+    });
+  });
+
+  test("removes an exact manifest-owned recursive directory", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "managed-dir");
+      mkdirSync(target, { recursive: true });
+      writeFileSync(path.join(target, "owned.txt"), "owned\n");
+      const closure = directoryClosureSync(target);
+      const result = removeExactManagedDirectory({
+        path: target,
+        manifestManaged: true,
+        recursive: true,
+        closureSha256: closure.sha256,
+        closureEntryCount: closure.entryCount,
+      });
+      assert.equal(result.success, true);
+      assert.equal(existsSync(target), false);
+    });
+  });
+
+  test("preserves a recursive directory containing unknown content", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "managed-dir");
+      mkdirSync(target, { recursive: true });
+      writeFileSync(path.join(target, "owned.txt"), "owned\n");
+      const closure = directoryClosureSync(target);
+      writeFileSync(path.join(target, "unknown.txt"), "user\n");
+      const result = removeExactManagedDirectory({
+        path: target,
+        manifestManaged: true,
+        recursive: true,
+        closureSha256: closure.sha256,
+        closureEntryCount: closure.entryCount,
+      });
+      assert.equal(result.success, false);
+      assert.equal(result.preserved, true);
+      assert.equal(result.reason, "directory_closure_drift");
+      assert.equal(existsSync(path.join(target, "unknown.txt")), true);
+    });
+  });
+});
+
+describe("uninstall / managed settings stripping", () => {
+  function settingsWithManagedHook() {
+    return {
+      keep: true,
+      hooks: {
+        PreToolUse: [{
+          matcher: "Bash",
+          hooks: [{ type: "command", command: "node hooks/meta-kim/check.mjs" }],
+        }],
+      },
+    };
+  }
+
+  const actionFor = (target, expectedCount) => ({
+    path: target,
+    expectedCount,
+    predicate: (command) => command.includes("hooks/meta-kim/"),
+  });
+
+  test("parse failure is fail-closed", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "settings.json");
+      writeFileSync(target, "not json");
+      const result = stripManagedSettingsFile(actionFor(target, 1));
+      assert.equal(result.success, false);
+      assert.equal(result.reason, "invalid_json");
+      assert.equal(readFileSync(target, "utf8"), "not json");
+    });
+  });
+
+  test("expected count mismatch preserves the original settings", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "settings.json");
+      const original = `${JSON.stringify(settingsWithManagedHook(), null, 2)}\n`;
+      writeFileSync(target, original);
+      const result = stripManagedSettingsFile(actionFor(target, 2));
+      assert.equal(result.success, false);
+      assert.equal(result.reason, "managed_entry_count_mismatch:1/2");
+      assert.equal(readFileSync(target, "utf8"), original);
+    });
+  });
+
+  test("manifest exact fragments never consume a same-directory user hook", () => {
+    withTmpRepo((home) => {
+      const settingsPath = path.join(home, ".claude", "settings.json");
+      mkdirSync(path.dirname(settingsPath), { recursive: true });
+      const userCommand = `node "${path.join(home, ".claude", "hooks", "meta-kim", "user-owned-hook.mjs")}"`;
+      const recordedCommand = `node "${path.join(home, ".claude", "hooks", "meta-kim", "enforce-agent-dispatch.mjs")}"`;
+      const original = Buffer.from(`${JSON.stringify({
+        keep: true,
+        hooks: {
+          PreToolUse: [{
+            matcher: "Bash",
+            hooks: [{ type: "command", command: userCommand }],
+          }],
+        },
+      }, null, 2)}\n`, "utf8");
+      writeFileSync(settingsPath, original);
+      writeGlobalManifest(home, [{
+        path: settingsPath,
+        category: CATEGORIES.C,
+        source: "sync-global-meta-theory",
+        purpose: "claude-global-settings-merge",
+        kind: "settings-merge",
+        mergedHookCommands: [recordedCommand],
+        mergedHookFragments: [{
+          event: "PreToolUse",
+          matcher: "Bash",
+          hook: { type: "command", command: recordedCommand },
+        }],
+        mergedSettingsKeys: ["hooks"],
+        installedAt: new Date().toISOString(),
+      }]);
+
+      const result = runUninstall(home, ["--scope=global", "--yes"]);
+      assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.match(`${result.stdout}\n${result.stderr}`, /managed_entry_count_mismatch/iu);
+      assert.deepEqual(readFileSync(settingsPath), original);
+    });
+  });
+
+  test("legacy command-only manifests fail safe without deleting matching hooks", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "settings.json");
+      const original = `${JSON.stringify(settingsWithManagedHook(), null, 2)}\n`;
+      writeFileSync(target, original);
+      const result = stripManagedSettingsFile({
+        ...actionFor(target, 1),
+        requiresExactFragments: true,
+        exactFragments: null,
+      });
+      assert.equal(result.success, false);
+      assert.equal(result.reason, "no_exact_managed_fragments_recorded");
+      assert.equal(readFileSync(target, "utf8"), original);
+    });
+  });
+
+  test("structured fragments remove only the exact event matcher and hook object", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "settings.json");
+      const managedHook = {
+        type: "command",
+        command: "node hooks/meta-kim/check.mjs",
+        timeout: 30,
+      };
+      const userHook = {
+        type: "command",
+        command: "node hooks/meta-kim/user-owned.mjs",
+        timeout: 30,
+      };
+      writeFileSync(target, `${JSON.stringify({
+        keep: true,
+        hooks: {
+          PreToolUse: [{ matcher: "Bash", hooks: [managedHook, userHook] }],
+        },
+      }, null, 2)}\n`);
+      const result = stripManagedSettingsFile({
+        path: target,
+        expectedCount: 1,
+        requiresExactFragments: true,
+        exactFragments: [{
+          event: "PreToolUse",
+          matcher: "Bash",
+          hook: managedHook,
+        }],
+      });
+      assert.equal(result.success, true, result.reason);
+      const next = JSON.parse(readFileSync(target, "utf8"));
+      assert.deepEqual(next.hooks.PreToolUse, [{ matcher: "Bash", hooks: [userHook] }]);
+    });
+  });
+
+  test("zero recorded or residual matches cannot report success", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "settings.json");
+      const original = `${JSON.stringify({ keep: true, hooks: {} }, null, 2)}\n`;
+      writeFileSync(target, original);
+      const result = stripManagedSettingsFile(actionFor(target, 0));
+      assert.equal(result.success, false);
+      assert.equal(result.reason, "no_managed_entries_recorded");
+      assert.equal(readFileSync(target, "utf8"), original);
+    });
+  });
+
+  test("concurrent settings changes are preserved by commit-time CAS", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "settings.json");
+      const original = Buffer.from(`${JSON.stringify(settingsWithManagedHook(), null, 2)}\n`);
+      const concurrent = Buffer.from(`${JSON.stringify({ ...settingsWithManagedHook(), userEdit: true }, null, 2)}\n`);
+      writeFileSync(target, original);
+      const result = stripManagedSettingsFile(actionFor(target, 1), {
+        beforeCommit: () => writeFileSync(target, concurrent),
+      });
+      assert.equal(result.success, false);
+      assert.equal(result.reason, "concurrent_change");
+      assert.deepEqual(readFileSync(target), concurrent);
+      assert.deepEqual(readFileSync(result.backupPath), original);
+    });
+  });
+
+  test("staged settings write failure preserves the original bytes", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "settings.json");
+      const original = Buffer.from(`${JSON.stringify(settingsWithManagedHook(), null, 2)}\n`);
+      writeFileSync(target, original);
+      const result = stripManagedSettingsFile(actionFor(target, 1), {
+        stageWriter: (request) => {
+          if (request.purpose === "replacement") throw new Error("simulated settings write failure");
+          writeDurableStagedFile(request);
+        },
+      });
+      assert.equal(result.success, false);
+      assert.match(result.reason, /^atomic_write_failed:/u);
+      assert.deepEqual(readFileSync(target), original);
+      assert.deepEqual(readFileSync(result.backupPath), original);
+    });
+  });
+
+  test("symlinked settings are rejected without touching the target", () => {
+    withTmpRepo((repo) => {
+      const realTarget = path.join(repo, "real-settings.json");
+      const linkTarget = path.join(repo, "linked-settings.json");
+      const original = Buffer.from(`${JSON.stringify(settingsWithManagedHook(), null, 2)}\n`);
+      writeFileSync(realTarget, original);
+      let retainedTarget = realTarget;
+      try {
+        symlinkSync(realTarget, linkTarget, "file");
+      } catch (error) {
+        if (!["EPERM", "EACCES", "ENOTSUP"].includes(error?.code)) throw error;
+        const realDirectory = path.join(repo, "real-settings-directory");
+        mkdirSync(realDirectory, { recursive: true });
+        retainedTarget = path.join(realDirectory, "settings.json");
+        writeFileSync(retainedTarget, original);
+        symlinkSync(realDirectory, linkTarget, "junction");
+      }
+      const result = stripManagedSettingsFile(actionFor(linkTarget, 1));
+      assert.equal(result.success, false);
+      assert.equal(result.reason, "unsafe_settings_file_type");
+      assert.equal(lstatSync(linkTarget).isSymbolicLink(), true);
+      assert.deepEqual(readFileSync(retainedTarget), original);
+    });
+  });
+
+  test("real uninstall CLI exits nonzero and preserves symlinked settings bytes", () => {
+    withTmpRepo((home) => {
+      const realTarget = path.join(home, "real-settings.json");
+      const linkTarget = path.join(home, "linked-settings.json");
+      const original = Buffer.from(`${JSON.stringify(settingsWithManagedHook(), null, 2)}\n`);
+      writeFileSync(realTarget, original);
+      let retainedTarget = realTarget;
+      try {
+        symlinkSync(realTarget, linkTarget, "file");
+      } catch (error) {
+        if (!["EPERM", "EACCES", "ENOTSUP"].includes(error?.code)) throw error;
+        const realDirectory = path.join(home, "real-settings-directory");
+        mkdirSync(realDirectory, { recursive: true });
+        retainedTarget = path.join(realDirectory, "settings.json");
+        writeFileSync(retainedTarget, original);
+        symlinkSync(realDirectory, linkTarget, "junction");
+      }
+      writeGlobalManifest(home, [{
+        path: linkTarget,
+        category: CATEGORIES.C,
+        source: "sync-global-meta-theory",
+        purpose: "claude-global-settings-merge",
+        kind: "settings-merge",
+        mergedHookCommands: ["node hooks/meta-kim/check.mjs"],
+        mergedSettingsKeys: ["hooks"],
+        installedAt: new Date().toISOString(),
+      }]);
+      const result = runUninstall(home, ["--scope=global", "--yes"]);
+      assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.equal(lstatSync(linkTarget).isSymbolicLink(), true);
+      assert.deepEqual(readFileSync(retainedTarget), original);
+    });
+  });
+});
+
+describe("uninstall / managed TOML fragment transaction", () => {
+  test("restores false from true while preserving BOM CRLF comments and unmanaged bytes", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "config.toml");
+      const original = [
+        '\uFEFFmodel = "gpt-5.5" # user model',
+        "",
+        "[features]",
+        "default_mode_request_user_input = false # user comment",
+        "js_repl = true",
+        "",
+      ].join("\r\n");
+      const planned = planCodexAppNativeControls(original, {
+        platformName: "linux",
+      });
+      writeFileSync(target, planned.text, "utf8");
+
+      const result = revertManagedTomlFragments({
+        path: target,
+        mutationJournal: planned.mutations,
+      });
+
+      assert.equal(result.success, true, result.reason);
+      assert.equal(readFileSync(target, "utf8"), original);
+      assert.equal(readFileSync(result.backupPath, "utf8"), planned.text);
+    });
+  });
+
+  test("managed drift blocks the complete TOML action without changing bytes", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "config.toml");
+      const original = [
+        "[features]",
+        "default_mode_request_user_input = false",
+        "js_repl = true",
+        "",
+      ].join("\n");
+      const planned = planCodexAppNativeControls(original, {
+        platformName: "linux",
+      });
+      const drifted = planned.text.replace(
+        "default_mode_request_user_input = true",
+        "default_mode_request_user_input = false # user took ownership",
+      );
+      writeFileSync(target, drifted);
+
+      const result = revertManagedTomlFragments({
+        path: target,
+        mutationJournal: planned.mutations,
+      });
+
+      assert.equal(result.success, false);
+      assert.match(result.reason, /^toml_fragment_preflight_failed:/u);
+      assert.equal(readFileSync(target, "utf8"), drifted);
+      assert.equal(result.backupPath, undefined);
+    });
+  });
+
+  test("commit-time concurrent edits win over TOML rollback", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "config.toml");
+      const original = [
+        "[features]",
+        "default_mode_request_user_input = false",
+        "js_repl = true",
+        "",
+      ].join("\n");
+      const planned = planCodexAppNativeControls(original, {
+        platformName: "linux",
+      });
+      const concurrent = `${planned.text}# concurrent user edit\n`;
+      writeFileSync(target, planned.text);
+
+      const result = revertManagedTomlFragments(
+        { path: target, mutationJournal: planned.mutations },
+        { beforeCommit: () => writeFileSync(target, concurrent) },
+      );
+
+      assert.equal(result.success, false);
+      assert.equal(result.reason, "concurrent_change");
+      assert.equal(readFileSync(target, "utf8"), concurrent);
+      assert.equal(readFileSync(result.backupPath, "utf8"), planned.text);
+    });
+  });
+
+  test("legacy fixed-key Codex manifests fail safe in the real CLI", () => {
+    withTmpRepo((home) => {
+      const configPath = path.join(home, ".codex", "config.toml");
+      mkdirSync(path.dirname(configPath), { recursive: true });
+      const original = [
+        "[features]",
+        "default_mode_request_user_input = true",
+        "js_repl = true",
+        "",
+      ].join("\n");
+      writeFileSync(configPath, original);
+      writeGlobalManifest(home, [{
+        path: configPath,
+        category: CATEGORIES.C,
+        source: "sync-global-meta-theory",
+        purpose: "codex-global-config-choice-surface-and-app-native-controls",
+        kind: "settings-merge",
+        mergedHookCommands: [
+          "default_mode_request_user_input",
+          "js_repl",
+          "notify",
+          "windows.sandbox",
+          "marketplaces.openai-bundled",
+          "plugins.browser@openai-bundled",
+          "plugins.chrome@openai-bundled",
+          "plugins.computer-use@openai-bundled",
+        ],
+        installedAt: new Date().toISOString(),
+      }]);
+
+      const result = runUninstall(home, ["--scope=global", "--yes"]);
+      assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.match(
+        `${result.stdout}\n${result.stderr}`,
+        /no_exact_managed_fragments_recorded/iu,
+      );
+      assert.equal(readFileSync(configPath, "utf8"), original);
+    });
+  });
+});
+
+describe("uninstall / MCP fragment transaction", () => {
+  const serverName = "managed-runtime";
+  const managedDefinition = {
+    type: "stdio",
+    command: "meta-kim",
+    args: ["mcp", "serve"],
+    env: {},
+  };
+
+  function fixtureConfig() {
+    return {
+      auth: { provider: "user-owned" },
+      env: { USER_SETTING: "keep" },
+      mcpServers: {
+        [serverName]: managedDefinition,
+        userServer: { type: "http", url: "https://example.invalid/mcp" },
+      },
+    };
+  }
+
+  function actionFor(target) {
+    return {
+      path: target,
+      serverName,
+      fingerprint: mcpDefinitionFingerprint(managedDefinition),
+    };
+  }
+
+  test("removes only the exact managed fragment and backs up the same original bytes", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "claude-user.json");
+      const original = Buffer.from(`${JSON.stringify(fixtureConfig(), null, 2)}\n`, "utf8");
+      writeFileSync(target, original);
+
+      const result = removeManagedMcpFragmentFromFile(actionFor(target));
+      assert.equal(result.success, true);
+      assert.deepEqual(readFileSync(result.backupPath), original);
+
+      const updated = JSON.parse(readFileSync(target, "utf8"));
+      assert.equal(updated.mcpServers[serverName], undefined);
+      assert.deepEqual(updated.mcpServers.userServer, fixtureConfig().mcpServers.userServer);
+      assert.deepEqual(updated.auth, fixtureConfig().auth);
+      assert.deepEqual(updated.env, fixtureConfig().env);
+    });
+  });
+
+  test("fails closed when the target changes between snapshot and commit", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "claude-user.json");
+      const original = Buffer.from(`${JSON.stringify(fixtureConfig(), null, 2)}\n`, "utf8");
+      const concurrent = Buffer.from(`${JSON.stringify({ ...fixtureConfig(), note: "concurrent" }, null, 2)}\n`, "utf8");
+      writeFileSync(target, original);
+
+      const result = removeManagedMcpFragmentFromFile(actionFor(target), {
+        beforeCommit: () => writeFileSync(target, concurrent),
+      });
+
+      assert.equal(result.success, false);
+      assert.equal(result.reason, "concurrent_change");
+      assert.deepEqual(readFileSync(target), concurrent);
+      assert.deepEqual(readFileSync(result.backupPath), original);
+    });
+  });
+
+  test("a staged replacement write failure leaves the target untouched", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "claude-user.json");
+      const original = Buffer.from(`${JSON.stringify(fixtureConfig(), null, 2)}\n`, "utf8");
+      writeFileSync(target, original);
+
+      const result = removeManagedMcpFragmentFromFile(actionFor(target), {
+        stageWriter: (request) => {
+          if (request.purpose === "replacement") throw new Error("simulated write failure");
+          writeDurableStagedFile(request);
+        },
+      });
+
+      assert.equal(result.success, false);
+      assert.match(result.reason, /^atomic_write_failed:/u);
+      assert.deepEqual(readFileSync(target), original);
+      assert.deepEqual(readFileSync(result.backupPath), original);
+    });
+  });
+
+  test("a symlinked MCP config is rejected without replacing the link", () => {
+    withTmpRepo((repo) => {
+      const realTarget = path.join(repo, "real-config.json");
+      const linkTarget = path.join(repo, "linked-config.json");
+      const original = Buffer.from(`${JSON.stringify(fixtureConfig(), null, 2)}\n`, "utf8");
+      writeFileSync(realTarget, original);
+      let retainedTarget = realTarget;
+      try {
+        symlinkSync(realTarget, linkTarget, "file");
+      } catch (error) {
+        if (["EPERM", "EACCES", "ENOTSUP"].includes(error?.code)) {
+          const realDirectory = path.join(repo, "real-config-directory");
+          mkdirSync(realDirectory, { recursive: true });
+          retainedTarget = path.join(realDirectory, "config.json");
+          writeFileSync(retainedTarget, original);
+          symlinkSync(realDirectory, linkTarget, "junction");
+        } else {
+          throw error;
+        }
+      }
+
+      const result = removeManagedMcpFragmentFromFile(actionFor(linkTarget));
+      assert.equal(result.success, false);
+      assert.equal(result.reason, "unsafe_config_file_type");
+      assert.equal(lstatSync(linkTarget).isSymbolicLink(), true);
+      assert.deepEqual(readFileSync(retainedTarget), original);
+    });
+  });
+
+  test("the generic snapshot rewrite rejects stale original bytes", () => {
+    withTmpRepo((repo) => {
+      const target = path.join(repo, "config.json");
+      const original = Buffer.from("old\n", "utf8");
+      writeFileSync(target, "new\n");
+      const result = atomicRewriteFileFromSnapshot(target, original, Buffer.from("replacement\n"));
+      assert.equal(result.success, false);
+      assert.equal(result.reason, "concurrent_change");
+      assert.equal(readFileSync(target, "utf8"), "new\n");
+    });
+  });
+});
+
+describe("uninstall / durable runtime bundle ownership", () => {
+  test("recordDir captures a closed-set fingerprint for every managed directory", () => {
+    withTmpRepo((repo) => {
+      const { bundle } = createManagedBundle(repo);
+      const recorder = openRecorder({
+        scope: "project",
+        repoRoot: repo,
+        metaKimVersion: "test",
+      });
+      recorder.recordDir(bundle, {
+        source: "sync-global-meta-theory",
+        purpose: "claude-global-hooks-dir",
+        category: CATEGORIES.B,
+      });
+      const entry = recorder.snapshot().entries.find((candidate) => candidate.path === bundle);
+      const closure = directoryClosureSync(bundle);
+      assert.equal(entry.directoryClosureSha256, closure.sha256);
+      assert.equal(entry.directoryClosureEntryCount, closure.entryCount);
+    });
+  });
+
+  test("removes an exact bundle whose three proofs and full closure match", () => {
+    withTmpRepo((repo) => {
+      const { bundle, action } = createManagedBundle(repo);
+      const result = removeExactManagedRuntimeBundle(action);
+      assert.equal(result.success, true);
+      assert.equal(existsSync(bundle), false);
+    });
+  });
+
+  test("preserves the bundle when an unknown file appears", () => {
+    withTmpRepo((repo) => {
+      const { bundle, action } = createManagedBundle(repo);
+      writeFileSync(path.join(bundle, "user-note.txt"), "keep me\n");
+      const result = removeExactManagedRuntimeBundle(action);
+      assert.equal(result.success, false);
+      assert.equal(result.preserved, true);
+      assert.equal(result.reason, "bundle_closure_drift");
+      assert.equal(existsSync(path.join(bundle, "user-note.txt")), true);
+    });
+  });
+
+  test("preserves the bundle when any required proof drifts", () => {
+    withTmpRepo((repo) => {
+      const { bundle, proofByRole, action } = createManagedBundle(repo);
+      writeFileSync(proofByRole.cli, "user changed cli\n");
+      const result = removeExactManagedRuntimeBundle(action);
+      assert.equal(result.success, false);
+      assert.equal(result.reason, "bundle_proof_drift");
+      assert.equal(existsSync(bundle), true);
+    });
+  });
+
+  test("validates and accepts an additional exact descendant proof", () => {
+    withTmpRepo((repo) => {
+      const { bundle, action } = createManagedBundle(repo);
+      const extraPath = path.join(bundle, ".meta-kim-candidate.json");
+      writeFileSync(extraPath, "candidate\n");
+      const extraBytes = readFileSync(extraPath);
+      const closure = directoryClosureSync(bundle);
+      action.closureSha256 = closure.sha256;
+      action.closureEntryCount = closure.entryCount;
+      action.proofFiles.push({
+        path: extraPath,
+        role: "candidate-lock",
+        kind: "file",
+        source: action.source,
+        size: extraBytes.length,
+        sha256: sha256(extraBytes),
+      });
+      const result = removeExactManagedRuntimeBundle(action);
+      assert.equal(result.success, true);
+      assert.equal(existsSync(bundle), false);
+    });
+  });
+
+  test("does not silently discard an extra proof with invalid source or ancestry", () => {
+    withTmpRepo((repo) => {
+      const { bundle, action } = createManagedBundle(repo);
+      action.proofFiles.push({
+        ...action.proofFiles[0],
+        role: "candidate-lock",
+        source: "other-source",
+      });
+      const result = removeExactManagedRuntimeBundle(action);
+      assert.equal(result.success, false);
+      assert.equal(result.reason, "invalid_bundle_proof");
+      assert.equal(existsSync(bundle), true);
+    });
+  });
+
+  test("keeps a drifted quarantine when recursive deletion fails mid-flight", () => {
+    withTmpRepo((repo) => {
+      const { bundle, action } = createManagedBundle(repo);
+      const result = removeExactManagedRuntimeBundle(action, {
+        removeDirectory: (quarantinePath) => {
+          writeFileSync(path.join(quarantinePath, "partial-delete-marker.txt"), "drift\n");
+          throw new Error("simulated recursive delete failure");
+        },
+      });
+      assert.equal(result.success, false);
+      assert.equal(result.preserved, false);
+      assert.match(result.reason, /^rollback_incomplete:/u);
+      assert.equal(existsSync(bundle), false);
+      assert.ok(result.quarantinePath);
+      assert.equal(existsSync(path.join(result.quarantinePath, "partial-delete-marker.txt")), true);
+    });
+  });
+
+  test("orders exact MCP fragment removal before runtime bundle removal", () => {
+    const ordered = orderUninstallActions([
+      { kind: "remove", path: "other" },
+      { kind: "remove-bundle", path: "bundle" },
+      { kind: "strip-mcp", path: "config" },
+    ]);
+    assert.deepEqual(ordered.map((action) => action.kind), [
+      "strip-mcp",
+      "remove-bundle",
+      "remove",
+    ]);
   });
 });

@@ -13,10 +13,14 @@ import {
   captureReleaseSourceSnapshot,
   compareReleaseSourceSnapshotSequence,
   compareReleaseSourceSnapshots,
+  buildVerificationStages,
   computeLiveCertified,
   computeReleaseGrade,
   computeVerificationClaims,
   LIVE_CERTIFIED_STAGE,
+  packedProductProofComplete,
+  RELEASE_RUNTIME_TARGETS,
+  resolveReleaseOperationTimeout,
   runAllRuntimeGlobalInstallUpdateProbe,
   runReleasePreflight,
   STAGES,
@@ -31,6 +35,97 @@ const gitignore = readFileSync(".gitignore", "utf8");
 const scriptsReadme = readFileSync("scripts/README.md", "utf8");
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 const verifyRunnerSource = readFileSync("scripts/run-verify-all.mjs", "utf8");
+
+function completePackedProductProof() {
+  return {
+    status: "passed",
+    releaseGradeEligible: true,
+    sourcePolicy: "npm_pack_installed_public_cli",
+    currentPackage: {
+      status: "passed",
+      installedCliEntrypoints: true,
+      modes: [
+        { mode: "install", status: "passed" },
+        { mode: "update", status: "passed" },
+        { mode: "update", status: "passed" },
+      ],
+      projectPackage: {
+        status: "passed",
+        modes: [
+          { mode: "install", status: "passed" },
+          { mode: "update", status: "passed" },
+        ],
+      },
+      runtimeSedimentation: { status: "passed" },
+      portableRuntime: {
+        status: "passed",
+        agentProjection: { status: "passed" },
+        ownershipManifest: {
+          status: "passed",
+          overlappingWriterPathCount: 0,
+        },
+        hookProjection: { status: "passed" },
+        mcpRegistration: { status: "passed" },
+        mcpTransport: {
+          status: "passed",
+          evidenceTier: "packed_isolated_transport",
+          liveHostInvocation: false,
+          semanticMatrixMatched: true,
+          platformCount: RELEASE_RUNTIME_TARGETS.length,
+          stubFree: true,
+        },
+        portability: {
+          status: "passed",
+          packExtractionDeletedBeforeTransport: true,
+          tarballDeletedBeforeInstalledChecks: true,
+          installedPackageChecksAfterSourceDeletion: true,
+        },
+      },
+    },
+    historicalUpdate: {
+      status: "passed",
+      completed: true,
+      historicalRef: "v4.1.9",
+      resolution: {
+        ref: "v4.1.9",
+        source: "highest_prior_stable_semver_tag",
+      },
+      beforeVersion: "4.1.9",
+      afterVersion: "4.2.0",
+      seedMethod: "historical_tarball_installed_cli",
+      updateMethod: "current_tarball_installed_cli",
+      checkMethod: "current_update_internal_global_check_plus_exact_artifact_manifest_validation",
+    },
+  };
+}
+
+test("verify checks discovery read-only before the sole runtime mirror writer", () => {
+  const discoveryIndex = STAGES.findIndex((stage) => stage.name === "discover:global");
+  const catalogIndex = STAGES.findIndex(
+    (stage) => stage.name === "meta:agents:migration-catalog:check",
+  );
+  const syncIndex = STAGES.findIndex((stage) => stage.name === "meta:sync");
+  const checkIndex = STAGES.findIndex((stage) => stage.name === "meta:check");
+
+  assert.ok(discoveryIndex >= 0);
+  assert.match(STAGES[discoveryIndex].cmd, /discover:global -- --check/u);
+  assert.ok(catalogIndex > discoveryIndex, "release verification must check the migration catalog");
+  assert.ok(catalogIndex < syncIndex, "the catalog check must remain a read-only source gate");
+  assert.ok(syncIndex > discoveryIndex, "runtime projection sync must follow discovery");
+  assert.ok(checkIndex > syncIndex, "runtime check must follow the sole mirror writer");
+});
+
+test("standard and smoke release gates reject a stale global Agent migration catalog", () => {
+  assert.equal(
+    packageJson.scripts?.["meta:agents:migration-catalog:check"],
+    "node scripts/generate-global-agent-migration-catalog.mjs --check",
+  );
+  assert.match(
+    packageJson.scripts?.["meta:release:smoke"] ?? "",
+    /npm run meta:agents:migration-catalog:check/u,
+  );
+  assert.match(verifyRunnerSource, /meta:agents:migration-catalog:check/u);
+});
 
 test("core-loop release public evidence maps the default governed path", () => {
   assert.deepEqual(CORE_LOOP_CONTRACT.defaultEntry.spine, [
@@ -112,6 +207,60 @@ test("release verification path includes governance tests", () => {
   );
 });
 
+test("release stages derive runtime targets and timeout budgets from canonical policy", () => {
+  const syncManifest = JSON.parse(readFileSync("config/sync.json", "utf8"));
+  assert.deepEqual(RELEASE_RUNTIME_TARGETS, syncManifest.supportedTargets);
+  const setupStage = STAGES.find((stage) => stage.name === "meta:test:setup");
+  assert.equal(setupStage?.cmd, "npm run meta:test:setup");
+  assert.ok(setupStage.timeoutMs > 0);
+  assert.equal(
+    STAGES.some((stage) => stage.name === "meta:test:setup:packed"),
+    false,
+    "the standard gate must not repeat the packed CLI acceptance preflight",
+  );
+  const overridden = buildVerificationStages({
+    META_KIM_VERIFY_TIMEOUT_META_TEST_SETUP_MS: "12345",
+  }).find((stage) => stage.name === "meta:test:setup");
+  assert.equal(overridden.timeoutMs, 12345);
+  assert.throws(
+    () => buildVerificationStages({
+      META_KIM_VERIFY_TIMEOUT_META_TEST_SETUP_MS: "0",
+    }),
+    /must be a positive integer/u,
+  );
+  assert.equal(
+    resolveReleaseOperationTimeout(
+      "all-runtime-global-install-update-probe-mode",
+      {},
+    ),
+    180000,
+  );
+  assert.equal(
+    resolveReleaseOperationTimeout(
+      "all-runtime-global-install-update-probe-mode",
+      {
+        META_KIM_VERIFY_TIMEOUT_ALL_RUNTIME_GLOBAL_INSTALL_UPDATE_PROBE_MODE_MS:
+          "24680",
+      },
+    ),
+    24680,
+  );
+  assert.throws(
+    () => resolveReleaseOperationTimeout(
+      "all-runtime-global-install-update-probe-mode",
+      {
+        META_KIM_VERIFY_TIMEOUT_ALL_RUNTIME_GLOBAL_INSTALL_UPDATE_PROBE_MODE_MS:
+          "invalid",
+      },
+    ),
+    /must be a positive integer/u,
+  );
+  assert.doesNotMatch(
+    verifyRunnerSource,
+    /RELEASE_PROBE_MODE_TIMEOUT_MS\s*=\s*[0-9_]+/u,
+  );
+});
+
 test("verify-all owns one stage manifest and expands deterministic checks once", () => {
   assert.equal(packageJson.scripts["meta:verify:all:chain"], "npm run meta:verify:all");
   const expandCommand = (command, ancestry = []) =>
@@ -147,13 +296,18 @@ test("standard release-grade and optional live certification remain separate", (
     requested: false,
     results: standardResults,
     startIndex: 0,
+    packedUserProof: completePackedProductProof(),
   });
   assert.deepEqual(standardClaims, {
     releaseGrade: true,
     liveCertified: false,
     liveCertificationStatus: "not_requested",
   });
-  const releaseGrade = computeReleaseGrade({ results: standardResults, startIndex: 0 });
+  const releaseGrade = computeReleaseGrade({
+    results: standardResults,
+    startIndex: 0,
+    packedUserProof: completePackedProductProof(),
+  });
   assert.equal(releaseGrade, true);
   assert.equal(
     computeLiveCertified({
@@ -208,6 +362,7 @@ test("release-grade requires a stable captured source snapshot and all-runtime i
       startIndex: 0,
       sourceIntegrity: { releaseEligible: false },
       globalTargetProof: { status: "passed" },
+      packedUserProof: completePackedProductProof(),
     }),
     false,
   );
@@ -217,6 +372,7 @@ test("release-grade requires a stable captured source snapshot and all-runtime i
       startIndex: 0,
       sourceIntegrity: { releaseEligible: true },
       globalTargetProof: { status: "failed" },
+      packedUserProof: completePackedProductProof(),
     }),
     false,
   );
@@ -253,6 +409,44 @@ test("release-grade requires a stable captured source snapshot and all-runtime i
   );
 });
 
+test("packed product proof requires every portable runtime subproof", () => {
+  const complete = completePackedProductProof();
+  assert.equal(packedProductProofComplete(complete), true);
+  assert.equal(packedProductProofComplete({ status: "passed" }), false);
+
+  for (const key of [
+    "agentProjection",
+    "ownershipManifest",
+    "hookProjection",
+    "mcpRegistration",
+    "mcpTransport",
+    "portability",
+  ]) {
+    const incomplete = structuredClone(complete);
+    delete incomplete.currentPackage.portableRuntime[key];
+    assert.equal(
+      packedProductProofComplete(incomplete),
+      false,
+      `${key} must be required for packed product proof`,
+    );
+  }
+
+  const falselyLive = structuredClone(complete);
+  falselyLive.currentPackage.portableRuntime.mcpTransport.liveHostInvocation = true;
+  assert.equal(packedProductProofComplete(falselyLive), false);
+
+  for (const key of ["seedMethod", "updateMethod", "checkMethod"]) {
+    const missingHistoryProof = structuredClone(complete);
+    delete missingHistoryProof.historicalUpdate[key];
+    assert.equal(packedProductProofComplete(missingHistoryProof), false);
+  }
+  const diagnostic = structuredClone(complete);
+  diagnostic.status = "diagnostic_passed";
+  diagnostic.releaseGradeEligible = false;
+  diagnostic.historicalUpdate.status = "not_available";
+  assert.equal(packedProductProofComplete(diagnostic), false);
+});
+
 test("dirty but stable source content remains release-grade while commit eligibility stays false", () => {
   const dirtySnapshot = {
     captureOk: true,
@@ -284,6 +478,7 @@ test("dirty but stable source content remains release-grade while commit eligibi
       startIndex: 0,
       sourceIntegrity,
       globalTargetProof: { status: "passed" },
+      packedUserProof: completePackedProductProof(),
     }),
     true,
   );
@@ -309,7 +504,7 @@ test("release preflight rejects a source mutation inside the probe window", () =
       };
       return { status: "passed" };
     },
-    runPackedProbe: () => ({ status: "passed" }),
+    runPackedProbe: () => completePackedProductProof(),
   });
 
   assert.equal(preflight.globalTargetProof.status, "passed");
@@ -335,6 +530,7 @@ test("release preflight rejects a source mutation inside the probe window", () =
       startIndex: 0,
       sourceIntegrity: completeIntegrity,
       globalTargetProof: preflight.globalTargetProof,
+      packedUserProof: completePackedProductProof(),
     }),
     false,
   );
@@ -392,7 +588,7 @@ test("all-runtime release preflight performs real isolated install and update ar
       [
         'import { mkdirSync, writeFileSync } from "node:fs";',
         'import path from "node:path";',
-        'const runtimes = ["claude", "codex", "openclaw", "cursor"];',
+        `const runtimes = ${JSON.stringify(RELEASE_RUNTIME_TARGETS)};`,
         'for (const runtime of runtimes) {',
         '  const home = process.env[`META_KIM_${runtime.toUpperCase()}_HOME`];',
         '  const target = path.join(home, "skills", "planning-with-files");',
@@ -421,26 +617,28 @@ test("all-runtime release preflight performs real isolated install and update ar
         onProgress,
       }),
       runPackedProbe: () => ({
-        status: "passed",
-        sourcePolicy: "npm_pack_extracted_public_cli",
+        ...completePackedProductProof(),
+        sourcePolicy: "npm_pack_installed_public_cli",
       }),
     });
     const proof = preflight.globalTargetProof;
     assert.equal(proof.status, "passed", proof.error);
-    assert.deepEqual(proof.targets, ["claude", "codex", "openclaw", "cursor"]);
+    assert.deepEqual(proof.targets, RELEASE_RUNTIME_TARGETS);
     assert.deepEqual(proof.modes.map((mode) => mode.mode), ["install", "update"]);
     assert.equal(proof.modes.every((mode) => mode.status === "passed"), true);
     assert.equal(
-      proof.modes.every((mode) => mode.artifactProof.length === 4),
+      proof.modes.every(
+        (mode) => mode.artifactProof.length === RELEASE_RUNTIME_TARGETS.length,
+      ),
       true,
     );
-    assert.equal(proof.artifactProof.length, 4);
+    assert.equal(proof.artifactProof.length, RELEASE_RUNTIME_TARGETS.length);
     assert.equal(proof.identicalArtifactHash, true);
     assert.equal(proof.sourcePolicy, "external_declared_dependency_no_local_fallback");
     assert.equal(preflight.packedUserProof.status, "passed");
     assert.equal(
       preflight.packedUserProof.sourcePolicy,
-      "npm_pack_extracted_public_cli",
+      "npm_pack_installed_public_cli",
     );
     assert.equal(progress[0].event, "release_preflight_start");
     assert.ok(progress[0].expectedDurationMs >= 360_000);

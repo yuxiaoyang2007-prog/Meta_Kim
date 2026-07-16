@@ -92,6 +92,7 @@ export const HOOKPROMPT_PLATFORM_SUPPORT = {
 export const SHARED_RUNTIME_HOOK_FILES = Object.freeze([
   "activate-meta-theory-spine.mjs",
   "project-root.mjs",
+  "meta-kim-memory-save.mjs",
   "skip-reminder.mjs",
   "spine-state.mjs",
   "spine-state-utils.mjs",

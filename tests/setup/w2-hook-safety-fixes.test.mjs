@@ -104,43 +104,38 @@ describe("W2: install-mcp-memory-hooks.mjs --force transaction", () => {
   });
 });
 
-describe("W2: enforce-agent-dispatch.mjs dead-branch + critical bypass", () => {
-  test("dead else branch on req.met is removed", () => {
-    const src = load(
-      "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
-    );
-    // The original L2-02 had:
-    //   if (!req.met) { exitAfterDeny(...); } else { exitAfterDeny(...); }
-    // The fix keeps only the !req.met branch.
-    const designStageBlock = src.match(
-      /if\s*\(currentIdx\s*<\s*execIdx\s*&&\s*stage\s*!==\s*["']critical["']\)\s*\{[\s\S]*?\n\s*\}\s*\n/,
-    );
-    assert.ok(designStageBlock, "design-stage block must be present");
-    assert.doesNotMatch(
-      designStageBlock[0],
-      /\}\s*else\s*\{[\s\S]*?exitAfterDeny/,
-      "else branch with duplicate exitAfterDeny must be removed",
-    );
-  });
-
-  test("critical bypass requires deactivationReason === 'session_stop'", () => {
+describe("W2: enforce-agent-dispatch.mjs local execution + inactive meta boundary", () => {
+  test("ordinary local execution no longer retains design-stage denial branches", () => {
     const src = load(
       "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
     );
     assert.match(
       src,
-      /!state\.active\s*&&\s*state\.deactivationReason\s*===\s*["']session_stop["']/,
-      "inactive-spine bypass must require session_stop deactivation reason",
+      /Local execution tools are not stage drivers/,
+      "local execution must declare the non-stage-driver boundary",
     );
-    // The previous unconditional !state.active bypass must not exist.
-    const critBlock = src.match(
-      /if\s*\(stage\s*===\s*["']critical["']\s*&&\s*currentIdx\s*<\s*execIdx\)\s*\{[\s\S]*?\n\s*\}\s*\n/,
-    );
-    assert.ok(critBlock, "critical-stage block must be present");
     assert.doesNotMatch(
-      critBlock[0],
-      /if\s*\(\s*!state\.active\s*\)\s*\{[\s\S]{0,80}process\.exit\(0\)/,
-      "unconditional !state.active bypass must be removed",
+      src,
+      /currentIdx\s*<\s*execIdx|formatDesignStageMutationDeny|formatPostExecutionStageDeny/,
+      "ordinary local tools must not regain stage-based denial code",
+    );
+  });
+
+  test("inactive spine still enforces trusted meta-agent readonly identity", () => {
+    const src = load(
+      "canonical/runtime-assets/claude/hooks/enforce-agent-dispatch.mjs",
+    );
+    const start = src.indexOf("if (!state || !state.active)");
+    const end = src.indexOf("// Agent dispatch tools", start);
+    assert.ok(start >= 0 && end > start, "inactive-spine boundary must be present");
+    const inactiveBlock = src.slice(start, end);
+    assert.match(inactiveBlock, /inferCallerIdentity\(\)/);
+    assert.match(inactiveBlock, /enforceMetaReadonly\(toolName, toolInput, state, caller\)/);
+    assert.match(inactiveBlock, /process\.exit\(0\)/);
+    assert.doesNotMatch(
+      src,
+      /deactivationReason\s*===\s*["']session_stop["']/,
+      "session-stop state must not become permission for ordinary local file changes",
     );
   });
 });

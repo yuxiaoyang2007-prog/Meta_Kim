@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import {
+  assertPortablePackedReferences,
+  collectNonPortablePackedReferences,
+} from "../../scripts/verify-packed-user-install-update.mjs";
 
 const MAINTAINER_PATH_PATTERNS = [
   /\b[A-Za-z]:[/\\]KimProject(?:[/\\]|$)/iu,
@@ -48,5 +52,39 @@ test("dependency registry contains no maintainer drive paths", () => {
     collectMaintainerPaths({ examples: ["C:/path/to/project", "D:/Project/example"] }),
     [],
     "generic Windows path examples are documentation, not maintainer path leakage",
+  );
+});
+
+test("packed generated runtime fragments reject source homes, deleted pack roots, and placeholders", () => {
+  const sourceRoot = "D:/work/source-repository";
+  const maintainerHome = "C:/Users/Maintainer";
+  const deletedPackRoot = "E:/temp/npm-pack/extract/package";
+  const forbiddenRoots = [sourceRoot, maintainerHome, deletedPackRoot];
+  const valid = {
+    command: "meta-kim",
+    args: ["mcp", "serve"],
+    runtimeWrapper: "C:/Users/RuntimeUser/.claude/hooks/meta-kim/launcher.mjs",
+  };
+  assert.deepEqual(
+    assertPortablePackedReferences(valid, { forbiddenRoots }),
+    { status: "passed", findingCount: 0 },
+  );
+
+  const findings = collectNonPortablePackedReferences(
+    {
+      source: `${sourceRoot}/scripts/mcp/meta-runtime-server.mjs`,
+      legacyHome: `${maintainerHome}/old-install`,
+      deletedPack: `${deletedPackRoot}/bin/meta-kim.mjs`,
+      placeholder: "__REPO_ROOT__/scripts/mcp/meta-runtime-server.mjs",
+    },
+    { forbiddenRoots },
+  );
+  assert.deepEqual(
+    new Set(findings.map((finding) => finding.reason)),
+    new Set(["forbidden_machine_root", "unresolved_placeholder"]),
+  );
+  assert.throws(
+    () => assertPortablePackedReferences({ command: "REPLACE_WITH_REPO_ROOT/bin" }),
+    /non-portable references/u,
   );
 });

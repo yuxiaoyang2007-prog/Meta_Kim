@@ -55,20 +55,28 @@ function createTempSourceRepoFixture() {
 }
 
 function runSyncGlobal(targets, extraEnv = {}) {
+  const runtimeHome =
+    extraEnv.META_KIM_CODEX_HOME ?? extraEnv.META_KIM_CLAUDE_HOME ?? null;
+  const isolatedUserHome = runtimeHome ? dirname(runtimeHome) : null;
   return spawnSync(
     process.execPath,
     [
-      "scripts/sync-runtimes.mjs",
-      "--scope",
-      "global",
+      "scripts/sync-global-meta-theory.mjs",
       "--targets",
       targets,
+      "--with-global-hooks",
     ],
     {
       cwd: repoRoot,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, ...extraEnv },
+      env: {
+        ...process.env,
+        ...(isolatedUserHome
+          ? { HOME: isolatedUserHome, USERPROFILE: isolatedUserHome }
+          : {}),
+        ...extraEnv,
+      },
     },
   );
 }

@@ -308,7 +308,7 @@ function modernCapabilityNodeBindings() {
 }
 
 function runEnforceHook(state, payload, options = {}) {
-  const { runtime = "codex" } = options;
+  const { runtime = "codex", env = {} } = options;
   const cwd = mkdtempSync(join(tmpdir(), "meta-kim-hook-"));
   try {
     const hookDir = join(cwd, "canonical", "runtime-assets", "claude", "hooks");
@@ -347,6 +347,7 @@ function runEnforceHook(state, payload, options = {}) {
           META_KIM_SPINE_STATE_DIR: ".meta-kim/state/test/spine",
           META_KIM_CAPABILITY_GATE: "block",
           META_KIM_HOOK_RUNTIME: runtime,
+          ...env,
         },
       },
     );
@@ -399,7 +400,7 @@ function codexWorkerEnvelope(packet, overrides = {}) {
 }
 
 function runEnforceHookWithState(state, payload, options = {}) {
-  const { runtime = "codex" } = options;
+  const { runtime = "codex", env = {} } = options;
   const cwd = mkdtempSync(join(tmpdir(), "meta-kim-hook-"));
   try {
     const hookDir = join(cwd, "canonical", "runtime-assets", "claude", "hooks");
@@ -435,6 +436,7 @@ function runEnforceHookWithState(state, payload, options = {}) {
           META_KIM_SPINE_STATE_DIR: ".meta-kim/state/test/spine",
           META_KIM_CAPABILITY_GATE: "block",
           META_KIM_HOOK_RUNTIME: runtime,
+          ...env,
         },
       },
     );
@@ -1557,7 +1559,7 @@ describe("Part F2: choice surface runtime gate", async () => {
     assert.equal(contract.controlPlaneRules?.hookRole, "last_resort_fuse");
   });
 
-  test("observed hook state allows ordinary local file mutation with one readable notice", () => {
+  test("observed hook state allows ordinary local file mutation without notice", () => {
     const state = {
       ...createInitialState({
         taskClassification: "meta_theory_auto",
@@ -1580,8 +1582,8 @@ describe("Part F2: choice surface runtime gate", async () => {
 
     assert.equal(result.status, 0);
     assert.doesNotMatch(result.stdout, /permissionDecision/);
-    assert.match(result.stderr, /观察态/);
-    assert.ok(updatedState.stageRuntimeControl?.observedNoticeEmittedAt);
+    assert.equal(result.stderr, "");
+    assert.equal(updatedState.stageRuntimeControl?.observedNoticeEmittedAt, undefined);
   });
 
   test("observed hook state does not block commands by keyword or command class", () => {
@@ -2056,7 +2058,7 @@ describe("Part F2: choice surface runtime gate", async () => {
     assert.doesNotMatch(result.stdout, /permissionDecision/);
   });
 
-  test("Verification stage still denies mutation when choice evidence is incomplete", () => {
+  test("Verification stage allows ordinary business file mutation when choice evidence is incomplete", () => {
     const state = {
       ...createInitialState({
         taskClassification: "meta_theory_auto",
@@ -2068,16 +2070,16 @@ describe("Part F2: choice surface runtime gate", async () => {
     const result = runEnforceHook(state, {
       tool_name: "Bash",
       tool_input: {
-        command: "npm install left-pad",
+        command: "sed -i 's/old/new/' src/styles.css",
       },
     });
 
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /permissionDecision/);
-    assert.match(result.stdout, /Execution cannot start before Fetch evidence/);
+    assert.doesNotMatch(result.stdout, /permissionDecision/);
+    assert.equal(result.stderr, "");
   });
 
-  test("Critical stage setup does not force meta-warden dispatch", () => {
+  test("Critical stage local command execution does not force meta-warden dispatch", () => {
     assert.deepEqual(STAGE_META_AGENT_MAP.critical.required, []);
     assert.doesNotMatch(STAGE_META_AGENT_MAP.critical.label, /Warden/i);
 
@@ -2097,9 +2099,9 @@ describe("Part F2: choice surface runtime gate", async () => {
     });
 
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /permissionDecision/);
+    assert.doesNotMatch(result.stdout, /permissionDecision/);
     assert.doesNotMatch(result.stdout, /meta-warden|Warden scope clarification/i);
-    assert.match(result.stdout, /Current stage: Critical/i);
+    assert.equal(result.stderr, "");
   });
 
   test("Critical planning-file write does not auto-advance the active run", () => {
@@ -2464,7 +2466,7 @@ describe("Part F2: choice surface runtime gate", async () => {
     assert.doesNotMatch(result.stdout, /permissionDecision/);
   });
 
-  test("Critical stage still denies test execution after harmless cwd setup", () => {
+  test("Critical stage allows test execution after harmless cwd setup", () => {
     const state = {
       ...createInitialState({
         taskClassification: "meta_theory_auto",
@@ -2481,12 +2483,12 @@ describe("Part F2: choice surface runtime gate", async () => {
     });
 
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /permissionDecision/);
-    assert.match(result.stdout, /Current stage: Critical/i);
+    assert.doesNotMatch(result.stdout, /permissionDecision/);
+    assert.equal(result.stderr, "");
   });
 
-  test("Critical and Fetch stages still deny mutation commands", () => {
-    for (const stage of ["critical", "fetch"]) {
+  test("managed stages allow ordinary local commands without warning", () => {
+    for (const stage of ["critical", "fetch", "thinking", "review", "verification", "evolution"]) {
       const state = {
         ...createInitialState({
           taskClassification: "meta_theory_auto",
@@ -2495,19 +2497,24 @@ describe("Part F2: choice surface runtime gate", async () => {
         currentStage: stage,
       };
 
-      const result = runEnforceHook(state, {
-        tool_name: "Bash",
-        tool_input: {
-          command: "npm install left-pad",
-        },
-      });
+      for (const command of [
+        "sed -i 's/old/new/' src/styles.css",
+        "rm -f .meta-kim/state/default/spine/spine-state.json",
+        "Remove-Item -LiteralPath .meta-kim/state/default/spine/spine-state.json -Force",
+      ]) {
+        const result = runEnforceHook(state, {
+          tool_name: "Bash",
+          tool_input: { command },
+        });
 
-      assert.equal(result.status, 0);
-      assert.match(result.stdout, /permissionDecision/);
+        assert.equal(result.status, 0);
+        assert.doesNotMatch(result.stdout, /permissionDecision/);
+        assert.equal(result.stderr, "");
+      }
     }
   });
 
-  test("Fetch business mutation denial does not instruct Agent dispatch", () => {
+  test("Fetch stage allows ordinary business file mutation without warning", () => {
     const state = {
       ...createInitialState({
         taskClassification: "meta_theory_auto",
@@ -2527,13 +2534,70 @@ describe("Part F2: choice surface runtime gate", async () => {
     });
 
     assert.equal(result.status, 0);
+    assert.doesNotMatch(result.stdout, /permissionDecision/);
+    assert.equal(result.stdout, "");
+    assert.equal(result.stderr, "");
+  });
+
+  test("dispatch history cannot impersonate a meta-agent caller or warn on project mutation", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      currentStage: "fetch",
+      dispatchChain: {
+        fetch: ["meta-artisan"],
+      },
+    };
+
+    const result = runEnforceHook(state, {
+      tool_name: "Write",
+      tool_input: {
+        file_path: "src/main.go",
+        content: "package main\n",
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, "");
+    assert.equal(result.stderr, "");
+  });
+
+  test("runtime-injected meta-agent identity still enforces the readonly role boundary", () => {
+    const state = {
+      ...createInitialState({
+        taskClassification: "meta_theory_auto",
+        triggerReason: "test",
+      }),
+      currentStage: "fetch",
+    };
+
+    const result = runEnforceHook(
+      state,
+      {
+        tool_name: "Write",
+        tool_input: {
+          file_path: "src/main.go",
+          content: "package main\n",
+        },
+      },
+      {
+        runtime: "claude",
+        env: {
+          CLAUDE_SUBAGENT_TYPE: "meta-artisan",
+          META_KIM_META_ENFORCEMENT_MODE: "block",
+        },
+      },
+    );
+
+    assert.equal(result.status, 0);
     assert.match(result.stdout, /permissionDecision/);
-    assert.match(result.stdout, /fetchRecord in spine state/);
-    assert.match(result.stdout, /Agent dispatch is not required before Execution/);
-    assert.match(result.stdout, /continue read\/search Fetch evidence/);
-    assert.doesNotMatch(result.stdout, /Dispatch them via Agent tool/);
-    assert.doesNotMatch(result.stdout, /description must contain the meta-agent name/);
-    assert.doesNotMatch(result.stdout, /planning\/control-plane updates/);
+    const decision = JSON.parse(result.stdout);
+    assert.match(
+      decision.hookSpecificOutput.permissionDecisionReason,
+      /Meta-agent "meta-artisan"/,
+    );
   });
 
   test("queryBypass allows read-only inspection but still denies mutation", () => {
@@ -2603,9 +2667,6 @@ describe("Part F2: choice surface runtime gate", async () => {
         triggerReason: "test",
       }),
       currentStage: "fetch",
-      dispatchChain: {
-        fetch: ["meta-artisan"],
-      },
     };
 
     const spineWrite = runEnforceHook(state, {
@@ -2628,7 +2689,8 @@ describe("Part F2: choice surface runtime gate", async () => {
       },
     });
     assert.equal(businessWrite.status, 0);
-    assert.match(businessWrite.stdout, /permissionDecision/);
+    assert.doesNotMatch(businessWrite.stdout, /permissionDecision/);
+    assert.equal(businessWrite.stderr, "");
 
     const misleadingContentWrite = runEnforceHook(state, {
       tool_name: "Bash",
@@ -2637,7 +2699,8 @@ describe("Part F2: choice surface runtime gate", async () => {
       },
     });
     assert.equal(misleadingContentWrite.status, 0);
-    assert.match(misleadingContentWrite.stdout, /permissionDecision/);
+    assert.doesNotMatch(misleadingContentWrite.stdout, /permissionDecision/);
+    assert.equal(misleadingContentWrite.stderr, "");
   });
 
   test("Fetch stage allows apply_patch spine-state patches before fetchRecord exists", () => {
@@ -2647,9 +2710,6 @@ describe("Part F2: choice surface runtime gate", async () => {
         triggerReason: "test",
       }),
       currentStage: "fetch",
-      dispatchChain: {
-        fetch: ["meta-artisan"],
-      },
     };
     delete state.fetchRecord;
 
@@ -2684,19 +2744,17 @@ describe("Part F2: choice surface runtime gate", async () => {
     });
 
     assert.equal(mixedPatch.status, 0);
-    assert.match(mixedPatch.stdout, /permissionDecision/);
+    assert.doesNotMatch(mixedPatch.stdout, /permissionDecision/);
+    assert.equal(mixedPatch.stderr, "");
   });
 
-  test("Fetch self-lock allows repair-only Node fetchRecord spine-state write", () => {
+  test("Fetch stage allows Node state repair and ordinary Node project writes", () => {
     const state = {
       ...createInitialState({
         taskClassification: "meta_theory_auto",
         triggerReason: "test",
       }),
       currentStage: "fetch",
-      dispatchChain: {
-        fetch: ["meta-sentinel"],
-      },
     };
     delete state.fetchRecord;
 
@@ -2740,19 +2798,17 @@ describe("Part F2: choice surface runtime gate", async () => {
       },
     });
     assert.equal(businessNodeWrite.status, 0);
-    assert.match(businessNodeWrite.stdout, /permissionDecision/);
+    assert.doesNotMatch(businessNodeWrite.stdout, /permissionDecision/);
+    assert.equal(businessNodeWrite.stderr, "");
   });
 
-  test("planning file mentions do not bypass Fetch business-file writes", () => {
+  test("planning file mentions do not change silent Fetch business-file allowance", () => {
     const state = {
       ...createInitialState({
         taskClassification: "meta_theory_auto",
         triggerReason: "test",
       }),
       currentStage: "fetch",
-      dispatchChain: {
-        fetch: ["meta-artisan"],
-      },
     };
     delete state.fetchRecord;
 
@@ -2774,7 +2830,8 @@ describe("Part F2: choice surface runtime gate", async () => {
       },
     });
     assert.equal(mixedBusinessWrite.status, 0);
-    assert.match(mixedBusinessWrite.stdout, /permissionDecision/);
+    assert.doesNotMatch(mixedBusinessWrite.stdout, /permissionDecision/);
+    assert.equal(mixedBusinessWrite.stderr, "");
   });
 
   test("Fetch stage allows planning files before fetchRecord exists", () => {
@@ -2828,7 +2885,8 @@ describe("Part F2: choice surface runtime gate", async () => {
       },
     });
     assert.equal(businessWriteWithPlanMention.status, 0);
-    assert.match(businessWriteWithPlanMention.stdout, /permissionDecision/);
+    assert.doesNotMatch(businessWriteWithPlanMention.stdout, /permissionDecision/);
+    assert.equal(businessWriteWithPlanMention.stderr, "");
   });
 
   test("Fetch stage delays task bookkeeping before Fetch evidence exists", () => {
@@ -2966,7 +3024,7 @@ describe("Part F2: choice surface runtime gate", async () => {
     assert.match(denied.stdout, /at least two workerTaskPackets/);
   });
 
-  test("simpleMode residue in spine state cannot skip dispatch governance", () => {
+  test("simpleMode residue in spine state cannot skip Agent dispatch governance", () => {
     const state = {
       ...createInitialState({
         taskClassification: "meta_theory_auto",
@@ -2977,10 +3035,11 @@ describe("Part F2: choice surface runtime gate", async () => {
     };
 
     const result = runEnforceHook(state, {
-      tool_name: "Write",
+      tool_name: "Agent",
       tool_input: {
-        file_path: "src/main.go",
-        content: "package main\n",
+        agent_type: "backend",
+        description: "implement task-backend-001",
+        prompt: "implement task-backend-001",
       },
     });
 

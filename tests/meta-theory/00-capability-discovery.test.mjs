@@ -353,6 +353,17 @@ describe("Part B: Runtime MCP Integration", async () => {
         result.tools.includes("dispatch_meta_agent"),
         "self-test must expose dispatch_meta_agent tool",
       );
+      const syncConfig = await readJson("config/sync.json");
+      const canonicalAgentRoot = syncConfig.canonicalRoots.agents;
+      assert.equal(
+        result.agentSources.length,
+        result.agentCount,
+        "self-test must expose one source path for every loaded agent",
+      );
+      assert.ok(
+        result.agentSources.every((source) => source.startsWith(`${canonicalAgentRoot}/`)),
+        `all MCP runtime agents must load from the declared canonical root ${canonicalAgentRoot}`,
+      );
     } catch (err) {
       assert.fail(`meta-runtime-server.mjs self-test failed: ${err.message}`);
     }
@@ -420,26 +431,6 @@ describe("Part C: Agent Discovery", async () => {
         `${agent}.md must have a non-empty description`,
       );
     }
-  });
-
-  test("meta-runtime-server loads agents from canonical/agents/ directory", async () => {
-    const serverPath = path.join(
-      REPO_ROOT,
-      "scripts",
-      "mcp",
-      "meta-runtime-server.mjs",
-    );
-    const content = await fs.readFile(serverPath, "utf8");
-
-    assert.ok(
-      content.includes("canonicalAgentsDir") ||
-        content.includes("canonical/agents"),
-      "meta-runtime-server.mjs must reference canonical/agents directory",
-    );
-    assert.ok(
-      content.includes("loadAgents") || content.includes("files"),
-      "meta-runtime-server.mjs must have agent loading logic",
-    );
   });
 
   test("SKILL.md documents capability-first (no hardcoded agent names)", () => {

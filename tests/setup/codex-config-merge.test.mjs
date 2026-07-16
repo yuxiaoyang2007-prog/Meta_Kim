@@ -9,7 +9,10 @@ import {
   ensureCodexWindowsNotifyCompat,
   ensureCodexRequestUserInputFeature,
   hasCodexRequestUserInputFeature,
+  invertCodexConfigMutations,
   mergeCodexConfigAddOnly,
+  normalizeCodexConfigMutations,
+  planCodexAppNativeControls,
 } from "../../scripts/codex-config-merge.mjs";
 
 function sectionBlock(configText, sectionName) {
@@ -27,6 +30,202 @@ function sectionBlock(configText, sectionName) {
 }
 
 describe("Codex config merge", () => {
+  test("native-control planner leaves already-equal bytes untouched", () => {
+    const input = "\uFEFF[features]\r\ndefault_mode_request_user_input = true # keep\r\njs_repl = true\r\n";
+    const planned = planCodexAppNativeControls(input, { platformName: "linux" });
+    assert.equal(planned.text, input);
+    assert.deepEqual(planned.mutations, []);
+  });
+
+  test("native-control mutations are actual deltas and invert exactly", () => {
+    const input = [
+      'model = "gpt-5.5"',
+      "",
+      "[features]",
+      "default_mode_request_user_input = false # preserve comment",
+      "js_repl = true",
+      "",
+    ].join("\r\n");
+    const planned = planCodexAppNativeControls(input, { platformName: "linux" });
+    assert.equal(planned.mutations.length, 1);
+    assert.deepEqual(planned.mutations[0], {
+      kind: "replace",
+      locator: { table: "features", key: "default_mode_request_user_input" },
+      beforeFragment: "default_mode_request_user_input = false # preserve comment",
+      afterFragment: "default_mode_request_user_input = true # preserve comment",
+    });
+    assert.match(planned.text, /true # preserve comment\r\n/u);
+    assert.equal(invertCodexConfigMutations(planned.text, planned.mutations), input);
+  });
+
+  test("inverse preserves unrelated edits and rejects managed drift", () => {
+    const input = [
+      'model = "gpt-5.5"',
+      "[features]",
+      "default_mode_request_user_input = false",
+      "js_repl = true",
+      "",
+    ].join("\n");
+    const planned = planCodexAppNativeControls(input, { platformName: "linux" });
+    const userEdited = planned.text.replace('model = "gpt-5.5"', 'model = "gpt-5.6"');
+    const inverted = invertCodexConfigMutations(userEdited, planned.mutations);
+    assert.match(inverted, /model = "gpt-5\.6"/u);
+    assert.match(inverted, /default_mode_request_user_input = false/u);
+
+    const drifted = planned.text.replace(
+      "default_mode_request_user_input = true",
+      "default_mode_request_user_input = false # user took ownership",
+    );
+    assert.throws(
+      () => invertCodexConfigMutations(drifted, planned.mutations),
+      /managed fragment drifted/u,
+    );
+  });
+
+  test("inverse keeps a newly added table header when user content makes removal ambiguous", () => {
+    const input = 'model = "gpt-5.5"\n';
+    const planned = planCodexAppNativeControls(input, { platformName: "linux" });
+    const withUserSetting = planned.text.replace(
+      "js_repl = true",
+      "js_repl = true\nuser_feature = true",
+    );
+    const inverted = invertCodexConfigMutations(withUserSetting, planned.mutations);
+    assert.match(inverted, /\[features\]/u);
+    assert.match(inverted, /user_feature = true/u);
+    assert.doesNotMatch(inverted, /default_mode_request_user_input|js_repl/u);
+  });
+
+  test("mutation normalization compresses a contiguous locator chain", () => {
+    const inserted = {
+      kind: "insert",
+      locator: { table: "features", key: "js_repl" },
+      beforeFragment: "",
+      afterFragment: "js_repl = true\n",
+    };
+    const replaced = {
+      kind: "replace",
+      locator: { table: "features", key: "js_repl" },
+      beforeFragment: "js_repl = true",
+      afterFragment: "js_repl = false",
+    };
+    assert.deepEqual(normalizeCodexConfigMutations([inserted, replaced]), [{
+      ...inserted,
+      afterFragment: "js_repl = false\n",
+    }]);
+  });
+
+  test("Windows planner journals notify marketplace and MCP semantic changes", () => {
+    const source = "C:\\Program Files\\WindowsApps\\OpenAI.Codex_test\\app\\resources\\plugins\\openai-bundled";
+    const input = [
+      "notify = [",
+      '  "terminal-notifier",',
+      '  "done"',
+      "]",
+      "",
+      "[features]",
+      "default_mode_request_user_input = false",
+      "js_repl = true",
+      "",
+      "[marketplaces.openai-bundled]",
+      'source_type = "local"',
+      "source = 'C:\\Users\\Kim\\.codex\\.tmp\\bundled-marketplaces\\openai-bundled'",
+      "",
+      "[mcp_servers.exa]",
+      'url = "https://mcp.example"',
+      'command = "npx"',
+      "",
+    ].join("\r\n");
+    const planned = planCodexAppNativeControls(input, {
+      platformName: "win32",
+      bundledMarketplaceSource: source,
+      pathExists: (candidate) => candidate.replace(/^\\\\\?\\/u, "") === source,
+    });
+    const identities = planned.mutations.map(({ locator }) => `${locator.table}.${locator.key}`);
+    assert.ok(identities.includes(".notify"));
+    assert.ok(identities.includes("marketplaces.openai-bundled.source"));
+    assert.ok(identities.includes("mcp_servers.exa.url"));
+    assert.doesNotMatch(planned.text, /^\s*url\s*=/mu);
+    assert.doesNotMatch(planned.text, /terminal-notifier/u);
+    assert.ok(planned.text.includes(`source = '\\\\?\\${source}'`));
+    assert.equal(invertCodexConfigMutations(planned.text, planned.mutations), input);
+  });
+
+  test("inverse fails closed when a managed table becomes duplicated", () => {
+    const input = "[features]\ndefault_mode_request_user_input = false\njs_repl = true\n";
+    const planned = planCodexAppNativeControls(input, { platformName: "linux" });
+    const duplicated = `${planned.text}\n[features]\nuser = true\n`;
+    assert.throws(
+      () => invertCodexConfigMutations(duplicated, planned.mutations),
+      /managed table is missing or ambiguous/u,
+    );
+  });
+
+  test("inverse fails closed when a managed table key becomes duplicated", () => {
+    const input = "[features]\ndefault_mode_request_user_input = false\njs_repl = true\n";
+    const planned = planCodexAppNativeControls(input, { platformName: "linux" });
+    const duplicated = planned.text.replace(
+      "js_repl = true",
+      "js_repl = true\ndefault_mode_request_user_input = true",
+    );
+    assert.throws(
+      () => invertCodexConfigMutations(duplicated, planned.mutations),
+      /managed locator is ambiguous/u,
+    );
+  });
+
+  test("inverse fails closed when root notify becomes duplicated", () => {
+    const input = [
+      "notify = [",
+      '  "terminal-notifier",',
+      '  "done"',
+      "]",
+      "",
+      "[features]",
+      "default_mode_request_user_input = true",
+      "js_repl = true",
+      "",
+    ].join("\n");
+    const planned = planCodexAppNativeControls(input, { platformName: "win32" });
+    const duplicated = planned.text.replace(
+      "\n\n[features]",
+      '\nnotify = ["powershell.exe"]\n\n[features]',
+    );
+    assert.throws(
+      () => invertCodexConfigMutations(duplicated, planned.mutations),
+      /managed locator is ambiguous: \.notify/u,
+    );
+  });
+
+  test("inverse refuses a recreated active key for a disabled conflict", () => {
+    const input = [
+      "[features]",
+      "default_mode_request_user_input = true",
+      "js_repl = true",
+      "",
+      "[mcp_servers.exa]",
+      'url = "https://mcp.example"',
+      'command = "npx"',
+      "",
+    ].join("\n");
+    const planned = planCodexAppNativeControls(input, { platformName: "linux" });
+    const recreated = planned.text.replace(
+      '# Meta_Kim disabled conflicting [mcp_servers.exa].url: url = "https://mcp.example"',
+      '# Meta_Kim disabled conflicting [mcp_servers.exa].url: url = "https://mcp.example"\nurl = "https://user.example"',
+    );
+    assert.throws(
+      () => invertCodexConfigMutations(recreated, planned.mutations),
+      /disabled locator was recreated or duplicated/u,
+    );
+  });
+
+  test("planner fails closed on a managed multiline scalar it cannot replace", () => {
+    const input = "[features]\njs_repl = [\n  false\n]\n";
+    assert.throws(
+      () => planCodexAppNativeControls(input, { platformName: "linux" }),
+      /cannot safely locate multiline/u,
+    );
+  });
+
   test("adds features section when missing", () => {
     const out = ensureCodexRequestUserInputFeature('model = "gpt-5.5"\n');
     assert.match(out, /\[features\]\ndefault_mode_request_user_input = true/);

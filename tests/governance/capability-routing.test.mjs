@@ -4,7 +4,10 @@ import process from "node:process";
 import test from "node:test";
 
 function route(task, runtime = "auto", os = "auto", extraArgs = []) {
-  const result = spawnSync(process.execPath, ["scripts/select-execution-route.mjs", "--task", task, "--runtime", runtime, "--os", os, "--json", ...extraArgs], { encoding: "utf8" });
+  const result = spawnSync(process.execPath, ["scripts/select-execution-route.mjs", "--task", task, "--runtime", runtime, "--os", os, "--json", ...extraArgs], {
+    encoding: "utf8",
+    maxBuffer: Number.POSITIVE_INFINITY,
+  });
   assert.equal(result.status, 0, result.stderr);
   return JSON.parse(result.stdout);
 }

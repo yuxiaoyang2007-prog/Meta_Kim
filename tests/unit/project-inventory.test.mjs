@@ -18,6 +18,20 @@ describe("project inventory and standard test-suite coverage", () => {
     assert.deepEqual(result.unmatched, ["tests/unregistered/example.test.mjs"]);
   });
 
+  test("classifies setup tests by runtime capability instead of a filename list", () => {
+    const result = classifyTrackedTests([
+      "tests/setup/global-runtime-bundle.test.mjs",
+      "tests/setup/global-runtime-assets.test.mjs",
+      "tests/setup/mcp-memory-hooks.test.mjs",
+      "tests/setup/install-scope-matrix.test.mjs",
+      "tests/setup/config-loader.test.mjs",
+    ]);
+    assert.equal(result.counts.setupPacked, 3);
+    assert.equal(result.counts.setupDiagnostic, 1);
+    assert.equal(result.counts.setup, 1);
+    assert.deepEqual(result.unmatched, []);
+  });
+
   test("every tracked test belongs to an explicit standard suite", () => {
     const inventory = buildProjectInventory();
     assert.equal(
@@ -47,6 +61,16 @@ describe("project inventory and standard test-suite coverage", () => {
     assert.equal(
       packageJson.scripts["meta:test:integration"],
       'node scripts/run-node-tests.mjs "tests/integration/*.test.mjs"',
+    );
+    assert.match(packageJson.scripts["meta:test:setup"], /--exclude-import "node:child_process"/u);
+    assert.match(packageJson.scripts["meta:test:setup"], /--concurrency 4/u);
+    assert.match(
+      packageJson.scripts["meta:test:setup:diagnostic"],
+      /--include-import "node:child_process" --concurrency 2/u,
+    );
+    assert.equal(
+      packageJson.scripts["meta:test:setup:packed"],
+      'node scripts/run-node-tests.mjs "tests/setup/global-runtime-bundle.test.mjs" "tests/setup/global-runtime-assets.test.mjs" "tests/setup/mcp-memory-hooks.test.mjs"',
     );
     assert.match(packageJson.scripts["meta:verify:governance"], /meta:test:integration/);
     assert.match(packageJson.scripts["meta:verify:governance:core"], /meta:test:governance/);

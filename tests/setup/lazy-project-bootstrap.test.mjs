@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import {
   existsSync,
@@ -14,8 +14,16 @@ import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { buildIsolatedUserHomeEnv } from "../../scripts/isolated-user-home-env.mjs";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
+const TEST_USER_HOME = mkdtempSync(
+  path.join(os.tmpdir(), "meta-kim-lazy-bootstrap-home-"),
+);
+
+after(() => {
+  rmSync(TEST_USER_HOME, { recursive: true, force: true });
+});
 
 function tempProject() {
   return mkdtempSync(path.join(os.tmpdir(), "meta-kim-lazy-bootstrap-"));
@@ -26,22 +34,25 @@ function sha256File(filePath) {
 }
 
 function runSetup(args, options = {}) {
+  const { env: envOverrides, ...spawnOptions } = options;
   return spawnSync(process.execPath, ["setup.mjs", ...args], {
     cwd: REPO_ROOT,
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
     timeout: 120_000,
-    ...options,
+    ...spawnOptions,
+    env: buildIsolatedUserHomeEnv(TEST_USER_HOME, envOverrides),
   });
 }
 
 function spawnSetup(args, options = {}) {
+  const { env: envOverrides, ...spawnOptions } = options;
   return spawn(process.execPath, ["setup.mjs", ...args], {
     cwd: REPO_ROOT,
-    env: process.env,
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
-    ...options,
+    ...spawnOptions,
+    env: buildIsolatedUserHomeEnv(TEST_USER_HOME, envOverrides),
   });
 }
 
@@ -66,12 +77,14 @@ async function waitForPath(filePath, timeoutMs = 5_000) {
 }
 
 function runBin(args, options = {}) {
+  const { env: envOverrides, ...spawnOptions } = options;
   return spawnSync(process.execPath, ["bin/meta-kim.mjs", ...args], {
     cwd: REPO_ROOT,
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
     timeout: 120_000,
-    ...options,
+    ...spawnOptions,
+    env: buildIsolatedUserHomeEnv(TEST_USER_HOME, envOverrides),
   });
 }
 

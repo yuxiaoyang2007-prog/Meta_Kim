@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "meta-kim-mcp-memory-managed-assets-v1",
+  "owned": {
+    "claude": [
+      {
+        "source": "claude/memory-hooks/mcp_memory_global.py",
+        "target": "hooks/mcp_memory_global.py"
+      },
+      {
+        "sourceTree": "claude/commands/save-progress",
+        "targetTree": "commands/save-progress"
+      }
+    ],
+    "codex": [],
+    "cursor": [],
+    "openclaw": []
+  },
+  "retiredOwned": {
+    "claude": [],
+    "codex": [],
+    "cursor": [],
+    "openclaw": []
+  },
+  "delegatedToGlobalSync": {
+    "claude": [
+      {
+        "source": "claude/hooks/stop-save-progress.mjs",
+        "target": "hooks/meta-kim/stop-save-progress.mjs"
+      },
+      {
+        "source": "claude/hooks/stop-memory-save.mjs",
+        "target": "hooks/meta-kim/stop-memory-save.mjs"
+      },
+      {
+        "sourceFilesIn": "claude/commands",
+        "targetDir": "commands"
+      }
+    ],
+    "codex": [
+      {
+        "source": "shared/hooks/meta-kim-memory-save.mjs",
+        "targetCandidates": [
+          "hooks/meta-kim/meta-kim-memory-save.mjs",
+          "hooks/meta-kim-memory-save.mjs"
+        ]
+      }
+    ],
+    "cursor": [
+      {
+        "source": "shared/hooks/meta-kim-memory-save.mjs",
+        "targetCandidates": [
+          "hooks/meta-kim/meta-kim-memory-save.mjs",
+          "hooks/meta-kim-memory-save.mjs"
+        ]
+      }
+    ],
+    "openclaw": [
+      {
+        "sourceTree": "openclaw/hooks/mcp-memory-service",
+        "targetTree": "hooks/mcp-memory-service"
+      }
+    ]
+  }
+}

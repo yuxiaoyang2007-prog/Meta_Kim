@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "meta-kim-global-install-ownership-policy-v1",
+  "durableRuntimeBundle": {
+    "runtime": "claude",
+    "assetType": "mcp",
+    "category": "C",
+    "sourceOwner": "sync-global-meta-theory",
+    "purpose": "claude-global-mcp-runtime-bundle"
+  },
+  "externalEntries": [
+    {
+      "runtime": "codex",
+      "assetType": "hooks",
+      "category": "B",
+      "sourceOwner": "sync-global-meta-theory",
+      "purpose": "codex-global-hookprompt-adapter",
+      "kinds": ["file"],
+      "base": "runtimeHomeParent",
+      "path": ".codex/hooks/hookprompt-adapter.mjs",
+      "match": "exact"
+    },
+    {
+      "runtime": "claude",
+      "assetType": "mcp",
+      "category": "C",
+      "sourceOwner": "sync-global-meta-theory",
+      "purpose": "claude-global-mcp",
+      "kinds": ["mcp-server"],
+      "base": "runtimeHomeParent",
+      "path": ".claude.json",
+      "match": "exact"
+    }
+  ]
+}

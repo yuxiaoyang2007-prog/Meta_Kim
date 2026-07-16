@@ -29,7 +29,9 @@
         "supportsRepoProjection",
         "supportsLocalActivation",
         "assetTypes",
-        "outputPaths"
+        "outputPaths",
+        "globalAgentProjection",
+        "globalAssetOwners"
       ],
       "properties": {
         "supportsRepoProjection": {
@@ -49,6 +51,51 @@
           "type": "object",
           "additionalProperties": {
             "type": "string"
+          }
+        },
+        "globalAgentProjection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "supported",
+            "format",
+            "renderer",
+            "agentsDir",
+            "fileExtension",
+            "migrationSupport"
+          ],
+          "properties": {
+            "supported": {
+              "type": "boolean"
+            },
+            "format": {
+              "type": "string",
+              "minLength": 1
+            },
+            "renderer": {
+              "type": "string",
+              "minLength": 1
+            },
+            "agentsDir": {
+              "type": ["string", "null"]
+            },
+            "fileExtension": {
+              "type": ["string", "null"]
+            },
+            "migrationSupport": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "globalAssetOwners": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "enum": [
+              "sync-global-meta-theory",
+              "sync-runtimes"
+            ]
           }
         }
       }

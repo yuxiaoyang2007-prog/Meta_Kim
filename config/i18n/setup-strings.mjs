@@ -403,10 +403,12 @@ Possible causes:
     askMcpMemoryInstall:
       "Enable Meta_Kim cross-session memory? This uses MCP Memory Service; setup installs it if missing, registers it, and starts it in the background.",
     mcpMemorySkipped: "MCP Memory Service skipped",
+    mcpMemoryRequiresGlobalHooks:
+      "MCP Memory Service skipped: rerun with --with-global-hooks so shared runtime hooks are installed first",
     mcpMemoryServerStartHint:
       "MCP Memory Service installed — HTTP service starts with: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
-    mcpMemoryHookInstalling:
-      "Installing MCP Memory hooks for Claude Code, Codex, Cursor, and OpenClaw...",
+    mcpMemoryHookInstalling: (targets) =>
+      `Installing MCP Memory hooks for ${targets}...`,
     mcpMemoryHookInstalled: "MCP Memory runtime hooks installed",
     mcpMemoryHookWarnings:
       "Hook installation reported warnings (non-blocking) — underlying stderr shown below:",
@@ -422,6 +424,8 @@ Possible causes:
     mcpMemoryAutoStartManual:
       "  MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryAutoStartBoot: "Boot auto-start configured",
+    mcpMemoryAutoStartBootFailed:
+      "MCP Memory Service is healthy, but boot auto-start could not be configured",
     mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
     mcpMemoryAutoStartFailureMessage: (healthUrl) =>
       `Meta_Kim MCP Memory Service failed to start or did not become healthy at ${healthUrl}. Cross-session memory may be unavailable. Please start it manually: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http`,
@@ -1044,10 +1048,12 @@ ${r ? `原始错误：${r}` : ""}
     askMcpMemoryInstall:
       "启用 Meta_Kim 跨会话记忆？会使用 MCP Memory Service；若未安装则安装，并完成注册和后台启动。",
     mcpMemorySkipped: "MCP Memory Service 已跳过",
+    mcpMemoryRequiresGlobalHooks:
+      "MCP Memory Service 已跳过：请使用 --with-global-hooks 重新运行，先安装共享运行时 Hook",
     mcpMemoryServerStartHint:
       "MCP Memory Service 已安装——HTTP 服务启动方式：MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
-    mcpMemoryHookInstalling:
-      "正在安装 Claude Code、Codex、Cursor、OpenClaw 的 MCP Memory 钩子...",
+    mcpMemoryHookInstalling: (targets) =>
+      `正在安装 ${targets} 的 MCP Memory 钩子...`,
     mcpMemoryHookInstalled: "MCP Memory 运行时钩子已安装",
     mcpMemoryHookWarnings:
       "钩子安装产生警告（不影响后续流程）——以下是子进程 stderr 原文：",
@@ -1063,6 +1069,8 @@ ${r ? `原始错误：${r}` : ""}
     mcpMemoryAutoStartManual:
       "  MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryAutoStartBoot: "已配置开机自启",
+    mcpMemoryAutoStartBootFailed:
+      "MCP Memory Service 当前健康，但未能配置开机自启",
     mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
     mcpMemoryAutoStartFailureMessage: (healthUrl) =>
       `Meta_Kim MCP Memory Service 启动失败，或未在 ${healthUrl} 变为 healthy。跨会话记忆可能不可用。请手动启动：MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http`,
@@ -1697,10 +1705,12 @@ ${r ? `生エラー：${r}` : ""}
     askMcpMemoryInstall:
       "Meta_Kim のクロスセッション記憶を有効にしますか？MCP Memory Service を使用し、未インストールならインストールして登録・バックグラウンド起動します。",
     mcpMemorySkipped: "MCP Memory Service をスキップしました",
+    mcpMemoryRequiresGlobalHooks:
+      "MCP Memory Service をスキップしました。共有ランタイム Hook を先に導入するため、--with-global-hooks を付けて再実行してください",
     mcpMemoryServerStartHint:
       "MCP Memory Service がインストールされました——HTTP サービスの起動方法：MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
-    mcpMemoryHookInstalling:
-      "Claude Code、Codex、Cursor、OpenClaw の MCP Memory フックをインストール中...",
+    mcpMemoryHookInstalling: (targets) =>
+      `${targets} の MCP Memory フックをインストール中...`,
     mcpMemoryHookInstalled: "MCP Memory ランタイムフックをインストールしました",
     mcpMemoryHookWarnings:
       "フックのインストール中に警告が発生しました（非ブロッキング）——子プロセスの stderr を以下に表示します:",
@@ -1718,6 +1728,8 @@ ${r ? `生エラー：${r}` : ""}
     mcpMemoryAutoStartManual:
       "  MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryAutoStartBoot: "起動時自動開始を設定しました",
+    mcpMemoryAutoStartBootFailed:
+      "MCP Memory Service は正常ですが、起動時の自動開始を設定できませんでした",
     mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
     mcpMemoryAutoStartFailureMessage: (healthUrl) =>
       `Meta_Kim MCP Memory Service の起動に失敗したか、${healthUrl} が healthy になりませんでした。クロスセッションメモリが利用できない可能性があります。手動で起動してください: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http`,
@@ -2360,10 +2372,12 @@ ${r ? `원본 오류：${r}` : ""}
     askMcpMemoryInstall:
       "Meta_Kim 크로스세션 메모리를 활성화할까요? MCP Memory Service 를 사용하며, 없으면 설치하고 등록한 뒤 백그라운드로 시작합니다.",
     mcpMemorySkipped: "MCP Memory Service 건너뜀",
+    mcpMemoryRequiresGlobalHooks:
+      "MCP Memory Service 건너뜀: 공유 런타임 Hook을 먼저 설치하도록 --with-global-hooks로 다시 실행하세요",
     mcpMemoryServerStartHint:
       "MCP Memory Service 설치 완료——HTTP 서비스 시작 방법: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
-    mcpMemoryHookInstalling:
-      "Claude Code, Codex, Cursor, OpenClaw용 MCP Memory 훅 설치 중...",
+    mcpMemoryHookInstalling: (targets) =>
+      `${targets}용 MCP Memory 훅 설치 중...`,
     mcpMemoryHookInstalled: "MCP Memory 런타임 훅 설치 완료",
     mcpMemoryHookWarnings:
       "훅 설치에서 경고가 발생했습니다 (비차단) — 하위 프로세스의 stderr 원문은 아래와 같습니다:",
@@ -2380,6 +2394,8 @@ ${r ? `원본 오류：${r}` : ""}
     mcpMemoryAutoStartManual:
       "  MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http",
     mcpMemoryAutoStartBoot: "부팅 시 자동 시작 구성 완료",
+    mcpMemoryAutoStartBootFailed:
+      "MCP Memory Service는 정상 상태이지만 부팅 시 자동 시작을 구성하지 못했습니다",
     mcpMemoryAutoStartFailureTitle: "Meta_Kim MCP Memory Service",
     mcpMemoryAutoStartFailureMessage: (healthUrl) =>
       `Meta_Kim MCP Memory Service를 시작하지 못했거나 ${healthUrl}이 healthy 상태가 되지 않았습니다. 세션 간 메모리를 사용할 수 없을 수 있습니다. 수동으로 시작하세요: MCP_ALLOW_ANONYMOUS_ACCESS=true memory server --http`,

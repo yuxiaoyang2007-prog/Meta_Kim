@@ -4,11 +4,17 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildGlobalMetaTheorySyncArgs } from "../../scripts/node-spawn-config.mjs";
+import {
+  GLOBAL_PROJECTION_OWNER_SYNC_RUNTIMES,
+  globalProjectionIsOwnedBy,
+  resolveRuntimeProfilesFromManifest,
+} from "../../scripts/meta-kim-sync-config.mjs";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const syncManifest = JSON.parse(
   readFileSync(path.join(repoRoot, "config", "sync.json"), "utf8"),
 );
+const runtimeProfiles = resolveRuntimeProfilesFromManifest(syncManifest);
 const packageJson = JSON.parse(
   readFileSync(path.join(repoRoot, "package.json"), "utf8"),
 );
@@ -575,8 +581,8 @@ describe("setup update default flow", () => {
     );
     assert.match(
       source,
-      /function syncNonClaudeGlobalRuntimeHooks\(targets, withGlobalHooks = false\) \{[\s\S]*?if \(!withGlobalHooks\) return true;/,
-      "Cursor/OpenClaw global runtime hooks must also be gated by the setup opt-in",
+      /function syncOwnedGlobalRuntimeAssets\([\s\S]*?assetType === "hooks" && !withGlobalHooks[\s\S]*?globalProjectionIsOwnedBy/,
+      "global runtime assets must be selected from profile ownership while hooks remain opt-in",
     );
     assert.doesNotMatch(source, /askAdvancedGlobalControls\(activeTargets\)/);
     assert.doesNotMatch(source, /askYesNo\(t\.askAdvancedGlobalControls/);
@@ -597,14 +603,33 @@ describe("setup update default flow", () => {
       "setup copy must not present hooks as part of the default global capability sync",
     );
     assert.match(source, /metaTheoryGlobalSyncArgs\(activeTargets, setupWithGlobalHooks\)/);
-    assert.match(source, /syncNonClaudeGlobalRuntimeHooks\(\s*activeTargets,\s*setupWithGlobalHooks,\s*\)/);
+    assert.match(
+      source,
+      /syncOwnedGlobalRuntimeAssets\(\s*activeTargets,\s*runtimeProfiles,\s*setupWithGlobalHooks,\s*\)/,
+    );
     assert.match(source, /globalHooksOptInNotice/);
-    assert.match(source, /\["cursor", "openclaw"\]\.includes\(target\)/);
     assert.doesNotMatch(
       source,
-      /\["codex", "cursor", "openclaw"\]\.includes\(target\)/,
-      "Codex global hooks are already owned by sync-global-meta-theory and must not be overwritten by sync-runtimes global sync",
+      /\["cursor", "openclaw"\]\.includes\(target\)/,
+      "setup must not hardcode which runtimes are owned by sync-runtimes",
     );
+    assert.equal(
+      globalProjectionIsOwnedBy(
+        runtimeProfiles.claude,
+        "capabilityIndex",
+        GLOBAL_PROJECTION_OWNER_SYNC_RUNTIMES,
+      ),
+      true,
+    );
+    assert.equal(
+      globalProjectionIsOwnedBy(
+        runtimeProfiles.codex,
+        "capabilityIndex",
+        GLOBAL_PROJECTION_OWNER_SYNC_RUNTIMES,
+      ),
+      true,
+    );
+    assert.match(source, /"--global-assets"/);
   });
 
   test("global update runs global skill and governance updates without extra yes/no prompts", () => {
@@ -669,6 +694,11 @@ describe("setup update default flow", () => {
     );
     assert.doesNotMatch(installerSource, /process\.env\.META_KIM_CONFIRM_GLOBAL\s*=/);
     assert.doesNotMatch(installerSource, /--force/);
+    assert.match(
+      installerSource,
+      /const stdoutText = \(result\.stdout \|\| ""\)\.trim\(\);[\s\S]*?const stderrText = \(result\.stderr \|\| ""\)\.trim\(\);[\s\S]*?if \(stdoutText\)[\s\S]*?if \(stderrText\)/,
+      "failed child hook installs must surface both stdout and stderr evidence",
+    );
 
     const memoryStepStart = source.indexOf("async function installMcpMemoryServiceStep");
     const memoryStepEnd = source.indexOf("function ensureNetworkxCompatibility", memoryStepStart);
@@ -678,6 +708,47 @@ describe("setup update default flow", () => {
       /const want = await askYesNo\(t\.askMcpMemoryInstall, true\);[\s\S]*?allowClaudeGlobalSettings: want && activeTargets\.includes\("claude"\)/,
       "the setup prompt answer must be the only source of the scoped Claude consent",
     );
+  });
+
+  test("global hook sync precedes memory and inventory refresh is last in install and update", () => {
+    const installStart = source.indexOf("async function runInstall()");
+    const updateStart = source.indexOf("async function runUpdate()");
+    const installSource = source.slice(installStart, updateStart);
+    const updateSource = source.slice(updateStart, source.indexOf("async function runCheck()"));
+
+    for (const [flowName, flowSource, memoryCall] of [
+      ["install", installSource, "installMcpMemoryServiceStep(false, activeTargets)"],
+      ["update", updateSource, "installMcpMemoryServiceStep(true, activeTargets)"],
+    ]) {
+      const globalSync = flowSource.indexOf("SETUP_NODE_CHILD.GLOBAL_META_THEORY_SYNC");
+      const memoryInstall = flowSource.indexOf(memoryCall);
+      const inventoryRefresh = flowSource.indexOf(
+        "refreshGlobalCapabilityInventory(activeTargets)",
+        memoryInstall,
+      );
+      const validation = flowSource.indexOf(
+        flowName === "install"
+          ? "validateInstalledArtifacts("
+          : "// ── 6. Validate installed artifacts",
+      );
+
+      assert.ok(globalSync >= 0, `${flowName}: global sync must be present`);
+      assert.ok(memoryInstall > globalSync, `${flowName}: memory must run after global sync`);
+      assert.ok(
+        inventoryRefresh > memoryInstall,
+        `${flowName}: inventory must refresh after memory-owned runtime writes`,
+      );
+      assert.ok(
+        validation > inventoryRefresh,
+        `${flowName}: inventory must refresh before final validation`,
+      );
+      assert.match(
+        flowSource,
+        /resolveMcpMemorySetupPolicy\(\{\s*needGlobal,\s*withGlobalHooks: setupWithGlobalHooks,\s*skipOptionalTools,\s*\}\)/,
+        `${flowName}: memory must use the shared global-hook prerequisite policy`,
+      );
+    }
+    assert.match(i18nStrings, /mcpMemoryRequiresGlobalHooks/);
   });
 
   test("packed installs validate installed artifacts instead of maintainer repository files", () => {

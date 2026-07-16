@@ -6,15 +6,20 @@ import {
   mkdirSync,
   existsSync,
   readFileSync,
+  readdirSync,
+  renameSync,
   writeFileSync,
   rmSync,
+  utimesSync,
 } from "node:fs";
 import path from "node:path";
 
 import {
   CATEGORIES,
   CATEGORY_LABELS,
+  MANIFEST_LOCK_STALE_MS,
   SCHEMA_VERSION,
+  TOML_MUTATION_JOURNAL_LIMIT,
   createEmpty,
   fileIntegritySync,
   listByCategory,
@@ -26,7 +31,12 @@ import {
   removeByPath,
   validate,
   writeManifest,
+  writeManifestAtomic,
 } from "../../scripts/install-manifest.mjs";
+import {
+  invertCodexConfigMutations,
+  planCodexAppNativeControls,
+} from "../../scripts/codex-config-merge.mjs";
 
 function withTmpDir(body) {
   const dir = mkdtempSync(path.join(tmpdir(), "meta-kim-manifest-"));
@@ -177,6 +187,122 @@ describe("install-manifest schema + helpers", () => {
     assert.ok(result.errors.some((e) => e.includes("schemaVersion")));
   });
 
+  test("validate and readManifest reject malformed TOML ownership journals", () => {
+    withTmpDir((dir) => {
+      const manifestPath = path.join(dir, "install-manifest.json");
+      const validEntry = {
+        path: path.join(dir, ".codex", "config.toml"),
+        category: CATEGORIES.C,
+        source: "sync-global-meta-theory",
+        purpose: "codex-global-config-choice-surface-and-app-native-controls",
+        kind: "toml-fragment-merge",
+        installedAt: new Date().toISOString(),
+        tomlMutationJournal: [{
+          kind: "replace",
+          locator: {
+            table: "features",
+            key: "default_mode_request_user_input",
+          },
+          beforeFragment: "default_mode_request_user_input = false",
+          afterFragment: "default_mode_request_user_input = true",
+        }],
+      };
+      const validManifest = {
+        ...createEmpty({ scope: "global", metaKimVersion: "x" }),
+        entries: [validEntry],
+      };
+      assert.deepEqual(validate(validManifest), { ok: true });
+
+      const invalidCases = [
+        {
+          label: "empty journal",
+          mutate(entry) {
+            entry.tomlMutationJournal = [];
+          },
+          expected: /non-empty array/u,
+        },
+        {
+          label: "journal limit",
+          mutate(entry) {
+            entry.tomlMutationJournal = Array.from(
+              { length: TOML_MUTATION_JOURNAL_LIMIT + 1 },
+              (_, index) => ({
+                kind: "insert",
+                locator: { table: "features", key: `managed_${index}` },
+                beforeFragment: "",
+                afterFragment: `managed_${index} = true\n`,
+              }),
+            );
+          },
+          expected: /exceeds/u,
+        },
+        {
+          label: "mutation field",
+          mutate(entry) {
+            entry.tomlMutationJournal[0].offset = 12;
+          },
+          expected: /unsupported fields: offset/u,
+        },
+        {
+          label: "locator field",
+          mutate(entry) {
+            entry.tomlMutationJournal[0].locator.line = 7;
+          },
+          expected: /locator has unsupported fields: line/u,
+        },
+        {
+          label: "non-normalized chain",
+          mutate(entry) {
+            entry.tomlMutationJournal.push({
+              kind: "replace",
+              locator: {
+                table: "features",
+                key: "default_mode_request_user_input",
+              },
+              beforeFragment: "default_mode_request_user_input = true",
+              afterFragment: "default_mode_request_user_input = false # next",
+            });
+          },
+          expected: /must already be normalized/u,
+        },
+        {
+          label: "legacy merge field",
+          mutate(entry) {
+            entry.mergedHookCommands = ["default_mode_request_user_input"];
+          },
+          expected: /mergedHookCommands is forbidden/u,
+        },
+        {
+          label: "unrelated ownership field",
+          mutate(entry) {
+            entry.sha256 = "0".repeat(64);
+          },
+          expected: /sha256 is not allowed/u,
+        },
+        {
+          label: "required metadata",
+          mutate(entry) {
+            delete entry.purpose;
+          },
+          expected: /purpose missing/u,
+        },
+      ];
+
+      for (const invalidCase of invalidCases) {
+        const invalidManifest = structuredClone(validManifest);
+        invalidCase.mutate(invalidManifest.entries[0]);
+        const result = validate(invalidManifest);
+        assert.equal(result.ok, false, invalidCase.label);
+        assert.match(result.errors.join("; "), invalidCase.expected, invalidCase.label);
+      }
+
+      const persistedInvalid = structuredClone(validManifest);
+      persistedInvalid.entries[0].mergedSettingsKeys = ["features"];
+      writeFileSync(manifestPath, `${JSON.stringify(persistedInvalid, null, 2)}\n`);
+      assert.equal(readManifest(manifestPath), null);
+    });
+  });
+
   test("listByCategory returns all 9 category keys", () => {
     const m = createEmpty({ scope: "global", metaKimVersion: "x" });
     const grouped = listByCategory(m);
@@ -320,6 +446,104 @@ describe("install-manifest schema + helpers", () => {
     });
   });
 
+  test("recordTomlFragmentMerge records only actual mutations and closes a cross-update locator chain", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "meta-kim-toml-journal-"));
+    try {
+      const configPath = path.join(dir, ".codex", "config.toml");
+      mkdirSync(path.dirname(configPath), { recursive: true });
+      const options = {
+        category: CATEGORIES.G,
+        source: "sync-global-meta-theory",
+        purpose: "codex-global-config-choice-surface-and-app-native-controls",
+      };
+      const noOp = openRecorder({ scope: "project", repoRoot: dir });
+      noOp.recordTomlFragmentMerge(configPath, [], options);
+      const noOpResult = await noOp.flush();
+      assert.equal(noOpResult.ok, true, noOpResult.error);
+      assert.equal(noOpResult.changed, false);
+      assert.equal(readManifest(manifestPathFor("project", dir)), null);
+
+      const sourceA = path.join(dir, "marketplace-a");
+      const sourceB = path.join(dir, "marketplace-b");
+      const original = [
+        "[features]",
+        "default_mode_request_user_input = true",
+        "js_repl = true",
+        "",
+        "[windows]",
+        'sandbox = "unelevated"',
+        "",
+        '[plugins."browser@openai-bundled"]',
+        "enabled = true",
+        "",
+        '[plugins."chrome@openai-bundled"]',
+        "enabled = true",
+        "",
+        '[plugins."computer-use@openai-bundled"]',
+        "enabled = true",
+        "",
+        "[marketplaces.openai-bundled]",
+        'source_type = "local"',
+        "source = 'fixture-original'",
+        "",
+      ].join("\n");
+      const firstPlan = planCodexAppNativeControls(original, {
+        platformName: "win32",
+        windowsAppsRoots: [],
+        bundledMarketplaceSource: sourceA,
+        pathExists: (candidate) => candidate === sourceA,
+      });
+      writeFileSync(configPath, firstPlan.text);
+      const first = openRecorder({ scope: "project", repoRoot: dir });
+      first.recordTomlFragmentMerge(configPath, firstPlan.mutations, options);
+      const firstResult = await first.flush();
+      assert.equal(firstResult.ok, true, firstResult.error);
+      const firstEntry = readManifest(manifestPathFor("project", dir)).entries[0];
+      assert.equal(firstEntry.kind, "toml-fragment-merge");
+
+      const secondPlan = planCodexAppNativeControls(firstPlan.text, {
+        platformName: "win32",
+        windowsAppsRoots: [],
+        bundledMarketplaceSource: sourceB,
+        pathExists: (candidate) => candidate === sourceB,
+      });
+      writeFileSync(configPath, secondPlan.text);
+      const second = openRecorder({ scope: "project", repoRoot: dir });
+      second.recordTomlFragmentMerge(configPath, secondPlan.mutations, options);
+      const secondResult = await second.flush();
+      assert.equal(secondResult.ok, true, secondResult.error);
+      const secondEntry = readManifest(manifestPathFor("project", dir)).entries[0];
+      assert.equal(secondEntry.tomlMutationJournal.length, 1);
+      assert.equal(
+        invertCodexConfigMutations(
+          secondPlan.text,
+          secondEntry.tomlMutationJournal,
+        ),
+        original,
+      );
+
+      const drifted = secondPlan.text.replace(sourceB, path.join(dir, "user-source"));
+      const thirdPlan = planCodexAppNativeControls(drifted, {
+        platformName: "win32",
+        windowsAppsRoots: [],
+        bundledMarketplaceSource: sourceA,
+        pathExists: (candidate) => candidate === sourceA,
+      });
+      writeFileSync(configPath, thirdPlan.text);
+      const discontinuous = openRecorder({ scope: "project", repoRoot: dir });
+      discontinuous.recordTomlFragmentMerge(
+        configPath,
+        thirdPlan.mutations,
+        options,
+      );
+      const discontinuousResult = await discontinuous.flush();
+      assert.equal(discontinuousResult.ok, false);
+      assert.match(discontinuousResult.error, /Non-contiguous Codex config mutation chain/u);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("flush cannot report success when a file ownership record lacks integrity", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "meta-kim-manifest-failure-"));
     try {
@@ -423,5 +647,257 @@ describe("install-manifest schema + helpers", () => {
       assert.equal(next.entries.some((entry) => entry.path === openclawFile), true);
       assert.equal(next.entries.some((entry) => entry.path === codexFile), true);
     });
+  });
+
+  test("concurrent recorders merge distinct writes and CAS rollback preserves the other writer", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "meta-kim-manifest-cas-"));
+    try {
+      const firstFile = path.join(dir, "first.mjs");
+      const secondFile = path.join(dir, "second.mjs");
+      writeFileSync(firstFile, "first\n");
+      writeFileSync(secondFile, "second\n");
+      const first = openRecorder({ scope: "project", repoRoot: dir });
+      const second = openRecorder({ scope: "project", repoRoot: dir });
+      first.recordFile(firstFile, {
+        category: CATEGORIES.E,
+        source: "sync-global-meta-theory",
+        purpose: "first-writer",
+      });
+      second.recordFile(secondFile, {
+        category: CATEGORIES.E,
+        source: "sync-runtimes",
+        purpose: "second-writer",
+      });
+
+      const [firstFlush, secondFlush] = await Promise.all([
+        first.flush(),
+        second.flush(),
+      ]);
+      assert.equal(firstFlush.ok, true, firstFlush.error);
+      assert.equal(secondFlush.ok, true, secondFlush.error);
+      const merged = readManifest(manifestPathFor("project", dir));
+      assert.equal(merged.entries.length, 2);
+      assert.equal(merged.entries.every((entry) => manifestFileEntryMatches(entry)), true);
+
+      const rollback = await first.rollback();
+      assert.equal(rollback.ok, true, rollback.error);
+      const afterRollback = readManifest(manifestPathFor("project", dir));
+      assert.deepEqual(
+        afterRollback.entries.map((entry) => entry.path),
+        [secondFile],
+      );
+      assert.equal(
+        existsSync(`${manifestPathFor("project", dir)}.lock`),
+        false,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("stale same-key TOML appends fail closed and can be retried without losing either journal", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "meta-kim-manifest-toml-cas-"));
+    try {
+      const configPath = path.join(dir, ".codex", "config.toml");
+      mkdirSync(path.dirname(configPath), { recursive: true });
+      const options = {
+        category: CATEGORIES.G,
+        source: "sync-global-meta-theory",
+        purpose: "codex-global-config-choice-surface-and-app-native-controls",
+      };
+      const original = [
+        "[features]",
+        "default_mode_request_user_input = false",
+        "js_repl = true",
+        "managed_alpha = false",
+        "managed_beta = false",
+        "",
+      ].join("\n");
+      const basePlan = planCodexAppNativeControls(original, {
+        platformName: "linux",
+      });
+      writeFileSync(configPath, basePlan.text);
+      const baseRecorder = openRecorder({ scope: "project", repoRoot: dir });
+      baseRecorder.recordTomlFragmentMerge(
+        configPath,
+        basePlan.mutations,
+        options,
+      );
+      const baseFlush = await baseRecorder.flush();
+      assert.equal(baseFlush.ok, true, baseFlush.error);
+
+      const first = openRecorder({ scope: "project", repoRoot: dir });
+      const second = openRecorder({ scope: "project", repoRoot: dir });
+      const alphaMutation = {
+        kind: "replace",
+        locator: { table: "features", key: "managed_alpha" },
+        beforeFragment: "managed_alpha = false",
+        afterFragment: "managed_alpha = true",
+      };
+      const betaMutation = {
+        kind: "replace",
+        locator: { table: "features", key: "managed_beta" },
+        beforeFragment: "managed_beta = false",
+        afterFragment: "managed_beta = true",
+      };
+      writeFileSync(
+        configPath,
+        basePlan.text
+          .replace(alphaMutation.beforeFragment, alphaMutation.afterFragment)
+          .replace(betaMutation.beforeFragment, betaMutation.afterFragment),
+      );
+      first.recordTomlFragmentMerge(configPath, [alphaMutation], options);
+      second.recordTomlFragmentMerge(configPath, [betaMutation], options);
+
+      const firstFlush = await first.flush();
+      assert.equal(firstFlush.ok, true, firstFlush.error);
+      const secondFlush = await second.flush();
+      assert.equal(secondFlush.ok, false);
+      assert.match(secondFlush.error, /entry changed concurrently/u);
+      const afterConflict = readManifest(manifestPathFor("project", dir));
+      const conflictLocators = afterConflict.entries[0].tomlMutationJournal.map(
+        (mutation) => mutation.locator.key,
+      );
+      assert.ok(conflictLocators.includes("managed_alpha"));
+      assert.equal(conflictLocators.includes("managed_beta"), false);
+
+      const retry = openRecorder({ scope: "project", repoRoot: dir });
+      retry.recordTomlFragmentMerge(configPath, [betaMutation], options);
+      const retryFlush = await retry.flush();
+      assert.equal(retryFlush.ok, true, retryFlush.error);
+      const finalEntry = readManifest(
+        manifestPathFor("project", dir),
+      ).entries[0];
+      assert.equal(
+        invertCodexConfigMutations(
+          readFileSync(configPath, "utf8"),
+          finalEntry.tomlMutationJournal,
+        ),
+        original,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("stale same-key forget cannot retire a concurrently upgraded TOML journal", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "meta-kim-manifest-forget-cas-"));
+    try {
+      const configPath = path.join(dir, ".codex", "config.toml");
+      const manifestPath = manifestPathFor("project", dir);
+      const purpose = "codex-global-config-choice-surface-and-app-native-controls";
+      mkdirSync(path.dirname(configPath), { recursive: true });
+      const original = [
+        "[features]",
+        "default_mode_request_user_input = false",
+        "js_repl = true",
+        "",
+      ].join("\n");
+      const planned = planCodexAppNativeControls(original, {
+        platformName: "linux",
+      });
+      writeFileSync(configPath, planned.text);
+      let legacyManifest = createEmpty({
+        scope: "project",
+        repoRoot: dir,
+        metaKimVersion: "legacy",
+      });
+      legacyManifest = record(legacyManifest, {
+        path: configPath,
+        category: CATEGORIES.G,
+        source: "sync-global-meta-theory",
+        purpose,
+        kind: "settings-merge",
+        mergedHookCommands: ["default_mode_request_user_input"],
+      });
+      writeManifest(manifestPath, legacyManifest);
+
+      const staleForget = openRecorder({ scope: "project", repoRoot: dir });
+      const upgrade = openRecorder({ scope: "project", repoRoot: dir });
+      staleForget.forget(configPath, purpose);
+      upgrade.recordTomlFragmentMerge(configPath, planned.mutations, {
+        category: CATEGORIES.G,
+        source: "sync-global-meta-theory",
+        purpose,
+      });
+      const upgradeFlush = await upgrade.flush();
+      assert.equal(upgradeFlush.ok, true, upgradeFlush.error);
+
+      const forgetFlush = await staleForget.flush();
+      assert.equal(forgetFlush.ok, false);
+      assert.match(forgetFlush.error, /entry changed concurrently/u);
+      const retained = readManifest(manifestPath);
+      assert.equal(retained.entries.length, 1);
+      assert.equal(retained.entries[0].kind, "toml-fragment-merge");
+      assert.equal(
+        Object.hasOwn(retained.entries[0], "mergedHookCommands"),
+        false,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("stale crashed-writer lock is reclaimed from owner metadata", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "meta-kim-manifest-stale-lock-"));
+    try {
+      const managedFile = path.join(dir, "managed.mjs");
+      writeFileSync(managedFile, "managed\n");
+      const manifestPath = manifestPathFor("project", dir);
+      mkdirSync(path.dirname(manifestPath), { recursive: true });
+      const lockPath = `${manifestPath}.lock`;
+      const staleDate = new Date(Date.now() - MANIFEST_LOCK_STALE_MS - 1000);
+      writeFileSync(lockPath, `${JSON.stringify({
+        schemaVersion: 1,
+        token: "crashed-writer",
+        pid: 2147483647,
+        hostname: "unreachable-test-host",
+        createdAt: staleDate.toISOString(),
+      })}\n`);
+      utimesSync(lockPath, staleDate, staleDate);
+
+      const recorder = openRecorder({ scope: "project", repoRoot: dir });
+      recorder.recordFile(managedFile, {
+        category: CATEGORIES.E,
+        source: "sync-runtimes",
+        purpose: "stale-lock-recovery",
+      });
+      const result = await recorder.flush();
+      assert.equal(result.ok, true, result.error);
+      assert.equal(existsSync(lockPath), false);
+      assert.equal(readManifest(manifestPath).entries.length, 1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("atomic manifest promotion retries transient Windows rename failures without residue", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "meta-kim-manifest-rename-"));
+    try {
+      const manifestPath = path.join(dir, "install-manifest.json");
+      const manifest = createEmpty({ scope: "global", metaKimVersion: "x" });
+      let attempts = 0;
+      const updated = await writeManifestAtomic(manifestPath, manifest, {
+        renameRetryAttempts: 4,
+        wait: async () => {},
+        renameFile(sourcePath, targetPath) {
+          attempts += 1;
+          if (attempts < 3) {
+            const error = new Error("simulated Windows sharing violation");
+            error.code = "EPERM";
+            throw error;
+          }
+          renameSync(sourcePath, targetPath);
+        },
+      });
+      assert.equal(attempts, 3);
+      assert.equal(readManifest(manifestPath).updatedAt, updated.updatedAt);
+      assert.deepEqual(
+        readdirSync(dir).filter((name) => name.endsWith(".tmp")),
+        [],
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

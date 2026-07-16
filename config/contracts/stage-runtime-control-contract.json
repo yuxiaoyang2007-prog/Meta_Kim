@@ -1,9 +1,9 @@
 {
   "contractId": "stage-runtime-control-contract",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "prdTaskId": "P-115",
   "status": "ready",
-  "purpose": "Keep the eight-stage spine mechanically executable by separating stage action policy, stage commit requirements, and side-effect authorization.",
+  "purpose": "Keep the eight-stage spine mechanically executable without turning stage progress into permission checks for ordinary local edits or commands; reserve hard gates for governed Agent dispatch and public-ready truth.",
   "sourceOfTruth": {
     "human": "docs/ai-native-capability-gap-mvp-prd.zh-CN.md",
     "machine": [
@@ -16,7 +16,7 @@
     "hookRole": "last_resort_fuse",
     "hookMustNotAdvanceStage": true,
     "businessWorkflowMayBlockTools": false,
-    "sideEffectsRequireExecutionStage": true
+    "sideEffectsRequireExecutionStage": false
   },
   "stageChecks": {
     "actionPolicy": {
@@ -29,8 +29,9 @@
       "requiresExplicitTransitionIntent": true
     },
     "executionLease": {
-      "description": "Checks whether a business mutation side effect is allowed after Thinking has committed owner, loadout, evidence, memory strategy, and review standard.",
-      "requiredForBusinessMutation": true
+      "description": "Records whether the governed run has enough owner, loadout, evidence, memory strategy, and review proof for public-ready claims. It does not authorize or block ordinary local project changes.",
+      "requiredForBusinessMutation": false,
+      "requiredForPublicReadyClaim": true
     }
   },
   "activationPolicy": {
@@ -45,8 +46,8 @@
       "creates": "managed_stage_runtime",
       "driverMode": "managed",
       "hookGateMode": "block",
-      "hardGateAllowedBeforeMutation": true,
-      "purpose": "Only a runner or trusted stage runtime that can write Critical/Fetch/Thinking packets may enable strict pre-execution blocking."
+      "hardGateAllowedBeforeMutation": false,
+      "purpose": "A managed runner may enforce Agent-dispatch evidence and public-ready truth, but it must not block or warn on ordinary local project edits or commands."
     },
     "staleStateRotation": {
       "legacyStateWithoutControlMayRotate": true,
@@ -60,7 +61,7 @@
     "nativeCommandPolicy": "observed_mode_does_not_block_user_command_execution_by_command_class",
     "gitPolicy": "never_block_git_commands",
     "observedExternalSideEffects": "not_hook_blocked_review_and_verification_judge_claims",
-    "managedMode": "required_before_mutation",
+    "managedMode": "required_for_agent_dispatch_and_public_ready_not_local_mutation",
     "mustNotBecomeIndependentHookLoop": true,
     "fileChangeFactCardBelongsTo": "Fetch/Thinking execution lease"
   },
@@ -82,7 +83,9 @@
       "validator_dry_run",
       "spine_state_write",
       "planning_file_update",
-      "visible_status_notice"
+      "visible_status_notice",
+      "ordinary_project_file_mutation",
+      "ordinary_local_command_execution"
     ],
     "inProgressMustDelay": [
       "task_bookkeeping_control_plane_until_fetch_evidence"
@@ -117,9 +120,9 @@
     "fetch_stage_allows_spine_state_write_before_fetchRecord",
     "fetch_stage_allows_planning_files_before_fetchRecord",
     "fetch_stage_delays_task_bookkeeping_before_fetch_evidence",
-    "fetch_business_mutation_denial_does_not_instruct_agent_dispatch",
+    "fetch_stage_allows_ordinary_business_file_mutation_without_warning",
     "fetch_self_lock_allows_repair_only_fetchRecord_write",
-    "business_mutation_still_denied_without_execution_readiness",
+    "stage_readiness_does_not_block_ordinary_local_execution",
     "auto_prompt_activation_creates_hook_observed_advisory_state",
     "observed_state_allows_ordinary_local_mutation",
     "observed_state_does_not_block_commands_by_keyword_or_command_class",

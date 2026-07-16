@@ -33,7 +33,36 @@ export const TEST_SUITES = Object.freeze({
   setup: {
     prefix: "tests/setup/",
     packageScript: "meta:test:setup",
-    command: 'node scripts/run-node-tests.mjs "tests/setup/*.test.mjs"',
+    command:
+      'node scripts/run-node-tests.mjs "tests/setup/*.test.mjs" --exclude "tests/setup/global-runtime-bundle.test.mjs" --exclude "tests/setup/global-runtime-assets.test.mjs" --exclude "tests/setup/mcp-memory-hooks.test.mjs" --exclude-import "node:child_process" --concurrency 4',
+    excludePaths: [
+      "tests/setup/global-runtime-bundle.test.mjs",
+      "tests/setup/global-runtime-assets.test.mjs",
+      "tests/setup/mcp-memory-hooks.test.mjs",
+    ],
+    excludeImports: ["node:child_process"],
+  },
+  setupDiagnostic: {
+    prefix: "tests/setup/",
+    packageScript: "meta:test:setup:diagnostic",
+    command:
+      'node scripts/run-node-tests.mjs "tests/setup/*.test.mjs" --exclude "tests/setup/global-runtime-bundle.test.mjs" --exclude "tests/setup/global-runtime-assets.test.mjs" --exclude "tests/setup/mcp-memory-hooks.test.mjs" --include-import "node:child_process" --concurrency 2',
+    excludePaths: [
+      "tests/setup/global-runtime-bundle.test.mjs",
+      "tests/setup/global-runtime-assets.test.mjs",
+      "tests/setup/mcp-memory-hooks.test.mjs",
+    ],
+    includeImports: ["node:child_process"],
+  },
+  setupPacked: {
+    paths: [
+      "tests/setup/global-runtime-bundle.test.mjs",
+      "tests/setup/global-runtime-assets.test.mjs",
+      "tests/setup/mcp-memory-hooks.test.mjs",
+    ],
+    packageScript: "meta:test:setup:packed",
+    command:
+      'node scripts/run-node-tests.mjs "tests/setup/global-runtime-bundle.test.mjs" "tests/setup/global-runtime-assets.test.mjs" "tests/setup/mcp-memory-hooks.test.mjs"',
   },
   unit: {
     prefix: "tests/unit/",
@@ -68,8 +97,28 @@ export function classifyTrackedTests(trackedTests, suites = TEST_SUITES) {
   const counts = Object.fromEntries(Object.keys(suites).map((name) => [name, 0]));
   const unmatched = [];
   for (const testPath of trackedTests) {
+    const absoluteTestPath = path.join(REPO_ROOT, testPath);
+    const source = existsSync(absoluteTestPath) ? readFileSync(absoluteTestPath, "utf8") : "";
+    const importsModule = (specifier) => {
+      const escaped = String(specifier).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(
+        "(?:from\\s+|import\\s*\\(|require\\s*\\()?[\"']" + escaped + "[\"']",
+        "u",
+      ).test(source);
+    };
     const suite = Object.entries(suites).find(([, definition]) =>
-      testPath.startsWith(definition.prefix),
+      definition.paths?.includes(testPath),
+    ) ?? Object.entries(suites).find(([, definition]) =>
+      definition.prefix &&
+      testPath.startsWith(definition.prefix) &&
+      !definition.excludePaths?.includes(testPath) &&
+      definition.includeImports?.every(importsModule),
+    ) ?? Object.entries(suites).find(([, definition]) =>
+      definition.prefix &&
+      testPath.startsWith(definition.prefix) &&
+      !definition.excludePaths?.includes(testPath) &&
+      (!definition.excludeImports ||
+        definition.excludeImports.every((specifier) => !importsModule(specifier))),
     );
     if (!suite) {
       unmatched.push(testPath);

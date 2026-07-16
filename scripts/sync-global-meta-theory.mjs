@@ -5,10 +5,13 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { setTimeout as delay } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath } from "node:url";
 import {
   buildMetaKimHooksTemplate,
@@ -18,23 +21,41 @@ import {
   mergeGlobalMetaKimHooksIntoSettings,
 } from "./claude-settings-merge.mjs";
 import {
+  canonicalAgentsDir,
   canonicalRuntimeAssetsDir,
   canonicalSkillRoot,
+  globalAgentProjectionFileName,
+  resolveGlobalAgentProjectionTargets,
   resolveTargetContext,
   resolveRuntimeHomeInfo,
 } from "./meta-kim-sync-config.mjs";
 import {
   CODEX_REQUEST_USER_INPUT_FEATURE,
   assertCodexConfigTomlMergeable,
-  ensureCodexAppNativeControls,
   hasCodexRequestUserInputFeature,
+  planCodexAppNativeControls,
 } from "./codex-config-merge.mjs";
-import { CATEGORIES, openRecorder } from "./install-manifest.mjs";
+import {
+  CATEGORIES,
+  directoryClosureSync,
+  manifestPathFor,
+  openRecorder,
+  readManifest,
+} from "./install-manifest.mjs";
 import { validateSkillFrontmatter } from "./install-skill-sanitizer.mjs";
 import {
   applyRuntimePaths,
   buildCodexSkillContent,
+  loadCanonicalAgents,
+  parseCanonicalAgent,
+  renderGlobalAgentProjection,
 } from "./sync-runtimes.mjs";
+import {
+  mcpDefinitionFingerprint,
+  mergeClaudeUserMcpConfig,
+  resolveDurableMetaKimRuntimeLayout,
+  resolvePortableMetaKimPackageIdentity,
+} from "./global-runtime-mcp.mjs";
 import {
   buildCodexHooksJson,
   buildHookPromptAdapterSource,
@@ -44,12 +65,14 @@ import {
 // Recorder is lazily opened in runSync(); helpers record through this holder
 // so we do not have to thread recorder arg through every sync function.
 let manifestRecorder = null;
+let globalManifestSnapshot = null;
+const manifestRecordFailures = [];
 function recordSafe(fn) {
   if (!manifestRecorder) return;
   try {
     fn(manifestRecorder);
-  } catch {
-    /* recorder never breaks sync */
+  } catch (error) {
+    manifestRecordFailures.push(error?.message ?? String(error));
   }
 }
 
@@ -197,6 +220,18 @@ const claudeCommandsSourceDir = path.join(
   "claude",
   "commands",
 );
+const canonicalClaudeMcpPath = path.join(
+  canonicalRuntimeAssetsDir,
+  "claude",
+  "mcp.json",
+);
+const distributionPath = path.join(repoRoot, "config", "distribution.json");
+const historicalAgentMigrationCatalogPath = path.join(
+  repoRoot,
+  "config",
+  "migrations",
+  "global-agent-projection-fingerprints.json",
+);
 const STALE_META_KIM_SKILL_ALIAS_SPECS = [
   {
     name: "meta_kim",
@@ -248,17 +283,34 @@ const CODEX_LEGACY_SHARED_SKILL_ROOT = path.join(
 let runtimeHomes = {};
 let allowedRoots = [];
 let allowedRealRoots = [];
+let allowedExactFiles = [];
+let allowedExactRealFiles = [];
 let activeTargets = [];
 let cleanupTargets = [];
 let staleSkillCleanupTargets = [];
 let selectedTargetIds = [];
+let runtimeProfiles = {};
+let globalAgentTargets = [];
+let globalAgentMigrationTargets = [];
 const removedOwnedLegacyHookPaths = new Set();
+
+function stagedSiblingForExactFile(resolved, exactFile) {
+  if (path.dirname(resolved) !== path.dirname(exactFile)) return false;
+  const prefix = `.meta-kim-staged-${path.basename(exactFile).replace(/^\.+/u, "")}-`;
+  return path.basename(resolved).startsWith(prefix);
+}
+
+function exactFileAllowanceIndex(resolved) {
+  return allowedExactFiles.findIndex(
+    (exactFile) => resolved === exactFile || stagedSiblingForExactFile(resolved, exactFile),
+  );
+}
 
 function assertHomeBound(targetPath) {
   const resolved = path.resolve(targetPath);
   const isAllowed = allowedRoots.some(
     (root) => resolved === root || resolved.startsWith(`${root}${path.sep}`),
-  );
+  ) || exactFileAllowanceIndex(resolved) !== -1;
   if (!isAllowed) {
     throw new Error(
       `Refusing to write outside the configured runtime homes: ${resolved}`,
@@ -298,7 +350,14 @@ async function assertRealHomeBound(targetPath) {
   const matched = allowedRoots
     .map((root, index) => ({ root, realRoot: allowedRealRoots[index] }))
     .filter(({ root }) => pathIsWithin(root, resolved));
-  if (!matched.some(({ realRoot }) => pathIsWithin(realRoot, realTarget))) {
+  const exactIndex = exactFileAllowanceIndex(resolved);
+  const exactAllowed = exactIndex !== -1 && (
+    resolved === allowedExactFiles[exactIndex]
+      ? realTarget === allowedExactRealFiles[exactIndex]
+      : path.dirname(realTarget) === path.dirname(allowedExactRealFiles[exactIndex]) &&
+        stagedSiblingForExactFile(resolved, allowedExactFiles[exactIndex])
+  );
+  if (!matched.some(({ realRoot }) => pathIsWithin(realRoot, realTarget)) && !exactAllowed) {
     throw new Error(
       `Refusing to follow a symlink or junction outside configured runtime homes: ${resolved} -> ${realTarget}`,
     );
@@ -333,6 +392,564 @@ async function writeUtf8FileIfChanged(targetPath, content) {
   return true;
 }
 
+async function renameDirectoryWithRetry(sourcePath, targetPath) {
+  const retryable = new Set(["EACCES", "EBUSY", "EPERM"]);
+  let lastError = null;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      await fs.rename(sourcePath, targetPath);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!retryable.has(error?.code) || attempt === 7) throw error;
+      await delay(50 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
+function sha256Text(content) {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+function manifestOwnsExactAgent(targetPath, content, targetId, agentId) {
+  const purpose = `${targetId}-global-agent:${agentId}`;
+  const size = Buffer.byteLength(content);
+  const sha256 = sha256Text(content);
+  return Boolean(globalManifestSnapshot?.entries?.some((entry) =>
+    entry.kind === "file" &&
+    entry.source === "sync-global-meta-theory" &&
+    entry.purpose === purpose &&
+    path.resolve(entry.path) === path.resolve(targetPath) &&
+    entry.size === size &&
+    entry.sha256 === sha256,
+  ));
+}
+
+const historicalAgentProjectionCache = new Map();
+let historicalAgentMigrationCatalog = null;
+
+async function loadHistoricalAgentMigrationCatalog() {
+  if (historicalAgentMigrationCatalog) return historicalAgentMigrationCatalog;
+  const parsed = JSON.parse(await fs.readFile(historicalAgentMigrationCatalogPath, "utf8"));
+  if (parsed?.schemaVersion !== 1 || !Array.isArray(parsed.projections)) {
+    throw new Error(`Invalid global Agent migration catalog: ${historicalAgentMigrationCatalogPath}`);
+  }
+  const index = new Map();
+  const migrationTargetIds = new Set(
+    globalAgentMigrationTargets.map((target) => target.targetId),
+  );
+  for (const projection of parsed.projections) {
+    if (
+      typeof projection?.agentId !== "string" ||
+      !migrationTargetIds.has(projection?.targetId) ||
+      !Array.isArray(projection?.fingerprints) ||
+      !projection.fingerprints.every((value) => /^[a-f0-9]{64}$/u.test(value))
+    ) {
+      throw new Error(`Invalid projection entry in global Agent migration catalog: ${historicalAgentMigrationCatalogPath}`);
+    }
+    index.set(
+      `${projection.targetId}:${projection.agentId}`,
+      new Set(projection.fingerprints),
+    );
+  }
+  historicalAgentMigrationCatalog = index;
+  return index;
+}
+
+async function catalogOwnsHistoricalAgentProjection(agentId, targetId, content) {
+  const catalog = await loadHistoricalAgentMigrationCatalog();
+  return catalog.get(`${targetId}:${agentId}`)?.has(sha256Text(content)) === true;
+}
+
+function historicalAgentProjections(agentId, targetId) {
+  const cacheKey = `${targetId}:${agentId}`;
+  if (historicalAgentProjectionCache.has(cacheKey)) {
+    return historicalAgentProjectionCache.get(cacheKey);
+  }
+  const target = globalAgentMigrationTargets.find(
+    (candidate) => candidate.targetId === targetId,
+  );
+  if (!target) {
+    const empty = new Set();
+    historicalAgentProjectionCache.set(cacheKey, empty);
+    return empty;
+  }
+  const sourceFile = path
+    .relative(repoRoot, path.join(canonicalAgentsDir, `${agentId}.md`))
+    .replace(/\\/g, "/");
+  const projections = new Set();
+  try {
+    const revisions = execFileSync(
+      "git",
+      ["log", "--format=%H", "--", sourceFile],
+      { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim().split(/\r?\n/u).filter(Boolean);
+    for (const revision of revisions) {
+      const raw = execFileSync(
+        "git",
+        ["show", `${revision}:${sourceFile}`],
+        { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      );
+      const historical = parseCanonicalAgent(raw, sourceFile);
+      if (historical.id === agentId) {
+        projections.add(renderGlobalAgentProjection(historical, target));
+      }
+    }
+  } catch {
+    // Packaged installs do not necessarily include git history. In that case,
+    // only exact manifest ownership can authorize replacing a stale file.
+  }
+  historicalAgentProjectionCache.set(cacheKey, projections);
+  return projections;
+}
+
+function globalAgentPath(target, agentId) {
+  return path.join(
+    runtimeHomes[target.targetId].dir,
+    target.agentsDir,
+    globalAgentProjectionFileName(target, agentId),
+  );
+}
+
+async function buildGlobalAgentPlan() {
+  const agents = await loadCanonicalAgents();
+  const entries = [];
+  const collisions = [];
+  for (const target of globalAgentTargets) {
+    const { targetId } = target;
+    for (const agent of agents) {
+      const targetPath = globalAgentPath(target, agent.id);
+      const expected = renderGlobalAgentProjection(agent, target);
+      const current = (await pathExists(targetPath)) ? await fs.readFile(targetPath, "utf8") : null;
+      const migration = current !== null && current !== expected;
+      const owned = migration && (
+        manifestOwnsExactAgent(targetPath, current, targetId, agent.id) ||
+        await catalogOwnsHistoricalAgentProjection(agent.id, targetId, current) ||
+        historicalAgentProjections(agent.id, targetId).has(current)
+      );
+      if (migration && !owned) {
+        collisions.push({ targetId, agentId: agent.id, targetPath });
+      }
+      entries.push({ targetId, agentId: agent.id, targetPath, expected });
+    }
+  }
+  return { entries, collisions };
+}
+
+async function syncGlobalAgents(plan) {
+  for (const entry of plan.entries) {
+    assertHomeBound(entry.targetPath);
+    await assertRealHomeBound(entry.targetPath);
+    const current = (await pathExists(entry.targetPath))
+      ? await fs.readFile(entry.targetPath, "utf8")
+      : null;
+    if (current === entry.expected) {
+      recordSafe((rec) => rec.recordFile(entry.targetPath, {
+        source: "sync-global-meta-theory",
+        purpose: `${entry.targetId}-global-agent:${entry.agentId}`,
+        category: CATEGORIES.A,
+        runtimeTarget: entry.targetId,
+      }));
+      continue;
+    }
+    if (current !== null) {
+      const owned = manifestOwnsExactAgent(
+        entry.targetPath,
+        current,
+        entry.targetId,
+        entry.agentId,
+      ) || await catalogOwnsHistoricalAgentProjection(
+        entry.agentId,
+        entry.targetId,
+        current,
+      ) || historicalAgentProjections(entry.agentId, entry.targetId).has(current);
+      if (!owned) {
+        throw new Error(`Refusing to overwrite concurrently changed or unowned global agent: ${entry.targetPath}`);
+      }
+      await backupExistingPath(entry.targetPath, {
+        family: "agent",
+        label: `${entry.targetId} global agent ${entry.agentId}`,
+        backupRoot: path.join(runtimeHomes[entry.targetId].dir, ".meta-kim", "backups"),
+      });
+    }
+    await writeUtf8FileAtomic(entry.targetPath, entry.expected, `${entry.targetId}-global-agent`);
+    recordSafe((rec) => rec.recordFile(entry.targetPath, {
+      source: "sync-global-meta-theory",
+      purpose: `${entry.targetId}-global-agent:${entry.agentId}`,
+      category: CATEGORIES.A,
+      runtimeTarget: entry.targetId,
+    }));
+  }
+}
+
+async function checkGlobalAgents(plan) {
+  let inSync = true;
+  for (const { targetId } of globalAgentTargets) {
+    const targetEntries = plan.entries.filter((entry) => entry.targetId === targetId);
+    let current = 0;
+    for (const entry of targetEntries) {
+      if ((await fs.readFile(entry.targetPath, "utf8").catch(() => null)) === entry.expected) current += 1;
+    }
+    console.log(`${current === targetEntries.length ? `${C.green}✓${C.reset}` : `${C.yellow}⊘${C.reset}`} ${C.dim}${targetId} global agents: ${current}/${targetEntries.length}${C.reset}`);
+    if (current !== targetEntries.length) inSync = false;
+  }
+  return inSync;
+}
+
+async function canonicalClaudeMcpIdentity() {
+  const parsed = JSON.parse(await fs.readFile(canonicalClaudeMcpPath, "utf8"));
+  const entries = Object.entries(parsed.mcpServers ?? {});
+  if (entries.length !== 1) throw new Error(`${canonicalClaudeMcpPath} must declare exactly one canonical server.`);
+  const packageManifest = JSON.parse(await fs.readFile(path.join(repoRoot, "package.json"), "utf8"));
+  const distribution = JSON.parse(await fs.readFile(distributionPath, "utf8"));
+  const identity = resolvePortableMetaKimPackageIdentity(packageManifest, distribution);
+  const runtimeBaseDir = path.dirname(runtimeHomes.claude.dir);
+  const layout = resolveDurableMetaKimRuntimeLayout(
+    runtimeBaseDir,
+    identity,
+    packageManifest,
+  );
+  const legacyScriptArg = (entries[0][1].args ?? []).find((value) =>
+    typeof value === "string" && value.includes("__REPO_ROOT__"),
+  );
+  if (!legacyScriptArg) throw new Error(`${canonicalClaudeMcpPath} must declare a portable legacy script marker.`);
+  return {
+    name: entries[0][0],
+    identity,
+    packageManifest,
+    layout,
+    legacyScriptSuffix: legacyScriptArg.replace(/^__REPO_ROOT__[\\/]/u, ""),
+    definition: layout.definition,
+  };
+}
+
+function bundleTrackedFiles(layout) {
+  return [
+    [layout.packageManifestPath, "package-manifest"],
+    [layout.cliPath, "cli"],
+    [layout.serverPath, "server"],
+  ];
+}
+
+async function manifestOwnsExactBundle(layout) {
+  const directoryEntry = globalManifestSnapshot?.entries?.find((candidate) =>
+    candidate.kind === "dir" &&
+    candidate.source === "sync-global-meta-theory" &&
+    candidate.purpose === "claude-global-mcp-runtime-bundle" &&
+    path.resolve(candidate.path) === path.resolve(layout.bundleDir),
+  );
+  if (!directoryEntry) return false;
+  if (
+    typeof directoryEntry.directoryClosureSha256 === "string" ||
+    Number.isFinite(directoryEntry.directoryClosureEntryCount)
+  ) {
+    const closure = directoryClosureSync(layout.bundleDir);
+    return Boolean(
+      closure &&
+      closure.sha256 === directoryEntry.directoryClosureSha256 &&
+      closure.entryCount === directoryEntry.directoryClosureEntryCount,
+    );
+  }
+
+  // Manifests written before directory-closure ownership existed may be
+  // migrated only when every historically tracked identity file is exact.
+  for (const [filePath, label] of bundleTrackedFiles(layout)) {
+    const content = await fs.readFile(filePath).catch(() => null);
+    if (!content) return false;
+    const entry = globalManifestSnapshot?.entries?.find((candidate) =>
+      candidate.kind === "file" &&
+      candidate.source === "sync-global-meta-theory" &&
+      candidate.purpose === `claude-global-mcp-runtime-bundle:${label}` &&
+      path.resolve(candidate.path) === path.resolve(filePath),
+    );
+    if (!entry || entry.size !== content.byteLength || entry.sha256 !== createHash("sha256").update(content).digest("hex")) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function candidateLockContent(identity, sourcePackageSha256) {
+  return `${JSON.stringify({
+    schemaVersion: 1,
+    packageName: identity.packageName,
+    packageVersion: identity.packageVersion,
+    sourcePackageSha256,
+  }, null, 2)}\n`;
+}
+
+async function liveBundleMatchesCandidate(layout, identity, sourcePackageSha256) {
+  const lockPath = path.join(layout.bundleDir, ".meta-kim-candidate.json");
+  const current = await fs.readFile(lockPath, "utf8").catch(() => null);
+  return current === candidateLockContent(identity, sourcePackageSha256);
+}
+
+function recordDurableMcpBundle(layout) {
+  recordSafe((rec) => rec.recordDir(layout.bundleDir, {
+    source: "sync-global-meta-theory",
+    purpose: "claude-global-mcp-runtime-bundle",
+    category: CATEGORIES.C,
+  }));
+  for (const [filePath, label] of bundleTrackedFiles(layout)) {
+    recordSafe((rec) => rec.recordFile(filePath, {
+      source: "sync-global-meta-theory",
+      purpose: `claude-global-mcp-runtime-bundle:${label}`,
+      category: CATEGORIES.C,
+      runtimeTarget: "claude",
+    }));
+  }
+}
+
+async function resolveNpmCliPath() {
+  const candidates = [
+    process.env.npm_execpath,
+    path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+    path.join(path.dirname(process.execPath), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (path.isAbsolute(candidate) && await pathExists(candidate)) return candidate;
+  }
+  throw new Error("Unable to resolve npm-cli.js from the active Node installation.");
+}
+
+function runDurableMcpSelfTest(cliPath, cwd) {
+  return execFileSync(
+    process.execPath,
+    [cliPath, "mcp", "self-test"],
+    { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  );
+}
+
+async function verifyDurableMcpLayout(layout, identity) {
+  const installedManifest = JSON.parse(await fs.readFile(layout.packageManifestPath, "utf8"));
+  if (installedManifest.name !== identity.packageName || installedManifest.version !== identity.packageVersion) {
+    throw new Error("Durable MCP runtime package identity does not match the executing candidate.");
+  }
+  await fs.access(layout.cliPath);
+  await fs.access(layout.serverPath);
+  const output = runDurableMcpSelfTest(layout.cliPath, layout.packageRoot);
+  if (!/"ok"\s*:\s*true/u.test(output)) {
+    throw new Error("Durable MCP runtime self-test did not return ok=true.");
+  }
+}
+
+function stagedLayoutFor(layout, stageDir) {
+  const relativePackageRoot = path.relative(layout.bundleDir, layout.packageRoot);
+  const packageRoot = path.join(stageDir, relativePackageRoot);
+  return {
+    ...layout,
+    bundleDir: stageDir,
+    packageRoot,
+    packageManifestPath: path.join(packageRoot, "package.json"),
+    cliPath: path.join(stageDir, path.relative(layout.bundleDir, layout.cliPath)),
+    serverPath: path.join(stageDir, path.relative(layout.bundleDir, layout.serverPath)),
+  };
+}
+
+async function materializeDurableMcpRuntime(plan) {
+  const { layout, identity } = plan;
+  const stageDir = path.join(
+    path.dirname(layout.bundleDir),
+    `.meta-kim-runtime-staged-${process.pid}-${randomUUID()}`,
+  );
+  assertHomeBound(stageDir);
+  await assertRealHomeBound(stageDir);
+  await fs.mkdir(stageDir, { recursive: true });
+  let displacedPath = null;
+  let promoted = false;
+  let promotedClosure = null;
+  try {
+    const npmCliPath = await resolveNpmCliPath();
+    if (process.env.META_KIM_TEST_FAIL_DURABLE_MCP_AT === "pack") {
+      throw new Error("Injected durable MCP pack failure.");
+    }
+    execFileSync(
+      process.execPath,
+      [npmCliPath, "pack", repoRoot, "--pack-destination", stageDir],
+      { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    );
+    const archives = (await fs.readdir(stageDir)).filter((name) => name.endsWith(".tgz"));
+    if (archives.length !== 1) throw new Error(`Expected one packed candidate, found ${archives.length}.`);
+    const archivePath = path.join(stageDir, archives[0]);
+    const sourcePackageSha256 = createHash("sha256")
+      .update(await fs.readFile(archivePath))
+      .digest("hex");
+    if (await pathExists(layout.bundleDir)) {
+      if (!(await manifestOwnsExactBundle(layout))) {
+        throw new Error(`Refusing to replace an unowned durable MCP runtime: ${layout.bundleDir}`);
+      }
+      if (await liveBundleMatchesCandidate(layout, identity, sourcePackageSha256)) {
+        await fs.rm(stageDir, { recursive: true, force: true });
+        recordDurableMcpBundle(layout);
+        return { displacedPath: null, installed: false };
+      }
+    }
+    if (process.env.META_KIM_TEST_FAIL_DURABLE_MCP_AT === "install") {
+      throw new Error("Injected durable MCP install failure.");
+    }
+    execFileSync(
+      process.execPath,
+      [npmCliPath, "install", "--prefix", stageDir, "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund", archivePath],
+      { cwd: stageDir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    );
+    await fs.rm(archivePath, { force: true });
+    await fs.writeFile(
+      path.join(stageDir, ".meta-kim-candidate.json"),
+      candidateLockContent(identity, sourcePackageSha256),
+      "utf8",
+    );
+    const stagedLayout = stagedLayoutFor(layout, stageDir);
+    await verifyDurableMcpLayout(stagedLayout, identity);
+    promotedClosure = directoryClosureSync(stageDir);
+    if (!promotedClosure) {
+      throw new Error("Unable to capture the staged durable MCP bundle closure.");
+    }
+
+    await fs.mkdir(path.dirname(layout.bundleDir), { recursive: true });
+    if (await pathExists(layout.bundleDir)) {
+      displacedPath = path.join(
+        path.dirname(layout.runtimeRoot),
+        "backups",
+        "mcp-runtime",
+        legacyHookBackupStamp,
+        `${path.basename(layout.bundleDir)}-${randomUUID()}`,
+      );
+      assertHomeBound(displacedPath);
+      await assertRealHomeBound(displacedPath);
+      await fs.mkdir(path.dirname(displacedPath), { recursive: true });
+      await renameDirectoryWithRetry(layout.bundleDir, displacedPath);
+    }
+    if (process.env.META_KIM_TEST_FAIL_DURABLE_MCP_AT === "rename") {
+      throw new Error("Injected durable MCP rename failure.");
+    }
+    await renameDirectoryWithRetry(stageDir, layout.bundleDir);
+    promoted = true;
+    if (process.env.META_KIM_TEST_CONCURRENT_DURABLE_MCP_EDIT === "post_rename_bundle") {
+      await fs.writeFile(
+        path.join(layout.bundleDir, "user-concurrent-runtime-file.txt"),
+        "preserve concurrent bundle edit\n",
+        "utf8",
+      );
+    }
+    if (process.env.META_KIM_TEST_FAIL_DURABLE_MCP_AT === "post_rename_verify") {
+      throw new Error("Injected durable MCP post_rename_verify failure.");
+    }
+    await verifyDurableMcpLayout(layout, identity);
+  } catch (error) {
+    const rollbackErrors = [];
+    if (promoted && await pathExists(layout.bundleDir)) {
+      const currentClosure = directoryClosureSync(layout.bundleDir);
+      if (
+        !currentClosure ||
+        !promotedClosure ||
+        currentClosure.sha256 !== promotedClosure.sha256 ||
+        currentClosure.entryCount !== promotedClosure.entryCount
+      ) {
+        rollbackErrors.push("rollback_incomplete: promoted bundle changed concurrently");
+      } else {
+        try {
+          await fs.rm(layout.bundleDir, { recursive: true, force: true });
+        } catch (rollbackError) {
+          rollbackErrors.push(`remove promoted bundle: ${rollbackError?.message ?? rollbackError}`);
+        }
+      }
+    }
+    if (
+      rollbackErrors.length === 0 &&
+      displacedPath &&
+      !(await pathExists(layout.bundleDir)) &&
+      await pathExists(displacedPath)
+    ) {
+      try {
+        await renameDirectoryWithRetry(displacedPath, layout.bundleDir);
+      } catch (rollbackError) {
+        rollbackErrors.push(`restore displaced bundle: ${rollbackError?.message ?? rollbackError}`);
+      }
+    }
+    await fs.rm(stageDir, { recursive: true, force: true }).catch(() => {});
+    if (rollbackErrors.length > 0) {
+      throw new Error(`${error?.message ?? error}; durable MCP rollback incomplete: ${rollbackErrors.join("; ")}`);
+    }
+    throw error;
+  }
+
+  recordDurableMcpBundle(layout);
+  return { displacedPath, installed: true, promotedClosure };
+}
+
+function claudeUserConfigPath() {
+  return process.env.META_KIM_CLAUDE_USER_CONFIG ||
+    path.join(path.dirname(runtimeHomes.claude.dir), ".claude.json");
+}
+
+async function buildClaudeUserMcpPlan() {
+  if (!selectedTargetIds.includes("claude")) return null;
+  const configPath = claudeUserConfigPath();
+  assertHomeBound(configPath);
+  await assertRealHomeBound(configPath);
+  const base = (await pathExists(configPath))
+    ? JSON.parse(await fs.readFile(configPath, "utf8"))
+    : {};
+  const canonical = await canonicalClaudeMcpIdentity();
+  const managedFingerprints = new Set(
+    (globalManifestSnapshot?.entries ?? [])
+      .filter((entry) =>
+        entry.kind === "mcp-server" &&
+        path.resolve(entry.path) === path.resolve(configPath) &&
+        entry.mcpServerName === canonical.name &&
+        typeof entry.mcpServerFingerprint === "string",
+      )
+      .map((entry) => entry.mcpServerFingerprint),
+  );
+  const merged = mergeClaudeUserMcpConfig(
+    base,
+    { ...canonical, canonicalName: canonical.name, portableDefinition: canonical.definition, managedFingerprints },
+  );
+  return { configPath, base, managedFingerprints, ...canonical, ...merged };
+}
+
+async function syncClaudeUserMcp(plan) {
+  if (!plan) return;
+  const configExisted = await pathExists(plan.configPath);
+  const originalRaw = configExisted ? await fs.readFile(plan.configPath, "utf8") : null;
+  const base = configExisted ? JSON.parse(originalRaw) : {};
+  const merged = mergeClaudeUserMcpConfig(base, {
+    canonicalName: plan.name,
+    portableDefinition: plan.definition,
+    identity: plan.identity,
+    legacyScriptSuffix: plan.legacyScriptSuffix,
+    managedFingerprints: plan.managedFingerprints,
+  });
+  if (merged.collisions.length > 0) {
+    throw new Error(`Refusing to overwrite concurrently changed or unowned Claude MCP entries: ${merged.collisions.join(", ")}`);
+  }
+  if (!isDeepStrictEqual(base, merged.config)) {
+    const promotedRaw = `${JSON.stringify(merged.config, null, 2)}\n`;
+    plan.configTransaction = {
+      existed: configExisted,
+      raw: originalRaw,
+      promotedRaw,
+      changed: true,
+    };
+    if (await pathExists(plan.configPath)) {
+      await backupExistingPath(plan.configPath, {
+        family: "mcp",
+        label: "Claude user MCP config",
+        backupRoot: path.join(runtimeHomes.claude.dir, ".meta-kim", "backups"),
+      });
+    }
+    await writeUtf8FileAtomic(plan.configPath, promotedRaw, "claude-user-mcp");
+  }
+  const registeredDefinition = merged.config.mcpServers?.[plan.name];
+  recordSafe((rec) => rec.recordMcpServer(plan.configPath, plan.name, {
+    source: "sync-global-meta-theory",
+    purpose: "claude-global-mcp",
+    category: CATEGORIES.C,
+    fingerprint: mcpDefinitionFingerprint(registeredDefinition),
+  }));
+}
+
 async function fsyncDirectoryBestEffort(directoryPath) {
   let handle = null;
   try {
@@ -343,6 +960,151 @@ async function fsyncDirectoryBestEffort(directoryPath) {
     // The staged file itself is still fsynced before the atomic rename.
   } finally {
     await handle?.close().catch(() => {});
+  }
+}
+
+function fileStatIdentity(stat) {
+  return {
+    dev: stat.dev,
+    ino: stat.ino,
+    mode: stat.mode,
+    nlink: stat.nlink,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    ctimeMs: stat.ctimeMs,
+  };
+}
+
+function fileStatIdentityHash(stat) {
+  return sha256Text(JSON.stringify(fileStatIdentity(stat)));
+}
+
+async function captureExactFileSnapshot(targetPath) {
+  let before;
+  try {
+    before = await fs.lstat(targetPath);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return { exists: false, bytes: null, size: 0, sha256: null };
+    }
+    throw error;
+  }
+  if (before.isSymbolicLink() || !before.isFile()) {
+    throw new Error(`Unsafe config file type: ${targetPath}`);
+  }
+  const bytes = await fs.readFile(targetPath);
+  const after = await fs.lstat(targetPath);
+  if (
+    after.isSymbolicLink() ||
+    !after.isFile() ||
+    fileStatIdentityHash(before) !== fileStatIdentityHash(after) ||
+    bytes.length !== after.size
+  ) {
+    throw new Error(`Concurrent config change while taking snapshot: ${targetPath}`);
+  }
+  return {
+    exists: true,
+    bytes,
+    size: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    stat: fileStatIdentity(after),
+    identitySha256: fileStatIdentityHash(after),
+  };
+}
+
+function exactFileSnapshotMatches(actual, expected, { requireIdentity = true } = {}) {
+  if (actual?.exists !== expected?.exists) return false;
+  if (!expected?.exists) return true;
+  return Boolean(
+    actual.size === expected.size &&
+    actual.sha256 === expected.sha256 &&
+    (!requireIdentity || actual.identitySha256 === expected.identitySha256),
+  );
+}
+
+async function injectConcurrentCodexConfigEdit(targetPath, phase) {
+  if (process.env.META_KIM_TEST_CONCURRENT_CODEX_CONFIG_EDIT !== phase) return;
+  const current = await fs.readFile(targetPath, "utf8").catch((error) => {
+    if (error?.code === "ENOENT") return "";
+    throw error;
+  });
+  const separator = current && !/(?:\r\n|\n|\r)$/u.test(current) ? "\n" : "";
+  await fs.writeFile(
+    targetPath,
+    `${current}${separator}# concurrent user edit during ${phase}\n`,
+    "utf8",
+  );
+}
+
+async function promoteExactFileFromSnapshot(
+  targetPath,
+  originalSnapshot,
+  replacementBytes,
+  {
+    failureId = null,
+    beforeCommit = null,
+    replacementMode = originalSnapshot?.stat?.mode ?? 0o600,
+  } = {},
+) {
+  assertHomeBound(targetPath);
+  await assertRealHomeBound(targetPath);
+  const bytes = Buffer.isBuffer(replacementBytes)
+    ? replacementBytes
+    : Buffer.from(replacementBytes);
+  const parentDir = path.dirname(targetPath);
+  await fs.mkdir(parentDir, { recursive: true });
+  const stagePath = path.join(
+    parentDir,
+    `.meta-kim-staged-${path.basename(targetPath).replace(/^\.+/u, "")}-${process.pid}-${randomUUID()}`,
+  );
+  assertHomeBound(stagePath);
+  await assertRealHomeBound(stagePath);
+
+  let handle = null;
+  let renamed = false;
+  try {
+    handle = await fs.open(stagePath, "wx", replacementMode);
+    await handle.writeFile(bytes);
+    await handle.sync();
+    await handle.close();
+    handle = null;
+    await fs.chmod(stagePath, replacementMode);
+
+    if (
+      failureId &&
+      process.env.META_KIM_TEST_FAIL_ATOMIC_SETTINGS_WRITE === failureId
+    ) {
+      throw new Error(`Injected atomic settings write failure: ${failureId}`);
+    }
+    await beforeCommit?.();
+    const current = await captureExactFileSnapshot(targetPath);
+    if (!exactFileSnapshotMatches(current, originalSnapshot)) {
+      throw new Error(`concurrent_change:${targetPath}`);
+    }
+
+    await fs.rename(stagePath, targetPath);
+    renamed = true;
+    await fsyncDirectoryBestEffort(parentDir);
+    const promoted = await captureExactFileSnapshot(targetPath);
+    const expectedHash = createHash("sha256").update(bytes).digest("hex");
+    if (
+      !promoted.exists ||
+      promoted.size !== bytes.length ||
+      promoted.sha256 !== expectedHash
+    ) {
+      throw new Error(
+        `rollback_incomplete: promoted config changed before verification: ${targetPath}`,
+      );
+    }
+    return {
+      changed: true,
+      targetPath,
+      original: originalSnapshot,
+      promoted,
+    };
+  } finally {
+    await handle?.close().catch(() => {});
+    if (!renamed) await fs.rm(stagePath, { force: true }).catch(() => {});
   }
 }
 
@@ -358,7 +1120,7 @@ async function writeUtf8FileAtomic(targetPath, content, failureId) {
   });
   const stagePath = path.join(
     parentDir,
-    `.${path.basename(targetPath)}.meta-kim-staged-${process.pid}-${randomUUID()}`,
+    `.meta-kim-staged-${path.basename(targetPath).replace(/^\.+/u, "")}-${process.pid}-${randomUUID()}`,
   );
   assertHomeBound(stagePath);
   await assertRealHomeBound(stagePath);
@@ -390,16 +1152,18 @@ async function writeUtf8FileAtomic(targetPath, content, failureId) {
   }
 }
 
-async function backupExistingPath(targetPath, { family, label }) {
+async function backupExistingPath(targetPath, { family, label, backupRoot = null }) {
   assertHomeBound(targetPath);
   await assertRealHomeBound(targetPath);
   if (!(await pathExists(targetPath))) return null;
 
-  const backupDir = path.join(
-    path.dirname(targetPath),
-    `.meta-kim-${family}-backup`,
-    legacyHookBackupStamp,
-  );
+  const backupDir = backupRoot
+    ? path.join(backupRoot, family, legacyHookBackupStamp)
+    : path.join(
+      path.dirname(targetPath),
+      `.meta-kim-${family}-backup`,
+      legacyHookBackupStamp,
+    );
   assertHomeBound(backupDir);
   await assertRealHomeBound(backupDir);
   await fs.mkdir(backupDir, { recursive: true });
@@ -418,14 +1182,24 @@ async function backupExistingPath(targetPath, { family, label }) {
 
 async function resolveTargets() {
   const targetContext = await resolveTargetContext(cliArgs);
-  runtimeHomes = {
-    claude: resolveRuntimeHomeInfo("claude"),
-    openclaw: resolveRuntimeHomeInfo("openclaw"),
-    codex: resolveRuntimeHomeInfo("codex"),
-    cursor: resolveRuntimeHomeInfo("cursor"),
-  };
+  runtimeProfiles = targetContext.profiles;
+  runtimeHomes = Object.fromEntries(
+    Object.keys(runtimeProfiles).map((targetId) => [
+      targetId,
+      resolveRuntimeHomeInfo(targetId),
+    ]),
+  );
 
   selectedTargetIds = [...targetContext.activeTargets];
+  globalAgentTargets = resolveGlobalAgentProjectionTargets(
+    runtimeProfiles,
+    selectedTargetIds,
+  );
+  globalAgentMigrationTargets = resolveGlobalAgentProjectionTargets(
+    runtimeProfiles,
+    Object.keys(runtimeProfiles),
+    { requireMigrationSupport: true },
+  );
 
   allowedRoots = Object.values(runtimeHomes).map(({ dir }) =>
     path.resolve(dir),
@@ -433,9 +1207,22 @@ async function resolveTargets() {
   if (selectedTargetIds.includes("codex")) {
     allowedRoots.push(path.resolve(path.dirname(CODEX_LEGACY_SHARED_SKILL_ROOT)));
   }
+  if (selectedTargetIds.includes("claude")) {
+    const runtimeBaseDir = path.dirname(runtimeHomes.claude.dir);
+    allowedRoots.push(path.resolve(runtimeBaseDir, ".meta-kim", "runtime"));
+    allowedRoots.push(path.resolve(runtimeBaseDir, ".meta-kim", "backups"));
+  }
+  allowedExactFiles = selectedTargetIds.includes("claude")
+    ? [path.resolve(claudeUserConfigPath())]
+    : [];
   allowedRealRoots = await Promise.all(
     allowedRoots.map((root) => projectedRealPath(root)),
   );
+  allowedExactRealFiles = await Promise.all(allowedExactFiles.map(async (filePath) => {
+    const realParent = await projectedRealPath(path.dirname(filePath));
+    return path.join(realParent, path.basename(filePath));
+  }));
+  globalManifestSnapshot = readManifest(manifestPathFor("global"));
 
   activeTargets = selectedTargetIds.map((targetId) => ({
     targetId,
@@ -780,48 +1567,72 @@ async function checkRuntimeCommands(targetId, sourceDir) {
 
 async function ensureCodexGlobalConfigChoiceSurface() {
   const configPath = path.join(runtimeHomes.codex.dir, "config.toml");
+  const manifestPurpose =
+    "codex-global-config-choice-surface-and-app-native-controls";
   assertHomeBound(configPath);
   await assertRealHomeBound(configPath);
   await fs.mkdir(path.dirname(configPath), { recursive: true });
 
-  const prev = (await pathExists(configPath))
-    ? await fs.readFile(configPath, "utf8")
+  const originalSnapshot = await captureExactFileSnapshot(configPath);
+  const prev = originalSnapshot.exists
+    ? originalSnapshot.bytes.toString("utf8")
     : "";
-  const next = ensureCodexAppNativeControls(prev, {
+  if (
+    originalSnapshot.exists &&
+    !Buffer.from(prev, "utf8").equals(originalSnapshot.bytes)
+  ) {
+    throw new Error(`Codex config is not valid UTF-8: ${configPath}`);
+  }
+  const planned = planCodexAppNativeControls(prev, {
     codexHome: runtimeHomes.codex.dir,
   });
+  const next = planned.text;
 
   if (prev === next) {
+    const previousEntry = (globalManifestSnapshot?.entries ?? []).find((entry) =>
+      path.resolve(entry.path) === path.resolve(configPath) &&
+      entry.purpose === manifestPurpose
+    );
+    if (previousEntry?.kind === "settings-merge") {
+      recordSafe((rec) => rec.forget(configPath, manifestPurpose));
+    }
     console.log(
       `${C.green}✓${C.reset} ${C.dim}Codex choice surface and App native controls already enabled: ${configPath}${C.reset}`,
     );
-    return configPath;
+    return { configPath, transaction: null };
+  }
+  if (planned.mutations.length === 0) {
+    throw new Error(
+      `Codex config planner changed bytes without a mutation journal: ${configPath}`,
+    );
   }
 
-  if (prev) {
+  if (originalSnapshot.exists) {
     await backupExistingPath(configPath, {
       family: "settings",
       label: "Codex config",
     });
   }
 
-  await fs.writeFile(configPath, next, "utf8");
+  const transaction = await promoteExactFileFromSnapshot(
+    configPath,
+    originalSnapshot,
+    Buffer.from(next, "utf8"),
+    {
+      failureId: "codex-global-config",
+      beforeCommit: () => injectConcurrentCodexConfigEdit(
+        configPath,
+        "precommit",
+      ),
+    },
+  );
   recordSafe((rec) =>
-    rec.recordSettingsMerge(
+    rec.recordTomlFragmentMerge(
       configPath,
-      [
-        CODEX_REQUEST_USER_INPUT_FEATURE,
-        "js_repl",
-        "notify",
-        "windows.sandbox",
-        "marketplaces.openai-bundled",
-        "plugins.browser@openai-bundled",
-        "plugins.chrome@openai-bundled",
-        "plugins.computer-use@openai-bundled",
-      ],
+      planned.mutations,
       {
         source: "sync-global-meta-theory",
-        purpose: "codex-global-config-choice-surface-and-app-native-controls",
+        purpose: manifestPurpose,
         category: CATEGORIES.C,
       },
     ),
@@ -829,7 +1640,7 @@ async function ensureCodexGlobalConfigChoiceSurface() {
   console.log(
     `${C.green}✓${C.reset} ${C.dim}Enabled Codex choice surface and App native controls: ${configPath}${C.reset}`,
   );
-  return configPath;
+  return { configPath, transaction };
 }
 
 async function removeIfExists(targetPath) {
@@ -1146,6 +1957,7 @@ async function syncClaudeGlobalSettingsHooks() {
         source: "sync-global-meta-theory",
         purpose: "claude-global-settings-merge",
         category: CATEGORIES.C,
+        managedHookFragments: flattenHookFragments(template),
       });
     });
   };
@@ -1323,6 +2135,7 @@ async function syncCodexGlobalHooksJson() {
         source: "sync-global-meta-theory",
         purpose: "codex-global-hooks-json-merge",
         category: CATEGORIES.C,
+        managedHookFragments: flattenHookFragments(template.hooks),
       }),
     );
   };
@@ -1374,6 +2187,24 @@ function flattenHookCommands(hooks = {}) {
   return commands;
 }
 
+function flattenHookFragments(hooks = {}) {
+  const fragments = [];
+  for (const [event, blocks] of Object.entries(hooks ?? {})) {
+    for (const block of blocks ?? []) {
+      for (const hook of block?.hooks ?? []) {
+        if (hook && typeof hook === "object" && !Array.isArray(hook)) {
+          fragments.push({
+            event,
+            matcher: block?.matcher ?? null,
+            hook: structuredClone(hook),
+          });
+        }
+      }
+    }
+  }
+  return fragments;
+}
+
 function hookCommandScriptPath(command) {
   const trimmed = String(command ?? "").trim();
   const quoted = trimmed.match(/^node\s+"([^"]+)"/u);
@@ -1395,9 +2226,7 @@ async function checkClaudeGlobalSettingsHooks() {
     isManagedHookCommand: isOwnedGlobalMetaKimHookCommand,
   });
 
-  const actualHooks = JSON.stringify(settings.hooks ?? {});
-  const expectedHooks = JSON.stringify(expected.hooks ?? {});
-  let inSync = actualHooks === expectedHooks;
+  let inSync = isDeepStrictEqual(settings.hooks ?? {}, expected.hooks ?? {});
   const missingCommands = [];
 
   for (const command of flattenHookCommands(settings.hooks)) {
@@ -1431,9 +2260,9 @@ async function checkCodexGlobalHooksJson() {
   const config = await readJsonConfig(hooksJsonPath, hooksJsonPath);
   const expected = mergeCodexGlobalHooksIntoConfig(config, template);
 
-  const actualHooks = JSON.stringify(config.hooks ?? {});
-  const expectedHooks = JSON.stringify(expected.hooks ?? {});
-  let inSync = actualHooks === expectedHooks;
+  // Object insertion order is not semantic JSON state; array order is. Node's
+  // deep strict comparison preserves that boundary without stringifying keys.
+  let inSync = isDeepStrictEqual(config.hooks ?? {}, expected.hooks ?? {});
   const missingCommands = [];
 
   for (const command of flattenHookCommands(config.hooks)) {
@@ -1472,6 +2301,24 @@ function isOwnedGlobalMetaKimHookCommand(command) {
 async function runCheck() {
   await assertCanonicalSkillFrontmatter();
   let failed = false;
+  const agentPlan = await buildGlobalAgentPlan();
+  const mcpPlan = await buildClaudeUserMcpPlan();
+
+  if (agentPlan.collisions.length > 0) failed = true;
+  if (!(await checkGlobalAgents(agentPlan))) failed = true;
+  if (mcpPlan) {
+    let durableReady = false;
+    try {
+      await verifyDurableMcpLayout(mcpPlan.layout, mcpPlan.identity);
+      durableReady = true;
+    } catch {
+      durableReady = false;
+    }
+    const mcpInSync = durableReady && mcpPlan.collisions.length === 0 &&
+      isDeepStrictEqual(mcpPlan.base, mcpPlan.config);
+    console.log(`${mcpInSync ? `${C.green}✓${C.reset}` : `${C.yellow}⊘${C.reset}`} ${C.dim}Claude user MCP: ${mcpPlan.configPath}${C.reset}`);
+    if (!mcpInSync) failed = true;
+  }
 
   for (const target of activeTargets) {
     const sourceFingerprint = await fingerprintSourceForTarget(
@@ -1597,13 +2444,184 @@ async function runCheck() {
   process.exitCode = failed ? 1 : 0;
 }
 
+async function restoreFileSnapshot(filePath, raw) {
+  if (raw === null) {
+    await fs.rm(filePath, { force: true });
+    return;
+  }
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, raw, "utf8");
+}
+
+async function readFileSnapshot(filePath) {
+  return fs.readFile(filePath, "utf8").catch((error) => {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  });
+}
+
+async function restoreCodexConfigTransaction(transaction) {
+  if (!transaction?.changed) return;
+  const current = await captureExactFileSnapshot(transaction.targetPath);
+  if (!exactFileSnapshotMatches(current, transaction.promoted)) {
+    throw new Error("rollback_incomplete: Codex config changed concurrently");
+  }
+
+  if (transaction.original.exists) {
+    await promoteExactFileFromSnapshot(
+      transaction.targetPath,
+      transaction.promoted,
+      transaction.original.bytes,
+      { replacementMode: transaction.original.stat.mode },
+    );
+    return;
+  }
+
+  const quarantinePath = path.join(
+    path.dirname(transaction.targetPath),
+    `.meta-kim-rollback-${path.basename(transaction.targetPath)}-${process.pid}-${randomUUID()}`,
+  );
+  assertHomeBound(quarantinePath);
+  await assertRealHomeBound(quarantinePath);
+  await fs.rename(transaction.targetPath, quarantinePath);
+  await fsyncDirectoryBestEffort(path.dirname(transaction.targetPath));
+  const quarantined = await captureExactFileSnapshot(quarantinePath);
+  if (!exactFileSnapshotMatches(quarantined, transaction.promoted, {
+    requireIdentity: false,
+  })) {
+    if (!(await pathExists(transaction.targetPath))) {
+      await fs.rename(quarantinePath, transaction.targetPath);
+    }
+    throw new Error("rollback_incomplete: Codex config changed during removal");
+  }
+  await fs.rm(quarantinePath, { force: true });
+  await fsyncDirectoryBestEffort(path.dirname(transaction.targetPath));
+}
+
+function directoryClosureMatches(actual, expected) {
+  return Boolean(
+    actual &&
+    expected &&
+    actual.sha256 === expected.sha256 &&
+    actual.entryCount === expected.entryCount,
+  );
+}
+
+async function injectConcurrentDurableMcpEdit(mcpPlan) {
+  const mode = process.env.META_KIM_TEST_CONCURRENT_DURABLE_MCP_EDIT;
+  if (!mcpPlan || !["config", "bundle", "both"].includes(mode)) return;
+  if (["config", "both"].includes(mode) && await pathExists(mcpPlan.configPath)) {
+    const current = JSON.parse(await fs.readFile(mcpPlan.configPath, "utf8"));
+    current.userConcurrentEdit = { preserve: true };
+    await fs.writeFile(mcpPlan.configPath, `${JSON.stringify(current, null, 2)}\n`, "utf8");
+  }
+  if (["bundle", "both"].includes(mode) && await pathExists(mcpPlan.layout.bundleDir)) {
+    await fs.writeFile(
+      path.join(mcpPlan.layout.bundleDir, "user-concurrent-runtime-file.txt"),
+      "preserve concurrent bundle edit\n",
+      "utf8",
+    );
+  }
+}
+
+async function rollbackGlobalSyncTransaction(
+  mcpPlan,
+  bundleTransaction,
+  codexConfigTransaction,
+  recorder = manifestRecorder,
+) {
+  const rollbackErrors = [];
+  if (codexConfigTransaction?.changed) {
+    const currentConfig = await captureExactFileSnapshot(
+      codexConfigTransaction.targetPath,
+    );
+    if (!exactFileSnapshotMatches(currentConfig, codexConfigTransaction.promoted)) {
+      rollbackErrors.push("rollback_incomplete: Codex config changed concurrently");
+    }
+  }
+  if (mcpPlan?.configTransaction?.changed) {
+    const currentConfig = await readFileSnapshot(mcpPlan.configPath);
+    if (currentConfig !== mcpPlan.configTransaction.promotedRaw) {
+      rollbackErrors.push("rollback_incomplete: Claude MCP config changed concurrently");
+    }
+  }
+  if (bundleTransaction?.installed && mcpPlan?.layout) {
+    const currentClosure = directoryClosureSync(mcpPlan.layout.bundleDir);
+    if (!directoryClosureMatches(currentClosure, bundleTransaction.promotedClosure)) {
+      rollbackErrors.push("rollback_incomplete: durable MCP bundle changed concurrently");
+    }
+  }
+  // Treat bundle, registration, and ledger as one rollback unit. If any CAS
+  // precondition fails, preserve every current artifact rather than creating a
+  // mixed old/new runtime state or overwriting user edits.
+  if (rollbackErrors.length > 0) {
+    throw new Error(`Global sync rollback incomplete: ${rollbackErrors.join("; ")}`);
+  }
+
+  if (mcpPlan?.configTransaction?.changed) {
+    try {
+      await restoreFileSnapshot(mcpPlan.configPath, mcpPlan.configTransaction.raw);
+    } catch (error) {
+      rollbackErrors.push(`Claude MCP config: ${error?.message ?? error}`);
+    }
+  }
+  if (bundleTransaction?.installed && mcpPlan?.layout) {
+    try {
+      await fs.rm(mcpPlan.layout.bundleDir, { recursive: true, force: true });
+      if (bundleTransaction.displacedPath && await pathExists(bundleTransaction.displacedPath)) {
+        await fs.mkdir(path.dirname(mcpPlan.layout.bundleDir), { recursive: true });
+        await renameDirectoryWithRetry(bundleTransaction.displacedPath, mcpPlan.layout.bundleDir);
+      }
+    } catch (error) {
+      rollbackErrors.push(`durable MCP bundle: ${error?.message ?? error}`);
+    }
+  }
+  if (codexConfigTransaction?.changed) {
+    try {
+      await restoreCodexConfigTransaction(codexConfigTransaction);
+    } catch (error) {
+      rollbackErrors.push(`Codex config: ${error?.message ?? error}`);
+    }
+  }
+  if (recorder) {
+    const result = await recorder.rollback();
+    if (!result.ok) {
+      rollbackErrors.push(`install manifest: ${result.error ?? "rollback failed"}`);
+    }
+  }
+  if (rollbackErrors.length > 0) {
+    throw new Error(`Global sync rollback incomplete: ${rollbackErrors.join("; ")}`);
+  }
+}
+
+function globalManifestPartialFailure(reasons) {
+  return new Error(
+    `Global sync is partial because install manifest persistence failed: ${reasons}. ` +
+    "Resolve the manifest write failure, then rerun the same sync command; " +
+    "non-MCP projections may already be updated and will be reconciled on rerun.",
+  );
+}
+
 async function runSync() {
+  let mcpPlan = null;
+  let bundleTransaction = null;
+  let codexConfigTransaction = null;
+  try {
   // Leading newline to separate from parent's progress message
   console.log("");
   if (!(await pathExists(sourceSkillFile))) {
     throw new Error(`Missing canonical skill source: ${sourceSkillFile}`);
   }
   await assertCanonicalSkillFrontmatter();
+  const agentPlan = await buildGlobalAgentPlan();
+  mcpPlan = await buildClaudeUserMcpPlan();
+  const collisions = [
+    ...agentPlan.collisions.map((item) => item.targetPath),
+    ...(mcpPlan?.collisions ?? []).map((name) => `${mcpPlan.configPath}#${name}`),
+  ];
+  if (collisions.length > 0) {
+    throw new Error(`Refusing to overwrite unowned global runtime assets:\n${collisions.join("\n")}`);
+  }
   const packageVersion = JSON.parse(
     await fs.readFile(path.join(repoRoot, "package.json"), "utf8"),
   ).version;
@@ -1611,6 +2629,10 @@ async function runSync() {
     scope: "global",
     metaKimVersion: packageVersion,
   });
+
+  if (mcpPlan) {
+    bundleTransaction = await materializeDurableMcpRuntime(mcpPlan);
+  }
 
   for (const target of cleanupTargets) {
     const removed = await removeIfExists(target.dir);
@@ -1627,6 +2649,9 @@ async function runSync() {
       `${C.green}✓${C.reset} ${C.dim}Synced ${target.label}: ${target.dir}${C.reset}`,
     );
   }
+
+  await syncGlobalAgents(agentPlan);
+  await syncClaudeUserMcp(mcpPlan);
 
   for (const target of staleSkillCleanupTargets) {
     await backupAndRemoveStaleSkillAlias(target);
@@ -1671,16 +2696,57 @@ async function runSync() {
     console.log(
       `${C.green}✓${C.reset} ${C.dim}Synced Codex commands: ${path.join(runtimeHomes.codex.dir, "commands")} (${commandPaths.length} files)${C.reset}`,
     );
-    await ensureCodexGlobalConfigChoiceSurface();
+    const codexConfigResult = await ensureCodexGlobalConfigChoiceSurface();
+    codexConfigTransaction = codexConfigResult.transaction;
   }
 
   if (manifestRecorder) {
-    const result = await manifestRecorder.flush();
-    if (result.ok) {
-      console.log(
-        `${C.green}✓${C.reset} ${C.dim}Install manifest: ${result.path} (${result.entries} entries)${C.reset}`,
-      );
+    if (["manifest", "rollback"].includes(
+      process.env.META_KIM_TEST_FAIL_CODEX_CONFIG_AT,
+    )) {
+      throw globalManifestPartialFailure("Injected Codex config manifest failure");
     }
+    if (process.env.META_KIM_TEST_FAIL_DURABLE_MCP_AT === "manifest") {
+      await injectConcurrentDurableMcpEdit(mcpPlan);
+      throw globalManifestPartialFailure("Injected durable MCP manifest failure");
+    }
+    const result = await manifestRecorder.flush();
+    if (!result.ok || manifestRecordFailures.length > 0) {
+      const reasons = [...manifestRecordFailures, result.error].filter(Boolean).join("; ");
+      throw globalManifestPartialFailure(reasons);
+    }
+    if (process.env.META_KIM_TEST_FAIL_DURABLE_MCP_AT === "late") {
+      await injectConcurrentDurableMcpEdit(mcpPlan);
+      throw globalManifestPartialFailure("Injected durable MCP late failure");
+    }
+    if (process.env.META_KIM_TEST_FAIL_CODEX_CONFIG_AT === "late") {
+      throw globalManifestPartialFailure("Injected Codex config late failure");
+    }
+    console.log(
+      `${C.green}✓${C.reset} ${C.dim}Install manifest: ${result.path} (${result.entries} entries)${C.reset}`,
+    );
+  }
+  } catch (error) {
+    try {
+      if (
+        codexConfigTransaction?.changed &&
+        process.env.META_KIM_TEST_CONCURRENT_CODEX_CONFIG_EDIT === "rollback"
+      ) {
+        await injectConcurrentCodexConfigEdit(
+          codexConfigTransaction.targetPath,
+          "rollback",
+        );
+      }
+      await rollbackGlobalSyncTransaction(
+        mcpPlan,
+        bundleTransaction,
+        codexConfigTransaction,
+        manifestRecorder,
+      );
+    } catch (rollbackError) {
+      throw new Error(`${error?.message ?? error}; ${rollbackError.message}`);
+    }
+    throw error;
   }
 }
 

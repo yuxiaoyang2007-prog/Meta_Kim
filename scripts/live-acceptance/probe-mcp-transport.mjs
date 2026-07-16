@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 
 import { createHash, randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import {
+  assertExactRuntimeCapabilityMatrix,
+  parseRuntimeCapabilityMatrix,
+} from "../mcp/runtime-resource-contract.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -18,9 +23,46 @@ const repoRoot = path.resolve(
 const digest = (value) =>
   createHash("sha256").update(JSON.stringify(value ?? null), "utf8").digest("hex");
 
+function requireRuntimeMatrix(result, expectedMatrix) {
+  const textItems = (result?.content ?? []).filter(
+    (item) => item?.type === "text" && typeof item.text === "string",
+  );
+  if (textItems.length !== 1) {
+    throw new Error(
+      "get_meta_runtime_capabilities must return exactly one text payload",
+    );
+  }
+  let matrix;
+  try {
+    matrix = JSON.parse(textItems[0].text);
+  } catch (error) {
+    throw new Error(
+      `get_meta_runtime_capabilities returned non-JSON/stub content: ${error.message}`,
+    );
+  }
+  assertExactRuntimeCapabilityMatrix(
+    matrix,
+    expectedMatrix,
+    "get_meta_runtime_capabilities",
+  );
+  return {
+    schemaVersion: matrix.schemaVersion,
+    platforms: matrix.platforms.map((entry) => entry.platform),
+    capabilityCounts: Object.fromEntries(
+      matrix.platforms.map((entry) => [entry.platform, entry.capabilities.length]),
+    ),
+    semanticMatrixMatched: true,
+  };
+}
+
 async function main() {
   const sessionId = randomUUID();
   const callId = randomUUID();
+  const matrixPath = path.join(repoRoot, "config", "runtime-capability-matrix.json");
+  const expectedMatrix = parseRuntimeCapabilityMatrix(
+    await fs.readFile(matrixPath, "utf8"),
+    matrixPath,
+  );
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [path.join(repoRoot, "scripts", "mcp", "meta-runtime-server.mjs")],
@@ -48,6 +90,7 @@ async function main() {
       name: "get_meta_runtime_capabilities",
       arguments: argumentsValue,
     });
+    const runtimeMatrix = requireRuntimeMatrix(result, expectedMatrix);
     process.stdout.write(`${JSON.stringify({
       phase: "tools/call",
       status: "success",
@@ -58,7 +101,7 @@ async function main() {
       arguments: argumentsValue,
       inputDigest: digest(argumentsValue),
       outputDigest: digest(result),
-      result,
+      runtimeMatrix,
     })}\n`);
   } finally {
     await client.close();

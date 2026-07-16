@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -7,9 +7,27 @@ import os from "node:os";
 import path from "node:path";
 
 import { classifyProjectProjectionUpdate } from "../../scripts/project-bootstrap-update-policy.mjs";
+import { buildIsolatedUserHomeEnv } from "../../scripts/isolated-user-home-env.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..", "..");
 const setupPath = path.join(repoRoot, "setup.mjs");
+const testUserHome = mkdtempSync(
+  path.join(os.tmpdir(), "meta-kim-bootstrap-policy-home-"),
+);
+
+after(() => {
+  rmSync(testUserHome, { recursive: true, force: true });
+});
+
+function runBootstrap(args, options = {}) {
+  const { env: envOverrides, ...execOptions } = options;
+  return execFileSync(process.execPath, [setupPath, ...args], {
+    cwd: repoRoot,
+    stdio: "pipe",
+    ...execOptions,
+    env: buildIsolatedUserHomeEnv(testUserHome, envOverrides),
+  });
+}
 
 test("three-hash policy distinguishes managed merge/delta refresh, protected project copies, and unknown ownership", () => {
   const oldHash = "a".repeat(64);
@@ -40,7 +58,7 @@ test("real bootstrap writes canonical bytes and a meta-kim Junction blocks all o
   const projectRoot = mkdtempSync(path.join(os.tmpdir(), "meta-kim-bootstrap-content-"));
   const outsideRoot = mkdtempSync(path.join(os.tmpdir(), "meta-kim-bootstrap-outside-"));
   try {
-    execFileSync(process.execPath, [setupPath, "--project-bootstrap", "--targets", "codex", "--project-dir", projectRoot, "--apply", "--json"], { cwd: repoRoot, stdio: "pipe" });
+    runBootstrap(["--project-bootstrap", "--targets", "codex", "--project-dir", projectRoot, "--apply", "--json"]);
     assert.deepEqual(
       readFileSync(path.join(projectRoot, ".agents", "skills", "meta-theory", "SKILL.md")),
       readFileSync(path.join(repoRoot, "canonical", "skills", "meta-theory", "SKILL.md")),
@@ -49,7 +67,7 @@ test("real bootstrap writes canonical bytes and a meta-kim Junction blocks all o
     const blockedRoot = mkdtempSync(path.join(os.tmpdir(), "meta-kim-bootstrap-junction-"));
     try {
       symlinkSync(outsideRoot, path.join(blockedRoot, ".meta-kim"), process.platform === "win32" ? "junction" : "dir");
-      assert.throws(() => execFileSync(process.execPath, [setupPath, "--project-bootstrap", "--targets", "codex", "--project-dir", blockedRoot, "--apply", "--json"], { cwd: repoRoot, stdio: "pipe" }));
+      assert.throws(() => runBootstrap(["--project-bootstrap", "--targets", "codex", "--project-dir", blockedRoot, "--apply", "--json"]));
       assert.equal(existsSync(path.join(outsideRoot, "state")), false);
       assert.equal(existsSync(path.join(outsideRoot, "backups")), false);
       assert.equal(existsSync(path.join(outsideRoot, "transactions")), false);
@@ -62,7 +80,7 @@ test("real bootstrap writes canonical bytes and a meta-kim Junction blocks all o
     const linkedProject = path.join(linkedRoot, "new-project");
     try {
       symlinkSync(outsideRoot, linkedRoot, process.platform === "win32" ? "junction" : "dir");
-      assert.throws(() => execFileSync(process.execPath, [setupPath, "--project-bootstrap", "--targets", "codex", "--project-dir", linkedProject, "--apply", "--json"], { cwd: repoRoot, stdio: "pipe" }));
+      assert.throws(() => runBootstrap(["--project-bootstrap", "--targets", "codex", "--project-dir", linkedProject, "--apply", "--json"]));
       assert.equal(existsSync(path.join(outsideRoot, "new-project")), false);
     } finally {
       rmSync(linkedParent, { recursive: true, force: true });
@@ -76,7 +94,7 @@ test("real bootstrap writes canonical bytes and a meta-kim Junction blocks all o
 test("configured merge/delta replaces a manifest-managed projection but preserves unknown and sedimented files", () => {
   const projectRoot = mkdtempSync(path.join(os.tmpdir(), "meta-kim-bootstrap-conflict-"));
   try {
-    execFileSync(process.execPath, [setupPath, "--project-bootstrap", "--targets", "codex", "--project-dir", projectRoot, "--apply", "--json"], { cwd: repoRoot, stdio: "pipe" });
+    runBootstrap(["--project-bootstrap", "--targets", "codex", "--project-dir", projectRoot, "--apply", "--json"]);
     const conflictPath = path.join(projectRoot, ".agents", "skills", "meta-theory", "SKILL.md");
     const repairPath = path.join(projectRoot, ".codex", "hooks", "project-root.mjs");
     const stalePath = path.join(projectRoot, ".codex", "skills", "stale", "SKILL.md");
@@ -90,7 +108,7 @@ test("configured merge/delta replaces a manifest-managed projection but preserve
     manifest.managedFiles.push({ relPath: ".codex/skills/stale/SKILL.md", contentHash: staleHash });
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
-    execFileSync(process.execPath, [setupPath, "--project-bootstrap", "--targets", "codex", "--project-dir", projectRoot, "--apply", "--json"], { cwd: repoRoot, stdio: "pipe" });
+    runBootstrap(["--project-bootstrap", "--targets", "codex", "--project-dir", projectRoot, "--apply", "--json"]);
     assert.deepEqual(
       readFileSync(conflictPath),
       readFileSync(path.join(repoRoot, "canonical", "skills", "meta-theory", "SKILL.md")),

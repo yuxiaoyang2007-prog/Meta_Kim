@@ -343,8 +343,8 @@ Graphify installation and runtime wiring are handled by setup and helper scripts
 
 After changing canonical prompts, skills, hooks, contracts, or runtime-facing docs:
 
-1. `npm run meta:sync`
-2. `npm run discover:global`
+1. `npm run discover:global`
+2. `npm run meta:sync`
 3. `npm run meta:check`
 4. `npm run meta:check:global`
 5. `npm run meta:verify:all` before release or after larger changes

@@ -673,6 +673,7 @@ export function executeSafeManagedFileTransaction({
   injectFailureAtCommit = Number(process.env.META_KIM_TEST_FAIL_MANAGED_COMMIT_AT || 0),
   injectCrashAt = process.env.META_KIM_TEST_CRASH_MANAGED_AT || "",
   injectPauseAfterLockMs = Number(process.env.META_KIM_TEST_PAUSE_MANAGED_AFTER_LOCK_MS || 0),
+  injectBeforeCommitItem = null,
 }) {
   if (!Array.isArray(operations)) {
     return resultWithGuidance({ ok: false, status: "blocked", reason: "invalid_operations" });
@@ -883,8 +884,27 @@ export function executeSafeManagedFileTransaction({
 
       for (const [index, item] of commitItems.entries()) {
         if (injectFailureAtCommit === index + 1) throw new Error(`injected_commit_failure:${index + 1}`);
+        injectBeforeCommitItem?.(item, index);
         const entryPaths = journalEntryPaths(root, journal, journalEntries[index]);
-        if (item.oldHash) renameDurable(item.target, entryPaths.rollbackRelPath);
+        if (item.oldHash) {
+          renameDurable(item.target, entryPaths.rollbackRelPath);
+          if (sha256ManagedFile(entryPaths.rollbackRelPath) !== item.oldHash) {
+            if (!existsSync(item.target)) {
+              renameDurable(entryPaths.rollbackRelPath, item.target);
+            }
+            throw new Error(`commit_rollback_hash_drift:${item.relPath}`);
+          }
+          if (
+            process.platform !== "win32" &&
+            item.oldMode !== null &&
+            portableMode(lstatSync(entryPaths.rollbackRelPath)) !== item.oldMode
+          ) {
+            if (!existsSync(item.target)) {
+              renameDurable(entryPaths.rollbackRelPath, item.target);
+            }
+            throw new Error(`commit_rollback_permission_drift:${item.relPath}`);
+          }
+        }
         maybeCrash("after_first_rollback_rename", index === 0 ? injectCrashAt : "");
         if (item.kind === "write") renameDurable(entryPaths.stageRelPath, item.target);
         maybeCrash("after_first_target_commit", index === 0 ? injectCrashAt : "");
@@ -908,8 +928,16 @@ export function executeSafeManagedFileTransaction({
       maybeCrash("after_verified_journal", injectCrashAt);
       for (const entry of journalEntries) {
         const entryPaths = journalEntryPaths(root, journal, entry);
-        if (entryPaths && existsSync(entryPaths.rollbackRelPath)) unlinkDurable(entryPaths.rollbackRelPath);
-        if (entryPaths && existsSync(entryPaths.stageRelPath)) unlinkDurable(entryPaths.stageRelPath);
+        if (
+          entryPaths &&
+          existsSync(entryPaths.rollbackRelPath) &&
+          !removeKnownFile(entryPaths.rollbackRelPath, entry.oldHash)
+        ) throw new Error(`verified_rollback_drift:${entry.relPath}`);
+        if (
+          entryPaths &&
+          existsSync(entryPaths.stageRelPath) &&
+          !removeKnownFile(entryPaths.stageRelPath, entry.nextHash)
+        ) throw new Error(`verified_stage_drift:${entry.relPath}`);
       }
       unlinkDurable(paths.verifiedPath);
       unlinkDurable(paths.journalPath);

@@ -10,6 +10,11 @@ import {
   installStep,
   summarizeInstallStatus,
 } from "../../scripts/install-status-semantics.mjs";
+import {
+  MCP_MEMORY_SETUP_ACTION,
+  MCP_MEMORY_SETUP_REASON,
+  resolveMcpMemorySetupPolicy,
+} from "../../scripts/setup-memory-policy.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
 
@@ -58,6 +63,54 @@ describe("install result aggregation", () => {
     assert.equal(invalid.status, "failed");
     assert.equal(invalid.exitCode, 1);
     assert.equal(skipped.status, "complete");
+  });
+
+  test("silent/default setup without global hooks skips memory and remains complete", () => {
+    const policy = resolveMcpMemorySetupPolicy({
+      needGlobal: true,
+      withGlobalHooks: false,
+      skipOptionalTools: false,
+    });
+    const result = summarizeInstallStatus([
+      installStep("global sync", true),
+      installStep(
+        "MCP Memory",
+        policy.action === MCP_MEMORY_SETUP_ACTION.SKIP
+          ? INSTALL_STEP_OUTCOME.SKIPPED
+          : false,
+        INSTALL_STEP_CLASSIFICATION.OPTIONAL,
+      ),
+      installStep("global inventory", true),
+    ]);
+
+    assert.deepEqual(policy, {
+      action: MCP_MEMORY_SETUP_ACTION.SKIP,
+      reason: MCP_MEMORY_SETUP_REASON.GLOBAL_HOOKS_REQUIRED,
+    });
+    assert.equal(result.status, "complete");
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.optionalFailures.length, 0);
+  });
+
+  test("memory becomes runnable only after global scope and hook opt-in are both present", () => {
+    assert.deepEqual(
+      resolveMcpMemorySetupPolicy({
+        needGlobal: true,
+        withGlobalHooks: true,
+        skipOptionalTools: false,
+      }),
+      {
+        action: MCP_MEMORY_SETUP_ACTION.RUN,
+        reason: MCP_MEMORY_SETUP_REASON.READY,
+      },
+    );
+    assert.equal(
+      resolveMcpMemorySetupPolicy({
+        needGlobal: false,
+        withGlobalHooks: true,
+      }).action,
+      MCP_MEMORY_SETUP_ACTION.SKIP,
+    );
   });
 
   test("malformed MCP config fails registration instead of claiming it exists", () => {
@@ -115,7 +168,10 @@ describe("install result aggregation", () => {
       /if \(result\.status === "complete"\) \{\s*console\.log\(`\\n\$\{C\.bold\}\$\{C\.green\}✓ \$\{t\.(?:installComplete|updateComplete)\}/,
     );
     assert.match(source, /return registrationOk && hooksOk && backgroundOk;/);
-    assert.match(source, /return bootOk;/);
+    assert.match(
+      source,
+      /const bootOk = configureBootAutoStart\(memoryBin, endpoint\);\s*if \(bootOk\) ok\(t\.mcpMemoryAutoStartBoot\);\s*else warn\(t\.mcpMemoryAutoStartBootFailed\);\s*return true;/,
+    );
     assert.match(source, /wiringOk = false;\s*warn\(t\.graphifyHookFailed\)/);
     assert.match(source, /wiringOk = false;\s*warn\(t\.graphifySkillFailed\(platform\)\)/);
     assert.match(source, /return wiringOk;/);

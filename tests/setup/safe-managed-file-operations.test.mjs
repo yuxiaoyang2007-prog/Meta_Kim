@@ -121,6 +121,34 @@ test("injected manifest commit failure rolls back earlier file commits", () => {
   }
 });
 
+test("a target changed after precommit is restored and retained for recovery", () => {
+  const root = tempRoot("meta-kim-managed-precommit-race-");
+  try {
+    const target = path.join(root, "hook.mjs");
+    const original = Buffer.from("managed old\n", "utf8");
+    const concurrent = Buffer.from("USER CONCURRENT EDIT\n", "utf8");
+    writeFileSync(target, original);
+    const result = executeSafeManagedFileTransaction({
+      trustedRoot: root,
+      backupRoot: path.join(root, ".meta-kim", "backups"),
+      operations: [{
+        kind: "write",
+        relPath: "hook.mjs",
+        content: "managed new\n",
+        expectedOldHash: sha256Buffer(original),
+      }],
+      injectBeforeCommitItem: () => writeFileSync(target, concurrent),
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.status, "recovery_required");
+    assert.match(result.originalFailure, /commit_rollback_hash_drift:hook\.mjs/u);
+    assert.deepEqual(readFileSync(target), concurrent);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("idempotent identical adoption creates no backup and does not churn mtime", () => {
   const root = tempRoot("meta-kim-managed-idempotent-");
   try {

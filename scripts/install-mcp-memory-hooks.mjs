@@ -8,25 +8,24 @@
  *      to ~/.claude/hooks/mcp_memory_global.py
  *   2. Seed ~/.claude/hooks/config.json from config.template.json if not present
  *      (NEVER overwrite an existing config — user customizations are preserved)
- *   3. Copy stop-save-progress.mjs and stop-memory-save.mjs from canonical/runtime-assets/claude/hooks/
- *      to ~/.claude/hooks/meta-kim/
- *   4. Copy commands from canonical/runtime-assets/claude/commands/ to ~/.claude/commands/
- *      (e.g., save-progress command)
+ *   3. Copy only the memory-owned files declared by managed-assets.json
+ *      (the Claude Python loader and save-progress skill subtree)
+ *   4. Verify shared hooks and top-level commands that global runtime sync owns
  *   5. Register the SessionStart hook in ~/.claude/settings.json
  *      - Automatically detects and validates Python paths
  *      - On Windows: skips WindowsApps shim, prefers explicit Python executable
  *      - Auto-fixes invalid Python paths (e.g., bare "python" on Windows)
- *   6. Register the Stop hook in ~/.claude/settings.json (stop-save-progress.mjs + stop-memory-save.mjs)
- *   7. Install lifecycle memory bridges for Codex, Cursor, and OpenClaw
+ *   6. Verify globally-owned lifecycle registration for Claude, Codex, and Cursor
+ *   7. Verify the globally-owned OpenClaw memory hook projection
  *   8. Warn if MCP server is not responding on the configured endpoint
  *      (MCP_MEMORY_URL, META_KIM_MEMORY_PORT, or http://localhost:8000)
  *
  * Usage:
- *   node scripts/install-mcp-memory-hooks.mjs                         # Install all runtime hooks
- *   node scripts/install-mcp-memory-hooks.mjs --targets codex,cursor   # Install selected runtime hooks
+ *   node scripts/install-mcp-memory-hooks.mjs                         # Install/verify all runtime hooks
+ *   node scripts/install-mcp-memory-hooks.mjs --targets codex,cursor   # Verify selected runtime hooks
  *   node scripts/install-mcp-memory-hooks.mjs --check                  # Dry-run: verify only, no side effects
  *   node scripts/install-mcp-memory-hooks.mjs --force                  # Force-update Python paths even if current is valid
- *   node scripts/install-mcp-memory-hooks.mjs --remove                 # Uninstall hooks (keeps files)
+ *   node scripts/install-mcp-memory-hooks.mjs --remove                 # Remove only memory-owned assets
  *
  * Exit codes:
  *   0  success
@@ -51,7 +50,7 @@ import {
   unlinkSync,
 } from "node:fs";
 import { readdir } from "node:fs/promises";
-import { join, dirname, relative, resolve, isAbsolute } from "node:path";
+import { join, dirname, relative, resolve, isAbsolute, sep as pathSeparator } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { resolveMemoryEndpoint } from "./memory-endpoint.mjs";
@@ -60,11 +59,13 @@ import {
   normalizeManagedRelPath,
   sha256Buffer,
   sha256ManagedFile,
+  inspectTrustedPath,
   validateManagedManifest,
 } from "./safe-managed-file-operations.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..");
+const CANONICAL_RUNTIME_ASSETS_DIR = join(REPO_ROOT, "canonical", "runtime-assets");
 
 // ── Paths ──────────────────────────────────────────────
 
@@ -80,55 +81,13 @@ const CANONICAL_CONFIG_TEMPLATE = join(
   CANONICAL_HOOK_DIR,
   "config.template.json",
 );
-const CANONICAL_HOOKS_DIR = join(
-  REPO_ROOT,
-  "canonical",
-  "runtime-assets",
-  "claude",
-  "hooks",
+const CANONICAL_MANAGED_ASSET_SPEC = join(
+  CANONICAL_HOOK_DIR,
+  "managed-assets.json",
 );
-const CANONICAL_STOP_HOOK_SOURCE = join(
-  CANONICAL_HOOKS_DIR,
-  "stop-save-progress.mjs",
-);
-const CANONICAL_MEMORY_SAVE_HOOK_SOURCE = join(
-  CANONICAL_HOOKS_DIR,
-  "stop-memory-save.mjs",
-);
-const CANONICAL_COMMANDS_DIR = join(
-  REPO_ROOT,
-  "canonical",
-  "runtime-assets",
-  "claude",
-  "commands",
-);
-const CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE = join(
-  REPO_ROOT,
-  "canonical",
-  "runtime-assets",
-  "shared",
-  "hooks",
-  "meta-kim-memory-save.mjs",
-);
-const CANONICAL_OPENCLAW_MEMORY_HOOK_DIR = join(
-  REPO_ROOT,
-  "canonical",
-  "runtime-assets",
-  "openclaw",
-  "hooks",
-  "mcp-memory-service",
-);
-
 const HOOKS_TARGET_DIR = join(homedir(), ".claude", "hooks");
 const HOOK_TARGET = join(HOOKS_TARGET_DIR, "mcp_memory_global.py");
 const CONFIG_TARGET = join(HOOKS_TARGET_DIR, "config.json");
-const META_KIM_HOOKS_DIR = join(HOOKS_TARGET_DIR, "meta-kim");
-const STOP_HOOK_TARGET = join(META_KIM_HOOKS_DIR, "stop-save-progress.mjs");
-const MEMORY_SAVE_HOOK_TARGET = join(
-  META_KIM_HOOKS_DIR,
-  "stop-memory-save.mjs",
-);
-const COMMANDS_TARGET_DIR = join(homedir(), ".claude", "commands");
 const CLAUDE_SETTINGS = join(homedir(), ".claude", "settings.json");
 const CODEX_HOME = join(homedir(), ".codex");
 const CURSOR_HOME = join(homedir(), ".cursor");
@@ -141,8 +100,68 @@ const RUNTIME_MANIFEST_DIR = join(
 );
 const RUNTIME_MANIFEST_SCHEMA = "meta-kim-memory-hook-files-v2";
 const CROSS_RUNTIME_HOOK_FILE = "meta-kim-memory-save.mjs";
-const VALID_TARGETS = new Set(["claude", "codex", "cursor", "openclaw"]);
-const DEFAULT_TARGETS = ["claude", "codex", "cursor", "openclaw"];
+const CLAUDE_SESSION_FRAGMENT_KIND = "claude-session-start-command-v1";
+const CLAUDE_SESSION_FRAGMENT_EVENT = "SessionStart";
+const CLAUDE_SESSION_FRAGMENT_MATCHER = "*";
+const GLOBAL_INSTALL_MANIFEST_PATH = join(
+  homedir(),
+  ".meta-kim",
+  "install-manifest.json",
+);
+
+function readManagedAssetSpec() {
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(CANONICAL_MANAGED_ASSET_SPEC, "utf8"));
+  } catch (error) {
+    throw new Error(
+      `Invalid MCP Memory managed-assets spec: could not read or parse ${CANONICAL_MANAGED_ASSET_SPEC}: ${error.message}`,
+    );
+  }
+  if (
+    raw?.schemaVersion !== "meta-kim-mcp-memory-managed-assets-v1" ||
+    !isJsonObject(raw.owned) ||
+    !isJsonObject(raw.retiredOwned) ||
+    !isJsonObject(raw.delegatedToGlobalSync)
+  ) {
+    throw new Error(`Invalid MCP Memory managed-assets spec: ${CANONICAL_MANAGED_ASSET_SPEC}`);
+  }
+  const runtimeIds = [
+    ...new Set([
+      ...Object.keys(raw.owned),
+      ...Object.keys(raw.retiredOwned),
+      ...Object.keys(raw.delegatedToGlobalSync),
+    ]),
+  ];
+  if (runtimeIds.length === 0) {
+    throw new Error("Invalid MCP Memory managed-assets spec: no runtimes are declared");
+  }
+  for (const runtime of runtimeIds) {
+    if (!/^[a-z][a-z0-9-]*$/u.test(runtime)) {
+      throw new Error(`Invalid MCP Memory managed-assets runtime id: ${runtime}`);
+    }
+    if (
+      !Array.isArray(raw.owned[runtime]) ||
+      !Array.isArray(raw.retiredOwned[runtime]) ||
+      !Array.isArray(raw.delegatedToGlobalSync[runtime])
+    ) {
+      throw new Error(
+        `Invalid MCP Memory managed-assets spec: ${runtime} must declare owned, retiredOwned, and delegatedToGlobalSync arrays`,
+      );
+    }
+  }
+  return raw;
+}
+
+const MANAGED_ASSET_SPEC = readManagedAssetSpec();
+const DEFAULT_TARGETS = Object.freeze([
+  ...new Set([
+    ...Object.keys(MANAGED_ASSET_SPEC.owned),
+    ...Object.keys(MANAGED_ASSET_SPEC.retiredOwned),
+    ...Object.keys(MANAGED_ASSET_SPEC.delegatedToGlobalSync),
+  ]),
+]);
+const VALID_TARGETS = new Set(DEFAULT_TARGETS);
 
 // ── Formatting helpers ──────────────────────────────────
 
@@ -189,20 +208,36 @@ function requireClaudeGlobalSettingsConsent({ explicitRemove = false } = {}) {
 }
 
 function parseTargets(argv) {
-  const valueFromEquals = argv.find((arg) => arg.startsWith("--targets="));
-  const equalsValue = valueFromEquals ? valueFromEquals.slice("--targets=".length) : "";
-  const targetIndex = argv.indexOf("--targets");
-  const flagValue =
-    targetIndex >= 0 && argv[targetIndex + 1] && !argv[targetIndex + 1].startsWith("--")
-      ? argv[targetIndex + 1]
-      : "";
-  const raw = equalsValue || flagValue;
-  if (!raw) return DEFAULT_TARGETS;
-  const parsed = raw
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter((item) => VALID_TARGETS.has(item));
-  return parsed.length > 0 ? [...new Set(parsed)] : DEFAULT_TARGETS;
+  const explicitValues = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--targets") {
+      const value = argv[index + 1];
+      if (!value || value.startsWith("--")) {
+        throw new Error("--targets requires a comma-separated runtime list");
+      }
+      explicitValues.push(value);
+      index += 1;
+    } else if (arg.startsWith("--targets=")) {
+      explicitValues.push(arg.slice("--targets=".length));
+    }
+  }
+  if (explicitValues.length === 0) return [...DEFAULT_TARGETS];
+  if (explicitValues.length !== 1 || !explicitValues[0].trim()) {
+    throw new Error("Specify --targets exactly once with a non-empty runtime list");
+  }
+  const rawItems = explicitValues[0].split(",");
+  if (rawItems.some((item) => !item.trim())) {
+    throw new Error("--targets contains an empty runtime id");
+  }
+  const parsed = rawItems.map((item) => item.trim().toLowerCase());
+  const unknown = [...new Set(parsed.filter((item) => !VALID_TARGETS.has(item)))];
+  if (unknown.length > 0) {
+    throw new Error(
+      `Unknown MCP Memory runtime target(s): ${unknown.join(", ")}. Valid targets: ${DEFAULT_TARGETS.join(", ")}`,
+    );
+  }
+  return [...new Set(parsed)];
 }
 
 function targetListText(targets) {
@@ -319,20 +354,6 @@ function filesEqual(a, b) {
   } catch {
     return false;
   }
-}
-
-function commandToken(value) {
-  const normalized = String(value).replace(/\\/g, "/");
-  return /[\s"]/u.test(normalized) ? JSON.stringify(normalized) : normalized;
-}
-
-function nodeHookCommand(hookPath, args = []) {
-  // Hooks are stored as shell command strings and may be executed by
-  // PowerShell, cmd.exe, bash, or zsh depending on the host runtime. A quoted
-  // absolute Windows Node path works in cmd.exe but fails in PowerShell without
-  // the call operator. Use the PATH-resolved `node` binary and quote only
-  // script/argument tokens that require it.
-  return ["node", hookPath, ...args].map(commandToken).join(" ");
 }
 
 function isValidPythonCommand(cmd) {
@@ -488,14 +509,6 @@ function readSelectedRuntimeSettingsStrict(targets) {
   return { ok: true, values };
 }
 
-function crossRuntimeMemoryHookDir(runtimeHome) {
-  const globalMetaKimHooksDir = join(runtimeHome, "hooks", "meta-kim");
-  if (existsSync(globalMetaKimHooksDir)) {
-    return globalMetaKimHooksDir;
-  }
-  return join(runtimeHome, "hooks");
-}
-
 function crossRuntimeMemoryHookCandidates(runtimeHome) {
   return [
     join(runtimeHome, "hooks", "meta-kim", CROSS_RUNTIME_HOOK_FILE),
@@ -536,37 +549,470 @@ function runtimeManifestPath(runtime) {
 }
 
 function readRuntimeManagedManifest(runtime) {
-  const path = runtimeManifestPath(runtime);
-  if (!existsSync(path)) return null;
-  return validateManagedManifest(readJsonFile(path, null), {
+  return readRuntimeManagedManifestState(runtime).manifest;
+}
+
+function commandToken(value) {
+  const normalized = String(value).replace(/\\/gu, "/");
+  return /[\s"]/u.test(normalized)
+    ? `"${normalized.replace(/"/gu, '\\"')}"`
+    : normalized;
+}
+
+function quotedCommandToken(value) {
+  return `"${String(value).replace(/\\/gu, "/").replace(/"/gu, '\\"')}"`;
+}
+
+function commandTargetsExactClaudeSessionHook(command, { allowLegacy = false } = {}) {
+  const normalized = String(command ?? "").trim().replace(/\\/gu, "/");
+  const targetToken = `"${String(HOOK_TARGET).replace(/\\/gu, "/").replace(/"/gu, '\\"')}"`;
+  const currentSuffix = ` ${targetToken} --mode session`;
+  const legacySuffix = ` ${targetToken}`;
+  const suffix = normalized.endsWith(currentSuffix)
+    ? currentSuffix
+    : allowLegacy && normalized.endsWith(legacySuffix)
+      ? legacySuffix
+      : null;
+  if (!suffix) return false;
+  const executable = normalized.slice(0, -suffix.length).trim();
+  return Boolean(executable) && !/[&|;<>()\r\n]/u.test(executable);
+}
+
+function buildClaudeSessionStartFragment() {
+  const pythonCmd = pickPythonCommand();
+  return {
+    kind: CLAUDE_SESSION_FRAGMENT_KIND,
+    settingsRelPath: homeRel(CLAUDE_SETTINGS),
+    eventName: CLAUDE_SESSION_FRAGMENT_EVENT,
+    matcher: CLAUDE_SESSION_FRAGMENT_MATCHER,
+    hook: {
+      type: "command",
+      command: `${commandToken(pythonCmd)} ${quotedCommandToken(HOOK_TARGET)} --mode session`,
+    },
+  };
+}
+
+function normalizeClaudeSettingsFragment(fragment) {
+  if (
+    !isJsonObject(fragment) ||
+    fragment.kind !== CLAUDE_SESSION_FRAGMENT_KIND ||
+    fragment.settingsRelPath !== homeRel(CLAUDE_SETTINGS) ||
+    fragment.eventName !== CLAUDE_SESSION_FRAGMENT_EVENT ||
+    fragment.matcher !== CLAUDE_SESSION_FRAGMENT_MATCHER ||
+    !isJsonObject(fragment.hook) ||
+    fragment.hook.type !== "command" ||
+    typeof fragment.hook.command !== "string" ||
+    !commandTargetsExactClaudeSessionHook(fragment.hook.command)
+  ) return null;
+  return {
+    kind: CLAUDE_SESSION_FRAGMENT_KIND,
+    settingsRelPath: homeRel(CLAUDE_SETTINGS),
+    eventName: CLAUDE_SESSION_FRAGMENT_EVENT,
+    matcher: CLAUDE_SESSION_FRAGMENT_MATCHER,
+    hook: { type: "command", command: fragment.hook.command },
+  };
+}
+
+function validateRuntimeManagedManifestValue(raw, runtime) {
+  const manifest = validateManagedManifest(raw, {
     schemaVersion: RUNTIME_MANIFEST_SCHEMA,
+  });
+  if (!manifest || manifest.runtime !== runtime) return null;
+  const rawFragments = raw.settingsFragments ?? [];
+  if (!Array.isArray(rawFragments)) return null;
+  if (runtime !== "claude" && rawFragments.length > 0) return null;
+  const settingsFragments = rawFragments.map(normalizeClaudeSettingsFragment);
+  if (settingsFragments.some((fragment) => !fragment) || settingsFragments.length > 1) {
+    return null;
+  }
+  return { ...manifest, settingsFragments };
+}
+
+function readRuntimeManagedManifestState(runtime) {
+  const manifestPath = runtimeManifestPath(runtime);
+  if (!existsSync(manifestPath)) {
+    return { exists: false, manifestPath, raw: null, manifest: null };
+  }
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(manifestPath, "utf8"));
+  } catch {
+    return { exists: true, manifestPath, raw: null, manifest: null };
+  }
+  return {
+    exists: true,
+    manifestPath,
+    raw,
+    manifest: validateRuntimeManagedManifestValue(raw, runtime),
+  };
+}
+
+function safeSpecPath(rootDir, relativePath) {
+  const normalized = normalizeManagedRelPath(relativePath);
+  if (!normalized) return null;
+  const absolutePath = resolve(rootDir, normalized);
+  const rel = relative(rootDir, absolutePath);
+  if (!rel || rel === ".." || rel.startsWith(`..${pathSeparator}`) || isAbsolute(rel)) {
+    return null;
+  }
+  return absolutePath;
+}
+
+function managedAssetSpecError(message) {
+  throw new Error(`Invalid MCP Memory managed-assets spec: ${message}`);
+}
+
+function runtimeHomeFor(runtime) {
+  if (!/^[a-z][a-z0-9-]*$/u.test(runtime)) {
+    managedAssetSpecError(`unsafe runtime id ${JSON.stringify(runtime)}`);
+  }
+  const runtimeHome = safeSpecPath(homedir(), `.${runtime}`);
+  const relPath = runtimeHome ? homeRel(runtimeHome) : null;
+  const inspected = relPath
+    ? inspectTrustedPath(homedir(), relPath, { allowMissing: true })
+    : null;
+  if (!runtimeHome || !relPath || !inspected) {
+    managedAssetSpecError(`unsafe runtime home for ${runtime}`);
+  }
+  if (existsSync(runtimeHome) && !lstatSync(runtimeHome).isDirectory()) {
+    managedAssetSpecError(`runtime home is not a directory for ${runtime}`);
+  }
+  return runtimeHome;
+}
+
+function requireCanonicalSource(relativePath, expectedKind, label) {
+  const normalized = normalizeManagedRelPath(relativePath);
+  const sourcePath = normalized
+    ? safeSpecPath(CANONICAL_RUNTIME_ASSETS_DIR, normalized)
+    : null;
+  const inspected = normalized
+    ? inspectTrustedPath(CANONICAL_RUNTIME_ASSETS_DIR, normalized)
+    : null;
+  if (!sourcePath || !inspected) {
+    managedAssetSpecError(`${label} is missing, unsafe, or traverses a symbolic link`);
+  }
+  const stats = lstatSync(sourcePath);
+  if (expectedKind === "file" && !stats.isFile()) {
+    managedAssetSpecError(`${label} must be a regular file`);
+  }
+  if (expectedKind === "directory" && !stats.isDirectory()) {
+    managedAssetSpecError(`${label} must be a directory`);
+  }
+  return sourcePath;
+}
+
+function requireRuntimeFileTarget(runtimeHome, relativePath, label) {
+  const targetPath = safeSpecPath(runtimeHome, relativePath);
+  const relPath = targetPath ? homeRel(targetPath) : null;
+  const inspected = relPath
+    ? inspectTrustedPath(homedir(), relPath, { allowMissing: true })
+    : null;
+  if (!targetPath || !relPath || !inspected) {
+    managedAssetSpecError(`${label} is unsafe or traverses a symbolic link`);
+  }
+  if (existsSync(targetPath) && !lstatSync(targetPath).isFile()) {
+    managedAssetSpecError(`${label} must resolve to a regular file target`);
+  }
+  return targetPath;
+}
+
+function declarationShape(declaration, label) {
+  if (!isJsonObject(declaration)) {
+    managedAssetSpecError(`${label} must be an object`);
+  }
+  const has = (key) => Object.prototype.hasOwnProperty.call(declaration, key);
+  const shapes = [
+    ["file", ["source", "target"]],
+    ["fileCandidates", ["source", "targetCandidates"]],
+    ["tree", ["sourceTree", "targetTree"]],
+    ["filesIn", ["sourceFilesIn", "targetDir"]],
+  ].filter(([, keys]) => keys.every(has));
+  if (shapes.length !== 1) {
+    managedAssetSpecError(`${label} must use exactly one supported declaration shape`);
+  }
+  const [shape, allowedKeys] = shapes[0];
+  const unexpected = Object.keys(declaration).filter((key) => !allowedKeys.includes(key));
+  if (unexpected.length > 0) {
+    managedAssetSpecError(`${label} has unexpected field(s): ${unexpected.join(", ")}`);
+  }
+  for (const key of allowedKeys.filter((key) => key !== "targetCandidates")) {
+    if (typeof declaration[key] !== "string" || !declaration[key].trim()) {
+      managedAssetSpecError(`${label}.${key} must be a non-empty string`);
+    }
+  }
+  if (shape === "fileCandidates") {
+    if (
+      !Array.isArray(declaration.targetCandidates) ||
+      declaration.targetCandidates.length === 0 ||
+      declaration.targetCandidates.some((value) => typeof value !== "string" || !value.trim()) ||
+      new Set(declaration.targetCandidates).size !== declaration.targetCandidates.length
+    ) {
+      managedAssetSpecError(`${label}.targetCandidates must be a non-empty unique string array`);
+    }
+  }
+  return shape;
+}
+
+function expandManagedDeclaration(
+  group,
+  runtime,
+  declaration,
+  declarationIndex,
+  { allTargetCandidates = false } = {},
+) {
+  const label = `${group}.${runtime}[${declarationIndex}]`;
+  const shape = declarationShape(declaration, label);
+  const runtimeHome = runtimeHomeFor(runtime);
+  const specs = [];
+  const add = (source, target, targetLabel) => {
+    const verifiedTarget = requireRuntimeFileTarget(runtimeHome, target, targetLabel);
+    specs.push({ source, target: verifiedTarget, relPath: homeRel(verifiedTarget) });
+  };
+
+  if (shape === "file" || shape === "fileCandidates") {
+    const source = requireCanonicalSource(declaration.source, "file", `${label}.source`);
+    const targetValues = shape === "file"
+      ? [declaration.target]
+      : declaration.targetCandidates;
+    const candidates = targetValues.map((target, index) => ({
+      target,
+      absolutePath: requireRuntimeFileTarget(
+        runtimeHome,
+        target,
+        `${label}.${shape === "file" ? "target" : `targetCandidates[${index}]`}`,
+      ),
+    }));
+    const selected = allTargetCandidates
+      ? candidates
+      : shape === "file"
+        ? candidates
+        : (() => {
+            const globalProofs = group === "delegatedToGlobalSync"
+              ? readGlobalInstallProofs()
+              : null;
+            return [
+              candidates.find((candidate) =>
+                globalManifestProvesFile(candidate.absolutePath, globalProofs),
+              ) ??
+              candidates.find((candidate) => existsSync(candidate.absolutePath)) ??
+              candidates[0],
+            ];
+          })();
+    for (const [index, candidate] of selected.entries()) {
+      add(source, candidate.target, `${label}.selectedTarget[${index}]`);
+    }
+    return specs;
+  }
+
+  const sourceRoot = requireCanonicalSource(
+    shape === "tree" ? declaration.sourceTree : declaration.sourceFilesIn,
+    "directory",
+    `${label}.${shape === "tree" ? "sourceTree" : "sourceFilesIn"}`,
+  );
+  const targetRoot = shape === "tree" ? declaration.targetTree : declaration.targetDir;
+  const sourceFiles = shape === "tree"
+    ? listRegularFiles(sourceRoot)
+    : readdirSync(sourceRoot, { withFileTypes: true }).flatMap((entry) => {
+        if (entry.isSymbolicLink()) {
+          managedAssetSpecError(`${label}.sourceFilesIn contains symbolic link ${entry.name}`);
+        }
+        return entry.isFile() ? [entry.name] : [];
+      });
+  if (!sourceFiles || sourceFiles.length === 0) {
+    managedAssetSpecError(`${label} resolves to no regular source files`);
+  }
+  for (const relPath of sourceFiles) {
+    const source = requireCanonicalSource(
+      join(
+        shape === "tree" ? declaration.sourceTree : declaration.sourceFilesIn,
+        relPath,
+      ),
+      "file",
+      `${label}.source:${relPath}`,
+    );
+    add(source, join(targetRoot, relPath), `${label}.target:${relPath}`);
+  }
+  return specs;
+}
+
+function retiredOwnedFileSpecs(runtime) {
+  const declarations = MANAGED_ASSET_SPEC.retiredOwned?.[runtime];
+  if (!Array.isArray(declarations)) {
+    managedAssetSpecError(`retiredOwned.${runtime} must be an array`);
+  }
+  const runtimeHome = runtimeHomeFor(runtime);
+  return declarations.map((declaration, index) => {
+    const label = `retiredOwned.${runtime}[${index}]`;
+    if (
+      !isJsonObject(declaration) ||
+      Object.keys(declaration).length !== 1 ||
+      typeof declaration.target !== "string" ||
+      !declaration.target.trim()
+    ) managedAssetSpecError(`${label} must contain only one non-empty target`);
+    const target = requireRuntimeFileTarget(runtimeHome, declaration.target, `${label}.target`);
+    return { target, relPath: homeRel(target) };
   });
 }
 
-function canonicalFileSpecs(runtime) {
-  const specs = [];
-  const add = (source, target) => specs.push({ source, target, relPath: homeRel(target) });
-  if (runtime === "claude") {
-    add(CANONICAL_HOOK_SOURCE, HOOK_TARGET);
-    add(CANONICAL_STOP_HOOK_SOURCE, STOP_HOOK_TARGET);
-    add(CANONICAL_MEMORY_SAVE_HOOK_SOURCE, MEMORY_SAVE_HOOK_TARGET);
-    const commandFiles = listRegularFiles(CANONICAL_COMMANDS_DIR) ?? [];
-    for (const relPath of commandFiles) {
-      add(join(CANONICAL_COMMANDS_DIR, relPath), join(COMMANDS_TARGET_DIR, relPath));
-    }
-  } else if (runtime === "codex") {
-    add(CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE, join(crossRuntimeMemoryHookDir(CODEX_HOME), CROSS_RUNTIME_HOOK_FILE));
-  } else if (runtime === "cursor") {
-    add(CANONICAL_SHARED_MEMORY_SAVE_HOOK_SOURCE, join(crossRuntimeMemoryHookDir(CURSOR_HOME), CROSS_RUNTIME_HOOK_FILE));
-  } else if (runtime === "openclaw") {
-    for (const relPath of listRegularFiles(CANONICAL_OPENCLAW_MEMORY_HOOK_DIR) ?? []) {
-      add(
-        join(CANONICAL_OPENCLAW_MEMORY_HOOK_DIR, relPath),
-        join(OPENCLAW_HOME, "hooks", "mcp-memory-service", relPath),
-      );
+function preflightManagedAssetSpec() {
+  const targetOwners = new Map();
+  for (const group of ["owned", "delegatedToGlobalSync"]) {
+    for (const [runtime, declarations] of Object.entries(MANAGED_ASSET_SPEC[group])) {
+      runtimeHomeFor(runtime);
+      for (const [index, declaration] of declarations.entries()) {
+        const specs = expandManagedDeclaration(group, runtime, declaration, index, {
+          allTargetCandidates: true,
+        });
+        for (const spec of specs) {
+          const key = absolutePathKey(spec.target);
+          const owner = `${group}.${runtime}[${index}]`;
+          const previous = targetOwners.get(key);
+          if (previous && previous !== owner) {
+            managedAssetSpecError(
+              `single-owner collision for ${spec.relPath}: ${previous} and ${owner}`,
+            );
+          }
+          targetOwners.set(key, owner);
+        }
+      }
     }
   }
-  return specs.filter((spec) => spec.relPath && existsSync(spec.source));
+  for (const runtime of Object.keys(MANAGED_ASSET_SPEC.retiredOwned)) {
+    for (const [index, spec] of retiredOwnedFileSpecs(runtime).entries()) {
+      const key = absolutePathKey(spec.target);
+      const owner = `retiredOwned.${runtime}[${index}]`;
+      const previous = targetOwners.get(key);
+      if (previous && previous !== owner) {
+        managedAssetSpecError(
+          `single-owner collision for ${spec.relPath}: ${previous} and ${owner}`,
+        );
+      }
+      targetOwners.set(key, owner);
+    }
+  }
+}
+
+function declaredFileSpecs(group, runtime, options = {}) {
+  const declarations = MANAGED_ASSET_SPEC[group]?.[runtime];
+  if (!Array.isArray(declarations)) {
+    managedAssetSpecError(`${group}.${runtime} must be an array`);
+  }
+  return declarations.flatMap((declaration, index) =>
+    expandManagedDeclaration(group, runtime, declaration, index, options)
+  );
+}
+
+preflightManagedAssetSpec();
+
+function canonicalFileSpecs(runtime) {
+  return declaredFileSpecs("owned", runtime);
+}
+
+function delegatedGlobalFileSpecs(runtime, options = {}) {
+  return declaredFileSpecs("delegatedToGlobalSync", runtime, options);
+}
+
+function validateMemoryManifestOwnedPaths(runtime, manifest) {
+  const allowed = new Set([
+    ...canonicalFileSpecs(runtime).map((spec) => spec.relPath),
+    ...retiredOwnedFileSpecs(runtime).map((spec) => spec.relPath),
+    ...delegatedGlobalFileSpecs(runtime, { allTargetCandidates: true }).map(
+      (spec) => spec.relPath,
+    ),
+  ]);
+  for (const entry of manifest?.files ?? []) {
+    if (allowed.has(entry.relPath) || isSeedOnlyRetainedPath(runtime, entry.relPath)) continue;
+    return entry.relPath;
+  }
+  return null;
+}
+
+function absolutePathKey(filePath) {
+  const key = resolve(filePath).replace(/\\/g, "/");
+  return process.platform === "win32" ? key.toLowerCase() : key;
+}
+
+function readGlobalInstallProofs() {
+  const manifest = readJsonFile(GLOBAL_INSTALL_MANIFEST_PATH, null);
+  if (!manifest || !Array.isArray(manifest.entries)) return null;
+  const proofs = new Map();
+  for (const entry of manifest.entries) {
+    if (
+      typeof entry?.path !== "string" ||
+      !/^[a-f0-9]{64}$/i.test(entry?.sha256 ?? "") ||
+      !Number.isSafeInteger(entry?.size) ||
+      entry.size < 0
+    ) continue;
+    proofs.set(absolutePathKey(entry.path), entry);
+  }
+  return proofs;
+}
+
+function globalManifestProvesFile(filePath, proofs) {
+  if (!proofs || !existsSync(filePath)) return false;
+  let stats;
+  try {
+    stats = lstatSync(filePath);
+  } catch {
+    return false;
+  }
+  if (stats.isSymbolicLink() || !stats.isFile()) return false;
+  const proof = proofs.get(absolutePathKey(filePath));
+  if (!proof || proof.size !== stats.size) return false;
+  return sha256ManagedFile(filePath) === proof.sha256.toLowerCase();
+}
+
+function runtimeRegistrationIssues(runtime) {
+  const issues = [];
+  if (runtime === "claude") {
+    const settings = readJsonFile(CLAUDE_SETTINGS, null);
+    for (const hookName of ["stop-save-progress.mjs", "stop-memory-save.mjs"]) {
+      const registered = (settings?.hooks?.Stop ?? []).some((block) =>
+        block?.hooks?.some((hook) => String(hook?.command ?? "").includes(hookName)),
+      );
+      if (!registered) issues.push(`Claude Stop hook NOT registered: ${hookName}`);
+    }
+  }
+  for (const [targetId, runtimeHome, eventNames] of [
+    ["codex", CODEX_HOME, ["SessionStart", "UserPromptSubmit", "Stop"]],
+    ["cursor", CURSOR_HOME, ["beforeSubmitPrompt", "stop"]],
+  ]) {
+    if (runtime !== targetId) continue;
+    const settings = readJsonFile(join(runtimeHome, "hooks.json"), null);
+    for (const eventName of eventNames) {
+      const entries = settings?.hooks?.[eventName] ?? [];
+      const registered = Array.isArray(entries) && entries.some((entry) =>
+        entry?.command
+          ? String(entry.command).includes(CROSS_RUNTIME_HOOK_FILE)
+          : (entry?.hooks ?? []).some((hook) =>
+              String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
+            ),
+      );
+      if (!registered) issues.push(`${targetId} ${eventName} memory hook NOT registered`);
+    }
+  }
+  return issues;
+}
+
+function delegatedGlobalProjectionIssues(
+  targets,
+  { includeRegistrations = true } = {},
+) {
+  const proofs = readGlobalInstallProofs();
+  const issues = [];
+  for (const runtime of targets) {
+    for (const spec of delegatedGlobalFileSpecs(runtime)) {
+      if (!globalManifestProvesFile(spec.target, proofs)) {
+        issues.push(
+          `${runtime}: global sync ownership proof missing or stale (${spec.relPath})`,
+        );
+      }
+    }
+    if (includeRegistrations) {
+      issues.push(...runtimeRegistrationIssues(runtime));
+    }
+  }
+  return issues;
 }
 
 function isSeedOnlyRetainedPath(runtime, relPath) {
@@ -588,70 +1034,103 @@ function seedOnlyOperations(runtime) {
   }];
 }
 
-function buildClaudeSettingsValue(settings) {
-  const pythonCmd = pickPythonCommand();
-  const without = (eventName, needles) => (settings.hooks?.[eventName] ?? [])
-    .map((block) => ({
-      ...block,
-      hooks: (block?.hooks ?? []).filter(
-        (hook) => !needles.some((needle) => String(hook?.command ?? "").includes(needle)),
-      ),
-    }))
-    .filter((block) => (block.hooks ?? []).length > 0);
-  return {
-    ...settings,
-    hooks: {
-      ...(settings.hooks ?? {}),
-      SessionStart: [
-        ...without("SessionStart", ["mcp_memory_global.py"]),
-        { matcher: "*", hooks: [{ type: "command", command: `${pythonCmd} "${HOOK_TARGET}"` }] },
-      ],
-      Stop: [
-        ...without("Stop", ["stop-save-progress.mjs", "stop-memory-save.mjs"]),
-        {
-          matcher: "*",
-          hooks: [
-            { type: "command", command: `node "${MEMORY_SAVE_HOOK_TARGET}"` },
-            { type: "command", command: `node "${STOP_HOOK_TARGET}"` },
-          ],
-        },
-      ],
-    },
-  };
+function assertMutableClaudeHookShape(settings) {
+  if (settings.hooks !== undefined && !isJsonObject(settings.hooks)) {
+    throw new Error("Claude settings hooks must be an object; preserved existing settings");
+  }
+  const sessionStart = settings.hooks?.[CLAUDE_SESSION_FRAGMENT_EVENT];
+  if (sessionStart !== undefined && !Array.isArray(sessionStart)) {
+    throw new Error("Claude SessionStart hooks must be an array; preserved existing settings");
+  }
 }
 
-function buildCodexSettingsValue(settings) {
-  const hookPath = join(crossRuntimeMemoryHookDir(CODEX_HOME), CROSS_RUNTIME_HOOK_FILE);
-  const without = (eventName) => (settings.hooks?.[eventName] ?? [])
-    .map((block) => {
-      const hooks = (block?.hooks ?? []).filter(
-        (hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
-      );
-      return hooks.length > 0 ? { ...block, hooks } : null;
-    })
-    .filter(Boolean);
-  return {
-    ...settings,
-    hooks: {
-      ...(settings.hooks ?? {}),
-      SessionStart: [{ matcher: "startup|resume", hooks: [{ type: "command", command: nodeHookCommand(hookPath, ["--event", "session-start"]), timeout: 10, statusMessage: "Loading Meta_Kim memory" }] }, ...without("SessionStart")],
-      UserPromptSubmit: [{ hooks: [{ type: "command", command: nodeHookCommand(hookPath, ["--event", "user-prompt"]), timeout: 10 }] }, ...without("UserPromptSubmit")],
-      Stop: [{ hooks: [{ type: "command", command: nodeHookCommand(hookPath, ["--event", "stop"]), timeout: 10 }] }, ...without("Stop")],
-    },
-  };
-}
-
-function buildCursorSettingsValue(settings) {
-  const hookPath = join(crossRuntimeMemoryHookDir(CURSOR_HOME), CROSS_RUNTIME_HOOK_FILE);
-  const without = (eventName) => (settings.hooks?.[eventName] ?? []).filter(
-    (hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
+function hookMatchesClaudeFragment(block, hook, fragment) {
+  return (
+    isJsonObject(block) &&
+    block.matcher === fragment.matcher &&
+    isJsonObject(hook) &&
+    hook.type === fragment.hook.type &&
+    hook.command === fragment.hook.command
   );
+}
+
+function claudeSettingsContainsFragment(settings, fragment) {
+  const blocks = settings?.hooks?.[fragment.eventName];
+  return Array.isArray(blocks) && blocks.some((block) =>
+    Array.isArray(block?.hooks) &&
+    block.hooks.some((hook) => hookMatchesClaudeFragment(block, hook, fragment)),
+  );
+}
+
+function removeOwnedClaudeSessionFragments(
+  settings,
+  { fragments = [], allowLegacyOwnedFragment = false } = {},
+) {
+  assertMutableClaudeHookShape(settings);
+  const hooks = { ...(settings.hooks ?? {}) };
+  const blocks = [...(hooks[CLAUDE_SESSION_FRAGMENT_EVENT] ?? [])];
+  const remaining = fragments.map((fragment) => ({ fragment, removed: false }));
+  let legacyRemoved = false;
+
+  for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
+    const block = blocks[blockIndex];
+    if (!isJsonObject(block) || !Array.isArray(block.hooks)) continue;
+    const nextHooks = [...block.hooks];
+    for (let hookIndex = nextHooks.length - 1; hookIndex >= 0; hookIndex -= 1) {
+      const hook = nextHooks[hookIndex];
+      const exact = remaining.find(
+        (candidate) =>
+          !candidate.removed && hookMatchesClaudeFragment(block, hook, candidate.fragment),
+      );
+      if (exact) {
+        exact.removed = true;
+        nextHooks.splice(hookIndex, 1);
+        continue;
+      }
+      if (
+        !legacyRemoved &&
+        allowLegacyOwnedFragment &&
+        block.matcher === CLAUDE_SESSION_FRAGMENT_MATCHER &&
+        isJsonObject(hook) &&
+        hook.type === "command" &&
+        commandTargetsExactClaudeSessionHook(hook.command, { allowLegacy: true })
+      ) {
+        legacyRemoved = true;
+        nextHooks.splice(hookIndex, 1);
+      }
+    }
+    if (nextHooks.length > 0) {
+      blocks[blockIndex] = { ...block, hooks: nextHooks };
+    } else if (Object.keys(block).every((key) => ["matcher", "hooks"].includes(key))) {
+      blocks.splice(blockIndex, 1);
+    } else {
+      blocks[blockIndex] = { ...block, hooks: [] };
+    }
+  }
+
+  if (blocks.length > 0) hooks[CLAUDE_SESSION_FRAGMENT_EVENT] = blocks;
+  else delete hooks[CLAUDE_SESSION_FRAGMENT_EVENT];
+  const next = { ...settings, hooks };
+  if (Object.keys(hooks).length === 0) delete next.hooks;
+  return next;
+}
+
+function buildClaudeSettingsValue(
+  settings,
+  { previousFragments = [], allowLegacyOwnedFragment = false, desiredFragment },
+) {
+  const cleaned = removeOwnedClaudeSessionFragments(settings, {
+    fragments: previousFragments,
+    allowLegacyOwnedFragment,
+  });
   return {
-    ...settings,
+    ...cleaned,
     hooks: {
-      ...(settings.hooks ?? {}),
-      beforeSubmitPrompt: [{ command: nodeHookCommand(hookPath, ["--event", "user-prompt"]), timeout: 10 }, ...without("beforeSubmitPrompt")],
-      stop: [{ command: nodeHookCommand(hookPath, ["--event", "stop"]), timeout: 10 }, ...without("stop")],
+      ...(cleaned.hooks ?? {}),
+      [CLAUDE_SESSION_FRAGMENT_EVENT]: [
+        ...(cleaned.hooks?.[CLAUDE_SESSION_FRAGMENT_EVENT] ?? []),
+        { matcher: desiredFragment.matcher, hooks: [{ ...desiredFragment.hook }] },
+      ],
     },
   };
 }
@@ -721,32 +1200,67 @@ function installSelectedRuntimeFilesTransactional(targets) {
       "Pass --force or set META_KIM_CONFIRM_GLOBAL=1, then retry.",
     );
   }
-  const existingSettings = readSelectedRuntimeSettingsStrict(targets);
+  const existingSettings = readSelectedRuntimeSettingsStrict(
+    targets.filter((runtime) => runtime === "claude"),
+  );
   if (!existingSettings.ok) {
     return blockedExistingSettingsTransaction(existingSettings);
   }
   const operations = [];
   const manifestOperations = [];
+  const globalProofs = readGlobalInstallProofs();
+  const desiredClaudeFragment = targets.includes("claude")
+    ? buildClaudeSessionStartFragment()
+    : null;
+  let oldClaudeManifest = null;
   for (const runtime of targets) {
     const specs = canonicalFileSpecs(runtime);
-    if (specs.length === 0) continue;
-    const oldManifestPath = runtimeManifestPath(runtime);
-    const oldManifestRaw = existsSync(oldManifestPath) ? readJsonFile(oldManifestPath, null) : null;
-    const oldManifest = oldManifestRaw
-      ? validateManagedManifest(oldManifestRaw, { schemaVersion: RUNTIME_MANIFEST_SCHEMA })
-      : null;
-    if (oldManifestRaw && !oldManifest) {
+    const delegatedSpecs = delegatedGlobalFileSpecs(runtime, {
+      allTargetCandidates: true,
+    });
+    const delegatedByRelPath = new Map(
+      delegatedSpecs.map((spec) => [spec.relPath, spec]),
+    );
+    const oldManifestState = readRuntimeManagedManifestState(runtime);
+    const oldManifestPath = oldManifestState.manifestPath;
+    const oldManifestRaw = oldManifestState.raw;
+    const oldManifest = oldManifestState.manifest;
+    if (oldManifestState.exists && !oldManifest) {
       warn(`Preserved runtime ${runtime}: ownership manifest is invalid or empty`);
       return blockedTransaction(
         `invalid_runtime_manifest:${runtime}`,
         "Preserve the runtime files and repair or remove only the invalid ownership manifest after inspection.",
       );
     }
+    const invalidOwnedPath = oldManifest
+      ? validateMemoryManifestOwnedPaths(runtime, oldManifest)
+      : null;
+    if (invalidOwnedPath) {
+      warn(`Preserved runtime ${runtime}: ownership manifest contains an unowned path`);
+      return blockedTransaction(
+        `runtime_manifest_path_outside_owned_policy:${runtime}`,
+        "Preserve every runtime file and repair the ownership manifest against the canonical managed-assets policy before retrying.",
+        invalidOwnedPath,
+      );
+    }
+    if (runtime === "claude") oldClaudeManifest = oldManifest;
     const oldMap = new Map((oldManifest?.files ?? []).map((entry) => [entry.relPath, entry.contentHash]));
     const nextFiles = [];
     const nextPaths = new Set(specs.map((spec) => spec.relPath));
     for (const entry of oldManifest?.files ?? []) {
       if (nextPaths.has(entry.relPath) || isSeedOnlyRetainedPath(runtime, entry.relPath)) {
+        continue;
+      }
+      const delegated = delegatedByRelPath.get(entry.relPath);
+      if (delegated) {
+        if (!globalManifestProvesFile(delegated.target, globalProofs)) {
+          warn(`Preserved runtime ${runtime}: delegated global owner proof is missing`);
+          return blockedTransaction(
+            `delegated_global_owner_proof_missing:${runtime}`,
+            "Run global runtime sync first, verify its install manifest, then retry the ownership handoff.",
+            entry.relPath,
+          );
+        }
         continue;
       }
       operations.push({
@@ -772,35 +1286,40 @@ function installSelectedRuntimeFilesTransactional(targets) {
       });
     }
     operations.push(...seedOnlyOperations(runtime));
-    const manifestValue = {
-      schemaVersion: RUNTIME_MANIFEST_SCHEMA,
-      runtime,
-      files: nextFiles,
-    };
-    const manifestOperation = jsonOperation(oldManifestPath, manifestValue, "manifest");
-    if (manifestOperation) manifestOperations.push(manifestOperation);
+    if (nextFiles.length > 0) {
+      const manifestValue = {
+        schemaVersion: RUNTIME_MANIFEST_SCHEMA,
+        runtime,
+        files: nextFiles,
+        ...(runtime === "claude"
+          ? { settingsFragments: [desiredClaudeFragment] }
+          : {}),
+      };
+      const manifestOperation = jsonOperation(oldManifestPath, manifestValue, "manifest");
+      if (manifestOperation) manifestOperations.push(manifestOperation);
+    } else if (oldManifestRaw) {
+      manifestOperations.push({
+        kind: "remove",
+        phase: "manifest",
+        relPath: homeRel(oldManifestPath),
+        expectedOldHash: sha256ManagedFile(oldManifestPath),
+      });
+    }
   }
 
   if (targets.includes("claude")) {
+    const legacyHookOwned = Boolean(
+      oldClaudeManifest &&
+      oldClaudeManifest.settingsFragments.length === 0 &&
+      oldClaudeManifest.files.some((entry) => entry.relPath === homeRel(HOOK_TARGET)),
+    );
     const operation = jsonOperation(
       CLAUDE_SETTINGS,
-      buildClaudeSettingsValue(existingSettings.values.claude),
-      "auxiliary",
-    );
-    if (operation) operations.push(operation);
-  }
-  if (targets.includes("codex")) {
-    const operation = jsonOperation(
-      join(CODEX_HOME, "hooks.json"),
-      buildCodexSettingsValue(existingSettings.values.codex),
-      "auxiliary",
-    );
-    if (operation) operations.push(operation);
-  }
-  if (targets.includes("cursor")) {
-    const operation = jsonOperation(
-      join(CURSOR_HOME, "hooks.json"),
-      buildCursorSettingsValue(existingSettings.values.cursor),
+      buildClaudeSettingsValue(existingSettings.values.claude, {
+        previousFragments: oldClaudeManifest?.settingsFragments ?? [],
+        allowLegacyOwnedFragment: legacyHookOwned,
+        desiredFragment: desiredClaudeFragment,
+      }),
       "auxiliary",
     );
     if (operation) operations.push(operation);
@@ -818,73 +1337,43 @@ function installSelectedRuntimeFilesTransactional(targets) {
   return result;
 }
 
-function stripClaudeSettingsValue(settings) {
-  const hooks = { ...(settings.hooks ?? {}) };
-  for (const [eventName, needles] of [
-    ["SessionStart", ["mcp_memory_global.py"]],
-    ["Stop", ["stop-save-progress.mjs", "stop-memory-save.mjs"]],
-  ]) {
-    hooks[eventName] = (hooks[eventName] ?? [])
-      .map((block) => ({
-        ...block,
-        hooks: (block?.hooks ?? []).filter(
-          (hook) => !needles.some((needle) => String(hook?.command ?? "").includes(needle)),
-        ),
-      }))
-      .filter((block) => (block.hooks ?? []).length > 0);
-    if (hooks[eventName].length === 0) delete hooks[eventName];
-  }
-  const next = { ...settings, hooks };
-  if (Object.keys(hooks).length === 0) delete next.hooks;
-  return next;
-}
-
-function stripCrossRuntimeSettingsValue(runtime, settings) {
-  const home = runtime === "codex" ? CODEX_HOME : CURSOR_HOME;
-  const eventNames = runtime === "codex"
-    ? ["SessionStart", "UserPromptSubmit", "Stop"]
-    : ["beforeSubmitPrompt", "stop"];
-  const hooks = { ...(settings.hooks ?? {}) };
-  for (const eventName of eventNames) {
-    hooks[eventName] = (hooks[eventName] ?? [])
-      .map((block) => {
-        if (block?.command) return String(block.command).includes(CROSS_RUNTIME_HOOK_FILE) ? null : block;
-        const nested = (block?.hooks ?? []).filter(
-          (hook) => !String(hook?.command ?? "").includes(CROSS_RUNTIME_HOOK_FILE),
-        );
-        return nested.length > 0 ? { ...block, hooks: nested } : null;
-      })
-      .filter(Boolean);
-    if (hooks[eventName].length === 0) delete hooks[eventName];
-  }
-  return { ...settings, hooks };
-}
-
 function removeSelectedRuntimeFilesTransactional(targets) {
-  const existingSettings = readSelectedRuntimeSettingsStrict(targets);
+  const existingSettings = readSelectedRuntimeSettingsStrict(
+    targets.filter((runtime) => runtime === "claude"),
+  );
   if (!existingSettings.ok) {
     return blockedExistingSettingsTransaction(existingSettings);
   }
   const operations = [];
   const manifestOperations = [];
+  let claudeManifest = null;
   for (const runtime of targets) {
-    const manifestPath = runtimeManifestPath(runtime);
-    const raw = existsSync(manifestPath) ? readJsonFile(manifestPath, null) : null;
-    const manifest = raw
-      ? validateManagedManifest(raw, { schemaVersion: RUNTIME_MANIFEST_SCHEMA })
-      : null;
-    if (raw && !manifest) {
+    const manifestState = readRuntimeManagedManifestState(runtime);
+    const manifestPath = manifestState.manifestPath;
+    const manifest = manifestState.manifest;
+    if (manifestState.exists && !manifest) {
       warn(`Preserved runtime ${runtime}: ownership manifest is invalid or empty`);
       return blockedTransaction(
         `invalid_runtime_manifest:${runtime}`,
         "Preserve the runtime files and repair or remove only the invalid ownership manifest after inspection.",
       );
     }
+    const invalidOwnedPath = manifest
+      ? validateMemoryManifestOwnedPaths(runtime, manifest)
+      : null;
+    if (invalidOwnedPath) {
+      warn(`Preserved runtime ${runtime}: ownership manifest contains an unowned path`);
+      return blockedTransaction(
+        `runtime_manifest_path_outside_owned_policy:${runtime}`,
+        "Preserve every runtime file and repair the ownership manifest against the canonical managed-assets policy before retrying.",
+        invalidOwnedPath,
+      );
+    }
+    if (runtime === "claude") claudeManifest = manifest;
     if (!manifest) {
-      const openClawTarget = join(OPENCLAW_HOME, "hooks", "mcp-memory-service");
-      const hasManagedCandidate =
-        canonicalFileSpecs(runtime).some((spec) => existsSync(spec.target)) ||
-        (runtime === "openclaw" && existsSync(openClawTarget));
+      const hasManagedCandidate = canonicalFileSpecs(runtime).some((spec) =>
+        existsSync(spec.target),
+      );
       if (hasManagedCandidate) {
         warn(`Preserved runtime ${runtime}: managed files exist without an ownership manifest`);
         return blockedTransaction(
@@ -894,8 +1383,14 @@ function removeSelectedRuntimeFilesTransactional(targets) {
       }
       continue;
     }
+    const delegatedPaths = new Set(
+      delegatedGlobalFileSpecs(runtime, { allTargetCandidates: true }).map(
+        (spec) => spec.relPath,
+      ),
+    );
     for (const entry of manifest.files) {
       if (isSeedOnlyRetainedPath(runtime, entry.relPath)) continue;
+      if (delegatedPaths.has(entry.relPath)) continue;
       operations.push({
         kind: "remove",
         phase: "content",
@@ -912,16 +1407,15 @@ function removeSelectedRuntimeFilesTransactional(targets) {
     });
   }
 
-  if (targets.includes("claude") && existsSync(CLAUDE_SETTINGS)) {
-    const next = stripClaudeSettingsValue(existingSettings.values.claude);
+  if (targets.includes("claude") && claudeManifest && existsSync(CLAUDE_SETTINGS)) {
+    const legacyHookOwned =
+      claudeManifest.settingsFragments.length === 0 &&
+      claudeManifest.files.some((entry) => entry.relPath === homeRel(HOOK_TARGET));
+    const next = removeOwnedClaudeSessionFragments(existingSettings.values.claude, {
+      fragments: claudeManifest.settingsFragments,
+      allowLegacyOwnedFragment: legacyHookOwned,
+    });
     const op = next ? jsonOperation(CLAUDE_SETTINGS, next, "auxiliary") : null;
-    if (op) operations.push(op);
-  }
-  for (const runtime of ["codex", "cursor"]) {
-    const path = join(runtime === "codex" ? CODEX_HOME : CURSOR_HOME, "hooks.json");
-    if (!targets.includes(runtime) || !existsSync(path)) continue;
-    const next = stripCrossRuntimeSettingsValue(runtime, existingSettings.values[runtime]);
-    const op = next ? jsonOperation(path, next, "auxiliary") : null;
     if (op) operations.push(op);
   }
   operations.push(...manifestOperations);
@@ -944,6 +1438,10 @@ async function install(targets) {
 
   const transaction = installSelectedRuntimeFilesTransactional(targets);
   if (!targets.includes("claude")) ok("Claude MCP memory hooks skipped (claude not selected)");
+  const delegatedIssues = transaction.ok
+    ? delegatedGlobalProjectionIssues(targets)
+    : [];
+  for (const issue of delegatedIssues) warn(issue);
 
   console.log("");
   info("Checking MCP Memory Service health...");
@@ -963,9 +1461,9 @@ async function install(targets) {
     );
   }
 
-  if (!transaction.ok) {
+  if (!transaction.ok || delegatedIssues.length > 0) {
     warn(
-      "Runtime hook installation did not complete; selected runtime files were preserved.",
+      "Runtime hook installation did not complete; run global sync for shared projections and retry.",
     );
     console.log(
       `\n${yellow("Done with warnings.")} Follow the recovery guidance, retry, and restart runtimes only after installation succeeds.\n`,
@@ -985,6 +1483,16 @@ function addCheckIssue(issues, message) {
 
 function verifyRuntimeManagedState(runtime, issues) {
   const manifestPath = runtimeManifestPath(runtime);
+  const expectedSpecs = canonicalFileSpecs(runtime);
+  if (expectedSpecs.length === 0) {
+    if (existsSync(manifestPath)) {
+      addCheckIssue(
+        issues,
+        `${runtime}: legacy memory ownership manifest remains after global-owner handoff`,
+      );
+    }
+    return null;
+  }
   if (!existsSync(manifestPath)) {
     addCheckIssue(issues, `${runtime}: ownership manifest is missing`);
     return null;
@@ -995,7 +1503,6 @@ function verifyRuntimeManagedState(runtime, issues) {
     return null;
   }
 
-  const expectedSpecs = canonicalFileSpecs(runtime);
   const expected = new Map(expectedSpecs.map((spec) => [spec.relPath, spec]));
   const owned = new Map(manifest.files.map((entry) => [entry.relPath, entry]));
   for (const spec of expectedSpecs) {
@@ -1020,6 +1527,20 @@ function verifyRuntimeManagedState(runtime, issues) {
         ? "seed-only config is still incorrectly owned"
         : "stale managed entry remains";
       addCheckIssue(issues, `${runtime}: ${qualifier} (${entry.relPath})`);
+    }
+  }
+  if (runtime === "claude") {
+    const fragment = manifest.settingsFragments[0];
+    if (!fragment) {
+      addCheckIssue(issues, "claude: SessionStart settings ownership fragment is missing");
+    } else {
+      const settings = readJsonFile(CLAUDE_SETTINGS, null);
+      if (!claudeSettingsContainsFragment(settings, fragment)) {
+        addCheckIssue(
+          issues,
+          "claude: exact manifest-owned SessionStart settings fragment is missing or changed",
+        );
+      }
     }
   }
   return manifest;
@@ -1057,8 +1578,10 @@ function check(targets) {
     if (settingsExists) {
       try {
         const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
-        const sessionRegistered = (settings.hooks?.SessionStart ?? []).some((b) =>
-          b?.hooks?.some((h) => h?.command?.includes("mcp_memory_global.py")),
+        const manifest = readRuntimeManagedManifest("claude");
+        const sessionFragment = manifest?.settingsFragments?.[0] ?? null;
+        const sessionRegistered = Boolean(
+          sessionFragment && claudeSettingsContainsFragment(settings, sessionFragment),
         );
         sessionRegistered
           ? ok("SessionStart hook registered in settings.json")
@@ -1129,6 +1652,12 @@ function check(targets) {
     }
   }
 
+  for (const issue of delegatedGlobalProjectionIssues(targets, {
+    includeRegistrations: false,
+  })) {
+    if (!issues.includes(issue)) addCheckIssue(issues, issue);
+  }
+
   const endpoint = configuredMemoryEndpoint();
   const health = checkServerHealthStatus(endpoint);
   if (health === "healthy") {
@@ -1172,7 +1701,6 @@ function remove(targets) {
 // ── Main ────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
-const targets = parseTargets(args);
 
 // Handle --force flag (must be checked before other flags)
 if (args.includes("--force")) {
@@ -1183,6 +1711,7 @@ if (args.includes("--force")) {
 }
 
 async function main() {
+  const targets = parseTargets(args);
   if (args.includes("--check")) {
     if (!check(targets).ok) process.exitCode = 1;
   }

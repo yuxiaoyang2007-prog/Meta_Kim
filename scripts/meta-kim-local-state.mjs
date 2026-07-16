@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const repoRoot = path.resolve(__dirname, "..");
 export const localStateRoot = path.join(repoRoot, ".meta-kim", "state");
+export const SHARED_RUNTIME_FAMILY = "shared";
 
 function repoPathHash(repoPath = repoRoot) {
   return crypto
@@ -25,32 +26,48 @@ export function resolveProfileName(input = process.env.META_KIM_PROFILE) {
 }
 
 export function resolveRuntimeFamily(
-  input = process.env.META_KIM_RUNTIME_FAMILY,
+  input,
+  {
+    environment = process.env,
+    argv = process.argv,
+    entrypoint = argv[1],
+  } = {},
 ) {
-  if (typeof input === "string" && input.trim()) {
-    return input.trim();
+  const explicit = input === undefined
+    ? environment.META_KIM_RUNTIME_FAMILY
+    : input;
+  if (typeof explicit === "string" && explicit.trim()) {
+    return explicit.trim();
   }
+  const entrypointSegments = String(entrypoint ?? "")
+    .replaceAll("\\", "/")
+    .toLowerCase()
+    .split("/")
+    .filter(Boolean);
+  const entrypointMatches = (runtimeId) =>
+    entrypointSegments.includes(runtimeId) ||
+    entrypointSegments.includes(`.${runtimeId}`);
   if (
-    process.env.OPENCLAW_HOME ||
-    process.argv.some((arg) => arg.includes("openclaw"))
+    environment.OPENCLAW_HOME ||
+    entrypointMatches("openclaw")
   ) {
     return "openclaw";
   }
   if (
-    process.env.CODEX_HOME ||
-    process.env.CODEX_SANDBOX ||
-    process.argv.some((arg) => arg.includes("codex"))
+    environment.CODEX_HOME ||
+    environment.CODEX_SANDBOX ||
+    entrypointMatches("codex")
   ) {
     return "codex";
   }
   if (
-    process.env.CLAUDE_PROJECT_DIR ||
-    process.env.CLAUDE_SESSION_ID ||
-    process.argv.some((arg) => arg.includes("claude"))
+    environment.CLAUDE_PROJECT_DIR ||
+    environment.CLAUDE_SESSION_ID ||
+    entrypointMatches("claude")
   ) {
     return "claude";
   }
-  return "shared";
+  return SHARED_RUNTIME_FAMILY;
 }
 
 export function buildProfileKey({

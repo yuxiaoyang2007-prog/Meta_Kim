@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { buildIsolatedUserHomeEnv } from "./isolated-user-home-env.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const keepTemp = process.argv.includes("--keep-temp");
@@ -145,6 +146,8 @@ function parseSetupJson(result) {
 
 function inspectProjectCase(baseDir, entry) {
   const projectDir = path.join(baseDir, entry.id);
+  const projectUserHome = path.join(baseDir, "project-user-home");
+  const projectEnv = buildIsolatedUserHomeEnv(projectUserHome);
   const targetExistedBeforeDryRun = existsSync(projectDir);
   const targetsArg = entry.targets.join(",");
   const commonArgs = [
@@ -156,12 +159,12 @@ function inspectProjectCase(baseDir, entry) {
     projectDir,
     "--json",
   ];
-  const dryResult = runNode([...commonArgs, "--dry-run"]);
+  const dryResult = runNode([...commonArgs, "--dry-run"], { env: projectEnv });
   const dryParsed = parseSetupJson(dryResult);
   const targetCreatedByDryRun = !targetExistedBeforeDryRun && existsSync(projectDir);
-  const applyResult = runNode([...commonArgs, "--apply"]);
+  const applyResult = runNode([...commonArgs, "--apply"], { env: projectEnv });
   const applyParsed = parseSetupJson(applyResult);
-  const currentResult = runNode([...commonArgs, "--dry-run"]);
+  const currentResult = runNode([...commonArgs, "--dry-run"], { env: projectEnv });
   const currentParsed = parseSetupJson(currentResult);
   const manifestPath = toFsPath(projectDir, ".meta-kim/state/default/project-bootstrap.json");
   const manifest = existsSync(manifestPath) ? readJson(manifestPath) : null;

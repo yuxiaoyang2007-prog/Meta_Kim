@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { buildIsolatedUserHomeEnv } from "../../scripts/isolated-user-home-env.mjs";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
 
@@ -10,14 +13,26 @@ function sorted(values) {
 }
 
 test("install scope verification proves global/project target boundaries", () => {
-  const result = spawnSync(process.execPath, ["scripts/verify-install-scope-matrix.mjs"], {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-    timeout: 180_000,
-    windowsHide: true,
-  });
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  const summary = JSON.parse(result.stdout);
+  const callerHome = mkdtempSync(path.join(os.tmpdir(), "meta-kim-scope-caller-home-"));
+  let summary;
+  try {
+    const result = spawnSync(process.execPath, ["scripts/verify-install-scope-matrix.mjs"], {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      timeout: 180_000,
+      windowsHide: true,
+      env: buildIsolatedUserHomeEnv(callerHome),
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    summary = JSON.parse(result.stdout);
+    assert.equal(
+      existsSync(path.join(callerHome, ".meta-kim", "global", "project-registry.sqlite")),
+      false,
+      "verification project cases must not register temporary projects in the caller home",
+    );
+  } finally {
+    rmSync(callerHome, { recursive: true, force: true });
+  }
   assert.equal(summary.ok, true);
   assert.equal(summary.schemaVersion, "meta-kim-install-scope-verification-v0.1");
   assert.equal(summary.globalResults[0].status, "pass");

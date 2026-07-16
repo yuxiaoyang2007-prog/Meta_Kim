@@ -81,10 +81,13 @@ import {
   stripProjectMetaKimHooksFromHookConfig,
 } from "./scripts/runtime-hook-mapping.mjs";
 import {
+  GLOBAL_PROJECTION_OWNER_SYNC_RUNTIMES,
+  globalProjectionIsOwnedBy,
   loadLocalOverrides,
   normalizeTargets,
   parseSkillsArg,
   resolveTargetContext,
+  resolveRuntimeProfilesFromManifest,
   resolveRuntimeHomeDir,
   writeLocalOverrides,
 } from "./scripts/meta-kim-sync-config.mjs";
@@ -124,6 +127,11 @@ import {
   installStep,
   summarizeInstallStatus,
 } from "./scripts/install-status-semantics.mjs";
+import {
+  MCP_MEMORY_SETUP_ACTION,
+  MCP_MEMORY_SETUP_REASON,
+  resolveMcpMemorySetupPolicy,
+} from "./scripts/setup-memory-policy.mjs";
 import {
   MetaKimConfigError,
   loadMetaKimConfig,
@@ -217,13 +225,6 @@ const langIdx = args.indexOf("--lang");
 const langArg = langIdx >= 0 && args[langIdx + 1] ? args[langIdx + 1] : null;
 let currentLangCode = langArg ? normalizeLangCliArg(langArg) : "en";
 
-const RUNTIME_CHOICES = [
-  { id: "claude", label: "Claude Code" },
-  { id: "codex", label: "Codex" },
-  { id: "openclaw", label: "OpenClaw" },
-  { id: "cursor", label: "Cursor" },
-];
-
 function normalizeProjectDeployDir(rawDir) {
   const raw = String(rawDir || "").trim();
   if (!raw) return null;
@@ -279,6 +280,15 @@ try {
   console.error(`${prefix}: ${error.message}`);
   process.exit(2);
 }
+const setupRuntimeProfiles = resolveRuntimeProfilesFromManifest(
+  metaKimConfig.syncConfig,
+);
+const RUNTIME_CHOICES = Object.freeze(
+  metaKimConfig.syncConfig.supportedTargets.map((id) => Object.freeze({
+    id,
+    label: setupRuntimeProfiles[id].label,
+  })),
+);
 
 const skillsManifest = {
   skillOwner: metaKimConfig.skills.skillOwner,
@@ -2387,7 +2397,7 @@ function isProjectLocalCapabilityAsset(relPath) {
 
 function projectInstructionRelPathsForTargets(activeTargets) {
   const targets = activeTargets.includes("all")
-    ? ["claude", "codex", "cursor", "openclaw"]
+    ? RUNTIME_CHOICES.map(({ id }) => id)
     : activeTargets;
   const rels = new Set();
   if (targets.includes("claude")) rels.add("CLAUDE.md");
@@ -2770,7 +2780,7 @@ function removeGlobalProjectCapabilityRoots(targetDir, activeTargets) {
 
 function expandedCleanupTargets(activeTargets) {
   return activeTargets.includes("all")
-    ? ["claude", "codex", "cursor", "openclaw"]
+    ? RUNTIME_CHOICES.map(({ id }) => id)
     : activeTargets;
 }
 
@@ -4863,7 +4873,7 @@ function metaKimRuntimeNotice(mcpPath) {
 
 function checkSync(
   runtimes,
-  repoTargets = ["claude", "codex", "openclaw", "cursor"],
+  repoTargets = RUNTIME_CHOICES.map(({ id }) => id),
 ) {
   heading(t.syncHeading);
   let allOk = true;
@@ -5265,31 +5275,47 @@ function metaTheoryGlobalSyncArgs(targets, withGlobalHooks = false) {
   return buildGlobalMetaTheorySyncArgs({ targets, withGlobalHooks });
 }
 
-function nonClaudeGlobalRuntimeHookTargets(targets) {
-  const targetList = Array.isArray(targets)
-    ? targets
-    : String(targets || "")
-        .split(",")
-        .filter(Boolean);
-  return targetList.filter((target) =>
-    ["cursor", "openclaw"].includes(target),
-  );
-}
-
 function formatRuntimeTargetLabels(targets) {
   const labels = new Map(RUNTIME_CHOICES.map((choice) => [choice.id, choice.label]));
   return targets.map((target) => labels.get(target) || target).join(", ");
 }
 
-function syncNonClaudeGlobalRuntimeHooks(targets, withGlobalHooks = false) {
-  if (!withGlobalHooks) return true;
-  const hookTargets = nonClaudeGlobalRuntimeHookTargets(targets);
-  if (hookTargets.length === 0) return true;
+function syncOwnedGlobalRuntimeAssets(
+  targets,
+  runtimeProfiles,
+  withGlobalHooks = false,
+) {
+  const selectedTargets = [];
+  const selectedAssetTypes = new Set();
+  for (const targetId of targets) {
+    const profile = runtimeProfiles[targetId];
+    if (!profile) {
+      throw new Error(`Missing runtime profile for selected target: ${targetId}`);
+    }
+    let targetSelected = false;
+    for (const assetType of profile.projection.assetTypes) {
+      if (assetType === "hooks" && !withGlobalHooks) continue;
+      if (
+        globalProjectionIsOwnedBy(
+          profile,
+          assetType,
+          GLOBAL_PROJECTION_OWNER_SYNC_RUNTIMES,
+        )
+      ) {
+        selectedAssetTypes.add(assetType);
+        targetSelected = true;
+      }
+    }
+    if (targetSelected) selectedTargets.push(targetId);
+  }
+  if (selectedTargets.length === 0 || selectedAssetTypes.size === 0) return true;
   const syncResult = runNodeScript(SETUP_NODE_CHILD.RUNTIME_SYNC, [
     "--scope",
     "global",
     "--targets",
-    hookTargets.join(","),
+    selectedTargets.join(","),
+    "--global-assets",
+    [...selectedAssetTypes].sort().join(","),
   ]);
   return syncResult.status === 0;
 }
@@ -6019,7 +6045,7 @@ function resolvePythonForMemoryService(detectedPython) {
 }
 
 async function runMcpMemoryHookInstaller(
-  activeTargets = DEFAULT_TARGETS.map((target) => target.id),
+  activeTargets = RUNTIME_CHOICES.map(({ id }) => id),
   { allowClaudeGlobalSettings = false } = {},
 ) {
   const hookScript = join(
@@ -6043,21 +6069,28 @@ async function runMcpMemoryHookInstaller(
       ? { ...process.env, META_KIM_CONFIRM_GLOBAL: "1" }
       : undefined;
   let result;
-  await withProgress(t.mcpMemoryHookInstalling, async () => {
+  await withProgress(
+    t.mcpMemoryHookInstalling(formatRuntimeTargetLabels(activeTargets)),
+    async () => {
     result = spawnSync(spawnDesc.command, spawnDesc.args, {
       ...spawnDesc.options,
       stdio: ["ignore", "pipe", "pipe"],
       encoding: "utf8",
       ...(childEnv ? { env: childEnv } : {}),
     });
-  });
+    },
+  );
 
   if (result.status === 0) {
     ok(t.mcpMemoryHookInstalled);
     return true;
   } else {
     warn(t.mcpMemoryHookWarnings);
+    const stdoutText = (result.stdout || "").trim();
     const stderrText = (result.stderr || "").trim();
+    if (stdoutText) {
+      console.log(`${C.dim}${stdoutText}${C.reset}`);
+    }
     if (stderrText) {
       console.log(`${C.dim}${stderrText}${C.reset}`);
     }
@@ -6334,7 +6367,8 @@ async function startMcpMemoryServiceBackground(resolved, endpoint = resolveMemor
     ok(t.mcpMemoryAutoStarted(endpoint.endpointUrl));
     const bootOk = configureBootAutoStart(memoryBin, endpoint);
     if (bootOk) ok(t.mcpMemoryAutoStartBoot);
-    return bootOk;
+    else warn(t.mcpMemoryAutoStartBootFailed);
+    return true;
   }
 
   if (isMcpMemoryProcessRunning()) {
@@ -6549,7 +6583,10 @@ function configureBootAutoStart(memoryBin, endpoint = resolveMemoryEndpoint()) {
   }
 }
 
-async function installMcpMemoryServiceStep(inUpdateMode = false, activeTargets = DEFAULT_TARGETS.map((target) => target.id)) {
+async function installMcpMemoryServiceStep(
+  inUpdateMode = false,
+  activeTargets = RUNTIME_CHOICES.map(({ id }) => id),
+) {
   heading(t.stepMcpMemory);
 
   const want = await askYesNo(t.askMcpMemoryInstall, true);
@@ -7354,6 +7391,7 @@ async function runInstall() {
   const stepResults = [];
   const runtimes = await detectRuntimes();
   const activeTargets = await selectActiveTargets(runtimes);
+  const { profiles: runtimeProfiles } = await resolveTargetContext(args);
 
   // 询问安装范围
   const installScope = await askInstallScope();
@@ -7472,6 +7510,7 @@ async function runInstall() {
           targets: activeTargets,
           skillIds: selectedSkillIds,
           preferLocalDependencies,
+          skipInventoryRefresh: true,
         });
         // ).concat(["--log-file", INSTALL_LOG_FILE]);
         const installResult = runNodeScript(
@@ -7495,25 +7534,17 @@ async function runInstall() {
         SETUP_NODE_CHILD.GLOBAL_META_THEORY_SYNC,
         metaTheoryGlobalSyncArgs(activeTargets, setupWithGlobalHooks),
       );
-      const runtimeHooksOk = syncNonClaudeGlobalRuntimeHooks(
+      const runtimeAssetsOk = syncOwnedGlobalRuntimeAssets(
         activeTargets,
+        runtimeProfiles,
         setupWithGlobalHooks,
       );
-      if (syncResult.status !== 0 || !runtimeHooksOk) {
+      if (syncResult.status !== 0 || !runtimeAssetsOk) {
         warn(t.warnMetaTheorySyncFailed);
       }
-      return syncResult.status === 0 && runtimeHooksOk;
+      return syncResult.status === 0 && runtimeAssetsOk;
     });
     stepResults.push(installStep(t.progressSyncMeta, metaSyncOk));
-  }
-
-  if (needGlobal) {
-    stepNum++;
-    const inventoryOk = await withProgress(
-      t.stepLabel(stepNum, t.refreshGlobalCapabilityInventory),
-      async () => refreshGlobalCapabilityInventory(activeTargets),
-    );
-    stepResults.push(installStep(t.refreshGlobalCapabilityInventory, inventoryOk));
   }
 
   // [Optional] Python tools (graphify)
@@ -7543,8 +7574,20 @@ async function runInstall() {
 
   // [Optional] MCP Memory Service (Layer 3)
   stepNum++;
-  const mcpMemoryOk = skipOptionalTools
-    ? (skip(`${C.dim}${t.mcpMemorySkipped}${C.reset}`), INSTALL_STEP_OUTCOME.SKIPPED)
+  const memoryPolicy = resolveMcpMemorySetupPolicy({
+    needGlobal,
+    withGlobalHooks: setupWithGlobalHooks,
+    skipOptionalTools,
+  });
+  const mcpMemoryOk = memoryPolicy.action === MCP_MEMORY_SETUP_ACTION.SKIP
+    ? (
+        skip(`${C.dim}${
+          memoryPolicy.reason === MCP_MEMORY_SETUP_REASON.GLOBAL_HOOKS_REQUIRED
+            ? t.mcpMemoryRequiresGlobalHooks
+            : t.mcpMemorySkipped
+        }${C.reset}`),
+        INSTALL_STEP_OUTCOME.SKIPPED
+      )
     : await withProgress(
         t.stepLabel(stepNum, t.progressInstallMcpMemory),
         async () => installMcpMemoryServiceStep(false, activeTargets),
@@ -7556,6 +7599,18 @@ async function runInstall() {
       INSTALL_STEP_CLASSIFICATION.OPTIONAL,
     ),
   );
+
+  // Memory can add its uniquely-owned Python hook, SessionStart fragment, and
+  // command subtree after global sync. Refresh only after those writes so a
+  // successful setup never leaves the capability inventory stale immediately.
+  if (needGlobal) {
+    stepNum++;
+    const inventoryOk = await withProgress(
+      t.stepLabel(stepNum, t.refreshGlobalCapabilityInventory),
+      async () => refreshGlobalCapabilityInventory(activeTargets),
+    );
+    stepResults.push(installStep(t.refreshGlobalCapabilityInventory, inventoryOk));
+  }
 
   // Copy runtime files to user-chosen project directories (if opted in earlier)
   let deployResults = [];
@@ -7630,6 +7685,7 @@ async function runUpdate() {
   const activeTargets = reselectTargets
     ? await selectActiveTargets(runtimes)
     : (await resolveTargetContext(args)).activeTargets;
+  const { profiles: runtimeProfiles } = await resolveTargetContext(args);
 
   // ── 0. Ask for update scope (like install mode) ─────────────────────
   const updateScope = await askInstallScope();
@@ -7683,19 +7739,6 @@ async function runUpdate() {
     ),
   );
 
-  // ── 2.5 [Optional] MCP Memory Service (Layer 3) ─────────────────
-  console.log("");
-  const mcpMemoryOk = skipOptionalTools
-    ? (skip(`${C.dim}${t.mcpMemorySkipped}${C.reset}`), INSTALL_STEP_OUTCOME.SKIPPED)
-    : await installMcpMemoryServiceStep(true, activeTargets);
-  stepResults.push(
-    installStep(
-      t.progressInstallMcpMemory,
-      mcpMemoryOk === undefined ? INSTALL_STEP_OUTCOME.SKIPPED : mcpMemoryOk,
-      INSTALL_STEP_CLASSIFICATION.OPTIONAL,
-    ),
-  );
-
   // ── 2.8. Clean up legacy skill files ───────────────────────────────
   const legacyCount = cleanupLegacySkills(updateScope);
   if (legacyCount > 0) ok(`Cleaned ${legacyCount} legacy file(s)`);
@@ -7727,6 +7770,7 @@ async function runUpdate() {
       skillIds: updateSkillIds,
       update: true,
       preferLocalDependencies,
+      skipInventoryRefresh: true,
     });
     // ).concat(["--log-file", INSTALL_LOG_FILE]);
     const updateInstallResult = runNodeScript(
@@ -7751,20 +7795,49 @@ async function runUpdate() {
       SETUP_NODE_CHILD.GLOBAL_META_THEORY_SYNC,
       metaTheoryGlobalSyncArgs(activeTargets, setupWithGlobalHooks),
     );
-    const runtimeHooksOk = syncNonClaudeGlobalRuntimeHooks(
+    const runtimeAssetsOk = syncOwnedGlobalRuntimeAssets(
       activeTargets,
+      runtimeProfiles,
       setupWithGlobalHooks,
     );
-    if (updateSyncResult.status === 0 && runtimeHooksOk)
+    if (updateSyncResult.status === 0 && runtimeAssetsOk)
       ok(t.updateMetaTheoryDone);
     else warn(t.warnMetaTheoryUpdateFailed);
     stepResults.push(
       installStep(
         t.progressSyncMeta,
-        updateSyncResult.status === 0 && runtimeHooksOk,
+        updateSyncResult.status === 0 && runtimeAssetsOk,
       ),
     );
   }
+
+  // ── 5.2 [Optional] MCP Memory Service (Layer 3) ─────────────────
+  // Global sync renders shared runtime assets first. The memory installer can
+  // then prove the ownership handoff before installing its unique assets,
+  // without treating rendered Meta_Kim commands as memory-owned files.
+  console.log("");
+  const memoryPolicy = resolveMcpMemorySetupPolicy({
+    needGlobal,
+    withGlobalHooks: setupWithGlobalHooks,
+    skipOptionalTools,
+  });
+  const mcpMemoryOk = memoryPolicy.action === MCP_MEMORY_SETUP_ACTION.SKIP
+    ? (
+        skip(`${C.dim}${
+          memoryPolicy.reason === MCP_MEMORY_SETUP_REASON.GLOBAL_HOOKS_REQUIRED
+            ? t.mcpMemoryRequiresGlobalHooks
+            : t.mcpMemorySkipped
+        }${C.reset}`),
+        INSTALL_STEP_OUTCOME.SKIPPED
+      )
+    : await installMcpMemoryServiceStep(true, activeTargets);
+  stepResults.push(
+    installStep(
+      t.progressInstallMcpMemory,
+      mcpMemoryOk === undefined ? INSTALL_STEP_OUTCOME.SKIPPED : mcpMemoryOk,
+      INSTALL_STEP_CLASSIFICATION.OPTIONAL,
+    ),
+  );
 
   // ── 5.5. Refresh global capability inventory ───────────────────────
   console.log("");

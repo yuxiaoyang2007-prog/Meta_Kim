@@ -40,6 +40,10 @@ function assertContract() {
     "business workflow phases must not directly block tools",
   );
   assert(
+    contract.controlPlaneRules?.sideEffectsRequireExecutionStage === false,
+    "ordinary local side effects must not require the Execution stage",
+  );
+  assert(
     contract.stageChecks?.actionPolicy?.mustNotRequireCommitPackets === true,
     "action policy must not require commit packets",
   );
@@ -50,6 +54,14 @@ function assertContract() {
   assert(
     contract.stageChecks?.commitRequirements?.requiresExplicitTransitionIntent === true,
     "commit requirements must require explicit transition intent",
+  );
+  assert(
+    contract.stageChecks?.executionLease?.requiredForBusinessMutation === false,
+    "execution lease must not authorize ordinary project mutation",
+  );
+  assert(
+    contract.stageChecks?.executionLease?.requiredForPublicReadyClaim === true,
+    "execution lease must remain required for public-ready claims",
   );
   assert(
     contract.activationPolicy?.autoPromptActivation?.creates === "hook_observed",
@@ -89,7 +101,15 @@ function assertContract() {
   );
   hasAll(
     contract.fetchPolicy?.inProgressMustAllow ?? [],
-    ["repo_search", "capability_scan", "spine_state_write", "planning_file_update", "visible_status_notice"],
+    [
+      "repo_search",
+      "capability_scan",
+      "spine_state_write",
+      "planning_file_update",
+      "visible_status_notice",
+      "ordinary_project_file_mutation",
+      "ordinary_local_command_execution",
+    ],
     "fetchPolicy.inProgressMustAllow",
   );
   hasAll(
@@ -182,8 +202,23 @@ function assertRuntimeSources() {
   assert(!/advanceStage\(state,\s*'fetch'\)/.test(hook), "hook must not auto-advance to Fetch");
   hasAll(
     hook,
-    ["isHookObservedState", "observedModeNotice", "allowObservedModeExecution"],
+    [
+      "isHookObservedState",
+      "observedModeNotice",
+      "Local execution tools are not stage drivers",
+      "must never block or warn on ordinary project edits or local commands",
+    ],
     "enforce-agent-dispatch.mjs",
+  );
+  assert(
+    !hook.includes("formatDesignStageMutationDeny") &&
+      !hook.includes("formatPostExecutionStageDeny"),
+    "ordinary local execution must not retain stage-mutation denial helpers",
+  );
+  assert(
+    !hook.includes('source: "spine_chain"') &&
+      !hook.includes('source: "spine_chain_walk"'),
+    "dispatch history must not be treated as runtime caller identity",
   );
 
   const activation = readText("canonical/runtime-assets/shared/hooks/activate-meta-theory-spine.mjs");
@@ -206,11 +241,14 @@ function assertRegressionTests() {
       "Fetch stage allows Bash spine-state writes even before fetchRecord exists",
       "Fetch stage allows planning files before fetchRecord exists",
       "Fetch stage delays task bookkeeping before Fetch evidence exists",
-      "Fetch business mutation denial does not instruct Agent dispatch",
-      "Fetch self-lock allows repair-only Node fetchRecord spine-state write",
-      `${deprecatedModeMarker} residue in spine state cannot skip dispatch governance`,
+      "Fetch stage allows ordinary business file mutation without warning",
+      "dispatch history cannot impersonate a meta-agent caller or warn on project mutation",
+      "runtime-injected meta-agent identity still enforces the readonly role boundary",
+      "managed stages allow ordinary local commands without warning",
+      "Fetch stage allows Node state repair and ordinary Node project writes",
+      `${deprecatedModeMarker} residue in spine state cannot skip Agent dispatch governance`,
       "auto prompt activation creates observed advisory state instead of managed hard-gate state",
-      "observed hook state allows ordinary local file mutation with one readable notice",
+      "observed hook state allows ordinary local file mutation without notice",
       "observed hook state does not block commands by keyword or command class",
       "observed hook state keeps command execution advisory even when text contains high-risk words",
       "auto prompt activation does not create command-class publish approvals",

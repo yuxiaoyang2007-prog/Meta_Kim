@@ -6,10 +6,15 @@ import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { canonicalAgentsDir } from "../meta-kim-sync-config.mjs";
+import {
+  parseRuntimeCapabilityMatrix,
+  readRequiredPackagedText,
+  validateRequiredMarkdown,
+} from "./runtime-resource-contract.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
+const packagedCanonicalAgentsDir = path.join(repoRoot, "canonical", "agents");
 
 const preferredOrder = [
   "meta-warden",
@@ -68,13 +73,13 @@ function sortAgents(agents) {
 }
 
 async function loadAgents() {
-  const files = (await fs.readdir(canonicalAgentsDir))
+  const files = (await fs.readdir(packagedCanonicalAgentsDir))
     .filter((file) => metaAgentFilePattern.test(file))
     .sort();
 
   const agents = [];
   for (const file of files) {
-    const filePath = path.join(canonicalAgentsDir, file);
+    const filePath = path.join(packagedCanonicalAgentsDir, file);
     const raw = await fs.readFile(filePath, "utf8");
     const { data, body } = parseFrontmatter(raw, filePath);
     const title = body.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? data.name;
@@ -89,23 +94,14 @@ async function loadAgents() {
   return sortAgents(agents);
 }
 
-async function readUtf8IfExists(filePath, fallbackText) {
-  try {
-    return await fs.readFile(filePath, "utf8");
-  } catch {
-    return fallbackText;
-  }
+async function loadRuntimeCapabilityMatrix(filePath) {
+  const raw = await readRequiredPackagedText(filePath, {
+    packageRoot: repoRoot,
+    label: "Meta_Kim runtime capability matrix",
+  });
+  const matrix = parseRuntimeCapabilityMatrix(raw, filePath);
+  return JSON.stringify(matrix, null, 2);
 }
-
-const FALLBACK_META_THEORY = `# Meta theory
-
-Use **CLAUDE.md**, **AGENTS.md**, \`canonical/skills/meta-theory/SKILL.md\`, and \`canonical/skills/meta-theory/references/meta-theory.md\` as the canonical Meta_Kim context.
-`;
-
-const FALLBACK_RUNTIME_MATRIX = `# Runtime capability matrix (stub)
-
-\`docs/runtime-capability-matrix.md\` is not present in this working tree. See **AGENTS.md** for Codex/OpenClaw mirrors and runtime sync commands (\`npm run meta:sync\`, \`npm run meta:validate\`).
-`;
 
 async function loadRuntimeData() {
   const agents = await loadAgents();
@@ -119,24 +115,38 @@ async function loadRuntimeData() {
   );
   const matrixPath = path.join(
     repoRoot,
-    "docs",
-    "runtime-capability-matrix.md",
+    "config",
+    "runtime-capability-matrix.json",
   );
-  const openclawSkillPath = path.join(
+  const metaTheorySkillPath = path.join(
     repoRoot,
-    "openclaw",
+    "canonical",
     "skills",
     "meta-theory",
     "SKILL.md",
   );
 
-  const [metaTheory, runtimeMatrix, openclawSkill] = await Promise.all([
-    readUtf8IfExists(metaTheoryPath, FALLBACK_META_THEORY),
-    readUtf8IfExists(matrixPath, FALLBACK_RUNTIME_MATRIX),
-    readUtf8IfExists(openclawSkillPath, FALLBACK_META_THEORY),
+  const [metaTheoryRaw, runtimeMatrix, metaTheorySkillRaw] = await Promise.all([
+    readRequiredPackagedText(metaTheoryPath, {
+      packageRoot: repoRoot,
+      label: "Meta_Kim theory reference",
+    }),
+    loadRuntimeCapabilityMatrix(matrixPath),
+    readRequiredPackagedText(metaTheorySkillPath, {
+      packageRoot: repoRoot,
+      label: "Meta_Kim skill definition",
+    }),
   ]);
 
-  return { agents, metaTheory, runtimeMatrix, openclawSkill };
+  const metaTheory = validateRequiredMarkdown(metaTheoryRaw, {
+    label: "Meta_Kim theory reference",
+  });
+  const metaTheorySkill = validateRequiredMarkdown(metaTheorySkillRaw, {
+    label: "Meta_Kim skill definition",
+    requireFrontmatter: true,
+    expectedFrontmatterName: "meta-theory",
+  });
+  return { agents, metaTheory, runtimeMatrix, metaTheorySkill };
 }
 
 function jsonText(payload) {
@@ -234,6 +244,7 @@ if (process.argv.includes("--self-test")) {
         ok: true,
         agentCount: runtimeData.agents.length,
         agentIds: runtimeData.agents.map((agent) => agent.id),
+        agentSources: runtimeData.agents.map((agent) => agent.sourceFile),
         resources: [
           "meta://theory",
           "meta://runtime-matrix",
@@ -306,7 +317,7 @@ server.registerResource(
       {
         uri: "meta://skill/meta-theory",
         mimeType: "text/markdown",
-        text: runtimeData.openclawSkill,
+        text: runtimeData.metaTheorySkill,
       },
     ],
   }),
@@ -392,8 +403,7 @@ server.registerTool(
 server.registerTool(
   "get_meta_runtime_capabilities",
   {
-    description:
-      "Return the runtime capability matrix for Claude Code, OpenClaw, and Codex.",
+    description: "Return the canonical Meta_Kim runtime capability matrix.",
     inputSchema: {},
   },
   async () => ({

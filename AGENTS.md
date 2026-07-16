@@ -369,8 +369,8 @@ Rules:
 
 After changing canonical behavior, contracts, hooks, or runtime-facing docs:
 
-1. `npm run meta:sync`
-2. `npm run discover:global`
+1. `npm run discover:global`
+2. `npm run meta:sync`
 3. `npm run meta:check`
 4. `npm run meta:check:global`
 5. `npm run meta:release:smoke` before routine low-risk patch/minor releases; use `npm run meta:verify:all` for the standard full release gate on larger, risky, runtime, install, hook, dependency, package, or security changes; add `npm run meta:verify:live-certified` only when the optional highest-assurance external live certification is requested

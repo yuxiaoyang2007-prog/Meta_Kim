@@ -99,19 +99,32 @@ test("runtime probe generator writes the same schema and stdout contract under a
   }
 });
 
-test("all report generators use the shared profile-aware context", async () => {
+test("state report generators use shared context and canonical generators declare their output class", async () => {
   const scriptNames = (await fs.readdir(path.join(repoRoot, "scripts")))
     .filter((name) => name.startsWith("generate-") && name.endsWith(".mjs"));
 
   assert.ok(scriptNames.length >= 16);
   for (const scriptName of scriptNames) {
     const source = await fs.readFile(path.join(repoRoot, "scripts", scriptName), "utf8");
-    assert.match(source, /createReportContext/,
-      `${scriptName} must use the shared report context`);
+    const usesReportContext = /createReportContext/u.test(source);
+    const declaresCanonicalSource =
+      /export const GENERATOR_OUTPUT_CLASS = "canonical_source"/u.test(source);
+    assert.equal(
+      usesReportContext || declaresCanonicalSource,
+      true,
+      `${scriptName} must use shared report context or declare canonical source output`,
+    );
     assert.doesNotMatch(
       source,
       /["']\.meta-kim["'][\s\S]{0,120}["']state["'][\s\S]{0,120}["']default["']/,
       `${scriptName} must not hardcode the default profile state path`,
     );
+    if (declaresCanonicalSource) {
+      assert.doesNotMatch(
+        source,
+        /["']\.meta-kim["']/u,
+        `${scriptName} canonical source output must not write local profile state`,
+      );
+    }
   }
 });

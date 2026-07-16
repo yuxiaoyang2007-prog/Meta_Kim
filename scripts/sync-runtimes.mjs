@@ -16,6 +16,7 @@ import {
   SHARED_RUNTIME_HOOK_FILES,
 } from "./runtime-hook-mapping.mjs";
 import { ensureCodexAppNativeControls } from "./codex-config-merge.mjs";
+import { OPENCLAW_WORKSPACE_FILE_NAMES } from "./openclaw-workspace-projection.mjs";
 import {
   canonicalAgentsDir,
   canonicalCapabilityIndexDir,
@@ -23,6 +24,9 @@ import {
   canonicalSkillsDir,
   canonicalSkillPath,
   canonicalSkillReferencesDir,
+  GLOBAL_PROJECTION_OWNER_SYNC_RUNTIMES,
+  globalAgentProjectionFileName,
+  globalProjectionIsOwnedBy,
   repoRoot,
   resolveTargetContext,
   parseScopeArg,
@@ -55,10 +59,55 @@ const dryRun = process.argv.includes("--dry-run");
 const forceWrite = process.argv.includes("--force");
 const PROJECT_RUNTIME_SKILL_IDS = new Set(["meta-theory"]);
 
+export function parseGlobalAssetTypesArg(
+  argv,
+  profiles,
+  targetIds = Object.keys(profiles ?? {}),
+) {
+  const values = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const current = argv[index];
+    if (current === "--global-assets") {
+      if (!argv[index + 1]) {
+        throw new Error("--global-assets requires a comma-separated value");
+      }
+      values.push(argv[index + 1]);
+      index += 1;
+    } else if (current.startsWith("--global-assets=")) {
+      values.push(current.slice("--global-assets=".length));
+    }
+  }
+  if (values.length === 0) return null;
+  const known = new Set(
+    targetIds.flatMap((targetId) => profiles[targetId]?.projection?.assetTypes ?? []),
+  );
+  const requested = [
+    ...new Set(
+      values
+        .join(",")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (requested.length === 0) {
+    throw new Error("--global-assets must select at least one asset type");
+  }
+  for (const assetType of requested) {
+    if (!known.has(assetType)) {
+      throw new Error(
+        `Unknown global asset type ${assetType}; expected one of ${[...known].sort().join(", ")}`,
+      );
+    }
+  }
+  return new Set(requested);
+}
+
 // Captures "will be written" entries whenever writeGeneratedFile runs under
 // --check. Populated even when not in --json mode so callers get deterministic
 // planning data; consumers just ignore it when they do not need it.
 const staleFiles = [];
+let canonicalAgentsForGlobalOnly = [];
 
 function assertSafeRepoProjectionPath(filePath, { allowMissing = true } = {}) {
   if (!isRepoLocalPath(filePath)) return;
@@ -204,6 +253,11 @@ async function expectedSourceRepoProjectProjectionAbsence(scope, staleRecords) {
 let manifestRecorder = null;
 let projectManifestAtStart = null;
 let runtimeSedimentedProjectPaths = new Set();
+let manifestScope = null;
+let syncScopeForWritePlan = null;
+let globalProjectionRecordDescriptors = [];
+let runtimeProfilesForSync = {};
+let requestedGlobalAssetTypes = null;
 function recordSafe(fn) {
   if (!manifestRecorder) return;
   fn(manifestRecorder);
@@ -371,6 +425,135 @@ export function inferProjectRuntimeTarget(filePath, rootDir = repoRoot) {
   if (rel.startsWith(".cursor/")) return "cursor";
   if (rel.startsWith("openclaw/")) return "openclaw";
   return null;
+}
+
+function isPathAtOrWithin(rootPath, candidatePath) {
+  const relative = path.relative(path.resolve(rootPath), path.resolve(candidatePath));
+  return relative === "" || (
+    relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+}
+
+function globalProjectionAssetType(assetKey) {
+  const normalized = assetKey.toLowerCase();
+  if (normalized.includes("capabilityindex")) return "capabilityIndex";
+  if (normalized.includes("workspace")) return "workspaces";
+  if (normalized.includes("agent")) return "agents";
+  if (normalized.includes("skill")) return "skills";
+  if (normalized.includes("hook")) return "hooks";
+  if (normalized.includes("command")) return "commands";
+  if (normalized.includes("rule")) return "rules";
+  if (normalized.includes("mcp")) return "mcp";
+  if (
+    normalized.includes("config") ||
+    normalized.includes("settings") ||
+    normalized.includes("template")
+  ) {
+    return "config";
+  }
+  return null;
+}
+
+function globalProjectionCategory(assetType) {
+  if (assetType === "hooks") return CATEGORIES.B;
+  if (["config", "mcp"].includes(assetType)) {
+    return CATEGORIES.C;
+  }
+  return CATEGORIES.A;
+}
+
+function buildGlobalProjectionRecordDescriptors(targetIds) {
+  const descriptors = [];
+  for (const targetId of targetIds) {
+    const profile = runtimeProfilesForSync[targetId];
+    if (!profile) {
+      throw new Error(`Missing runtime profile for global write plan: ${targetId}`);
+    }
+    const projection = resolveRuntimeProjection(targetId, "global");
+    for (const [assetKey, assetPath] of Object.entries(projection)) {
+      if (
+        ["runtimeId", "scope", "baseDir", "display"].includes(assetKey) ||
+        typeof assetPath !== "string"
+      ) {
+        continue;
+      }
+      const assetType = globalProjectionAssetType(assetKey);
+      if (!assetType || !profile.projection.assetTypes.includes(assetType)) {
+        continue;
+      }
+      descriptors.push({
+        targetId,
+        assetKey,
+        assetType,
+        rootPath: assetPath,
+        category: globalProjectionCategory(assetType),
+        owner: profile.projection.globalAssetOwners[assetType],
+      });
+    }
+  }
+  return descriptors.sort((left, right) =>
+    right.rootPath.length - left.rootPath.length
+  );
+}
+
+function inferGlobalProjectionRecord(filePath) {
+  const descriptor = globalProjectionRecordDescriptors.find(({ rootPath }) =>
+    isPathAtOrWithin(rootPath, filePath)
+  );
+  if (!descriptor) return null;
+  return {
+    category: descriptor.category,
+    purpose: `${descriptor.targetId}-global-${descriptor.assetKey}`,
+    runtimeTarget: descriptor.targetId,
+    assetType: descriptor.assetType,
+    owner: descriptor.owner,
+  };
+}
+
+function runtimeHasSyncOwnedGlobalAssets(targetId, ignoredAssetTypes = []) {
+  const profile = runtimeProfilesForSync[targetId];
+  if (!profile) return false;
+  const ignored = new Set(ignoredAssetTypes);
+  return profile.projection.assetTypes.some(
+    (assetType) =>
+      !ignored.has(assetType) &&
+      (
+        requestedGlobalAssetTypes === null ||
+        requestedGlobalAssetTypes.has(assetType)
+      ) &&
+      globalProjectionIsOwnedBy(
+        profile,
+        assetType,
+        GLOBAL_PROJECTION_OWNER_SYNC_RUNTIMES,
+      ),
+  );
+}
+
+function shouldSyncRuntimeAsset(targetId, assetType, scope) {
+  if (scope !== "global") return true;
+  const profile = runtimeProfilesForSync[targetId];
+  return Boolean(
+    profile &&
+    profile.projection.assetTypes.includes(assetType) &&
+    (
+      requestedGlobalAssetTypes === null ||
+      requestedGlobalAssetTypes.has(assetType)
+    ) &&
+    globalProjectionIsOwnedBy(
+      profile,
+      assetType,
+      GLOBAL_PROJECTION_OWNER_SYNC_RUNTIMES,
+    )
+  );
+}
+
+function shouldRunRuntimeProjectionBranch(targetId, scope) {
+  return (
+    scope !== "global" ||
+    runtimeHasSyncOwnedGlobalAssets(targetId, ["capabilityIndex"])
+  );
 }
 
 /**
@@ -1185,6 +1368,26 @@ function roleFromTitle(title, fallback) {
   return parts.length > 1 ? parts.slice(1).join(":").trim() : fallback;
 }
 
+export function parseCanonicalAgent(raw, sourceFile) {
+  const { data, body } = parseFrontmatter(raw, sourceFile);
+  if (!data.name || !data.description) {
+    throw new Error(
+      `${sourceFile} must define frontmatter name and description.`,
+    );
+  }
+  const title = extractTitle(body, data.name);
+  return {
+    id: data.name,
+    description: data.description,
+    sourceFile,
+    title,
+    summary: extractSummary(body, data.description),
+    role: roleFromTitle(title, data.description),
+    raw,
+    body: body.trim(),
+  };
+}
+
 function sortAgents(agents) {
   return [...agents].sort((left, right) => {
     const leftIndex = preferredOrder.indexOf(left.id);
@@ -1309,7 +1512,7 @@ Store information that stays true across sessions.
 `;
 }
 
-async function loadAgents() {
+export async function loadCanonicalAgents() {
   const files = (await fs.readdir(canonicalAgentsDir))
     .filter((file) => file.endsWith(".md"))
     .sort();
@@ -1318,24 +1521,8 @@ async function loadAgents() {
   for (const file of files) {
     const filePath = path.join(canonicalAgentsDir, file);
     const raw = await fs.readFile(filePath, "utf8");
-    const { data, body } = parseFrontmatter(raw, filePath);
-
-    if (!data.name || !data.description) {
-      throw new Error(
-        `${filePath} must define frontmatter name and description.`,
-      );
-    }
-
-    agents.push({
-      id: data.name,
-      description: data.description,
-      sourceFile: path.relative(repoRoot, filePath).replace(/\\/g, "/"),
-      title: extractTitle(body, data.name),
-      summary: extractSummary(body, data.description),
-      role: roleFromTitle(extractTitle(body, data.name), data.description),
-      raw,
-      body: body.trim(),
-    });
+    const sourceFile = path.relative(repoRoot, filePath).replace(/\\/g, "/");
+    agents.push(parseCanonicalAgent(raw, sourceFile));
   }
 
   return sortAgents(agents);
@@ -1694,21 +1881,65 @@ ${body}
 `;
 }
 
+const GLOBAL_AGENT_RENDERERS = Object.freeze({
+  canonical_markdown: (agent) => agent.raw,
+  codex_toml: buildCodexAgent,
+  cursor_markdown: buildCursorAgent,
+});
+
+export function renderGlobalAgentProjection(agent, projection) {
+  const renderer = GLOBAL_AGENT_RENDERERS[projection?.renderer];
+  if (!renderer) {
+    throw new Error(
+      `Unsupported global Agent renderer: ${projection?.renderer ?? "<missing>"}`,
+    );
+  }
+  return renderer(agent);
+}
+
 async function writeGeneratedFile(filePath, nextContent) {
   assertSafeRepoProjectionPath(filePath);
   if (isRuntimeSedimentedProjectPath(filePath)) {
     return { changed: false, preserved: true, reason: "runtime_sedimented_project_copy" };
   }
+  const globalRecord = syncScopeForWritePlan === "global"
+    ? inferGlobalProjectionRecord(filePath)
+    : null;
+  if (syncScopeForWritePlan === "global" && !globalRecord) {
+    throw new Error(
+      `Global projection path has no runtime-profile ownership mapping: ${filePath}`,
+    );
+  }
+  if (
+    globalRecord &&
+    (
+      globalRecord.owner !== GLOBAL_PROJECTION_OWNER_SYNC_RUNTIMES ||
+      (
+        requestedGlobalAssetTypes !== null &&
+        !requestedGlobalAssetTypes.has(globalRecord.assetType)
+      )
+    )
+  ) {
+    return {
+      changed: false,
+      preserved: true,
+      reason:
+        globalRecord.owner !== GLOBAL_PROJECTION_OWNER_SYNC_RUNTIMES
+          ? `owned_by:${globalRecord.owner}`
+          : `asset_not_selected:${globalRecord.assetType}`,
+    };
+  }
   const recordGeneratedFile = () => {
-    const category = inferProjectCategory(filePath);
+    const category = globalRecord?.category ?? inferProjectCategory(filePath);
     if (!category) return;
     recordSafe((rec) =>
       rec.recordFile(filePath, {
         source: "sync-runtimes",
-        purpose: inferProjectPurpose(category),
+        purpose: globalRecord?.purpose ?? inferProjectPurpose(category),
         category,
         ownershipClass: "install_projection",
-        runtimeTarget: inferProjectRuntimeTarget(filePath),
+        runtimeTarget:
+          globalRecord?.runtimeTarget ?? inferProjectRuntimeTarget(filePath),
       }),
     );
   };
@@ -1732,7 +1963,7 @@ async function writeGeneratedFile(filePath, nextContent) {
   if (checkOnly) {
     staleFiles.push({
       path: filePath,
-      category: inferProjectCategory(filePath),
+      category: globalRecord?.category ?? inferProjectCategory(filePath),
       action: currentContent === null ? "create" : "update",
     });
     return { changed: true };
@@ -1907,21 +2138,99 @@ async function removeEmptyTree(rootPath) {
   if (remaining.length === 0 && !checkOnly) await fs.rmdir(rootPath);
 }
 
-async function removeExactlyOwnedProjectionFile(filePath) {
+function projectionRelativeChild(rootPath, candidatePath) {
+  if (typeof rootPath !== "string" || !rootPath.trim()) return null;
+  const normalizedRoot = rootPath.replace(/\\/g, "/").replace(/^\.\//u, "").replace(/\/+$/u, "");
+  const normalizedCandidate = candidatePath.replace(/\\/g, "/").replace(/^\.\//u, "");
+  if (!normalizedCandidate.startsWith(`${normalizedRoot}/`)) return null;
+  const relativePath = normalizedCandidate.slice(normalizedRoot.length + 1);
+  return relativePath || null;
+}
+
+export async function canonicalGlobalOnlyProjectionContent(
+  filePath,
+  agents,
+  {
+    rootDir = repoRoot,
+    profiles = runtimeProfilesForSync,
+  } = {},
+) {
+  const relativePath = path.relative(rootDir, filePath).replace(/\\/g, "/");
+  if (
+    relativePath === ".." ||
+    relativePath.startsWith("../") ||
+    path.isAbsolute(relativePath)
+  ) {
+    return null;
+  }
+  const candidates = [];
+  for (const [targetId, profile] of Object.entries(profiles ?? {})) {
+    const outputPaths = profile?.projection?.outputPaths ?? {};
+    const capabilityRelative = projectionRelativeChild(
+      outputPaths.capabilityIndexDir,
+      relativePath,
+    );
+    if (capabilityRelative) {
+      candidates.push({
+        targetId,
+        kind: "capability-index",
+        content: await tryReadCanonical(
+          path.join(canonicalCapabilityIndexDir, ...capabilityRelative.split("/")),
+        ),
+      });
+    }
+
+    const projection = profile?.projection?.globalAgentProjection;
+    if (!projection?.supported) continue;
+    const agentRelative = projectionRelativeChild(outputPaths.agentsDir, relativePath);
+    if (!agentRelative || agentRelative.includes("/")) continue;
+    const agent = agents.find((item) =>
+      globalAgentProjectionFileName(projection, item.id) === agentRelative
+    );
+    if (!agent) continue;
+    candidates.push({
+      targetId,
+      kind: "agent",
+      content: renderGlobalAgentProjection(agent, projection),
+    });
+  }
+  const matches = candidates.filter(({ content }) => content !== null);
+  if (matches.length > 1) {
+    throw new Error(
+      `Ambiguous runtime-profile canonical projection mapping for ${relativePath}: ` +
+        matches.map(({ targetId, kind }) => `${targetId}:${kind}`).join(", "),
+    );
+  }
+  return matches[0]?.content ?? null;
+}
+
+export function canRetireGlobalOnlyProjection({
+  manifestMatches,
+  actualContent,
+  expectedContent,
+}) {
+  return manifestMatches ||
+    (expectedContent !== null && actualContent === expectedContent);
+}
+
+async function removeExactlyOwnedProjectionFile(filePath, agents) {
   assertSafeRepoProjectionPath(filePath);
   const ownership = inspectProjectProjectionOwnership(filePath);
   if (ownership.preserve) {
     return { changed: false, preserved: true, reason: ownership.reason };
   }
   const { entry } = ownership;
-  if (!manifestFileEntryMatches(entry, filePath)) {
+  const manifestMatches = manifestFileEntryMatches(entry, filePath);
+  const expectedContent = await canonicalGlobalOnlyProjectionContent(filePath, agents);
+  const actualContent = await fs.readFile(filePath, "utf8").catch(() => null);
+  if (!canRetireGlobalOnlyProjection({ manifestMatches, actualContent, expectedContent })) {
     staleFiles.push({
       path: filePath,
       category: inferProjectCategory(filePath),
       action: "preserve",
       reason: entry.sha256 ? "managed_file_changed" : "legacy_manifest_missing_integrity",
     });
-    return { changed: false, preserved: true, reason: "ownership_not_exact" };
+    return { changed: false, preserved: true, reason: "canonical_projection_not_exact" };
   }
   if (checkOnly) {
     staleFiles.push({
@@ -1936,11 +2245,11 @@ async function removeExactlyOwnedProjectionFile(filePath) {
   return { changed: true };
 }
 
-async function removeExactlyOwnedProjectionTree(relativePath, changedFiles) {
+async function removeExactlyOwnedProjectionTree(relativePath, changedFiles, agents) {
   const rootPath = path.join(repoRoot, relativePath);
   const files = await walkFiles(rootPath);
   for (const filePath of files) {
-    const result = await removeExactlyOwnedProjectionFile(filePath);
+    const result = await removeExactlyOwnedProjectionFile(filePath, agents);
     if (result.changed) changedFiles.push(path.relative(repoRoot, filePath).replace(/\\/g, "/"));
   }
   await removeEmptyTree(rootPath);
@@ -1993,11 +2302,11 @@ async function rewriteGlobalOnlyConfig(filePath, transform, changedFiles) {
 
 async function enforceGlobalOnlyProjectShape(changedFiles) {
   for (const relativePath of GLOBAL_ONLY_DURABLE_PROJECTION_ROOTS) {
-    await removeExactlyOwnedProjectionTree(relativePath, changedFiles);
+    await removeExactlyOwnedProjectionTree(relativePath, changedFiles, canonicalAgentsForGlobalOnly);
   }
   for (const relativePath of GLOBAL_ONLY_WHOLE_FILE_PROJECTIONS) {
     const filePath = path.join(repoRoot, relativePath);
-    const result = await removeExactlyOwnedProjectionFile(filePath);
+    const result = await removeExactlyOwnedProjectionFile(filePath, canonicalAgentsForGlobalOnly);
     if (result.changed) changedFiles.push(relativePath);
   }
 
@@ -2900,6 +3209,7 @@ async function main() {
 Options:
   --scope <project|global|both>  Write projection to repo (default: project)
   --targets <ids>                 Comma-separated runtime IDs (claude,codex,openclaw,cursor)
+  --global-assets <types>         Profile-declared asset families to write in global scope
   --lang <code>                   Messages: en | zh-CN | ja-JP | ko-KR (aliases: zh, ja, ko)
   --check                        Show what would be synced without writing
   --reverse                      Reverse sync: runtime -> canonical (collect evolution signals)
@@ -2926,13 +3236,27 @@ Examples:
 
   const scope = parseScopeArg(cliArgs);
   const targetContext = await resolveTargetContext(cliArgs);
+  runtimeProfilesForSync = targetContext.profiles;
+  syncScopeForWritePlan = scope;
   const globalOnlyProjectSync =
     scope === "project" &&
     targetContext.cliTargets.length === 0 &&
     targetContext.localOverrides.projectProjectionMode === "global_only";
   const selectedTargets = globalOnlyProjectSync ? [] : targetContext.activeTargets;
+  requestedGlobalAssetTypes = parseGlobalAssetTypesArg(
+    cliArgs,
+    runtimeProfilesForSync,
+    selectedTargets,
+  );
+  if (requestedGlobalAssetTypes !== null && syncScopeForWritePlan !== "global") {
+    throw new Error("--global-assets can only be used with --scope global");
+  }
+  globalProjectionRecordDescriptors = syncScopeForWritePlan === "global"
+    ? buildGlobalProjectionRecordDescriptors(selectedTargets)
+    : [];
   const dirs = resolveProjectionDirs(scope);
-  const agents = await loadAgents();
+  const agents = await loadCanonicalAgents();
+  canonicalAgentsForGlobalOnly = agents;
   const teamDirectory = buildWorkspaceDirectory(agents);
   const canonicalSkills = await loadCanonicalSkills();
   const changedFiles = [];
@@ -2949,16 +3273,21 @@ Examples:
     }
   }
 
-  // Open project install manifest recorder. Only record when writes actually
-  // hit the repo (not in --check mode, and only when scope includes project).
-  // Global-scope sync is recorded separately by sync-global-meta-theory.mjs.
-  if (!checkOnly && (scope === "project" || scope === "both")) {
-    projectManifestAtStart = readManifest(manifestPathFor("project", repoRoot));
-    runtimeSedimentedProjectPaths = await loadRuntimeSedimentedProjectPaths(repoRoot);
+  // Every scope records its own actual projection writes into the shared
+  // ownership ledger. The recorder performs a lock-backed merge so this
+  // global writer preserves records emitted by sync-global-meta-theory.mjs.
+  if (!checkOnly && (scope === "project" || scope === "both" || scope === "global")) {
+    manifestScope = scope === "global" ? "global" : "project";
+    if (manifestScope === "project") {
+      projectManifestAtStart = readManifest(manifestPathFor("project", repoRoot));
+      runtimeSedimentedProjectPaths = await loadRuntimeSedimentedProjectPaths(repoRoot);
+    }
     manifestRecorder = openRecorder({
-      scope: "project",
-      repoRoot,
-      metaKimVersion: process.env.META_KIM_VERSION ?? null,
+      scope: manifestScope,
+      repoRoot: manifestScope === "project" ? repoRoot : undefined,
+      metaKimVersion:
+        process.env.META_KIM_VERSION ??
+        JSON.parse(await fs.readFile(path.join(repoRoot, "package.json"), "utf8")).version,
     });
   } else if (scope === "project" || scope === "both") {
     projectManifestAtStart = readManifest(manifestPathFor("project", repoRoot));
@@ -2980,7 +3309,13 @@ Examples:
     }
   }
 
-  await syncCapabilityIndexMirrors(dirs, selectedTargets, changedFiles);
+  await syncCapabilityIndexMirrors(
+    dirs,
+    selectedTargets.filter((targetId) =>
+      shouldSyncRuntimeAsset(targetId, "capabilityIndex", scope),
+    ),
+    changedFiles,
+  );
 
   // `global_only` suppresses durable project agents/skills/commands, but the
   // repo-local governance hook package still has to remain internally
@@ -3049,7 +3384,10 @@ Examples:
     await enforceGlobalOnlyProjectShape(changedFiles);
   }
 
-  if (selectedTargets.includes("claude")) {
+  if (
+    selectedTargets.includes("claude") &&
+    shouldRunRuntimeProjectionBranch("claude", scope)
+  ) {
     await syncClaudeProjection(
       dirs,
       agents,
@@ -3058,44 +3396,34 @@ Examples:
     );
   }
 
-  if (selectedTargets.includes("openclaw")) {
+  if (
+    selectedTargets.includes("openclaw") &&
+    shouldRunRuntimeProjectionBranch("openclaw", scope)
+  ) {
     const dp = dirs.displayPaths;
 
     for (const agent of agents) {
       const workspaceDir = dirs.openclawWorkspaceDir(agent.id);
       const heartbeatContent = await buildHeartbeat(agent);
-      const writes = await Promise.all([
-        writeGeneratedFile(
-          path.join(workspaceDir, "BOOT.md"),
-          buildBoot(agent),
-        ),
-        writeGeneratedFile(
-          path.join(workspaceDir, "BOOTSTRAP.md"),
-          buildBootstrap(agent),
-        ),
-        writeGeneratedFile(
-          path.join(workspaceDir, "IDENTITY.md"),
-          buildIdentity(agent),
-        ),
-        writeGeneratedFile(
-          path.join(workspaceDir, "MEMORY.md"),
-          buildMemory(agent),
-        ),
-        writeGeneratedFile(path.join(workspaceDir, "USER.md"), buildUser()),
-        writeGeneratedFile(
-          path.join(workspaceDir, "SOUL.md"),
-          buildSoul(agent),
-        ),
-        writeGeneratedFile(path.join(workspaceDir, "AGENTS.md"), teamDirectory),
-        writeGeneratedFile(
-          path.join(workspaceDir, "HEARTBEAT.md"),
-          heartbeatContent,
-        ),
-        writeGeneratedFile(
-          path.join(workspaceDir, "TOOLS.md"),
-          buildTools(agent, agents),
-        ),
+      const workspaceContent = new Map([
+        ["BOOT.md", buildBoot(agent)],
+        ["BOOTSTRAP.md", buildBootstrap(agent)],
+        ["IDENTITY.md", buildIdentity(agent)],
+        ["MEMORY.md", buildMemory(agent)],
+        ["USER.md", buildUser()],
+        ["SOUL.md", buildSoul(agent)],
+        ["AGENTS.md", teamDirectory],
+        ["HEARTBEAT.md", heartbeatContent],
+        ["TOOLS.md", buildTools(agent, agents)],
       ]);
+      const writes = await Promise.all(
+        OPENCLAW_WORKSPACE_FILE_NAMES.map((fileName) =>
+          writeGeneratedFile(
+            path.join(workspaceDir, fileName),
+            workspaceContent.get(fileName),
+          )
+        ),
+      );
 
       if (writes.some((result) => result.changed)) {
         changedFiles.push(dirs.openclawDisplayWorkspaceDir(agent.id));
@@ -3221,7 +3549,10 @@ Examples:
     );
   }
 
-  if (selectedTargets.includes("codex")) {
+  if (
+    selectedTargets.includes("codex") &&
+    shouldRunRuntimeProjectionBranch("codex", scope)
+  ) {
     const dp = dirs.displayPaths;
 
     if ((await removeGeneratedPath(dirs.codexLegacySkillFile)).changed) {
@@ -3561,7 +3892,10 @@ Examples:
   }
 
   // ── Cursor sync ───────────────────────────────────────────────
-  if (selectedTargets.includes("cursor")) {
+  if (
+    selectedTargets.includes("cursor") &&
+    shouldRunRuntimeProjectionBranch("cursor", scope)
+  ) {
     const dp = dirs.displayPaths;
 
     // Agent projections (.cursor/agents/*.md)
@@ -3624,7 +3958,11 @@ Examples:
       changedFiles,
     );
 
-    if (dirs.cursorHooksDir && dirs.cursorHooksFile) {
+    if (
+      dirs.cursorHooksDir &&
+      dirs.cursorHooksFile &&
+      shouldSyncRuntimeAsset("cursor", "hooks", scope)
+    ) {
       // Global-hooks migration: clear legacy files directly under
       // ~/.cursor/hooks/ before writing the namespaced global package.
       if (scope === "global") {
@@ -4242,6 +4580,11 @@ Examples:
   console.log(t.syncScopeLine(scope, selectedTargets.join(", ")));
 
   if (manifestRecorder) {
+    if (process.env.META_KIM_TEST_FAIL_SYNC_RUNTIMES_MANIFEST === "1") {
+      throw new Error(
+        "Global runtime sync is partial because install manifest persistence was intentionally failed",
+      );
+    }
     const result = await manifestRecorder.flush();
     if (result.ok) {
       console.log(`✓ ${t.syncInstallManifestOk(result.path, result.entries)}`);

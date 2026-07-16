@@ -41,6 +41,7 @@ ${status.usageHeading}:
   meta-kim check [options]
   ${status.usage}
   meta-kim doctor
+  meta-kim mcp serve
   meta-kim uninstall [--yes] [--deep] [--scope=global|project|both]
   meta-kim project bootstrap [--project-dir <dir>] [--dry-run|--apply] [--json]
   meta-kim project capability copy --project-dir <dir> --runtime <runtime> --type <agent|skill|command> --id <id> --source <path> --mode <create|iterate> [--apply] [--json]
@@ -53,7 +54,7 @@ ${status.optionsHeading}:
 `;
 }
 
-const commands = new Set(["install", "update", "check", "status", "doctor", "uninstall", "project"]);
+const commands = new Set(["install", "update", "check", "status", "doctor", "uninstall", "project", "mcp"]);
 
 function fail(message, copy = statusCopy()) {
   console.error(`meta-kim: ${message}`);
@@ -222,5 +223,11 @@ switch (command) {
       run("scripts/project-capability-copy.mjs", commandArgs.slice(2));
     }
     fail("project subcommand must be 'bootstrap' or 'capability copy'");
+    break;
+  case "mcp":
+    if (!['serve', 'self-test'].includes(commandArgs[0]) || commandArgs.length !== 1) {
+      fail("mcp subcommand must be 'serve' or 'self-test'");
+    }
+    run("scripts/mcp/meta-runtime-server.mjs", commandArgs[0] === "self-test" ? ["--self-test"] : []);
     break;
 }

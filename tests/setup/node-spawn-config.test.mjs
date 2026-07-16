@@ -63,6 +63,7 @@ describe("setup child CLI contracts", () => {
         args: buildGlobalSkillsInstallerArgs({
           targets: ["claude", "codex"],
           skillIds: ["meta-theory"],
+          skipInventoryRefresh: true,
         }),
       },
       {
@@ -71,6 +72,7 @@ describe("setup child CLI contracts", () => {
           targets: ["claude", "codex"],
           skillIds: ["meta-theory"],
           update: true,
+          skipInventoryRefresh: true,
         }),
       },
     ];
@@ -90,6 +92,9 @@ describe("setup child CLI contracts", () => {
       );
       assert.deepEqual(spawnConfig.args.slice(1, 3), ["--lang", "zh-CN"], phase);
       assert.doesNotThrow(() => validateInstallerArgs(spawnConfig.args.slice(1)), phase);
+      if (phase === "install" || phase === "update") {
+        assert.ok(args.includes("--skip-inventory-refresh"), phase);
+      }
     }
   });
 

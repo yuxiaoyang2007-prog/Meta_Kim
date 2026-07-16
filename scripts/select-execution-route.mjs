@@ -5,6 +5,7 @@ import path from "node:path";
 import { GOVERNANCE_OWNERS, OS_TARGETS, RUNTIMES, classifyTaskShape, exists, readJson, repoPath, scoreRoute, stateDir, supportScore, toPosix } from "./governance-lib.mjs";
 import { CAPABILITY_GAP_DECISION_CONTRACT, decideCapabilityGap } from "./capability-gap-mvp.mjs";
 import { classifyMetaTheoryEntry } from "./meta-theory-entry-classifier.mjs";
+import { loadRuntimeProfiles, resolveRuntimeProjection } from "./meta-kim-sync-config.mjs";
 
 function argValue(name, fallback = null) {
   const index = process.argv.indexOf(name);
@@ -396,22 +397,7 @@ async function projectRuntimeAgents() {
       let customAgentDefinitionErrors = [];
       if (runtimeName === "codex") {
         const content = await fs.readFile(path.join(absDir, entry.name), "utf8");
-        const scalar = (key) => {
-          const triple = content.match(new RegExp(`^${key}\\s*=\\s*(?:\"\"\"|''')([\\s\\S]*?)(?:\"\"\"|''')`, "mu"));
-          if (triple) return triple[1].trim();
-          const single = content.match(new RegExp(`^${key}\\s*=\\s*[\"']([^\"']+)[\"']`, "mu"));
-          return single?.[1]?.trim() ?? null;
-        };
-        metadata = {
-          name: scalar("name"),
-          description: scalar("description"),
-          developer_instructions: scalar("developer_instructions"),
-        };
-        customAgentDefinitionErrors = [
-          ...(!metadata.name ? ["missing_name"] : []),
-          ...(!metadata.description ? ["missing_description"] : []),
-          ...(!metadata.developer_instructions ? ["missing_developer_instructions"] : []),
-        ];
+        ({ metadata, errors: customAgentDefinitionErrors } = parseCodexAgentDefinition(content));
         validCustomAgentDefinition = customAgentDefinitionErrors.length === 0;
         if (validCustomAgentDefinition) id = metadata.name;
       }
@@ -449,6 +435,74 @@ async function projectRuntimeAgents() {
     }
   }
   return agents;
+}
+
+function parseCodexAgentDefinition(content) {
+  const scalar = (key) => {
+    const triple = content.match(
+      new RegExp(`^${key}\\s*=\\s*(?:\"\"\"|''')([\\s\\S]*?)(?:\"\"\"|''')`, "mu"),
+    );
+    if (triple) return triple[1].trim();
+    const single = content.match(new RegExp(`^${key}\\s*=\\s*[\"']([^\"']+)[\"']`, "mu"));
+    return single?.[1]?.trim() ?? null;
+  };
+  const metadata = {
+    name: scalar("name"),
+    description: scalar("description"),
+    developer_instructions: scalar("developer_instructions"),
+  };
+  return {
+    metadata,
+    errors: [
+      ...(!metadata.name ? ["missing_name"] : []),
+      ...(!metadata.description ? ["missing_description"] : []),
+      ...(!metadata.developer_instructions ? ["missing_developer_instructions"] : []),
+    ],
+  };
+}
+
+async function globalRuntimeAgentProviders() {
+  const profileId = runtime === "claude_code" ? "claude" : runtime;
+  const profiles = await loadRuntimeProfiles();
+  const profile = profiles[profileId];
+  const agentProjection = profile?.projection?.globalAgentProjection;
+  if (!agentProjection?.supported) return [];
+
+  const projection = resolveRuntimeProjection(profileId, "global");
+  const agentsDir = projection.agentsDir;
+  if (!agentsDir || !(await exists(agentsDir))) return [];
+
+  const providers = [];
+  const entries = await fs.readdir(agentsDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(agentProjection.fileExtension)) continue;
+    const inventoryId = entry.name.slice(0, -agentProjection.fileExtension.length);
+    let id = inventoryId;
+    let metadata = null;
+    let customAgentDefinitionErrors = [];
+    let validCustomAgentDefinition = null;
+    if (agentProjection.format === "codex_toml") {
+      const content = await fs.readFile(path.join(agentsDir, entry.name), "utf8");
+      ({ metadata, errors: customAgentDefinitionErrors } = parseCodexAgentDefinition(content));
+      validCustomAgentDefinition = customAgentDefinitionErrors.length === 0;
+      if (validCustomAgentDefinition) id = metadata.name;
+    }
+    const layer = id.startsWith("meta-") ? "meta" : "execution";
+    providers.push({
+      id,
+      inventoryId,
+      layer,
+      source: "local_global_agent_inventory",
+      runtime,
+      platformId: runtime,
+      sourceRef: `~/${toPosix(path.relative(projection.baseDir, path.join(agentsDir, entry.name)))}`,
+      executionBlock: layer === "meta",
+      metadata,
+      validCustomAgentDefinition,
+      customAgentDefinitionErrors,
+    });
+  }
+  return providers;
 }
 
 async function projectSkillProviders() {
@@ -606,7 +660,17 @@ async function codexGlobalSkillProviders() {
 }
 
 const repoCanonicalAgents = capabilityEntries(repoCapabilityIndex, "agents").map((entry) => compactAgent(entry, "repo_canonical_capability_index"));
-const localGlobalAgents = capabilityEntries(globalCapabilityInventory, "agents").map((entry) => compactAgent(entry, "local_global_agent_inventory"));
+const cachedLocalGlobalAgents = capabilityEntries(globalCapabilityInventory, "agents")
+  .map((entry) => compactAgent(entry, "local_global_agent_inventory"));
+const filesystemRuntimeAgents = await globalRuntimeAgentProviders();
+const localGlobalAgents = [];
+const localGlobalAgentKeys = new Set();
+for (const agent of [...filesystemRuntimeAgents, ...cachedLocalGlobalAgents]) {
+  const key = `${agent.runtime ?? agent.platformId ?? "shared"}:${agent.id}`;
+  if (localGlobalAgentKeys.has(key)) continue;
+  localGlobalAgentKeys.add(key);
+  localGlobalAgents.push(agent);
+}
 const projectRuntimeAgentCandidates = await projectRuntimeAgents();
 const repoCanonicalSkillProviders = capabilityEntries(repoCapabilityIndex, "skills").map((entry) => compactCapabilityProvider(entry, "repo_canonical_capability_index", "skills"));
 const projectRuntimeSkillProviders = await projectSkillProviders();

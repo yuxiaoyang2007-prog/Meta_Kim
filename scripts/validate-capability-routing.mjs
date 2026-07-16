@@ -1,17 +1,12 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
-import process from "node:process";
 import { assert } from "./governance-lib.mjs";
+import { runRouteQuery } from "./run-route-query.mjs";
 
 function route(task, runtime = "auto", os = "auto", extraArgs = []) {
-  const result = spawnSync(process.execPath, ["scripts/select-execution-route.mjs", "--task", task, "--runtime", runtime, "--os", os, "--json", ...extraArgs], {
-    encoding: "utf8",
-  });
-  if (result.status !== 0) throw new Error(result.stderr || result.stdout);
-  return JSON.parse(result.stdout);
+  return runRouteQuery({ task, runtime, os, extraArgs });
 }
 
-const fuzzy = route("fuzzy strategy task: choose a product monetization path and minimum test");
+const fuzzy = await route("fuzzy strategy task: choose a product monetization path and minimum test");
 assert(fuzzy.candidateWeapons.includes("meta-kim-decision-patterns"), "Fuzzy strategy/product task must recall internal Meta_Kim decision patterns");
 assert(fuzzy.ownerDiscoveryPacket?.governanceStages?.Critical?.requiredAgents?.includes("meta-warden"), "Route output must expose Critical governance owner discovery");
 assert(Array.isArray(fuzzy.ownerDiscoveryPacket?.projectRuntimeAgents), "Route output must expose project runtime agent discovery");
@@ -189,7 +184,7 @@ assert(fuzzy.recommendedRoute?.runtime, "Recommended route needs runtime");
 assert(fuzzy.recommendedRoute?.os, "Recommended route needs OS");
 assert(fuzzy.recommendedRoute?.verificationMethod, "Recommended route needs verification method");
 
-const subjectiveQuality = route("这个页面不好看，帮我弄高级一点", "codex", "windows");
+const subjectiveQuality = await route("这个页面不好看，帮我弄高级一点", "codex", "windows");
 assert(
   subjectiveQuality.recommendedRoute?.id === "subjective-ui-design-orchestration:codex:windows",
   "No-keyword subjective UI request must route to subjective UI orchestration",
@@ -207,10 +202,10 @@ assert(
   "Route provider refs must not leak local absolute home paths",
 );
 
-const code = route("complex code refactor with tests");
+const code = await route("complex code refactor with tests");
 assert(!code.rankedRoutes.some((item) => item.dependencyProject === "kim-decision"), "Kim_Decision must not become implementation owner for pure code execution");
 
-const contentGrowthDecision = route("内容营销中，标题文案和封面设计怎样提升转化，帮我判断怎么改", "codex", "windows");
+const contentGrowthDecision = await route("内容营销中，标题文案和封面设计怎样提升转化，帮我判断怎么改", "codex", "windows");
 assert(contentGrowthDecision.taskShape === "strategy_product_decision", "Business content work must not be misclassified as runtime platform governance");
 assert(contentGrowthDecision.recommendedRoute?.id === "kim-decision-lens:codex:windows", "Decision tasks should expose the Kim_Decision decision lens");
 assert(contentGrowthDecision.recommendedRoute?.dependency === null, "Kim_Decision lens must not be recorded as an execution dependency");
@@ -225,25 +220,25 @@ assert(
 assert(!JSON.stringify(contentGrowthDecision.decisionExperiencePlan?.sequence ?? []).includes("goalpro"), "Decision route must not trigger GoalPro early");
 assert(/not the place that creates user Goals/i.test(contentGrowthDecision.decisionExperiencePlan?.evolutionBoundary ?? ""), "Evolution must not be bound to user Goal creation");
 
-const contentAutomationBuild = route("帮我做一个内容营销自动发布器，需要内容策略、前端界面、后端 API、数据模型、平台集成、权限风控、测试验收和发布运维", "codex", "windows");
+const contentAutomationBuild = await route("帮我做一个内容营销自动发布器，需要内容策略、前端界面、后端 API、数据模型、平台集成、权限风控、测试验收和发布运维", "codex", "windows");
 assert(contentAutomationBuild.recommendedRoute?.id === "product-build-orchestration:codex:windows", "An explicit product build must retain the product-build orchestration route even when it includes strategy language");
 
-const codexAgentSearch = route("Create a provider smoke test that discovers an execution agent and finds a skill provider", "codex", "windows");
+const codexAgentSearch = await route("Create a provider smoke test that discovers an execution agent and finds a skill provider", "codex", "windows");
 assert(
   codexAgentSearch.recommendedRoute?.selectedCapabilityProviders?.agent?.platformId !== "claudeCode",
   "Codex execution owner selection must not bind Claude Code global agents",
 );
 
-const hook = route("platform hook install for Codex and Cursor");
+const hook = await route("platform hook install for Codex and Cursor");
 assert(hook.candidateWeapons.includes("runtime-capability-matrix") || hook.candidateOwners.includes("meta-sentinel"), "Platform hook task must recall runtime matrix or sentinel");
 
-const windows = route("Windows setup task for hooks and MCP", "codex", "windows");
+const windows = await route("Windows setup task for hooks and MCP", "codex", "windows");
 assert(windows.osFilterResult.applied === "windows", "Windows setup must apply windows OS filter");
 
-const cursorUnknown = route("Cursor unknown native choice surface task", "cursor", "windows");
+const cursorUnknown = await route("Cursor unknown native choice surface task", "cursor", "windows");
 assert(cursorUnknown.recommendedRoute || cursorUnknown.capabilityGapPacket, "Cursor unknown capability must route or gap honestly");
 
-const missing = route("missing dependency task requiring imaginary provider xzzq");
+const missing = await route("missing dependency task requiring imaginary provider xzzq");
 assert(missing.recommendedRoute || missing.capabilityGapPacket, "Missing dependency task must produce route or capabilityGapPacket");
 assert(missing.capabilityGapDetected === true, "Explicit missing dependency must trigger capability-gap detection");
 assert(missing.capabilityGapDecision?.decision === "blocked_or_needs_approval", "Imaginary provider must block or require approval instead of being swallowed by a generic route");
@@ -260,7 +255,7 @@ assert(
   "Explicit capability gap route must connect type classification to capabilityGapDecision",
 );
 
-const claudeAgentSearch = route("在 Claude Code 里运行 agent 搜索不对 critical and fetch thinking and review", "claude_code", "windows");
+const claudeAgentSearch = await route("在 Claude Code 里运行 agent 搜索不对 critical and fetch thinking and review", "claude_code", "windows");
 assert(
   claudeAgentSearch.recommendedRoute?.id === "execution-capability-discovery:claude_code:windows",
   "Claude Code agent-search complaints must route to execution capability discovery, not dependency-project registry",
@@ -274,7 +269,7 @@ assert(
   "Claude Code agent search must not select .codex/agents adapters as callable Claude agents",
 );
 
-const codexAgentReuseComplaint = route("Critical Thinking Fetch Deep Thinking Review 为什么 Codex 一直创建 agent 而不是找全局 agent", "codex", "windows");
+const codexAgentReuseComplaint = await route("Critical Thinking Fetch Deep Thinking Review 为什么 Codex 一直创建 agent 而不是找全局 agent", "codex", "windows");
 assert(
   codexAgentReuseComplaint.recommendedRoute?.id === "execution-capability-discovery:codex:windows",
   "Codex agent-creation complaints must route to execution capability discovery before dependency/project registry",
@@ -308,7 +303,7 @@ const codexAgentTypeSchema = JSON.stringify({
   inputProperties: ["task_name", "message", "agent_type"],
   evidenceSource: "active_host_tool_schema",
 });
-const codexNativeAgentReuse = route(
+const codexNativeAgentReuse = await route(
   "Critical Thinking Fetch Deep Thinking Review 为什么 Codex 一直创建 agent 而不是找全局 agent",
   "codex",
   "windows",
@@ -332,7 +327,7 @@ assert(
   "Agent reuse complaints must not be misread as create-agent capability-gap requests",
 );
 
-const createAgentGap = route("create agent for long-term test coverage strategy owner");
+const createAgentGap = await route("create agent for long-term test coverage strategy owner");
 assert(createAgentGap.capabilityGapDetected === true, "Explicit create agent request must trigger capability-gap detection");
 assert(createAgentGap.capabilityGapDecision?.decision === "create_agent", "Long-term coverage owner gap must route to create_agent");
 assert(createAgentGap.capabilityGapDecision?.generatedAgentSpec?.identityCleanliness?.status === "pass", "create_agent route gap must produce a clean GeneratedAgentSpec");

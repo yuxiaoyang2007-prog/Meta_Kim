@@ -14,6 +14,8 @@ import {
   ensureProfileState,
   getProfilePaths,
   resolveProfileName,
+  resolveRuntimeFamily,
+  SHARED_RUNTIME_FAMILY,
 } from "../../scripts/meta-kim-local-state.mjs";
 import {
   joinProjectRegistry,
@@ -111,6 +113,33 @@ describe("sqlite unit-of-work boundaries", () => {
 });
 
 describe("profile-aware state paths", () => {
+test("runtime-family inference reads the real entrypoint, not business argument values", () => {
+  assert.equal(
+    resolveRuntimeFamily(undefined, {
+      environment: {},
+      argv: [
+        process.execPath,
+        path.join(REPO_ROOT, "scripts", "discover-global-capabilities.mjs"),
+        "--targets",
+        "claude,codex",
+      ],
+    }),
+    SHARED_RUNTIME_FAMILY,
+  );
+  assert.equal(
+    resolveRuntimeFamily(undefined, {
+      environment: {},
+      argv: [
+        process.execPath,
+        path.join("C:\\", "Users", "Runtime", ".codex", "hooks", "check.mjs"),
+        "--targets",
+        "claude,codex",
+      ],
+    }),
+    "codex",
+  );
+});
+
   test("META_KIM_PROFILE selects an isolated profile for state and reports", () => {
     const previous = process.env.META_KIM_PROFILE;
     process.env.META_KIM_PROFILE = "test";
@@ -179,6 +208,54 @@ describe("profile-aware state paths", () => {
       assert.equal(path.basename(profileDir), safeProfile);
     } finally {
       await fs.rm(profileDir, { recursive: true, force: true });
+      await fs.rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("cross-runtime discovery keeps shared profile ownership under Codex host pollution", async () => {
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "meta-kim-shared-discovery-"));
+    const profile = `shared-discovery-${process.pid}-${Date.now()}`;
+    const paths = getProfilePaths({
+      profile,
+      runtimeFamily: SHARED_RUNTIME_FAMILY,
+    });
+    try {
+      await ensureProfileState({
+        profile,
+        runtimeFamily: SHARED_RUNTIME_FAMILY,
+      });
+      await execFileAsync(
+        process.execPath,
+        [
+          path.join(REPO_ROOT, "scripts", "discover-global-capabilities.mjs"),
+          "--runtime-inventory-only",
+          "--targets",
+          "claude,codex",
+        ],
+        {
+          cwd: REPO_ROOT,
+          env: {
+            ...process.env,
+            HOME: home,
+            USERPROFILE: home,
+            CODEX_HOME: path.join(home, ".codex-host"),
+            META_KIM_CODEX_HOME: path.join(home, ".codex-runtime"),
+            META_KIM_CLAUDE_HOME: path.join(home, ".claude-runtime"),
+            META_KIM_PROFILE: profile,
+            META_KIM_RUNTIME: "codex",
+            META_KIM_RUNTIME_FAMILY: "codex",
+          },
+          maxBuffer: 1024 * 1024 * 4,
+        },
+      );
+
+      const metadata = JSON.parse(await fs.readFile(paths.profileFile, "utf8"));
+      assert.equal(metadata.runtimeFamily, SHARED_RUNTIME_FAMILY);
+      await fs.access(
+        path.join(paths.profileDir, "capability-index", "global-capabilities.json"),
+      );
+    } finally {
+      await fs.rm(paths.profileDir, { recursive: true, force: true });
       await fs.rm(home, { recursive: true, force: true });
     }
   });

@@ -98,7 +98,6 @@ import {
   isReadOnlyTool,
   recordDispatch,
   writeSpineState,
-  checkStageRequirements,
   checkChoiceSurfaceGate,
   isHookObservedState,
   STAGE_META_AGENT_MAP,
@@ -106,7 +105,6 @@ import {
   recordSkippedHook,
   getGovernanceFlow,
   evaluateFanoutGate,
-  validateDegradedDeclaration,
 } from "./spine-state.mjs";
 import {
   getSkipRule,
@@ -445,22 +443,6 @@ function isPlanningFileWriteSegment(segment) {
   );
 }
 
-function formatDesignStageMutationDeny(label, req, state) {
-  const missing = req?.missing?.length
-    ? ` Missing: ${req.missing.join(", ")}.`
-    : "";
-  const reason = req?.reason ? ` ${req.reason}` : "";
-  return (
-    `Stage "${label}" is a design-time stage; business mutation is blocked until Execution.` +
-    `${missing}${reason} Critical, Fetch, and Thinking can be completed by the main thread; ` +
-    "Agent dispatch is not required before Execution. Allowed next actions: continue " +
-    "read/search Fetch evidence, capability discovery, a brief visible chat status, " +
-    "planning-file updates when already useful, or spine-state packet writes. Do not start " +
-    "Fetch by creating or updating a task/todo board before evidence is collected. " +
-    `Dispatch chain so far: ${JSON.stringify(state.dispatchChain || {})}`
-  );
-}
-
 function hasFetchEvidenceForTaskBookkeeping(state) {
   const fetchRecord = state?.fetchRecord;
   if (!fetchRecord || typeof fetchRecord !== "object") return false;
@@ -499,18 +481,6 @@ function formatTaskBookkeepingDelayDeny(toolName, state) {
     "Continue Fetch with read/search/capability discovery and a brief visible chat status; " +
     "write spine-state or planning files only when needed. Do not start by creating or updating " +
     "a task list before evidence is collected."
-  );
-}
-
-function formatPostExecutionStageDeny(label, req, state) {
-  const missing = req?.missing?.length
-    ? ` Missing: ${req.missing.join(", ")}.`
-    : "";
-  const reason = req?.reason ? ` ${req.reason}` : "";
-  return (
-    `Stage "${label}" requirements are not met.${missing}${reason} ` +
-    "Return to the responsible stage and record the missing evidence before continuing. " +
-    `Dispatch chain: ${JSON.stringify(state.dispatchChain || {})}`
   );
 }
 
@@ -761,23 +731,6 @@ function observedModeNotice(state) {
     "commands remain runtime/user-intent concerns, while release/public-ready claims still require " +
     "the managed runner to record Fetch, Thinking, fileChangeFactCard, and executionLease."
   );
-}
-
-async function allowObservedModeExecution(state) {
-  const control = state?.stageRuntimeControl || {};
-  if (!control.observedNoticeEmittedAt) {
-    process.stderr.write(`${observedModeNotice(state)}\n`);
-    const nextState = {
-      ...state,
-      stageRuntimeControl: {
-        ...control,
-        observedNoticeEmittedAt: new Date().toISOString(),
-        observedNoticePolicy: "emit_once_per_active_state",
-      },
-    };
-    await writeSpineState(cwd, nextState);
-  }
-  process.exit(0);
 }
 
 function isAgentDispatchTool(name) {
@@ -1107,41 +1060,17 @@ function warnMetaAgentExecution(agentName, stage) {
 }
 
 /**
- * Infer the caller's identity (which agent is making the current tool call).
- * Priority order:
- *   1. CLAUDE_SUBAGENT_TYPE environment variable (runtime-injected).
- *   2. Latest entry in spine state's dispatchChain (most recently dispatched
- *      owner for the current stage).
- *   3. Conservative fallback: null. The caller treats null as "unknown" and
- *      degrades to warn-mode so that legitimate user activity is not blocked
- *      by a parsing miss.
+ * Infer the caller's identity only from runtime-injected evidence.
+ * dispatchChain is historical governance state, not proof that the latest
+ * dispatched owner is making the current tool call. Using it as caller identity
+ * can falsely warn or block the main thread's ordinary project changes.
  *
- * @param {object|null} state
  * @returns {{ name: string|null, source: string }}
  */
-function inferCallerIdentity(state) {
+function inferCallerIdentity() {
   const envHint = process.env.CLAUDE_SUBAGENT_TYPE;
   if (envHint && typeof envHint === "string" && envHint.trim()) {
     return { name: envHint.trim(), source: "env" };
-  }
-
-  const chain = state?.dispatchChain;
-  const stage = state?.currentStage;
-  if (chain && stage && Array.isArray(chain[stage]) && chain[stage].length) {
-    // The most recently appended entry is the active owner for this stage.
-    const latest = chain[stage][chain[stage].length - 1];
-    if (latest) return { name: latest, source: "spine_chain" };
-  }
-
-  // Walk back through all stages, newest first, as a secondary signal.
-  if (chain && typeof chain === "object") {
-    const stages = Object.keys(chain);
-    for (let i = stages.length - 1; i >= 0; i--) {
-      const list = chain[stages[i]];
-      if (Array.isArray(list) && list.length) {
-        return { name: list[list.length - 1], source: "spine_chain_walk" };
-      }
-    }
   }
 
   return { name: null, source: "unknown" };
@@ -1424,7 +1353,7 @@ if (state && state.active) {
 // restriction would evaporate as soon as the spine deactivated.
 if (!state || !state.active) {
   if (isExecutionTool(toolName)) {
-    const caller = inferCallerIdentity(state);
+    const caller = inferCallerIdentity();
     if (caller.name && isMetaAgent(caller.name)) {
       enforceMetaReadonly(toolName, toolInput, state, caller);
       // If enforceMetaReadonly chose warn-mode, fall through to exit(0) below.
@@ -1465,10 +1394,12 @@ if (isAgentDispatchTool(toolName)) {
     process.exit(0);
   }
 
+  const executionDispatchIntent = isExecutionDispatchIntent(toolInput, metaName);
+
   if (
     !state.queryBypass &&
     ["critical", "fetch", "thinking"].includes(state.currentStage) &&
-    isExecutionDispatchIntent(toolInput, metaName)
+    executionDispatchIntent
   ) {
     const independentLaneGate = checkThinkingIndependentLanes(state);
     if (!independentLaneGate.met) {
@@ -1560,6 +1491,15 @@ if (isAgentDispatchTool(toolName)) {
           );
         } else {
           exitAfterDeny(reason);
+        }
+      }
+
+      if (executionDispatchIntent) {
+        const choiceSurfaceGate = checkChoiceSurfaceGate(state);
+        if (!choiceSurfaceGate.met) {
+          exitAfterDeny(
+            `${choiceSurfaceGate.reason} Missing: ${choiceSurfaceGate.missing.join(", ")}.`,
+          );
         }
       }
 
@@ -1663,8 +1603,8 @@ if (TASK_BOOKKEEPING_TOOLS.has(toolName)) {
   process.exit(0);
 }
 
-// Other control-plane tools are allowed. The fuse is about business mutation
-// and external side effects, not passive native planning surfaces.
+// Other passive control-plane tools are allowed. Agent dispatch and early task
+// bookkeeping have their own explicit governance branches above.
 if (CONTROL_PLANE_TOOLS.has(toolName)) {
   process.exit(0);
 }
@@ -1698,7 +1638,9 @@ if (state.queryBypass) {
   );
 }
 
-// Execution tools: enforce dispatch chain
+// Local execution tools are not stage drivers. Critical / Fetch / Thinking and
+// later stage evidence still govern Agent dispatch and public-ready claims, but
+// they must never block or warn on ordinary project edits or local commands.
 if (isExecutionTool(toolName)) {
   if (isSpineStateWrite()) {
     process.exit(0);
@@ -1708,167 +1650,12 @@ if (isExecutionTool(toolName)) {
   // This runs before the planning-file exemption so that a meta-* caller cannot,
   // for example, push hand-crafted Bash through the planning-file shortcut.
   // Spine-state writes are the deadlock breaker and stay exempt above.
-  const caller = inferCallerIdentity(state);
+  const caller = inferCallerIdentity();
   if (caller.name && isMetaAgent(caller.name)) {
     enforceMetaReadonly(toolName, toolInput, state, caller);
     // warn-mode falls through; block-mode already exited.
   }
-
-  if (isPlanningFile()) {
-    process.exit(0);
-  }
-
-  const stage = state.currentStage;
-  const stageOrder = [
-    "critical",
-    "fetch",
-    "thinking",
-    "execution",
-    "review",
-    "meta-review",
-    "verification",
-    "evolution",
-  ];
-  const currentIdx = stageOrder.indexOf(stage);
-  const execIdx = stageOrder.indexOf("execution");
-
-  // Read-only inspection must remain available even when execution readiness is
-  // incomplete; otherwise the operator cannot inspect state to return upstream.
-  if (
-    toolName === "Bash" &&
-    !state.queryBypass
-  ) {
-    const stageConfig = STAGE_META_AGENT_MAP[stage];
-    const cmd = (toolInput?.command || "").trim();
-    const stageWhitelist = [
-      ...(stageConfig?.readOnlyVerifierCommands || []),
-      ...(stageConfig?.readOnlyInspectionCommands || []),
-    ];
-    const allowedByStage = matchesStageReadOnlyCommand(cmd, stageWhitelist);
-    if (allowedByStage || isReadOnlyBash(cmd)) {
-      process.exit(0);
-    }
-  }
-
-  if (isHookObservedState(state)) {
-    await allowObservedModeExecution(state);
-  }
-
-  const choiceSurfaceGate = checkChoiceSurfaceGate(state);
-  if (!choiceSurfaceGate.met) {
-    exitAfterDeny(
-      `${choiceSurfaceGate.reason} Missing: ${choiceSurfaceGate.missing.join(", ")}.`,
-    );
-  }
-
-  if (
-    currentIdx >= execIdx &&
-    !state.queryBypass
-  ) {
-    const nodeBindingGate = checkCapabilityNodeBindings(state);
-    if (!nodeBindingGate.met) {
-      exitAfterDeny(
-        `Capability node binding violation: ${nodeBindingGate.reason} ` +
-          `Missing: ${nodeBindingGate.missing.join(", ")}.`,
-      );
-    }
-  }
-
-
-  // Pre-execution stages: block + check meta-agent requirements
-  // Exception: critical stage is for setup (spine state + planning files), defer checks
-  if (currentIdx < execIdx && stage !== "critical") {
-    if (stage === "fetch" && !isSpineStateWrite() && !isPlanningFile()) {
-      exitAfterDeny(
-        "Current stage: Fetch. Write fetchRecord in spine state before " +
-          "any business mutation. Use repo-inspection / capability-scan to " +
-          "continue read/search Fetch evidence. Agent dispatch is not " +
-          "required before Execution. business-file mutations and package " +
-          "installs must wait until the run commits Fetch and advances to " +
-          "Execution.",
-      );
-    }
-    const req = checkStageRequirements(state);
-    const stageInfo = STAGE_META_AGENT_MAP[stage];
-    const label = stageInfo?.label || stage;
-
-    if (!req.met) {
-      exitAfterDeny(formatDesignStageMutationDeny(label, req, state));
-    }
-  }
-
-  // Critical stage: allow only spine-state/planning-file writes and read-only
-  // inspection. Warden is an escalation owner, not a mandatory setup dispatch.
-  // Skip ALL checks if spine is inactive AND the deactivation was a clean
-  // session_stop (allows normal work after the previous run ended).
-  if (stage === "critical" && currentIdx < execIdx) {
-    if (isSpineStateWrite() || isPlanningFile()) {
-      process.exit(0); // Allow spine state and planning file writes during critical
-    }
-    // Inactive spine: bypass critical requirements ONLY when the previous run
-    // was cleanly stopped by the stop hook. Any other deactivation reason
-    // (manual override, malformed state, missing reason) keeps the gate
-    // closed and forces a new governed run to be opened.
-    if (!state.active && state.deactivationReason === "session_stop") {
-      process.exit(0);
-    }
-    // For other execution tools in critical with active spine, check requirements
-    const req = checkStageRequirements(state);
-    if (!req.met) {
-      const stageInfo = STAGE_META_AGENT_MAP[stage];
-      exitAfterDeny(
-        formatDesignStageMutationDeny(stageInfo?.label || stage, req, state),
-      );
-    }
-    exitAfterDeny(
-      "Current stage: Critical. This stage is for understanding the request and reading project evidence. " +
-        "Use repo-inspection commands to enter Fetch, then run baseline verification from Fetch. " +
-        "Allowed now: visible chat status, planning files when already useful, spine state writes, and read-only inspection. " +
-        "Do not create or update task/todo boards before evidence is collected. " +
-        `Dispatch chain so far: ${JSON.stringify(state.dispatchChain || {})}`,
-    );
-  }
-
-  // Degraded declaration guard (Phase 3, native-handoff refactor).
-  // Fan-out gate removed: host-native Agent/spawn_agent is the orchestrator
-  // (see docs/goals/meta-kim-native-handoff.md). The boundary check against
-  // unsupported degraded claims stays independent so a run cannot silently
-  // claim degraded without capability-search evidence.
-  if (state?.degradedMode === true) {
-    const degradationCheck = validateDegradedDeclaration(state);
-    if (!degradationCheck.valid) {
-      const guardModeRaw = (process.env.META_KIM_FANOUT_GATE || "progressive")
-        .trim()
-        .toLowerCase();
-      const guardOff =
-        guardModeRaw === "off" ||
-        guardModeRaw === "0" ||
-        guardModeRaw === "false";
-      const guardEffective = guardOff
-        ? "off"
-        : resolveGracedMode(
-            guardModeRaw,
-            "META_KIM_FANOUT_GATE_GRACE_DAYS",
-            7,
-            state,
-          );
-      if (guardEffective !== "off") {
-        exitAfterDeny(
-          `[Meta_Kim degraded-guard] ${degradationCheck.reason} ` +
-            `mode: "${guardEffective}".`,
-        );
-      }
-    }
-  }
-
-  // Post-execution stages: require correct meta-agent
-  if (currentIdx >= execIdx && stage !== "execution") {
-    const req = checkStageRequirements(state);
-    if (!req.met) {
-      const stageInfo = STAGE_META_AGENT_MAP[stage];
-      exitAfterDeny(formatPostExecutionStageDeny(stageInfo?.label || stage, req, state));
-    }
-  }
+  process.exit(0);
 }
 
 process.exit(0);

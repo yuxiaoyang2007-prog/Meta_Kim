@@ -40,10 +40,12 @@ export function buildGlobalSkillsInstallerArgs({
   skillIds = [],
   update = false,
   preferLocalDependencies = false,
+  skipInventoryRefresh = false,
 } = {}) {
   const args = [];
   if (update) args.push("--update");
   if (preferLocalDependencies) args.push("--prefer-local-dependencies");
+  if (skipInventoryRefresh) args.push("--skip-inventory-refresh");
   args.push(
     "--targets",
     normalizeTargetList(targets),

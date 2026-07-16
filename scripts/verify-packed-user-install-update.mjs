@@ -3,8 +3,8 @@
  * Release acceptance for the public package CLI.
  *
  * This deliberately runs the packed candidate instead of repository scripts:
- *   pack -> extract -> isolated npm materialization -> bin/meta-kim.mjs install
- *   -> update -> second update.
+ *   pack -> isolated npm install -> installed CLI install -> update -> second
+ *   update -> delete pack/extraction -> installed CLI check and MCP transport.
  *
  * It proves the default global-only user path without writing to the caller's
  * HOME, runtime homes, temp directory, or ordinary working directory.
@@ -17,6 +17,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -25,17 +26,59 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import {
+  mcpDefinitionFingerprint,
+  resolveDurableMetaKimRuntimeLayout,
+  resolvePackageCliName,
+  resolvePortableMetaKimPackageIdentity,
+} from "./global-runtime-mcp.mjs";
+import {
+  GLOBAL_PROJECTION_OWNER_SYNC_RUNTIMES,
+  globalAgentProjectionFileName,
+  globalProjectionIsOwnedBy,
+  resolveGlobalAgentProjectionTargets,
+  resolveRuntimeProfilesFromManifest,
+} from "./meta-kim-sync-config.mjs";
+import {
+  assertExactRuntimeCapabilityMatrix,
+  validateRuntimeCapabilityMatrix,
+} from "./mcp/runtime-resource-contract.mjs";
+import { renderGlobalAgentProjection } from "./sync-runtimes.mjs";
 
+const PACKED_SYNC_MANIFEST = JSON.parse(
+  readFileSync(path.join(import.meta.dirname, "..", "config", "sync.json"), "utf8"),
+);
+const PACKED_RUNTIME_PROFILES = resolveRuntimeProfilesFromManifest(
+  PACKED_SYNC_MANIFEST,
+);
+const PACKED_RELEASE_POLICY = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      "..",
+      "config",
+      "contracts",
+      "release-verification-policy.json",
+    ),
+    "utf8",
+  ),
+);
 export const PACKED_USER_TARGETS = Object.freeze([
-  "claude",
-  "codex",
-  "openclaw",
-  "cursor",
+  ...PACKED_SYNC_MANIFEST.supportedTargets,
 ]);
-export const HISTORICAL_UPDATE_REF = "v2.8.85";
-export const PACKED_USER_ACCEPTANCE_EXPECTED_DURATION_MS = 900_000;
+export const PACKED_GLOBAL_AGENT_TARGETS = Object.freeze(
+  resolveGlobalAgentProjectionTargets(
+    PACKED_RUNTIME_PROFILES,
+    PACKED_USER_TARGETS,
+  ).map((target) => Object.freeze(target)),
+);
+export const PACKED_USER_ACCEPTANCE_EXPECTED_DURATION_MS =
+  PACKED_RELEASE_POLICY.packedUserAcceptance.expectedDurationMs;
 const ACCEPTANCE_SKILL_FILTER = "planning-with-files";
-const DEFAULT_TIMEOUT_MS = 300_000;
+const DEFAULT_TIMEOUT_MS =
+  PACKED_RELEASE_POLICY.packedUserAcceptance.commandTimeoutMs;
+const HISTORICAL_REF_ENV_KEY =
+  PACKED_RELEASE_POLICY.packedUserAcceptance.historicalRefEnvironmentKey;
 const PROJECT_PROJECTION_NAMES = Object.freeze([
   ".claude",
   ".codex",
@@ -51,6 +94,63 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+const PORTABILITY_PLACEHOLDERS = Object.freeze([
+  "__REPO_ROOT__",
+  "REPLACE_WITH_REPO_ROOT",
+  "__META_KIM_PACKAGE_ROOT__",
+]);
+
+function normalizedReference(value) {
+  return path.resolve(String(value)).replaceAll("\\", "/").replace(/\/+$/u, "").toLowerCase();
+}
+
+export function collectNonPortablePackedReferences(
+  value,
+  { forbiddenRoots = [], location = "$" } = {},
+) {
+  const normalizedForbiddenRoots = forbiddenRoots
+    .filter((root) => typeof root === "string" && root.trim())
+    .map((root) => ({ raw: root, normalized: normalizedReference(root) }));
+  const findings = [];
+  const visit = (entry, entryLocation) => {
+    if (typeof entry === "string") {
+      for (const placeholder of PORTABILITY_PLACEHOLDERS) {
+        if (entry.includes(placeholder)) {
+          findings.push({ location: entryLocation, reason: "unresolved_placeholder", value: placeholder });
+        }
+      }
+      const normalizedEntry = entry.replaceAll("\\", "/").toLowerCase();
+      for (const root of normalizedForbiddenRoots) {
+        if (normalizedEntry.includes(root.normalized)) {
+          findings.push({ location: entryLocation, reason: "forbidden_machine_root", value: root.raw });
+        }
+      }
+      return;
+    }
+    if (Array.isArray(entry)) {
+      entry.forEach((item, index) => visit(item, `${entryLocation}[${index}]`));
+      return;
+    }
+    if (entry && typeof entry === "object") {
+      Object.entries(entry).forEach(([key, item]) => visit(item, `${entryLocation}.${key}`));
+    }
+  };
+  visit(value, location);
+  return findings;
+}
+
+export function assertPortablePackedReferences(value, options = {}) {
+  const findings = collectNonPortablePackedReferences(value, options);
+  if (findings.length > 0) {
+    throw new Error(
+      `packed generated artifact contains non-portable references: ${findings
+        .map((finding) => `${finding.location}:${finding.reason}`)
+        .join(", ")}`,
+    );
+  }
+  return { status: "passed", findingCount: 0 };
+}
+
 function run(command, args, options = {}) {
   return spawnSync(command, args, {
     cwd: options.cwd,
@@ -59,6 +159,7 @@ function run(command, args, options = {}) {
     windowsHide: true,
     timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     maxBuffer: 64 * 1024 * 1024,
+    input: options.input,
   });
 }
 
@@ -127,12 +228,166 @@ function requireSuccess(label, result) {
   return result;
 }
 
+function parseSemver(value) {
+  const match = String(value).trim().match(
+    /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/u,
+  );
+  if (!match) return null;
+  return {
+    raw: String(value).trim(),
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    prerelease: match[4]?.split(".") ?? [],
+  };
+}
+
+function comparePrerelease(left, right) {
+  if (left.length === 0 && right.length === 0) return 0;
+  if (left.length === 0) return 1;
+  if (right.length === 0) return -1;
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    if (left[index] == null) return -1;
+    if (right[index] == null) return 1;
+    const leftNumeric = /^\d+$/u.test(left[index]);
+    const rightNumeric = /^\d+$/u.test(right[index]);
+    if (leftNumeric && rightNumeric) {
+      const delta = Number(left[index]) - Number(right[index]);
+      if (delta !== 0) return Math.sign(delta);
+      continue;
+    }
+    if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
+    const delta = left[index].localeCompare(right[index], "en");
+    if (delta !== 0) return Math.sign(delta);
+  }
+  return 0;
+}
+
+function compareSemver(left, right) {
+  for (const field of ["major", "minor", "patch"]) {
+    const delta = left[field] - right[field];
+    if (delta !== 0) return Math.sign(delta);
+  }
+  return comparePrerelease(left.prerelease, right.prerelease);
+}
+
+function tagSemver(tag) {
+  return parseSemver(String(tag).replace(/^v/u, ""));
+}
+
+export function selectHistoricalUpdateRef({ currentVersion, tags, overrideRef = null }) {
+  const currentSemver = parseSemver(currentVersion);
+  if (!currentSemver) {
+    throw new Error(`current package version is not valid semver: ${currentVersion}`);
+  }
+  const candidates = tags
+    .map((tag) => ({ tag, semver: tagSemver(tag) }))
+    .filter((candidate) => candidate.semver && candidate.semver.prerelease.length === 0)
+    .filter((candidate) => compareSemver(candidate.semver, currentSemver) < 0)
+    .sort((left, right) =>
+      compareSemver(right.semver, left.semver) || left.tag.localeCompare(right.tag, "en"),
+    );
+  if (overrideRef) {
+    const overridden = candidates.find((candidate) => candidate.tag === overrideRef);
+    if (!overridden) {
+      throw new Error(
+        `${HISTORICAL_REF_ENV_KEY} must name an existing lower stable semver tag: ${overrideRef}`,
+      );
+    }
+    return overridden;
+  }
+  if (!candidates[0]) {
+    throw new Error(`no prior stable release tag exists below ${currentVersion}`);
+  }
+  return candidates[0];
+}
+
+function readTaggedPackageVersion(repoRoot, tag, environment, timeoutMs) {
+  const result = requireSuccess(
+    `read ${tag} package version`,
+    run("git", ["show", `${tag}:package.json`], {
+      cwd: repoRoot,
+      env: environment,
+      timeoutMs,
+    }),
+  );
+  return JSON.parse(result.stdout).version;
+}
+
+export function resolveHistoricalUpdateRef({
+  repoRoot = process.cwd(),
+  environment = process.env,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  overrideRef = environment[HISTORICAL_REF_ENV_KEY] ?? null,
+} = {}) {
+  const currentVersion = JSON.parse(
+    readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+  ).version;
+  const tagResult = requireSuccess(
+    "list release tags for packed historical acceptance",
+    run("git", ["tag", "--list"], { cwd: repoRoot, env: environment, timeoutMs }),
+  );
+  const tags = tagResult.stdout.split(/\r?\n/u).map((tag) => tag.trim()).filter(Boolean);
+  const selected = selectHistoricalUpdateRef({ currentVersion, tags, overrideRef });
+  const taggedVersion = readTaggedPackageVersion(
+    repoRoot,
+    selected.tag,
+    environment,
+    timeoutMs,
+  );
+  if (taggedVersion !== selected.semver.raw) {
+    throw new Error(
+      `release tag ${selected.tag} points to package version ${taggedVersion}, expected ${selected.semver.raw}`,
+    );
+  }
+  return {
+    ref: selected.tag,
+    version: selected.semver.raw,
+    currentVersion,
+    source: overrideRef ? "validated_env_override" : "highest_prior_stable_semver_tag",
+  };
+}
+
 function parsePackResult(result) {
   const parsed = JSON.parse(result.stdout);
   if (!Array.isArray(parsed) || !parsed[0]?.filename) {
     throw new Error("npm pack did not return a tarball filename");
   }
   return parsed[0].filename;
+}
+
+function resolvePackedCliPath(workspace) {
+  const packageManifest = JSON.parse(
+    readFileSync(path.join(workspace, "package.json"), "utf8"),
+  );
+  const cliName = resolvePackageCliName(packageManifest);
+  const cliRelativePath = packageManifest.bin[cliName];
+  const portableCliRelativePath = typeof cliRelativePath === "string"
+    ? cliRelativePath.replaceAll("\\", "/")
+    : "";
+  if (
+    !portableCliRelativePath ||
+    path.isAbsolute(cliRelativePath) ||
+    path.win32.isAbsolute(cliRelativePath) ||
+    portableCliRelativePath === ".." ||
+    portableCliRelativePath.startsWith("../")
+  ) {
+    throw new Error(`packed candidate CLI ${cliName} must resolve to a relative file`);
+  }
+  const cliPath = path.resolve(workspace, cliRelativePath);
+  const cliPathFromWorkspace = path.relative(workspace, cliPath);
+  if (
+    cliPathFromWorkspace === ".." ||
+    cliPathFromWorkspace.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(cliPathFromWorkspace)
+  ) {
+    throw new Error(`packed candidate CLI ${cliName} escapes the package root`);
+  }
+  if (!existsSync(cliPath) || !statSync(cliPath).isFile()) {
+    throw new Error(`packed candidate is missing its declared CLI bin: ${cliName}`);
+  }
+  return cliPath;
 }
 
 function packAndExtract({ sourceRoot, destinationRoot, environment, timeoutMs }) {
@@ -158,11 +413,12 @@ function packAndExtract({ sourceRoot, destinationRoot, environment, timeoutMs })
     }),
   );
   const workspace = path.join(extractDir, "package");
-  if (!existsSync(path.join(workspace, "bin", "meta-kim.mjs"))) {
-    throw new Error("packed candidate is missing bin/meta-kim.mjs");
-  }
+  resolvePackedCliPath(workspace);
   return {
+    sourceRoot,
     workspace,
+    extractDir,
+    tarball,
     tarballSha256: sha256(readFileSync(tarball)),
   };
 }
@@ -177,45 +433,55 @@ function isolatedEnvironment(baseEnvironment, roots) {
       .filter((key) => baseEnvironment[key] !== undefined)
       .map((key) => [key, baseEnvironment[key]]),
   );
-  return {
+  const isolated = {
     ...env,
     HOME: roots.userHome,
     USERPROFILE: roots.userHome,
     TMP: roots.tempDir,
     TEMP: roots.tempDir,
-    META_KIM_CLAUDE_HOME: roots.claudeHome,
-    CLAUDE_HOME: roots.claudeHome,
     CLAUDE_CONFIG_DIR: roots.claudeHome,
     CLAUDE_SKILLS_DIR: path.join(roots.claudeHome, "skills"),
-    META_KIM_CODEX_HOME: roots.codexHome,
-    CODEX_HOME: roots.codexHome,
     CODEX_SKILLS_DIR: path.join(roots.codexHome, "skills"),
-    META_KIM_CURSOR_HOME: roots.cursorHome,
-    CURSOR_HOME: roots.cursorHome,
-    META_KIM_OPENCLAW_HOME: roots.openclawHome,
-    OPENCLAW_HOME: roots.openclawHome,
     META_KIM_SKIP_OPTIONAL_TOOLS: "1",
     META_KIM_WITH_GLOBAL_HOOKS: "0",
     META_KIM_PREFER_LOCAL_DEPENDENCIES: "1",
     META_KIM_LOCAL_DEPENDENCY_ROOT: roots.localDependencyRoot,
   };
+  for (const [targetId, profile] of Object.entries(PACKED_RUNTIME_PROFILES)) {
+    const runtimeHome = roots.runtimeHomes[targetId];
+    for (const envKey of profile.activation.envKeys) {
+      isolated[envKey] = runtimeHome;
+    }
+  }
+  return isolated;
 }
 
 function makeIsolatedRoots(root, name) {
   const laneRoot = path.join(root, name);
+  const userHome = path.join(laneRoot, "user-home");
+  const runtimeHomes = Object.fromEntries(
+    Object.entries(PACKED_RUNTIME_PROFILES).map(([targetId, profile]) => [
+      targetId,
+      path.join(userHome, profile.activation.defaultHomeDir),
+    ]),
+  );
   const roots = {
     laneRoot,
-    userHome: path.join(laneRoot, "user-home"),
-    claudeHome: path.join(laneRoot, "user-home", ".claude"),
-    codexHome: path.join(laneRoot, "user-home", ".codex"),
-    cursorHome: path.join(laneRoot, "user-home", ".cursor"),
-    openclawHome: path.join(laneRoot, "user-home", ".openclaw"),
+    userHome,
+    runtimeHomes,
+    claudeHome: runtimeHomes.claude,
+    codexHome: runtimeHomes.codex,
+    cursorHome: runtimeHomes.cursor,
+    openclawHome: runtimeHomes.openclaw,
     tempDir: path.join(laneRoot, "tmp"),
     ordinaryCwd: path.join(laneRoot, "ordinary-project"),
     projectDir: path.join(laneRoot, "governed-project"),
     localDependencyRoot: path.join(laneRoot, "local-dependencies"),
+    cliPrefix: path.join(laneRoot, "installed-cli"),
   };
-  for (const directory of Object.values(roots)) mkdirSync(directory, { recursive: true });
+  for (const directory of Object.values(roots).filter((value) => typeof value === "string")) {
+    mkdirSync(directory, { recursive: true });
+  }
   const planningFixture = path.join(roots.localDependencyRoot, "planning-with-files");
   mkdirSync(path.join(planningFixture, ".git"), { recursive: true });
   mkdirSync(path.join(planningFixture, "skills", "planning-with-files"), {
@@ -228,6 +494,554 @@ function makeIsolatedRoots(root, name) {
   );
   writeFileSync(path.join(roots.ordinaryCwd, "user-owned.txt"), "user-owned\n", "utf8");
   return roots;
+}
+
+function packedCliDescriptor(packageInfo, roots, globalNodeModules) {
+  const packageManifest = JSON.parse(
+    readFileSync(path.join(packageInfo.workspace, "package.json"), "utf8"),
+  );
+  const distribution = JSON.parse(
+    readFileSync(
+      path.join(packageInfo.workspace, "config", "distribution.json"),
+      "utf8",
+    ),
+  );
+  const identity = resolvePortableMetaKimPackageIdentity(
+    packageManifest,
+    distribution,
+  );
+  const binName = identity.cliName;
+  const packageSegments = identity.packageName.split("/").filter(Boolean);
+  const installedPackageRoot = path.join(globalNodeModules, ...packageSegments);
+  const relativeToPrefix = path.relative(roots.cliPrefix, installedPackageRoot);
+  if (
+    relativeToPrefix === ".." ||
+    relativeToPrefix.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeToPrefix)
+  ) {
+    throw new Error("isolated packed CLI package root escaped its install prefix");
+  }
+  const installedPackageManifestPath = path.join(installedPackageRoot, "package.json");
+  if (!existsSync(installedPackageManifestPath)) {
+    throw new Error("isolated packed CLI package manifest is missing after npm install");
+  }
+  const installedPackageManifest = JSON.parse(
+    readFileSync(installedPackageManifestPath, "utf8"),
+  );
+  const installedCliPath = path.resolve(
+    installedPackageRoot,
+    installedPackageManifest.bin?.[binName] ?? "",
+  );
+  if (!existsSync(installedCliPath) || !statSync(installedCliPath).isFile()) {
+    throw new Error(`isolated packed CLI package is missing its declared bin: ${binName}`);
+  }
+  const durableLayout = resolveDurableMetaKimRuntimeLayout(
+    roots.userHome,
+    identity,
+    packageManifest,
+  );
+  const packedCliPath = path.resolve(
+    packageInfo.workspace,
+    packageManifest.bin[binName],
+  );
+  const binDir = process.platform === "win32"
+    ? roots.cliPrefix
+    : path.join(roots.cliPrefix, "bin");
+  const command = process.platform === "win32"
+    ? path.join(binDir, `${binName}.cmd`)
+    : path.join(binDir, binName);
+  return {
+    binName,
+    binDir,
+    command,
+    installedPackageRoot,
+    installedPackageManifestPath,
+    installedCliPath,
+    identity,
+    durableLayout,
+    packedCliSha256: sha256(readFileSync(installedCliPath)),
+    extractedCliSha256: sha256(readFileSync(packedCliPath)),
+  };
+}
+
+function installPackedCli(packageInfo, roots, env, timeoutMs) {
+  requireSuccess(
+    "packed candidate isolated global CLI install",
+    runCli(
+      "npm",
+      [
+        "install",
+        "--global",
+        "--prefix",
+        roots.cliPrefix,
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        packageInfo.tarball,
+      ],
+      { cwd: roots.laneRoot, env, timeoutMs },
+    ),
+  );
+  const globalRoot = requireSuccess(
+    "resolve isolated packed CLI global package root",
+    runCli(
+      "npm",
+      ["root", "--global", "--prefix", roots.cliPrefix],
+      { cwd: roots.laneRoot, env, timeoutMs },
+    ),
+  ).stdout.trim();
+  if (!globalRoot || !path.isAbsolute(globalRoot)) {
+    throw new Error("npm did not return an absolute isolated global package root");
+  }
+  const descriptor = packedCliDescriptor(packageInfo, roots, globalRoot);
+  if (!existsSync(descriptor.command)) {
+    throw new Error(`isolated packed CLI bin is missing: ${descriptor.binName}`);
+  }
+  if (descriptor.packedCliSha256 !== descriptor.extractedCliSha256) {
+    throw new Error("installed packed CLI bytes differ from the npm tarball candidate");
+  }
+  const pathKey = Object.hasOwn(env, "Path") ? "Path" : "PATH";
+  const pathValue = env[pathKey] ?? env.PATH ?? env.Path ?? "";
+  env[pathKey] = [descriptor.binDir, pathValue].filter(Boolean).join(path.delimiter);
+  env.PATH = env[pathKey];
+  return descriptor;
+}
+
+function canonicalAgentIds(workspace) {
+  const agentsDir = path.join(workspace, "canonical", "agents");
+  return readdirSync(agentsDir)
+    .filter((fileName) => fileName.endsWith(".md"))
+    .map((fileName) => fileName.slice(0, -3))
+    .sort();
+}
+
+function expectedGlobalAgentArtifacts(
+  roots,
+  agentIds,
+  targetProjections = PACKED_GLOBAL_AGENT_TARGETS,
+) {
+  return Object.fromEntries(
+    targetProjections.flatMap((target) =>
+      agentIds.map((agentId) => [
+        `${target.targetId}Agent:${agentId}`,
+        path.join(
+          roots.runtimeHomes[target.targetId],
+          target.agentsDir,
+          globalAgentProjectionFileName(target, agentId),
+        ),
+      ]),
+    ),
+  );
+}
+
+function seedPortableRuntimeUserState(
+  roots,
+  agentIds,
+  targetProjections = PACKED_GLOBAL_AGENT_TARGETS,
+) {
+  const userAgentId = "user-owned-runtime-agent";
+  if (agentIds.includes(userAgentId)) {
+    throw new Error("portable acceptance user Agent fixture collides with a canonical Agent");
+  }
+  const fixtureAgent = {
+    id: userAgentId,
+    description: "Preserve this user-owned runtime Agent.",
+    sourceFile: "user-owned-runtime-agent.md",
+    title: "User-owned runtime Agent",
+    summary: "User-owned runtime state must be preserved.",
+    role: "preserve",
+    raw: `---\nname: ${userAgentId}\ndescription: "Preserve this user-owned runtime Agent."\n---\n\n# User-owned runtime Agent\n`,
+    body: "# User-owned runtime Agent\n",
+  };
+  const userAgents = targetProjections.map((target) => {
+    const targetPath = path.join(
+      roots.runtimeHomes[target.targetId],
+      target.agentsDir,
+      globalAgentProjectionFileName(target, userAgentId),
+    );
+    const content = renderGlobalAgentProjection(fixtureAgent, target);
+    mkdirSync(path.dirname(targetPath), { recursive: true });
+    writeFileSync(targetPath, content, "utf8");
+    return { targetId: target.targetId, path: targetPath, content };
+  });
+
+  const claudeSettingsPath = path.join(roots.claudeHome, "settings.json");
+  const userHookCommand = "node user-owned-hook.mjs";
+  writeFileSync(
+    claudeSettingsPath,
+    `${JSON.stringify({
+      userPreference: { preserve: true },
+      hooks: {
+        SessionStart: [
+          { matcher: "*", hooks: [{ type: "command", command: userHookCommand }] },
+        ],
+      },
+    }, null, 2)}\n`,
+    "utf8",
+  );
+
+  const claudeUserConfigPath = path.join(roots.userHome, ".claude.json");
+  const legacyPackageRoot = path.join(roots.laneRoot, "retired-package-root");
+  const unknownServer = {
+    command: "user-owned-mcp-command",
+    args: ["--preserve"],
+    env: { USER_OWNED_ENV: "preserve" },
+  };
+  const auth = { provider: "user-owned", profile: "preserve" };
+  writeFileSync(
+    claudeUserConfigPath,
+    `${JSON.stringify({
+      auth,
+      unknownUserField: { preserve: true },
+      mcpServers: {
+        "user-owned-server": unknownServer,
+        meta_kim_runtime: {
+          command: path.basename(process.execPath),
+          args: [path.join(legacyPackageRoot, "scripts", "mcp", "meta-runtime-server.mjs")],
+        },
+      },
+    }, null, 2)}\n`,
+    "utf8",
+  );
+  return {
+    runtimeBaseDir: roots.userHome,
+    userAgentId,
+    userAgents,
+    claudeSettingsPath,
+    userHookCommand,
+    claudeUserConfigPath,
+    legacyPackageRoot,
+    unknownServer,
+    auth,
+  };
+}
+
+export function durableMcpDefinitionMatches(
+  definition,
+  expectedDefinition,
+) {
+  return mcpDefinitionFingerprint(definition) ===
+    mcpDefinitionFingerprint(expectedDefinition);
+}
+
+function isPathWithin(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return relative !== "" &&
+    relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative);
+}
+
+function requireDurableMcpServer(
+  config,
+  seeded,
+  forbiddenRoots,
+  descriptor,
+) {
+  if (config.mcpServers?.meta_kim_runtime) {
+    throw new Error("packed update did not migrate the legacy meta_kim_runtime MCP alias");
+  }
+  const server = config.mcpServers?.["meta-kim-runtime"];
+  if (!server || typeof server.command !== "string" || !Array.isArray(server.args)) {
+    throw new Error("packed update did not register canonical meta-kim-runtime MCP server");
+  }
+  if (!durableMcpDefinitionMatches(server, descriptor.durableLayout.definition)) {
+    throw new Error(
+      "durable Meta_Kim MCP registration does not match the shared runtime layout strategy",
+    );
+  }
+  if (JSON.stringify(config.mcpServers?.["user-owned-server"]) !== JSON.stringify(seeded.unknownServer)) {
+    throw new Error("packed update changed an unknown user MCP server");
+  }
+  if (JSON.stringify(config.auth) !== JSON.stringify(seeded.auth)) {
+    throw new Error("packed update changed unknown Claude auth state");
+  }
+  if (config.unknownUserField?.preserve !== true) {
+    throw new Error("packed update changed unknown Claude user configuration");
+  }
+  const { durableLayout, identity, packedCliSha256 } = descriptor;
+  if (!isPathWithin(seeded.runtimeBaseDir, durableLayout.bundleDir)) {
+    throw new Error("durable Meta_Kim MCP runtime escaped the isolated user home");
+  }
+  for (const requiredPath of [
+    durableLayout.packageManifestPath,
+    durableLayout.cliPath,
+    durableLayout.serverPath,
+  ]) {
+    if (!existsSync(requiredPath)) {
+      throw new Error(`durable Meta_Kim MCP runtime is incomplete: ${path.basename(requiredPath)}`);
+    }
+  }
+  const installedManifest = JSON.parse(
+    readFileSync(durableLayout.packageManifestPath, "utf8"),
+  );
+  if (
+    installedManifest.name !== identity.packageName ||
+    installedManifest.version !== identity.packageVersion ||
+    installedManifest.bin?.[identity.cliName] === undefined
+  ) {
+    throw new Error("durable Meta_Kim MCP runtime package identity does not match the packed candidate");
+  }
+  if (sha256(readFileSync(durableLayout.cliPath)) !== packedCliSha256) {
+    throw new Error("durable Meta_Kim MCP runtime CLI does not match the packed candidate");
+  }
+  assertPortablePackedReferences(server, { forbiddenRoots });
+  return server;
+}
+
+function runPortableRuntimePreparation({ packageInfo, descriptor, roots, env, timeoutMs }) {
+  requireInstalledCliDescriptor(descriptor);
+  const agentIds = canonicalAgentIds(descriptor.installedPackageRoot);
+  const agentTargetIds = PACKED_GLOBAL_AGENT_TARGETS.map(
+    (target) => target.targetId,
+  );
+  const runtimeTargetIds = [...PACKED_USER_TARGETS];
+  const seeded = seedPortableRuntimeUserState(
+    roots,
+    agentIds,
+    PACKED_GLOBAL_AGENT_TARGETS,
+  );
+  const hookEnv = { ...env, META_KIM_WITH_GLOBAL_HOOKS: "1" };
+  requireSuccess(
+    "packed installed CLI global runtime update",
+    runCli(
+      descriptor.command,
+      [
+        "update",
+        "--silent",
+        "--scope",
+        "global",
+        "--targets",
+        runtimeTargetIds.join(","),
+        "--skills",
+        ACCEPTANCE_SKILL_FILTER,
+        "--with-global-hooks",
+      ],
+      { cwd: roots.ordinaryCwd, env: hookEnv, timeoutMs },
+    ),
+  );
+
+  const agentProof = artifactFingerprint(
+    expectedGlobalAgentArtifacts(roots, agentIds, PACKED_GLOBAL_AGENT_TARGETS),
+  );
+  for (const userAgent of seeded.userAgents) {
+    if (readFileSync(userAgent.path, "utf8") !== userAgent.content) {
+      throw new Error(
+        `packed global update changed an unknown ${userAgent.targetId} Agent`,
+      );
+    }
+  }
+
+  const settings = JSON.parse(readFileSync(seeded.claudeSettingsPath, "utf8"));
+  if (!JSON.stringify(settings.hooks ?? {}).includes(seeded.userHookCommand)) {
+    throw new Error("packed global Hook update removed an unknown user Hook");
+  }
+  const config = JSON.parse(readFileSync(seeded.claudeUserConfigPath, "utf8"));
+  const forbiddenRoots = [
+    packageInfo.sourceRoot,
+    packageInfo.workspace,
+    seeded.legacyPackageRoot,
+  ];
+  const server = requireDurableMcpServer(
+    config,
+    seeded,
+    forbiddenRoots,
+    descriptor,
+  );
+  const ownershipProof = verifyGlobalProjectionOwnership(
+    path.join(roots.userHome, ".meta-kim", "install-manifest.json"),
+    roots,
+    agentIds,
+    { runtimeTargetIds, agentTargets: PACKED_GLOBAL_AGENT_TARGETS },
+  );
+  return {
+    proof: {
+      status: "prepared",
+      agentProjection: {
+        status: "passed",
+        canonicalAgentCount: agentIds.length,
+        runtimeTargets: agentTargetIds,
+        projectedArtifactCount: Object.keys(agentProof).length,
+        unknownAgentsPreserved: true,
+      },
+      ownershipManifest: ownershipProof,
+      hookProjection: {
+        status: "passed",
+        globalHookAuthorization: "explicit",
+        unknownHookPreserved: true,
+      },
+      mcpRegistration: {
+        status: "passed",
+        canonicalServerId: "meta-kim-runtime",
+        legacyAliasMigrated: true,
+        unknownServerEnvAndAuthPreserved: true,
+        invocation: {
+          command: server.command,
+          args: [...server.args],
+        },
+      },
+      portability: { status: "passed", unresolvedPlaceholderCount: 0 },
+    },
+    context: {
+      descriptor,
+      hookEnv,
+      roots,
+      seeded,
+      server,
+      forbiddenRoots,
+      runtimeTargetIds,
+    },
+  };
+}
+
+function probePackedMcpTransport(server, context, timeoutMs) {
+  const requests = [
+    {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-03-26",
+        capabilities: {},
+        clientInfo: { name: "meta-kim-packed-acceptance", version: "1.0.0" },
+      },
+    },
+    { jsonrpc: "2.0", method: "notifications/initialized", params: {} },
+    { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+    {
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: { name: "get_meta_runtime_capabilities", arguments: {} },
+    },
+  ];
+  const result = runCli(server.command, server.args, {
+    cwd: context.roots.userHome,
+    env: { ...context.hookEnv, ...(server.env ?? {}) },
+    timeoutMs,
+    input: `${requests.map((request) => JSON.stringify(request)).join("\n")}\n`,
+  });
+  requireSuccess("packed durable CLI MCP transport", result);
+  const responses = String(result.stdout ?? "")
+    .split(/\r?\n/u)
+    .filter((line) => line.trim().startsWith("{"))
+    .map((line) => JSON.parse(line));
+  const tools = responses.find((response) => response.id === 2)?.result?.tools ?? [];
+  const call = responses.find((response) => response.id === 3);
+  if (!tools.some((tool) => tool.name === "get_meta_runtime_capabilities")) {
+    throw new Error("packed durable CLI MCP transport did not expose Meta_Kim tools");
+  }
+  if (!call?.result || call.error) {
+    throw new Error("packed durable CLI MCP transport tool call did not succeed");
+  }
+  const textContent = call.result.content?.filter(
+    (entry) => entry?.type === "text" && typeof entry.text === "string",
+  ) ?? [];
+  if (textContent.length !== 1) {
+    throw new Error(
+      "packed durable CLI MCP capability call must return exactly one text payload",
+    );
+  }
+  let capabilityPayload;
+  try {
+    capabilityPayload = JSON.parse(textContent[0].text);
+  } catch (error) {
+    throw new Error(
+      `packed durable CLI MCP capability payload is not JSON: ${error.message}`,
+    );
+  }
+  const expectedMatrixPath = path.join(
+    context.descriptor.installedPackageRoot,
+    "config",
+    "runtime-capability-matrix.json",
+  );
+  const expectedMatrix = validateRuntimeCapabilityMatrix(
+    JSON.parse(
+      readFileSync(
+        expectedMatrixPath,
+        "utf8",
+      ),
+    ),
+    expectedMatrixPath,
+  );
+  assertExactRuntimeCapabilityMatrix(
+    capabilityPayload,
+    expectedMatrix,
+    "packed durable CLI MCP capability matrix",
+  );
+  const serializedCapabilities = JSON.stringify(capabilityPayload).toLowerCase();
+  if (
+    serializedCapabilities.includes("stub") ||
+    serializedCapabilities.includes("docs/runtime-capability-matrix.md")
+  ) {
+    throw new Error("packed durable CLI MCP capabilities returned a stub payload");
+  }
+  return {
+    status: "passed",
+    evidenceTier: "packed_isolated_transport",
+    liveHostInvocation: false,
+    toolListed: "get_meta_runtime_capabilities",
+    toolCallSucceeded: true,
+    semanticMatrixMatched: true,
+    platformCount: capabilityPayload.platforms.length,
+    stubFree: true,
+  };
+}
+
+function finalizePortableRuntimeProof(prepared, packageInfo, timeoutMs) {
+  rmSync(packageInfo.extractDir, { recursive: true, force: true });
+  rmSync(path.dirname(packageInfo.tarball), { recursive: true, force: true });
+  if (existsSync(packageInfo.workspace)) {
+    throw new Error("packed extraction directory still exists before MCP portability proof");
+  }
+  if (existsSync(packageInfo.tarball)) {
+    throw new Error("packed tarball still exists before installed-product checks");
+  }
+  const { descriptor, hookEnv, roots, runtimeTargetIds } = prepared.context;
+  requireSuccess(
+    "installed packed global runtime exact projection check after source deletion",
+    run(process.execPath, [
+      path.join(descriptor.installedPackageRoot, "scripts", "sync-runtimes.mjs"),
+      "--check",
+      "--scope",
+      "global",
+      "--targets",
+      runtimeTargetIds.join(","),
+      "--json",
+    ], { cwd: roots.ordinaryCwd, env: hookEnv, timeoutMs }),
+  );
+  requireSuccess(
+    "installed packed global Hook release check after source deletion",
+    run(process.execPath, [
+      path.join(descriptor.installedPackageRoot, "scripts", "sync-global-meta-theory.mjs"),
+      "--check",
+      "--targets",
+      runtimeTargetIds.join(","),
+      "--with-global-hooks",
+    ], { cwd: roots.ordinaryCwd, env: hookEnv, timeoutMs }),
+  );
+  const config = JSON.parse(readFileSync(prepared.context.seeded.claudeUserConfigPath, "utf8"));
+  const forbiddenRoots = [packageInfo.workspace, ...prepared.context.forbiddenRoots];
+  const server = requireDurableMcpServer(
+    config,
+    prepared.context.seeded,
+    forbiddenRoots,
+    prepared.context.descriptor,
+  );
+  const mcpTransport = probePackedMcpTransport(server, prepared.context, timeoutMs);
+  return {
+    ...prepared.proof,
+    status: "passed",
+    mcpTransport,
+    portability: {
+      status: "passed",
+      packExtractionDeletedBeforeTransport: true,
+      tarballDeletedBeforeInstalledChecks: true,
+      installedPackageChecksAfterSourceDeletion: true,
+      unresolvedPlaceholderCount: 0,
+      forbiddenRootReferenceCount: 0,
+    },
+  };
 }
 
 function expectedProjectArtifacts(projectDir) {
@@ -303,6 +1117,109 @@ function artifactFingerprint(artifacts) {
     };
   }
   return proof;
+}
+
+export function verifyGlobalProjectionOwnership(
+  manifestPath,
+  roots,
+  agentIds,
+  {
+    runtimeTargetIds = PACKED_USER_TARGETS,
+    agentTargets = PACKED_GLOBAL_AGENT_TARGETS,
+  } = {},
+) {
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  if (manifest.scope !== "global" || !Array.isArray(manifest.entries)) {
+    throw new Error("packed global ownership manifest is invalid");
+  }
+  const fileEntries = manifest.entries.filter((entry) => entry.kind === "file");
+  for (const entry of fileEntries) {
+    if (
+      !existsSync(entry.path) ||
+      statSync(entry.path).size !== entry.size ||
+      sha256(readFileSync(entry.path)) !== entry.sha256
+    ) {
+      throw new Error(`packed global ownership integrity mismatch: ${entry.path}`);
+    }
+  }
+
+  for (const target of agentTargets) {
+    for (const agentId of agentIds) {
+      const agentPath = path.join(
+        roots.runtimeHomes[target.targetId],
+        target.agentsDir,
+        globalAgentProjectionFileName(target, agentId),
+      );
+      if (
+        !fileEntries.some(
+          (entry) =>
+            entry.source === "sync-global-meta-theory" &&
+            entry.purpose === `${target.targetId}-global-agent:${agentId}` &&
+            path.resolve(entry.path) === path.resolve(agentPath),
+        )
+      ) {
+        throw new Error(
+          `packed global Agent ownership is missing: ${target.targetId}/${agentId}`,
+        );
+      }
+    }
+  }
+
+  const syncRuntimeEntries = fileEntries.filter(
+    (entry) => entry.source === "sync-runtimes",
+  );
+  for (const targetId of runtimeTargetIds) {
+    const profile = PACKED_RUNTIME_PROFILES[targetId];
+    const ownsGlobalAssets = profile.projection.assetTypes.some((assetType) =>
+      globalProjectionIsOwnedBy(
+        profile,
+        assetType,
+        GLOBAL_PROJECTION_OWNER_SYNC_RUNTIMES,
+      ),
+    );
+    if (
+      ownsGlobalAssets &&
+      !syncRuntimeEntries.some((entry) => entry.runtimeTarget === targetId)
+    ) {
+      throw new Error(
+        `packed global ownership is missing sync-runtimes records for ${targetId}`,
+      );
+    }
+  }
+
+  const syncGlobalPaths = new Set(
+    fileEntries
+      .filter((entry) => entry.source === "sync-global-meta-theory")
+      .map((entry) => path.resolve(entry.path)),
+  );
+  const overlappingPath = syncRuntimeEntries.find((entry) =>
+    syncGlobalPaths.has(path.resolve(entry.path)),
+  );
+  if (overlappingPath) {
+    throw new Error(
+      `packed global projection has multiple writers: ${overlappingPath.path}`,
+    );
+  }
+  const agentRoots = agentTargets.map((target) =>
+    path.join(roots.runtimeHomes[target.targetId], target.agentsDir),
+  );
+  if (
+    syncRuntimeEntries.some((entry) =>
+      agentRoots.some((agentRoot) => isPathWithin(agentRoot, entry.path)),
+    )
+  ) {
+    throw new Error("sync-runtimes claimed a profile-owned global Agent path");
+  }
+
+  return {
+    status: "passed",
+    runtimeTargets: [...runtimeTargetIds],
+    agentOwner: "sync-global-meta-theory",
+    projectionOwner: GLOBAL_PROJECTION_OWNER_SYNC_RUNTIMES,
+    fileEntryCount: fileEntries.length,
+    syncRuntimeEntryCount: syncRuntimeEntries.length,
+    overlappingWriterPathCount: 0,
+  };
 }
 
 function normalizedManifest(manifestPath, userHome) {
@@ -400,26 +1317,41 @@ function formatArtifactChanges(changed) {
     .join(", ");
 }
 
-function runPublicCli(workspace, roots, env, mode, timeoutMs) {
+function requireInstalledCliDescriptor(descriptor) {
+  if (
+    !descriptor ||
+    typeof descriptor.command !== "string" ||
+    !descriptor.command ||
+    typeof descriptor.installedPackageRoot !== "string" ||
+    !descriptor.installedPackageRoot
+  ) {
+    throw new Error("packed release entrypoints require an installed CLI descriptor");
+  }
+  return descriptor;
+}
+
+export function runInstalledPublicCli(descriptor, roots, env, mode, timeoutMs) {
+  const installed = requireInstalledCliDescriptor(descriptor);
   const args = [
-    path.join(workspace, "bin", "meta-kim.mjs"),
     mode,
     "--silent",
+    "--scope",
+    "global",
     "--targets",
     PACKED_USER_TARGETS.join(","),
     "--skills",
     ACCEPTANCE_SKILL_FILTER,
   ];
-  return run(process.execPath, args, {
+  return runCli(installed.command, args, {
     cwd: roots.ordinaryCwd,
     env,
     timeoutMs,
   });
 }
 
-function runPublicProjectCli(workspace, roots, env, mode, timeoutMs) {
-  return run(process.execPath, [
-    path.join(workspace, "bin", "meta-kim.mjs"),
+function runInstalledPublicProjectCli(descriptor, roots, env, mode, timeoutMs) {
+  const installed = requireInstalledCliDescriptor(descriptor);
+  return runCli(installed.command, [
     mode,
     "--silent",
     "--scope",
@@ -435,9 +1367,9 @@ function runPublicProjectCli(workspace, roots, env, mode, timeoutMs) {
   });
 }
 
-function runPublicGlobalUpdateFromProject(workspace, roots, env, timeoutMs) {
-  return run(process.execPath, [
-    path.join(workspace, "bin", "meta-kim.mjs"),
+function runInstalledPublicGlobalUpdateFromProject(descriptor, roots, env, timeoutMs) {
+  const installed = requireInstalledCliDescriptor(descriptor);
+  return runCli(installed.command, [
     "update",
     "--silent",
     "--scope",
@@ -454,14 +1386,14 @@ function runPublicGlobalUpdateFromProject(workspace, roots, env, timeoutMs) {
 }
 
 function runProjectCapabilityCopy(
-  workspace,
+  descriptor,
   roots,
   env,
   { type, id, source, mode },
   timeoutMs,
 ) {
-  return run(process.execPath, [
-    path.join(workspace, "bin", "meta-kim.mjs"),
+  const installed = requireInstalledCliDescriptor(descriptor);
+  return runCli(installed.command, [
     "project",
     "capability",
     "copy",
@@ -554,7 +1486,7 @@ function globalReuseOnlyFixtures(roots) {
   return fixtures;
 }
 
-function runGlobalReuseNegativeLane({ packageInfo, roots, env, fixtures, timeoutMs }) {
+function runGlobalReuseNegativeLane({ descriptor, roots, env, fixtures, timeoutMs }) {
   const artifactDir = path.join(roots.projectDir, ".meta-kim", "acceptance", "global-reuse");
   const stateDir = path.join(roots.projectDir, ".meta-kim", "state", "acceptance-global-reuse");
   const dbPath = path.join(stateDir, "runs.sqlite");
@@ -569,7 +1501,11 @@ function runGlobalReuseNegativeLane({ packageInfo, roots, env, fixtures, timeout
   requireSuccess(
     "governed global reuse negative acceptance",
     run(process.execPath, [
-      path.join(packageInfo.workspace, "scripts", "run-meta-theory-governed-execution.mjs"),
+      path.join(
+        descriptor.installedPackageRoot,
+        "scripts",
+        "run-meta-theory-governed-execution.mjs",
+      ),
       "--task",
       task,
       "--run-id",
@@ -596,7 +1532,7 @@ function runGlobalReuseNegativeLane({ packageInfo, roots, env, fixtures, timeout
   const packet = artifact.projectCustomizationPacket;
   if (packet?.decision !== "use_global_directly") {
     const inventoryPath = path.join(
-      packageInfo.workspace,
+      descriptor.installedPackageRoot,
       ".meta-kim",
       "state",
       "default",
@@ -660,14 +1596,14 @@ function runGlobalReuseNegativeLane({ packageInfo, roots, env, fixtures, timeout
   };
 }
 
-function runRuntimeSedimentationLane({ packageInfo, roots, env, timeoutMs }) {
+function runRuntimeSedimentationLane({ descriptor, roots, env, timeoutMs }) {
   const fixtures = runtimeSedimentationFixtures(roots);
   const reuseOnlyFixtures = globalReuseOnlyFixtures(roots);
   for (const fixture of fixtures) {
     const copied = requireSuccess(
       `project capability create ${fixture.type}`,
       runProjectCapabilityCopy(
-        packageInfo.workspace,
+        descriptor,
         roots,
         env,
         { ...fixture, mode: "create" },
@@ -716,7 +1652,7 @@ function runRuntimeSedimentationLane({ packageInfo, roots, env, timeoutMs }) {
   const globalArtifacts = expectedArtifacts(roots);
   const projectArtifacts = expectedProjectArtifacts(roots.projectDir);
   const candidateVersion = JSON.parse(
-    readFileSync(path.join(packageInfo.workspace, "package.json"), "utf8"),
+    readFileSync(descriptor.installedPackageManifestPath, "utf8"),
   ).version;
   const globalSkillExpected = readFileSync(globalArtifacts.codexSkill, "utf8");
   const projectSkillExpected = readFileSync(projectArtifacts.projectSkill, "utf8");
@@ -747,7 +1683,7 @@ function runRuntimeSedimentationLane({ packageInfo, roots, env, timeoutMs }) {
 
   const dependencyUpdate = requireSuccess(
     "project-aware global update after project capability copies",
-    runPublicGlobalUpdateFromProject(packageInfo.workspace, roots, env, timeoutMs),
+    runInstalledPublicGlobalUpdateFromProject(descriptor, roots, env, timeoutMs),
   );
   assertOrdinaryCwdUntouched(roots.ordinaryCwd);
 
@@ -798,7 +1734,7 @@ function runRuntimeSedimentationLane({ packageInfo, roots, env, timeoutMs }) {
   }
 
   const globalReuse = runGlobalReuseNegativeLane({
-    packageInfo,
+    descriptor,
     roots,
     env,
     fixtures: reuseOnlyFixtures,
@@ -813,7 +1749,7 @@ function runRuntimeSedimentationLane({ packageInfo, roots, env, timeoutMs }) {
     const iterated = requireSuccess(
       `project capability iterate ${fixture.type}`,
       runProjectCapabilityCopy(
-        packageInfo.workspace,
+        descriptor,
         roots,
         env,
         { ...fixture, mode: "iterate" },
@@ -869,7 +1805,7 @@ function runRuntimeSedimentationLane({ packageInfo, roots, env, timeoutMs }) {
   };
 }
 
-function runProjectPackageLane({ packageInfo, roots, env, timeoutMs, onProgress }) {
+function runProjectPackageLane({ descriptor, roots, env, timeoutMs, onProgress }) {
   writeFileSync(path.join(roots.projectDir, "user-owned-project.txt"), "project-owned\n", "utf8");
   const projectArtifacts = expectedProjectArtifacts(roots.projectDir);
   const modes = [];
@@ -877,7 +1813,7 @@ function runProjectPackageLane({ packageInfo, roots, env, timeoutMs, onProgress 
   for (const ordinal of [1, 2]) {
     emit(onProgress, { event: "packed_project_mode_start", mode: ordinal === 1 ? "install" : "update", ordinal });
     const mode = ordinal === 1 ? "install" : "update";
-    const result = runPublicProjectCli(packageInfo.workspace, roots, env, mode, timeoutMs);
+    const result = runInstalledPublicProjectCli(descriptor, roots, env, mode, timeoutMs);
     if (result.status !== 0 || result.error) throw commandFailure(`packed project ${mode}`, result);
     const proof = artifactFingerprint(projectArtifacts);
     if (readFileSync(path.join(roots.projectDir, "user-owned-project.txt"), "utf8") !== "project-owned\n") {
@@ -914,17 +1850,6 @@ function runProjectPackageLane({ packageInfo, roots, env, timeoutMs, onProgress 
   };
 }
 
-function materializePackage(workspace, env, timeoutMs) {
-  return requireSuccess(
-    "packed candidate npm install",
-    runCli("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
-      cwd: workspace,
-      env,
-      timeoutMs,
-    }),
-  );
-}
-
 function emit(onProgress, payload) {
   if (typeof onProgress !== "function") return;
   try {
@@ -944,14 +1869,14 @@ function runCurrentPackageLane({
 }) {
   const roots = makeIsolatedRoots(root, "current-package");
   const env = isolatedEnvironment(environment, roots);
-  materializePackage(packageInfo.workspace, env, timeoutMs);
+  const descriptor = installPackedCli(packageInfo, roots, env, timeoutMs);
   const artifacts = expectedArtifacts(roots);
   const modes = [];
   let firstUpdateProof = null;
   let firstUpdateManifest = null;
   for (const mode of ["install", "update", "update"]) {
     emit(onProgress, { event: "packed_user_mode_start", mode, ordinal: modes.length + 1 });
-    const result = runPublicCli(packageInfo.workspace, roots, env, mode, timeoutMs);
+    const result = runInstalledPublicCli(descriptor, roots, env, mode, timeoutMs);
     const record = {
       mode,
       ordinal: modes.length + 1,
@@ -996,17 +1921,25 @@ function runCurrentPackageLane({
       idempotentSecondUpdate: true,
       freshGlobalUpdateCreatedProjectCopies: false,
       stoppedAfterGlobalIdempotence: true,
+      installedCliEntrypoints: true,
     };
   }
   const projectPackage = runProjectPackageLane({
-    packageInfo,
+    descriptor,
     roots,
     env,
     timeoutMs,
     onProgress,
   });
   const runtimeSedimentation = runRuntimeSedimentationLane({
+    descriptor,
+    roots,
+    env,
+    timeoutMs,
+  });
+  const portableRuntimePrepared = runPortableRuntimePreparation({
     packageInfo,
+    descriptor,
     roots,
     env,
     timeoutMs,
@@ -1021,16 +1954,10 @@ function runCurrentPackageLane({
     freshGlobalUpdateCreatedProjectCopies: false,
     projectPackage,
     runtimeSedimentation,
+    installedCliEntrypoints: true,
+    portableRuntime: portableRuntimePrepared.proof,
+    _portableRuntimeContext: portableRuntimePrepared.context,
   };
-}
-
-function historicalRefExists(repoRoot, historicalRef, environment, timeoutMs) {
-  const result = run("git", ["rev-parse", "--verify", `${historicalRef}^{commit}`], {
-    cwd: repoRoot,
-    env: environment,
-    timeoutMs,
-  });
-  return result.status === 0;
 }
 
 function extractHistoricalSource(repoRoot, root, historicalRef, environment, timeoutMs) {
@@ -1065,14 +1992,6 @@ function runHistoricalUpdateLane({
   timeoutMs,
   historicalRef,
 }) {
-  if (!historicalRefExists(repoRoot, historicalRef, environment, timeoutMs)) {
-    return {
-      status: "not_available",
-      historicalRef,
-      completed: false,
-      reason: "historical_git_ref_missing",
-    };
-  }
   const historicalSource = extractHistoricalSource(
     repoRoot,
     root,
@@ -1089,23 +2008,27 @@ function runHistoricalUpdateLane({
   const roots = makeIsolatedRoots(root, "historical-update");
   const env = isolatedEnvironment(environment, roots);
   const artifacts = expectedArtifacts(roots);
+  const historicalDescriptor = installPackedCli(
+    historicalPackage,
+    roots,
+    env,
+    timeoutMs,
+  );
   requireSuccess(
-    `${historicalRef} global state seed`,
-    run(process.execPath, [
-      path.join(historicalPackage.workspace, "scripts", "sync-global-meta-theory.mjs"),
-      "--targets",
-      PACKED_USER_TARGETS.join(","),
-    ], {
-      cwd: roots.ordinaryCwd,
+    `${historicalRef} installed CLI global state seed`,
+    runInstalledPublicCli(
+      historicalDescriptor,
+      roots,
       env,
+      "install",
       timeoutMs,
-    }),
+    ),
   );
   const before = normalizedManifest(artifacts.manifest, roots.userHome);
-  materializePackage(packageInfo.workspace, env, timeoutMs);
+  const currentDescriptor = installPackedCli(packageInfo, roots, env, timeoutMs);
   const update = requireSuccess(
-    `packed user update from ${historicalRef}`,
-    runPublicCli(packageInfo.workspace, roots, env, "update", timeoutMs),
+    `installed packed user update from ${historicalRef}`,
+    runInstalledPublicCli(currentDescriptor, roots, env, "update", timeoutMs),
   );
   assertOrdinaryCwdUntouched(roots.ordinaryCwd);
   const proof = artifactFingerprint(artifacts);
@@ -1118,7 +2041,9 @@ function runHistoricalUpdateLane({
     targets: [...PACKED_USER_TARGETS],
     historicalRef,
     completed: true,
-    seedMethod: "historical_packed_global_sync",
+    seedMethod: "historical_tarball_installed_cli",
+    updateMethod: "current_tarball_installed_cli",
+    checkMethod: "current_update_internal_global_check_plus_exact_artifact_manifest_validation",
     beforeVersion: before.metaKimVersion,
     afterVersion: after.metaKimVersion,
     exitCode: update.status,
@@ -1131,14 +2056,30 @@ export function runPackedUserInstallUpdateAcceptance({
   repoRoot = process.cwd(),
   environment = process.env,
   timeoutMs = DEFAULT_TIMEOUT_MS,
-  historicalRef = HISTORICAL_UPDATE_REF,
+  historicalRef = null,
   includeHistorical = true,
+  allowMissingHistory = false,
   onProgress = null,
   stopAfterGlobalIdempotence = false,
 } = {}) {
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), "meta-kim-packed-user-"));
   emit(onProgress, { event: "packed_user_acceptance_start", targets: [...PACKED_USER_TARGETS] });
   try {
+    let historicalResolution = null;
+    let historicalResolutionError = null;
+    if (!stopAfterGlobalIdempotence && includeHistorical) {
+      try {
+        historicalResolution = resolveHistoricalUpdateRef({
+          repoRoot,
+          environment,
+          timeoutMs,
+          overrideRef: historicalRef ?? environment[HISTORICAL_REF_ENV_KEY] ?? null,
+        });
+      } catch (error) {
+        if (!allowMissingHistory) throw error;
+        historicalResolutionError = error.message;
+      }
+    }
     const packageInfo = packAndExtract({
       sourceRoot: repoRoot,
       destinationRoot: path.join(tempRoot, "candidate"),
@@ -1156,38 +2097,63 @@ export function runPackedUserInstallUpdateAcceptance({
     const historicalUpdate = stopAfterGlobalIdempotence
       ? {
           status: "not_requested",
-          historicalRef,
+          historicalRef: historicalResolution?.ref ?? historicalRef,
           completed: false,
           reason: "stopped_after_global_idempotence",
         }
-      : includeHistorical
+      : includeHistorical && historicalResolution
       ? runHistoricalUpdateLane({
           repoRoot,
           packageInfo,
           root: tempRoot,
           environment,
           timeoutMs,
-          historicalRef,
+          historicalRef: historicalResolution.ref,
         })
       : {
-          status: "not_requested",
-          historicalRef,
+          status: historicalResolutionError ? "not_available" : "not_requested",
+          historicalRef: historicalResolution?.ref ?? historicalRef,
           completed: false,
-          reason: "historical_lane_disabled",
+          reason: historicalResolutionError
+            ? "historical_release_baseline_unavailable"
+            : "historical_lane_disabled",
+          error: historicalResolutionError,
         };
+    if (currentPackage._portableRuntimeContext) {
+      const prepared = {
+        proof: currentPackage.portableRuntime,
+        context: currentPackage._portableRuntimeContext,
+      };
+      delete currentPackage._portableRuntimeContext;
+      currentPackage.portableRuntime = finalizePortableRuntimeProof(
+        prepared,
+        packageInfo,
+        timeoutMs,
+      );
+    }
+    const releaseGradeEligible =
+      !stopAfterGlobalIdempotence &&
+      includeHistorical &&
+      historicalUpdate.status === "passed";
+    const status = releaseGradeEligible ? "passed" : "diagnostic_passed";
     const result = {
-      status: "passed",
-      sourcePolicy: "npm_pack_extracted_public_cli",
+      status,
+      releaseGradeEligible,
+      sourcePolicy: "npm_pack_installed_public_cli",
       currentPackage,
-      historicalUpdate,
+      historicalUpdate: {
+        ...historicalUpdate,
+        resolution: historicalResolution,
+      },
       error: null,
     };
-    emit(onProgress, { event: "packed_user_acceptance_complete", status: "passed" });
+    emit(onProgress, { event: "packed_user_acceptance_complete", status });
     return result;
   } catch (error) {
     const result = {
       status: "failed",
-      sourcePolicy: "npm_pack_extracted_public_cli",
+      releaseGradeEligible: false,
+      sourcePolicy: "npm_pack_installed_public_cli",
       currentPackage: null,
       historicalUpdate: null,
       error: error.message,
@@ -1212,13 +2178,15 @@ export function runPackedUserInstallUpdateAcceptance({
 
 function main() {
   const includeHistorical = !process.argv.includes("--skip-history");
+  const allowMissingHistory = process.argv.includes("--allow-missing-history");
   const stopAfterGlobalIdempotence = process.argv.includes("--stop-after-global-idempotence");
   const result = runPackedUserInstallUpdateAcceptance({
     includeHistorical,
+    allowMissingHistory,
     stopAfterGlobalIdempotence,
   });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  process.exit(result.status === "passed" ? 0 : 1);
+  process.exit(result.status === "failed" ? 1 : 0);
 }
 
 const isMain = process.argv[1] &&

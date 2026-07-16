@@ -163,15 +163,17 @@ describe("architecture alignment contracts", () => {
   });
 
   test("capability mirror indexes identify the config capability index as canonical", async () => {
-    const mirrors = [
-      ".claude/capability-index/meta-kim-capabilities.json",
-      ".codex/capability-index/meta-kim-capabilities.json",
-      ".cursor/capability-index/meta-kim-capabilities.json",
-      "openclaw/capability-index/meta-kim-capabilities.json",
-    ];
+    const canonicalIndex = await readJson(CANONICAL_CAPABILITY_INDEX);
+    assert.equal(canonicalIndex.canonicalProjection, CANONICAL_CAPABILITY_INDEX);
 
     const mismatches = [];
-    for (const mirror of mirrors) {
+    for (const mirror of canonicalIndex.mirroredTo ?? []) {
+      try {
+        await fs.access(path.join(REPO_ROOT, mirror));
+      } catch (error) {
+        if (error?.code === "ENOENT") continue;
+        throw error;
+      }
       const index = await readJson(mirror);
       if (index.canonicalProjection !== CANONICAL_CAPABILITY_INDEX) {
         mismatches.push({

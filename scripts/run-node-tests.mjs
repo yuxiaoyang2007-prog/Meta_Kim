@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawnSync as nativeSpawnSync } from "node:child_process";
+import { spawn as nativeSpawn } from "node:child_process";
 import { once } from "node:events";
 import {
   existsSync,
@@ -44,8 +44,71 @@ function expandPattern(pattern) {
     .map((entry) => dir + "/" + entry);
 }
 
-const patterns = process.argv.slice(2);
-const files = patterns.flatMap(expandPattern);
+function parsePatterns(argv) {
+  const include = [];
+  const exclude = [];
+  const includeImports = [];
+  const excludeImports = [];
+  let concurrency = 1;
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+    if (value === "--exclude") {
+      if (!argv[index + 1]) throw new Error("--exclude requires a file or glob pattern");
+      exclude.push(argv[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (value.startsWith("--exclude=")) {
+      exclude.push(value.slice("--exclude=".length));
+      continue;
+    }
+    if (value === "--include-import" || value === "--exclude-import") {
+      if (!argv[index + 1]) throw new Error(value + " requires a module specifier");
+      (value === "--include-import" ? includeImports : excludeImports).push(argv[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (value.startsWith("--include-import=")) {
+      includeImports.push(value.slice("--include-import=".length));
+      continue;
+    }
+    if (value.startsWith("--exclude-import=")) {
+      excludeImports.push(value.slice("--exclude-import=".length));
+      continue;
+    }
+    if (value === "--concurrency") {
+      if (!argv[index + 1]) throw new Error("--concurrency requires a positive integer");
+      concurrency = Number.parseInt(argv[index + 1], 10);
+      index += 1;
+      continue;
+    }
+    if (value.startsWith("--concurrency=")) {
+      concurrency = Number.parseInt(value.slice("--concurrency=".length), 10);
+      continue;
+    }
+    include.push(value);
+  }
+  if (!Number.isSafeInteger(concurrency) || concurrency <= 0) {
+    throw new Error("--concurrency must be a positive integer");
+  }
+  return { include, exclude, includeImports, excludeImports, concurrency };
+}
+
+const patterns = parsePatterns(process.argv.slice(2));
+const excludedFiles = new Set(patterns.exclude.flatMap(expandPattern));
+function importsModule(file, moduleSpecifier) {
+  const source = readFileSync(file, "utf8");
+  const escaped = String(moduleSpecifier).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(
+    "(?:from\\s+|import\\s*\\(|require\\s*\\()?[\"']" + escaped + "[\"']",
+    "u",
+  ).test(source);
+}
+
+const files = [...new Set(patterns.include.flatMap(expandPattern))]
+  .filter((file) => !excludedFiles.has(file))
+  .filter((file) => patterns.includeImports.every((specifier) => importsModule(file, specifier)))
+  .filter((file) => patterns.excludeImports.every((specifier) => !importsModule(file, specifier)));
 
 if (files.length === 0) {
   console.error("No test files matched.");
@@ -240,7 +303,7 @@ async function runInProcessWhenSpawnUnavailable(spawnError) {
       "); using in-process node:test fallback with local-script worker spawnSync.",
   );
   installLocalNodeSpawnFallback();
-  const stream = run({ files, concurrency: 1, isolation: "none" });
+  const stream = run({ files, concurrency: patterns.concurrency, isolation: "none" });
   let failed = 0;
   stream.on("test:fail", () => {
     failed += 1;
@@ -254,25 +317,43 @@ async function runInProcessWhenSpawnUnavailable(spawnError) {
   return failed === 0 ? 0 : 1;
 }
 
-const result = nativeSpawnSync(process.execPath, ["--test", "--test-concurrency=1", ...files], {
-  encoding: "utf8",
-  maxBuffer: 1024 * 1024 * 64,
-  stdio: ["ignore", "pipe", "pipe"],
-});
+async function runNativeNodeTests() {
+  return new Promise((resolve) => {
+    let settled = false;
+    let child;
+    try {
+      child = nativeSpawn(
+        process.execPath,
+        ["--test", `--test-concurrency=${patterns.concurrency}`, ...files],
+        {
+          stdio: ["ignore", "inherit", "inherit"],
+          windowsHide: true,
+        },
+      );
+    } catch (error) {
+      resolve(runInProcessWhenSpawnUnavailable(error));
+      return;
+    }
 
-if (result.error) {
-  process.exitCode = await runInProcessWhenSpawnUnavailable(result.error);
-} else {
-  if (result.stdout) {
-    process.stdout.write(result.stdout);
-  }
-  if (result.stderr) {
-    process.stderr.write(result.stderr);
-  }
-  if (result.status !== 0) {
-    console.error(
-      "node --test exited " + (result.status ?? "unknown") + " for " + files.length + " file(s).",
-    );
-  }
-  process.exitCode = result.status ?? 1;
+    child.once("error", (error) => {
+      if (settled) return;
+      settled = true;
+      resolve(runInProcessWhenSpawnUnavailable(error));
+    });
+    child.once("close", (code, signal) => {
+      if (settled) return;
+      settled = true;
+      const exitCode = code ?? 1;
+      if (exitCode !== 0) {
+        console.error(
+          "node --test exited " + exitCode +
+            " for " + files.length + " file(s)" +
+            (signal ? " after signal " + signal : "") + ".",
+        );
+      }
+      resolve(exitCode);
+    });
+  });
 }
+
+process.exitCode = await runNativeNodeTests();

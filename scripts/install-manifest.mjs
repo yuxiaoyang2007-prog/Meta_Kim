@@ -25,7 +25,7 @@
  *     category:    one of Categories.{A..I}  (see CATEGORY_LABELS below)
  *     source:      logical source (script name or "setup.mjs:step4.5")
  *     purpose:     short tag, e.g. "global-hook", "project-agent"
- *     kind:        "file" | "dir" | "settings-merge" | "mcp-server"
+ *     kind:        "file" | "dir" | "settings-merge" | "toml-fragment-merge" | "mcp-server"
  *                  | "pip-package" | "git-hook"
  *     installedAt: ISO-8601
  *     sha256?:     file checksum when kind === "file"
@@ -33,7 +33,11 @@
  *     ownershipClass?: "install_projection" | "runtime_sedimented_project_copy"
  *     mergedHookCommands?: string[]  (kind === "settings-merge")
  *     mergedSettingsKeys?: string[]  (kind === "settings-merge")
+ *     tomlMutationJournal?: object[] (kind === "toml-fragment-merge")
  *     mcpServerName?: string         (kind === "mcp-server")
+ *     mcpServerFingerprint?: string  (kind === "mcp-server")
+ *     directoryClosureSha256?: string     (kind === "dir")
+ *     directoryClosureEntryCount?: number (kind === "dir")
  *     pipPackageName?: string        (kind === "pip-package")
  *     pipPackageVersion?: string
  *   }
@@ -43,18 +47,60 @@
  */
 
 import {
+  closeSync,
   existsSync,
+  fsyncSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  renameSync,
   writeFileSync,
   statSync,
   createReadStream,
+  lstatSync,
+  readdirSync,
+  readlinkSync,
+  unlinkSync,
 } from "node:fs";
-import { createHash } from "node:crypto";
-import { homedir } from "node:os";
+import { createHash, randomUUID } from "node:crypto";
+import { homedir, hostname } from "node:os";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import {
+  invertCodexConfigMutations,
+  normalizeCodexConfigMutations,
+} from "./codex-config-merge.mjs";
 
 export const SCHEMA_VERSION = 1;
+
+export const MANIFEST_LOCK_STALE_MS = 2 * 60 * 1000;
+const MANIFEST_LOCK_RETRY_ATTEMPTS = 100;
+const MANIFEST_LOCK_RETRY_BASE_MS = 20;
+const MANIFEST_RENAME_RETRY_ATTEMPTS = 8;
+const MANIFEST_RENAME_RETRY_BASE_MS = 25;
+const RETRYABLE_RENAME_CODES = new Set(["EACCES", "EBUSY", "EEXIST", "EPERM"]);
+export const TOML_MUTATION_JOURNAL_LIMIT = 256;
+const TOML_FRAGMENT_ENTRY_FIELDS = new Set([
+  "path",
+  "category",
+  "source",
+  "purpose",
+  "kind",
+  "installedAt",
+  "tomlMutationJournal",
+]);
+const TOML_MUTATION_FIELDS = new Set([
+  "kind",
+  "locator",
+  "beforeFragment",
+  "afterFragment",
+]);
+const TOML_MUTATION_LOCATOR_FIELDS = new Set(["table", "key"]);
+const LEGACY_TOML_MERGE_FIELDS = new Set([
+  "mergedHookCommands",
+  "mergedHookFragments",
+  "mergedSettingsKeys",
+]);
 
 export const CATEGORIES = Object.freeze({
   A: "A",
@@ -137,8 +183,222 @@ export function writeManifest(manifestPath, manifest) {
   return updated;
 }
 
+function fsyncDirectory(directoryPath) {
+  let handle = null;
+  try {
+    handle = openSync(directoryPath, "r");
+    fsyncSync(handle);
+  } catch (error) {
+    const unsupportedOnWindows =
+      process.platform === "win32" &&
+      ["EACCES", "EINVAL", "EISDIR", "ENOTSUP", "EPERM"].includes(error?.code);
+    if (!unsupportedOnWindows) throw error;
+  } finally {
+    if (handle !== null) closeSync(handle);
+  }
+}
+
+export async function writeManifestAtomic(
+  manifestPath,
+  manifest,
+  {
+    renameFile = renameSync,
+    wait = delay,
+    renameRetryAttempts = MANIFEST_RENAME_RETRY_ATTEMPTS,
+  } = {},
+) {
+  const dir = path.dirname(manifestPath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const updated = { ...manifest, updatedAt: new Date().toISOString() };
+  const temporaryPath = path.join(
+    dir,
+    `.meta-kim-install-manifest-${process.pid}-${randomUUID()}.tmp`,
+  );
+  let temporaryHandle = null;
+  try {
+    temporaryHandle = openSync(temporaryPath, "wx");
+    writeFileSync(
+      temporaryHandle,
+      `${JSON.stringify(updated, null, 2)}\n`,
+      "utf8",
+    );
+    fsyncSync(temporaryHandle);
+    closeSync(temporaryHandle);
+    temporaryHandle = null;
+
+    let lastError = null;
+    for (let attempt = 0; attempt < renameRetryAttempts; attempt += 1) {
+      try {
+        renameFile(temporaryPath, manifestPath);
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (
+          !RETRYABLE_RENAME_CODES.has(error?.code) ||
+          attempt === renameRetryAttempts - 1
+        ) {
+          throw error;
+        }
+        await wait(MANIFEST_RENAME_RETRY_BASE_MS * (attempt + 1));
+      }
+    }
+    if (lastError) throw lastError;
+    fsyncDirectory(dir);
+  } finally {
+    if (temporaryHandle !== null) closeSync(temporaryHandle);
+    if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+  }
+  return updated;
+}
+
+function positiveIntegerFromEnv(name, fallback) {
+  const parsed = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function readLockSnapshot(lockPath) {
+  try {
+    const raw = readFileSync(lockPath, "utf8");
+    const stats = statSync(lockPath);
+    let metadata = null;
+    try {
+      metadata = JSON.parse(raw);
+    } catch {
+      // Invalid legacy lock files can still be reclaimed from their mtime.
+    }
+    return { raw, stats, metadata };
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function lockOwnerIsAlive(metadata) {
+  if (
+    !metadata ||
+    metadata.hostname !== hostname() ||
+    !Number.isSafeInteger(metadata.pid) ||
+    metadata.pid <= 0
+  ) {
+    return false;
+  }
+  try {
+    process.kill(metadata.pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code !== "ESRCH";
+  }
+}
+
+function reclaimStaleManifestLock(lockPath, staleMs) {
+  const snapshot = readLockSnapshot(lockPath);
+  if (!snapshot) return true;
+  const declaredAt = Date.parse(snapshot.metadata?.createdAt ?? "");
+  const createdAt = Number.isFinite(declaredAt)
+    ? declaredAt
+    : snapshot.stats.mtimeMs;
+  if (Date.now() - createdAt < staleMs || lockOwnerIsAlive(snapshot.metadata)) {
+    return false;
+  }
+
+  // Re-read immediately before removal. This token/content comparison prevents
+  // a stale observer from deleting a lock that another writer has refreshed.
+  const current = readLockSnapshot(lockPath);
+  if (
+    !current ||
+    current.raw !== snapshot.raw ||
+    current.stats.size !== snapshot.stats.size ||
+    current.stats.mtimeMs !== snapshot.stats.mtimeMs
+  ) {
+    return false;
+  }
+  try {
+    unlinkSync(lockPath);
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT") return true;
+    throw error;
+  }
+}
+
+async function withManifestLock(manifestPath, operation) {
+  const dir = path.dirname(manifestPath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const lockPath = `${manifestPath}.lock`;
+  const token = randomUUID();
+  const staleMs = positiveIntegerFromEnv(
+    "META_KIM_MANIFEST_LOCK_STALE_MS",
+    MANIFEST_LOCK_STALE_MS,
+  );
+  const owner = {
+    schemaVersion: 1,
+    token,
+    pid: process.pid,
+    hostname: hostname(),
+    createdAt: new Date().toISOString(),
+  };
+  let handle = null;
+  for (let attempt = 0; attempt < MANIFEST_LOCK_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      handle = openSync(lockPath, "wx");
+      try {
+        writeFileSync(handle, `${JSON.stringify(owner)}\n`, "utf8");
+        fsyncSync(handle);
+      } catch (error) {
+        closeSync(handle);
+        handle = null;
+        try {
+          unlinkSync(lockPath);
+        } catch (unlinkError) {
+          if (unlinkError?.code !== "ENOENT") throw unlinkError;
+        }
+        throw error;
+      }
+      break;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      if (reclaimStaleManifestLock(lockPath, staleMs)) continue;
+      if (attempt === MANIFEST_LOCK_RETRY_ATTEMPTS - 1) {
+        throw new Error(`Timed out waiting for install manifest lock: ${lockPath}`);
+      }
+      await delay(
+        MANIFEST_LOCK_RETRY_BASE_MS * Math.min(attempt + 1, 10),
+      );
+    }
+  }
+  try {
+    return await operation();
+  } finally {
+    if (handle !== null) closeSync(handle);
+    const current = readLockSnapshot(lockPath);
+    if (current?.metadata?.token === token) {
+      try {
+        unlinkSync(lockPath);
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+    }
+  }
+}
+
 function entryKey(entry) {
   return `${entry.path}::${entry.purpose ?? ""}`;
+}
+
+function matchingEntries(manifest, targetPath, purpose) {
+  return (manifest?.entries ?? []).filter((entry) =>
+    entry.path === targetPath &&
+    (purpose === undefined || entry.purpose === purpose)
+  );
+}
+
+function entriesForKey(manifest, key) {
+  return (manifest?.entries ?? []).filter((entry) => entryKey(entry) === key);
+}
+
+function sameEntryState(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 export function record(manifest, entry) {
@@ -149,8 +409,14 @@ export function record(manifest, entry) {
     ...entry,
     installedAt: entry.installedAt ?? new Date().toISOString(),
   };
-  if (idx === -1) next.entries.push(stamped);
-  else next.entries[idx] = { ...next.entries[idx], ...stamped };
+  const merged = idx === -1 || next.entries[idx].kind !== stamped.kind
+    ? stamped
+    : { ...next.entries[idx], ...stamped };
+  for (const [field, value] of Object.entries(merged)) {
+    if (value === undefined) delete merged[field];
+  }
+  if (idx === -1) next.entries.push(merged);
+  else next.entries[idx] = merged;
   return next;
 }
 
@@ -190,6 +456,85 @@ export function validate(manifest) {
       }
       if (!Object.prototype.hasOwnProperty.call(CATEGORIES, entry.category)) {
         errors.push(`entries[${i}].category invalid: ${entry.category}`);
+      }
+      if (entry.kind === "toml-fragment-merge") {
+        const label = `entries[${i}]`;
+        for (const field of Object.keys(entry)) {
+          if (LEGACY_TOML_MERGE_FIELDS.has(field)) {
+            errors.push(`${label}.${field} is forbidden for toml-fragment-merge`);
+          } else if (!TOML_FRAGMENT_ENTRY_FIELDS.has(field)) {
+            errors.push(`${label}.${field} is not allowed for toml-fragment-merge`);
+          }
+        }
+        for (const field of ["source", "purpose", "installedAt"]) {
+          if (typeof entry[field] !== "string" || !entry[field]) {
+            errors.push(`${label}.${field} missing for toml-fragment-merge`);
+          }
+        }
+        const journal = entry.tomlMutationJournal;
+        if (!Array.isArray(journal) || journal.length === 0) {
+          errors.push(`${label}.tomlMutationJournal must be a non-empty array`);
+          continue;
+        }
+        if (journal.length > TOML_MUTATION_JOURNAL_LIMIT) {
+          errors.push(
+            `${label}.tomlMutationJournal exceeds ${TOML_MUTATION_JOURNAL_LIMIT} entries`,
+          );
+          continue;
+        }
+        for (const [mutationIndex, mutation] of journal.entries()) {
+          const mutationLabel = `${label}.tomlMutationJournal[${mutationIndex}]`;
+          if (!mutation || typeof mutation !== "object" || Array.isArray(mutation)) {
+            errors.push(`${mutationLabel} must be an object`);
+            continue;
+          }
+          const unexpectedMutationFields = Object.keys(mutation).filter(
+            (field) => !TOML_MUTATION_FIELDS.has(field),
+          );
+          if (unexpectedMutationFields.length > 0) {
+            errors.push(
+              `${mutationLabel} has unsupported fields: ${unexpectedMutationFields.join(", ")}`,
+            );
+          }
+          if (
+            !mutation.locator ||
+            typeof mutation.locator !== "object" ||
+            Array.isArray(mutation.locator)
+          ) {
+            errors.push(`${mutationLabel}.locator must be an object`);
+            continue;
+          }
+          const unexpectedLocatorFields = Object.keys(mutation.locator).filter(
+            (field) => !TOML_MUTATION_LOCATOR_FIELDS.has(field),
+          );
+          if (unexpectedLocatorFields.length > 0) {
+            errors.push(
+              `${mutationLabel}.locator has unsupported fields: ${unexpectedLocatorFields.join(", ")}`,
+            );
+          }
+        }
+        try {
+          const normalized = normalizeCodexConfigMutations(journal);
+          const alreadyNormalized = normalized.length === journal.length &&
+            normalized.every((mutation, mutationIndex) => {
+              const recorded = journal[mutationIndex];
+              return Boolean(
+                recorded &&
+                mutation.kind === recorded.kind &&
+                mutation.locator.table === recorded.locator?.table &&
+                mutation.locator.key === recorded.locator?.key &&
+                mutation.beforeFragment === recorded.beforeFragment &&
+                mutation.afterFragment === recorded.afterFragment
+              );
+            });
+          if (!alreadyNormalized) {
+            errors.push(`${label}.tomlMutationJournal must already be normalized`);
+          }
+        } catch (error) {
+          errors.push(
+            `${label}.tomlMutationJournal invalid: ${error?.message ?? String(error)}`,
+          );
+        }
       }
     }
   }
@@ -247,6 +592,57 @@ export function fileIntegritySync(filePath) {
   }
 }
 
+/**
+ * Hash a directory as a closed set of relative paths, entry kinds, file
+ * bytes, and symlink targets. Symlinks are recorded but never followed.
+ */
+export function directoryClosureSync(directoryPath) {
+  try {
+    if (!lstatSync(directoryPath).isDirectory()) return null;
+    const entries = [];
+    const walk = (currentPath, relativeParent = "") => {
+      const names = readdirSync(currentPath).sort();
+      for (const name of names) {
+        const absolutePath = path.join(currentPath, name);
+        const relativePath = path.posix.join(
+          ...relativeParent.split(path.sep).filter(Boolean),
+          name,
+        );
+        const stat = lstatSync(absolutePath);
+        if (stat.isSymbolicLink()) {
+          entries.push({
+            path: relativePath,
+            kind: "symlink",
+            target: readlinkSync(absolutePath),
+          });
+        } else if (stat.isDirectory()) {
+          entries.push({ path: relativePath, kind: "dir" });
+          if (walk(absolutePath, path.join(relativeParent, name)) === false) return false;
+        } else if (stat.isFile()) {
+          const bytes = readFileSync(absolutePath);
+          entries.push({
+            path: relativePath,
+            kind: "file",
+            size: bytes.length,
+            sha256: createHash("sha256").update(bytes).digest("hex"),
+          });
+        } else {
+          return false;
+        }
+      }
+      return true;
+    };
+    if (walk(directoryPath) === false) return null;
+    const payload = JSON.stringify(entries);
+    return {
+      entryCount: entries.length,
+      sha256: createHash("sha256").update(payload).digest("hex"),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function manifestFileEntryMatches(entry, filePath = entry?.path) {
   if (entry?.kind !== "file" || !entry?.sha256 || !Number.isFinite(entry?.size)) {
     return false;
@@ -289,11 +685,17 @@ export function openRecorder({
   replaceSources = [],
 }) {
   let manifest;
+  let baseManifest;
   const recordErrors = [];
+  const touchedEntryKeys = new Set();
+  const expectedTouchedEntryStates = new Map();
+  const forgetOperations = [];
+  let promotedEntries = null;
   try {
-    manifest =
+    baseManifest =
       readManifest(manifestPathFor(scope, repoRoot)) ??
       createEmpty({ scope, repoRoot, metaKimVersion });
+    manifest = structuredClone(baseManifest);
     if (replaceSources.length > 0) {
       const sourceSet = new Set(replaceSources);
       manifest = {
@@ -305,12 +707,21 @@ export function openRecorder({
       manifest = { ...manifest, metaKimVersion };
     }
   } catch {
-    manifest = createEmpty({ scope, repoRoot, metaKimVersion });
+    baseManifest = createEmpty({ scope, repoRoot, metaKimVersion });
+    manifest = structuredClone(baseManifest);
   }
 
   const safeRecord = (entry) => {
     try {
+      const key = entryKey(entry);
+      if (!expectedTouchedEntryStates.has(key)) {
+        expectedTouchedEntryStates.set(
+          key,
+          structuredClone(entriesForKey(baseManifest, key)),
+        );
+      }
       manifest = record(manifest, entry);
+      touchedEntryKeys.add(key);
     } catch (e) {
       recordErrors.push(e?.message ?? String(e));
       if (verbose) console.error(`[manifest] record failed: ${e?.message}`);
@@ -353,18 +764,31 @@ export function openRecorder({
     },
     recordDir(dirPath, { source, purpose, category } = {}) {
       if (!dirPath || !category) return;
+      const closure = directoryClosureSync(dirPath);
+      if (!closure) {
+        recordErrors.push(`cannot record directory closure: ${dirPath}`);
+        return;
+      }
       safeRecord({
         path: dirPath,
         category,
         source: source ?? "unknown",
         purpose: purpose ?? null,
         kind: "dir",
+        directoryClosureSha256: closure.sha256,
+        directoryClosureEntryCount: closure.entryCount,
       });
     },
     recordSettingsMerge(
       settingsPath,
       managedCommands,
-      { source, purpose, category, mergedSettingsKeys } = {},
+      {
+        source,
+        purpose,
+        category,
+        mergedSettingsKeys,
+        managedHookFragments,
+      } = {},
     ) {
       if (!settingsPath || !category) return;
       safeRecord({
@@ -374,10 +798,84 @@ export function openRecorder({
         purpose: purpose ?? "settings-merge",
         kind: "settings-merge",
         mergedHookCommands: managedCommands ?? [],
+        mergedHookFragments: managedHookFragments ?? [],
         mergedSettingsKeys: mergedSettingsKeys ?? [],
       });
     },
-    recordMcpServer(mcpPath, name, { source, purpose, category } = {}) {
+    recordTomlFragmentMerge(
+      settingsPath,
+      mutationJournal,
+      { source, purpose, category } = {},
+    ) {
+      if (!settingsPath || !category) return;
+      if (
+        !Array.isArray(mutationJournal) ||
+        mutationJournal.length === 0 ||
+        mutationJournal.some((entry) =>
+          !entry || typeof entry !== "object" || Array.isArray(entry)
+        )
+      ) {
+        if (Array.isArray(mutationJournal) && mutationJournal.length === 0) return;
+        recordErrors.push(`invalid TOML mutation journal: ${settingsPath}`);
+        return;
+      }
+      const resolvedPurpose = purpose ?? "toml-fragment-merge";
+      const previous = manifest.entries.find((entry) =>
+        entry.path === settingsPath &&
+        entry.purpose === resolvedPurpose &&
+        entry.kind === "toml-fragment-merge" &&
+        Array.isArray(entry.tomlMutationJournal)
+      );
+      let normalizedJournal;
+      try {
+        normalizedJournal = normalizeCodexConfigMutations([
+          ...(previous?.tomlMutationJournal ?? []),
+          ...structuredClone(mutationJournal),
+        ]);
+      } catch (error) {
+        recordErrors.push(
+          `invalid TOML mutation journal for ${settingsPath}: ${error?.message ?? String(error)}`,
+        );
+        return;
+      }
+      if (normalizedJournal.length > TOML_MUTATION_JOURNAL_LIMIT) {
+        recordErrors.push(
+          `TOML mutation journal exceeds ${TOML_MUTATION_JOURNAL_LIMIT} entries: ${settingsPath}`,
+        );
+        return;
+      }
+      if (normalizedJournal.length === 0) {
+        manifest = removeByPath(manifest, settingsPath, resolvedPurpose);
+        touchedEntryKeys.delete(entryKey({ path: settingsPath, purpose: resolvedPurpose }));
+        forgetOperations.push({ targetPath: settingsPath, purpose: resolvedPurpose });
+        return;
+      }
+      try {
+        const currentBytes = readFileSync(settingsPath);
+        const currentText = currentBytes.toString("utf8");
+        if (!Buffer.from(currentText, "utf8").equals(currentBytes)) {
+          throw new Error("config is not valid UTF-8");
+        }
+        invertCodexConfigMutations(currentText, normalizedJournal);
+      } catch (error) {
+        recordErrors.push(
+          `TOML mutation journal does not match current config ${settingsPath}: ${error?.message ?? String(error)}`,
+        );
+        return;
+      }
+      safeRecord({
+        path: settingsPath,
+        category,
+        source: source ?? "unknown",
+        purpose: resolvedPurpose,
+        kind: "toml-fragment-merge",
+        tomlMutationJournal: normalizedJournal,
+        mergedHookCommands: undefined,
+        mergedHookFragments: undefined,
+        mergedSettingsKeys: undefined,
+      });
+    },
+    recordMcpServer(mcpPath, name, { source, purpose, category, fingerprint } = {}) {
       if (!mcpPath || !name || !category) return;
       safeRecord({
         path: mcpPath,
@@ -386,6 +884,7 @@ export function openRecorder({
         purpose: purpose ?? `mcp-server:${name}`,
         kind: "mcp-server",
         mcpServerName: name,
+        mcpServerFingerprint: fingerprint ?? null,
       });
     },
     recordPipPackage(name, version, { source } = {}) {
@@ -403,6 +902,13 @@ export function openRecorder({
     forget(targetPath, purpose) {
       try {
         manifest = removeByPath(manifest, targetPath, purpose);
+        forgetOperations.push({
+          targetPath,
+          purpose,
+          expectedEntries: structuredClone(
+            matchingEntries(baseManifest, targetPath, purpose),
+          ),
+        });
       } catch {
         /* ignore */
       }
@@ -418,12 +924,117 @@ export function openRecorder({
           errors: [...recordErrors],
         };
       }
+      const target = manifestPathFor(scope, repoRoot);
+      if (
+        touchedEntryKeys.size === 0 &&
+        forgetOperations.length === 0 &&
+        replaceSources.length === 0
+      ) {
+        const current = readManifest(target);
+        return {
+          ok: true,
+          path: target,
+          entries: current?.entries?.length ?? 0,
+          changed: false,
+        };
+      }
       try {
-        const target = manifestPathFor(scope, repoRoot);
-        writeManifest(target, manifest);
-        return { ok: true, path: target, entries: manifest.entries.length };
+        const updated = await withManifestLock(target, async () => {
+          const current = readManifest(target);
+          if (existsSync(target) && !current) {
+            throw new Error(`cannot merge invalid install manifest: ${target}`);
+          }
+          for (const [key, expectedEntries] of expectedTouchedEntryStates) {
+            const currentEntries = entriesForKey(current, key);
+            if (!sameEntryState(currentEntries, expectedEntries)) {
+              throw new Error(`install manifest entry changed concurrently: ${key}`);
+            }
+          }
+          for (const operation of forgetOperations) {
+            const currentEntries = matchingEntries(
+              current,
+              operation.targetPath,
+              operation.purpose,
+            );
+            if (!sameEntryState(currentEntries, operation.expectedEntries)) {
+              throw new Error(
+                `install manifest entry changed concurrently: ${operation.targetPath}::${operation.purpose ?? "*"}`,
+              );
+            }
+          }
+          let next = current ?? createEmpty({ scope, repoRoot, metaKimVersion });
+          if (replaceSources.length > 0) {
+            const sourceSet = new Set(replaceSources);
+            next = {
+              ...next,
+              entries: next.entries.filter((entry) => !sourceSet.has(entry.source)),
+            };
+          }
+          for (const { targetPath, purpose } of forgetOperations) {
+            next = removeByPath(next, targetPath, purpose);
+          }
+          const localEntries = new Map(
+            manifest.entries.map((entry) => [entryKey(entry), entry]),
+          );
+          for (const key of touchedEntryKeys) {
+            const entry = localEntries.get(key);
+            if (entry) next = record(next, entry);
+          }
+          if (metaKimVersion && next.metaKimVersion !== metaKimVersion) {
+            next = { ...next, metaKimVersion };
+          }
+          return await writeManifestAtomic(target, next);
+        });
+        promotedEntries = new Map(
+          updated.entries
+            .filter((entry) => touchedEntryKeys.has(entryKey(entry)))
+            .map((entry) => [entryKey(entry), entry]),
+        );
+        manifest = updated;
+        return { ok: true, path: target, entries: updated.entries.length };
       } catch (e) {
         if (verbose) console.error(`[manifest] flush failed: ${e?.message}`);
+        return { ok: false, error: e?.message ?? String(e) };
+      }
+    },
+    async rollback() {
+      if (!promotedEntries) {
+        return { ok: true, changed: false, reason: "not_flushed" };
+      }
+      if (replaceSources.length > 0 || forgetOperations.length > 0) {
+        return {
+          ok: false,
+          error: "recorder rollback does not support replaceSources or forget operations",
+        };
+      }
+      try {
+        const target = manifestPathFor(scope, repoRoot);
+        const baseEntries = new Map(
+          baseManifest.entries.map((entry) => [entryKey(entry), entry]),
+        );
+        const updated = await withManifestLock(target, async () => {
+          const current = readManifest(target);
+          if (!current) throw new Error(`install manifest is missing or invalid: ${target}`);
+          const currentEntries = new Map(
+            current.entries.map((entry) => [entryKey(entry), entry]),
+          );
+          for (const [key, promoted] of promotedEntries) {
+            if (JSON.stringify(currentEntries.get(key)) !== JSON.stringify(promoted)) {
+              throw new Error(`install manifest entry changed concurrently: ${key}`);
+            }
+          }
+          let next = { ...current, entries: [...current.entries] };
+          for (const key of promotedEntries.keys()) {
+            next.entries = next.entries.filter((entry) => entryKey(entry) !== key);
+            const baseEntry = baseEntries.get(key);
+            if (baseEntry) next = record(next, baseEntry);
+          }
+          return await writeManifestAtomic(target, next);
+        });
+        manifest = updated;
+        promotedEntries = null;
+        return { ok: true, changed: true, path: target, entries: updated.entries.length };
+      } catch (e) {
         return { ok: false, error: e?.message ?? String(e) };
       }
     },

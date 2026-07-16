@@ -8,6 +8,49 @@
 
 ## Unreleased
 
+## [2.8.88] - 2026-07-16
+
+### 解决的问题
+
+跨运行时的 dispatch Hook 仍把普通本地文件与命令工具当成阶段推进器。用户只是让 Meta_Kim 修改业务文件，也可能因为当前处于 Fetch、Thinking 或其他治理阶段而被拦截或警告；严重时连修复状态的命令本身也会被拦住，形成自锁。但这个 Hook 真正需要治理的是 Agent dispatch，而不是普通项目操作。另一方面，Windows 上的 Claude Code 会把 Meta_Kim 持久 MCP 的精确启动命令规范化为等价的 `cmd /c` 形式。全局安装与更新因此把 Meta_Kim 自己的条目误判为“用户未归属冲突”，无法完成 Claude 用户级全局安装。
+
+### 修复内容
+
+- **`enforce-agent-dispatch` 不再按阶段限制普通项目操作。** 本地文件修改和命令执行不再因为 Meta_Kim 当前阶段而被拒绝或警告。Agent dispatch 治理、明确的只读查询承诺，以及由运行时可信注入的 meta-agent 只读边界仍然保留。
+- **历史 dispatch 记录不再冒充当前调用者。** dispatch chain 里曾经出现过 meta-agent，不会再把主线程后续业务文件修改误认成 meta-agent 写入，也不会产生假警告。
+- **Claude 的精确 Windows MCP 包装形式会被识别为 Meta_Kim 自有条目。** 安装器只接受对预期可执行文件与参数进行精确包装的 `cmd`/`cmd.exe`；额外参数、路径变化、拼接命令、环境漂移和未知相似项仍按用户冲突保护。
+- **Claude 全局安装与清理 ownership 保持精确。** 检查和同步会保留等价包装形式，安装清单记录实际注册条目的指纹，后续更新或清理只处理 Meta_Kim 自己的片段，不会认领整份 `.claude.json`。
+- **真实打包生命周期覆盖 Claude 规范化行为。** 打包后的全局安装测试会把注册项改写为 Claude 的包装形式，验证检查与同步幂等、清单指纹一致，并证明无关用户配置不受影响。
+
+### 验证
+
+- Hook、阶段运行时、Claude 全局资产和打包运行时生命周期的聚焦回归全部通过，包含未知冲突拒绝、meta-agent 边界和只读查询边界。
+- Claude 用户级 Agent、Skill、Hook、settings 注册、commands、持久 MCP bundle 与安装清单已同步；全目标全局发布检查通过。
+- 一次不中断的 `npm run meta:verify:all` 完整通过全部 `13/13` 个标准发布级阶段，`releaseGrade=true`；Graphify 新鲜度与差异格式检查也通过。
+- 可选的私有签名 `live-certified` 验证未请求，它与标准发布门禁保持独立。
+
+## [2.8.87] - 2026-07-15
+
+### 解决的问题
+
+全局运行时安装、更新和清理仍有几处依赖固定假设：运行时 profile、旧 Agent 路径、安装包位置和上一版本号都可能被写成特定值。这样既会让合法的新运行时 profile 无法接入，也可能留下已经退役的投影，或把“路径看起来合理”误当成“Meta_Kim 确实拥有”。Codex 配置在 ownership 不确定时虽然会安全保留，但还不能记录为精确、可逆的真实差量。打包后的 MCP 运行时也可能返回结构正确的占位资源，却没有证明能力矩阵、Agent 和 Meta-Theory 内容确实来自已安装包。与此同时，setup 与测试子进程可能污染真实用户的能力盘点和项目注册表；打包发布验证仍混用了源码仓库证据与安装后产品事实，并依赖固定的历史版本基线。
+
+### 修复内容
+
+- **运行时投影与迁移改为由来源声明驱动。** 各运行时 profile 自行声明输出路径、renderer 和退役边界；历史 Agent 指纹从 Git 历史生成到规范迁移目录，不再维护固定 Agent 或路径清单。未来 profile 结构不完整时会失败关闭。
+- **安装 ownership 精确且可逆。** Manifest 策略会同时绑定类别、来源、运行时、资产类型、用途和路径，全部匹配后才允许清理。Codex `config.toml` 只记录真实发生的 mutation，保留原始注释、换行和字节形态，通过原子 compare-and-swap 落盘，并能在不删除用户其他修改的前提下精确逆向恢复。内容漂移、TOML 歧义、符号链接越界、伪造用途和旧 command-only ownership 都会被保留或阻断，不再靠猜测处理。
+- **MCP 运行时事实来自真实安装包。** 全局同步会安装带版本的持久 bundle，并校验精确包身份与目录结构。服务端从该安装包读取并验证完整运行时能力矩阵、规范 Agent 与 Meta-Theory 资源；传输验收会拒绝占位、缺项、重复、空内容和越界资源。运行时启动不再依赖源码仓库、`npx` 或环境 `PATH`。
+- **能力发现与本地状态不再跨运行时或测试泄漏。** Claude 与 Codex 通过明确的 runtime-family profile 共享盘点语义，不再因偶然入口文件名发生冲突。定向刷新会保留未选运行时的既有盘点，并发刷新通过文件锁与原子替换发布；Setup 只负责一次最终盘点刷新，子进程测试使用隔离用户目录；新的项目注册表修复命令只清理精确匹配且已经不存在的临时项目记录，并提供 dry-run 与备份保护。
+- **全局清理只认声明过的 ownership。** `global_only` 退役、OpenClaw workspace、Memory Hook、持久 MCP bundle、Agent、Skill、Command、Hook 与能力索引统一使用 profile 或契约生成的 allowlist，并采用最具体匹配。未知文件、用户漂移、项目运行时沉淀副本和第三方配置都不会被触碰。
+- **发布验证动态证明真实打包产品。** 隔离安装后的 tarball 会执行真实安装、更新、重复更新、项目更新、MCP 和历史升级路径。上一稳定版本从 Git 标签动态选择，不再写死版本号；超时来自发布策略契约；耗时 packed 验收拥有独立测试 lane；缺少历史记录时标准发布验证会失败，只有显式诊断模式可以降级。
+- **发布测试实时显示进度且不重复执行 packed CLI。** Node 测试 runner 会直接流式输出子进程进度；快速 setup 与子进程重型分组由 import 关系动态识别，不维护固定文件清单；真实 packed CLI 验收只在发布预检执行，不再在标准 setup 阶段重复。
+
+### 验证
+
+- Codex TOML 规划与逆向恢复、Manifest 与卸载安全、MCP 安装包/资源契约、全局 Agent 迁移、项目注册表隔离、setup 编排及 packed package 边界等聚焦测试已在开发过程中通过。
+- 一次完整 `npm run meta:verify:all` 已通过全部 `13/13` 个标准发布级阶段，`releaseGrade=true`、`packedProductProofComplete=true`，源码快照在整轮验证期间保持稳定。Meta-Theory 阶段共运行 1,190 项测试：1,185 通过、0 失败、5 跳过。
+- 可选私有签名 `live-certified` 验证本次未请求，继续与标准发布门保持分离。
+
 ## [2.8.86] - 2026-07-14
 
 ### 解决的问题
