@@ -46,18 +46,15 @@ describe("54 — Owner Global-First Discovery (meta-theory SKILL.md)", () => {
     );
   });
 
-  test("SKILL.md references dev-governance.md 4-Stage Parallel Fan-out Protocol", () => {
+  test("SKILL.md references dev-governance.md and the single machine parallelism contract", () => {
     const src = readFileSync(SKILL_FILE, "utf8");
     assert.match(
       src,
       /dev-governance\.md/,
       "SKILL.md must reference dev-governance.md"
     );
-    assert.match(
-      src,
-      /4-Stage Parallel Fan-out Protocol/,
-      "SKILL.md must reference the '4-Stage Parallel Fan-out Protocol' by name"
-    );
+    assert.match(src, /core-loop-contract\.json/);
+    assert.match(src, /stage-internal parallel policy|Inside each stage/iu);
   });
 });
 

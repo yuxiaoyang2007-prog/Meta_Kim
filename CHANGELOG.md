@@ -8,6 +8,28 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## Unreleased
 
+## [2.8.89] - 2026-07-16
+
+### Solved Problem
+
+Meta-Theory had more than one component trying to decide the same route. The entry classifier identified the task, but it also decided whether a native question was allowed and whether fan-out was authorized. Those decisions could disagree with the canonical Skill, the execution selector, and the host runtime, so material choices were rarely shown while safe parallel work could still be serialized or gated by an optional orchestration Skill. Separately, a legacy Claude `PostToolUse:Write` memory Hook could fail repeatedly when a CommonJS `.js` script inherited a project's ESM package type, and Hook diagnostics could mistake an unparseable external command for a healthy or broken file target.
+
+### Fixed
+
+- **Entry classification is factual instead of policy-owning.** The classifier now reports the entry path and observable signals only. It no longer owns native-choice state, fan-out authorization, lane counts, or execution policy.
+- **Native choice has one runtime-aware policy.** Material route, scope, risk, owner, and acceptance branches are evaluated centrally. Claude Code uses `AskUserQuestion`; Codex uses `request_user_input`. Missing, empty, rejected, or stripped native answers block or return to the responsible stage instead of silently becoming approval.
+- **The core-loop contract is the single parallelism authority.** All eight stages keep ordered merge barriers while independent work inside the active stage runs as the maximal safe ready set under dependency, resource, permission, isolation, useful-work, and host-capacity constraints. Parent/child paths and unknown write scopes are treated as real collisions instead of allowing unsafe apparent fan-out.
+- **Native fan-out no longer depends on `agent-teams-playbook`.** Claude Agent/Task or Codex `spawn_agent` plus the authoritative stage DAG is sufficient. The playbook remains an optional adapter and is never a prerequisite, degradation trigger, or substitute for live host invocation evidence.
+- **Hook diagnosis and legacy retirement are safer.** `doctor-hooks` accepts an explicit project root, detects CommonJS `.js` targets that run inside ESM projects, and reports commands whose target cannot be parsed as `unverified` instead of guessing. Automatic repair remains limited to proven missing zombie targets; unknown or incompatible user assets are preserved for explicit review.
+- **Claude global refresh can preserve an in-use durable MCP runtime.** An explicit maintenance flag refreshes the global Skill, Agents, commands, and manifest without replacing the active MCP bundle or rewriting user MCP configuration. The default synchronization behavior remains unchanged.
+
+### Verification
+
+- Focused choice, stage-DAG, Hook doctor, runtime projection, ownership, and governed-run regressions passed, including native-surface mismatch, empty-answer, path-collision, unknown-write-scope, and legacy Hook cases.
+- The Meta-Theory suite completed with 1,188 tests: 1,183 passed, 0 failed, and 5 declared skips.
+- One fresh `npm run meta:verify:all` run passed all `13/13` standard release-grade stages with `releaseGrade=true`, including four-runtime install/update probes and real packed user/project install and repeated-update acceptance.
+- Project and all four user-global Meta-Theory projections were synchronized with global Hooks enabled. Claude's durable MCP bundle and registration were transactionally upgraded to `2.8.89` with a pre-write backup, without terminating Claude. Optional private-attested `live-certified` verification was not requested.
+
 ## [2.8.88] - 2026-07-16
 
 ### Solved Problem

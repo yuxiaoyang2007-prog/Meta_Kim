@@ -62,107 +62,40 @@ User-visible agent naming: `roleDisplayName` is a short business role such as fr
 
 Parallelism rule: the same owner may run multiple instances only with shardKey, shardScope, workspaceIsolation, artifactNamespace, collisionPolicy, shared `parallelGroup`, and one `mergeOwner`. Missing shard or merge evidence is fake parallelism.
 
-## Stage 0 — Global-First Discovery Pre-Dispatch Checklist
+## Ordered Stage Barriers And Maximal Safe Internal Parallelism
 
-A dispatch is invalid unless the dispatcher (main thread or conductor) can show **evidence** that it ran a global-first owner discovery **before** the Wave 1 fan-out. "I remember the name" is not evidence. The discovery must produce a `capabilityInventory` recorded in the `dispatchEnvelopePacket`; without it, Wave 1 cannot start.
+`config/contracts/core-loop-contract.json#parallelExecutionPolicy` is the single machine authority for stage order, barriers, stage-internal parallelism, resource safety, merge authority, degradation, and invocation truth. This reference explains that contract; it does not add a pre-stage discovery gate, fixed wave model, or competing fan-out trigger.
 
-The discovery is run as **Stage 0**, before the 4-Stage Parallel Fan-out Protocol below. A run that skips Stage 0 is fake-parallel and must be rejected by Meta-Review.
+The canonical spine remains `Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verification -> Evolution`. A stage starts only after the previous stage's merge node closes. Critical and Fetch never overlap, Review and Meta-Review never overlap, and no support lane may release the next-stage barrier by itself.
 
-### Stage 0 steps (in this order)
+Inside the active stage, schedule the maximal safe ready set from that stage's `parallelPolicy`:
 
-1. **Read capability indexes.** Read every file under `config/capability-index/` (`meta-kim-capabilities.json`, `provider-registry.json`, `weapon-registry.json`, `dependency-project-registry.json`) and record the registered provider types, weapons, and dependency projects relevant to the current task. Skip a source only with a recorded `no-impact` reason.
-2. **Scan canonical sources.** Walk `canonical/agents/`, `canonical/skills/`, `canonical/runtime-assets/` and record the 9 meta agents + every canonical skill + every runtime asset. Note the canonical owner for each capability family.
-3. **Scan global runtime homes.** For each host that this run will touch (Claude Code, Codex, Cursor, OpenClaw), list the global assets under `~/.claude/agents/`, `~/.claude/skills/`, `~/.codex/agents/`, `~/.codex/skills/`, `~/.cursor/agents/`, `~/.cursor/skills/`, `~/.openclaw/workspaces/`, `~/.openclaw/skills/`, `~/.agents/skills/`. Note specialists that could be alternative owners.
-4. **Scan runtime package providers.** Read `package.json` `scripts` block and record the candidate `meta:*` and `discover:*` commands that could be invoked as tools. Note commands that the host exposes directly.
-5. **Scan MCP and hook config.** Read `.mcp.json`, `.codex/config.toml` mcp section, `.cursor/mcp.json`, runtime hook registries. Note which MCP servers and hooks are available as providers.
-6. **Match owner.** Only now: for the current Wave's stage and role, pick the owner from the inventory. The owner must be one of the candidate names that appeared in steps 1-5. If no candidate fits, return to Critical with `capabilityGapPacket`; do not fall back to `general-purpose` or any hardcoded name.
-7. **Record the inventory.** Write `dispatchEnvelopePacket.capabilityInventory` containing the scanned sources, the candidate set per stage, the selected owner, and the rejected candidates with reasons.
+| Stage | Parallel support lanes | Unique stage authority |
+|---|---|---|
+| Critical | pain/value, success/non-goal, permission/risk, architecture/context analysis | `meta-warden` locks one intent and one consolidated user-choice request |
+| Fetch | local source/graph/memory, capability discovery, runtime/OS/dependency checks, external research, worktree boundaries | `meta-conductor` merges one `fetchPacket` and capability inventory |
+| Thinking | candidate routes, owner/loadout match, dependency/resource/runtime analysis, review/verification design | `meta-conductor` selects one route and one stage DAG |
+| Execution | every dependency-ready read node and every isolated disjoint write node | the selected `mergeOwner` closes one execution result and side-effect ledger |
+| Review | correctness, security, product/UX/accessibility, tests/consistency/redundancy | `meta-prism` issues one deduplicated review verdict |
+| Meta-Review | stage-completeness evidence, review-standard/bias analysis, public-ready/runtime-truth analysis | `meta-warden` issues the only Meta-Review/public-ready verdict |
+| Verification | isolated test/lint/type/security checks, runtime/OS probes, package/install/update/smoke, UI/acceptance checks | `verify` merges fresh results and sets the evidence-tier claim |
+| Evolution | pattern/scar extraction, capability-gap analysis, memory/docs/telemetry/writeback candidates | `meta-chrysalis` selects candidates; approved durable writes remain single-writer |
 
-### What the inventory must look like
+### Adaptive capability discovery inside Fetch
 
-`dispatchEnvelopePacket.capabilityInventory` is a structured record (machine-readable JSON or a fenced code block in markdown). The minimum fields:
+Capability discovery is a Fetch lane, not a prerequisite stage. Start from cached capability inventories and a task-scoped project scan, then widen only when the route, owner, verification path, or a proven capability gap requires it. Stop on a qualified match; cancel or record `no-impact` for searches that cannot change the route. Full global/runtime scans belong to install, update, explicit refresh, stale/missing cache, missing provider, or high-risk provider routes—not every task.
 
-- `scannedAt`: ISO timestamp of when the discovery ran.
-- `sources`: array of `{ path, status, hitCount }` for every source actually scanned (steps 1-5).
-- `candidates`: array of `{ stage, owner, source, reason }` covering every wave that will dispatch.
-- `selected`: for each wave, the chosen owner plus a one-line reason and at least one `rejected` alternative with its reason.
-- `gap`: a free-text field; if the discovery could not find a matching owner, this field contains the `capabilityGapPacket` describing the gap, and Execution is blocked until the gap is closed.
+The merged capability inventory records sources actually checked, candidates considered, the selected owner/provider, rejected alternatives that materially affected the decision, and any gap. Selected owners must come from discoverable evidence; `general-purpose`, a runtime nickname, or an invented temporary owner is not a silent fallback.
 
-### Hard rules
+### Scheduler and safety rules
 
-- **Stage 0 is mandatory.** A `dispatchEnvelopePacket` without `capabilityInventory` is not a valid dispatch. Review must reject it.
-- **No hardcoded owner names.** The selected owner in step 6 must come from the inventory. A dispatcher that writes `meta-scout` without first proving `meta-scout` appears in the candidate set is a protocol violation.
-- **No silent general-purpose fallback.** If step 6 cannot find a matching owner, the run must return to Critical with `capabilityGapPacket` and surface the gap to the user. Silently falling back to `general-purpose` is forbidden, even for Wave 3 workers, unless the Wave-3 row of the Default Owner Assignments table is the explicit default for that role.
-- **Inventory must be auditable.** Every `sources[i].path` listed in the inventory must be a real file or directory the host can read; Review may grep any of them to confirm the inventory is not a fabrication.
-- **Skipping a source requires a reason.** If the dispatcher does not read `config/capability-index/provider-registry.json`, the inventory must record `sources[i].status: "skipped"` with `sources[i].reason` explaining why. An empty reason is a protocol violation.
-
-## 4-Stage Parallel Fan-out Protocol
-
-The canonical 8-stage spine (`Critical -> Fetch -> Thinking -> Execution -> Review -> Meta-Review -> Verification -> Evolution`) is the routing order. The **governance stages** (Critical, Fetch, Thinking, Review) have an internal DAG that allows safe parallelism when their evidence, decisions, and reviews are independent. The 4-Stage Parallel Fan-out Protocol wires them into four waves, each with explicit parallel lanes and a named merge owner. The dispatching convention is **Wave N: scope**, not **Stage N: pass/fail**.
-
-This protocol is referenced from `SKILL.md` § **Global-First Owner Discovery** and § **Parallelism Boundaries**; both are read together. The hooks `enforce-agent-dispatch.mjs` and `activate-meta-theory-spine.mjs` enforce the spine but never block the safe intra-wave fan-out described here.
-
-### Wave 1 — Critical + Fetch (intent lock + evidence fan-out)
-
-- **Critical** runs on the main thread. It locks the actual user intent, the success criteria, the non-goals, the permissions, the Architecture Type, and the boundaries. It is intentionally single-threaded because every later wave depends on a stable intent lock.
-- **Fetch** runs in parallel with Critical's evidence-need surface. Inside a single run, Fetch fans out the capability-discovery sources from `SKILL.md` § **Global-First Owner Discovery** (canonical assets, capability indexes, global runtime homes, package scripts, MCP configs, external discovery) across 1-6 parallel readers when the route is visibly complex.
-- **main-thread merge**: the main thread holds the intent lock and merges the Fetch fan-out into a single `fetchPacket` + `capabilityDiscovery.searchLog`. No subagent may write the intent lock.
-
-### Wave 2 — Thinking + Planning (owner match + dispatch envelope)
-
-- **Thinking** maps the needed capabilities to owner candidates, dependencies, runtimes, and OS support. It runs on the main thread or under `meta-conductor` orchestration.
-- **Plan** (the `dispatchEnvelopePacket`, `dispatchBoard`, and `workerTaskPackets`) is produced in parallel: candidate paths are explored in parallel, owner matching is parallel across the candidate shortlist, and dependency / runtime / OS eligibility checks run in parallel.
-- **mergeOwner**: the main thread. `meta-conductor` may co-orchestrate, but the dispatch envelope is closed by a single mergeOwner with full DAG and `parallelGroup` evidence.
-
-### Wave 3 — Execution (bounded fan-out)
-
-- **Execution** dispatches `workerTaskPackets` in parallel. Each packet must carry `shardKey`, `shardScope`, `workspaceIsolation`, `artifactNamespace`, `collisionPolicy`, shared `parallelGroup`, and one `mergeOwner`. Missing shard or merge evidence is fake parallelism. All packets sharing a `parallelGroup` MUST be dispatched as concurrent Task/Agent tool calls in a single assistant message — splitting them across messages fails Meta-Review as fake parallelism.
-- **mergeOwner** is the single authority that resolves collisions and produces the final deliverable chain. The main thread may also be the mergeOwner, but only when it has not also held the worker role for the same packet.
-
-### Wave 4 — Review + Meta-Review (skeptic fan-out + Warden gate)
-
-- **Review** fans out across the `meta-prism` lenses (factual reviewer, senior engineer, security expert, consistency reviewer, redundancy checker) in parallel. Each lens produces a separate `reviewLensPacket`; the main `reviewPacket` is the merge.
-- **Meta-Review** is a single-point authority on `meta-warden`. The Warden gate cannot be parallelized; it inspects the Review standard itself, not the deliverables.
-- **Verification** and **Evolution** remain strict-serial after Meta-Review. The Warden gate and the Verification stage are the only authorities that can close a run.
-
-### Default Owner Assignments
-
-These assignments are the **default** for any run that triggers the Fan-out Trigger below. They are not optional defaults; deviating requires a recorded `no_branching_choice` or an explicit user override. A dispatch that uses a different subagent type than the one named here must record why in `dispatchEnvelopePacket`.
-
-| Wave | Stage / role | Default subagent type | Reason |
-|------|--------------|------------------------|--------|
-| 1 | Fetch — capability discovery across 1-6 readers | `meta-scout` | External + cross-runtime capability scanning is `meta-scout`'s stated boundary. |
-| 1 | Fetch — graph + memory navigation | `meta-librarian` | Memory + graph + continuity is `meta-librarian`'s boundary. |
-| 2 | Thinking — owner match + dispatch envelope | `meta-conductor` | Business-flow blueprint, stage sequencing, and dispatch envelope are `meta-conductor`'s boundary. |
-| 2 | Thinking — capability loadout (skills, MCP, commands) | `meta-artisan` | Skill / MCP / tool fit is `meta-artisan`'s boundary. |
-| 3 | Execution — worker task | runtime-discovered professional owner | Bind each run-scoped worker packet to an existing global/project execution owner whose capability contract fits the lane. A runtime worker instance is not permission to invent a `general-purpose` owner. |
-| 4 | Review — adversarial correctness | `meta-prism` (lens: correctness) | Quality review and drift detection are `meta-prism`'s boundary. |
-| 4 | Review — adversarial security | `meta-prism` (lens: security) | Same boundary; different lens. |
-| 4 | Review — adversarial completeness | `meta-prism` (lens: completeness) | Same boundary; different lens. |
-| 4 | Meta-Review — gate approval | `meta-warden` | Coordination, arbitration, final synthesis, and the public-ready gate are `meta-warden`'s boundary. |
-| 8 | Evolution — writeback coordination | `meta-chrysalis` | Evolution signal aggregation and writeback coordination through Warden's gate are `meta-chrysalis`'s boundary. |
-
-**History note** — early runs of this protocol (v2.8.62 and earlier) defaulted every Wave-3 worker to `general-purpose` because the owner table did not exist. Wave 4 review was also done by `general-purpose` instead of `meta-prism` three-lens fan-out, and Meta-Review was done by the main thread instead of `meta-warden`. From v2.8.63 onward named governance roles became the default; the current contract also requires Wave-3 packets to bind a runtime-discovered professional owner instead of reviving the old generic fallback.
-
-### Wave Hard Rules
-
-- The 8-stage ordering is preserved. Parallelism exists **inside** a wave, not **across** waves.
-- No wave may skip the main-thread intent lock. Critical, the Fetch merge, the Thinking merge, and the Review merge are single-point.
-- Meta-Review, Verification, and Evolution are strict-serial. Warden is the only Meta-Review authority; Verification produces fresh evidence; Evolution writeback requires Warden approval.
-- A Wave-3 fan-out that lacks `parallelGroup` + `mergeOwner` + `collisionPolicy` is fake parallelism and must be rejected by Review, not silently serialized.
-- The `agent-teams-playbook` skill is the recommended execution pattern for Wave 3; it is selected only when the DAG and collision policy prove safe.
-- **A dispatch that picks `general-purpose` as an execution owner is a protocol violation.** Review must return to Thinking and bind a runtime-discovered professional owner or emit a real capability gap.
-
-### Fan-out Trigger
-
-The protocol activates when any of these signals appear:
-
-- explicit `/meta-theory`, `meta-theory`, `元理论`, natural-language governed execution, `critical and fetch thinking and review`, `Critical Thinking -> Fetch -> Deep Thinking -> Review`, "并行", "多个 agent", "review + fix + verify"
-- 2+ independent files, runtimes, platforms, capability families, or verification lanes
-- cross-runtime behavior, release/update/sync, hook/security/sandbox, or repeated same-type failure work
-- user feedback that the current Meta_Kim route is slow, serial, missing agents, or repeatedly corrected
-
-A run that does not trigger fan-out still walks the 8-stage spine in order, just without intra-wave parallelism.
+- Parallel readiness comes from the active stage DAG, completed dependencies, disjoint resource scopes, permission state, host capacity, and useful dispatch/merge economics—not from keywords, estimated lane counts, fixed wave numbers, or merely selecting a provider.
+- Run every safe ready lane up to active host capacity. Serialize dependency edges and conflicts involving the same file, state store, port, service, package target, or external resource unless verified isolation plus an explicit merge contract removes the conflict.
+- Read-only support lanes may fan out by default. Project writes need bounded scopes and collision policies. External or irreversible writes need the applicable approval and remain serialized unless approved, disjoint, isolated, and idempotent.
+- Each lane records owner, dependencies, resource scope, effect class, permission boundary, collision policy, evidence requirement, and merge authority. Same-owner parallel instances additionally need distinct shard scope and artifact namespace.
+- `agent-teams-playbook` is an optional adapter. Use it when it improves a safe stage DAG, but do not block native `Agent`, `Task`, or `spawn_agent` fan-out when the host surface and stage contract are already sufficient.
+- Planned lanes, dispatch packets, selected providers, and host-invocation requests are not execution proof. Completion requires exact run-and-lane-bound native host results; a concurrency claim additionally requires batched native calls or overlapping invocation intervals.
+- Capacity, permission, isolation, owner, or host-surface limits produce an explicit partial/degraded route. Never relabel degradation as parallel execution, completion, verification pass, or public-ready.
 
 ## Complexity Routing
 
@@ -311,7 +244,7 @@ They supplement packets. They do not replace `businessFlowBlueprintPacket`, `dis
 
 ## Execution
 
-Dispatch from Thinking artifacts and selected capabilities. Execution may be parallel or sequential based on dependencies. `agent-teams-playbook` is selected only after Thinking and before Execution when there are 2+ executable worker lanes whose DAG dependencies, collision boundaries, workspace isolation, and external-write policy prove safe fan-out; fewer than 2 lanes record `not_required`, and unsafe fan-out records partial/degraded. Selection proves bounded fan-out planning, not a live Skill/Agent Team/spawn_agent call without attached host evidence.
+Dispatch from Thinking artifacts and selected capabilities. Execution schedules the maximal safe ready set from `core-loop-contract.parallelExecutionPolicy` and the Execution stage's `parallelPolicy`; dependency or resource conflicts serialize only the affected nodes. `agent-teams-playbook` may be selected as an adapter when useful, but it is not a prerequisite when the native host surface and stage DAG already support safe fan-out. Fewer than two ready lanes record `not_required`, unsafe lanes remain pending/serialized or partial, and adapter selection never counts as a live Skill/Agent Team/`spawn_agent` call without attached host evidence.
 
 Surgical hygiene: touch only files required by the task, remove only unused code caused by the change, and preserve unrelated user changes.
 

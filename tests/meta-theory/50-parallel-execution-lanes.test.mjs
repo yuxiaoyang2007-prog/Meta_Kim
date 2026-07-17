@@ -119,7 +119,8 @@ describe("50 — Parallel execution lanes (engineering fan-out)", () => {
     const drafts = result.workerTaskPacketDrafts;
     const available = new Set(result.ownerDiscoveryPacket.candidateExistingExecutionOwners);
 
-    assert.equal(result.entryClassification.subagentAuthorizationSource, "meta_theory_trigger_request");
+    assert.equal(Object.hasOwn(result.entryClassification, "subagentAuthorizationSource"), false);
+    assert.equal(result.entryClassification.signals.structuredGovernanceChainRequest, true);
     assert.ok(lanes.length >= 2, `expected whitespace capability anchors to produce >=2 lanes, got ${lanes.length}`);
     assert.ok(drafts.length >= 2, `expected >=2 worker drafts, got ${drafts.length}`);
     for (const draft of drafts) {

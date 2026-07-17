@@ -58,10 +58,10 @@ not enforce dispatch.
 - This `/meta-theory` invocation is explicit user authorization to use Claude
   Code Agent/Task delegation and parallel worker lanes when Thinking proves
   the lanes are independent and safe.
-- Use `agent-teams-playbook` after Thinking and before Execution when the plan
-  has 2+ executable worker lanes whose DAG dependencies, collision boundaries,
-  workspace isolation, and external-write policy prove safe fan-out; record
-  `not_required` for fewer lanes and partial/degraded for unsafe fan-out.
+- Use the authoritative stage DAG plus native Agent/Task as the sufficient
+  fan-out route. `agent-teams-playbook` is optional: select it only when it
+  improves orchestration, record `not_required` for fewer than two ready lanes,
+  and record `optional_adapter_not_selected` when native fan-out is sufficient.
   Resolve it from the first available skill root (`~/.claude/skills/agent-teams-playbook/SKILL.md`,
   `.claude/skills/agent-teams-playbook/SKILL.md`, `.agents/skills/agent-teams-playbook/SKILL.md`,
   or a configured dependency root). Treat it as a selected fan-out adapter

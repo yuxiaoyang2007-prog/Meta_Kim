@@ -19,6 +19,27 @@
     "packageScript": "meta:theory:run",
     "contractIsDefaultPath": true
   },
+  "parallelExecutionPolicy": {
+    "authority": "This contract is the single machine authority for stage order, stage barriers, stage-internal parallelism, and final stage authority. Skills, references, runners, adapters, and hooks are projections or consumers and must not define a competing wave model.",
+    "mode": "ordered_stage_barriers_with_maximal_safe_internal_parallelism",
+    "runtimeDagPacket": "coreLoop.stageDagPacket",
+    "stageOrderSource": "defaultEntry.spine",
+    "stageBarrierRule": "No lane in the next stage may start until the current stage merge node has completed. Cross-stage overlap is forbidden; parallelism is maximized inside the active stage.",
+    "laneReadinessRule": "Run every ready lane up to active host capacity when its dependencies are complete, its resource scopes do not conflict with another ready lane, its permission boundary is satisfied, and dispatch plus merge overhead is justified.",
+    "resourceRule": "Unknown write scope is unsafe for parallel mutation. Same-file, same-state, same-port, same-service, or same external-resource writes serialize unless verified isolation and an explicit merge contract remove the conflict.",
+    "sideEffectRule": "Read-only support lanes may fan out by default. Project writes require bounded resource scopes and collision policy. External or irreversible writes require the applicable approval before invocation and remain serialized unless approved, disjoint, isolated, and idempotent.",
+    "capacityRule": "Use the active runtime capacity; Meta_Kim must not impose an arbitrary fixed lane or wave count.",
+    "mergeRule": "Each stage has one merge or verdict authority. Support lanes may prepare evidence and recommendations, but only that authority closes the stage outputs and releases the next-stage barrier.",
+    "invocationTruthRule": "A planned lane, derived wave, selected provider, host invocation request, or dispatched label is not execution evidence. Completion requires an exact run-and-lane-bound native host call and successful terminal result; claimed concurrency additionally requires batched native calls or overlapping invocation intervals.",
+    "degradationRule": "Unavailable capacity, permission, isolation, owner, or host surface may produce an explicit partial or degraded route. Degradation must not be relabeled as parallel execution, completion, verification pass, or public-ready.",
+    "compatibilityViews": [
+      "thinkingPacket.workerTaskPackets for Execution lanes",
+      "agentTeamsPlaybookPacket.waves",
+      "langGraphRunPacket",
+      "dispatchBoard",
+      "stageOperationPlan"
+    ]
+  },
   "stages": [
     {
       "stage": "Critical",
@@ -41,6 +62,20 @@
       "blockingGates": ["unclear_user_intent", "unsafe_or_unbounded_permission"],
       "warningGates": ["minor wording ambiguity with no route impact"],
       "defaultOwner": "meta-warden",
+      "parallelPolicy": {
+        "laneFamilies": [
+          "request and pain/value decomposition",
+          "success criteria and non-goal extraction",
+          "permission, irreversibility, and risk analysis",
+          "architecture and project-context support analysis"
+        ],
+        "effectClass": "read_only_support",
+        "mergeAuthority": "meta-warden",
+        "singleAuthorityOutputs": ["intentPacket", "intentGatePacket", "native user-choice request"],
+        "previousStageMergeRequired": false,
+        "nextStageRequiresMerge": true,
+        "notes": "Support analyses may run in parallel, but only the merge authority locks intent or asks the consolidated route-changing questions."
+      },
       "decisionResponsibilities": {
         "responsibilityRef": "intent_lock",
         "decisionQuestion": "Which missing intent, success, non-goal, permission, or architecture-type fact would change the route?",
@@ -81,6 +116,21 @@
       "blockingGates": ["missing_fetch_evidence", "missing_capability_discovery", "known_unsupported_runtime_or_os"],
       "warningGates": ["stale global cache that does not affect selected route"],
       "defaultOwner": "meta-conductor",
+      "parallelPolicy": {
+        "laneFamilies": [
+          "local source, graph, memory, and read-before-edit evidence",
+          "global and runtime capability discovery",
+          "runtime, OS, dependency, and provider compatibility",
+          "external or current authoritative research when required",
+          "worktree and source/projection boundary inspection"
+        ],
+        "effectClass": "read_only_discovery",
+        "mergeAuthority": "meta-conductor",
+        "singleAuthorityOutputs": ["fetchPacket", "capabilityDiscovery", "contradictionLog", "fileChangeFactCard"],
+        "previousStageMergeRequired": true,
+        "nextStageRequiresMerge": true,
+        "notes": "Use cached global inventory plus a project-light scan by default, stop on a qualified match, cancel no-impact searches, and reserve full scans for capabilityDiscovery.fullScanTriggers."
+      },
       "decisionResponsibilities": {
         "responsibilityRef": "evidence_and_capability_discovery",
         "decisionQuestion": "Which evidence or capability fact changes candidate routes, owners, risk, scope, or verification?",
@@ -112,6 +162,7 @@
         "thinkingPacket.verificationOwner",
         "thinkingPacket.mergeOwner",
         "thinkingPacket.parallelGroups",
+        "stageDagPacket",
         "thinkingPacket.dependencyPolicy",
         "thinkingPacket.omittedLanesWithReason",
         "preDecisionOptionFrame.planChallengeState",
@@ -135,6 +186,20 @@
       "blockingGates": ["missing_owner", "missing_weapon", "missing_verification_owner", "blind_execute"],
       "warningGates": ["single obvious path recorded as no_branching_choice"],
       "defaultOwner": "meta-conductor",
+      "parallelPolicy": {
+        "laneFamilies": [
+          "candidate route exploration",
+          "owner and capability-loadout matching",
+          "dependency, resource, side-effect, runtime, and OS analysis",
+          "review and verification path design"
+        ],
+        "effectClass": "read_only_design",
+        "mergeAuthority": "meta-conductor",
+        "singleAuthorityOutputs": ["thinkingPacket", "preDecisionOptionFrame", "stageDagPacket", "dispatchEnvelopePacket"],
+        "previousStageMergeRequired": true,
+        "nextStageRequiresMerge": true,
+        "notes": "Candidate analyses may run in parallel. The merge authority selects one route, derives the stage DAG, and consolidates any material user choice before Execution."
+      },
       "decisionResponsibilities": {
         "responsibilityRef": "route_design_and_owner_selection",
         "decisionQuestion": "Which owner, weapon, dependency, runtime, OS, lane shape, and verification path best serves the intent?",
@@ -187,6 +252,19 @@
       "blockingGates": ["unsafe_mutation", "external_write_without_approval", "global_write_without_approval", "plan_challenge_not_ready"],
       "warningGates": ["low-risk local wording edit"],
       "defaultOwner": "selected worker or selected capability provider",
+      "parallelPolicy": {
+        "laneFamilies": [
+          "all dependency-ready read-only work nodes",
+          "dependency-ready project-write nodes with disjoint resource scopes",
+          "isolated verification-support and artifact-production nodes"
+        ],
+        "effectClass": "bounded_execution",
+        "mergeAuthority": "thinkingPacket.mergeOwner with meta-conductor fallback",
+        "singleAuthorityOutputs": ["executionResult.mergeResult", "sideEffectLedgerPacket"],
+        "previousStageMergeRequired": true,
+        "nextStageRequiresMerge": true,
+        "notes": "Schedule the maximal safe ready set rather than accepting or rejecting the whole stage. Serialize dependencies and resource conflicts; do not require an optional agent-teams provider when the native host surface and stage DAG are sufficient."
+      },
       "decisionResponsibilities": {
         "responsibilityRef": "bounded_execution_and_midrun_branching",
         "decisionQuestion": "Did execution discover a route-changing fact that should pause, continue, narrow, or return to Thinking?",
@@ -230,6 +308,20 @@
       "blockingGates": ["review_finds_unresolved_critical_or_high_issue"],
       "warningGates": ["minor polish issue that does not affect acceptance"],
       "defaultOwner": "meta-prism",
+      "parallelPolicy": {
+        "laneFamilies": [
+          "correctness and factual review",
+          "security and permission review",
+          "product, UX, accessibility, and acceptance review",
+          "test, consistency, redundancy, and source/projection review"
+        ],
+        "effectClass": "read_only_review",
+        "mergeAuthority": "meta-prism",
+        "singleAuthorityOutputs": ["reviewPacket", "productExperiencePacket"],
+        "previousStageMergeRequired": true,
+        "nextStageRequiresMerge": true,
+        "notes": "Independent lenses may run concurrently; meta-prism deduplicates, prioritizes, and closes one review verdict."
+      },
       "decisionResponsibilities": {
         "responsibilityRef": "upstream_and_output_quality_review",
         "decisionQuestion": "Is the chain good enough for the claimed result, and which finding changes acceptance or revision direction?",
@@ -267,6 +359,19 @@
       "blockingGates": ["public_ready_overclaim", "review_standard_too_low"],
       "warningGates": ["non-public smoke evidence only"],
       "defaultOwner": "meta-warden",
+      "parallelPolicy": {
+        "laneFamilies": [
+          "upstream stage-completeness evidence preparation",
+          "review-standard and bias analysis",
+          "public-ready, overclaim, runtime-truth, and residual-risk analysis"
+        ],
+        "effectClass": "read_only_meta_review",
+        "mergeAuthority": "meta-warden",
+        "singleAuthorityOutputs": ["metaReviewPacket verdict", "public-ready gate decision"],
+        "previousStageMergeRequired": true,
+        "nextStageRequiresMerge": true,
+        "notes": "Evidence preparation may fan out, but only meta-warden issues the Meta-Review verdict or returns the run to Review or Verification."
+      },
       "decisionResponsibilities": {
         "responsibilityRef": "review_standard_and_public_ready_gate",
         "decisionQuestion": "Is Review's standard strong enough for the intended claim, especially public-ready or release-grade claims?",
@@ -318,6 +423,20 @@
       ],
       "warningGates": ["ordinary low-risk step that does not make a completion claim"],
       "defaultOwner": "verify",
+      "parallelPolicy": {
+        "laneFamilies": [
+          "independent test, lint, typecheck, and security checks",
+          "isolated runtime and OS probes",
+          "isolated package, install, update, and smoke checks",
+          "artifact, UI, and user-visible acceptance checks"
+        ],
+        "effectClass": "fresh_verification",
+        "mergeAuthority": "verify",
+        "singleAuthorityOutputs": ["verificationResult", "completion and evidence-tier claim"],
+        "previousStageMergeRequired": true,
+        "nextStageRequiresMerge": true,
+        "notes": "Run independent checks concurrently only when caches, services, ports, package targets, and temporary directories are isolated. The verification authority merges fresh results and sets the claim boundary."
+      },
       "decisionResponsibilities": {
         "responsibilityRef": "fresh_evidence_and_truth_state",
         "decisionQuestion": "Which fresh evidence proves, weakens, or limits the completion claim?",
@@ -356,6 +475,19 @@
       "blockingGates": ["writeback_without_warden_approval", "missing_writeback_or_none_reason"],
       "warningGates": ["candidate writeback requires later approval"],
       "defaultOwner": "meta-chrysalis",
+      "parallelPolicy": {
+        "laneFamilies": [
+          "reusable pattern and scar extraction",
+          "capability-gap and owner-boundary analysis",
+          "memory, documentation, telemetry, and workflow writeback candidates"
+        ],
+        "effectClass": "read_only_candidate_analysis_then_governed_write",
+        "mergeAuthority": "meta-chrysalis",
+        "singleAuthorityOutputs": ["evolutionWritebackDecision", "evolutionWritebackPacket", "scarPacket"],
+        "previousStageMergeRequired": true,
+        "nextStageRequiresMerge": true,
+        "notes": "Candidate analysis may fan out. meta-chrysalis merges candidates; durable writes remain single-writer actions and require the existing Warden approval gate."
+      },
       "decisionResponsibilities": {
         "responsibilityRef": "durable_learning_and_writeback",
         "decisionQuestion": "What reusable lesson, capability gap, scar, or none-with-reason should survive this run?",
@@ -500,7 +632,7 @@
       "stateTaxonomy includes invoked, applied, host_visible_observed, selected_not_invoked, discovered_not_selected, unavailable, not_authorized, blocked, not_required",
       "agent/subagent live invocation is invoked only with external agent spawn evidence; otherwise use unavailable, not_authorized, blocked, not_required, or selected_not_invoked according to host-tool availability and authorization evidence",
       "app-visible host UI subagents are recorded separately from runner Agent/spawn_agent tool invocation",
-      "agent-teams-playbook is selected for 2+ executable parallel lanes but is not relabeled as a live Skill/Agent Team/spawn_agent call",
+      "agent-teams-playbook is optional; when selected it is not relabeled as a live Skill/Agent Team/spawn_agent call, and when absent it must not block a native stage-DAG fan-out route",
       "MCP binding or --self-test catalog output is not relabeled as an MCP tool call; live proof requires an externally observed tools/call result",
       "hook match or file is not relabeled as triggered hook",
       "command selection is not relabeled as command execution without fresh command output",
@@ -605,8 +737,8 @@
       ],
       "P-110": [
         "agentTeamsPlaybookPacket is not_required for fewer than 2 executable worker lanes",
-        "2+ executable worker lanes must discover and select agent-teams-playbook as the fan-out orchestration adapter",
-        "fan-out waves use the current host/runtime capacity such as Codex [agents].max_threads or Claude Code's native dispatch capacity, not an arbitrary Meta_Kim hard cap, prove DAG/collision/workspace/external-write safety, and preserve workerTaskPackets",
+        "2+ executable worker lanes may use agent-teams-playbook as an optional orchestration adapter, but native Agent/Task/spawn_agent plus the authoritative stage DAG is sufficient",
+        "fan-out ready sets use the current host/runtime capacity such as Codex [agents].max_threads or Claude Code's native dispatch capacity, not an arbitrary Meta_Kim hard cap, prove dependency/resource/permission/isolation safety, and preserve workerTaskPackets only as a derived compatibility view",
         "the Node runner must not claim a live Skill, Agent Team, or Codex spawn_agent call without host tool-call evidence"
       ]
     }

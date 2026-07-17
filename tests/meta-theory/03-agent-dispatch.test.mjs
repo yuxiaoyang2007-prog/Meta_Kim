@@ -357,14 +357,12 @@ describe("Agent Dispatch — Part B: Dispatch Rule Verification", async () => {
     );
   });
 
-  test("Protocol-first rule documented (runHeader, dispatchBoard, etc. before Stage 4)", async () => {
+  test("Protocol-first rule documented before Execution", async () => {
     await ensureLoaded();
     const hasProtocolFirst = /Protocol-first/i.test(skillContent);
     const hasRunHeader = skillContent.includes("runHeader");
     const hasDispatchBoard = skillContent.includes("dispatchBoard");
-    const hasBeforeStage4 =
-      /Stage 4 may not start/i.test(skillContent) ||
-      /before Stage 4/i.test(skillContent);
+    const hasBeforeExecution = /Before Execution/i.test(skillContent);
 
     assert.ok(
       hasProtocolFirst,
@@ -373,8 +371,8 @@ describe("Agent Dispatch — Part B: Dispatch Rule Verification", async () => {
     assert.ok(hasRunHeader, "SKILL.md must mention runHeader artifact");
     assert.ok(hasDispatchBoard, "SKILL.md must mention dispatchBoard artifact");
     assert.ok(
-      hasBeforeStage4,
-      "SKILL.md must state that Stage 4 may not start before protocol artifacts are ready"
+      hasBeforeExecution,
+      "SKILL.md must state that Execution may not start before protocol evidence is ready"
     );
   });
 
@@ -431,23 +429,23 @@ describe("Agent Dispatch — Part B: Dispatch Rule Verification", async () => {
     );
   });
 
-  test("workerTaskPackets documented with dependsOn and parallelGroup", async () => {
+  test("stageDagPacket owns dependencies while workerTaskPackets stay a derived view", async () => {
     await ensureLoaded();
     assert.ok(
       skillContent.includes("workerTaskPackets"),
       "SKILL.md must document workerTaskPackets"
     );
     assert.ok(
-      skillContent.includes("dependsOn"),
-      "workerTaskPackets must include dependsOn field"
+      skillContent.includes("stageDagPacket"),
+      "SKILL.md must document the authoritative stageDagPacket"
     );
     assert.ok(
-      skillContent.includes("parallelGroup"),
-      "workerTaskPackets must include parallelGroup field"
+      /workerTaskPackets[\s\S]{0,120}derived Execution views/i.test(skillContent),
+      "workerTaskPackets must be documented as a derived Execution view"
     );
     assert.ok(
-      skillContent.includes("mergeOwner"),
-      "workerTaskPackets must include mergeOwner field"
+      /must not become a second dependency or collision source/i.test(skillContent),
+      "derived worker views must not become a competing scheduler source"
     );
   });
 

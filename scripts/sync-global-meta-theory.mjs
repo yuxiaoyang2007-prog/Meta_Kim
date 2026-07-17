@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Global sync: canonical meta-theory skill + Meta_Kim Claude runtime hook assets into runtime homes.
- * Flags: --check, --print-targets, --with-global-hooks (opt into global hook copy + settings merge where supported).
+ * Flags: --check, --print-targets, --with-global-hooks (opt into global hook copy + settings merge where supported), --skip-durable-mcp.
  */
 
 import { createHash, randomUUID } from "node:crypto";
@@ -103,6 +103,7 @@ Options:
   --targets <ids>         Comma-separated runtime ids
   --with-global-hooks     Include global Hook files and runtime registration
   --skip-global-hooks     Explicitly skip global Hook synchronization
+  --skip-durable-mcp      Explicitly skip Claude durable MCP runtime and MCP config
   --help, -h              Show this help without resolving homes or writing`);
 }
 
@@ -112,6 +113,7 @@ function parseCliArgs(args) {
     "--print-targets",
     "--with-global-hooks",
     "--skip-global-hooks",
+    "--skip-durable-mcp",
     "--help",
     "-h",
   ]);
@@ -144,6 +146,7 @@ function parseCliArgs(args) {
     printTargetsOnly: args.includes("--print-targets"),
     skipGlobalHooks,
     withGlobalHooks: args.includes("--with-global-hooks") && !skipGlobalHooks,
+    skipDurableMcp: args.includes("--skip-durable-mcp"),
   };
 }
 
@@ -158,6 +161,7 @@ try {
 const checkOnly = cliOptions?.checkOnly ?? false;
 const printTargetsOnly = cliOptions?.printTargetsOnly ?? false;
 const withGlobalHooks = cliOptions?.withGlobalHooks ?? false;
+const skipDurableMcp = cliOptions?.skipDurableMcp ?? false;
 
 const repoHooksDir = path.join(canonicalRuntimeAssetsDir, "claude", "hooks");
 const sharedHooksDir = path.join(canonicalRuntimeAssetsDir, "shared", "hooks");
@@ -2302,7 +2306,8 @@ async function runCheck() {
   await assertCanonicalSkillFrontmatter();
   let failed = false;
   const agentPlan = await buildGlobalAgentPlan();
-  const mcpPlan = await buildClaudeUserMcpPlan();
+  const skipClaudeDurableMcp = skipDurableMcp && selectedTargetIds.includes("claude");
+  const mcpPlan = skipClaudeDurableMcp ? null : await buildClaudeUserMcpPlan();
 
   if (agentPlan.collisions.length > 0) failed = true;
   if (!(await checkGlobalAgents(agentPlan))) failed = true;
@@ -2318,6 +2323,10 @@ async function runCheck() {
       isDeepStrictEqual(mcpPlan.base, mcpPlan.config);
     console.log(`${mcpInSync ? `${C.green}✓${C.reset}` : `${C.yellow}⊘${C.reset}`} ${C.dim}Claude user MCP: ${mcpPlan.configPath}${C.reset}`);
     if (!mcpInSync) failed = true;
+  } else if (skipClaudeDurableMcp) {
+    console.log(
+      `${C.yellow}⊘${C.reset} ${C.dim}Claude durable MCP runtime and user MCP config not checked; skipped because explicitly requested with --skip-durable-mcp.${C.reset}`,
+    );
   }
 
   for (const target of activeTargets) {
@@ -2614,7 +2623,8 @@ async function runSync() {
   }
   await assertCanonicalSkillFrontmatter();
   const agentPlan = await buildGlobalAgentPlan();
-  mcpPlan = await buildClaudeUserMcpPlan();
+  const skipClaudeDurableMcp = skipDurableMcp && selectedTargetIds.includes("claude");
+  mcpPlan = skipClaudeDurableMcp ? null : await buildClaudeUserMcpPlan();
   const collisions = [
     ...agentPlan.collisions.map((item) => item.targetPath),
     ...(mcpPlan?.collisions ?? []).map((name) => `${mcpPlan.configPath}#${name}`),
@@ -2652,6 +2662,11 @@ async function runSync() {
 
   await syncGlobalAgents(agentPlan);
   await syncClaudeUserMcp(mcpPlan);
+  if (skipClaudeDurableMcp) {
+    console.log(
+      `${C.yellow}⊘${C.reset} ${C.dim}Claude durable MCP runtime and user MCP config skipped because explicitly requested with --skip-durable-mcp.${C.reset}`,
+    );
+  }
 
   for (const target of staleSkillCleanupTargets) {
     await backupAndRemoveStaleSkillAlias(target);

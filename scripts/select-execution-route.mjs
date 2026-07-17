@@ -6,6 +6,10 @@ import { GOVERNANCE_OWNERS, OS_TARGETS, RUNTIMES, classifyTaskShape, exists, rea
 import { CAPABILITY_GAP_DECISION_CONTRACT, decideCapabilityGap } from "./capability-gap-mvp.mjs";
 import { classifyMetaTheoryEntry } from "./meta-theory-entry-classifier.mjs";
 import { loadRuntimeProfiles, resolveRuntimeProjection } from "./meta-kim-sync-config.mjs";
+import {
+  evaluateChoiceRequirement,
+  resolveNativeChoiceSurface,
+} from "./governed-execution/choice-policy.mjs";
 
 function argValue(name, fallback = null) {
   const index = process.argv.indexOf(name);
@@ -31,6 +35,7 @@ const osTarget = osArg === "auto" ? "windows" : osArg;
 const taskShape = classifyTaskShape(task);
 const taskText = String(task ?? "").toLowerCase();
 const entryClassification = classifyMetaTheoryEntry(task);
+const choiceSurfacePolicy = await readJson("config/governance/choice-surface-policy.json");
 
 function normalizeCodexHostToolSchema(raw) {
   if (!raw) {
@@ -73,25 +78,23 @@ function normalizeCodexHostToolSchema(raw) {
 }
 
 const codexHostToolSchema = normalizeCodexHostToolSchema(codexHostToolSchemaRaw);
-const choicePolicy = entryClassification.ambiguityPacket?.choicePolicy ?? "no_choice_needed";
-const subjectiveRouteChoice = entryClassification.triggerReason === "subjective_quality_ambiguous";
+const entrySignals = entryClassification.signals ?? {};
+const routeChangingDimensionSignals = entrySignals.routeChangingDimensionSignals ?? [];
+const subjectiveRouteChoice = entrySignals.subjectiveQualitySignal === true;
+const runtimeChoiceSurface = resolveNativeChoiceSurface(choiceSurfacePolicy, runtime);
 const stateDirRef = toPosix(path.relative(repoPath("."), stateDir));
 const GOVERNANCE_CHAIN_PREFIX_RE =
   /^critical(?:\s+thinking)?(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)fetch(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)(?:deep\s+)?thinking(?:\s*(?:->|=>|→|,|，|、|;|；|and)?\s+)review\s*/iu;
-const autoFanoutDispatchRequested =
-  entryClassification.fanoutEligible === true &&
-  [
-    "direct_parallel_agent_request",
-    "meta_theory_trigger_request",
-    "structured_governance_chain_request",
-  ].includes(
-    entryClassification.subagentAuthorizationSource,
-  );
+const concurrentDispatchIntentPresent =
+  entrySignals.directParallelRequest === true ||
+  entrySignals.structuredGovernanceChainRequest === true ||
+  entrySignals.explicitMetaTheory === true ||
+  entrySignals.productBuildIntent === true;
 const nativeChoiceEvidenceRaw =
   argValue("--native-choice-evidence", null) ??
   process.env.META_KIM_NATIVE_CHOICE_EVIDENCE ??
   null;
-function normalizeNativeChoiceEvidence(raw) {
+function normalizeNativeChoiceEvidence(raw, expectedSurface) {
   const base = {
     completedStages: [],
   };
@@ -136,9 +139,7 @@ function normalizeNativeChoiceEvidence(raw) {
         answerRecorded &&
         completedStages.length > 0 &&
         evidenceRefs.length > 0 &&
-        ["request_user_input", "AskUserQuestion", "native_choice"].includes(
-          surface,
-        ),
+        surface === expectedSurface,
       evidenceRef: parsed.evidenceRef ?? parsed.answerRef ?? null,
       evidenceRefs,
       completedStages,
@@ -153,14 +154,13 @@ function normalizeNativeChoiceEvidence(raw) {
     };
   }
 }
-const nativeChoiceEvidence = normalizeNativeChoiceEvidence(nativeChoiceEvidenceRaw);
+const nativeChoiceEvidence = normalizeNativeChoiceEvidence(
+  nativeChoiceEvidenceRaw,
+  runtimeChoiceSurface.surface,
+);
 function hasChoiceStage(stage) {
   return nativeChoiceEvidence.trusted === true && nativeChoiceEvidence.completedStages.includes(stage);
 }
-const criticalChoiceBlocksExecution = choicePolicy === "must_ask" && !hasChoiceStage("Critical");
-const subjectiveThinkingChoiceRequired = subjectiveRouteChoice;
-const thinkingChoiceBlocksExecution = subjectiveThinkingChoiceRequired && !hasChoiceStage("Thinking");
-
 const weapons = (await readJson("config/capability-index/weapon-registry.json")).weapons ?? [];
 const registryDependencies = (await readJson("config/capability-index/dependency-project-registry.json")).projects ?? [];
 const repoCapabilityIndex = await readJson("config/capability-index/meta-kim-capabilities.json");
@@ -168,7 +168,6 @@ const workflowContract = await readJson("config/contracts/workflow-contract.json
 const capabilityInventory = await readStateJson("capability-inventory.json", { capabilities: [] });
 const globalCapabilityInventory = await readStateJson(path.join("capability-index", "global-capabilities.json"), { byCapabilityType: { agents: {} }, byPlatform: {} });
 const dependencyIndex = await readStateJson("dependency-capability-index.json", { discoveredDependencyProjects: [] });
-const choiceSurfacePolicy = await readJson("config/governance/choice-surface-policy.json");
 const intentContract = await readJson("config/governance/intent-amplification-contract.json");
 const localOverrides = (await exists(repoPath(".meta-kim/local.overrides.json")))
   ? await readJson(".meta-kim/local.overrides.json")
@@ -1914,11 +1913,11 @@ function capabilityDiscoveryTaskRequested() {
   const discoveryVerb = /find|discover|search|match|route|寻找|找|发现|搜索|检索|匹配|路由/.test(taskText);
   const discoveryTarget = /agent|subagent|owner|skill|provider|capability|mcp|tool|智能体|代理|技能|能力|工具/.test(taskText);
   const executionFanoutDiscovery =
-    autoFanoutDispatchRequested && (
+    concurrentDispatchIntentPresent && (
       taskShape === "engineering_execution" ||
-      entryClassification.subagentAuthorizationSource === "direct_parallel_agent_request" ||
-      entryClassification.triggerReason === "explicit_meta_theory" ||
-      entryClassification.triggerReason === "critical_fetch_thinking_review_requested"
+      entrySignals.directParallelRequest === true ||
+      entrySignals.explicitMetaTheory === true ||
+      entrySignals.structuredGovernanceChainRequest === true
     );
   return (discoveryVerb && discoveryTarget) || agentProviderReuseConcernRequested() || executionFanoutDiscovery;
 }
@@ -2073,9 +2072,10 @@ function buildParallelExecutionLanes() {
 
   // 4. 无显式标点时，用能力锚点拆 lane。很多真实任务会写成
   // “平台 key adapter 注册 能力账本 路由 上传证据”，入口分类已能识别
-  // 多 lane，但句子分段会只得到一整句。这里只在 fan-out 已授权时启用，
-  // 避免把普通单句小任务误拆。
-  if (autoFanoutDispatchRequested) {
+  // 多 lane，但句子分段会只得到一整句。这里只在文本已表达并行/治理/
+  // 产品多线意图时构造候选 lane；真正的 fan-out 仍由后面的 Thinking
+  // worker packets、DAG 与碰撞边界裁决。
+  if (concurrentDispatchIntentPresent) {
     const anchorPatterns = [
       {
         key: "meta-theory-rules",
@@ -2142,7 +2142,7 @@ function buildParallelExecutionLanes() {
   for (const [, segment] of laneSegments) {
     let provider = null;
     let capabilityProvider = null;
-    if (autoFanoutDispatchRequested) {
+    if (concurrentDispatchIntentPresent) {
       provider = resolveProvider({ kind: "agent", terms: segment.terms });
       if (!provider) {
         const fallbackOwner = selectExecutionOwner();
@@ -2611,7 +2611,7 @@ function subjectiveUiDesignRoute() {
 function productBuildOrchestrationRoute() {
   if (
     entryClassification.triggerReason !== "natural_language_product_build" &&
-    !entryClassification.fanoutSignals?.includes("product_build_has_multiple_execution_lanes")
+    entrySignals.productBuildIntent !== true
   ) {
     return null;
   }
@@ -3022,6 +3022,54 @@ const decisionCard = userChoiceNeeded ? {
   }))
 } : null;
 
+const criticalChoiceDecision = evaluateChoiceRequirement(choiceSurfacePolicy, {
+  runtime,
+  stage: "Critical",
+  routeChangingDimensions: routeChangingDimensionSignals,
+  materialBranch: subjectiveRouteChoice,
+  highRiskOperation:
+    entrySignals.destructiveOrProductionIntent === true &&
+    entrySignals.queryPreambleSignal !== true,
+  destructiveOrProductionOperation:
+    entrySignals.destructiveOrProductionTermSignal === true &&
+    (entrySignals.actionIntent === true || entrySignals.destructiveOrProductionIntent === true) &&
+    entrySignals.queryPreambleSignal !== true,
+});
+const thinkingChoiceDimensions = [
+  ...(subjectiveRouteChoice ? ["scope", "acceptance"] : []),
+  ...(decisionCard ? ["scope", "owner", "runtime_or_os", "dependency", "acceptance"] : []),
+];
+const thinkingChoiceDecision = evaluateChoiceRequirement(choiceSurfacePolicy, {
+  runtime,
+  stage: "Thinking",
+  routeChangingDimensions: thinkingChoiceDimensions,
+  materialBranch: subjectiveRouteChoice || Boolean(decisionCard),
+  decisionCardOptionCount: decisionCard?.options?.length ?? 0,
+});
+const entryChoiceDecision = {
+  schemaVersion: "entry-choice-decision-v1",
+  policySource: "config/governance/choice-surface-policy.json",
+  lifecycleOwner: "meta-conductor/spine",
+  choicePolicy:
+    criticalChoiceDecision.required || thinkingChoiceDecision.required
+      ? "must_ask"
+      : "no_choice_needed",
+  critical: criticalChoiceDecision,
+  thinking: thinkingChoiceDecision,
+};
+const choicePolicy = entryChoiceDecision.choicePolicy;
+const criticalChoiceBlocksExecution =
+  criticalChoiceDecision.required && !hasChoiceStage("Critical");
+const thinkingChoiceBlocksExecution =
+  thinkingChoiceDecision.required && !hasChoiceStage("Thinking");
+const routeScoreReady =
+  Boolean(recommendedRoute?.score >= 85) ||
+  Boolean(
+    recommendedRoute?.score >= 70 &&
+    decisionCard &&
+    hasChoiceStage("Thinking"),
+  );
+
 const selectedWorkerLanes =
   recommendedRoute?.subjectiveUiCapabilityAmplification?.lanes ??
   recommendedRoute?.parallelExecutionLanes ??
@@ -3158,11 +3206,10 @@ const unprovenMultiLaneExecution =
   Array.isArray(recommendedRoute?.parallelExecutionLanes) &&
   recommendedRoute.parallelExecutionLanes.length >= 2 &&
   !safeFanoutReady;
-
 const routeExecutionGate = {
   canPreviewRoute: true,
   canEnterExecution:
-    Boolean(recommendedRoute?.score >= 85) &&
+    routeScoreReady &&
     !globalInventoryFreshness.refreshRequiredBeforeExecution &&
     !capabilityGapBlocksExecution &&
     !criticalChoiceBlocksExecution &&
@@ -3170,7 +3217,7 @@ const routeExecutionGate = {
     !unprovenMultiLaneExecution,
   blockedBy: [
     ...(!recommendedRoute ? ["missing_recommended_route"] : []),
-    ...(recommendedRoute && recommendedRoute.score < 85 ? ["route_requires_confirmation_or_more_fetch"] : []),
+    ...(recommendedRoute && !routeScoreReady ? ["route_requires_confirmation_or_more_fetch"] : []),
     ...(globalInventoryFreshness.refreshRequiredBeforeExecution ? ["global_capability_inventory_refresh_required"] : []),
     ...(capabilityGapBlocksExecution ? ["capability_gap_decision_blocks_execution"] : []),
     ...(criticalChoiceBlocksExecution ? ["native_choice_surface_required_before_execution"] : []),
@@ -3187,13 +3234,13 @@ const routeExecutionGate = {
       ? "Thinking"
     : unprovenMultiLaneExecution
       ? "Thinking"
-    : recommendedRoute.score < 85 || globalInventoryFreshness.refreshRequiredBeforeExecution
+    : !routeScoreReady || globalInventoryFreshness.refreshRequiredBeforeExecution
       ? "Fetch"
       : null,
   refreshCommand: globalInventoryFreshness.refreshRequiredBeforeExecution ? globalInventoryFreshness.refreshCommand : null,
   reason: !recommendedRoute
     ? "No executable route is available; Execution must not start until owner, provider, runtime, OS, and verification binding are resolved."
-    : recommendedRoute.score < 85
+    : !routeScoreReady
       ? "Route preview is available, but Execution needs confirmation or stronger provider evidence before starting."
       : capabilityGapBlocksExecution
         ? "Capability-gap decision requires approval, stronger evidence, or return to Thinking before Execution."
@@ -3207,19 +3254,22 @@ const routeExecutionGate = {
         ? "Cached provider evidence is missing or older than 14 days; route preview is allowed, but Execution must refresh capability discovery first."
         : "Cached provider evidence is fresh enough and the route has execution-grade owner/provider/verification binding.",
   entryClassification,
+  entryChoiceDecision,
   choicePolicy,
   typeFirstPolicyRef: "typeFirstRoutePolicy",
   typeFirstDisposition: routeTypeClassification.overallDisposition,
   nativeChoiceSurface: {
-    required: choicePolicy === "must_ask",
-    primarySurface: "request_user_input",
+    required: criticalChoiceDecision.required,
+    primarySurface: runtimeChoiceSurface.surface,
+    policyRef: runtimeChoiceSurface.source,
     evidence: nativeChoiceEvidence,
     rule:
       "Branch-changing choices must be answered through the native host surface before Execution; artifact-only cards or chat text do not satisfy this gate.",
   },
   thinkingChoiceSurface: {
-    required: subjectiveThinkingChoiceRequired,
-    primarySurface: "request_user_input",
+    required: thinkingChoiceDecision.required,
+    primarySurface: runtimeChoiceSurface.surface,
+    policyRef: runtimeChoiceSurface.source,
     evidenceTrusted: hasChoiceStage("Thinking"),
     rule:
       "Subjective product/design work needs a second route choice after Fetch/Thinking when implementation paths have different scope, cost, and verification impact.",
@@ -3268,7 +3318,7 @@ const output = {
         ? "fanout_eligible"
         : "single_worker_ready",
     fanoutReadiness: {
-      eligibleAtEntry: entryClassification.fanoutEligible === true,
+      entryConcurrencyHintPresent: concurrentDispatchIntentPresent,
       thinkingApproved: safeFanoutReady,
       workerCount: workerTaskPacketDrafts.length,
       independentLanes: safeFanoutReady,

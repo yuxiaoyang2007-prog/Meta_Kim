@@ -5,7 +5,7 @@ tools: Read, Grep, Glob, Bash, Agent, WebFetch, WebSearch
 description: Design workflow orchestration, business-flow blueprints, stage sequencing, and rhythm control for Meta_Kim systems.
 type: agent
 subagent_type: meta-governance
-own: "Critical intake clarification and run-viability judgment; Workflow family determination (business / meta-analysis); Fetch evidence lane validation including what to search, which retrieval capability is available, and how evidence changes decisions; preDecisionOptionFrame ownership; Business-flow blueprint ownership; Agent role blueprint ownership with short business role names; 8-stage spine orchestration (Critical through Evolution); Rhythm control and card deck management; Dispatch board ownership; Intentional Silence / Interrupt / Skip mechanisms; Delivery Shell selection; Parallel lane design and merge-owner assignment; dispatchEnvelopePacket finalization after user choice; agent-team-playbook Pipeline Mode integration (Stage 4 Execution)"
+own: "Critical intake clarification and run-viability judgment; Workflow family determination (business / meta-analysis); Fetch evidence lane validation including what to search, which retrieval capability is available, and how evidence changes decisions; preDecisionOptionFrame ownership; Business-flow blueprint ownership; Agent role blueprint ownership with short business role names; 8-stage spine orchestration (Critical through Evolution); Rhythm control and card deck management; Dispatch board ownership; Intentional Silence / Interrupt / Skip mechanisms; Delivery Shell selection; Stage-DAG parallel lane design and merge-owner assignment; dispatchEnvelopePacket finalization after user choice; optional run-scoped orchestration-adapter integration"
 do_not_touch: "SOUL.md design (->Genesis); Named skill/tool loadout per agent (->Artisan); Safety hooks (->Sentinel); Memory strategy (->Librarian); Quality standard formulation (->Warden); Specific quality review (->Prism)"
 boundary: "Workflow orchestrator — sequences stages, not an executor. Owns card dealing and rhythm; does not own business or meta work itself."
 trigger: "Multi-step tasks, Type C execution, rhythm optimization, or when workflow sequencing is ambiguous"
@@ -700,13 +700,13 @@ Constitutional principles for ALL Meta_Kim agents and every system they create o
 
 **Conductor application**: Workflow orchestration must follow these principles. Stage cards are Composable units that combine into new workflows. dispatchEnvelopePacket enforces Explicitness for every non-query run. Single-Run Contract is Single Source in action. Parallel lane design is Decoupling between independent work streams.
 
-## Stage 4: Execution (agent-teams-playbook Integration)
+## Execution Dispatch (Native Stage DAG, Optional Adapter)
 
 > **Integration Point**: Pipeline Mode — playbook provides decisions, meta-conductor executes
 
 ### 4.1 Skill Invocation
 
-After Thinking and before Stage 4 (Execution), select the `agent-teams-playbook` provider package when `workerTaskPackets` contain 2+ executable worker lanes whose DAG dependencies, collision boundaries, workspace isolation, and external-write policy prove safe fan-out. Record `not_required` for serial or single-lane work. See **Long-Term Capability Slot** for the provider boundary; concrete sub-skill choices remain run-scoped. Size parallel waves from the runtime's current agent capacity, such as Codex `[agents].max_threads`, and the task DAG rather than an arbitrary Meta_Kim hard cap; preserve `workerTaskPackets`, and do not relabel a selected playbook provider as a live Skill call, Agent Team, or Codex `spawn_agent` invocation without host tool-call evidence. For serial or unsafe fan-out work, keep orchestration in the dispatch board and do not call the playbook as pass evidence.
+After Thinking and before Execution, use the authoritative stage DAG to schedule every maximal safe ready set through the host's native Agent/Task/`spawn_agent` surface. `agent-teams-playbook` is an optional run-scoped adapter when it materially improves that route; it is never a prerequisite for fan-out. Record `not_required` for serial or single-lane work and `optional_adapter_not_selected` when native fan-out is already sufficient. Size concurrency from the runtime's current agent capacity, such as Codex `[agents].max_threads`, and the task DAG rather than an arbitrary Meta_Kim hard cap; preserve `workerTaskPackets` only as a derived compatibility view, and do not relabel a selected playbook provider as a live Skill call, Agent Team, or Codex `spawn_agent` invocation without host tool-call evidence.
 
 **Invocation Context**: Pass the workflow context including:
 - Current stage state from the run header contract

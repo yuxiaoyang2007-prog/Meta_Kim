@@ -46,7 +46,7 @@ If cache freshness could change the route, show one short user-facing hint with 
 
 ## Agent Teams Playbook
 
-Use `agent-teams-playbook` after Thinking and before Execution when there are 2+ executable worker lanes whose DAG dependencies, collision boundaries, workspace isolation, and external-write policy prove safe fan-out. Record `not_required` when there are fewer than 2 executable lanes, and record partial/degraded rather than pass when independence is not proven. It advises bounded fan-out and runtime-capacity wave sizing; it does not replace Critical, Fetch, Thinking, owner selection, or verification planning. A selected playbook provider remains `selected_not_invoked` unless a live Skill/Agent Team/spawn_agent call is attached as evidence.
+The authoritative stage DAG plus the runtime's native Agent/Task/`spawn_agent` surface is sufficient for fan-out. `agent-teams-playbook` is an optional adapter after Thinking: select it only when it improves orchestration, record `not_required` when there are fewer than two ready lanes, and record `optional_adapter_not_selected` when native fan-out is sufficient. Unsafe lanes remain pending or serialized; the absence of this optional adapter is not degraded mode. A selected provider remains `selected_not_invoked` unless a live Skill/Agent Team/`spawn_agent` call is attached as evidence.
 
 ## Use when
 

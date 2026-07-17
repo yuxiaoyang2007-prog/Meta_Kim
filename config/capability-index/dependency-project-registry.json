@@ -92,7 +92,7 @@
         "failureCount": 0,
         "lastFailureReason": null,
         "nextRunHints": [
-          "Use only after Thinking when 2+ executable worker lanes exist.",
+          "Optional after Thinking when it materially improves a 2+ ready-lane stage DAG; native Agent/Task/spawn_agent fan-out does not depend on it.",
           "Record agent_teams_playbook as selected_not_invoked unless live Skill/Agent Team/spawn_agent evidence is attached."
         ]
       },

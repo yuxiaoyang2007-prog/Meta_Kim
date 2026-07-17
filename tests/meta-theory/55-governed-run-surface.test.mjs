@@ -425,9 +425,9 @@ describe("55 - governed run identity, language, and chat surface", () => {
       const rawHost = hintOnlyRun.capabilityInvocationTruthPacket.rows.find(
         (row) => row.family === "app_visible_subagent",
       );
-      assert.equal(rawAgent.state, "unavailable");
+      assert.equal(rawAgent.state, "not_required");
       assert.equal(rawHost.state, "not_required");
-      assert.equal(hintOnlyRun.capabilityInvocationTruthPacket.stateCounts.unavailable >= 1, true);
+      assert.equal(hintOnlyRun.capabilityInvocationTruthPacket.stateCounts.not_required >= 2, true);
       assert.equal(hintOnlyRun.capabilityInvocationTruthPacket.stateCounts.host_visible_observed ?? 0, 0);
       const routeBlock = hintOnlyRun.conversationNotice.blocks.find((block) => block.id === "route");
       assert.match(routeBlock.lines.join("\n"), /调用记录: 运行记录待关联.*独立复核/u);

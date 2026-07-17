@@ -215,13 +215,11 @@ describe("SKILL.md structural integrity", async () => {
       assert.ok(raw.includes("verificationPacket.fixEvidence"));
     });
 
-    test("agent-teams-playbook is scoped to real parallel execution lanes", () => {
-      assert.match(
-        raw,
-        /Thinking[\s\S]{0,120}Execution[\s\S]{0,240}agent-teams-playbook/i,
-      );
-      assert.match(raw, /2\+ executable worker lanes/i);
-      assert.match(raw, /DAG.*collision/i);
+    test("stage DAG is authoritative and agent-teams-playbook is optional", () => {
+      assert.match(raw, /coreLoop\.stageDagPacket[\s\S]{0,240}runtime authority/i);
+      assert.match(raw, /maximal safe ready set/i);
+      assert.match(raw, /agent-teams-playbook[\s\S]{0,180}optional/i);
+      assert.match(raw, /never a prerequisite for safe native fan-out/i);
       assert.doesNotMatch(
         raw,
         /Apply `agent-teams-playbook`[\s\S]{0,80}before substantive work/i,
@@ -230,8 +228,9 @@ describe("SKILL.md structural integrity", async () => {
 
     test("runtime command does not force agent-teams-playbook for all non-trivial work", async () => {
       const command = await readFile("canonical/runtime-assets/codex/commands/meta-theory.md");
-      assert.match(command, /2\+ executable worker lanes/i);
-      assert.match(command, /DAG.*collision/i);
+      assert.match(command, /authoritative stage DAG[\s\S]{0,120}native `spawn_agent`/i);
+      assert.match(command, /agent-teams-playbook[\s\S]{0,80}optional/i);
+      assert.match(command, /optional_adapter_not_selected/i);
       assert.doesNotMatch(command, /For any non-trivial task,\s*first apply `agent-teams-playbook`/i);
     });
 
@@ -592,10 +591,11 @@ describe("Canonical meta-agent boundary structure", () => {
     );
   });
 
-  test("meta-conductor scopes agent-teams-playbook to parallel lanes only", async () => {
+  test("meta-conductor makes native stage-DAG fan-out sufficient", async () => {
     const conductor = await readFile("canonical/agents/meta-conductor.md");
-    assert.match(conductor, /2\+ executable worker lanes/i);
-    assert.match(conductor, /DAG.*collision/i);
+    assert.match(conductor, /authoritative stage DAG[\s\S]{0,180}native Agent\/Task\/`spawn_agent`/i);
+    assert.match(conductor, /agent-teams-playbook[\s\S]{0,120}optional/i);
+    assert.match(conductor, /never a prerequisite for fan-out/i);
     assert.doesNotMatch(
       conductor,
       /At the start of Stage 4 \(Execution\), use the `agent-teams-playbook` provider package/i,

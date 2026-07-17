@@ -2,7 +2,7 @@
 
 Capability discovery is **global-first**, not project-local-first. Before Fetch can name an owner, the run must look in every layer where a reusable owner can live. Named dispatch without a discovery step is a design shortcut, not the canonical method. The main thread is the discovery orchestrator; the discovery itself may fan out across the sources below in parallel.
 
-This reference is the long-form companion to `SKILL.md` § **Global-First Owner Discovery** and the **4-Stage Parallel Fan-out Protocol** in `dev-governance.md`. SKILL.md keeps the section short and links here for detail.
+This reference is the long-form companion to `SKILL.md` § **Global-First Owner Discovery** and the ordered-stage, stage-internal parallelism contract in `dev-governance.md`. SKILL.md keeps the section short and links here for detail.
 
 ## Use when
 

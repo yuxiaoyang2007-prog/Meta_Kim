@@ -43,6 +43,7 @@ describe("sync-global-meta-theory hook policy", () => {
         const result = await runScript([flag], env);
         assert.match(result.stdout, /Usage: node scripts\/sync-global-meta-theory\.mjs/);
         assert.match(result.stdout, /--with-global-hooks/);
+        assert.match(result.stdout, /--skip-durable-mcp/);
         assert.deepEqual(
           await readdir(root),
           [],
@@ -181,6 +182,28 @@ console.log("About to git push");
       const check = await runScript(["--check", "--targets", "claude"], env);
       assert.match(check.stdout, /global hooks skipped/);
       assert.match(check.stdout, /Claude Code commands/);
+    });
+  });
+
+  test("--skip-durable-mcp syncs Claude assets while preserving the running MCP runtime and config", async () => {
+    await withTempRuntimeHomes(async ({ env, root }) => {
+      const sync = await runScript(
+        ["--targets", "claude", "--skip-durable-mcp"],
+        env,
+      );
+      assert.match(sync.stdout, /skipped because explicitly requested with --skip-durable-mcp/);
+      await readFile(
+        path.join(root, "claude", "skills", "meta-theory", "SKILL.md"),
+        "utf8",
+      );
+      await assert.rejects(() => readFile(path.join(root, ".claude.json"), "utf8"));
+
+      const check = await runScript(
+        ["--check", "--targets", "claude", "--skip-durable-mcp"],
+        env,
+      );
+      assert.match(check.stdout, /not checked; skipped because explicitly requested/);
+      assert.match(check.stdout, /Claude Code global skill/);
     });
   });
 

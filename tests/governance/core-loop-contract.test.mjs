@@ -265,6 +265,19 @@ test("governed execution emits a coreLoop artifact summary", () => {
     }
   }
   assert.ok(artifact.coreLoop.intentPacket.realIntent);
+  assert.equal(artifact.coreLoop.stageDagPacket.status, "planned_not_invoked");
+  for (const stage of EXPECTED_STAGES) {
+    const summary = artifact.coreLoop.stageDagPacket.stageSummaries.find(
+      (item) => item.stage === stage,
+    );
+    assert.ok(summary, `${stage} must exist in the stage DAG`);
+    assert.ok(
+      summary.laneNodeIds.length >= (stage === "Execution" ? 1 : 2),
+      `${stage} must expose its materialized contract or worker lanes`,
+    );
+    const contractStage = CORE_LOOP.stages.find((item) => item.stage === stage);
+    assert.equal(summary.mergeAuthority, contractStage.parallelPolicy.mergeAuthority);
+  }
   assert.ok(artifact.coreLoop.fetchPacket.capabilityDiscovery.capabilityInventory.length > 250);
   const providerTypes = new Set(
     artifact.coreLoop.fetchPacket.capabilityDiscovery.capabilityInventory.map(
@@ -513,7 +526,13 @@ test("caller-provided host-visible names remain unverified hints", () => {
     artifact.coreLoop.capabilityInvocationTruthPacket.rows.map((row) => [row.family, row]),
   );
   assert.equal(invocationByFamily.get("app_visible_subagent").state, "not_required");
-  assert.equal(invocationByFamily.get("agent_subagent").state, "not_required");
+  assert.equal(invocationByFamily.get("agent_subagent").state, "unavailable");
+  assert.equal(artifact.coreLoop.stageDagPacket.status, "planned_not_invoked");
+  assert.ok(
+    artifact.coreLoop.stageDagPacket.nodes.some(
+      (node) => node.stage === "Execution" && node.laneKind === "execution_worker",
+    ),
+  );
   assert.equal(artifact.coreLoop.capabilityInvocationPresentationPacket.executionState, "not_confirmed");
   assert.equal(
     artifact.coreLoop.capabilityInvocationTruthPacket.truthAssertions.noHostUiSubagentOverclaim,
@@ -590,7 +609,7 @@ test("core-loop contract declares three product goals plus support gates", () =>
     (rule) => rule.includes("app-visible host subagent"),
   ));
   assert.ok(CORE_LOOP.productExperienceCoreGoals.supportGateRequirements["P-110"].some(
-    (rule) => rule.includes("agent-teams-playbook"),
+    (rule) => rule.includes("native Agent/Task/spawn_agent"),
   ));
 });
 

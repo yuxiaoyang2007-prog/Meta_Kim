@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
  * Meta_Kim hook doctor — scan settings.json files for hook commands whose
- * target files no longer exist (zombies from machine-to-machine copies,
- * renamed hooks, uninstalled tools, etc.).
+ * target files no longer exist or are obviously incompatible with their Node
+ * module scope (zombies, ESM/CommonJS mismatches, etc.).
  *
  * Usage:
  *   node scripts/doctor-hooks.mjs              # scan ~/.claude/settings.json (dry-run)
  *   node scripts/doctor-hooks.mjs --fix        # remove zombies + write back (auto backup)
  *   node scripts/doctor-hooks.mjs --all        # also scan <repo>/.claude/settings.json
  *   node scripts/doctor-hooks.mjs --project    # scan ONLY <repo>/.claude/settings.json
+ *   node scripts/doctor-hooks.mjs --project-root <path> # resolve project settings from path
  *   node scripts/doctor-hooks.mjs --lang zh    # force language (en/zh/ja/ko); default: auto
  *   node scripts/doctor-hooks.mjs --silent     # CI mode, exit code = zombie count (capped at 1)
  */
@@ -37,11 +38,17 @@ const MESSAGES = {
     parseFailed: (p, e) => `Failed to parse ${p}: ${e}`,
     noHooks: (p) => `No hooks registered in ${p}`,
     zombieHeader: (n) => `Found ${n} zombie hook(s) — files do not exist:`,
+    incompatibleHeader: (n) => `Found ${n} incompatible hook(s) — files exist but cannot run:`,
+    unverifiedHeader: (n) => `Found ${n} unverified hook command(s) — target path could not be parsed:`,
     liveHeader: (n) => `Healthy hook(s) (${n}):`,
     zombieItem: (e, m, p) => `  [${e} / ${m}]  ${p}`,
-    summaryClean: "All hooks point to existing files.",
+    incompatibleItem: (e, m, p, reason) => `  [${e} / ${m}]  ${p}\n    ${reason}`,
+    unverifiedItem: (e, m, command) => `  [${e} / ${m}]  ${command}`,
+    summaryClean: "All parsed hook targets point to existing, runtime-compatible files.",
     dryRunHint:
       "Dry-run only. Re-run with --fix to back up & remove the zombie entries.",
+    incompatibleHint:
+      "Incompatible hooks are diagnostic-only. Meta_Kim will not delete or rewrite unknown hooks automatically.",
     backupWritten: (p) => `Backup written: ${p}`,
     removedCount: (n) =>
       `Removed ${n} zombie hook entr${n === 1 ? "y" : "ies"}.`,
@@ -56,10 +63,15 @@ const MESSAGES = {
     parseFailed: (p, e) => `解析 ${p} 失败：${e}`,
     noHooks: (p) => `${p} 里没有注册任何 hook`,
     zombieHeader: (n) => `发现 ${n} 个僵尸 hook（目标文件不存在）：`,
+    incompatibleHeader: (n) => `发现 ${n} 个不兼容 hook（文件存在但无法运行）：`,
+    unverifiedHeader: (n) => `发现 ${n} 个未验证 hook 命令（无法解析目标路径）：`,
     liveHeader: (n) => `健康的 hook（${n}）：`,
     zombieItem: (e, m, p) => `  [${e} / ${m}]  ${p}`,
-    summaryClean: "所有 hook 的目标文件都存在，无需清理。",
+    incompatibleItem: (e, m, p, reason) => `  [${e} / ${m}]  ${p}\n    ${reason}`,
+    unverifiedItem: (e, m, command) => `  [${e} / ${m}]  ${command}`,
+    summaryClean: "所有可解析 hook 的目标文件都存在且运行时兼容。",
     dryRunHint: "当前仅为扫描模式。加 --fix 参数可自动备份并清除僵尸条目。",
+    incompatibleHint: "不兼容 hook 只诊断和建议；Meta_Kim 不会自动删除或改写未知 hook。",
     backupWritten: (p) => `已备份：${p}`,
     removedCount: (n) => `已移除 ${n} 个僵尸 hook 条目。`,
     settingsSaved: (p) => `已保存：${p}`,
@@ -74,11 +86,19 @@ const MESSAGES = {
     noHooks: (p) => `${p} に hook が登録されていません`,
     zombieHeader: (n) =>
       `${n} 個のゾンビ hook を検出（ファイルが存在しません）：`,
+    incompatibleHeader: (n) =>
+      `${n} 個の互換性のない hook を検出（ファイルは存在しますが実行できません）：`,
+    unverifiedHeader: (n) =>
+      `${n} 個の未検証 hook コマンドを検出（ターゲットパスを解析できません）：`,
     liveHeader: (n) => `正常な hook（${n}）：`,
     zombieItem: (e, m, p) => `  [${e} / ${m}]  ${p}`,
-    summaryClean: "すべての hook ターゲットが存在します。",
+    incompatibleItem: (e, m, p, reason) => `  [${e} / ${m}]  ${p}\n    ${reason}`,
+    unverifiedItem: (e, m, command) => `  [${e} / ${m}]  ${command}`,
+    summaryClean: "解析可能なすべての hook ターゲットが存在し、実行時互換性があります。",
     dryRunHint:
       "ドライラン。--fix を付けるとバックアップしてからゾンビを削除します。",
+    incompatibleHint:
+      "互換性のない hook は診断のみです。Meta_Kim は未知の hook を自動削除・変更しません。",
     backupWritten: (p) => `バックアップ作成：${p}`,
     removedCount: (n) => `ゾンビ hook を ${n} 件削除しました。`,
     settingsSaved: (p) => `保存：${p}`,
@@ -92,10 +112,16 @@ const MESSAGES = {
     parseFailed: (p, e) => `${p} 파싱 실패: ${e}`,
     noHooks: (p) => `${p} 에 등록된 hook 이 없음`,
     zombieHeader: (n) => `좀비 hook ${n} 개 발견 (파일 없음):`,
+    incompatibleHeader: (n) => `호환되지 않는 hook ${n} 개 발견 (파일은 있지만 실행 불가):`,
+    unverifiedHeader: (n) => `검증되지 않은 hook 명령 ${n} 개 발견 (대상 경로를 파싱할 수 없음):`,
     liveHeader: (n) => `정상 hook (${n}):`,
     zombieItem: (e, m, p) => `  [${e} / ${m}]  ${p}`,
-    summaryClean: "모든 hook 대상 파일이 존재합니다.",
+    incompatibleItem: (e, m, p, reason) => `  [${e} / ${m}]  ${p}\n    ${reason}`,
+    unverifiedItem: (e, m, command) => `  [${e} / ${m}]  ${command}`,
+    summaryClean: "파싱 가능한 모든 hook 대상 파일이 존재하며 런타임과 호환됩니다.",
     dryRunHint: "드라이런 모드. --fix 옵션으로 백업 후 좀비 항목을 제거합니다.",
+    incompatibleHint:
+      "호환되지 않는 hook은 진단만 합니다. Meta_Kim은 알 수 없는 hook을 자동 삭제하거나 수정하지 않습니다.",
     backupWritten: (p) => `백업 완료: ${p}`,
     removedCount: (n) => `좀비 hook ${n} 건 제거 완료.`,
     settingsSaved: (p) => `저장됨: ${p}`,
@@ -282,7 +308,73 @@ export function extractCommandPath(command) {
   return null;
 }
 
-function scanSettingsFile(settingsPath) {
+export function settingsProjectRoot(settingsPath) {
+  const settingsDir = path.dirname(path.resolve(settingsPath));
+  return path.basename(settingsDir).toLowerCase() === ".claude"
+    ? path.dirname(settingsDir)
+    : settingsDir;
+}
+
+export function resolveHookTargetPath(target, settingsPath) {
+  if (!target) return null;
+  const expanded = target === "~"
+    ? homedir()
+    : target.startsWith("~/") || target.startsWith("~\\")
+      ? path.join(homedir(), target.slice(2))
+      : target;
+  if (
+    path.isAbsolute(expanded) ||
+    path.win32.isAbsolute(expanded) ||
+    path.posix.isAbsolute(expanded)
+  ) {
+    return path.normalize(expanded);
+  }
+  return path.resolve(settingsProjectRoot(settingsPath), expanded);
+}
+
+function nearestPackageType(startDir) {
+  let current = path.resolve(startDir);
+  while (true) {
+    const packagePath = path.join(current, "package.json");
+    if (existsSync(packagePath)) {
+      try {
+        const parsed = JSON.parse(readFileSync(packagePath, "utf8"));
+        return { type: parsed?.type ?? null, path: packagePath };
+      } catch {
+        return { type: null, path: packagePath };
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return { type: null, path: null };
+    current = parent;
+  }
+}
+
+export function detectHookRuntimeIncompatibility(targetPath) {
+  if (!targetPath || path.extname(targetPath).toLowerCase() !== ".js") return null;
+  const packageScope = nearestPackageType(path.dirname(targetPath));
+  if (packageScope.type !== "module") return null;
+  let source;
+  try {
+    source = readFileSync(targetPath, "utf8");
+  } catch {
+    return null;
+  }
+  const commonJsLine = source.split(/\r?\n/u).find((line) =>
+    /^\s*(?:(?:const|let|var)\s+[^=]+?=\s*)?require\s*\(/u.test(line) ||
+    /^\s*(?:module\.exports|exports(?:\.[A-Za-z_$][\w$]*)?)\s*=/u.test(line)
+  );
+  if (!commonJsLine) return null;
+  return {
+    code: "esm_commonjs_mismatch",
+    reason:
+      `.js runs as ESM because ${packageScope.path} declares type=module, ` +
+      "but the hook contains CommonJS require/module.exports. Convert it to ESM or rename it to .cjs and update settings.json.",
+    packagePath: packageScope.path,
+  };
+}
+
+export function scanSettingsFile(settingsPath) {
   if (!existsSync(settingsPath)) {
     return { ok: false, reason: "missing" };
   }
@@ -300,26 +392,43 @@ function scanSettingsFile(settingsPath) {
   }
   const hooks = parsed.hooks || {};
   const zombies = [];
+  const incompatible = [];
+  const unverified = [];
   const live = [];
   for (const [event, blocks] of Object.entries(hooks)) {
     for (const block of blocks || []) {
       for (const hook of block.hooks || []) {
-        const target = extractCommandPath(hook.command || "");
+        const rawTarget = extractCommandPath(hook.command || "");
+        const target = resolveHookTargetPath(rawTarget, settingsPath);
         const exists = target ? existsSync(target) : true;
         const entry = {
           event,
           matcher: block.matcher,
           path: target,
+          rawPath: rawTarget,
           command: hook.command,
         };
-        (exists ? live : zombies).push(entry);
+        if (!rawTarget) {
+          unverified.push(entry);
+          continue;
+        }
+        if (!exists) {
+          zombies.push(entry);
+          continue;
+        }
+        const runtimeIssue = detectHookRuntimeIncompatibility(target);
+        if (runtimeIssue) {
+          incompatible.push({ ...entry, ...runtimeIssue });
+          continue;
+        }
+        live.push(entry);
       }
     }
   }
-  return { ok: true, settings: parsed, zombies, live };
+  return { ok: true, settings: parsed, zombies, incompatible, unverified, live };
 }
 
-function removeZombies(settings) {
+export function removeZombies(settings, settingsPath) {
   const hooks = settings.hooks || {};
   const next = {};
   let removed = 0;
@@ -327,7 +436,10 @@ function removeZombies(settings) {
     const keptBlocks = (blocks || [])
       .map((block) => {
         const keptHooks = (block.hooks || []).filter((hook) => {
-          const target = extractCommandPath(hook.command || "");
+          const target = resolveHookTargetPath(
+            extractCommandPath(hook.command || ""),
+            settingsPath,
+          );
           if (!target) return true;
           if (existsSync(target)) return true;
           removed += 1;
@@ -351,26 +463,36 @@ function backupPath(settingsPath) {
   return `${settingsPath}.backup-${iso()}`;
 }
 
-function findProjectSettings() {
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const repoRoot = path.resolve(__dirname, "..");
-  const projSettings = path.join(repoRoot, ".claude", "settings.json");
+export function findProjectSettings(projectRoot = process.cwd()) {
+  const projSettings = path.join(path.resolve(projectRoot), ".claude", "settings.json");
   return existsSync(projSettings) ? projSettings : null;
+}
+
+export function projectRootFromArgs(args, cwd = process.cwd()) {
+  const index = args.indexOf("--project-root");
+  if (index < 0) return path.resolve(cwd);
+  const value = args[index + 1];
+  if (!value || value.startsWith("--")) {
+    throw new Error("--project-root requires a path");
+  }
+  return path.resolve(cwd, value);
 }
 
 async function main() {
   const args = process.argv.slice(2);
   const fixMode = args.includes("--fix");
   const allMode = args.includes("--all");
-  const projectOnly = args.includes("--project");
+  const explicitProjectRoot = args.includes("--project-root");
+  const projectOnly = args.includes("--project") || (explicitProjectRoot && !allMode);
   const silent = args.includes("--silent");
+  const projectRoot = projectRootFromArgs(args);
   const langIdx = args.indexOf("--lang");
   const langArg = langIdx >= 0 ? args[langIdx + 1] : null;
   const lang = resolveLang(langArg);
   const t = MESSAGES[lang] || MESSAGES.en;
 
   const userSettings = path.join(homedir(), ".claude", "settings.json");
-  const projectSettings = findProjectSettings();
+  const projectSettings = findProjectSettings(projectRoot);
   const targets = [];
   if (!projectOnly) targets.push({ path: userSettings, label: "user" });
   if ((allMode || projectOnly) && projectSettings) {
@@ -384,7 +506,7 @@ async function main() {
     }
   }
 
-  let totalZombies = 0;
+  let totalIssues = 0;
   for (const target of targets) {
     if (!silent) {
       console.log(`\n${C.bold}${t.scanning(target.path)}${C.reset}`);
@@ -405,12 +527,12 @@ async function main() {
       }
       continue;
     }
-    const { zombies, live, settings } = result;
-    if (zombies.length === 0 && live.length === 0) {
+    const { zombies, incompatible, unverified, live, settings } = result;
+    if (zombies.length === 0 && incompatible.length === 0 && unverified.length === 0 && live.length === 0) {
       if (!silent) console.log(`${C.dim}  ${t.noHooks(target.path)}${C.reset}`);
       continue;
     }
-    if (zombies.length === 0) {
+    if (zombies.length === 0 && incompatible.length === 0) {
       if (!silent) {
         console.log(`${C.green}  ✓ ${t.summaryClean}${C.reset}`);
         console.log(`${C.dim}  ${t.liveHeader(live.length)}${C.reset}`);
@@ -419,16 +541,41 @@ async function main() {
             `${C.dim}${t.zombieItem(l.event, l.matcher, l.path)}${C.reset}`,
           );
         }
+        if (unverified.length > 0) {
+          console.log(`${C.yellow}  ? ${t.unverifiedHeader(unverified.length)}${C.reset}`);
+          for (const item of unverified) {
+            console.log(`${C.yellow}${t.unverifiedItem(item.event, item.matcher, item.command)}${C.reset}`);
+          }
+        }
       }
       continue;
     }
-    totalZombies += zombies.length;
+    totalIssues += zombies.length + incompatible.length;
     if (!silent) {
-      console.log(`${C.yellow}  ⚠ ${t.zombieHeader(zombies.length)}${C.reset}`);
-      for (const z of zombies) {
-        console.log(
-          `${C.yellow}${t.zombieItem(z.event, z.matcher, z.path)}${C.reset}`,
-        );
+      if (zombies.length > 0) {
+        console.log(`${C.yellow}  ⚠ ${t.zombieHeader(zombies.length)}${C.reset}`);
+        for (const z of zombies) {
+          console.log(
+            `${C.yellow}${t.zombieItem(z.event, z.matcher, z.path)}${C.reset}`,
+          );
+        }
+      }
+      if (incompatible.length > 0) {
+        console.log(`${C.red}  ⚠ ${t.incompatibleHeader(incompatible.length)}${C.reset}`);
+        for (const item of incompatible) {
+          console.log(
+            `${C.red}${t.incompatibleItem(item.event, item.matcher, item.path, item.reason)}${C.reset}`,
+          );
+        }
+        console.log(`${C.dim}${t.incompatibleHint}${C.reset}`);
+      }
+      if (unverified.length > 0) {
+        console.log(`${C.yellow}  ? ${t.unverifiedHeader(unverified.length)}${C.reset}`);
+        for (const item of unverified) {
+          console.log(
+            `${C.yellow}${t.unverifiedItem(item.event, item.matcher, item.command)}${C.reset}`,
+          );
+        }
       }
       console.log(`${C.dim}  ${t.liveHeader(live.length)}${C.reset}`);
       for (const l of live) {
@@ -439,16 +586,18 @@ async function main() {
     }
 
     if (!fixMode) {
-      if (!silent) console.log(`\n${C.bold}${t.dryRunHint}${C.reset}`);
+      if (!silent && zombies.length > 0) console.log(`\n${C.bold}${t.dryRunHint}${C.reset}`);
       continue;
     }
+
+    if (zombies.length === 0) continue;
 
     const backup = backupPath(target.path);
     writeFileSync(backup, JSON.stringify(settings, null, 2));
     if (!silent)
       console.log(`${C.green}  ${t.backupWritten(backup)}${C.reset}`);
 
-    const { settings: cleaned, removed } = removeZombies(settings);
+    const { settings: cleaned, removed } = removeZombies(settings, target.path);
     writeFileSync(target.path, `${JSON.stringify(cleaned, null, 2)}\n`);
     if (!silent) {
       console.log(`${C.green}  ${t.removedCount(removed)}${C.reset}`);
@@ -462,7 +611,7 @@ async function main() {
   }
 
   if (silent) {
-    process.exit(totalZombies > 0 ? 1 : 0);
+    process.exit(totalIssues > 0 ? 1 : 0);
   }
 }
 

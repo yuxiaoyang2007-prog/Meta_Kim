@@ -339,12 +339,11 @@ function assertAgentTeamsPlaybook(report) {
   const packet = report.coreLoop.agentTeamsPlaybookPacket;
   assert.equal(packet.status, "pass");
   assert.equal(packet.triggered, true);
-  assert.equal(packet.selected, true);
   assert.equal(packet.providerId, "agent-teams-playbook");
   assert.ok(packet.executableLaneCount >= 2);
   assert.ok(packet.waves.length >= 1);
   assert.equal(packet.fanoutSafetyPacket.safeForParallelFanout, true);
-  assert.equal(packet.acceptance.selectedWhenParallelLanes, true);
+  assert.equal(packet.acceptance.orchestrationReadyWhenParallelLanes, true);
   assert.equal(packet.acceptance.independentLanesProven, true);
   assert.equal(packet.acceptance.parallelWaveExists, true);
   assert.equal(packet.acceptance.dagAndCollisionSafe, true);
@@ -355,9 +354,10 @@ function assertAgentTeamsPlaybook(report) {
   assert.ok(packet.capacitySource);
   assert.equal(packet.acceptance.workerPacketsPreserved, true);
   assert.equal(packet.acceptance.noLiveSubagentOverclaim, true);
-  assert.ok(
-    packet.providerResolution.configuredInSkills || packet.providerResolution.found,
-    "agent-teams-playbook must be found by config or local/global skill resolver",
+  assert.equal(
+    packet.selected || packet.acceptance.optionalProviderDoesNotGateNativeFanout,
+    true,
+    "native stage-DAG fan-out must pass whether the optional playbook is selected or not",
   );
 }
 

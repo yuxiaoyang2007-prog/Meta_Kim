@@ -52,6 +52,10 @@ import {
   buildFanoutSafetyPacket,
   taskIsExecutableWorker,
 } from "./governed-execution/fanout-policy.mjs";
+import {
+  buildStageDagPacket,
+  stageLaneNodeId,
+} from "./governed-execution/stage-dag.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(scriptDir, "..");
@@ -64,6 +68,14 @@ const RUN_REPORT_PANEL_CONTRACT_PATH = path.join(
   "contracts",
   "run-report-panel-contract.json"
 );
+const CORE_LOOP_CONTRACT_PATH = path.join(
+  REPO_ROOT,
+  "config",
+  "contracts",
+  "core-loop-contract.json",
+);
+const CORE_LOOP_CONTRACT = JSON.parse(readFileSync(CORE_LOOP_CONTRACT_PATH, "utf8"));
+const TRACE_SPINE = Object.freeze([...(CORE_LOOP_CONTRACT.defaultEntry?.spine ?? [])]);
 const AI_READABLE_PRODUCT_STANDARDS_PATH = path.join(
   REPO_ROOT,
   "config",
@@ -3735,27 +3747,78 @@ function buildConductorConsumptionEvidence({
   };
 }
 
-const TRACE_SPINE = Object.freeze([
-  "Critical",
-  "Fetch",
-  "Thinking",
-  "Execution",
-  "Review",
-  "Meta-Review",
-  "Verification",
-  "Evolution",
-]);
-
-const STAGE_OWNER_FALLBACKS = Object.freeze({
-  Critical: "meta-warden",
-  Fetch: "meta-scout",
-  Thinking: "meta-conductor",
-  Execution: "worker",
-  Review: "meta-prism",
-  "Meta-Review": "meta-warden",
-  Verification: "verify",
-  Evolution: "meta-chrysalis",
-});
+function buildRunnerStageDagPacket(workerTaskPackets, agentTeamsPlaybookPacket) {
+  const contractStages = CORE_LOOP_CONTRACT.stages ?? [];
+  const stageOrder = CORE_LOOP_CONTRACT.defaultEntry?.spine ?? contractStages.map((item) => item.stage);
+  const stageAuthorities = Object.fromEntries(
+    contractStages.map((item) => [
+      item.stage,
+      item.parallelPolicy?.mergeAuthority ?? item.defaultOwner,
+    ]),
+  );
+  const stageLanes = Object.fromEntries(
+    contractStages.map((item) => [
+      item.stage,
+      (item.parallelPolicy?.laneFamilies ?? []).map((laneFamily, index) => ({
+        laneId: `support-${index + 1}`,
+        laneKind: "contract_support_candidate",
+        ownerBindingRef: `core-loop-contract:${item.stage}:mergeAuthority`,
+        capabilityBindingRef: `core-loop-contract:${item.stage}:laneFamilies[${index}]`,
+        effectClass: "read_only_candidate_analysis",
+        resourceScopes: [],
+        isolation: "candidate_requires_host_binding",
+        status: "planned_not_invoked",
+        description: laneFamily,
+      })),
+    ]),
+  );
+  const executionNodeIdByTaskId = new Map(
+    workerTaskPackets.map((packet) => [
+      packet.taskPacketId,
+      stageLaneNodeId("Execution", packet.taskPacketId),
+    ]),
+  );
+  const executionLanes = workerTaskPackets.map((packet, index) => {
+    const resourceScopes = uniqueStrings([
+      ...(packet.scopeFiles ?? []).map((scope) => `file:${scope}`),
+      ...(packet.artifactNamespace ? [`artifact:${packet.artifactNamespace}`] : []),
+      ...(packet.shardScope ?? []).map((scope) => `shard:${scope}`),
+    ]);
+    return {
+      nodeId: executionNodeIdByTaskId.get(packet.taskPacketId),
+      laneKind: "execution_worker",
+      ownerBindingRef:
+        packet.ownerBindingRef ??
+        `coreLoop.thinkingPacket.workerTaskPackets[${index}].ownerAgent`,
+      capabilityBindingRef:
+        packet.capabilityLoadout?.capabilityProfileId ??
+        `coreLoop.thinkingPacket.workerTaskPackets[${index}].capabilityLoadout`,
+      dependsOn: (packet.dependsOn ?? []).map(
+        (dependencyId) => executionNodeIdByTaskId.get(dependencyId) ?? dependencyId,
+      ),
+      effectClass: packet.externalWriteBoundary === true
+        ? "external_write"
+        : packet.executionMode === "approval_gate"
+          ? "approval_gate"
+          : "bounded_execution",
+      resourceScopes,
+      isolation: packet.workspaceIsolation ?? "unspecified",
+      status: "planned_not_invoked",
+    };
+  });
+  if (executionLanes.length > 0) {
+    stageLanes.Execution = executionLanes;
+  }
+  return buildStageDagPacket({
+    stageOrder,
+    stageLanes,
+    stageAuthorities,
+    runtimeCapacity:
+      agentTeamsPlaybookPacket?.parallelBudget?.maxConcurrentAgents ??
+      agentTeamsPlaybookPacket?.runtimeCapacity ??
+      null,
+  });
+}
 
 function buildTraceEvalControlPlane({
   runId,
@@ -4323,12 +4386,16 @@ function buildAgentTeamsPlaybookPacket({
     fanoutSafetyPacket.safeForParallelFanout === true &&
     hasParallelWave &&
     providerAvailable;
+  const nativeFanoutReady =
+    triggered &&
+    fanoutSafetyPacket.safeForParallelFanout === true &&
+    hasParallelWave;
   const externalAgentSpawned = (workerExecutionEvidence ?? []).some(
     (item) => item.externalAgentSpawned === true
   );
   const status = !triggered
     ? "not_required"
-    : selected && waves.length > 0
+    : nativeFanoutReady
       ? "pass"
       : "partial";
   return {
@@ -4337,17 +4404,23 @@ function buildAgentTeamsPlaybookPacket({
     status,
     evidenceKind:
       status === "pass"
-        ? "orchestration_provider_selected"
+        ? selected
+          ? "orchestration_provider_selected"
+          : "native_stage_dag_ready_optional_playbook_not_selected"
         : status === "not_required"
           ? "not_required_for_single_lane"
-          : "provider_missing_or_unusable",
+          : "fanout_safety_or_wave_unproven",
     stageBoundary: "after Thinking workerTaskPackets, before Execution fan-out",
     triggered,
     triggerReason: triggered
       ? "2+ executable independent worker lanes are present."
       : "Fewer than 2 executable worker lanes; normal dispatch board is enough.",
     selected,
-    selectedAs: selected ? "parallel_fanout_orchestration_adapter" : "not_selected",
+    selectedAs: selected
+      ? "parallel_fanout_orchestration_adapter"
+      : nativeFanoutReady
+        ? "optional_adapter_not_required_for_native_fanout"
+        : "not_selected",
     providerResolution,
     maxParallelAgents: parallelBudget.maxConcurrentAgents,
     requestedParallelAgents: parallelBudget.requestedParallelAgents,
@@ -4379,7 +4452,8 @@ function buildAgentTeamsPlaybookPacket({
         "For Codex prefer named subagent over fork so agent-type can change; this Node runner only records evidence and does not enforce spawn.",
     },
     acceptance: {
-      selectedWhenParallelLanes: !triggered || selected,
+      orchestrationReadyWhenParallelLanes: !triggered || nativeFanoutReady,
+      optionalProviderDoesNotGateNativeFanout: !selected && nativeFanoutReady,
       independentLanesProven: !triggered || fanoutSafetyPacket.safeForParallelFanout === true,
       parallelWaveExists: !triggered || hasParallelWave,
       dagAndCollisionSafe: !triggered || (
@@ -4410,35 +4484,26 @@ function buildAgentTeamsPlaybookPacket({
 }
 
 function buildRuntimeSubagentInvocationPacket({
-  entryClassification,
   agentTeamsPlaybookPacket,
   workerExecutionEvidence,
 }) {
   const externalAgentSpawned = (workerExecutionEvidence ?? []).some(
     (item) => item.externalAgentSpawned === true,
   );
+  const selectedWorkerLaneCount = agentTeamsPlaybookPacket?.executableLaneCount ?? 0;
+  const dagAndCollisionSafe = agentTeamsPlaybookPacket?.acceptance?.dagAndCollisionSafe === true;
   const fanoutEligible =
-    entryClassification?.fanoutEligible === true ||
-    agentTeamsPlaybookPacket?.triggered === true;
-  const entryAuthorizationSource = entryClassification?.subagentAuthorizationSource;
-  const authorizationSource =
-    entryAuthorizationSource && entryAuthorizationSource !== "not_required"
-      ? entryAuthorizationSource
-      : agentTeamsPlaybookPacket?.triggered
-        ? "native_choice_surface_required"
-        : "not_required";
-  const authorized =
-    authorizationSource === "direct_parallel_agent_request" ||
-    authorizationSource === "meta_theory_trigger_request" ||
-    authorizationSource === "structured_governance_chain_request" ||
-    authorizationSource === "native_choice_surface_completed";
+    selectedWorkerLaneCount >= 2 &&
+    agentTeamsPlaybookPacket?.triggered === true &&
+    dagAndCollisionSafe;
+  const authorizationSource = fanoutEligible
+    ? "thinking_dag_approved"
+    : "not_required";
   const status = externalAgentSpawned
     ? "invoked"
     : !fanoutEligible
       ? "not_required"
-      : authorized
-        ? "unavailable"
-        : "not_authorized";
+      : "unavailable";
   return {
     schemaVersion: "runtime-subagent-invocation-v0.1",
     status,
@@ -4449,22 +4514,15 @@ function buildRuntimeSubagentInvocationPacket({
     availabilityDisposition:
       status === "unavailable"
         ? "host_evidence_unattached"
-        : status === "not_authorized"
-          ? "authorization_denied"
-          : status === "invoked"
-            ? "observed_success"
-            : "not_required",
-    selectedWorkerLaneCount: agentTeamsPlaybookPacket?.executableLaneCount ?? 0,
-    expectedIndependentLaneCount:
-      entryClassification?.expectedIndependentLaneCount ??
-      agentTeamsPlaybookPacket?.executableLaneCount ??
-      0,
+        : status === "invoked"
+          ? "observed_success"
+          : "not_required",
+    selectedWorkerLaneCount,
+    plannedIndependentLaneCount: selectedWorkerLaneCount,
     degradationReason:
       status === "unavailable"
         ? "The Node governed runner cannot call the active host Agent/Task or spawn_agent tool directly; host-layer evidence must be attached by the runtime adapter."
-        : status === "not_authorized"
-          ? "Subagent dispatch needs a governed meta-theory activation, direct subagent/delegation/parallel-agent wording, or a completed native choice surface before Execution."
-          : null,
+        : null,
     requiredHostEvidence:
       status === "invoked"
         ? []
@@ -4474,7 +4532,7 @@ function buildRuntimeSubagentInvocationPacket({
             "worker task packet id to spawned agent id mapping",
           ],
     evidenceRefs: [
-      "coreLoop.requestRecord.entryClassification",
+      "coreLoop.thinkingPacket.workerTaskPackets",
       "coreLoop.agentTeamsPlaybookPacket",
       "coreLoop.executionResult.workerExecutionEvidence[].externalAgentSpawned",
     ],
@@ -7956,8 +8014,7 @@ function buildAgentTeamsPlaybookGate({ agentTeamsPlaybookPacket }) {
     (
       agentTeamsPlaybookPacket?.status === "pass" &&
       agentTeamsPlaybookPacket?.triggered === true &&
-      agentTeamsPlaybookPacket?.selected === true &&
-      agentTeamsPlaybookPacket?.acceptance?.selectedWhenParallelLanes === true &&
+      agentTeamsPlaybookPacket?.acceptance?.orchestrationReadyWhenParallelLanes === true &&
       agentTeamsPlaybookPacket?.acceptance?.independentLanesProven === true &&
       agentTeamsPlaybookPacket?.acceptance?.parallelWaveExists === true &&
       agentTeamsPlaybookPacket?.acceptance?.dagAndCollisionSafe === true &&
@@ -7971,20 +8028,20 @@ function buildAgentTeamsPlaybookGate({ agentTeamsPlaybookPacket }) {
       : "partial";
   return {
     id: "P-110",
-    name: "Agent Teams Playbook 编排适配门",
+    name: "原生阶段 DAG 并行与可选编排适配门",
     status,
     evidenceKind: "product_support_gate",
     requiredFor:
-      "2+ independent executable worker lanes after Thinking and before Execution fan-out.",
+      "2+ independent executable worker lanes after Thinking and before Execution fan-out; agent-teams-playbook remains optional.",
     evidenceRefs: [
       "coreLoop.agentTeamsPlaybookPacket",
       "coreLoop.dynamicWorkflowRuntimePacket.capabilityBindingCoverage.agentTeamsPlaybook",
       "coreLoop.capabilityInvocationTruthPacket.rows[family=agent_teams_playbook]",
     ],
     passIf:
-      "2+ executable lanes select agent-teams-playbook as the fan-out orchestration adapter, prove DAG/collision/workspace/external-write safety, run safe lanes through runtime-capacity waves, preserve workerTaskPackets, and avoid live subagent overclaim.",
+      "2+ executable lanes prove stage-DAG readiness and dependency/resource/permission/isolation safety, use native host capacity, preserve workerTaskPackets as a derived view, and avoid live subagent overclaim; an optional agent-teams-playbook selection must not gate this route.",
     failIf:
-      "Parallel worker lanes exist but agent-teams-playbook is only a registry entry, is not selected into the default route, inflates agent count without lane evidence, or is relabeled as a live Agent Team/spawn_agent call without host evidence.",
+      "Parallel worker lanes lack stage-DAG safety or runtime-capacity proof, inflate agent count without lane evidence, or relabel an optional adapter as a live Agent Team/spawn_agent call without host evidence.",
   };
 }
 
@@ -8649,8 +8706,11 @@ function buildCoreLoopArtifact({
     providerResolution: agentTeamsPlaybookProvider,
     workerExecutionEvidence,
   });
+  const stageDagPacket = buildRunnerStageDagPacket(
+    workerTaskPackets,
+    agentTeamsPlaybookPacket,
+  );
   const runtimeSubagentInvocationPacket = buildRuntimeSubagentInvocationPacket({
-    entryClassification,
     agentTeamsPlaybookPacket,
     workerExecutionEvidence,
   });
@@ -8854,6 +8914,7 @@ function buildCoreLoopArtifact({
     langGraphRunPacket,
     dynamicWorkflowRuntimePacket,
     peerAgentMeshPacket,
+    stageDagPacket,
     agentTeamsPlaybookPacket,
     runtimeSubagentInvocationPacket,
     runtimeInvocationPlanPacket,
@@ -8893,6 +8954,7 @@ function buildCoreLoopArtifact({
       owner: orchestrationReport.orchestrationTaskBoardPacket?.synthesisOwner,
       weapon: "workerTaskPackets",
       workerTaskPackets,
+      stageDagPacketRef: "coreLoop.stageDagPacket",
       projectCustomizationPacket,
       reviewOwner: orchestrationReport.reviewResult?.owner,
       verificationOwner: orchestrationReport.verificationResult?.owner,

@@ -224,7 +224,10 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   assert.equal(chineseProduct.recommendedRoute?.dependencyProject, null);
 
   const subjectiveQuality = route("这个页面不好看，帮我弄高级一点", "codex", "windows");
-  assert.equal(subjectiveQuality.entryClassification?.ambiguityPacket?.choicePolicy, "must_ask");
+  assert.equal(Object.hasOwn(subjectiveQuality.entryClassification ?? {}, "ambiguityPacket"), false);
+  assert.equal(Object.hasOwn(subjectiveQuality.entryClassification ?? {}, "subagentAuthorizationSource"), false);
+  assert.equal(subjectiveQuality.routeExecutionGate?.entryChoiceDecision?.choicePolicy, "must_ask");
+  assert.equal(subjectiveQuality.routeExecutionGate?.nativeChoiceSurface?.primarySurface, "request_user_input");
   assert.equal(subjectiveQuality.routeExecutionGate?.canEnterExecution, false);
   assert.equal(subjectiveQuality.recommendedRoute?.id, "subjective-ui-design-orchestration:codex:windows");
   assert.equal(
@@ -421,6 +424,75 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   );
   assert.equal(subjectiveQualityFullyConfirmed.routeExecutionGate?.canEnterExecution, true);
   assert.equal(subjectiveQualityFullyConfirmed.routeExecutionGate?.thinkingChoiceSurface?.evidenceTrusted, true);
+
+  const claudeSubjectiveQuality = route(
+    "这个页面不好看，帮我弄高级一点",
+    "claude_code",
+    "windows",
+  );
+  assert.equal(
+    claudeSubjectiveQuality.routeExecutionGate?.nativeChoiceSurface?.primarySurface,
+    "AskUserQuestion",
+  );
+  assert.equal(
+    claudeSubjectiveQuality.routeExecutionGate?.thinkingChoiceSurface?.primarySurface,
+    "AskUserQuestion",
+  );
+  const claudeWrongSurfaceEvidence = route(
+    "这个页面不好看，帮我弄高级一点",
+    "claude_code",
+    "windows",
+    [
+      "--native-choice-evidence",
+      JSON.stringify({
+        surface: "request_user_input",
+        choices: [
+          { stage: "Critical", status: "completed", evidenceRef: "wrong-runtime:critical" },
+          { stage: "Thinking", status: "completed", evidenceRef: "wrong-runtime:thinking" },
+        ],
+      }),
+    ],
+  );
+  assert.equal(
+    claudeWrongSurfaceEvidence.routeExecutionGate?.nativeChoiceSurface?.evidence?.trusted,
+    false,
+  );
+  const claudeNativeChoiceEvidence = route(
+    "这个页面不好看，帮我弄高级一点",
+    "claude_code",
+    "windows",
+    [
+      "--native-choice-evidence",
+      JSON.stringify({
+        surface: "AskUserQuestion",
+        choices: [
+          { stage: "Critical", status: "completed", evidenceRef: "claude:critical" },
+          { stage: "Thinking", status: "completed", evidenceRef: "claude:thinking" },
+        ],
+      }),
+    ],
+  );
+  assert.equal(
+    claudeNativeChoiceEvidence.routeExecutionGate?.nativeChoiceSurface?.evidence?.trusted,
+    true,
+  );
+
+  for (const highRiskTask of [
+    "删除生产数据库并发布上线",
+    "deploy this release to production and remove the old database",
+  ]) {
+    const highRiskRoute = route(highRiskTask, "claude_code", "windows");
+    assert.equal(highRiskRoute.entryClassification?.governedEntry, true);
+    assert.equal(
+      highRiskRoute.routeExecutionGate?.entryChoiceDecision?.critical?.choicePolicy,
+      "must_ask",
+    );
+    assert.equal(
+      highRiskRoute.routeExecutionGate?.nativeChoiceSurface?.primarySurface,
+      "AskUserQuestion",
+    );
+    assert.equal(highRiskRoute.routeExecutionGate?.canEnterExecution, false);
+  }
 
   const subjectiveQualityForgedChoice = route(
     "这个页面不好看，帮我弄高级一点",
@@ -661,11 +733,8 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     "codex",
     "windows",
   );
-  assert.equal(
-    codexStructuredChainFanout.entryClassification?.subagentAuthorizationSource,
-    "meta_theory_trigger_request",
-    "Structured Critical/Fetch/Thinking/Review chains are meta-theory activations that must authorize safe fan-out without extra dispatch wording",
-  );
+  assert.equal(Object.hasOwn(codexStructuredChainFanout.entryClassification ?? {}, "subagentAuthorizationSource"), false);
+  assert.equal(codexStructuredChainFanout.entryClassification?.signals?.structuredGovernanceChainRequest, true);
   assert.equal(
     codexStructuredChainFanout.recommendedRoute?.id,
     "execution-capability-discovery:codex:windows",
@@ -685,11 +754,8 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
     "codex",
     "windows",
   );
-  assert.equal(
-    codexMetaTriggerFanout.entryClassification?.subagentAuthorizationSource,
-    "meta_theory_trigger_request",
-    "A meta-theory trigger itself must authorize safe fan-out once scopes are separable",
-  );
+  assert.equal(Object.hasOwn(codexMetaTriggerFanout.entryClassification ?? {}, "subagentAuthorizationSource"), false);
+  assert.equal(codexMetaTriggerFanout.entryClassification?.signals?.explicitMetaTheory, true);
   assert.equal(
     codexMetaTriggerFanout.recommendedRoute?.id,
     "execution-capability-discovery:codex:windows",
