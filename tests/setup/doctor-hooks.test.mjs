@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   detectHookRuntimeIncompatibility,
   extractCommandPath,
+  extractHookTargetPath,
   findProjectSettings,
   projectRootFromArgs,
   removeZombies,
@@ -30,6 +31,19 @@ function writeSettings(root, command) {
       PostToolUse: [{
         matcher: "Write|Edit",
         hooks: [{ type: "command", command }],
+      }],
+    },
+  }, null, 2));
+  return settingsPath;
+}
+
+function writeHookSettings(root, hooks) {
+  const settingsPath = path.join(root, ".claude", "settings.json");
+  writeFileSync(settingsPath, JSON.stringify({
+    hooks: {
+      PostToolUse: [{
+        matcher: "Write|Edit",
+        hooks,
       }],
     },
   }, null, 2));
@@ -187,6 +201,259 @@ describe("doctor-hooks extractCommandPath", () => {
 });
 
 describe("doctor-hooks project-aware runtime diagnostics", () => {
+  test("recognizes an existing direct-spawn node target from args", () => {
+    withTempProject((root) => {
+      const hookPath = path.join(root, ".claude", "hooks", "hook with spaces.mjs");
+      writeFileSync(hookPath, "export {};\n");
+      const hook = { type: "command", command: "node", args: [hookPath] };
+      const settingsPath = writeHookSettings(root, [hook]);
+
+      assert.equal(extractHookTargetPath(hook), hookPath);
+      const result = scanSettingsFile(settingsPath);
+      assert.equal(result.zombies.length, 0);
+      assert.equal(result.unverified.length, 0);
+      assert.equal(result.live.length, 1);
+      assert.equal(result.live[0].path, hookPath);
+    });
+  });
+
+  test("treats a direct-spawn script command with spaces as one literal path", () => {
+    withTempProject((root) => {
+      const hookPath = path.join(root, ".claude", "hooks", "valid hook.cmd");
+      writeFileSync(hookPath, "@echo off\r\n");
+      const hook = { type: "command", command: hookPath, args: [] };
+      const settingsPath = writeHookSettings(root, [hook]);
+
+      assert.equal(extractHookTargetPath(hook), hookPath);
+      const result = scanSettingsFile(settingsPath);
+      assert.equal(result.zombies.length, 0);
+      assert.equal(result.unverified.length, 0);
+      assert.equal(result.live.length, 1);
+
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      assert.deepEqual(removeZombies(settings, settingsPath), {
+        settings,
+        removed: 0,
+      });
+    });
+  });
+
+  test("recognizes an absolute runner path with spaces in direct-spawn form", () => {
+    withTempProject((root) => {
+      const hookPath = path.join(root, ".claude", "hooks", "hook.mjs");
+      writeFileSync(hookPath, "export {};\n");
+      const runner = process.platform === "win32"
+        ? "C:/Program Files/nodejs/node.exe"
+        : "/opt/Node Runtime/bin/node";
+      const hook = { type: "command", command: runner, args: [hookPath] };
+      const settingsPath = writeHookSettings(root, [hook]);
+
+      assert.equal(extractHookTargetPath(hook), hookPath);
+      const result = scanSettingsFile(settingsPath);
+      assert.equal(result.zombies.length, 0);
+      assert.equal(result.unverified.length, 0);
+      assert.equal(result.live.length, 1);
+    });
+  });
+
+  test("recognizes only explicit PowerShell file mode in direct-spawn form", () => {
+    withTempProject((root) => {
+      const hookPath = path.join(root, ".claude", "hooks", "hook.ps1");
+      writeFileSync(hookPath, "exit 0\n");
+      const hook = { type: "command", command: "pwsh", args: ["-File", hookPath] };
+      const settingsPath = writeHookSettings(root, [hook]);
+
+      assert.equal(extractHookTargetPath(hook), hookPath);
+      const result = scanSettingsFile(settingsPath);
+      assert.equal(result.zombies.length, 0);
+      assert.equal(result.unverified.length, 0);
+      assert.equal(result.live.length, 1);
+    });
+  });
+
+  test("preserves malformed direct-spawn args as unverified", () => {
+    withTempProject((root) => {
+      const malformedHooks = [
+        { type: "command", command: "node", args: ".claude/hooks/missing.mjs" },
+        { type: "command", command: "node", args: [42, ".claude/hooks/missing.mjs"] },
+      ];
+      const settingsPath = writeHookSettings(root, malformedHooks);
+      const result = scanSettingsFile(settingsPath);
+      assert.equal(result.zombies.length, 0);
+      assert.equal(result.live.length, 0);
+      assert.equal(result.unverified.length, 2);
+
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      const cleaned = removeZombies(settings, settingsPath);
+      assert.equal(cleaned.removed, 0);
+      assert.deepEqual(cleaned.settings, settings);
+    });
+  });
+
+  test("preserves direct-spawn non-file and ambiguous runner args as unverified", () => {
+    withTempProject((root) => {
+      const inlineHooks = [
+        {
+          type: "command",
+          command: "node",
+          args: ["-e", "console.log(process.argv[1])", "missing-data.js"],
+        },
+        {
+          type: "command",
+          command: "node",
+          args: ["-econsole.log(process.argv[1])", "missing-data.js"],
+        },
+        { type: "command", command: "node", args: ["-efoo.js"] },
+        { type: "command", command: "node", args: ["--eval=foo.js"] },
+        { type: "command", command: "node", args: ["--print=foo.js"] },
+        {
+          type: "command",
+          command: "python",
+          args: ["-c", "print('safe')", "missing-data.py"],
+        },
+        { type: "command", command: "python", args: ["-cfoo.py"] },
+        {
+          type: "command",
+          command: "python3",
+          args: ["-m", "package.tool", "missing-data.py"],
+        },
+        {
+          type: "command",
+          command: "bash",
+          args: ["-c", "echo missing-data.sh"],
+        },
+        { type: "command", command: "bash", args: ["-cfoo.sh"] },
+        {
+          type: "command",
+          command: "pwsh",
+          args: ["-Command", "Write-Output missing-data.ps1"],
+        },
+        {
+          type: "command",
+          command: "bun",
+          args: ["-e", "missing-data.ts"],
+        },
+        {
+          type: "command",
+          command: "deno",
+          args: ["eval", "missing-data.ts"],
+        },
+        {
+          type: "command",
+          command: "npx",
+          args: ["package", "--output", "missing-data.js"],
+        },
+        {
+          type: "command",
+          command: "cmd",
+          args: ["/c", "echo missing-data.cmd"],
+        },
+      ];
+      const settingsPath = writeHookSettings(root, inlineHooks);
+
+      for (const hook of inlineHooks) {
+        assert.equal(extractHookTargetPath(hook), null);
+      }
+      const result = scanSettingsFile(settingsPath);
+      assert.equal(result.zombies.length, 0);
+      assert.equal(result.live.length, 0);
+      assert.equal(result.unverified.length, inlineHooks.length);
+
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      const cleaned = removeZombies(settings, settingsPath);
+      assert.equal(cleaned.removed, 0);
+      assert.deepEqual(cleaned.settings, settings);
+    });
+  });
+
+  test("removes only a missing direct-spawn target and preserves unrelated args", () => {
+    withTempProject((root) => {
+      const livePath = path.join(root, ".claude", "hooks", "live.mjs");
+      const missingPath = path.join(root, ".claude", "hooks", "missing.mjs");
+      writeFileSync(livePath, "export {};\n");
+      const liveHook = { type: "command", command: "node", args: [livePath, "--mode", "safe"] };
+      const missingHook = { type: "command", command: "node", args: [missingPath] };
+      const unrelatedHook = {
+        type: "command",
+        command: "graphify",
+        args: ["hook-guard", "payload.js"],
+      };
+      const settingsPath = writeHookSettings(root, [liveHook, missingHook, unrelatedHook]);
+
+      const result = scanSettingsFile(settingsPath);
+      assert.equal(result.zombies.length, 1);
+      assert.equal(result.zombies[0].rawPath, missingPath);
+      assert.equal(result.live.length, 1);
+      assert.equal(result.unverified.length, 1);
+
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      const cleaned = removeZombies(settings, settingsPath);
+      assert.equal(cleaned.removed, 1);
+      assert.deepEqual(
+        cleaned.settings.hooks.PostToolUse[0].hooks,
+        [liveHook, unrelatedHook],
+      );
+    });
+  });
+
+  test("recognizes and removes a missing WSL shell-form path on Windows", {
+    skip: process.platform !== "win32",
+  }, () => {
+    withTempProject((root) => {
+      const command = 'node "/mnt/c/Users/MetaKimMissing/.claude/hooks/hook.mjs"';
+      const settingsPath = writeSettings(root, command);
+      const result = scanSettingsFile(settingsPath);
+      assert.equal(result.zombies.length, 1);
+      assert.equal(result.zombies[0].rawPath, "/mnt/c/Users/MetaKimMissing/.claude/hooks/hook.mjs");
+
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      const cleaned = removeZombies(settings, settingsPath);
+      assert.equal(cleaned.removed, 1);
+      assert.deepEqual(cleaned.settings.hooks, {});
+    });
+  });
+
+  test("preserves MSYS drive paths as unverified on Windows", {
+    skip: process.platform !== "win32",
+  }, () => {
+    withTempProject((root) => {
+      const msysPath = "/c/Users/Kim/.claude/hooks/meta-kim/hook.mjs";
+      const hooks = [
+        { type: "command", command: `node "${msysPath}"` },
+        { type: "command", command: "node", args: [msysPath] },
+      ];
+      const settingsPath = writeHookSettings(root, hooks);
+      const result = scanSettingsFile(settingsPath);
+      assert.equal(result.zombies.length, 0);
+      assert.equal(result.live.length, 0);
+      assert.equal(result.unverified.length, hooks.length);
+      assert.equal(result.unverified[0].rawPath, msysPath);
+      assert.equal(result.unverified[1].rawPath, msysPath);
+
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      const cleaned = removeZombies(settings, settingsPath);
+      assert.equal(cleaned.removed, 0);
+      assert.deepEqual(cleaned.settings, settings);
+    });
+  });
+
+  test("preserves ambiguous POSIX absolute roots as unverified on Windows", {
+    skip: process.platform !== "win32",
+  }, () => {
+    withTempProject((root) => {
+      const settingsPath = writeSettings(root, 'node "/usr/local/hooks/hook.mjs"');
+      const result = scanSettingsFile(settingsPath);
+      assert.equal(result.zombies.length, 0);
+      assert.equal(result.live.length, 0);
+      assert.equal(result.unverified.length, 1);
+
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      const cleaned = removeZombies(settings, settingsPath);
+      assert.equal(cleaned.removed, 0);
+      assert.deepEqual(cleaned.settings, settings);
+    });
+  });
+
   test("resolves an explicit project root before the caller cwd", () => {
     withTempProject((root) => {
       const settingsPath = writeSettings(root, "node .claude/hooks/hook.mjs");

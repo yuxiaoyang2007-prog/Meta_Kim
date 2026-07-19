@@ -192,45 +192,40 @@ function trimShellPunctuation(token) {
   return token.replace(/^[;&|]+|[;&|]+$/g, "");
 }
 
-export function extractCommandPath(command) {
-  if (typeof command !== "string") return null;
-  const tokens = parseCommandTokens(command.trim());
+const RUNNERS = new Set([
+  "node",
+  "python",
+  "python3",
+  "bash",
+  "sh",
+  "pwsh",
+  "powershell",
+  "cmd",
+  "npx",
+  "tsx",
+  "ts-node",
+  "bun",
+  "deno",
+]);
+
+function runnerName(token) {
+  const base = customBasename(token).toLowerCase();
+  const withoutExe = base.endsWith(".exe") ? base.slice(0, -4) : base;
+  return RUNNERS.has(withoutExe) ? withoutExe : null;
+}
+
+function isScriptLikePath(value) {
+  if (!value) return false;
+  const lower = value.toLowerCase();
+  const scriptExtension = /\.(mjs|js|cjs|py|sh|ts|tsx|bat|cmd|ps1)$/i;
+  return (
+    scriptExtension.test(lower) ||
+    (/^(?:\.{1,2}|~)[\\/]/.test(value) && scriptExtension.test(lower))
+  );
+}
+
+function extractPathFromTokens(tokens) {
   if (tokens.length === 0) return null;
-
-  const runners = [
-    "node",
-    "python",
-    "python3",
-    "bash",
-    "sh",
-    "pwsh",
-    "powershell",
-    "cmd",
-    "npx",
-    "tsx",
-    "ts-node",
-    "bun",
-    "deno",
-  ];
-
-  // Helper to check if token is a runner
-  const runnerName = (token) => {
-    const base = customBasename(token).toLowerCase();
-    const withoutExe = base.endsWith(".exe") ? base.slice(0, -4) : base;
-    return runners.includes(withoutExe) ? withoutExe : null;
-  };
-
-  // Helper to check if token is script-like/path-like
-  const isScriptLike = (t) => {
-    if (!t) return false;
-    const token = trimShellPunctuation(t);
-    const lower = token.toLowerCase();
-    const scriptExtension = /\.(mjs|js|cjs|py|sh|ts|tsx|bat|cmd|ps1)$/i;
-    return (
-      scriptExtension.test(lower) ||
-      (/^(?:\.{1,2}|~)[\\/]/.test(token) && scriptExtension.test(lower))
-    );
-  };
 
   const isShellRunner = (runner) =>
     ["bash", "sh", "pwsh", "powershell", "cmd"].includes(runner);
@@ -300,12 +295,63 @@ export function extractCommandPath(command) {
     }
 
     // 7. Check if it's a script/path-like target
-    if (isScriptLike(normalized)) {
+    if (isScriptLikePath(normalized)) {
       return normalized;
     }
   }
 
   return null;
+}
+
+export function extractCommandPath(command) {
+  if (typeof command !== "string") return null;
+  return extractPathFromTokens(parseCommandTokens(command.trim()));
+}
+
+function extractDirectSpawnArgsTarget(runner, args) {
+  const directFileOperand = () => {
+    if (args[0] === "--" && isScriptLikePath(args[1])) return args[1];
+    if (!args[0]?.startsWith("-") && isScriptLikePath(args[0])) return args[0];
+    return null;
+  };
+
+  if (["node", "python", "python3", "bash", "sh"].includes(runner)) {
+    return directFileOperand();
+  }
+  if (runner === "pwsh" || runner === "powershell") {
+    const fileFlag = args[0]?.toLowerCase();
+    if ((fileFlag === "-file" || fileFlag === "--file") && isScriptLikePath(args[1])) {
+      return args[1];
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract the executable script target from either Claude Code's shell-form
+ * hook command or its direct-spawn `command` + `args` form.
+ *
+ * Args are inspected only for allowlisted, unambiguous file-execution modes.
+ * Ambiguous runners and eval/module/command payload modes stay unverified so
+ * cleanup cannot mistake their data arguments for hook targets.
+ *
+ * @param {unknown} hook Claude Code hook configuration entry.
+ * @returns {string | null} Parsed script path, or null when it cannot be
+ * safely identified.
+ */
+export function extractHookTargetPath(hook) {
+  if (!hook || typeof hook !== "object") return null;
+  const command = typeof hook.command === "string" ? hook.command : "";
+  if (Object.hasOwn(hook, "args")) {
+    if (!Array.isArray(hook.args) || !hook.args.every((arg) => typeof arg === "string")) {
+      return null;
+    }
+    const literalCommand = command.trim();
+    if (isScriptLikePath(literalCommand)) return literalCommand;
+    const runner = runnerName(literalCommand);
+    return runner ? extractDirectSpawnArgsTarget(runner, hook.args) : null;
+  }
+  return extractCommandPath(command);
 }
 
 export function settingsProjectRoot(settingsPath) {
@@ -322,6 +368,10 @@ export function resolveHookTargetPath(target, settingsPath) {
     : target.startsWith("~/") || target.startsWith("~\\")
       ? path.join(homedir(), target.slice(2))
       : target;
+  if (platform() === "win32" && path.posix.isAbsolute(expanded)) {
+    const explicitWslDrivePath = /^\/mnt\/[A-Za-z](?:[\\/]|$)/u.test(expanded);
+    if (!explicitWslDrivePath) return null;
+  }
   if (
     path.isAbsolute(expanded) ||
     path.win32.isAbsolute(expanded) ||
@@ -398,7 +448,7 @@ export function scanSettingsFile(settingsPath) {
   for (const [event, blocks] of Object.entries(hooks)) {
     for (const block of blocks || []) {
       for (const hook of block.hooks || []) {
-        const rawTarget = extractCommandPath(hook.command || "");
+        const rawTarget = extractHookTargetPath(hook);
         const target = resolveHookTargetPath(rawTarget, settingsPath);
         const exists = target ? existsSync(target) : true;
         const entry = {
@@ -408,7 +458,7 @@ export function scanSettingsFile(settingsPath) {
           rawPath: rawTarget,
           command: hook.command,
         };
-        if (!rawTarget) {
+        if (!rawTarget || !target) {
           unverified.push(entry);
           continue;
         }
@@ -437,7 +487,7 @@ export function removeZombies(settings, settingsPath) {
       .map((block) => {
         const keptHooks = (block.hooks || []).filter((hook) => {
           const target = resolveHookTargetPath(
-            extractCommandPath(hook.command || ""),
+            extractHookTargetPath(hook),
             settingsPath,
           );
           if (!target) return true;
