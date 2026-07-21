@@ -218,6 +218,32 @@ describe("Codex config merge", () => {
     );
   });
 
+  test("planner collapses an adjacent stale disabled comment when its active key reappears", () => {
+    const source = String.raw`\\?\C:\Users\Kim\.codex\.tmp\bundled-marketplaces\openai-bundled`;
+    const disabled = `# Meta_Kim disabled conflicting [marketplaces.openai-bundled].source: source = '${source}'`;
+    const input = [
+      "[features]",
+      "default_mode_request_user_input = true",
+      "js_repl = true",
+      "",
+      "[marketplaces.openai-bundled]",
+      'source_type = "local"',
+      `source = '${source}'`,
+      disabled,
+      "",
+    ].join("\n");
+    const planned = planCodexAppNativeControls(input, {
+      platformName: "win32",
+      windowsAppsRoots: [],
+      codexHome: String.raw`C:\Users\Kim\.codex`,
+      pathExists: () => false,
+    });
+
+    assert.equal(planned.text.split(disabled).length - 1, 1);
+    assert.doesNotMatch(planned.text, new RegExp(`^source =`, "mu"));
+    assert.equal(invertCodexConfigMutations(planned.text, planned.mutations), input);
+  });
+
   test("planner fails closed on a managed multiline scalar it cannot replace", () => {
     const input = "[features]\njs_repl = [\n  false\n]\n";
     assert.throws(

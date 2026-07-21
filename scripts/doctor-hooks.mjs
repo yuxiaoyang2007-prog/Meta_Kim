@@ -6,7 +6,7 @@
  *
  * Usage:
  *   node scripts/doctor-hooks.mjs              # scan ~/.claude/settings.json (dry-run)
- *   node scripts/doctor-hooks.mjs --fix        # remove zombies + write back (auto backup)
+ *   node scripts/doctor-hooks.mjs --fix        # repair known Graphify hooks, remove zombies, and back up
  *   node scripts/doctor-hooks.mjs --all        # also scan <repo>/.claude/settings.json
  *   node scripts/doctor-hooks.mjs --project    # scan ONLY <repo>/.claude/settings.json
  *   node scripts/doctor-hooks.mjs --project-root <path> # resolve project settings from path
@@ -46,10 +46,12 @@ const MESSAGES = {
     unverifiedItem: (e, m, command) => `  [${e} / ${m}]  ${command}`,
     summaryClean: "All parsed hook targets point to existing, runtime-compatible files.",
     dryRunHint:
-      "Dry-run only. Re-run with --fix to back up & remove the zombie entries.",
+      "Dry-run only. Re-run with --fix to back up, repair known Graphify commands, and remove zombie entries.",
     incompatibleHint:
       "Incompatible hooks are diagnostic-only. Meta_Kim will not delete or rewrite unknown hooks automatically.",
     backupWritten: (p) => `Backup written: ${p}`,
+    graphifyRepaired: (n, p) =>
+      `Repaired ${n} unsafe Graphify hook command${n === 1 ? "" : "s"} (backup: ${p}).`,
     removedCount: (n) =>
       `Removed ${n} zombie hook entr${n === 1 ? "y" : "ies"}.`,
     settingsSaved: (p) => `Saved: ${p}`,
@@ -70,9 +72,10 @@ const MESSAGES = {
     incompatibleItem: (e, m, p, reason) => `  [${e} / ${m}]  ${p}\n    ${reason}`,
     unverifiedItem: (e, m, command) => `  [${e} / ${m}]  ${command}`,
     summaryClean: "所有可解析 hook 的目标文件都存在且运行时兼容。",
-    dryRunHint: "当前仅为扫描模式。加 --fix 参数可自动备份并清除僵尸条目。",
+    dryRunHint: "当前仅为扫描模式。加 --fix 参数可自动备份、修复已知 Graphify 命令并清除僵尸条目。",
     incompatibleHint: "不兼容 hook 只诊断和建议；Meta_Kim 不会自动删除或改写未知 hook。",
     backupWritten: (p) => `已备份：${p}`,
+    graphifyRepaired: (n, p) => `已修复 ${n} 个不安全的 Graphify hook 命令（备份：${p}）。`,
     removedCount: (n) => `已移除 ${n} 个僵尸 hook 条目。`,
     settingsSaved: (p) => `已保存：${p}`,
     finalStructure: "剩余 hook 事件：",
@@ -100,6 +103,8 @@ const MESSAGES = {
     incompatibleHint:
       "互換性のない hook は診断のみです。Meta_Kim は未知の hook を自動削除・変更しません。",
     backupWritten: (p) => `バックアップ作成：${p}`,
+    graphifyRepaired: (n, p) =>
+      `安全でない Graphify hook コマンドを ${n} 件修復しました（バックアップ：${p}）。`,
     removedCount: (n) => `ゾンビ hook を ${n} 件削除しました。`,
     settingsSaved: (p) => `保存：${p}`,
     finalStructure: "残存する hook イベント：",
@@ -123,6 +128,8 @@ const MESSAGES = {
     incompatibleHint:
       "호환되지 않는 hook은 진단만 합니다. Meta_Kim은 알 수 없는 hook을 자동 삭제하거나 수정하지 않습니다.",
     backupWritten: (p) => `백업 완료: ${p}`,
+    graphifyRepaired: (n, p) =>
+      `안전하지 않은 Graphify hook 명령 ${n}개를 복구했습니다 (백업: ${p}).`,
     removedCount: (n) => `좀비 hook ${n} 건 제거 완료.`,
     settingsSaved: (p) => `저장됨: ${p}`,
     finalStructure: "남은 hook 이벤트:",
@@ -354,6 +361,80 @@ export function extractHookTargetPath(hook) {
   return extractCommandPath(command);
 }
 
+/**
+ * Detect shell-form hook commands that cannot survive Claude Code's native
+ * Windows Git Bash boundary. An unquoted `C:\\...` or UNC executable token at
+ * the start of the command is parsed by Bash before the executable starts, so
+ * every backslash becomes an escape and the path collapses (for example
+ * `C:\\Users` becomes `C:Users`).
+ *
+ * Direct-spawn `command` + `args` hooks do not cross this shell boundary and
+ * quoted tokens are left alone. This is diagnostic-only; cleanup continues to
+ * preserve external or otherwise ambiguous commands.
+ */
+export function detectHookCommandIncompatibility(
+  hook,
+  runtimePlatform = platform(),
+) {
+  if (
+    runtimePlatform !== "win32" ||
+    !hook ||
+    typeof hook !== "object" ||
+    typeof hook.command !== "string" ||
+    Object.hasOwn(hook, "args")
+  ) {
+    return null;
+  }
+  const match = hook.command
+    .trim()
+    .match(/^((?:[A-Za-z]:\\|\\\\)[^\s"';&|]+)/u);
+  if (!match) return null;
+  return {
+    code: "windows_shell_backslash_path",
+    path: match[1],
+    reason:
+      `Native Windows Claude Code runs shell-form hooks through Git Bash, ` +
+      `where the unquoted backslashes in ${match[1]} are consumed as escapes. ` +
+      "Regenerate the hook with forward slashes or use direct-spawn command + args.",
+  };
+}
+
+/**
+ * Rewrite a Windows shell-form hook that Git Bash would mangle into the
+ * direct-spawn `command` + `args` form. Direct-spawn hooks bypass Bash, so the
+ * backslashes in the executable path survive verbatim instead of being parsed
+ * as escapes. Pure transform only: it never writes files, and it acts solely
+ * on graphify-injected commands (the ones Meta_Kim's own install flow emits),
+ * leaving unrelated user hooks untouched for explicit review.
+ *
+ * Returns the rewritten hook object, or null when the hook is not a graphify
+ * Windows shell-form command that needs rewriting.
+ */
+export function rewriteHookToDirectSpawn(hook, runtimePlatform = platform()) {
+  if (
+    runtimePlatform !== "win32" ||
+    !hook ||
+    typeof hook !== "object" ||
+    typeof hook.command !== "string" ||
+    Object.hasOwn(hook, "args")
+  ) {
+    return null;
+  }
+  if (!detectHookCommandIncompatibility(hook, runtimePlatform)) return null;
+  const match = hook.command
+    .trim()
+    .match(/^((?:[A-Za-z]:\\|\\\\).+?graphify(?:\.exe)?)\s+(hook-guard)\s+(read|search)\s*$/iu);
+  if (!match || !["graphify", "graphify.exe"].includes(customBasename(match[1]).toLowerCase())) {
+    return null;
+  }
+  return {
+    ...hook,
+    type: hook.type ?? "command",
+    command: match[1],
+    args: [match[2], match[3]],
+  };
+}
+
 export function settingsProjectRoot(settingsPath) {
   const settingsDir = path.dirname(path.resolve(settingsPath));
   return path.basename(settingsDir).toLowerCase() === ".claude"
@@ -448,16 +529,21 @@ export function scanSettingsFile(settingsPath) {
   for (const [event, blocks] of Object.entries(hooks)) {
     for (const block of blocks || []) {
       for (const hook of block.hooks || []) {
+        const commandIssue = detectHookCommandIncompatibility(hook);
         const rawTarget = extractHookTargetPath(hook);
         const target = resolveHookTargetPath(rawTarget, settingsPath);
         const exists = target ? existsSync(target) : true;
         const entry = {
           event,
           matcher: block.matcher,
-          path: target,
+          path: target ?? commandIssue?.path ?? null,
           rawPath: rawTarget,
           command: hook.command,
         };
+        if (commandIssue) {
+          incompatible.push({ ...entry, ...commandIssue });
+          continue;
+        }
         if (!rawTarget || !target) {
           unverified.push(entry);
           continue;
@@ -535,7 +621,10 @@ async function main() {
   const explicitProjectRoot = args.includes("--project-root");
   const projectOnly = args.includes("--project") || (explicitProjectRoot && !allMode);
   const silent = args.includes("--silent");
-  const projectRoot = projectRootFromArgs(args);
+  const projectRoot = projectRootFromArgs(
+    args,
+    process.env.META_KIM_CALLER_CWD || process.cwd(),
+  );
   const langIdx = args.indexOf("--lang");
   const langArg = langIdx >= 0 ? args[langIdx + 1] : null;
   const lang = resolveLang(langArg);
@@ -557,11 +646,14 @@ async function main() {
   }
 
   let totalIssues = 0;
+  const graphifySanitizer = fixMode
+    ? await import("./graphify-hook-sanitize.mjs")
+    : null;
   for (const target of targets) {
     if (!silent) {
       console.log(`\n${C.bold}${t.scanning(target.path)}${C.reset}`);
     }
-    const result = scanSettingsFile(target.path);
+    let result = scanSettingsFile(target.path);
     if (!result.ok) {
       if (result.reason === "missing") {
         if (!silent)
@@ -576,6 +668,20 @@ async function main() {
         continue;
       }
       continue;
+    }
+    if (graphifySanitizer) {
+      const repaired = graphifySanitizer.sanitizeGraphifyWindowsHooks(target.path);
+      if (repaired.changed) {
+        if (!silent) {
+          console.log(
+            `${C.green}  ${t.graphifyRepaired(repaired.count, repaired.backup)}${C.reset}`,
+          );
+        }
+        result = scanSettingsFile(target.path);
+        if (!result.ok) {
+          throw new Error(`Graphify hook repair could not be verified for ${target.path}`);
+        }
+      }
     }
     const { zombies, incompatible, unverified, live, settings } = result;
     if (zombies.length === 0 && incompatible.length === 0 && unverified.length === 0 && live.length === 0) {

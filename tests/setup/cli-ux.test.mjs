@@ -1,6 +1,13 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -26,6 +33,7 @@ describe("stable package CLI UX", () => {
     assert.equal(help.status, 0, help.stderr);
     assert.match(help.stdout, /meta-kim status/);
     assert.match(help.stdout, /meta-kim uninstall/);
+    assert.match(help.stdout, /meta-kim doctor hooks/);
 
     const version = run(cli, ["--version"]);
     assert.equal(version.status, 0, version.stderr);
@@ -73,6 +81,7 @@ describe("stable package CLI UX", () => {
     const source = readFileSync(cli, "utf8");
     assert.match(source, /case "status"[\s\S]*?scripts\/footprint\.mjs/);
     assert.match(source, /case "doctor"[\s\S]*?scripts\/doctor-interactive\.mjs/);
+    assert.match(source, /case "doctor"[\s\S]*?scripts\/doctor-hooks\.mjs/);
     assert.match(source, /case "uninstall"[\s\S]*?scripts\/uninstall\.mjs/);
     assert.match(source, /case "check"[\s\S]*?setup\.mjs/);
     assert.match(source, /case "update"[\s\S]*?setup\.mjs/);
@@ -87,6 +96,45 @@ describe("stable package CLI UX", () => {
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
+  });
+
+  test("doctor hooks --fix repairs the caller project's known Graphify hook", {
+    skip: process.platform !== "win32",
+  }, () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), "meta-kim-doctor-hooks-cwd-"));
+    try {
+      const claudeDir = path.join(cwd, ".claude");
+      const graphifyExe = path.join(cwd, "graphify.EXE");
+      const settingsPath = path.join(claudeDir, "settings.json");
+      mkdirSync(claudeDir, { recursive: true });
+      writeFileSync(graphifyExe, "", "utf8");
+      writeFileSync(settingsPath, JSON.stringify({
+        hooks: {
+          PreToolUse: [{
+            matcher: "Read",
+            hooks: [{
+              type: "command",
+              command: `${graphifyExe.replaceAll("/", "\\")} hook-guard read`,
+            }],
+          }],
+        },
+      }, null, 2), "utf8");
+
+      const result = run(cli, ["doctor", "hooks", "--fix", "--silent"], {}, cwd);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const saved = JSON.parse(readFileSync(settingsPath, "utf8"));
+      const hook = saved.hooks.PreToolUse[0].hooks[0];
+      assert.equal(path.resolve(hook.command), path.resolve(graphifyExe));
+      assert.deepEqual(hook.args, ["hook-guard", "read"]);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  test("doctor hooks rejects unknown options before scanning", () => {
+    const result = run(cli, ["doctor", "hooks", "--rewrite-everything"]);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /unknown doctor hooks option/);
   });
 
   test("status accepts language aliases and keeps concise, detailed, and JSON layers compatible", () => {

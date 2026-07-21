@@ -939,13 +939,41 @@ function planCodexSettingRemoval(configText, table, key) {
     throw new Error(`Codex config mutation is ambiguous: duplicate ${table}.${key}.`);
   }
   const assignment = expandedAssignment(configText, candidates[0]);
-  const beforeFragment = assignment.body;
+  let beforeFragment = assignment.body;
   const afterFragment = assignment.body
     .split(/\r\n|\n|\r/u)
     .map((line) => `# Meta_Kim disabled conflicting ${table ? `[${table}].` : ""}${key}: ${line}`)
     .join(parsed.eol);
+  let replaceStart = assignment.start;
+  let replaceEnd = assignment.bodyEnd;
+  const existingIndexes = [];
+  for (
+    let index = configText.indexOf(afterFragment);
+    index >= 0;
+    index = configText.indexOf(afterFragment, index + afterFragment.length)
+  ) {
+    existingIndexes.push(index);
+  }
+  if (existingIndexes.length === 1) {
+    const existingStart = existingIndexes[0];
+    const existingEnd = existingStart + afterFragment.length;
+    const adjacentLine = (value) => /^[\t ]*(?:\r\n|\n|\r)[\t ]*$/u.test(value);
+    if (
+      existingStart >= assignment.bodyEnd &&
+      adjacentLine(configText.slice(assignment.bodyEnd, existingStart))
+    ) {
+      replaceEnd = existingEnd;
+      beforeFragment = configText.slice(replaceStart, replaceEnd);
+    } else if (
+      existingEnd <= assignment.start &&
+      adjacentLine(configText.slice(existingEnd, assignment.start))
+    ) {
+      replaceStart = existingStart;
+      beforeFragment = configText.slice(replaceStart, replaceEnd);
+    }
+  }
   return {
-    text: `${configText.slice(0, assignment.start)}${afterFragment}${configText.slice(assignment.bodyEnd)}`,
+    text: `${configText.slice(0, replaceStart)}${afterFragment}${configText.slice(replaceEnd)}`,
     mutation: {
       kind: "replace",
       locator,

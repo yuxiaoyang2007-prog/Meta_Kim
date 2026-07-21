@@ -5,6 +5,7 @@ import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { detectPython310, formatPythonLauncher, runPythonModule } from "./graphify-runtime.mjs";
+import { sanitizeGraphifyWindowsHooks } from "./graphify-hook-sanitize.mjs";
 import { resolveProjectRoot } from "../canonical/runtime-assets/shared/hooks/project-root.mjs";
 
 const projectRootArgIndex = process.argv.indexOf("--project-root");
@@ -200,6 +201,15 @@ runPython(python, ["-m", "pip", "install", "--upgrade", "networkx>=3.4"], {
 
 if (existsSync(join(rootDir, ".git"))) {
   runPython(python, ["-m", "graphify", "hook", "install"]);
+  const repaired = sanitizeGraphifyWindowsHooks(
+    join(rootDir, ".claude", "settings.json"),
+  );
+  if (repaired.changed) {
+    console.log(
+      `[Meta_Kim] Repaired ${repaired.count} unsafe Graphify hook command(s) ` +
+      `(backup: ${repaired.backup}).`,
+    );
+  }
 } else {
   console.log("[Meta_Kim] Skipping graphify git hook; no .git directory found.");
 }

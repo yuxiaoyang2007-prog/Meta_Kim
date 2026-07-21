@@ -56,6 +56,7 @@ import {
   runPythonModule,
   checkNetworkx,
 } from "./scripts/graphify-runtime.mjs";
+import { sanitizeGraphifyWindowsHooks } from "./scripts/graphify-hook-sanitize.mjs";
 import { resolveManifestSkillSubdir } from "./scripts/install-platform-config.mjs";
 import {
   SETUP_NODE_CHILD,
@@ -4552,6 +4553,20 @@ async function copyToDeployDir(activeTargets, targetDir) {
   console.log(`${C.dim}  ${t.npxQuickCreating} ${targetDir}${C.reset}`);
 
   const bootstrapResult = await applyProjectBootstrapToDir(activeTargets, targetDir);
+  const normalizedTargets = normalizeTargets(activeTargets);
+  let graphifyHookRepair = { changed: false, count: 0, path: null };
+  if (normalizedTargets.includes("claude") || normalizedTargets.includes("all")) {
+    graphifyHookRepair = sanitizeGraphifyWindowsHooks(
+      join(targetDir, ".claude", "settings.json"),
+    );
+    if (graphifyHookRepair.changed) {
+      ok(t.graphifyHooksRepaired(
+        graphifyHookRepair.count,
+        targetDir,
+        graphifyHookRepair.backup,
+      ));
+    }
+  }
   quickDeployDir = quickDeployDir || targetDir;
   quickDeployDirs = uniqueProjectDeployDirs([...quickDeployDirs, targetDir]);
 
@@ -4559,7 +4574,7 @@ async function copyToDeployDir(activeTargets, targetDir) {
   console.log(`${C.dim}  ${targetDir}${C.reset}`);
   printPostCopyBootstrapHint();
   console.log("");
-  return bootstrapResult;
+  return { ...bootstrapResult, graphifyHookRepair };
 }
 
 async function runQuickDeploy() {
@@ -5870,6 +5885,20 @@ async function installPythonTools(
     } else {
       wiringOk = false;
       warn(t.graphifySkillFailed(platform));
+    }
+  }
+
+  // graphify's upstream installer writes Windows shell-form hook commands that
+  // Git Bash mangles; rewrite them to direct-spawn form after every graphify
+  // install/upgrade so the hook is executable on Windows.
+  if (platform() === "win32") {
+    const sanitized = sanitizeGraphifyWindowsHooks(
+      join(graphifyDir, ".claude", "settings.json"),
+    );
+    if (sanitized.changed) {
+      ok(
+        `Rewrote ${sanitized.count} graphify hook command(s) to direct-spawn form (backup: ${sanitized.backup})`,
+      );
     }
   }
 

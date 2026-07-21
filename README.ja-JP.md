@@ -627,6 +627,7 @@ Meta_Kim の記憶は一枚岩ではありません。3 層に分かれ、各層
 - **何を担うか**: プロジェクト単位のコード知識グラフ
 - **保存先**: `graphify-out/graph.json`（NetworkX のノードリンク形式）。深く読む場合は同ディレクトリの `GRAPH_REPORT.md` を優先
 - **動き（データ）**: `node setup.mjs` のオプション Python 手順は graphify を入れ、**冪等に** `python -m graphify claude install` と `python -m graphify hook install` を実行（pip で既に入っていても hook を補完）。git hook は **現在のリポジトリ** で commit/checkout 時に再構築。`npm run meta:graphify:install` も同様（hook 含む）。
+- **Windows の既存プロジェクト移行**: Claude プロジェクトで `C:Users...graphify.EXE: command not found` が残る場合、そのプロジェクト内で `meta-kim doctor hooks --fix` を実行します。`.claude/settings.json` をバックアップし、既知の危険な Graphify Hook 形式だけを修復します。ユーザー設定も確認する場合のみ `--all` を使います。
 - **動き（利用）**: 同期済み meta-theory の `dev-governance.md` Fetch **Step 0.5** がモデル側の検出・利用ルール。バックグラウンド常駐ではない。Claude Code 子エージェントは `subagent-context.mjs` で**短いヒント**のみ。Codex / OpenClaw / Cursor は SubagentStart hook がないが `sync:runtimes` 後は同じ参照を共有。他ランタイムは**対象リポジトリ**で `python -m graphify codex install` や `claw install` を任意で（`python -m graphify --help`）。
 - **価値**:
   - ただのコード文字列ではなく、構造と関係を理解できます

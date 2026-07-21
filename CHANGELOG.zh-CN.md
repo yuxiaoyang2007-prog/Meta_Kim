@@ -8,6 +8,42 @@
 
 ## Unreleased
 
+## [2.8.91] - 2026-07-21
+
+### 解决的问题
+
+2.8.90 已经会在主 setup 和 Graphify CLI 安装器执行后修复 Windows 上的不安全 Graphify 命令，但仍漏了两条真实用户路径：项目复制后的初始化器会独立运行 `graphify hook install`，可能再次生成同样的反斜杠命令；已经出错的旧项目也没有对外可用的迁移命令。因此，手动改好某一个项目的 `.claude/settings.json` 只能修好该项目，不能安全迁移另一个未纳管项目；Meta_Kim 也不应该在没有明确授权范围时扫描并改写磁盘上的任意仓库。
+
+### 修复内容
+
+- **Meta_Kim 负责的每条 Graphify 安装路径都关闭 Windows shell 边界。** post-copy 初始化器会在上游安装命令后立即清理项目 Hook；install/update 刷新也会清理用户明确选择或已有 manifest 纳管的 Claude 项目。未纳管项目保持不动。
+- **旧项目现在有公开且范围明确的迁移命令。** 在出错项目目录运行 `meta-kim doctor hooks --fix`。稳定 CLI 默认只处理调用者当前项目；`--project-root <目录>` 可明确选择另一个项目，只有显式加 `--all` 才会包含用户级设置。
+- **修复范围窄且可恢复。** 只改写已知的 Windows `graphify.EXE hook-guard read|search` shell 形式；保留 Hook 元数据和含空格的可执行路径；原始 JSON 必须先成功备份，再以原子替换方式写入。其他未知不兼容 Hook 仍然只诊断、不自动改写。
+- **全局 Codex 配置在外部漂移后仍可逆恢复。** 如果 active marketplace 键再次出现在 Meta_Kim 以前生成的禁用冲突注释旁边，planner 现在会把相邻重复状态收敛成一条受管注释，并记录可精确反演的 mutation，不会再让全局同步永久停在 partial。
+
+### 验证
+
+- Hook doctor、清理器、公开 CLI、Graphify 接线和运行时聚焦测试 106 个全部通过；完整 setup 测试 415 个全部通过。
+- Codex config planner 回归套件 26 个测试全部通过，并用维护者此前失败的真实配置形态完成了精确内存往返。
+- packed-product 预检成功执行四运行时安装/更新探针，并用真实 npm 包完成一次安装和连续两次更新。
+- 在最初报错的多媒体项目中，新启动的 Claude Code `Read` 探针和 `meta-kim doctor hooks --project-root ... --silent` 都未出现 Hook 错误。
+
+## [2.8.90] - 2026-07-21
+
+### 解决的问题
+
+graphify 上游安装器会把 Windows shell 形式的 hook 命令（`C:\Users\<用户>\...\graphify.EXE hook-guard read`）写进项目 `.claude/settings.json`。Claude Code 在 Windows 上用 Git Bash 跑 shell 形式 hook，反斜杠被当成转义字符吞掉，路径塌成类似 `C:UsersKim...graphify.EXE`，于是每次 `Read`、`Glob`、`Bash` 工具调用都会刷一条 non-blocking 的 `command not found`。Meta_Kim 的 hook 体检已经能把它诊断为 `windows_shell_backslash_path` 不兼容，但只是诊断——安装和更新流程每次还会重新生成那条坏命令，所以在 Windows 上 clone 仓库的人每次全新安装都会撞上同样的报错。
+
+### 修复内容
+
+- **graphify hook 命令在安装时就被修好，而不是只被诊断。** `graphify hook install` 跑完后，setup 流程（`setup.mjs`）和 `meta:graphify:install` / `meta:graphify:update` 流程都会把 Windows shell 形式的 graphify 命令改写成 direct-spawn 的 `command` + `args` 形式（例如 `command: "C:\\...\\graphify.EXE"`，`args: ["hook-guard", "read"]`）。direct-spawn hook 不经过 Bash，可执行文件路径原样保留。修复只在 Windows 生效，幂等，改写前写带时间戳的备份，并且只动 graphify 注入的命令——其他用户 hook 保持原样，等用户自己处理。
+
+### 验证
+
+- 新增 `rewriteHookToDirectSpawn` 单测（在 `doctor-hooks`）覆盖盘符和 UNC 路径改写、安全形式放行（正斜杠、引号包裹、已拆 `args`、裸 `graphify`）、非 graphify 命令保留、非 win32 不处理。
+- 新增 `sanitizeGraphifyWindowsHooks` 单测覆盖文件读写往返、非 win32 不处理、幂等、备份生成、文件缺失、非 graphify 保留、权限和同组 hook 保留。
+- 完整 `npm run meta:test:setup` 通过，409 个测试，0 失败。
+
 ## [2.8.89] - 2026-07-16
 
 ### 解决的问题

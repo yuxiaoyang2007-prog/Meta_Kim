@@ -41,6 +41,7 @@ ${status.usageHeading}:
   meta-kim check [options]
   ${status.usage}
   meta-kim doctor
+  meta-kim doctor hooks [--fix] [--project|--all] [--project-root <dir>]
   meta-kim mcp serve
   meta-kim uninstall [--yes] [--deep] [--scope=global|project|both]
   meta-kim project bootstrap [--project-dir <dir>] [--dry-run|--apply] [--json]
@@ -77,6 +78,32 @@ function validateScopeOptions(args, copy = getStatusCliCopy("en")) {
     if (!["global", "project", "both"].includes(scope)) {
       fail(copy.invalidScope(scope), copy);
     }
+  }
+}
+
+function validateDoctorHooksOptions(args) {
+  const allowedFlags = new Set([
+    "--fix",
+    "--all",
+    "--project",
+    "--silent",
+    "--help",
+    "-h",
+  ]);
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (allowedFlags.has(arg) || arg.startsWith("--lang=")) continue;
+    if (["--lang", "--project-root"].includes(arg)) {
+      if (!args[index + 1] || args[index + 1].startsWith("--")) {
+        fail(`${arg} requires a value`);
+      }
+      index += 1;
+      continue;
+    }
+    fail(`unknown doctor hooks option '${arg}'`);
+  }
+  if (args.includes("--all") && args.includes("--project")) {
+    fail("doctor hooks accepts only one of --all or --project");
   }
 }
 
@@ -204,8 +231,23 @@ switch (command) {
     }
     break;
   case "doctor":
-    if (commandArgs.length > 0) fail(`unknown doctor option '${commandArgs[0]}'`);
-    run("scripts/doctor-interactive.mjs");
+    if (commandArgs.length === 0) {
+      run("scripts/doctor-interactive.mjs");
+    }
+    if (commandArgs[0] !== "hooks") {
+      fail(`unknown doctor subcommand '${commandArgs[0]}'`);
+    }
+    validateDoctorHooksOptions(commandArgs.slice(1));
+    if (commandArgs.slice(1).some((arg) => ["--help", "-h"].includes(arg))) {
+      console.log(renderHelp(resolvedLanguage(commandArgs.slice(1))));
+      process.exit(0);
+    }
+    run(
+      "scripts/doctor-hooks.mjs",
+      commandArgs.slice(1).some((arg) => ["--all", "--project"].includes(arg))
+        ? commandArgs.slice(1)
+        : ["--project", ...commandArgs.slice(1)],
+    );
     break;
   case "uninstall":
     if (commandArgs.some((arg) => !["--yes", "--deep"].includes(arg) && !arg.startsWith("--scope="))) {

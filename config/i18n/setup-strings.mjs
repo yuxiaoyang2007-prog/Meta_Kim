@@ -384,6 +384,8 @@ Possible causes:
     graphifyHookInstalled:
       "graphify git hooks installed (auto-rebuild on commit/checkout)",
     graphifyHookFailed: "graphify git hook installation failed (non-blocking)",
+    graphifyHooksRepaired: (n, project, backup) =>
+      `Repaired ${n} unsafe Graphify hook command(s) in ${project} (backup: ${backup})`,
     graphifyProjectWiringSkipped:
       "Graphify is installed globally. Run `npm run meta:graphify:rebuild` (or `python -m graphify update .`) inside a project to build its knowledge graph.",
     stepMcpMemory: "Meta_Kim cross-session memory",
@@ -1031,6 +1033,8 @@ ${r ? `原始错误：${r}` : ""}
     graphifyHookInstalled:
       "graphify git hook 已安装（commit/checkout 时自动重建图谱）",
     graphifyHookFailed: "graphify git hook 安装失败（不影响其他功能）",
+    graphifyHooksRepaired: (n, project, backup) =>
+      `已修复 ${project} 中 ${n} 个不安全的 Graphify hook 命令（备份：${backup}）`,
     graphifyProjectWiringSkipped:
       "Graphify 已全局安装。在项目目录内跑 `npm run meta:graphify:rebuild`（或 `python -m graphify update .`）生成该项目的知识图谱。",
     stepMcpMemory: "Meta_Kim 跨会话记忆",
@@ -1679,6 +1683,8 @@ ${r ? `生エラー：${r}` : ""}
     graphifyHookInstalled:
       "graphify git hookインストール完了（commit/checkout時に自動再構築）",
     graphifyHookFailed: "graphify git hookインストール失敗（非ブロッキング）",
+    graphifyHooksRepaired: (n, project, backup) =>
+      `${project} の安全でない Graphify hook コマンドを ${n} 件修復しました（バックアップ：${backup}）`,
     projectAssetsCleanupAllClean:
       "全タイプ綺麗（agents/skills/commands/capability-index/hooks）：削除 0",
     graphifyProjectWiringSkipped:
@@ -2351,6 +2357,8 @@ ${r ? `원본 오류：${r}` : ""}
     graphifyHookInstalled:
       "graphify git hook 설치 완료 (commit/checkout 시 자동 재구축)",
     graphifyHookFailed: "graphify git hook 설치 실패 (비차단)",
+    graphifyHooksRepaired: (n, project, backup) =>
+      `${project}의 안전하지 않은 Graphify hook 명령 ${n}개를 복구했습니다 (백업: ${backup})`,
     projectAssetsCleanupAllClean:
       "모든 타입 정리됨 (agents/skills/commands/capability-index/hooks): 삭제 0",
     graphifyProjectWiringSkipped:

@@ -4,15 +4,109 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  detectHookCommandIncompatibility,
   detectHookRuntimeIncompatibility,
   extractCommandPath,
   extractHookTargetPath,
   findProjectSettings,
   projectRootFromArgs,
   removeZombies,
+  rewriteHookToDirectSpawn,
   resolveHookTargetPath,
   scanSettingsFile,
 } from "../../scripts/doctor-hooks.mjs";
+
+describe("rewriteHookToDirectSpawn()", () => {
+  test("rewrites a graphify Windows shell-form hook into command + args", () => {
+    const hook = {
+      type: "command",
+      timeout: 17,
+      statusMessage: "Indexing context",
+      command: String.raw`C:\Users\Kim\Python\Scripts\graphify.EXE hook-guard read`,
+    };
+    const next = rewriteHookToDirectSpawn(hook, "win32");
+    assert.deepEqual(next, {
+      type: "command",
+      timeout: 17,
+      statusMessage: "Indexing context",
+      command: String.raw`C:\Users\Kim\Python\Scripts\graphify.EXE`,
+      args: ["hook-guard", "read"],
+    });
+  });
+
+  test("keeps a Graphify executable path containing spaces intact", () => {
+    const hook = {
+      type: "command",
+      command: String.raw`C:\Users\Kim Name\Python\Scripts\graphify.EXE hook-guard read`,
+    };
+    const next = rewriteHookToDirectSpawn(hook, "win32");
+    assert.equal(
+      next.command,
+      String.raw`C:\Users\Kim Name\Python\Scripts\graphify.EXE`,
+    );
+    assert.deepEqual(next.args, ["hook-guard", "read"]);
+  });
+
+  test("rewrites a UNC graphify path into command + args", () => {
+    const hook = {
+      type: "command",
+      command: String.raw`\\server\share\graphify.EXE hook-guard search`,
+    };
+    const next = rewriteHookToDirectSpawn(hook, "win32");
+    assert.equal(next.command, String.raw`\\server\share\graphify.EXE`);
+    assert.deepEqual(next.args, ["hook-guard", "search"]);
+  });
+
+  test("leaves safe forms untouched", () => {
+    const safe = [
+      "C:/Users/Kim/Python/Scripts/graphify.EXE hook-guard read",
+      String.raw`"C:\Users\Kim\Python\Scripts\graphify.EXE" hook-guard read`,
+      "graphify hook-guard read",
+    ];
+    for (const command of safe) {
+      assert.equal(
+        rewriteHookToDirectSpawn({ type: "command", command }, "win32"),
+        null,
+      );
+    }
+    assert.equal(
+      rewriteHookToDirectSpawn(
+        {
+          type: "command",
+          command: String.raw`C:\Users\Kim\Python\Scripts\graphify.EXE`,
+          args: ["hook-guard", "read"],
+        },
+        "win32",
+      ),
+      null,
+    );
+  });
+
+  test("leaves non-graphify shell-form hooks untouched", () => {
+    const hook = {
+      type: "command",
+      command: String.raw`C:\Users\Kim\bin\other-tool.EXE run`,
+    };
+    assert.equal(rewriteHookToDirectSpawn(hook, "win32"), null);
+  });
+
+  test("leaves Graphify commands outside the known hook-guard contract untouched", () => {
+    const hook = {
+      type: "command",
+      command: String.raw`C:\Users\Kim\Python\Scripts\graphify.EXE update .`,
+    };
+    assert.equal(rewriteHookToDirectSpawn(hook, "win32"), null);
+  });
+
+  test("is a no-op outside win32", () => {
+    const hook = {
+      type: "command",
+      command: String.raw`C:\Users\Kim\Python\Scripts\graphify.EXE hook-guard read`,
+    };
+    assert.equal(rewriteHookToDirectSpawn(hook, "linux"), null);
+    assert.equal(rewriteHookToDirectSpawn(hook, "darwin"), null);
+  });
+});
 
 function withTempProject(run) {
   const root = mkdtempSync(path.join(tmpdir(), "meta-kim-hook-doctor-"));
@@ -201,6 +295,74 @@ describe("doctor-hooks extractCommandPath", () => {
 });
 
 describe("doctor-hooks project-aware runtime diagnostics", () => {
+  test("detects only unquoted Windows backslash paths in shell-form hooks", () => {
+    const broken = {
+      type: "command",
+      command: String.raw`C:\Users\Kim\Python\Scripts\graphify.EXE hook-guard read`,
+    };
+    const issue = detectHookCommandIncompatibility(broken, "win32");
+    assert.equal(issue?.code, "windows_shell_backslash_path");
+    assert.equal(issue?.path, String.raw`C:\Users\Kim\Python\Scripts\graphify.EXE`);
+
+    const uncIssue = detectHookCommandIncompatibility({
+      type: "command",
+      command: String.raw`\\server\share\graphify.EXE hook-guard read`,
+    }, "win32");
+    assert.equal(uncIssue?.code, "windows_shell_backslash_path");
+    assert.equal(uncIssue?.path, String.raw`\\server\share\graphify.EXE`);
+
+    for (const safe of [
+      {
+        type: "command",
+        command: "C:/Users/Kim/Python/Scripts/graphify.EXE hook-guard read",
+      },
+      {
+        type: "command",
+        command: String.raw`"C:\Users\Kim\Python\Scripts\graphify.EXE" hook-guard read`,
+      },
+      {
+        type: "command",
+        command: String.raw`C:\Users\Kim\Python\Scripts\graphify.EXE`,
+        args: ["hook-guard", "read"],
+      },
+      {
+        type: "command",
+        command: String.raw`echo C:\Users\Kim\payload.txt`,
+      },
+    ]) {
+      assert.equal(detectHookCommandIncompatibility(safe, "win32"), null);
+    }
+    assert.equal(detectHookCommandIncompatibility(broken, "linux"), null);
+  });
+
+  test("classifies the broken Graphify shell path as incompatible and preserves it", {
+    skip: process.platform !== "win32",
+  }, () => {
+    withTempProject((root) => {
+      const hook = {
+        type: "command",
+        command: String.raw`C:\Users\Kim\Python\Scripts\graphify.EXE hook-guard read`,
+      };
+      const settingsPath = writeHookSettings(root, [hook]);
+      const result = scanSettingsFile(settingsPath);
+
+      assert.equal(result.zombies.length, 0);
+      assert.equal(result.live.length, 0);
+      assert.equal(result.unverified.length, 0);
+      assert.equal(result.incompatible.length, 1);
+      assert.equal(result.incompatible[0].code, "windows_shell_backslash_path");
+      assert.equal(
+        result.incompatible[0].path,
+        String.raw`C:\Users\Kim\Python\Scripts\graphify.EXE`,
+      );
+
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      const cleaned = removeZombies(settings, settingsPath);
+      assert.equal(cleaned.removed, 0);
+      assert.deepEqual(cleaned.settings, settings);
+    });
+  });
+
   test("recognizes an existing direct-spawn node target from args", () => {
     withTempProject((root) => {
       const hookPath = path.join(root, ".claude", "hooks", "hook with spaces.mjs");

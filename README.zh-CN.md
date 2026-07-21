@@ -694,6 +694,7 @@ Meta_Kim 的记忆不是单一的。它有三层，各有分工，共同保障 a
 - **负责什么**：项目级别的代码知识图谱
 - **存储位置**：`graphify-out/graph.json`（NetworkX 节点链接格式）；人和 agent 应通过 query/path/explain 小切片使用它，`GRAPH_REPORT.md` 只作为大范围架构导览
 - **工作机制（数据面）**：`node setup.mjs` 可选步骤会安装 graphify、并**幂等**执行 `python -m graphify claude install` 与 `python -m graphify hook install`（即使 graphify 已通过 pip 安装过也会补全 hook）；git hook 在 commit/checkout 时触发当前仓库内图谱重建。`npm run meta:graphify:install` 行为与之一致（含 hook）。
+- **Windows 旧项目迁移**：如果已有 Claude 项目仍报 `C:Users...graphify.EXE: command not found`，请在该项目目录运行 `meta-kim doctor hooks --fix`。命令会先备份 `.claude/settings.json`，并且只修复已知的不安全 Graphify Hook；只有在也准备检查用户级配置时才加 `--all`。
 - **工作机制（使用面）**：同步后的 `meta-theory` 里 Fetch Step 0.5 约定模型如何检测与使用图谱；**不是**后台常驻进程。Claude Code 子代理仅通过 `subagent-context.mjs` 收到**短提示**，不会自动把整份 `graph.json` 塞进上下文。聚焦任务应先用 `graphify query`、`graphify path` 或 `graphify explain` 拿候选文件锚点，再回读真实源文件确认会影响路线的判断。Codex / OpenClaw / Cursor 无该 hook，但共享同一份 `dev-governance.md` 引用；其他工具端可在**目标仓库**按需执行 `python -m graphify codex install` 或 `python -m graphify claw install`（参见 `python -m graphify --help`）。
 - **核心价值**：
   - 让记忆越来越熟悉项目——不是记住代码原文，而是理解代码的结构和关系

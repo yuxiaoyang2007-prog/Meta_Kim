@@ -8,6 +8,42 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## Unreleased
 
+## [2.8.91] - 2026-07-21
+
+### Solved Problem
+
+Version 2.8.90 repaired the unsafe Windows Graphify command after the main setup and Graphify CLI installers ran, but two real user paths remained open. The project post-copy initializer independently runs `graphify hook install` and could recreate the same backslash command, while projects that were already broken had no supported public migration command. Editing one project's `.claude/settings.json` therefore fixed that project only; it could not safely migrate another unmanaged project, and Meta_Kim must not scan and rewrite arbitrary repositories without explicit user scope.
+
+### Fixed
+
+- **Every Meta_Kim-owned Graphify install path now closes the Windows shell boundary.** The post-copy initializer sanitizes the project Hook immediately after the upstream installer, and install/update refreshes sanitize explicitly selected or manifest-managed Claude project deployments. Unmanaged projects remain untouched.
+- **Existing projects have a public, scoped migration command.** Run `meta-kim doctor hooks --fix` from the affected project. The stable CLI defaults to that caller project; `--project-root <dir>` selects another project explicitly, and `--all` is required before user-level settings are included.
+- **Repairs are narrow and recoverable.** Only the known Windows `graphify.EXE hook-guard read|search` shell form is rewritten. Hook metadata and executable paths containing spaces are preserved, the original JSON must be backed up successfully, and the repaired file is promoted atomically. Unknown incompatible Hooks remain diagnostic-only.
+- **Global Codex config recovery remains reversible after external drift.** If an active marketplace key reappears beside Meta_Kim's earlier disabled-conflict comment, the planner now collapses the adjacent duplicate into one managed comment and records an exactly invertible mutation instead of leaving global sync permanently partial.
+
+### Verification
+
+- Focused Hook doctor, sanitizer, public CLI, Graphify wiring, and runtime tests passed with 106 tests and 0 failures; the complete setup suite passed with 415 tests and 0 failures.
+- The Codex config planner regression suite passed with 26 tests and confirmed an exact in-memory round trip against the maintainer's previously failing real config shape.
+- The packed-product preflight exercised four-runtime install/update probes and a real npm package install followed by two updates successfully.
+- A fresh Claude Code `Read` probe and `meta-kim doctor hooks --project-root ... --silent` both completed without Hook errors in the originally reported multimedia project.
+
+## [2.8.90] - 2026-07-21
+
+### Solved Problem
+
+graphify's upstream installer writes Windows shell-form hook commands (`C:\Users\<user>\...\graphify.EXE hook-guard read`) into the project `.claude/settings.json`. Claude Code runs shell-form hooks through Git Bash, which consumes those backslashes as escapes and collapses the path to something like `C:UsersKim...graphify.EXE`, so every `Read`, `Glob`, and `Bash` tool call logged a non-blocking `command not found`. The Meta_Kim hook doctor could already diagnose this as a `windows_shell_backslash_path` incompatibility, but only as a diagnostic — the install and update flows kept regenerating the broken command, so anyone who cloned the repo on Windows hit the same noise on every fresh install.
+
+### Fixed
+
+- **graphify hook commands are repaired at install time, not just diagnosed.** After `graphify hook install` runs, both the setup flow (`setup.mjs`) and the `meta:graphify:install` / `meta:graphify:update` flows rewrite the Windows shell-form graphify command into the direct-spawn `command` + `args` form (for example `command: "C:\\...\\graphify.EXE"`, `args: ["hook-guard", "read"]`). Direct-spawn hooks bypass the Bash boundary, so the executable path survives verbatim. The repair is Windows-only, idempotent, writes a timestamped backup before changing anything, and only touches graphify-injected commands — unrelated user hooks are preserved for explicit review.
+
+### Verification
+
+- New `rewriteHookToDirectSpawn` unit tests (in `doctor-hooks`) cover drive-letter and UNC shell-form rewrites, safe-form passthrough (forward slashes, quoted, already-split `args`, bare `graphify`), non-graphify preservation, and non-win32 no-op.
+- New `sanitizeGraphifyWindowsHooks` unit tests cover the file round-trip, non-win32 no-op, idempotency, backup creation, missing-file handling, non-graphify preservation, and permissions/sibling-hook preservation.
+- Full `npm run meta:test:setup` passed with 409 tests, 0 failures.
+
 ## [2.8.89] - 2026-07-16
 
 ### Solved Problem

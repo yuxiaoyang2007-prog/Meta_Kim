@@ -332,6 +332,7 @@ console.log("forced rebuild ok");
     const applyBody = src.slice(applyStart, applyEnd);
 
     assert.match(body, /applyProjectBootstrapToDir\(activeTargets, targetDir\)/);
+    assert.match(body, /sanitizeGraphifyWindowsHooks\([\s\S]*?join\(targetDir, "\.claude", "settings\.json"\)/);
     assert.doesNotMatch(applyBody, /writePostCopyBootstrap\(targetDir, activeTargets\)/);
     assert.match(applyBody, /projectBootstrapTransactionalPlan\(plan, targetDir, backup\)/);
     assert.match(applyBody, /executeSafeManagedFileTransaction\(\{/);
@@ -386,6 +387,7 @@ console.log("forced rebuild ok");
     assert.match(body, /\["-m", "pip", "show", "graphifyy"\]/);
     assert.match(body, /\["-m", "pip", "install", "graphifyy"\]/);
     assert.match(body, /\["-m", "graphify", "hook", "install"\]/);
+    assert.match(body, /sanitizeGraphifyWindowsHooks\([\s\S]*?join\(rootDir, "\.claude", "settings\.json"\)/);
     assert.match(body, /\["-m", "graphify", platform, "install"\]/);
     assert.match(body, /\["-m", "graphify", "update", "\."\]/);
     assert.match(body, /process\.argv\.includes\("--auto"\)/);
