@@ -8,6 +8,62 @@
 
 ## Unreleased
 
+## [2.9.0] - 2026-07-25
+
+### 解决的问题
+
+首版 Harness Fitness Lab 已能证明 runner 会如实报告负结果，但简单任务和高风险任务出现质量天花板，无法分别判断核心治理、Review 链和 Evolution 的价值与成本。继续事后收紧隐藏测试，或人为设置任务耗时预算，只会制造失败，不是在测量用户结果。
+
+### 修复内容
+
+- **实验能拆分组件，又不会把天花板任务改造成陷阱。** P-135 新增 `baseline -> slim -> reviewed -> full` 累积梯子，每个任务/组重复 3 次；每题 5 条可见要求与 5 条 held-out 行为检查一一绑定；简单任务改成无预算的 single-flight 并发语义场景。只有所有组都达到相同满分时，才允许用自然 token/耗时差异证明额外成本；成本证据永远不能冒充质量收益。
+- **默认治理深度按实测价值收敛。** Critical / Fetch / Thinking 仍是 canonical 顺序与真相边界，但明确、低风险的本地任务只需简洁的内联记录。Review / Meta-Review 按风险、歧义、影响范围、验证失败或声明强度触发。Evolution 能力和 canonical 阶段完整保留，但退出默认执行脚手架；没有持久学习触发条件时，直接内联记录 `none-with-reason`，不再派发 Evolution 工作。
+- **Fitness trial 在闪退后可以真正续跑。** provider 身份与结构化 provider 证据分离保存，旧结果可安全推断；正式结果指针不参与不可变合同定义摘要。同一正式 run-id 重启后复用了全部 36 个 trial，没有再次调用 provider。
+
+### 验证
+
+- Windows 原生 Codex 正式矩阵完成 36/36 个 live trial，保留完整 JSONL trajectory 且全部具备产品证据资格；四组均为 9/9、盲评 5/5，因此没有任何治理组件被宣称有质量收益。
+- 核心治理相对 baseline 的 token/墙钟成本为 1.201×/1.354×，改为条件启用；Review 相对 slim 为 1.029×/0.971×，同样条件启用；Evolution 相对 reviewed 为 1.525×/1.289×，从默认脚手架移除。
+- Docker、WSL、任务预算、提权或绕过 sandbox 均未参与验收；fixture 和被用户叫停在 2/12 的预算实验只保留为诊断，不能计产品证据。
+
+## [2.8.93] - 2026-07-24
+
+### 解决的问题
+
+Meta_Kim 已经有大量治理结构，但此前没有受控实验能证明这些结构是否真的改善任务结果。Windows Codex 试跑还曾把 headless 审批策略覆盖误判成整个平台只读，既阻塞真实产品证据，也容易把 Docker 诊断错当成用户路径验收。
+
+### 修复内容
+
+- **Harness Fitness Lab 开始测量真实结果，而不是 packet 完整度。** Codex 原生 runner 按固定随机顺序执行 3 类任务 × 3 组 × 3 次试验，使用隔离且已有初始提交的工作区、held-out 环境测试、匿名质量评分、完整 JSONL trajectory、token/工具/返工/墙钟指标、不可变可续跑结果，并明确区分诊断证据和产品证据。
+- **Windows 原生试验改用 Codex 支持的权限路径。** 独立宿主把 `:workspace`、`on-request` 与原生 auto-reviewer 绑定，只使用一个外部 Git 工作区根，并拒绝嵌套在 Codex Desktop managed session 中运行。Docker、fixture、计划结果、提权和绕过 sandbox 都不能满足产品验收。
+- **首轮负结论被如实保留。** 27 次原生试验全部完成：完整治理 9/9，基线与去掉 Review 均为 8/9，成本在 1.5 倍预算内；但只有模糊产品任务显著提升，因此通用 2/3 fitness 门槛仍失败，Review 也没有证明独立收益。下一项是消除基准天花板并做治理瘦身，而不是继续堆框架。
+
+### 验证
+
+- 独立 Windows 原生 pilot 在不使用 Docker、不提权、不绕过 sandbox 的条件下完成真实文件修改、公开测试和 held-out 测试。
+- 正式矩阵完成 27/27 个 live Codex trial，并保留 `criteriaPass=false`，没有为了发布而篡改结论。
+- 发布前必须通过合同、计划器、provider 参数安全、评分、失败分母、partial pilot、package surface、唯一 PRD、Graphify、投影、setup、Meta-Theory、integration 和 packed release 验证。
+
+## [2.8.92] - 2026-07-24
+
+### 解决的问题
+
+标准发布链此前可能在 smoke evaluator 进程正常退出后报告成功，即使 evaluator 自己的证据已经标明运行时只有 projection、并不具备 release-grade。Claude 发现逻辑还把 Agent View 命令误当成自定义 Agent 定义来源；Codex 则可能仅凭模型生成的 JSON 或超时恢复结果通过 live evaluator，而没有证明真实子 Agent 已完成。最终导致发布声明强于 Claude Code 和 Codex 的底层证据。
+
+### 修复内容
+
+- **标准发布现在只有一道双主运行时保险丝。** release evaluator 固定检查 Claude Code 与 Codex，先验证完整的九个治理 Agent 结构清单，再要求两个主运行时各有一次真实宿主调用成功。smoke、canonical fallback、fixture、模型自述 JSON 和 projection-only 证据仍可诊断，但不能打开发布保险丝。
+- **运行时身份只按宿主实际证明的层级报告。** Claude 自定义 Agent 从真实的项目/全局声明中发现，并通过 `claude --agent` 主会话绑定实测；Codex 从 TOML 的 `name` 字段发现定义。当活动 `spawn_agent` schema 没有 `agent_type` 时，完成的 child 会诚实记录为 run-scoped 调用，不会被误报成已经加载某个 custom Agent。
+- **Codex CLI 未完整转发事件时，仍能安全验证完成链。** evaluator 优先消费原生 JSONL；如果 Codex 0.144.x 已持久化完成的协作事件、但 `exec --json` 没有转发，则只接受本轮精确且新鲜的 exec thread 及其唯一 child 回链。错误、陈旧、重复、超大小、链接路径或 fixture 证据全部 fail closed；公开报告只保留 ID 与摘要。
+- **全局更新在宿主规范化和动态重建后仍保持真实归属。** Claude 只有在解包后的 Windows `cmd` 启动定义精确命中 manifest 指纹时，才允许迁移受管的持久化 MCP；Codex TOML 日志只会折叠宿主恢复后的完全相同重放，或在受管结果不变时重基到最新宿主值。命令被追加参数或目标结果变化时仍然 fail closed。
+
+### 验证
+
+- evaluator、observer、发布链、session 关联、路径安全和隐私聚焦回归 77 个全部通过；独立 P0/P1 Review 未发现发布真相或信息泄漏阻断项。
+- 真实双主运行时保险丝通过：Claude Code 与 Codex 均为 `strictReleasePass=true`；Codex 证明了 `spawn_agent -> returned_child_final`，同时保持诚实的 run-scoped 绑定边界。
+- 全局 MCP 归属、持久化 bundle 生命周期、Codex TOML 日志与 manifest 聚焦回归全部通过，并完成真实 v2.8.91 到 v2.8.92 的全局同步及同步后检查。
+- 正式发布前，最终候选必须继续通过完整 packed-product、四运行时投影/安装、Graphify、setup、Meta-Theory、integration 与双主运行时发布套件。
+
 ## [2.8.91] - 2026-07-21
 
 ### 解决的问题

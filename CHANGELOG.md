@@ -8,6 +8,62 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## Unreleased
 
+## [2.9.0] - 2026-07-25
+
+### Solved Problem
+
+Meta_Kim's first Harness Fitness Lab could prove that its benchmark runner was honest, but two task classes hit a quality ceiling and the experiment could not isolate the cost or value of the core governance scaffold, the Review chain, and Evolution. Repeatedly making hidden tests harsher—or imposing an artificial task-time budget—would have manufactured failures instead of measuring user outcomes.
+
+### Fixed
+
+- **The lab now measures components without turning ceiling tasks into traps.** P-135 adds a cumulative `baseline -> slim -> reviewed -> full` ladder, three repetitions for each task/group pair, five visible requirements bound one-to-one to held-out behavior checks, an unbudgeted single-flight concurrency scenario, and a cost-only discrimination branch that is valid only when every group achieves the same perfect outcome. Cost-only evidence can prove overhead, never quality benefit.
+- **Default governance depth now follows measured value.** Critical / Fetch / Thinking stay the canonical ordering and truth boundary but use concise inline records for clear low-risk local work. Review / Meta-Review run conditionally by risk, ambiguity, blast radius, failed verification, or claim strength. Evolution remains a canonical capability but leaves the default execution scaffold; without a durable learning trigger, the run closes inline with `none-with-reason` instead of dispatching Evolution work.
+- **Fitness trials can genuinely resume after a crash.** Trial results now retain a stable provider identity separately from structured provider evidence, legacy results are inferred safely, and the formal-result pointer is excluded from the immutable contract-definition digest. Restarting the same formal run reused all 36 completed trials without another provider invocation.
+
+### Verification
+
+- The native Windows/Codex formal matrix completed 36/36 live trials with complete JSONL trajectories and product-evidence eligibility; all four groups achieved 9/9 and 5/5, so no governance component is credited with a quality gain.
+- Core governance measured 1.201× token and 1.354× wall-clock cost versus baseline and is conditional; Review measured 1.029× token and 0.971× time versus slim and is conditional; Evolution measured 1.525× token and 1.289× time versus reviewed and is removed from the default scaffold.
+- No Docker, WSL, task budget, elevated access, or sandbox bypass contributed to acceptance. Fixture runs and the stopped 2/12 budget experiment remain diagnostic-only and cannot satisfy product evidence.
+
+## [2.8.93] - 2026-07-24
+
+### Solved Problem
+
+Meta_Kim had extensive governance structure but no controlled experiment showing whether that structure improved real outcomes. Its earlier Windows Codex pilot also mistook a headless approval-policy override for a platform-wide read-only limitation, which blocked real product evidence and encouraged an invalid Docker substitute.
+
+### Fixed
+
+- **Harness Fitness Lab now measures outcome truth instead of packet completeness.** A Codex-native runner executes a seeded 3-task × 3-group × 3-trial matrix with isolated committed workspaces, held-out environment tests, anonymized quality scoring, complete JSONL trajectories, token/tool/rework/wall-clock metrics, immutable resumable trial results, and explicit diagnostic-versus-product evidence boundaries.
+- **Native Windows trials use Codex's supported permission path.** Standalone runs bind `:workspace` permissions to `on-request` plus the native auto-reviewer, use one external Git workspace root, and reject managed Codex Desktop nesting. Docker, fixtures, planned runs, elevated access, and sandbox bypasses cannot satisfy product acceptance.
+- **The first result is preserved as a real negative fitness decision.** All 27 native trials completed: full governance succeeded 9/9 versus 8/9 for baseline and Review ablation, within the 1.5× cost budget, but only fuzzy product work improved materially. The general 2-of-3 fitness gate therefore remains failed, Review has no demonstrated independent benefit, and the next governed item is benchmark de-ceiling plus governance slimming—not another framework layer.
+
+### Verification
+
+- The standalone native Windows pilot completed real file changes plus public and held-out tests without Docker or unsafe permissions.
+- The formal matrix completed 27/27 live Codex trials with product-evidence eligibility and retained `criteriaPass=false` rather than promoting a convenient result.
+- Contract, planner, provider argument safety, scoring, failure-denominator, partial-pilot, package-surface, unique-PRD, Graphify, projection, setup, Meta-Theory, integration, and packed release paths are required to pass before publication.
+
+## [2.8.92] - 2026-07-24
+
+### Solved Problem
+
+The standard release path could report success after a smoke evaluator exited cleanly even when its own evidence said the runtime was projection-only and not release-grade. Claude discovery also confused the Agent View command with custom-agent definitions, while Codex could satisfy the live evaluator with model-authored JSON or timeout recovery without proving that a real child Agent completed. This made the release claim stronger than the underlying Claude Code and Codex evidence.
+
+### Fixed
+
+- **Standard releases now have one dual-primary runtime fuse.** The release evaluator fixes its scope to Claude Code and Codex, requires the complete nine-agent structural inventory, and permits release-grade only after one real host invocation succeeds in each primary runtime. Smoke, canonical fallback, fixtures, model-authored JSON, and projection-only evidence remain diagnostic and cannot open the fuse.
+- **Runtime identity is reported at the level the host actually proves.** Claude custom agents are discovered from declared project/global definitions and verified through a real `claude --agent` main-session binding. Codex definitions are discovered from TOML `name` fields; when the active `spawn_agent` schema has no `agent_type`, a completed child is recorded truthfully as a run-scoped invocation rather than being mislabeled as a loaded custom agent.
+- **Codex completion evidence survives incomplete CLI forwarding without trusting arbitrary files.** The evaluator first consumes native JSONL events. If Codex 0.144.x persists the completed collaboration but omits it from `exec --json`, the fallback accepts only the exact fresh exec thread and its unique child backlink from the bounded local session store. Wrong, stale, duplicate, oversized, linked, or fixture evidence fails closed, and public reports retain only IDs and digests.
+- **Global updates preserve ownership truth across host normalization and regeneration.** A Claude-managed durable MCP command may be migrated after Claude wraps it with an exact Windows `cmd` launcher only when the unwrapped definition matches the recorded manifest fingerprint. Codex TOML journals now collapse exact host-restored replays and rebase regenerated host values only when the managed result is unchanged; altered commands or different results still fail closed.
+
+### Verification
+
+- Focused evaluator, observer, release-chain, session-correlation, path-safety, and privacy regressions passed with 77 tests and 0 failures; an independent P0/P1 review found no release-truth or disclosure blocker.
+- A real primary-runtime fuse completed with both Claude Code and Codex marked `strictReleasePass=true`; Codex proved `spawn_agent -> returned_child_final` while preserving the truthful run-scoped binding boundary.
+- Focused global MCP ownership, durable bundle lifecycle, Codex TOML journal, and manifest regressions passed, including real v2.8.91-to-v2.8.92 global sync and post-sync checks.
+- The final release candidate is required to pass the complete packed-product, four-runtime projection/install, Graphify, setup, Meta-Theory, integration, and dual-primary runtime release suite before publication.
+
 ## [2.8.91] - 2026-07-21
 
 ### Solved Problem
