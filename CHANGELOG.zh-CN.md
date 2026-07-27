@@ -8,6 +8,38 @@
 
 ## Unreleased
 
+## [2.9.4] - 2026-07-26
+
+### 修复内容
+
+- **LangGraph 现在可以进入真实 Dynamic Workflow，但不会变成第二套工作流引擎。** 可选 ready-set adapter 只消费 `coreLoop.stageDagPacket` 已经选好的精确节点，用 LangGraph Functional API 的 `entrypoint` 和 `task` 包裹执行；流程图、checkpoint、lease、恢复和 merge 权威仍在 Meta_Kim。
+- **普通安装完全不变。** 默认仍用原生执行；只有显式选择 `--stage-runner-orchestrator langgraph` 才动态加载维护者自己安装的 `@langchain/langgraph`；包缺失或接口不兼容会明确失败，不会静默退回原生路径。
+- **真实打包外部消费者验收证明了边界。** 普通候选包没有 LangGraph 依赖，显式选择时会明确失败且不回退原生路径；单独安装 `@langchain/langgraph@1.4.8` 后，A 节点耐久提交时故意结束进程，再启动只执行 B，最终 merge 一次。验收中的确定性 worker 明确标成 test-only，不能冒充原生运行端正证。没有凭证支持的 OpenAI Agents 与 Claude Agent SDK 适配器仍如实标记为未实现、未做 live 证明。
+- **Claude Code 的 live 发布验收不再被无关的用户提示词 Hook 改写结构化证据。** 验收器读取真实已安装的运行端 Agent 定义，校验声明身份和边界字段、记录完整文件摘要，再通过 Claude 原生 `--setting-sources "" --agents --agent` 路径绑定紧凑投影。空设置源只排除无关的用户/项目 Hook，不会禁用显式内联 Agent，也不切断宿主管理的登录凭据。用户 Hook 不会被修改，报告也会把这种 inline binding 与普通加载的自定义 Agent 明确区分。
+- **MCP Memory 的安装、更新和开机启动现在可恢复且安静。** 安装路径固定为 `mcp-memory-service[sqlite]==11.5.5`，强制使用 ONNX 并禁止 hash embedding。更新先构建并行候选环境、证明联网与开机离线两种真实 ONNX 向量，再取得 endpoint 事务锁；随后只停止 PID、启动身份、可执行文件/launcher、host、port 与 argv 全部匹配的 listener，对已静止的 SQLite 数据库执行 backup 与 `quick_check`，并在候选服务健康且监听进程身份匹配后，才依次更新 MCP 配置、boot 文件和 active 状态。由目标 runtime 验证的绝对数据库路径会同时写进 MCP 配置、live env、全部 boot launcher、active state 和 recovery journal，自定义数据库不会在重启后静默退回默认路径。崩溃恢复先取得同一 endpoint 锁，在 restore 前精确停止旧或候选 writer，遇到未知 listener 则 fail closed。恢复材料只保存 MCP Memory 条目与必要状态，使用私有权限；commit 后立即删除敏感 backup/recovery，失败材料也只按受控命名保守过期。setup 与 boot 共用 owner-aware endpoint mkdir 锁，不再使用名称级广泛杀进程或 GUI 通知。
+- **Windows C++ 运行库代际混装时，不再退回 hash 或只给一个模糊的安装失败。** 包安装成功但 ONNX 依赖探针失败时，setup 只允许从本机 Visual Studio 官方 Redist 树中发现完整、同版本的 x64 CRT bundle，把允许列表 DLL 放到候选 ONNX 模块旁并重试一次。非 Windows、文件不完整或混版、符号链接/路径逃逸、缺少官方资产都会 fail closed；setup 不写 System32、不下载任意 DLL，也不借用其他应用私带的运行库。
+
+## [2.9.3] - 2026-07-26
+
+### 解决的问题
+
+Meta_Kim 已能让 Claude Code 和 Codex 执行 Dynamic Workflow 阶段图，但进程中断后仍接近“重新运行原请求”。闪退可能让已完成 worker 再做一次，生成产物也可能与运行状态不一致；原有 checkpoint/replay 字段并不等于可耐久恢复到具体节点。
+
+### 修复内容
+
+- **governed run 现在从 append-only SQLite kernel 恢复。** 每个 run 精确绑定任务与 canonical graph digest，记录哈希事件链、节点 attempt、checkpoint、lease、fencing token、coordinator、fork lineage 和真实 traversed edge。节点完成与边遍历原子提交；事件、投影、checkpoint、claim 或物化摘要被篡改时 fail closed。
+- **闪退后只继续没做完的工作。** 正式 runner 把新执行和恢复入口分开；活跃 lease 不能被抢占；只有身份绑定的 staging/final artifact 状态可修复；最终只物化一对 JSON/Markdown，不重跑 worker。子进程强制退出测试证明：A 已完成就保留，只在 lease 到期后继续 B，merge 只执行一次。
+- **Claude Code 与 Codex 共用同一耐久接口，但不会多出第二张图。** 两端仍只消费 `coreLoop.stageDagPacket`；bridge 只保存 execution projection，不能重定义阶段、依赖或 merge owner。本版本仍禁止外部副作用；effect reconciliation 只是以后适配器启用副作用前的安全边界，不冒充真实外部 effect 证明。
+- **运行端启动和留存证据进一步收紧。** Windows CLI 按 PATH 目录先后选择可用入口；子进程只继承精确列出的登录/配置变量，不再按前缀通配；内置和自定义 worker 输出都会在耐久保存前限长、脱敏。
+- **全局更新能收口 Codex App 的路径再生成，但不会接管用户配置。** Codex 生成新的有效内置 marketplace 路径、旁边又留着 Meta_Kim 旧的精确冲突注释时，合并器只删除这条旧受管注释并结束对应 journal ownership；未知、重复、不相邻或用户自写内容仍 fail closed。
+
+### 验证
+
+- durable kernel、runner、bridge、graph、CLI、唯一 PRD、篡改、闪退恢复、artifact 修复、凭证边界和遍历边的针对性测试为 126/126；独立架构、持久化、bridge、安全与最终 Review 均未发现 P1/P2 阻塞。
+- 原生 run `p117-2026-07-26T05-36-46-515Z` 四项产品场景全部通过：最终环境边界修复后，Claude Code 与 Codex 各完成一次串行 worker 和一次真实重叠的双 worker fan-out/merge。
+- 耐久正式入口 run `p117-governed-2026-07-26T05-39-25-380Z` 在 Codex 与 Claude Code 两端均通过且 `releaseEligible=true`，单独证明了 kernel-backed 执行与物化路径，不拿四场景 bridge 验收替代耐久证据。
+- 标准 `meta:verify:all` 在同一次不中断运行中 13/13 全过，覆盖四目标隔离 install/update、packed 用户/项目 install-update、全局 Hook、Graphify、setup、Meta-Theory 1342 项 0 失败、integration 以及 fresh Claude Code/Codex live release fuse。Docker、Cursor 产品执行、合成 provider 输出、任务/token 预算、项目修改和外部副作用均不属于本次验收。
+
 ## [2.9.2] - 2026-07-26
 
 ### 解决的问题
