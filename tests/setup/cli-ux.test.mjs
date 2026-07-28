@@ -35,6 +35,16 @@ describe("stable package CLI UX", () => {
     assert.match(help.stdout, /meta-kim status/);
     assert.match(help.stdout, /meta-kim uninstall/);
     assert.match(help.stdout, /meta-kim doctor hooks/);
+    assert.match(help.stdout, /meta-kim release audit/);
+    assert.match(help.stdout, /meta-kim release close/);
+
+    const releaseAuditHelp = run(cli, ["release", "audit", "--help"]);
+    assert.equal(releaseAuditHelp.status, 0, releaseAuditHelp.stderr);
+    assert.match(releaseAuditHelp.stdout, /historical-report-unavailable/);
+
+    const releaseCloseHelp = run(cli, ["release", "close", "--help"]);
+    assert.equal(releaseCloseHelp.status, 0, releaseCloseHelp.stderr);
+    assert.match(releaseCloseHelp.stdout, /never creates a second queue/);
 
     const version = run(cli, ["--version"]);
     assert.equal(version.status, 0, version.stderr);
@@ -83,6 +93,8 @@ describe("stable package CLI UX", () => {
     assert.match(source, /case "status"[\s\S]*?scripts\/footprint\.mjs/);
     assert.match(source, /case "doctor"[\s\S]*?scripts\/doctor-interactive\.mjs/);
     assert.match(source, /case "doctor"[\s\S]*?scripts\/doctor-hooks\.mjs/);
+    assert.match(source, /case "release"[\s\S]*?scripts\/audit-release-binding\.mjs/);
+    assert.match(source, /case "release"[\s\S]*?scripts\/record-release-planning-closure\.mjs/);
     assert.match(source, /case "uninstall"[\s\S]*?scripts\/uninstall\.mjs/);
     assert.match(source, /case "check"[\s\S]*?setup\.mjs/);
     assert.match(source, /case "update"[\s\S]*?setup\.mjs/);

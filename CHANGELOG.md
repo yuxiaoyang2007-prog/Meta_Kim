@@ -8,6 +8,79 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## Unreleased
 
+## [2.9.10] - 2026-07-28
+
+### Fixed
+
+- **A fresh Graphify graph now proves its identity schema and repository contents, not only its Git commit.** Every real upstream file node uses the installed Graphify 0.9.28 Unicode normalizer and a full source-path identity. The proof binds the exact repository inventory and file contents, all node and link data, both hyperedge surfaces, analysis, provenance, sanitization, and report counts. Same-name Claude adapter and shared implementation nodes remain distinct and queryable.
+- **Incremental updates and interrupted clustering now resume from a coherent snapshot.** Extract checkpoints preserve bound graph and analysis inputs; cluster checkpoints additionally bind the final report. A truncated sidecar, partial graph, changed report, source mutation during an upstream command, stale community membership, or an orphan snapshot cannot be stamped as current. Incremental updates automatically re-cluster when new or renamed nodes are absent from the analysis, and every graph node must appear in exactly one community.
+- **Generated Graphify evidence no longer exposes or follows private local paths.** Graph, analysis keys and values, report text, and recovery snapshots reject Windows, UNC, Unix home, and delimiter-prefixed `~/` paths without echoing them. Graphify output, state, and snapshots must be plain files contained in the real repository output directory; mixed `GIT_*` redirection and junction or symlink escapes fail closed.
+- **Cross-runtime release evaluation now uses the target Claude Code provider instead of inheriting the caller's provider.** Hook isolation still uses empty setting sources, while a strict allowlist hydrates only Claude's provider, model, and timeout environment from its global settings. A Codex-launched release check can therefore call the user's configured `MiniMax-M3` without sending that model name to an unrelated ambient GLM endpoint, and arbitrary settings environment keys remain excluded.
+
+### Verification
+
+- Independent correctness, adversarial, and security reviews all ended with P0/P1/P2 at zero after their crash, stale-proof, TOCTOU, path-leak, symlink, incomplete-community, and orphan-snapshot counterexamples became regressions. Focused Graphify tests pass 69/69; Claude provider-environment tests pass 24/24; the private PRD contract passes 56/56; a real Python 3.14.6 / Graphify 0.9.28 rebuild and independent check bind every represented node, exact link, community reference, and real file identity with no open checkpoint. Release verification also excludes the root `debug.log` that Windows CEF applications can emit when they inherit the repository working directory, with a regression proving that this machine-local file cannot stale the graph proof. The primary release fuse then completed real Claude Code `MiniMax-M3` and Codex calls with release-grade evidence. The 88 upstream zero-node sources and semantic-collision completeness remain explicitly deferred to P-149. Docker, task budgets, and Cursor product execution are not acceptance evidence.
+
+## [2.9.9] - 2026-07-27
+
+### Fixed
+
+- **A private work queue can now close a public release without becoming public itself.** The packed `meta-kim release close` command reads the one ignored PRD `ACTIVE` row and appends one human-readable, idempotent release-fact block to each existing ignored planning file. It never creates a public backlog mirror, publishes the PRD, or treats a planning block as queue authority.
+- **Release closure now proves current public and global truth instead of trusting a local success label.** Before writing, the command replays the chained `published_bound` evidence against the live GitHub annotated tag, Release, downloaded tgz, exact clean verification report, and remote main; it checks the real default Claude Code and Codex global homes, then revalidates the PRD, tracked tree, tag, audit, planning-file presence, and markers immediately around projection and record publication.
+- **Interruptions and hostile local path redirection fail closed.** Immutable backups, atomic per-file replacement, a fully hashed closure record, and stable release markers let a retry keep correct work and add only missing projections. Dirty or tracked planning files, malformed markers, detached or forged audits, tampered records, symlink/junction paths, concurrent queue/file changes, runtime/source/Node preload overrides, and case-insensitive `GIT_*` repository redirection are rejected without claiming `release_closed`.
+
+### Verification
+
+- Independent correctness, adversarial, and security reviews ended with no P0/P1 findings after their counterexamples were converted into regressions. Focused closure and release-audit tests, CLI UX, the complete governance suite, packed-package boundary checks, project sync/checks, the standard full release gate, exact post-publication package audit, and final Claude Code/Codex global setup readback cover this release. Docker, task budgets, and Cursor product execution are not acceptance evidence.
+
+## [2.9.8] - 2026-07-27
+
+### Fixed
+
+- **Full-verification failures no longer erase the evidence that came before them.** Every `meta:verify:all` completion now writes an immutable attempt before updating the compatible `verification-report.json` latest projection. A separate latest-release-grade pointer keeps the exact clean attempt available for release audit even after a later diagnostic or failed run.
+- **Interrupted report writes recover instead of poisoning every later verification.** Attempt and lock ownership become visible only after a complete atomic write. Legacy clean reports are imported on first use, while half-written projections, corrupt attempts, dead locks, and stale locks with a reused PID are preserved as recovery evidence and no longer block the next report.
+- **Concurrent and custom outputs cannot cross-contaminate verification history.** Latest selection uses completion time plus attempt ID instead of lock order, custom report paths own separate histories, Windows path-case aliases and traversal IDs cannot overwrite immutable attempts, and existing release-audit readers remain compatible with the enriched report schema.
+
+### Verification
+
+- Focused crash, migration, concurrency, custom-path, Windows alias, traversal, and exact release-audit regressions cover the storage boundary. Standard release verification, exact package binding, and Claude Code/Codex global setup readback are required before this version is published. Docker, task budgets, and Cursor product execution are not acceptance evidence.
+
+## [2.9.7] - 2026-07-27
+
+### Fixed
+
+- **Runtime-specific providers no longer impersonate support in other runtimes.** Claude Code, Codex, Cursor, OpenClaw, and HookPrompt adapter records keep their positive claim only on the declared target runtime. Every non-target adapter is explicitly blocked, has unsupported install and OS layers, and carries no copied activation event.
+- **Provider claims now have one durable authority.** `providers[*].support` owns availability truth, explicit runtime targets own applicability, and `runtimeAdapters` is a schema- and validator-checked projection. Static registry data cannot claim that a provider was selected, invoked, completed, or live; those remain run-scoped evidence.
+- **The validator now rejects believable false records.** Negative controls cover cross-runtime `verified` claims, support overrides that try to invent a target, adapter/source mapping drift, contradictory state/status pairs, activation leakage, and private run-state fields. Claude Code and Codex retain their verified target capability; Cursor product execution remains outside this release.
+
+### Verification
+
+- Focused provider tests, the complete governance regression, schema validation, project sync/checks, the standard release gate, exact release binding, and final Claude Code/Codex global setup readback cover this change. Docker, task budgets, and Cursor product execution are not acceptance evidence.
+
+## [2.9.6] - 2026-07-27
+
+### Fixed
+
+- **Published release evidence can now be audited instead of reconstructed from memory.** The packed `meta-kim release audit` command joins the local and GitHub annotated tag, peeled commit/tree, clean full-verification report, public Release, and uploaded npm package into an immutable, hash-chained attempt record. Historical releases whose clean report no longer exists remain explicitly verification-unbound and cannot be promoted.
+- **A package with substituted code cannot inherit a clean release result.** Exact promotion requires the local tgz and GitHub asset to be byte-identical to the npm candidate that the same clean `meta:verify:all` report installed and tested; matching only package name, version, or `package.json` is rejected.
+- **Audit evidence stays inside the repository-owned state tree.** The output root and its `attempts` and `stale-locks` children reject symlink/junction redirection before lock, record, pointer, or stale-lock writes. Failed attempts remain append-only and never replace the latest successful binding.
+
+### Verification
+
+- Release acceptance covers the focused audit and junction counterexamples, the complete governance regression, a dirty-candidate and clean-commit standard `meta:verify:all`, packed CLI execution, an exact post-publication `published_bound` record attached to the GitHub Release, and final Claude Code/Codex global setup readback. Docker, task budgets, and Cursor product execution are not acceptance evidence.
+
+## [2.9.5] - 2026-07-27
+
+### Fixed
+
+- **`meta:theory:report latest` now explains exactly which "latest" it selected.** The command still opens the newest committed governed report, including valid `partial` reports, but the JSON summary now includes a stable `selection` block that distinguishes the committed report pointer from the current active lifecycle run.
+- **Current-run status can no longer silently rewrite report readback.** Repository lifecycle relation is read through the canonical Meta_Kim status reader; weak or invalid `active-run.json` projections stay untrusted, custom report directories remain isolated, and explicit run IDs continue to read the requested committed artifact.
+- **Claude Code and Codex command help now carries the same boundary.** Both projections tell the operator to report the selected run, artifact claim status, active-run relation, and continuation command without exposing task text or task fingerprints.
+
+### Verification
+
+- The standard `meta:verify:all` gate passed all 13 stages in one uninterrupted run, including four-runtime isolated install/update probes, packed user and project install/update/re-update, global Hook checks, 1,366 Meta-Theory tests with zero failures and three declared skips, integration, and fresh Claude Code/Codex live release-fuse evidence. Docker, task budgets, and Cursor product execution were not used as acceptance evidence.
+
 ## [2.9.4] - 2026-07-26
 
 ### Fixed

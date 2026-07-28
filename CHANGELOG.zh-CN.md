@@ -8,6 +8,79 @@
 
 ## Unreleased
 
+## [2.9.10] - 2026-07-28
+
+### 修复内容
+
+- **Graphify 的“最新”现在证明身份规则和仓库内容，不再只比较 Git 提交号。** 所有真实 upstream file node 都使用已安装 Graphify 0.9.28 的 Unicode normalizer 和完整 source path 身份；proof 精确绑定仓库文件清单与内容、全部节点与关系、两份 hyperedge 表面、analysis、provenance、sanitization 和报告数量。同名的 Claude 适配器与共享实现保持两个真实、可分别查询的节点。
+- **增量更新和聚类中断现在从一致快照恢复。** Extract checkpoint 保存内容绑定的 graph/analysis 输入，cluster checkpoint 再绑定最终 report；sidecar 截断、graph 部分写入、report 被改、上游命令运行期间源码变化、community 仍引用旧节点或孤儿 snapshot，都不能冒充 current。增量更新发现新节点或改名节点尚未进入 analysis 时会自动重新聚类，且每个 graph node 必须恰好属于一个 community。
+- **Graphify 生成证据不再泄露或跟随私有本机路径。** Graph、analysis 的键和值、report 正文和恢复 snapshot 都拒绝 Windows、UNC、Unix home 及分隔符后的 `~/` 路径，错误不会回显秘密。Graphify output、state 和 snapshot 必须是位于真实仓库输出目录内的普通文件；混合大小写 `GIT_*` 错仓、junction 和 symlink 外跳都会 fail closed。
+- **跨运行时发布验收现在使用目标 Claude Code 自己的 provider，不再误继承调用方 provider。** Hook 隔离仍使用空 setting sources，同时只从 Claude 全局设置中白名单读取 provider、模型和 timeout 环境。这样从 Codex 发起的发布检查会调用用户配置的 `MiniMax-M3`，不会再把这个模型名发给调用进程里残留的 GLM 接口；其他任意 settings 环境项仍不会进入验收子进程。
+
+### 验证
+
+- correctness、反例和 security 三路独立 Review 把闪退、旧 proof、TOCTOU、路径泄漏、symlink、community 漏项/重复和孤儿 snapshot 反例转成回归后，最终 P0/P1/P2 均为 0。Graphify 聚焦测试 69/69，Claude provider 环境测试 24/24，唯一私有 PRD 合约 56/56；真实 Python 3.14.6 / Graphify 0.9.28 重建和独立检查已绑定每个实际表示的节点、精确 link、community 引用和真实 file identity，且没有开放 checkpoint。发布验收还明确排除了 Windows CEF 继承仓库工作目录时可能生成的根目录 `debug.log`，并用回归测试证明这种机器日志不会再让知识图证明过期；双主运行时发布保险丝随后以真实 `MiniMax-M3` Claude Code 调用和 Codex 调用共同得到 release-grade 证据。上游 88 个零节点来源和 semantic collision 完整性明确留在 P-149。Docker、任务预算和 Cursor 产品执行不作为验收证据。
+
+## [2.9.9] - 2026-07-27
+
+### 修复内容
+
+- **私有工作队列现在可以收尾公开发布，但不会因此被公开。** 打包后的 `meta-kim release close` 读取唯一被 ignore 的 PRD `ACTIVE` 行，只向已经存在且同样被 ignore 的 planning 文件追加一段人话、幂等的发布事实。它不会创建公共 backlog 镜像、公开 PRD，也不会把 planning 段落变成第二个队列权威。
+- **发布收尾会重新证明当前公开事实和全局状态，不再相信本地“成功”标签。** 写入前，命令会把哈希串联的 `published_bound` 证据与 GitHub 上真实的 annotated tag、Release、重新下载的 tgz、精确 clean verification report 和 remote main 再做一次绑定；随后检查系统账户真实默认目录里的 Claude Code/Codex 全局投影，并在投影和 record 发布前后紧邻复核 PRD、tracked tree、tag、audit、planning presence 与 marker。
+- **闪退恢复和恶意本地路径重定向都会 fail closed。** 不可变备份、逐文件原子替换、完整内容 hash 的 closure record 与稳定 marker，使重跑可以保留正确结果、只补缺项。被跟踪或不私有的 planning、畸形 marker、脱链/伪造 audit、篡改 record、symlink/junction、并发修改队列或文件、runtime/source/Node preload 重定向，以及 Windows 大小写不敏感的 `GIT_*` 假仓库重定向都会被拒绝，不能冒充 `release_closed`。
+
+### 验证
+
+- correctness、反例和 security 三路独立 Review 把实际攻击反例转成回归后，最终均为 P0/P1 归零。正式验收覆盖 release-close 与 release-audit 定向测试、CLI UX、完整 governance 回归、打包边界、项目同步/检查、标准全量发布门禁、发布后的精确包审计，以及 Claude Code/Codex 最终全局 setup 回读。Docker、任务预算和 Cursor 产品执行不作为验收证据。
+
+## [2.9.8] - 2026-07-27
+
+### 修复内容
+
+- **全量验收失败不再抹掉之前的证据。** 每次 `meta:verify:all` 结束都会先写入不可变 attempt，再更新兼容旧读取方的 `verification-report.json` latest 投影。独立的最近发布级指针会保留可直接交给发布审计的精确 clean attempt，即使后面又跑了诊断或失败验收也不会丢。
+- **报告写到一半时闪退，不会再让以后每次验收都卡死。** Attempt 与 lock owner 只有在完整原子写入后才对外可见；第一次升级会导入旧 clean 报告。半截旧 projection、坏 attempt、死锁和 PID 被复用的陈旧锁会原样保留为恢复证据，但不再阻断下一份报告。
+- **并发运行和自定义输出不会互相串历史。** Latest 由完成时间和 attempt ID 稳定决定，不依赖抢锁顺序；不同自定义报告路径各用自己的 history；Windows 大小写别名和路径穿越 ID 不能覆盖不可变 attempt；现有发布审计仍能读取新增字段后的报告。
+
+### 验证
+
+- 定向回归覆盖崩溃残留、旧报告迁移、并发、自定义路径、Windows 大小写 alias、路径穿越和 exact 发布审计。正式发布前仍必须完成标准全量门禁、精确包绑定与 Claude Code/Codex 全局 setup 回读。Docker、任务预算和 Cursor 产品执行不作为验收证据。
+
+## [2.9.7] - 2026-07-27
+
+### 修复内容
+
+- **运行端专用 provider 不再冒充其他运行端也支持。** Claude Code、Codex、Cursor、OpenClaw 及 HookPrompt adapter 只在声明的目标运行端保留正向 claim；所有非目标 adapter 都明确阻塞、安装层与系统层为 unsupported，且不再复制目标运行端的激活事件。
+- **Provider claim 现在只有一个长期事实源。** `providers[*].support` 负责可用性真值，显式 runtime target 负责适用范围，`runtimeAdapters` 只是由 schema 和 validator 双重校验的投影。静态 registry 不得声称 provider 已被选择、调用、完成或现场运行；这些只能来自本次运行证据。
+- **Validator 会拒绝“看起来完整”的假记录。** 负例覆盖跨运行端 `verified`、用 support override 伪扩目标、adapter/source mapping 漂移、自相矛盾的 state/status、激活事件泄漏和私有运行状态字段。Claude Code 与 Codex 的目标能力保持 verified；本版没有把 Cursor 产品执行包装成已处理。
+
+### 验证
+
+- 本次由 provider 定向测试、完整 governance 回归、真实 schema 校验、项目同步/检查、标准发布门禁、精确发布绑定以及 Claude Code/Codex 全局 setup 回读共同验收。Docker、任务预算和 Cursor 产品执行不作为验收证据。
+
+## [2.9.6] - 2026-07-27
+
+### 修复内容
+
+- **发布证据现在可以被审计，不再靠事后回忆拼接。** 打包后的 `meta-kim release audit` 会把本地与 GitHub annotated tag、peeled commit/tree、干净全量验证报告、公开 Release 和上传的 npm 包写入不可变、哈希串联的 attempt 记录。旧版本如果已经找不到当时的干净报告，只能明确记为 verification unbound，不能补写成 exact。
+- **被替换过代码的包不能继承干净发布结论。** exact 升级要求本地 tgz 与 GitHub asset 都逐字节等于同一份干净 `meta:verify:all` 实际安装并测试过的 npm 候选包；只有包名、版本号或 `package.json` 相同会被拒绝。
+- **审计证据只能写进仓库拥有的状态目录。** 输出根目录及其 `attempts`、`stale-locks` 子目录会在 lock、record、pointer 或 stale-lock 写入前拒绝 symlink/junction 跳转。失败 attempt 继续追加保存，不会覆盖最近一次成功绑定。
+
+### 验证
+
+- 发布验收覆盖审计与 junction 反例、完整 governance 回归、脏候选与干净提交两轮标准 `meta:verify:all`、packed CLI、发布后附加到 GitHub Release 的 exact `published_bound` 记录，以及 Claude Code/Codex 最终全局 setup 回读。Docker、任务预算与 Cursor 产品执行不作为验收正证。
+
+## [2.9.5] - 2026-07-27
+
+### 修复内容
+
+- **`meta:theory:report latest` 现在会说清楚自己选的是哪一种 “latest”。** 命令仍然读取最后一次 committed governed report，合法的 `partial` 报告也会正常打开；但 JSON 摘要新增稳定的 `selection` 区块，明确区分 committed report 指针和当前 active lifecycle run。
+- **当前运行状态不能再静默改写报告读取结果。** active 关系只通过 Meta_Kim canonical status reader 判断；弱格式或坏掉的 `active-run.json` 投影不被信任，自定义报告目录保持隔离，显式 runId 仍精确读取指定的 committed artifact。
+- **Claude Code 和 Codex 的命令说明保持同一边界。** 两端投影都会提示操作者报告 selected run、artifact claim status、active-run relation 与继续命令，同时不得输出任务原文或 task fingerprint。
+
+### 验证
+
+- 标准 `meta:verify:all` 在一次不中断运行中 13/13 全过，覆盖四运行端隔离 install/update、packed 用户与项目 install/update/re-update、全局 Hook、Meta-Theory 1,366 项 0 失败（3 项按设计跳过）、integration，以及 fresh Claude Code/Codex live release fuse。Docker、任务预算和 Cursor 产品执行没有被当作验收正证。
+
 ## [2.9.4] - 2026-07-26
 
 ### 修复内容
