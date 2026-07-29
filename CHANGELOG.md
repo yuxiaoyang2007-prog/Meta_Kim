@@ -8,6 +8,32 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## Unreleased
 
+## [2.9.12] - 2026-07-28
+
+### Fixed
+
+- **Context-engineering budgets no longer pass before the host has observed or measured them.** The default governed run stays partial until the runtime proves the loaded fixed and variable context, reports a finite nonnegative input-token count, completes duplicate/conflict/omission checks, and binds every observed source to evidence. Missing measurements now become explicit blockers instead of a hard-coded pass.
+- **Every public-ready validation path now consumes the same context truth.** The generic run-artifact validator and strict intent validator reject missing, partial, blocked, unmeasured, unobserved, or evidence-free context budgets. Top-level and `coreLoop` copies must agree, so a successful nested packet cannot hide a failing peer. Non-public-ready runs remain allowed to omit the packet.
+
+### Verification
+
+- Targeted public-ready and context-budget regressions cover the generic validator, strict validator, governed runner, product-goal flow, valid fixtures, and top-level/`coreLoop` masking counterexamples. Three independent correctness, completeness, and collision reviews accepted the final isolated diff. Standard full release verification and exact post-publication package binding are required before this version is published; Graphify, Docker, task budgets, Cursor product execution, and optional live certification are not inferred from the targeted checks.
+
+## [2.9.11] - 2026-07-28
+
+### Fixed
+
+- **Claude Code and Codex capability evidence now describes what the current host may attempt without pretending that Meta_Kim authorized or executed it.** Compatible host surfaces enter an explicit handoff state; historical observations remain advisory, while unsupported, reference-only, wrong-runtime, and unknown native-choice claims fail closed. The standalone runner emits a bounded host request and never converts callbacks, environment values, JSON, receipts, or self-hashes into current execution authority.
+- **Runtime observations now form a recoverable, capability-specific product path instead of a report-only matrix.** The packed CLI records and reads the exact Claude Code/Codex ten-capability set, binds producer events and release lineage, preserves failed evidence for diagnosis, exposes exact populated and empty MCP partitions, and keeps every persisted result non-authorizing.
+- **Install and release proof now follows the package users actually run.** Windows launch descriptors bind the discovered entry, shim, launcher, and JavaScript entrypoint without claiming a same-user trust root or eliminating TOCTOU. Project-aware global refreshes normalize managed deployment records into absolute inventory roots instead of failing after project capability copies. Packed current, project, and historical install/update lanes must cover the canonical four targets exactly; verification, release audit, release close, and observation readback recompute one shared raw proof and reject partial, legacy, count-only, or self-declared success.
+- **Packed MCP verification now checks advisory observations against the effective matrix they actually produce.** The packaged canonical baseline must still match exactly, while the MCP readback must exactly match the effective matrix recomputed from that same installed package and isolated read-only snapshot; an expected advisory overlay no longer causes a false release failure, and neither baseline drift nor effective-state drift is accepted.
+- **Governance verification now reads the current mode-scoped runtime claim format.** It requires non-empty `evidenceRefs` and complete `claimsByMode` facts for every declared runtime mode instead of demanding the retired top-level `evidence` placeholder; legacy-shaped or incomplete records still fail closed.
+- **Graphify can now give a repository-root file a stable unique label when subdirectories contain files with the same name.** The root file uses its real explicit relative form, such as `./README.md`, while ordinary and nested shortest-unique labels remain unchanged; a regression protects the replayable identity proof.
+
+### Verification
+
+- Eleven falsification/rework rounds closed authority minting, route deadlocks, native-choice ambiguity, Stage Runner bypasses, launch-identity drift, packed source leakage, incomplete target sets, release-audit trust, false worker attribution, and consecutive-release lineage. Final independent correctness, security, and product-completeness Reviews report no P0/P1/P2; Meta-Review authorizes the standard release gate. Existing production observations remain Claude Code 5/5 and Codex 5/5 and were consumed read-only rather than regenerated. Cursor product execution, Docker, task budgets, and optional live-certified external signing are not acceptance evidence for this release.
+
 ## [2.9.10] - 2026-07-28
 
 ### Fixed

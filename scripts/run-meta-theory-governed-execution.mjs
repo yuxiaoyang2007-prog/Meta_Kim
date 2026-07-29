@@ -38,7 +38,6 @@ import {
   selectHighestImpactOpenQuestion,
 } from "./governed-execution/plan-challenge-policy.mjs";
 import {
-  bindVerifiedHostPlanChallengeDecision,
   loadPlanChallengeContinuationCandidate,
 } from "./governed-execution/plan-challenge-host-continuation.mjs";
 export {
@@ -4385,6 +4384,38 @@ function durableCapabilitySpecificationReady(line, explicitCapabilityId) {
   );
 }
 
+function explicitlyRequestsDurableCapabilityAction(line, decision) {
+  const text = String(line ?? "")
+    .replace(
+      /(?:不要|不需要|无需|不应|禁止|拒绝)\s*(?:再|进行|执行)?\s*(?:新建|创建|生成|固化|沉淀|写入|安装|新增|添加|复制|迭代|修改|升级|定制|复用)/giu,
+      "",
+    )
+    .replace(
+      /(?:do\s+not|don't|without|no\s+need\s+to|refuse\s+to)\s*(?:create|add|persist|generate|install|copy|iterate|modify|upgrade|customize|reuse)/giu,
+      "",
+    );
+  const chineseAction = "新建|创建|固化|沉淀|写入|安装|新增|添加|复制|迭代|修改|升级|定制|复用";
+  const capabilityType = decision === "create_agent"
+    ? "agent|智能体|代理"
+    : decision === "create_skill"
+      ? "skill|技能"
+      : decision === "create_command"
+        ? "command|命令"
+        : decision === "create_hook"
+          ? "hook|钩子"
+          : decision === "create_mcp_provider"
+            ? "mcp(?:\\s+provider)?|mcp服务|mcp工具"
+            : "script|脚本";
+  const chineseContext = "(?:(?:在|于|把|将|对|为|当前|本|这个|该|全局|项目|仓库)\\s*){0,6}";
+  const englishContext = "(?:(?:the|this|a|an|global|project|repository|repo)\\s+){0,5}";
+  return (
+    new RegExp(`(?:请|需要|需|应当|应该|务必|直接|立即|马上|帮我)\\s*${chineseContext}(?:${chineseAction}|生成)\\s*${chineseContext}(?:${capabilityType})`, "iu").test(text) ||
+    new RegExp(`(?:^|[。；;\\n])\\s*(?:${chineseAction}|生成)\\s*(?:一个|新的?)?\\s*(?:${capabilityType})`, "iu").test(text) ||
+    new RegExp(`(?:please|need\\s+to|should|must|help\\s+me)\\s+${englishContext}(?:create|add|persist|generate|install|copy|iterate|modify|upgrade|customize|reuse)\\s+${englishContext}(?:${capabilityType})`, "iu").test(text) ||
+    new RegExp(`(?:^|[.;\\n])\\s*(?:create|add|persist|generate|install|copy|iterate|modify|upgrade|customize|reuse)\\s+(?:an?\\s+|the\\s+)?(?:${capabilityType})`, "iu").test(text)
+  );
+}
+
 function durableCapabilityRequestsFromTask(task, runId = "meta-run") {
   const lines = String(task ?? "")
     .split(/\r?\n|。|；|;/u)
@@ -4428,6 +4459,7 @@ function durableCapabilityRequestsFromTask(task, runId = "meta-run") {
       requestedCapability,
       explicitCapabilityId,
       specificationReady: durableCapabilitySpecificationReady(line, explicitCapabilityId),
+      mutationAuthorized: explicitlyRequestsDurableCapabilityAction(line, decision),
       decision,
       requestedAction:
         /迭代|修改|升级|定制|iterate|modify|upgrade|customize/i.test(line)
@@ -5640,7 +5672,6 @@ export function normalizeHostInvocationEvidence(input, {
 }
 
 function normalizeNativeChoiceEvidence(input, {
-  trusted = false,
   expectedRunId = null,
   attestation = null,
 } = {}) {
@@ -5736,12 +5767,12 @@ function normalizeNativeChoiceEvidence(input, {
     const trimmed = input.trim();
     if (!trimmed) return [];
     try {
-      return normalizeNativeChoiceEvidence(JSON.parse(trimmed), { trusted, expectedRunId, attestation });
+      return normalizeNativeChoiceEvidence(JSON.parse(trimmed), { expectedRunId, attestation });
     } catch {
       return [];
     }
   }
-  return normalizeNativeChoiceEvidence([input], { trusted, expectedRunId, attestation });
+  return normalizeNativeChoiceEvidence([input], { expectedRunId, attestation });
 }
 
 function compactCommand(command, args = []) {
@@ -7232,6 +7263,7 @@ export function buildProjectCustomizationPacket({
       requestedCapability: request.requestedCapability,
       requestText: request.sourceText,
       creationSpecificationReady: request.specificationReady,
+      mutationAuthorized: request.mutationAuthorized === true,
       decision,
       reason,
       targetPath,
@@ -7487,6 +7519,10 @@ function projectCustomizationUserLine({ decision, result, outputLanguage }) {
     if (language === "zh-CN") return `只读模式：未复制 ${label}；计划位置：${decision.targetPath}。`;
     return `Read-only mode: ${label} was not copied; planned target: ${decision.targetPath}.`;
   }
+  if (result.status === "not_applied_missing_authorization") {
+    if (language === "zh-CN") return `未写入 ${label}：这句话描述了能力需要，但没有明确要求创建、复制或迭代。`;
+    return `${label} was not written because the request did not explicitly authorize create, copy, or iteration.`;
+  }
   if (language === "zh-CN") return `未能落盘 ${label}，不会假称完成；原因：${result.reason}`;
   return `Failed to materialize ${label}; completion is not claimed. Reason: ${result.reason}`;
 }
@@ -7533,6 +7569,18 @@ export function executeProjectCustomizationPacket({
         applied: false,
         targetPaths: [],
         reason: "project capability mutation is disabled for read-only, check, dry-run, or fast-path execution",
+      };
+      results.push(result);
+      return { ...decision, executionStatus: result.status, actualTargetPaths: [] };
+    }
+
+    if (decision.mutationAuthorized !== true) {
+      const result = {
+        requestId: decision.requestId,
+        status: "not_applied_missing_authorization",
+        applied: false,
+        targetPaths: [],
+        reason: "explicit_project_capability_mutation_authorization_required",
       };
       results.push(result);
       return { ...decision, executionStatus: result.status, actualTargetPaths: [] };
@@ -7642,7 +7690,13 @@ export function executeProjectCustomizationPacket({
 
   const mutationRequired = decisions.some((decision) => decision.copyPolicy !== "use_global_directly");
   const failedCount = results.filter((result) => result.status === "failed").length;
-  const readOnlyCount = results.filter((result) => result.status === "not_applied_read_only").length;
+  const readOnlyCount = results.filter((result) => [
+    "not_applied_read_only",
+    "not_applied_missing_authorization",
+  ].includes(result.status)).length;
+  const authorizationMissingCount = results.filter(
+    (result) => result.status === "not_applied_missing_authorization",
+  ).length;
   const appliedCount = results.filter((result) => result.status === "applied").length;
   const noCopyCount = results.filter((result) => result.status === "reused_without_copy").length;
   const status = failedCount > 0
@@ -7677,6 +7731,7 @@ export function executeProjectCustomizationPacket({
       appliedCount,
       noCopyCount,
       readOnlyCount,
+      authorizationMissingCount,
       failedCount,
       results,
       manifest: appliedCount > 0
@@ -7687,7 +7742,7 @@ export function executeProjectCustomizationPacket({
       status === "partial"
         ? "At least one required project capability mutation failed; the run must remain partial and must not claim completion."
         : status === "read_only"
-          ? "Project capability mutation was intentionally not applied in read-only/check/dry-run mode."
+          ? "Project capability mutation was not applied because the run was read-only/check/dry-run or the request did not explicitly authorize create, copy, or iteration."
           : "Project capability write claims are backed by project-capability-copy transaction results; global reuse claims mean no project copy was created.",
   };
   if (ownsCandidateRoot) {
@@ -8089,7 +8144,6 @@ function buildNativeChoiceSurfaceGate({
   cardPlanPacket,
   dynamicWorkflowDecisionRecord,
   nativeChoiceEvidence,
-  nativeChoiceEvidenceTrusted,
 }) {
   const branchCardRefs = [
     ...(cardPlanPacket?.cardEvents ?? [])
@@ -8100,11 +8154,11 @@ function buildNativeChoiceSurfaceGate({
       .map((card) => `dynamicWorkflowDecisionRecord.cards.${card.cardKey}`),
   ];
   const evidence = normalizeNativeChoiceEvidence(nativeChoiceEvidence, {
-    trusted: nativeChoiceEvidenceTrusted,
     expectedRunId: runId,
   });
   const acceptedAnswers = evidence.filter((item) => item.passEligible === true);
   const blockedEvidence = evidence.filter((item) => item.blockedEligible === true);
+  const proofValidEvidence = evidence.filter((item) => item.proofValid === true);
   const branchChoiceRequired = branchCardRefs.length > 0;
   const liveStatus = !branchChoiceRequired
     ? "no_branching_choice"
@@ -8150,7 +8204,7 @@ function buildNativeChoiceSurfaceGate({
       status: liveStatus,
       requiredForNativePass: true,
       branchChoiceRequired,
-      evidenceTrusted: nativeChoiceEvidenceTrusted === true,
+      evidenceTrusted: proofValidEvidence.length > 0,
       acceptedEvidenceRefs: acceptedAnswers.map((item) => item.evidenceRef),
       blockedEvidenceRefs: blockedEvidence.map((item) => item.evidenceRef),
       rejectedEvidence:
@@ -8397,7 +8451,6 @@ function buildProductExperiencePacket({
   cardPlanPacket,
   dynamicWorkflowDecisionRecord,
   nativeChoiceEvidence,
-  nativeChoiceEvidenceTrusted,
 }) {
   const callableInvocationPass =
     capabilityInvocationTruthPacket?.callableInvocationCoverage?.status === "pass" &&
@@ -8478,7 +8531,6 @@ function buildProductExperiencePacket({
       cardPlanPacket,
       dynamicWorkflowDecisionRecord,
       nativeChoiceEvidence,
-      nativeChoiceEvidenceTrusted,
     }),
     buildRepeatFailureDesignGate(),
     buildNoHardcodedFixtureGate({ goalContractPacket }),
@@ -8589,45 +8641,72 @@ function buildContextEngineeringBudget({
   capabilitySearchLog,
   stageOperationPlan,
 }) {
+  const fixedContext = [
+    {
+      source: "AGENTS.md",
+      freshness: "repo-current",
+      reasonIncluded: "declared project governance entrypoint",
+      reasonOmitted: null,
+      evidenceState: "declared_not_host_observed",
+    },
+    {
+      source: "canonical/skills/meta-theory/SKILL.md",
+      freshness: "repo-current",
+      reasonIncluded: "declared canonical meta-theory prompt contract",
+      reasonOmitted: null,
+      evidenceState: "declared_not_host_observed",
+    },
+    {
+      source: "config/contracts/core-loop-contract.json",
+      freshness: "repo-current",
+      reasonIncluded: "declared machine-readable core loop contract",
+      reasonOmitted: null,
+      evidenceState: "declared_not_host_observed",
+    },
+  ];
+  const variableContext = [
+    ...capabilitySearchLog.slice(0, 12).map((item) => ({
+      source: item.source,
+      freshness: "run-current",
+      reasonIncluded: "selected route-changing capability or evidence source",
+      reasonOmitted: null,
+      evidenceState: "selected_not_host_observed_as_model_context",
+    })),
+    ...(stageOperationPlan?.stages ?? []).map((stage) => ({
+      source: `stageOperationPlan.${stage.stage}`,
+      freshness: "run-current",
+      reasonIncluded: "generated visible stage event and report shaping data",
+      reasonOmitted: null,
+      evidenceState: "generated_not_host_observed_as_model_context",
+    })),
+  ];
+  const measurement = {
+    hostObservedContextLoad: false,
+    actualInputTokens: null,
+    duplicateRuleScanStatus: "not_run",
+    conflictingRuleScanStatus: "not_run",
+    omissionVerificationStatus: "not_verified",
+  };
+  const blockedBy = [
+    ...(measurement.hostObservedContextLoad ? [] : ["host_context_load_not_observed"]),
+    ...(Number.isFinite(measurement.actualInputTokens) ? [] : ["actual_input_tokens_not_measured"]),
+    ...(measurement.duplicateRuleScanStatus === "pass" ? [] : ["duplicate_rule_scan_not_run"]),
+    ...(measurement.conflictingRuleScanStatus === "pass" ? [] : ["conflicting_rule_scan_not_run"]),
+    ...(measurement.omissionVerificationStatus === "pass" ? [] : ["omission_not_verified"]),
+  ];
   return {
     schemaVersion: "context-engineering-budget-v0.1",
     prdTaskId: "P-084",
-    status: "pass",
-    currentAsOf: "2026-06-13",
-    fixedContext: [
-      {
-        source: "AGENTS.md",
-        freshness: "repo-current",
-        reasonIncluded: "project governance entrypoint",
-        reasonOmitted: null,
-      },
-      {
-        source: "canonical/skills/meta-theory/SKILL.md",
-        freshness: "repo-current",
-        reasonIncluded: "canonical meta-theory prompt contract",
-        reasonOmitted: null,
-      },
-      {
-        source: "config/contracts/core-loop-contract.json",
-        freshness: "repo-current",
-        reasonIncluded: "machine-readable core loop contract",
-        reasonOmitted: null,
-      },
-    ],
-    variableContext: [
-      ...capabilitySearchLog.slice(0, 12).map((item) => ({
-        source: item.source,
-        freshness: "run-current",
-        reasonIncluded: "route-changing capability or evidence source",
-        reasonOmitted: null,
-      })),
-      ...(stageOperationPlan?.stages ?? []).map((stage) => ({
-        source: `stageOperationPlan.${stage.stage}`,
-        freshness: "run-current",
-        reasonIncluded: "visible stage event and report shaping",
-        reasonOmitted: null,
-      })),
-    ],
+    status: blockedBy.length === 0 ? "pass" : "partial",
+    statusReason:
+      blockedBy.length === 0
+        ? "host-observed context load and all budget checks passed"
+        : "declared and selected sources are not proof of host-loaded model context",
+    currentAsOf: "2026-07-28",
+    fixedContext,
+    variableContext,
+    measurement,
+    blockedBy,
     omissionPolicy: [
       {
         sourceClass: "duplicate_rule",
@@ -8671,7 +8750,6 @@ function buildCoreLoopArtifact({
   hostVisibleSubagents,
   hostInvocationEvidence,
   nativeChoiceEvidence,
-  nativeChoiceEvidenceTrusted,
   agentTeamsPlaybookProvider,
   invokeCapabilityProbes = false,
   projectRoot = null,
@@ -8680,7 +8758,7 @@ function buildCoreLoopArtifact({
   runtime = "codex",
   osTarget = "windows",
   outputLanguage = "zh-CN",
-  executionAllowed = true,
+  executionAllowed = false,
   preDecisionOptionFrame = null,
 }) {
   const routeRuntime = normalizeRouteRuntime(runtime);
@@ -8759,6 +8837,9 @@ function buildCoreLoopArtifact({
     orchestrationReport,
     workerTaskPackets,
   });
+  const planChallengeState = preDecisionOptionFrame?.planChallengeState ?? {};
+  const blockedByPlanChallenge =
+    planChallengeState.active === true && planChallengeState.planChallengeSatisfied !== true;
   const workerResultPackets = workerTaskPackets.map((packet) => {
     const requiresApproval =
       packet.executionMode === "approval_gate" || packet.externalWriteBoundary === true;
@@ -8772,22 +8853,22 @@ function buildCoreLoopArtifact({
       owner: packet.owner,
       ownerAgent: packet.ownerAgent,
       executionMode: packet.executionMode,
-      status: !executionAllowed
+      status: blockedByPlanChallenge
         ? "blocked_by_plan_challenge"
         : requiresApproval
           ? "blocked_or_needs_approval"
           : "planned_not_executed",
-      resultKind: !executionAllowed
+      resultKind: blockedByPlanChallenge
         ? "plan_challenge_gate"
         : requiresApproval
           ? "approval_gate"
-          : "run_scoped_worker_plan",
-      evidenceKind: !executionAllowed
+          : "planned_not_executed_by_runner",
+      evidenceKind: blockedByPlanChallenge
         ? "plan_challenge_not_ready"
         : requiresApproval
           ? "approval_required"
           : "structural_worker_plan",
-      output: !executionAllowed || requiresApproval
+      output: blockedByPlanChallenge || requiresApproval
         ? null
         : {
             declaredOutput: packet.output ?? "worker_result",
@@ -8806,8 +8887,8 @@ function buildCoreLoopArtifact({
             "prepare_declared_output_contract",
             "request_external_worker_execution_evidence",
           ],
-      note: !executionAllowed
-        ? "Execution is blocked until the plan challenge is ready and separately authorized where required."
+      note: blockedByPlanChallenge
+        ? "Execution is blocked until the active plan challenge is satisfied."
         : requiresApproval
           ? "Approval is required before this worker can execute."
           : "The runner produced a bounded worker plan only; it did not execute the worker's command or deliverable.",
@@ -9103,7 +9184,6 @@ function buildCoreLoopArtifact({
     cardPlanPacket,
     dynamicWorkflowDecisionRecord,
     nativeChoiceEvidence,
-    nativeChoiceEvidenceTrusted,
   });
   const selectedExecutableTruthGaps = (capabilityInvocationTruthPacket.rows ?? [])
     .filter(
@@ -9112,8 +9192,21 @@ function buildCoreLoopArtifact({
         ["selected_not_invoked", "unavailable", "blocked"].includes(row.state),
     )
     .map((row) => `${row.family}:${row.state}`);
+  const performanceCostBudget = buildPerformanceCostBudget();
+  const contextEngineeringBudget = buildContextEngineeringBudget({
+    capabilitySearchLog,
+    stageOperationPlan,
+  });
   publicReadyBlockedBy = [
     ...(artifactStatus === "pass" ? [] : ["artifactStatus is not pass before coreLoop gate closure."]),
+    ...(contextEngineeringBudget.status === "pass"
+      ? []
+      : [
+          `contextEngineeringBudget.status=${contextEngineeringBudget.status}.`,
+          ...contextEngineeringBudget.blockedBy.map(
+            (blocker) => `contextEngineeringBudget blocked by ${blocker}.`,
+          ),
+        ]),
     ...(liveReleaseEvidenceReady ? [] : ["live release/runtime evidence is not release-grade ready."]),
     ...(runtimeInvocationPlanPacket.status === "pass" ? [] : ["runtimeInvocationPlanPacket.status is not pass."]),
     ...(hostInvocationRequestPacket.status === "pass" ? [] : ["hostInvocationRequestPacket.status is not pass."]),
@@ -9131,11 +9224,6 @@ function buildCoreLoopArtifact({
     ),
   ];
   publicReady = publicReadyBlockedBy.length === 0;
-  const performanceCostBudget = buildPerformanceCostBudget();
-  const contextEngineeringBudget = buildContextEngineeringBudget({
-    capabilitySearchLog,
-    stageOperationPlan,
-  });
   return {
     schemaVersion: "core-loop-run-v0.1",
     contractRef: "config/contracts/core-loop-contract.json",
@@ -9255,15 +9343,21 @@ function buildCoreLoopArtifact({
     executionResult: {
       stage: "Execution",
       executionAllowed,
-      executionGate: executionAllowed ? "ready" : "blocked_by_plan_challenge",
+      executionGate: blockedByPlanChallenge
+        ? "blocked_by_plan_challenge"
+        : executionAllowed
+          ? "ready"
+          : "host_native_handoff_required",
       mainThreadRole: "scope_delegate_review_synthesize",
       executionOwnerMode: "workerTaskPackets",
       actualWorkerExecution,
       actualProjectCapabilityMutation:
         projectCustomizationPacket.execution.appliedCount > 0,
       projectCapabilityMutation: projectCustomizationPacket.execution,
-      executionClosure: !executionAllowed
+      executionClosure: blockedByPlanChallenge
         ? "blocked_by_plan_challenge"
+        : !executionAllowed
+          ? "planned_not_executed_by_runner"
         : actualWorkerExecution
         ? "run_scoped_worker_executed"
         : projectCustomizationPacket.execution.appliedCount > 0
@@ -9461,6 +9555,8 @@ function buildCoreLoopArtifact({
       realInvocationCoverageStatus:
         capabilityInvocationTruthPacket.realInvocationCoverage?.status ?? "missing",
       productExperienceStatus: productExperiencePacket.status,
+      contextEngineeringBudgetStatus: contextEngineeringBudget.status,
+      contextEngineeringBudgetBlockedBy: [...contextEngineeringBudget.blockedBy],
       selectedExecutableTruthGaps,
       blockedBy: publicReady ? [] : publicReadyBlockedBy,
     },
@@ -10632,7 +10728,7 @@ async function selectExecutionRoute({ task, runtime = "codex", os = "windows", r
 
 function providerListFromRoute(routeResult) {
   const selectedProviders = routeResult.recommendedRoute?.selectedCapabilityProviders ?? {};
-  const selected = Object.entries(selectedProviders);
+  const selected = Object.entries(selectedProviders).filter(([, provider]) => provider && typeof provider.id === "string" && provider.id);
   const fallback = selected.length > 0
     ? []
     : [
@@ -10643,16 +10739,44 @@ function providerListFromRoute(routeResult) {
           .map((provider) => [provider.type, provider]),
         ...(routeResult.ownerDiscoveryPacket?.runtimeToolProviders ?? []).slice(0, 3).map((provider) => ["runtime_tool", provider]),
       ];
-  return [...selected, ...fallback].map(([slot, provider]) => ({
+  const baseProviders = [...selected, ...fallback];
+  const selectedTypes = new Set(
+    baseProviders.map(([, provider]) => provider.type ?? provider.providerType),
+  );
+  const supplemental = [
+    !selectedTypes.has("runtimeTools")
+      ? ["runtimeToolDiscovery", (routeResult.ownerDiscoveryPacket?.runtimeToolProviders ?? [])[0]]
+      : null,
+    !selectedTypes.has("hooks")
+      ? [
+          "hookDiscovery",
+          [
+            ...(routeResult.ownerDiscoveryPacket?.projectRuntimeCapabilityProviders ?? []),
+            ...(routeResult.ownerDiscoveryPacket?.repoCanonicalCapabilityProviders ?? []),
+          ].find((provider) => provider.type === "hooks"),
+        ]
+      : null,
+  ].filter((entry) => entry?.[1]?.id);
+  return [...baseProviders, ...supplemental].map(([slot, provider]) => ({
     slot,
     id: provider.id,
     type: provider.type ?? provider.providerType ?? "capability",
     capabilityType: provider.type ?? provider.providerType ?? "capability",
-    coverageStatus: "selected",
+    coverageStatus: supplemental.some(
+      ([supplementalSlot, supplementalProvider]) =>
+        supplementalSlot === slot && supplementalProvider.id === provider.id,
+    )
+      ? "discovered"
+      : "selected",
     source: provider.source ?? "selected_execution_route",
     sourceRef: provider.sourceRef ?? provider.id,
     platformId: provider.platformId ?? provider.runtime ?? null,
-    routeImpact: `${slot} provider selected for route-driven execution`,
+    routeImpact: supplemental.some(
+      ([supplementalSlot, supplementalProvider]) =>
+        supplementalSlot === slot && supplementalProvider.id === provider.id,
+    )
+      ? `${slot} provider retained as capability-chain discovery evidence`
+      : `${slot} provider selected for route-driven execution`,
   }));
 }
 
@@ -10921,12 +11045,12 @@ function buildRouteDrivenWorkerTasks({ runId, routeResult, task }) {
         },
       ],
       preDecisionOptionFrameRef: "selectedExecutionRoute.decisionCard",
-      userChoiceState: routeResult.routeExecutionGate?.canEnterExecution
-        ? "no_branching_choice"
-        : (routeResult.routeExecutionGate?.returnToStage ?? "route_choice_required"),
-      finalizationGate: routeResult.routeExecutionGate?.canEnterExecution
-        ? "after_route_gate_pass"
-        : "blocked_before_execution",
+      userChoiceState: routeResult.routeExecutionGate?.handoffStatus === "awaiting_native_choice"
+        ? "awaiting_native_choice"
+        : "no_branching_choice",
+      finalizationGate: routeResult.routeExecutionGate?.handoffStatus === "blocked"
+        ? "blocked_before_host_handoff"
+        : routeResult.routeExecutionGate?.hostAction ?? "host_action_required",
     };
   });
 }
@@ -10939,12 +11063,12 @@ async function buildRouteDrivenOrchestration({ task, runId, runtime = "codex", o
   const providerList = providerListFromRoute(routeResult);
   const workerTaskPackets = buildRouteDrivenWorkerTasks({ runId, routeResult, task });
   const routeGate = routeResult.routeExecutionGate ?? {};
-  const blocked = routeGate.canEnterExecution !== true;
+  const blocked = routeGate.handoffStatus === "blocked";
   const capabilityGaps = routeResult.capabilityGapDetected && routeResult.capabilityGapDecision
     ? [
         {
           gapId: `${runId}-route-capability-gap`,
-          blocked: routeGate.canEnterExecution !== true,
+          blocked,
           gapType: "selected_route_gap",
           decision: routeResult.capabilityGapDecision.decision,
           reason: routeResult.capabilityGapDecision.blockedReason ?? "Selected route reported a capability gap.",
@@ -11081,7 +11205,11 @@ async function buildRouteDrivenOrchestration({ task, runId, runtime = "codex", o
       Critical: "visible_intent_and_choice_boundary",
       Fetch: "visible_capability_inventory",
       Thinking: "visible_route_and_worker_task_cards",
-      Execution: blocked ? "blocked_before_execution_by_route_gate" : "route_driven_worker_tasks_ready",
+      Execution: blocked
+        ? "blocked_before_host_handoff"
+        : routeGate.handoffStatus === "awaiting_native_choice"
+          ? "awaiting_native_choice"
+          : "host_action_required",
       Review: "visible_review_checks",
       "Meta-Review": "visible_overclaim_boundary",
       Verification: "visible_verification_owner_and_command",
@@ -11114,17 +11242,11 @@ export async function runMetaTheoryGovernedExecution({
   hostAssistantMessageEvidence = process.env.META_KIM_HOST_ASSISTANT_MESSAGE_EVIDENCE ?? null,
   nativeChoiceEvidence = process.env.META_KIM_NATIVE_CHOICE_EVIDENCE ?? null,
   codexHostToolSchema = process.env.META_KIM_CODEX_HOST_TOOL_SCHEMA ?? null,
-  nativeChoiceEvidenceTrusted = false,
   invokeCapabilityProbes = false,
   projectRoot = process.env.META_KIM_CALLER_CWD || process.cwd(),
   projectCapabilityMutationMode = "auto",
-  planChallengeResponses = [],
-  planChallengeControl = null,
-  sharedUnderstandingConfirmed = false,
-  executionAuthorization = null,
   planChallengeContradictionEvidence = [],
   requestedSideEffectActions = [],
-  hostDecisionEvidenceVerifier = null,
   previousPlanChallengeRunId = null,
   stageRunner = null,
 } = {}) {
@@ -11155,78 +11277,33 @@ export async function runMetaTheoryGovernedExecution({
   const requestedPreviousRunId = previousPlanChallengeRunId == null
     ? null
     : validateRunId(String(previousPlanChallengeRunId), "previous plan challenge runId");
-  const continuationCandidate = requestedPreviousRunId == null
-    ? null
-    : await loadPlanChallengeContinuationCandidate({
+  if (requestedPreviousRunId != null) {
+    await loadPlanChallengeContinuationCandidate({
         artifactPath: resolveOutputFile(outputDir, `${requestedPreviousRunId}.json`),
         previousRunId: requestedPreviousRunId,
         taskFingerprint,
       });
-  const candidatePriorChallengeState = continuationCandidate
-    ? { ...continuationCandidate, trusted: true }
-    : null;
-  const initialPlanChallengePreview = buildPlanChallengeState({
-    task: normalizedTask,
-    priorChallengeState: candidatePriorChallengeState,
-    contradictionEvidence: planChallengeContradictionEvidence,
-    requestedSideEffectActions: governedSideEffectActions,
-    outputLanguage: resolvedOutputLanguage,
-  });
-  let effectivePlanChallengeResponses = [];
-  let effectivePlanChallengeControl = null;
-  let effectiveSharedUnderstandingConfirmed = false;
-  let effectiveExecutionAuthorization = null;
-  let trustedPriorChallengeState = null;
-  if (typeof hostDecisionEvidenceVerifier === "function") {
-    const verifiedDecision = await hostDecisionEvidenceVerifier({
-      task: normalizedTask,
-      previousRunId: requestedPreviousRunId,
-      currentPhase: initialPlanChallengePreview.planChallengeState.phase,
-      pendingUserChoice: initialPlanChallengePreview.planChallengeState.pendingUserChoice,
-      untrustedInput: {
-        responses: planChallengeResponses,
-        control: planChallengeControl,
-        sharedUnderstandingConfirmed,
-        executionAuthorization,
-      },
-    });
-    const boundDecision = bindVerifiedHostPlanChallengeDecision({
-      verifiedDecision,
-      preview: initialPlanChallengePreview,
-      continuationCandidate,
-    });
-    if (boundDecision.accepted) {
-      effectivePlanChallengeResponses = boundDecision.responses;
-      effectivePlanChallengeControl = boundDecision.control;
-      effectiveSharedUnderstandingConfirmed = boundDecision.sharedUnderstandingConfirmed;
-      effectiveExecutionAuthorization = boundDecision.executionAuthorization;
-      trustedPriorChallengeState = boundDecision.priorChallengeState;
-    } else if (requestedPreviousRunId != null) {
-      throw new Error(`Plan challenge continuation rejected: ${boundDecision.reason}.`);
-    }
-  } else if (requestedPreviousRunId != null) {
-    throw new Error(
-      "Plan challenge continuation requires a current host decision evidence verifier.",
-    );
   }
   const planChallengePreview = buildPlanChallengeState({
     task: normalizedTask,
-    priorChallengeState: trustedPriorChallengeState,
-    responses: effectivePlanChallengeResponses,
-    control: effectivePlanChallengeControl,
-    sharedUnderstandingConfirmed: effectiveSharedUnderstandingConfirmed,
-    executionAuthorization: effectiveExecutionAuthorization,
     contradictionEvidence: planChallengeContradictionEvidence,
     requestedSideEffectActions: governedSideEffectActions,
     outputLanguage: resolvedOutputLanguage,
   });
-  const executionAllowed = planChallengePreview.planChallengeState.executionAllowed === true;
+  const planChallengeHandoffReady =
+    planChallengePreview.planChallengeState.active !== true ||
+    planChallengePreview.planChallengeState.planChallengeSatisfied === true;
+  const executionAllowed = false;
   const requestedProjectCapabilityMutationMode =
     normalizedProjectCapabilityMutationMode(projectCapabilityMutationMode);
-  const resolvedProjectCapabilityMutationMode =
-    !executionAllowed
-      ? "read_only"
-      : requestedProjectCapabilityMutationMode;
+  // Host-native worker execution authority and explicit project capability
+  // sedimentation are separate effects. The latter is already constrained by
+  // the entry classification, durable specification, route, and transactional
+  // project-copy checks, so a missing host execution receipt must not silently
+  // downgrade an explicitly requested local capability write to read-only.
+  const resolvedProjectCapabilityMutationMode = planChallengeHandoffReady
+    ? requestedProjectCapabilityMutationMode
+    : "read_only";
   const requestedRunId = runId == null ? null : String(runId);
   if (durableMode === "resume" && requestedRunId == null) {
     throw new Error("Durable resume requires an explicit runId and task.");
@@ -11372,7 +11449,7 @@ export async function runMetaTheoryGovernedExecution({
     decisionResults,
     approvalEvidence,
     approvalPacket,
-    applyWriteback: applyWriteback && executionAllowed,
+    applyWriteback: applyWriteback && planChallengeHandoffReady,
     canonicalRoot,
   });
   await publishProgress(
@@ -11532,7 +11609,6 @@ export async function runMetaTheoryGovernedExecution({
       hostVisibleSubagents,
       hostInvocationEvidence,
       nativeChoiceEvidence,
-      nativeChoiceEvidenceTrusted,
       agentTeamsPlaybookProvider,
       invokeCapabilityProbes,
       projectRoot: path.resolve(projectRoot),
@@ -11552,7 +11628,14 @@ export async function runMetaTheoryGovernedExecution({
   let durableBodyError = null;
   try {
   if (stageRunner?.enabled === true) {
-    if (!executionAllowed) {
+    const routeExecutionGate = orchestrationReport.selectedExecutionRoute?.routeExecutionGate ?? {};
+    const routeGateAllowsBridge =
+      routeExecutionGate.routeCompatible === true &&
+      routeExecutionGate.canHandoffToHost === true &&
+      routeExecutionGate.handoffStatus === "ready_for_host_handoff" &&
+      routeExecutionGate.hostAction === "host_action_required";
+    if (!planChallengeHandoffReady || !routeGateAllowsBridge) {
+      const planChallengeBlocked = !planChallengeHandoffReady;
       coreLoop = {
         ...coreLoop,
         stageRunnerBridgePacket: {
@@ -11562,9 +11645,15 @@ export async function runMetaTheoryGovernedExecution({
           mode: "read_only_shadow",
           runtime: normalizeStageRunnerRuntime(stageRunner.runtime ?? routeRuntime),
           runId: effectiveRunId,
+          routeExecutionGate,
+          canHandoffToHost: routeExecutionGate.canHandoffToHost === true,
           failure: {
-            failureClass: "plan_challenge_execution_not_authorized",
-            reason: "The existing plan-challenge gate did not authorize Execution.",
+            failureClass: planChallengeBlocked
+              ? "plan_challenge_execution_not_authorized"
+              : "route_gate_host_native_execution_required",
+            reason: planChallengeBlocked
+              ? "The plan challenge is still awaiting a real host-native decision."
+              : "The route gate is not ready for the explicitly requested read-only host bridge handoff.",
           },
           nodeRecords: [],
           workerResults: [],
@@ -11624,6 +11713,7 @@ export async function runMetaTheoryGovernedExecution({
           stageRunner.orchestratorOptions,
         ),
         readySetTimeoutMs: stageRunner.readySetTimeoutMs ?? null,
+        evidenceKind: stageRunner.evidenceKind ?? "native_read_only_stage_runner",
         durable: durableCoordinator
           ? {
               enabled: true,
@@ -11636,6 +11726,14 @@ export async function runMetaTheoryGovernedExecution({
             }
           : null,
       });
+      bridgeResult.routeHandoffEvidence = {
+        routeCompatible: routeExecutionGate.routeCompatible === true,
+        canHandoffToHost: routeExecutionGate.canHandoffToHost === true,
+        handoffStatus: routeExecutionGate.handoffStatus,
+        hostAction: routeExecutionGate.hostAction,
+        executionAuthorized: false,
+        authority: routeExecutionGate.authorizationOwner ?? "current_host_native_surfaces_and_permissions",
+      };
       coreLoop = applyStageRunnerBridgeResult(coreLoop, bridgeResult);
       if (durableCoordinator) {
         durableCoordinator.assertHealthy();
@@ -11663,6 +11761,7 @@ export async function runMetaTheoryGovernedExecution({
     coreLoop.capabilityInvocationTruthPacket.status === "pass" &&
     !["partial", "read_only"].includes(coreLoop.projectCustomizationPacket.status) &&
     coreLoop.productExperiencePacket.status === "product_experience_pass" &&
+    coreLoop.contextEngineeringBudget.status === "pass" &&
     (!coreLoop.stageRunnerBridgePacket || coreLoop.stageRunnerBridgePacket.status === "pass")
       ? "pass"
       : "partial";
@@ -11686,6 +11785,14 @@ export async function runMetaTheoryGovernedExecution({
         coreLoop.productExperiencePacket.status !== "product_experience_pass"
           ? `product_experience=${coreLoop.productExperiencePacket.status}`
           : null,
+        coreLoop.contextEngineeringBudget.status !== "pass"
+          ? `context_engineering_budget=${coreLoop.contextEngineeringBudget.status}`
+          : null,
+        ...(coreLoop.contextEngineeringBudget.status === "pass"
+          ? []
+          : coreLoop.contextEngineeringBudget.blockedBy.map(
+              (blocker) => `context_engineering_budget_blocked_by=${blocker}`,
+            )),
         coreLoop.stageRunnerBridgePacket && coreLoop.stageRunnerBridgePacket.status !== "pass"
           ? `stage_runner_bridge=${coreLoop.stageRunnerBridgePacket.status}`
           : null,
@@ -11830,11 +11937,6 @@ export async function runMetaTheoryGovernedExecution({
     osTarget: routeOs,
     outputLanguage: resolvedOutputLanguage,
     languageSource: languageResolution.source,
-    planChallengeResponses: effectivePlanChallengeResponses,
-    planChallengeControl: effectivePlanChallengeControl,
-    sharedUnderstandingConfirmed: effectiveSharedUnderstandingConfirmed,
-    executionAuthorization: effectiveExecutionAuthorization,
-    priorChallengeState: trustedPriorChallengeState,
     contradictionEvidence: planChallengeContradictionEvidence,
     requestedSideEffectActions: governedSideEffectActions,
     planChallengePreview,
@@ -11864,6 +11966,7 @@ export async function runMetaTheoryGovernedExecution({
     resolvedOutputLanguage,
     languageResolution,
     status: artifactStatus,
+    partialReasons,
     task: normalizedTask,
     coreLoop,
     requestRecord: coreLoop.requestRecord,
@@ -12440,7 +12543,6 @@ async function main() {
       "--codex-host-tool-schema",
       process.env.META_KIM_CODEX_HOST_TOOL_SCHEMA ?? null,
     ),
-    nativeChoiceEvidenceTrusted: false,
     invokeCapabilityProbes: process.argv.includes("--invoke-capability-probes"),
     projectRoot: process.env.META_KIM_CALLER_CWD || process.cwd(),
     projectCapabilityMutationMode:
@@ -12475,8 +12577,9 @@ async function main() {
               ? "stopped_by_user"
               : report.status,
         runId: report.runId,
-        executionAllowed:
-          report.preDecisionOptionFrame?.planChallengeState?.executionAllowed ?? true,
+        executionAllowed: false,
+        planChallengeSatisfied:
+          report.preDecisionOptionFrame?.planChallengeState?.planChallengeSatisfied === true,
         pendingUserChoice:
           report.preDecisionOptionFrame?.planChallengeState?.pendingUserChoice ?? null,
         challengeSummary: report.summaryPacket

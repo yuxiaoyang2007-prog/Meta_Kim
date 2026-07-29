@@ -1744,6 +1744,10 @@ function validatePreDecisionOptionFrame(contract, artifact) {
       "preDecisionOptionFrame.planChallengeState.active must be a boolean.",
     );
     ensure(
+      typeof challenge.planChallengeSatisfied === "boolean",
+      "preDecisionOptionFrame.planChallengeState.planChallengeSatisfied must be a boolean.",
+    );
+    ensure(
       typeof challenge.authorizationRequired === "boolean",
       "preDecisionOptionFrame.planChallengeState.authorizationRequired must be a boolean.",
     );
@@ -1817,8 +1821,8 @@ function validatePreDecisionOptionFrame(contract, artifact) {
         `preDecisionOptionFrame.planChallengeState.decisionEvidence[${index}]`,
       );
       ensure(
-        evidence.trusted === true,
-        `preDecisionOptionFrame.planChallengeState.decisionEvidence[${index}] must be trusted host-adapter evidence.`,
+        evidence.trusted === false,
+        `preDecisionOptionFrame.planChallengeState.decisionEvidence[${index}] is planning evidence and must remain non-authorizing.`,
       );
       ensureString(
         evidence.binding,
@@ -1993,12 +1997,10 @@ function validatePreDecisionOptionFrame(contract, artifact) {
         "execution authorization evidence must be bound to the current side-effect action set.",
       );
     }
-    if (challenge.executionAuthorization.state === "authorized") {
-      ensure(
-        scopeCoversActions,
-        "authorized executionAuthorization must cover every concrete side-effect action.",
-      );
-    }
+    ensure(
+      challenge.executionAuthorization.state !== "authorized",
+      "pre-host artifacts cannot claim authorized executionAuthorization.",
+    );
     ensureObject(
       challenge.pendingUserChoice,
       "preDecisionOptionFrame.planChallengeState.pendingUserChoice",
@@ -2082,9 +2084,12 @@ function validatePreDecisionOptionFrame(contract, artifact) {
       );
     }
     ensure(
-      challenge.executionAllowed ===
-        (!challenge.active || challenge.phase === "ready_for_execution"),
-      "preDecisionOptionFrame.planChallengeState.executionAllowed must fail closed until an active challenge is ready_for_execution.",
+      challenge.executionAllowed === false,
+      "preDecisionOptionFrame.planChallengeState.executionAllowed must remain false before host-native execution occurs.",
+    );
+    ensure(
+      challenge.phase !== "ready_for_execution",
+      "pre-host artifacts cannot claim ready_for_execution; use planChallengeSatisfied for non-authorizing plan closure.",
     );
     if (!challenge.active) {
       ensure(
@@ -2094,22 +2099,25 @@ function validatePreDecisionOptionFrame(contract, artifact) {
         "inactive plan challenge must preserve the low-risk path without an authorization gate.",
       );
     }
-    if (challenge.phase === "ready_for_execution") {
+    if (challenge.phase === "plan_challenge_satisfied") {
       ensure(
         challenge.selectedQuestionId === null &&
           packet.unresolvedQuestions.every((question) => question.status !== "open"),
-        "ready_for_execution requires every challenge question to be closed and no selected question.",
+        "plan_challenge_satisfied requires every challenge question to be closed and no selected question.",
       );
       ensure(
         challenge.sharedUnderstandingConfirmed === true,
-        "ready_for_execution requires shared understanding confirmation.",
+        "plan_challenge_satisfied requires shared understanding confirmation.",
       );
       ensure(
-        challenge.authorizationRequired === false ||
-          challenge.executionAuthorization.state === "authorized",
-        "ready_for_execution requires separate execution authorization when authorizationRequired=true.",
+        challenge.planChallengeSatisfied === true,
+        "plan_challenge_satisfied phase requires planChallengeSatisfied=true.",
       );
     }
+    ensure(
+      challenge.planChallengeSatisfied === (challenge.phase === "plan_challenge_satisfied"),
+      "planChallengeSatisfied must match the non-authorizing plan_challenge_satisfied phase.",
+    );
     if (challenge.executionAuthorization.state === "denied") {
       ensure(
         challenge.phase === "execution_denied" &&
@@ -2118,7 +2126,7 @@ function validatePreDecisionOptionFrame(contract, artifact) {
         "denied execution authorization must be terminal and must not ask again.",
       );
     }
-    if (challenge.active && challenge.phase !== "ready_for_execution") {
+    if (challenge.active) {
       ensure(
         challenge.executionAllowed === false && artifact.status !== "pass",
         "active non-ready plan challenge must block execution and prevent a pass artifact.",
@@ -2143,8 +2151,8 @@ function validatePreDecisionOptionFrame(contract, artifact) {
       !["authorized", "denied"].includes(challenge.executionAuthorization.state)
     ) {
       ensure(
-        challenge.phase === "awaiting_execution_authorization",
-        "shared understanding alone must not advance an authorization-required challenge to execution.",
+        challenge.phase === "plan_challenge_satisfied",
+        "shared understanding may satisfy the plan challenge but must not authorize host execution.",
       );
     }
     const summaryFields = challengePolicy.summaryRequiredFields ?? [];
@@ -4590,12 +4598,112 @@ function validateNestedPacketConsistency(artifact, packetName) {
   );
 }
 
-function validateCoreLoopPublicReadyConsistency(artifact) {
+function validateContextEngineeringBudgetForPublicReady(contract, artifact, claims) {
+  const policy =
+    contract.runDiscipline?.runArtifactValidation
+      ?.contextEngineeringBudgetPublicReadyPolicy;
+  ensure(
+    policy?.enabled === true,
+    "runArtifactValidation.contextEngineeringBudgetPublicReadyPolicy must be enabled.",
+  );
+
+  const claimNames = claims.map(([name]) => name).join(", ");
+  const packetName = policy.packet;
+  const contextBudget = nestedPacket(artifact, packetName);
+  ensure(
+    contextBudget && typeof contextBudget === "object",
+    `${claimNames} requires ${packetName}.`,
+  );
+  ensure(
+    contextBudget[policy.statusField] === policy.requiredStatus,
+    `${claimNames} requires ${packetName}.${policy.statusField}=${policy.requiredStatus}.`,
+  );
+
+  const blockedBy = contextBudget[policy.blockedByField];
+  ensureArray(blockedBy, `${packetName}.${policy.blockedByField}`);
+  ensure(
+    blockedBy.length === 0,
+    `${claimNames} requires ${packetName}.${policy.blockedByField} to be empty.`,
+  );
+
+  const measurement = contextBudget[policy.measurementField];
+  ensure(
+    measurement && typeof measurement === "object",
+    `${claimNames} requires ${packetName}.${policy.measurementField}.`,
+  );
+  const measurementPolicy = policy.measurementRequirements;
+  const hostObservedField = measurementPolicy.hostObservedContextLoadField;
+  ensure(
+    measurement[hostObservedField] ===
+      measurementPolicy.hostObservedContextLoadRequiredValue,
+    `${claimNames} requires ${packetName}.${policy.measurementField}.${hostObservedField}=true.`,
+  );
+  const inputTokensField = measurementPolicy.actualInputTokensField;
+  ensure(
+    Number.isFinite(measurement[inputTokensField]) &&
+      measurement[inputTokensField] >= measurementPolicy.actualInputTokensMinimum,
+    `${claimNames} requires ${packetName}.${policy.measurementField}.${inputTokensField} to be a finite nonnegative number.`,
+  );
+  for (const check of measurementPolicy.completedChecks) {
+    ensure(
+      measurement[check.field] === check.requiredValue,
+      `${claimNames} requires ${packetName}.${policy.measurementField}.${check.field}=${check.requiredValue}.`,
+    );
+  }
+
+  for (const collectionField of policy.sourceCollectionFields) {
+    const records = contextBudget[collectionField];
+    ensureArray(records, `${packetName}.${collectionField}`);
+    ensure(
+      records.length >= policy.minimumSourceRecordsPerCollection,
+      `${claimNames} requires at least ${policy.minimumSourceRecordsPerCollection} ${packetName}.${collectionField} record(s).`,
+    );
+    for (const [index, source] of records.entries()) {
+      const sourcePath = `${packetName}.${collectionField}[${index}]`;
+      ensure(
+        source && typeof source === "object",
+        `${sourcePath} must be an object.`,
+      );
+      ensureEnum(
+        source[policy.sourceEvidenceStateField],
+        policy.observedSourceEvidenceStates,
+        `${sourcePath}.${policy.sourceEvidenceStateField}`,
+      );
+      ensureString(
+        source[policy.sourceEvidenceRefField],
+        `${sourcePath}.${policy.sourceEvidenceRefField}`,
+      );
+    }
+  }
+
+  const publicReadyDecision = nestedPacket(artifact, "publicReadyDecision");
+  ensure(
+    publicReadyDecision && typeof publicReadyDecision === "object",
+    `${claimNames} requires publicReadyDecision.`,
+  );
+  ensure(
+    publicReadyDecision[policy.publicReadyDecisionStatusField] ===
+      contextBudget[policy.statusField],
+    `publicReadyDecision.${policy.publicReadyDecisionStatusField} must match ${packetName}.${policy.statusField}.`,
+  );
+  ensureArray(
+    publicReadyDecision[policy.publicReadyDecisionBlockedByField],
+    `publicReadyDecision.${policy.publicReadyDecisionBlockedByField}`,
+  );
+  ensure(
+    canonicalJson(publicReadyDecision[policy.publicReadyDecisionBlockedByField]) ===
+      canonicalJson(blockedBy),
+    `publicReadyDecision.${policy.publicReadyDecisionBlockedByField} must match ${packetName}.${policy.blockedByField}.`,
+  );
+}
+
+function validateCoreLoopPublicReadyConsistency(contract, artifact) {
   for (const packetName of [
     "runtimeInvocationPlanPacket",
     "hostInvocationRequestPacket",
     "capabilityInvocationTruthPacket",
     "productExperiencePacket",
+    "contextEngineeringBudget",
     "publicReadyDecision",
   ]) {
     validateNestedPacketConsistency(artifact, packetName);
@@ -4603,6 +4711,8 @@ function validateCoreLoopPublicReadyConsistency(artifact) {
 
   const claims = publicReadyClaims(artifact);
   if (claims.length === 0) return;
+
+  validateContextEngineeringBudgetForPublicReady(contract, artifact, claims);
 
   const readinessSignals = publicReadySignals(artifact);
   const falseSignals = readinessSignals.filter(([, value]) => value === false);
@@ -4891,7 +5001,7 @@ export function validateArtifact(contract, artifact) {
   validateWorkerPackets(contract, artifact);
   validateFindingChain(contract, artifact);
   validateSummaryAndEvolution(contract, artifact);
-  validateCoreLoopPublicReadyConsistency(artifact);
+  validateCoreLoopPublicReadyConsistency(contract, artifact);
   validateCompactionPacket(contract, artifact);
   validateHardPublicReadyTodoGate(contract, artifact);
   validateHardCommentReviewGate(contract, artifact);
