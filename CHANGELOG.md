@@ -8,6 +8,26 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## Unreleased
 
+## [2.9.15] - 2026-07-31
+
+### Fixed
+
+- **OpenClaw's declarative `executionBlock` policy is no longer described as mechanical tool-call enforcement.** The canonical runtime boundary now states that refusal prose is policy guidance, while actual blocking or parameter rewriting requires an OpenClaw typed plugin hook. Meta_Kim still does not claim that such an adapter is installed, and it does not copy Claude Code or Codex deny-payload semantics into OpenClaw.
+
+### Verification
+
+- Independent correctness, security/truth, and completeness reviews closed all P0/P1 findings. The private capability-gap PRD test passes 56/56, its strict five-classification acceptance check passes, runtime projections sync cleanly, and `git diff --check` passes. A single post-repair global readback confirms current Claude Code and Codex governance agents, Meta-Theory skills, Hooks, commands, MCP, and choice configuration before publication.
+
+## [2.9.14] - 2026-07-30
+
+### Fixed
+
+- **GitHub source downloads and Windows Git checkouts no longer fail repository-evidence validation solely because text files use LF or CRLF line endings.** Repository source bindings now hash a canonical LF representation for UTF-8 text while preserving byte-exact hashing for non-text files, so the same tracked content verifies consistently in source archives, npm packages, and local checkouts.
+
+### Verification
+
+- Repository-evidence regressions verify equivalent LF and CRLF distributions and retain byte-sensitive hashing for non-UTF-8 files. The GitHub source-archive shape and the packed npm-product shape both validate without SHA-256 mismatches. Standard full release verification and exact post-publication package binding remain required before publication.
+
 ## [2.9.13] - 2026-07-29
 
 ### Fixed

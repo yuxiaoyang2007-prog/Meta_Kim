@@ -8,6 +8,26 @@
 
 ## Unreleased
 
+## [2.9.15] - 2026-07-31
+
+### 修复内容
+
+- **不再把 OpenClaw 的声明式 `executionBlock` 策略描述成机械工具调用拦截。** canonical 运行端边界现在明确：拒绝说明只是策略指导，真正阻断或改写工具调用需要 OpenClaw typed plugin Hook。Meta_Kim 仍不声称已经安装该 adapter，也不会把 Claude Code 或 Codex 的 deny-payload 语义直接复制到 OpenClaw。
+
+### 验证
+
+- correctness、security/truth、completeness 三路独立 Review 已关闭全部 P0/P1。私有 capability-gap PRD 测试 56/56 通过，五分类严格验收通过，运行端投影同步与 `git diff --check` 通过；发布前只执行一次的全局 fresh readback 已确认 Claude Code/Codex 的治理 Agent、Meta-Theory Skill、Hooks、Commands、MCP 与 choice 配置均为当前版本。
+
+## [2.9.14] - 2026-07-30
+
+### 修复内容
+
+- **从 GitHub 下载源码包或在 Windows 上用 Git 克隆时，不会再仅因文本换行符为 LF/CRLF 就触发仓库证据校验失败。** UTF-8 文本现在按统一 LF 表示计算仓库源码绑定，非文本文件仍保持原始字节哈希，因此相同的受跟踪内容可在源码包、npm 安装包和本地工作区中得到一致结果。
+
+### 验证
+
+- 仓库证据回归同时验证 LF 与 CRLF 分发结果一致，并保留非 UTF-8 文件的原始字节敏感哈希。GitHub 源码包形态与实际 npm 打包产品形态均不再出现 SHA-256 不匹配。发布前仍必须完成标准完整发布门禁与发布后的精确包绑定审计。
+
 ## [2.9.13] - 2026-07-29
 
 ### 修复内容
