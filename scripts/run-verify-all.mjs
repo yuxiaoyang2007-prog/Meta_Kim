@@ -98,15 +98,25 @@ export function resolveReleaseOperationTimeout(operationName, environment = proc
 const STANDARD_STAGE_COMMANDS = Object.freeze([
   ["discover:global", "npm run discover:global -- --check"],
   ["meta:agents:migration-catalog:check", "npm run meta:agents:migration-catalog:check"],
-  ["meta:sync", "npm run meta:sync"],
-  ["meta:check", "npm run meta:check"],
+  [
+    "meta:sync",
+    `npm run meta:sync -- --targets ${RELEASE_RUNTIME_TARGETS.join(",")}`,
+  ],
+  [
+    "meta:check",
+    `npm run meta:check:runtimes -- --targets ${RELEASE_RUNTIME_TARGETS.join(",")} && npm run meta:check:sync-coverage && npm run meta:open-source-boundary:validate && npm run meta:validate`,
+  ],
   ["meta:verify:governance:core", "npm run meta:verify:governance:core"],
-  ["meta:graphify:check", "npm run meta:graphify:check"],
+  [
+    "meta:graphify:verified-rebuild",
+    "npm run meta:graphify:verified-rebuild && npm run meta:graphify:check",
+  ],
   ["meta:check:global:release", "npm run meta:check:global:release"],
   ["eval-meta-agents", "node scripts/eval-meta-agents.mjs --primary-release-fuse"],
   ["meta:runtime:produce", "node scripts/run-runtime-capability-producers.mjs --status --require-fresh"],
   ["meta:test:inventory", "npm run meta:test:inventory"],
   ["meta:test:unit", "npm run meta:test:unit"],
+  ["meta:test:process-guard", "npm run meta:test:process-guard"],
   ["meta:test:setup", "npm run meta:test:setup"],
   ["meta:test:meta-theory", "npm run meta:test:meta-theory"],
   ["meta:test:integration", "npm run meta:test:integration"],
@@ -697,9 +707,29 @@ function parseStageCommand(cmd) {
 
 function runWithTimeout(cmd, timeoutMs, { captureStdout = false } = {}) {
   const { command, args: commandArgs } = parseStageCommand(cmd);
+  const environment = { ...process.env };
+  if (cmd.includes("meta:graphify:verified-rebuild")) {
+    const blockedEnvironmentKeys = new Set([
+      "META_KIM_GRAPHIFY_BIN",
+      "META_KIM_GRAPHIFY_BIN_ARGS",
+      "META_KIM_GRAPHIFY_PYTHON",
+      "META_KIM_GRAPHIFY_NORMALIZER_PYTHON",
+      "PYTHONHOME",
+      "PYTHONPATH",
+      "PYTHONSTARTUP",
+      "PYTHONINSPECT",
+      "PYTHONUSERBASE",
+    ]);
+    for (const key of Object.keys(environment)) {
+      if (blockedEnvironmentKeys.has(key.toUpperCase())) {
+        delete environment[key];
+      }
+    }
+  }
   const result = spawnSync(command, commandArgs, {
     cwd: process.cwd(),
     shell: false,
+    env: environment,
     ...(captureStdout ? { encoding: "utf8", stdio: ["inherit", "pipe", "inherit"] } : { stdio: "inherit" }),
     timeout: timeoutMs,
   });

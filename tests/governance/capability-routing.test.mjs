@@ -165,6 +165,12 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
         `${sourceRef} must survive bounded route evidence when commands outnumber the output limit`,
       );
     }
+    assert.ok(
+      fuzzy.ownerDiscoveryPacket?.projectRuntimeCapabilityProviders?.some(
+        (provider) => provider.id?.startsWith("package-script:") && provider.sourceRef?.startsWith("package.json#scripts."),
+      ),
+      "at least one package.json command provider must survive bounded route evidence",
+    );
   } else {
     const routeSearchRefs = fuzzy.ownerDiscoveryPacket.capabilityDiscoverySearchLog
       .map((entry) => `${entry.source}:${entry.sourceRef}`)
@@ -703,14 +709,16 @@ test("routing fixtures recall internal patterns and platform/OS matrices", () =>
   assertNativeCodexSpawn(
     codexNativeCustomAgentRoute.recommendedRoute?.codexSpawnBinding,
     codexNativeCustomAgentRoute.recommendedRoute?.owner,
-    null,
-    "native_custom_agent",
   );
   assertNativeCodexSpawn(
     codexNativeCustomAgentRoute.workerTaskPacketDrafts?.[0]?.codexSpawnBinding,
     codexNativeCustomAgentRoute.recommendedRoute?.owner,
     codexNativeCustomAgentRoute.workerTaskPacketDrafts?.[0],
-    "native_custom_agent",
+  );
+  assert.equal(
+    codexNativeCustomAgentRoute.recommendedRoute?.codexSpawnBinding
+      ?.hostToolSchemaEvidence?.suppliedArtifactRejected,
+    true,
   );
   assert.equal(
     codexAgentReuseComplaint.capabilityGapDetected,

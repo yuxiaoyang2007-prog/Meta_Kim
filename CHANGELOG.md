@@ -8,6 +8,63 @@ The changelog explains the user-facing problem or risk each release solved, what
 
 ## Unreleased
 
+## [2.9.19] - 2026-08-01
+
+### Fixed
+
+- **Windows runtime evaluation now contains its own processes with a private Job Object instead of reconstructing a process tree from reusable PIDs.** The root process is created suspended, assigned before resume, and protected by kill-on-close plus owner-process and supervisor-pipe leases. Timeout, launcher failure, supervisor death, and an early root exit all drain the processes actually admitted to the Job.
+- **Runtime command output is bounded without losing whole-stream evidence.** Each stream retains a bounded prefix and tail, records complete byte counts and SHA-256, preserves valid UTF-8 boundaries, and applies mandatory repository, home, WSL-path, and credential redaction. Secondary temporary-file cleanup failures no longer hide the primary process-cleanup result.
+- **Cleanup claims now match the real containment boundary.** Release evidence may verify only the runner-owned Windows Job or POSIX detached process group; it explicitly does not claim arbitrary whole-process-tree cleanup or cover processes created outside that group. A dedicated serial process-guard stage exercises this boundary once in the standard release chain.
+- **Windows PowerShell 5.1 now reads evaluator launch specifications as explicit UTF-8.** Real Chinese agent definitions, emoji, accented Latin, Japanese, and Korean survive the no-BOM JSON handoff; launcher/result contradictions, out-of-range protocol values, and malformed public failure evidence fail closed instead of being reported as verified cleanup.
+- **Primary process cleanup truth is kept separate from secondary control-directory cleanup.** A retained temporary directory remains visible as a bounded allowlisted secondary failure, while a coherently verified Windows Job or POSIX process-group cleanup keeps its verified status. Public reports omit raw commands, prompts, paths, environment values, output, stacks, and signals.
+- **Graphify rebuilds now tolerate intentional tracked-file deletions in the current worktree.** Deleted index entries are excluded from the live repository snapshot before hashing, so replacing the legacy process guardian no longer crashes the graph migration with an `ENOENT`; a concurrent disappearance still fails closed during digest verification.
+- **Graphify's verified Windows install retries only short-lived directory-lock errors during atomic replacement.** `EPERM`, `EBUSY`, and `EACCES` receive a small finite backoff; every other error fails immediately, and exhaustion still restores the previous verified graph instead of weakening the release gate.
+- **OpenClaw 2026.7.1 SQLite auth storage no longer fails the compatibility smoke or triggers legacy credential copying.** Meta_Kim recognizes the runtime-managed per-agent SQLite store and leaves authentication inheritance to OpenClaw; it never copies credential databases. The old fixed-file mirror remains available only for legacy installations that do not have the current store.
+
+### Verification
+
+- Focused regressions cover root/child/grandchild timeout cleanup, nonzero root exit with descendant draining, launcher crash, Node supervisor death, missing launcher results, stale timers, stdout and stderr floods, default redaction, UTF-8 splitting/spec roundtrips, POSIX outcome ordering, contradictory protocol tuples, and primary-versus-secondary cleanup truth. Independent correctness, security, and completeness reviews report P0/P1/P2=0. Final release evidence still requires one clean 15/15 standard gate on the final commit, exact Release binding, and formal Claude Code/Codex global readback; an earlier failed stage-8 report and a later Claude-only diagnostic are not release evidence.
+
+## [2.9.18] - 2026-08-01
+
+### Fixed
+
+- **Governance decisions and transactional run state now have a clear boundary.** `spine-state.mjs` remains the single compatibility entrypoint and state authority; path/profile routing, task identity, HMAC, migration, locks/CAS, activation, and terminalization stay in the original transaction chain. Pure stage, capability, choice-surface, and fan-out policy moved into one shared zero-I/O module, reducing the verification blast radius of policy-only changes.
+- **Claude Code, Codex, and Cursor Hook projection installs dependencies before replacing their consumers.** Project sync, global sync, setup, cleanup ownership sets, and capability discovery all include the new shared dependency. An interrupted update cannot create this release's new “consumer written before dependency exists” window.
+- **In-process importers can no longer mutate shared governance policy.** Stage order, public labels, choice-surface states, and nested stage policy are deeply frozen, while the Meta Agent allowlist remains private. A forged owner cannot enter the primary dispatch chain by changing a shared array.
+
+### Verification
+
+- All 43 historical `spine-state.mjs` exports remain available, and the 14 extracted policy exports retain identity through the compatibility façade. Focused regressions cover state CAS/migration/interruption repair, cold import across three runtime projections, packed/global Hook projection, dependency write order, policy mutation, and forged owners. Independent correctness, security, and projection-completeness reviews end with no P0/P1/P2 findings. Final release evidence still requires the standard full gate, exact Release binding, and formal Claude Code/Codex global readback.
+
+## [2.9.17] - 2026-07-31
+
+### Fixed
+
+- **Codex Agent and Skill discovery now keeps source provenance instead of flattening same-name definitions into one unverified capability.** Exact duplicates remain aliasable, while conflicting or invalid definitions are published as diagnosis-only and cannot enter normal or dynamic execution routing. Live filesystem definitions outrank stale cache entries, and project/global collisions retain their ownership and repair boundary.
+- **Offline routing can no longer manufacture native Codex custom-agent authority from supplied JSON or environment data.** Only the current interactive host may prove native `agent_type` support; offline selection rejects self-reported host schemas and safely falls back to a run-scoped owner contract.
+- **Capability diagnostics and publication are safer and more honest.** New Codex skill preflight and JSONL replay commands report candidate-set pressure and observed event markers without claiming host completion or causality. Published inventory and route output redact secrets and local paths, summarize developer instructions instead of exposing prompt text, and fail closed when install ownership cannot be validated.
+- **Standard release verification no longer treats a maintainer-adopted Graphify artifact as fresh production evidence.** The gate now launches and observes a deterministic local code-graph update, binds its unchanged repository snapshot, then reclusters without an LLM before the normal identity and freshness checks. Existing-extract adoption remains a recovery aid only.
+
+### Verification
+
+- Focused discovery, routing, YAML metadata, ownership, privacy, and replay regressions pass, including conflicting custom agents, invalid dynamic-lane providers, quoted and delimiter-containing local paths, secret-bearing environment fragments, process-exit failures, and markers without an independently bound host receipt. Three independent correctness, product-fit, and security reviews report no remaining P0/P1/P2. Standard full release verification, packed-product installation, exact Release binding, and final Claude Code/Codex global readback remain required before publication. This release does not claim that Codex host metadata truncation is fixed.
+
+## [2.9.16] - 2026-07-31
+
+### Fixed
+
+- **Codex CLI 0.146 now receives a valid custom-agent release-fuse request.** The self-contained child review pairs its explicit `agent_type` with `fork_turns: "none"`, avoiding the host-rejected custom-agent plus default full-history combination.
+- **Full release verification now keeps all declared runtime projections present and checks the same set throughout one run.** Its sync and readback stages derive the explicit Claude Code, Codex, OpenClaw, and Cursor targets from the canonical sync manifest instead of collapsing back to machine-local defaults before cross-runtime smoke checks.
+- **Claude Code 2.1.202 asynchronous Agent runs now become evidence only after the exact child result and the full task lifecycle are complete.** Agent and subagent observations bind the same session, tool call, task, child result, completion boundary, and marker digest. Failed, duplicated, reordered, cross-session, or decorated-only results fail closed instead of being mistaken for a successful child run.
+- **Codex Desktop can provide fresh release evidence from the current native task when a separate Codex CLI invocation is unavailable.** The reader accepts the current structured output-block form, ignores outer in-progress string outputs, and still requires the exact ordered shell, file-read, and patch chain. A plain string or self-declared `Exit code: 0` cannot mint a successful capability receipt.
+- **A completed Graphify extract can now be adopted without repeating extraction, but only through an explicit, fail-closed takeover.** The takeover binds the exact HEAD, repository inventory and contents, plain-file artifact hashes, graph identity, report counts, and source-versus-artifact timestamps before it can resume clustering. The rebuild path also rewrites only the canonical `~/.meta-kim/...` documentation alias to a non-local display token while real home paths, unknown aliases, and traversal forms remain blocked.
+- **The runtime-capability evidence regression clock now matches the repository evidence date.** The baseline no longer misclassifies the existing 2026-07-31 OpenClaw projection observation as future evidence, while the negative fixture still proves that a genuinely later observation is rejected.
+
+### Verification
+
+- Focused observer, producer, raw-replay, acceptance, and Graphify safety regressions cover synchronous and asynchronous Claude Agent lifecycles, exact child-result hashing, duplicate and failed terminals, cross-session/call splicing, Codex Desktop string-output falsification, valid structured desktop evidence, safe existing-extract takeover, wrong-HEAD/source-change rejection, and private-path/traversal refusal. Independent correctness, security/truth, and completeness reviews found no remaining P0/P1/P2 before the Graphify gate fix; that additional fix still requires the standard full release verification and exact post-publication package binding before this version is declared released. Fresh production observations cover the exact Claude Code 5/5 and Codex 5/5 capability set.
+
 ## [2.9.15] - 2026-07-31
 
 ### Fixed

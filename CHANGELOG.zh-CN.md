@@ -8,6 +8,63 @@
 
 ## Unreleased
 
+## [2.9.19] - 2026-08-01
+
+### 修复内容
+
+- **Windows runtime 验收不再根据可复用 PID 反推整棵进程树，而是用私有 Job Object 管住自己创建的进程。** 根进程先以 suspended 状态创建，成功加入 Job 后才恢复；kill-on-close、owner 进程 handle 与 supervisor pipe lease 共同覆盖 timeout、launcher 崩溃、Node supervisor 退出和根进程提前结束，确保真正加入 Job 的成员被排空。
+- **runtime 命令输出有界保存，同时保留完整流证据。** 每个输出流只保留有限正文与尾部，但记录完整字节数和 SHA-256；UTF-8 截断不会产生破损字符，仓库路径、用户 home、WSL 路径和凭据默认脱敏，次级临时文件清理失败也不会覆盖主要进程清理结果。
+- **清理声明与真实控制范围一致。** 发布证据只能验证 runner 自己拥有的 Windows Job 或 POSIX detached process group；明确不声称能清理任意完整系统进程树，也不覆盖脱离该进程组创建的进程。标准发布链新增一次串行 process-guard 阶段，避免这些生命周期测试在其他套件中重复执行。
+- **Windows PowerShell 5.1 现在会显式按 UTF-8 读取 evaluator 启动规格。** 无 BOM JSON 交接中的真实中文 Agent 定义、emoji、重音拉丁文、日文和韩文不再损坏；launcher/result 矛盾、越界协议数值和畸形公开失败证据会 fail closed，不会被误报为清理已验证。
+- **主要进程清理真值与次级控制目录清理分开记录。** 临时目录残留会继续作为有界、固定白名单的次级失败显示，但已经自洽证明的 Windows Job 或 POSIX 进程组清理不会被它覆盖。公开报告不会带出原始命令、提示词、路径、环境变量、输出、stack 或 signal。
+- **Graphify 重建现在能正确处理当前工作区中有意删除的受跟踪文件。** 在计算当前仓库快照前会排除 Git 索引里已删除的旧路径，替换旧进程 guardian 不再因 `ENOENT` 让代码图迁移崩溃；若文件在摘要过程中并发消失，验证仍会 fail closed。
+- **Graphify 在 Windows 安装已验证代码图时，只对短暂目录锁做有限重试。** `EPERM`、`EBUSY`、`EACCES` 使用很短且有上限的退避；其他错误立即失败，重试耗尽仍恢复上一份已验证图，不会放宽发布门。
+- **OpenClaw 2026.7.1 的 SQLite 认证存储不再让兼容 smoke 失败，也不会触发旧式凭据复制。** Meta_Kim 识别由 OpenClaw 管理的 per-agent SQLite store，把认证继承继续交给运行端处理，绝不复制凭据数据库；只有不存在当前 store 的旧安装才继续使用固定 JSON 文件兼容镜像。
+
+### 验证
+
+- 定向回归覆盖 root/child/grandchild timeout 清理、根进程非零退出后的后代排空、launcher 崩溃、Node supervisor 退出、缺失 launcher 结果、残留 timer、stdout/stderr 洪泛、默认脱敏、UTF-8 分片/规格往返、POSIX 结果竞争、矛盾协议组合及主要/次级清理真值。correctness、security、completeness 三路独立 Review 最终均为 P0/P1/P2=0。最终仍以最终提交上的单一 clean 15/15 标准门、精确 Release 绑定和 Claude Code/Codex 正式全局读回为准；此前第 8 项失败报告和后续 Claude-only 定向诊断都不算发布证据。
+
+## [2.9.18] - 2026-08-01
+
+### 修复内容
+
+- **治理判断与运行状态事务现在有了清晰边界。** `spine-state.mjs` 继续作为唯一兼容入口和状态权威，路径/profile、任务身份、HMAC、迁移、锁/CAS、激活与终止全部留在原事务链；无文件 I/O 的阶段、能力、选择面与 fan-out 判断被抽到单一共享规则模块，局部修改不再与持久化实现混在一起。
+- **Claude Code、Codex 与 Cursor 的 Hook 投影会先安装依赖，再替换引用它的入口。** 项目同步、全局同步、setup、清理白名单和能力发现目录都认识新的共享依赖；更新中断不会留下“新入口已经生效、依赖文件却还不存在”的本次新增窗口。
+- **共享治理常量不能再被同进程导入方篡改。** 阶段顺序、公开标签、选择面状态与嵌套阶段策略均已深冻结，Meta Agent 名单保持私有；伪造 owner 不能通过修改共享数组进入主 dispatch chain。
+
+### 验证
+
+- 旧 `spine-state.mjs` 的 43 个导出完整保留，14 个迁移后的规则导出仍与新模块保持同一引用。定向回归覆盖状态 CAS/迁移/中断修复、三运行端冷启动、packed/global Hook 投影、依赖写入顺序、策略常量篡改和伪 owner；correctness、security、projection completeness 三路独立 Review 最终均为 P0/P1/P2=0。发布仍以标准完整门、精确 Release 绑定和 Claude Code/Codex 正式全局读回为最终证据。
+
+## [2.9.17] - 2026-07-31
+
+### 修复内容
+
+- **Codex Agent 与 Skill 发现现在会保留来源，不再把同名定义压成一条未经确认的能力。** 内容完全相同的副本仍可作为别名复用；互相冲突或元数据无效的定义只用于诊断，不能进入普通或动态执行路由。真实文件系统定义优先于过期缓存，项目与全局冲突继续保留各自的所有权和修复边界。
+- **离线路由不能再用传入 JSON 或环境变量伪造 Codex 原生自定义 Agent 权限。** 只有当前交互宿主可以证明原生 `agent_type` 支持；离线选择会拒绝自报的宿主 schema，并安全退回本次运行范围内的 owner contract。
+- **能力诊断和公开输出更安全，也更诚实。** 新增 Codex Skill 预检与 JSONL 重放命令，用来报告候选能力集合压力和已观察事件标记，不冒充宿主完成，也不推断因果关系。公开清单与路由输出会清除密钥和本机路径，以摘要代替完整 developer instructions；安装所有权无法验证时会 fail closed。
+- **标准发布验收不再把维护者接管的 Graphify 产物当作新鲜生产证据。** 门禁现在会亲自启动并观察确定性的本地代码图更新，绑定过程中未变化的仓库快照，再在不使用 LLM 的情况下重新聚类，最后执行原有身份与新鲜度检查；旧产物接管只保留为恢复手段。
+
+### 验证
+
+- 定向发现、路由、YAML 元数据、所有权、隐私与重放回归已通过，覆盖冲突自定义 Agent、动态 lane 中的无效 provider、带引号或逗号/分号的本机路径、包含秘密的环境片段、进程失败退出，以及只有事件标记但没有独立宿主回执的情况。correctness、product-fit、security 三路独立 Review 均未发现剩余 P0/P1/P2。发布前仍必须完成标准完整发布验证、真实打包产品安装、Release 精确绑定，以及 Claude Code/Codex 最终全局读回。本版本不声称已经修复 Codex 宿主元数据截断。
+
+## [2.9.16] - 2026-07-31
+
+### 修复内容
+
+- **Codex CLI 0.146 现在能收到合法的自定义 Agent 发布熔断请求。** 自包含的子任务验收在显式指定 `agent_type` 时同步使用 `fork_turns: "none"`，避免宿主拒绝“指定 Agent + 默认继承完整对话”的参数组合。
+- **完整发布验收现在会在同一次运行中持续保留并核对同一组声明运行端投影。** 同步与读回阶段都从规范 `sync` 清单明确选择 Claude Code、Codex、OpenClaw、Cursor，不再在跨端 smoke 前退回本机默认目标，或把刚生成的四端文件误判为过期。
+- **Claude Code 2.1.202 的异步 Agent 只有在精确子任务结果和完整任务生命周期都结束后，才会成为有效证据。** Agent 与 subagent 观察现在同时绑定 session、tool call、task、子任务结果、完成边界和 marker digest；失败、重复、乱序、跨 session 或只有装饰文本的结果都会 fail closed，不再被误判成成功的子任务。
+- **当独立 Codex CLI 无法调用时，Codex Desktop 可以从当前原生任务提供新鲜发布证据。** 读取器兼容当前结构化输出块，忽略外层仍在运行的字符串输出，同时继续要求命令、文件读取与补丁操作按精确顺序完成；普通字符串或自报的 `Exit code: 0` 不能制造成功 capability receipt。
+- **已完成的 Graphify extract 现在可以显式、安全接管，不必重复提取。** 接管前必须同时绑定精确 HEAD、仓库文件清单与内容、普通文件产物哈希、图身份、报告计数和“源码未晚于提取产物”的时间证据；随后只能从 cluster/stamp 接续。rebuild 还会把规范的 `~/.meta-kim/...` 文档示例确定性改写为非本地展示标记，真实 home 路径、未知 alias 和路径穿越形式仍然 fail closed。
+- **runtime-capability 证据回归的冻结时钟已与仓库证据日期同步。** 基线不再把现有的 2026-07-31 OpenClaw 投影观察误判为未来证据，同时负例仍会拒绝真正更晚的观察日期。
+
+### 验证
+
+- 定向 observer、producer、原始记录重放、acceptance 与 Graphify 安全回归覆盖 Claude 同步/异步 Agent 生命周期、精确子任务结果哈希、重复与失败终态、跨 session/call 拼接、Codex Desktop 字符串输出反证、合法结构化桌面证据、安全接管现有 extract、错 HEAD/源码变化拒绝以及私有路径/穿越拒绝。Graphify 门禁修复加入前，correctness、security/truth、completeness 三路独立 Review 均未发现剩余 P0/P1/P2；新增修复仍需通过标准完整发布验证和发布后的精确包绑定。当前生产观察已精确覆盖 Claude Code 5/5 与 Codex 5/5。
+
 ## [2.9.15] - 2026-07-31
 
 ### 修复内容

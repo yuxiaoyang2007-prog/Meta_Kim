@@ -151,6 +151,19 @@ test("verify checks discovery read-only before the sole runtime mirror writer", 
   assert.ok(catalogIndex > discoveryIndex, "release verification must check the migration catalog");
   assert.ok(catalogIndex < syncIndex, "the catalog check must remain a read-only source gate");
   assert.ok(syncIndex > discoveryIndex, "runtime projection sync must follow discovery");
+  assert.equal(
+    STAGES[syncIndex].cmd,
+    `npm run meta:sync -- --targets ${RELEASE_RUNTIME_TARGETS.join(",")}`,
+    "full release verification must not collapse the project projection back to machine-local default runtimes",
+  );
+  assert.match(
+    STAGES[checkIndex].cmd,
+    new RegExp(
+      `meta:check:runtimes -- --targets ${RELEASE_RUNTIME_TARGETS.join(",")}`,
+      "u",
+    ),
+    "the release readback must check the same explicit target set that the release sync generated",
+  );
   assert.ok(checkIndex > syncIndex, "runtime check must follow the sole mirror writer");
 });
 
@@ -230,6 +243,7 @@ test("release verification path includes governance tests", () => {
     "meta:verify:governance:core",
     "meta:test:inventory",
     "meta:test:unit",
+    "meta:test:process-guard",
     "meta:test:setup",
     "meta:test:meta-theory",
     "meta:test:integration",
@@ -268,6 +282,11 @@ test("release stages derive runtime targets and timeout budgets from canonical p
   const setupStage = STAGES.find((stage) => stage.name === "meta:test:setup");
   assert.equal(setupStage?.cmd, "npm run meta:test:setup");
   assert.ok(setupStage.timeoutMs > 0);
+  const processGuardStage = STAGES.find(
+    (stage) => stage.name === "meta:test:process-guard",
+  );
+  assert.equal(processGuardStage?.cmd, "npm run meta:test:process-guard");
+  assert.ok(processGuardStage.timeoutMs > 0);
   const metaTheoryStage = STAGES.find(
     (stage) => stage.name === "meta:test:meta-theory",
   );
@@ -307,6 +326,10 @@ test("release stages derive runtime targets and timeout budgets from canonical p
     META_KIM_VERIFY_TIMEOUT_META_TEST_SETUP_MS: "12345",
   }).find((stage) => stage.name === "meta:test:setup");
   assert.equal(overridden.timeoutMs, 12345);
+  const processGuardOverride = buildVerificationStages({
+    META_KIM_VERIFY_TIMEOUT_META_TEST_PROCESS_GUARD_MS: "23456",
+  }).find((stage) => stage.name === "meta:test:process-guard");
+  assert.equal(processGuardOverride.timeoutMs, 23456);
   assert.throws(
     () => buildVerificationStages({
       META_KIM_VERIFY_TIMEOUT_META_TEST_SETUP_MS: "0",
