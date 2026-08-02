@@ -23,7 +23,7 @@
  */
 
 import { execFileSync, execSync, spawnSync, spawn } from "node:child_process";
-import { createWriteStream, existsSync, readFileSync } from "node:fs";
+import { createWriteStream, existsSync, readFileSync, readdirSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -4881,63 +4881,131 @@ function buildCodexPlanningHookAdapterPy() {
   ].join("\n");
 }
 
-function buildCodexHookRunnerMjs() {
+export function collectWindowsPythonCandidatePaths({
+  env,
+  installTimeHint = null,
+  pathApi,
+  pathExists,
+  listDirectoryNames,
+}) {
+  const candidates = [];
+  const seen = new Set();
+  const isSafe = (candidate) => {
+    if (!candidate || !pathApi.isAbsolute(candidate)) return false;
+    const normalized = candidate.replace(/\\/gu, "/").toLowerCase();
+    if (normalized.includes("/windowsapps/")) return false;
+    return /^(?:python|python3)\.exe$/iu.test(pathApi.basename(candidate));
+  };
+  const push = (candidate) => {
+    if (!isSafe(candidate) || !pathExists(candidate)) return;
+    const normalized = candidate.replace(/\\/gu, "/").toLowerCase();
+    if (seen.has(normalized)) return;
+    seen.add(normalized);
+    candidates.push(candidate);
+  };
+  const scanVersionDirectories = (root) => {
+    if (!root || !pathApi.isAbsolute(root)) return;
+    for (const name of listDirectoryNames(root)) {
+      if (!/^Python\d+(?:-32)?$/iu.test(name)) continue;
+      for (const executable of ["python.exe", "python3.exe"]) {
+        push(pathApi.join(root, name, executable));
+      }
+    }
+  };
+
+  for (const key of ["META_KIM_PYTHON", "PYTHON", "PYTHON3"]) push(env[key]);
+  push(installTimeHint?.command);
+  const pathValue = env.PATH || env.Path || env.path || "";
+  for (const dir of String(pathValue).split(pathApi.delimiter).filter(Boolean)) {
+    if (!pathApi.isAbsolute(dir)) continue;
+    for (const executable of ["python.exe", "python3.exe"]) {
+      push(pathApi.join(dir, executable));
+    }
+  }
+
+  if (env.LOCALAPPDATA) {
+    scanVersionDirectories(pathApi.join(env.LOCALAPPDATA, "Programs", "Python"));
+  }
+  for (const key of ["ProgramFiles", "ProgramFiles(x86)"]) {
+    if (env[key]) scanVersionDirectories(env[key]);
+  }
+  scanVersionDirectories("C:\\");
+  return candidates;
+}
+
+export function buildCodexHookRunnerMjs(pythonHint = null) {
+  const hintCommand =
+    pythonHint && typeof pythonHint.command === "string"
+      ? pythonHint.command.trim()
+      : "";
+  const hintBasename = path.basename(hintCommand).toLowerCase();
+  const installTimePythonHint =
+    hintCommand &&
+    !/^py(?:\.exe)?$/iu.test(hintBasename) &&
+    !hintCommand.replace(/\\/gu, "/").toLowerCase().includes("/windowsapps/") &&
+    (process.platform !== "win32" ||
+      (path.isAbsolute(hintCommand) &&
+        /^(?:python|python3|pythonw)\.exe$/iu.test(hintBasename)))
+      ? { command: hintCommand, args: Array.isArray(pythonHint.args) ? pythonHint.args : [] }
+      : null;
   return [
     'import { spawnSync } from "node:child_process";',
-    'import { existsSync, readFileSync } from "node:fs";',
-    'import os from "node:os";',
+    'import { existsSync, readFileSync, readdirSync } from "node:fs";',
     'import path from "node:path";',
     'import process from "node:process";',
     "",
     "const scriptPath = process.argv[2];",
+    `const INSTALL_TIME_PYTHON_HINT = ${JSON.stringify(installTimePythonHint)};`,
     "",
-    "function pathEntries() {",
-    "  return String(process.env.PATH || process.env.Path || process.env.path || '')",
-    "    .split(path.delimiter)",
-    "    .filter(Boolean);",
+    "function isPyLauncher(filePath) {",
+    "  return /^py(?:\\.exe)?$/i.test(path.basename(String(filePath)));",
     "}",
     "",
-    "function isWindowsApps(filePath) {",
-    "  return filePath.toLowerCase().includes('microsoft\\\\windowsapps');",
+    `const collectWindowsPythonCandidatePaths = ${collectWindowsPythonCandidatePaths.toString()};`,
+    "",
+    "function listDirectoryNames(directory) {",
+    "  try {",
+    "    return readdirSync(directory, { withFileTypes: true })",
+    "      .filter((entry) => entry.isDirectory())",
+    "      .map((entry) => entry.name);",
+    "  } catch {",
+    "    return [];",
+    "  }",
     "}",
     "",
     "function commandWorks(command, args = []) {",
-    "  const result = spawnSync(command, [...args, '--version'], {",
+    "  const result = spawnSync(command, [",
+    "    ...args,",
+    "    '-c',",
+    "    'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)',",
+    "  ], {",
     "    encoding: 'utf8',",
     "    windowsHide: true,",
-    "    timeout: 5000,",
+    "    timeout: 750,",
     "  });",
     "  return result.status === 0;",
     "}",
     "",
     "function pythonCandidates() {",
     "  const candidates = [];",
-    "  for (const envKey of ['META_KIM_PYTHON', 'PYTHON', 'PYTHON3']) {",
-    "    const value = process.env[envKey];",
-    "    if (value) candidates.push({ command: value, args: [] });",
-    "  }",
-    "",
-    "  if (os.platform() === 'win32') {",
-    "    for (const dir of pathEntries()) {",
-    "      for (const name of ['python.exe', 'python3.exe']) {",
-    "        const filePath = path.join(dir, name);",
-    "        if (!existsSync(filePath) || isWindowsApps(filePath)) continue;",
-    "        candidates.push({ command: filePath, args: [] });",
-    "      }",
+    "  if (process.platform === 'win32') {",
+    "    const paths = collectWindowsPythonCandidatePaths({",
+    "      env: process.env,",
+    "      installTimeHint: INSTALL_TIME_PYTHON_HINT,",
+    "      pathApi: path.win32,",
+    "      pathExists: existsSync,",
+    "      listDirectoryNames,",
+    "    });",
+    "    candidates.push(...paths.map((command) => ({ command, args: [] })));",
+    "  } else {",
+    "    for (const envKey of ['META_KIM_PYTHON', 'PYTHON', 'PYTHON3']) {",
+    "      const value = process.env[envKey];",
+    "      if (value && !isPyLauncher(value)) candidates.push({ command: value, args: [] });",
     "    }",
-    "    for (const filePath of [",
-    "      'D:\\\\ProgramData\\\\anaconda3\\\\python.exe',",
-    "      'C:\\\\ProgramData\\\\anaconda3\\\\python.exe',",
-    "      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python311', 'python.exe'),",
-    "      path.join(os.homedir(), '.openclaw', 'skills', 'Python313', 'Python313', 'python.exe'),",
-    "    ]) {",
-    "      if (existsSync(filePath)) candidates.push({ command: filePath, args: [] });",
-    "    }",
-    "    candidates.push({ command: 'py', args: ['-3'] });",
+    "    if (INSTALL_TIME_PYTHON_HINT) candidates.push(INSTALL_TIME_PYTHON_HINT);",
+    "    candidates.push({ command: 'python3', args: [] });",
+    "    candidates.push({ command: 'python', args: [] });",
     "  }",
-    "",
-    "  candidates.push({ command: 'python3', args: [] });",
-    "  candidates.push({ command: 'python', args: [] });",
     "",
     "  const seen = new Set();",
     "  return candidates.filter((candidate) => {",
@@ -5185,7 +5253,9 @@ async function patchCodexPlanningHooksForPlatform(spec, runtimeHome, runtimeId) 
   );
   await fs.writeFile(
     path.join(hooksDir, "codex_hook_runner.mjs"),
-    buildCodexHookRunnerMjs(),
+    buildCodexHookRunnerMjs(
+      process.platform === "win32" ? null : detectPython310(),
+    ),
     "utf8",
   );
   await fs.writeFile(

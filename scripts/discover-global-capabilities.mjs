@@ -20,8 +20,7 @@ import {
   withFileLock,
 } from "../canonical/runtime-assets/shared/hooks/spine-state-utils.mjs";
 import {
-  ensureProfileState,
-  SHARED_RUNTIME_FAMILY,
+  ensureGlobalProfileState,
 } from "./meta-kim-local-state.mjs";
 import {
   loadSyncManifest,
@@ -805,12 +804,13 @@ function normalizePlatformTargets(rawValue) {
 
 // ========== 通用扫描函数 ==========
 
-async function* walkDir(dir, maxDepth = 10) {
+async function* walkDir(dir, maxDepth = 10, excludedDirectoryNames = new Set()) {
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (
+        excludedDirectoryNames.has(entry.name) ||
         entry.name === "node_modules" ||
         entry.name === ".git" ||
         entry.name === "downloads" ||
@@ -823,7 +823,7 @@ async function* walkDir(dir, maxDepth = 10) {
         const depth =
           fullPath.split(path.sep).length - dir.split(path.sep).length;
         if (depth < maxDepth) {
-          yield* walkDir(fullPath, maxDepth);
+          yield* walkDir(fullPath, maxDepth, excludedDirectoryNames);
         }
       } else if (entry.isFile()) {
         yield fullPath;
@@ -1105,13 +1105,17 @@ async function scanConfigFile(filePath, metadata = {}) {
 
 async function scanHookFiles(dir) {
   const results = [];
+  const nonLiveHookDirectoryNames = new Set([
+    ".meta-kim-hook-package-backup",
+    ".meta-kim-legacy-backup",
+  ]);
 
   // Only scan physical hook script files in the hooks directory.
   // Meta_Kim's capability index records what hooks Meta_Kim manages
   // (i.e., the physical .js/.py/.sh files under the hooks directory).
   // Hook commands defined inside third-party skill SKILL.md files are
   // governed by their respective skill repositories, not by Meta_Kim.
-  for await (const filePath of walkDir(dir, 3)) {
+  for await (const filePath of walkDir(dir, 3, nonLiveHookDirectoryNames)) {
     if (
       filePath.endsWith(".js") ||
       filePath.endsWith(".mjs") ||
@@ -1120,9 +1124,6 @@ async function scanHookFiles(dir) {
     ) {
       const stat = await fs.stat(filePath);
       const relPath = path.relative(dir, filePath);
-      if (relPath.replace(/\\/g, "/").startsWith(".meta-kim-legacy-backup/")) {
-        continue;
-      }
       const id = relPath.replace(/\\/g, "/");
       results.push({
         id,
@@ -2794,9 +2795,7 @@ async function main() {
   // This inventory joins capabilities from multiple runtime targets. Its
   // ownership family is therefore shared and must not inherit the host runtime
   // or a target value such as `--targets claude,codex`.
-  const profileState = await ensureProfileState({
-    runtimeFamily: SHARED_RUNTIME_FAMILY,
-  });
+  const profileState = await ensureGlobalProfileState();
   const canonicalIndexPath = path.join(repoRoot, CANONICAL_CAPABILITY_INDEX);
   const repoCapabilityIndex = writeCanonicalIndex
     ? preserveGeneratedAtWhenUnchanged(

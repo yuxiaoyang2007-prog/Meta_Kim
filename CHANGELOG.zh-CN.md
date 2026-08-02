@@ -6,7 +6,43 @@
 
 更新说明先解释本次解决的用户痛点或风险，再说明为了解决它改了什么、为什么重要。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
-## Unreleased
+## [2.9.22] - 2026-08-02
+
+### 修复内容
+
+- **Claude Code 的进度保存现在可以在只有 `python3`、没有裸 `python` 命令的新版 macOS 上正常工作。** macOS 和 Linux 优先尝试 `python3`，并保留 `python` 作为兼容回退；每个候选都必须先证明满足 Python 3.10+，才会运行 memory helper。
+- **Windows Python Hook 不再回退到 `py.exe`，也不会再弹出可见控制台窗口。** Claude Code 和生成的 Codex Hook 会从安全的明确路径、PATH 和常见非 PATH 安装目录中选择经过验证的解释器；过期环境覆盖、WindowsApps 别名和 `py` launcher 都会被拒绝，子进程统一隐藏窗口启动。
+- **兼容修复没有改变 Hook 原有行为。** stdin/stdout 转发、退出码处理、有界探针和执行超时继续保留，运行时证据账本也已重新绑定到修正后的 Claude canonical 投影。
+
+### 验证
+
+- 跨平台安装器与 MCP Memory Hook 定向回归 83/83 通过，运行时证据回归 11/11 通过，运行时能力矩阵已按修正后的源码指纹验证通过。
+
+## [2.9.21] - 2026-08-01
+
+### 修复内容
+
+- **run-status 不再把治理任务原文或稳定 fingerprint 复制到状态输出。** 文本、详情和 JSON 共用同一份脱敏公开投影；嵌套 fingerprint 会被移除，自由文本若重复任务内容会被脱敏，完整报告内容只通过显式报告回读查看。
+- **Codex planning Hook 不再携带维护者电脑上的固定 Python 路径。** 安装/更新只记录通过共享活探针的解释器描述，生成的 runner 每次仍重新验证 Python 3.10+；过期环境覆盖、过期安装提示、失效 PATH 和只会伪造 `--version` 的程序都会被拒绝并继续寻找有效解释器。
+- **失效解释器不再让 Hook 长时间卡顿。** PATH 候选先检查文件存在，每个可执行探针使用较短的有界超时。
+
+### 验证
+
+- 状态、安装器、packed 回读、Graphify runtime、PRD、同步和项目聚焦检查通过。两路独立 Review 曾退回第一版；嵌套 fingerprint、短任务、非 PATH 回退、过期 hint 和超时反例均已进入回归。修正候选按低风险发布使用 release smoke，不重复无关的完整发布套件。
+
+## [2.9.20] - 2026-08-01
+
+### 修复内容
+
+- **npx 继续作为受支持的全局安装/更新入口，但可回收 cache 不再成为永久运行权威。** 在写入 Claude Code 或 Codex 的 Commands、Hooks、合并配置前，候选实现先把精确安装包物化到由“包版本 + 打包文件 SHA-256”定位的共享不可变目录；所有持久执行引用只从这个稳定根生成。
+- **只读、执行环境和所有权边界保持明确。** help、status、doctor 不会只因调用就物化稳定目录；check 按 npm 的真实打包文件集核对，但不写用户 npm cache。版本探测、真实 pack 与 install 共用一次性私有 cache/temp，稳定 child 会去掉临时执行环境覆盖。卸载先清除持久引用，再删除 receipt、first-party 文件与目录闭包都精确匹配的 manifest-owned bundle。
+- **物化过程被意外中断后可以恢复，但不会信任或删除未知内容。** 同一摘要由带 owner 的锁串行创建；已死亡且缺少 receipt 的残缺目录会连同证据一起原子隔离后再重建，完整但不可信的目录仍然 fail closed。稳定 child 还会先把结构化项目部署记录还原成真实目标目录，再运行 Graphify 工具。
+- **保留的 Hook 备份不再膨胀活跃能力清单。** discovery 只在遍历前剪枝 Meta_Kim 精确命名的非运行态 Hook 备份目录；磁盘上的备份全部保留，名称中只是包含 `backup` 等字样的用户目录仍会被发现。在维护者验收机上，活跃 Hook 记录从 5947 降到 153，可搜索能力条目从 7573 降到 1779。
+- **发布证明会真实覆盖“临时根消失”这一故障。** packed 公共 CLI 从 npx 形状的临时包根更新 Claude Code 与 Codex，删除全部可回收来源，再从精确稳定 authority 执行 check，并回读 Commands、Hooks、合并配置、manifest 完整性和所有引用路径。若当前版本的 Git tag 已存在，发布预检会在昂贵探针前直接阻断，避免未升版本的候选借更旧历史 tag 取得通过。
+
+### 验证
+
+- lifecycle、cleanup、Hook 投影、packed proof、tag guard、release binding 与 first-party 漂移定向回归已通过，并完成 correctness、security、completeness 独立反证。安全口径只覆盖正常 cache 删除、意外内容漂移、链接路径拒绝和精确卸载所有权；不声称抵抗同一用户下的恶意进程、被替换的 Node/npm 或供应链攻击。P-141、P-151、P-154、P-156、Cursor live、Docker 验收和已取消的 Claude 上下文删减 A/B 继续保持独立。
 
 ## [2.9.19] - 2026-08-01
 

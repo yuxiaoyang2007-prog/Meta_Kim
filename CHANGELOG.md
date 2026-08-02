@@ -6,7 +6,43 @@ This file is the reader-facing release history for Meta_Kim.
 
 The changelog explains the user-facing problem or risk each release solved, what changed to solve it, and why the change matters. It intentionally avoids long internal task ledgers, low-signal backlog ids, and implementation trivia. When exact evidence is needed, use the repository history, tests, generated reports, and PRD artifacts.
 
-## Unreleased
+## [2.9.22] - 2026-08-02
+
+### Fixed
+
+- **Claude Code progress saving now works on modern macOS systems that provide `python3` but no bare `python` command.** macOS and Linux try `python3` first and retain `python` as a compatibility fallback, while every candidate must prove Python 3.10+ before the memory helper runs.
+- **Windows Python Hooks no longer fall back to `py.exe` or open a visible console window.** Claude Code and generated Codex Hooks select a verified interpreter from safe explicit paths, PATH, and standard off-PATH installation directories; stale overrides, WindowsApps aliases, and the `py` launcher are rejected, and child processes use hidden-window spawning.
+- **Hook behavior stays stable across the compatibility repair.** stdin/stdout forwarding, exit-code handling, bounded probes, and execution timeouts remain intact, and the runtime evidence ledger is rebound to the corrected canonical Claude projection.
+
+### Verification
+
+- Focused cross-platform installer and MCP memory Hook regressions pass (83/83), runtime evidence regressions pass (11/11), and the runtime capability matrix validates against the corrected source digest.
+
+## [2.9.21] - 2026-08-01
+
+### Fixed
+
+- **Run-status output no longer republishes governed task text or stable fingerprints.** Text, details, and JSON use one redacted public projection; nested fingerprint fields are removed, free-text status fields redact embedded task canaries, and explicit report readback remains the only surface for report content.
+- **Codex planning Hooks no longer carry fixed Python paths from a maintainer machine.** Install/update records only the interpreter descriptor that passed the shared live probe, then the generated runner revalidates Python 3.10+ on every use. Stale environment overrides, stale install hints, missing PATH entries, and fake `--version` launchers are rejected before falling back to a live interpreter.
+- **Stale interpreter failure no longer causes multi-second Hook stalls.** PATH candidates receive an existence precheck and each executable probe has a short bounded timeout.
+
+### Verification
+
+- Focused status, installer, packed-readback, Graphify-runtime, PRD, sync, and project checks pass. Two independent reviews rejected the first candidate, their nested-fingerprint, short-task, non-PATH fallback, stale-hint, and timeout counterexamples were added as regressions, and the corrected candidate uses the low-risk release smoke rather than the unrelated full release suite.
+
+## [2.9.20] - 2026-08-01
+
+### Fixed
+
+- **npx remains a supported global install/update entry without turning its disposable cache into permanent runtime authority.** Before a global-writing operation projects Claude Code or Codex Commands, Hooks, or merged settings, the candidate materializes the exact package into a shared immutable store keyed by package version and packed-package SHA-256; persistent references are rendered only from that stable root.
+- **Read-only, environment, and ownership boundaries stay explicit.** Help, status, and doctor do not materialize the store merely by being invoked; check derives the real npm pack file set without writing the user's npm cache. Version probing, packing, and installation share one private cache/temp transaction, while the stable child removes transient executable environment overrides. Uninstall clears persistent references before removing only an exact manifest-owned bundle whose receipt, first-party files, and directory closure still match.
+- **Interrupted materialization can recover without trusting or deleting unknown content.** A per-digest owner lock serializes package creation; a dead incomplete directory with no receipt is atomically quarantined with its evidence before replacement, while a complete but untrusted directory still fails closed. Stable project handoff also resolves structured deployment records to their real target directory before Graphify tooling runs.
+- **Retained Hook backups no longer inflate the live capability inventory.** Discovery prunes only Meta_Kim's exact non-live Hook backup directories before traversal, while preserving every backup on disk and continuing to discover user directories whose names merely contain words such as `backup`. On the maintainer acceptance machine this reduced reported live Hooks from 5,947 to 153 and searchable capability entries from 7,573 to 1,779.
+- **Release proof now exercises the disposable-root failure mode directly.** The packed public-CLI lane updates Claude Code and Codex from an npx-shaped package root, removes every disposable package origin, runs check from the exact stable authority, and reads back Commands, Hooks, merged configuration, manifest integrity, and referenced paths. A current-version Git tag blocks the release preflight before expensive probes, preventing an unbumped candidate from being certified against an older historical tag.
+
+### Verification
+
+- Focused lifecycle, cleanup, Hook projection, packed-proof, tag-guard, release-binding, and first-party drift regressions pass after adversarial correctness, security, and completeness review. The declared security boundary covers normal cache deletion, accidental content drift, linked-path rejection, and precise uninstall ownership; it does not claim resistance to a malicious same-user process, a compromised Node/npm installation, or supply-chain compromise. P-141, P-151, P-154, P-156, Cursor live acceptance, Docker acceptance, and the cancelled Claude context-reduction A/B remain separate.
 
 ## [2.9.19] - 2026-08-01
 

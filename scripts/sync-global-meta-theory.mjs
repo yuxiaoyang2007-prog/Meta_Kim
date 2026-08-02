@@ -62,12 +62,32 @@ import {
   runtimeHookSourceOwner,
 } from "./runtime-hook-mapping.mjs";
 import { readSetupRuntimeLaunchInventory } from "./runtime-executable-binding.mjs";
+import {
+  findAuthoritativeGlobalProjectionPackage,
+  materializeGlobalProjectionPackage,
+  packageContentClosure,
+  recordGlobalProjectionPackage,
+  runGlobalProjectionPackageChild,
+  verifyExecutingGlobalProjectionPackage,
+} from "./global-projection-package-store.mjs";
 
 // Recorder is lazily opened in runSync(); helpers record through this holder
 // so we do not have to thread recorder arg through every sync function.
 let manifestRecorder = null;
 let globalManifestSnapshot = null;
+let executingProjectionPackage = null;
+let checkMissingProjectionPackageAuthority = false;
 const manifestRecordFailures = [];
+const PRIMARY_PROJECTION_TARGET_IDS = new Set(["claude", "codex"]);
+function primaryProjectionTargetSelected() {
+  return selectedTargetIds.some((targetId) =>
+    PRIMARY_PROJECTION_TARGET_IDS.has(targetId)
+  );
+}
+function packagePathKey(value) {
+  const resolved = path.resolve(value);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
 function recordSafe(fn) {
   if (!manifestRecorder) return;
   try {
@@ -285,6 +305,12 @@ const CODEX_LEGACY_SHARED_SKILL_ROOT = path.join(
   ".agents",
   "skills",
 );
+const PROJECTION_PACKAGE_STORE_ROOT = path.join(
+  os.homedir(),
+  ".meta-kim",
+  "runtime",
+  "projection-packages",
+);
 
 let runtimeHomes = {};
 let allowedRoots = [];
@@ -353,6 +379,14 @@ async function assertRealHomeBound(targetPath) {
   assertHomeBound(targetPath);
   const resolved = path.resolve(targetPath);
   const realTarget = await projectedRealPath(resolved);
+  const realProjectionStoreRoot = await projectedRealPath(
+    PROJECTION_PACKAGE_STORE_ROOT,
+  );
+  if (pathIsWithin(realProjectionStoreRoot, realTarget)) {
+    throw new Error(
+      `Refusing to write a runtime projection into the immutable package store: ${resolved}`,
+    );
+  }
   const matched = allowedRoots
     .map((root, index) => ({ root, realRoot: allowedRealRoots[index] }))
     .filter(({ root }) => pathIsWithin(root, resolved));
@@ -2773,6 +2807,12 @@ async function runSync() {
   }
 
   if (manifestRecorder) {
+    if (primaryProjectionTargetSelected()) {
+      await recordGlobalProjectionPackage(
+        manifestRecorder,
+        executingProjectionPackage,
+      );
+    }
     if (["manifest", "rollback"].includes(
       process.env.META_KIM_TEST_FAIL_CODEX_CONFIG_AT,
     )) {
@@ -2820,6 +2860,82 @@ async function runSync() {
     }
     throw error;
   }
+}
+
+function propagateProjectionPackageChildResult(result) {
+  if (result.error) throw result.error;
+  if (result.signal) {
+    throw new Error(
+      `Stable global projection package child terminated by signal ${result.signal}`,
+    );
+  }
+  process.exitCode = Number.isInteger(result.status) ? result.status : 1;
+}
+
+async function handOffToStableProjectionPackage() {
+  if (cliOptions.help || printTargetsOnly) return false;
+  if (!primaryProjectionTargetSelected()) return false;
+
+  const homeRoot = os.homedir();
+  const executing = await verifyExecutingGlobalProjectionPackage({
+    packageRoot: repoRoot,
+    homeRoot,
+  });
+  const currentPackageManifest = JSON.parse(
+    await fs.readFile(path.join(repoRoot, "package.json"), "utf8"),
+  );
+
+  if (checkOnly) {
+    const manifest = readManifest(manifestPathFor("global"));
+    const currentPackageContent = executing
+      ? executing.firstPartyClosure
+      : await packageContentClosure(repoRoot, {
+        env: process.env,
+        homeRoot,
+      });
+    const authority = await findAuthoritativeGlobalProjectionPackage(manifest, {
+      homeRoot,
+      expectedPackageName: currentPackageManifest.name,
+      expectedPackageVersion: currentPackageManifest.version,
+      expectedFirstPartyClosure: currentPackageContent,
+    });
+    if (!authority) {
+      checkMissingProjectionPackageAuthority = true;
+      return false;
+    }
+    if (
+      executing &&
+      packagePathKey(executing.packageRoot) === packagePathKey(authority.packageRoot)
+    ) {
+      executingProjectionPackage = executing;
+      return false;
+    }
+    propagateProjectionPackageChildResult(
+      await runGlobalProjectionPackageChild(authority, cliArgs, {
+        env: process.env,
+        sourceRoot: repoRoot,
+      }),
+    );
+    return true;
+  }
+
+  if (executing) {
+    executingProjectionPackage = executing;
+    return false;
+  }
+
+  const stablePackage = await materializeGlobalProjectionPackage({
+    sourceRoot: repoRoot,
+    homeRoot,
+    env: process.env,
+  });
+  propagateProjectionPackageChildResult(
+    await runGlobalProjectionPackageChild(stablePackage, cliArgs, {
+      env: process.env,
+      sourceRoot: repoRoot,
+    }),
+  );
+  return true;
 }
 
 function printTargets() {
@@ -2879,8 +2995,16 @@ async function main() {
     printTargets();
     return;
   }
+  if (await handOffToStableProjectionPackage()) return;
   if (checkOnly) {
+    if (checkMissingProjectionPackageAuthority) {
+      console.error(
+        "Global projection package authority is missing or invalid; " +
+        "the current-root check below is diagnostic only and cannot pass release-grade validation.",
+      );
+    }
     await runCheck();
+    if (checkMissingProjectionPackageAuthority) process.exitCode = 1;
     return;
   }
   await runSync();

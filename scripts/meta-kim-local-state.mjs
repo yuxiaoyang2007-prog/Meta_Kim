@@ -85,6 +85,7 @@ export function getProfilePaths({
   canonicalProfile,
   runtimeFamily = resolveRuntimeFamily(),
   repoPath = repoRoot,
+  stateRoot = localStateRoot,
 } = {}) {
   if (profile !== undefined && canonicalProfile !== undefined) {
     throw new TypeError("Pass either raw profile or canonicalProfile, not both.");
@@ -96,11 +97,13 @@ export function getProfilePaths({
   const safeProfile = canonicalProfile === undefined
     ? resolveProfileName(profile)
     : validateCanonicalStateProfile(canonicalProfile);
-  const profileDir = path.join(localStateRoot, safeProfile);
+  const resolvedRepoPath = path.resolve(repoPath);
+  const profileDir = path.join(path.resolve(stateRoot), safeProfile);
   return {
     profile: safeProfile,
     runtimeFamily,
-    profileKey: buildProfileKey({ repoPath, runtimeFamily }),
+    repoPath: resolvedRepoPath,
+    profileKey: buildProfileKey({ repoPath: resolvedRepoPath, runtimeFamily }),
     profileDir,
     profileFile: path.join(profileDir, "profile.json"),
     runIndexPath: path.join(profileDir, "run-index.sqlite"),
@@ -108,6 +111,17 @@ export function getProfilePaths({
     doctorCacheDir: path.join(profileDir, "doctor-cache"),
     migrationsDir: path.join(profileDir, "migrations"),
   };
+}
+
+export function getGlobalProfilePaths({ profile, canonicalProfile } = {}) {
+  const home = os.homedir();
+  return getProfilePaths({
+    profile,
+    canonicalProfile,
+    runtimeFamily: SHARED_RUNTIME_FAMILY,
+    repoPath: home,
+    stateRoot: path.join(home, ".meta-kim", "state"),
+  });
 }
 
 export function toRepoRelative(targetPath) {
@@ -154,8 +168,8 @@ export async function ensureProfileState(options = {}) {
   const metadata = {
     profile: paths.profile,
     profileKey: paths.profileKey,
-    repoRoot,
-    repoPathHash: repoPathHash(),
+    repoRoot: paths.repoPath,
+    repoPathHash: repoPathHash(paths.repoPath),
     runtimeFamily: paths.runtimeFamily,
     host: os.hostname(),
     createdAt: existing?.createdAt ?? now,
@@ -163,7 +177,7 @@ export async function ensureProfileState(options = {}) {
   };
 
   const projectRegistry = await detectProjectRegistryEntry({
-    repoPath: repoRoot,
+    repoPath: paths.repoPath,
     runtimeFamily: paths.runtimeFamily,
   });
   metadata.projectRef = projectRegistry.projectRef;
@@ -175,6 +189,16 @@ export async function ensureProfileState(options = {}) {
     "utf8",
   );
   return { ...paths, metadata, projectRegistry };
+}
+
+export async function ensureGlobalProfileState({ profile, canonicalProfile } = {}) {
+  const paths = getGlobalProfilePaths({ profile, canonicalProfile });
+  return ensureProfileState({
+    canonicalProfile: paths.profile,
+    runtimeFamily: SHARED_RUNTIME_FAMILY,
+    repoPath: paths.repoPath,
+    stateRoot: path.dirname(paths.profileDir),
+  });
 }
 
 export async function detectProfileCollision(options = {}) {
