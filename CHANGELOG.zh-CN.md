@@ -6,6 +6,46 @@
 
 更新说明先解释本次解决的用户痛点或风险，再说明为了解决它改了什么、为什么重要。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
+## [2.9.25] - 2026-08-05
+
+### 修复内容
+
+- **Windows 已安装 CLI 在“当前 Node 可执行文件旁边没有自带 npm”时也能完成全局更新。** 稳定包同步会先检查 Node/npm 的直接安装布局，再从净化后的 PATH 安全解析真实 `npm.cmd` 及其绝对 `npm-cli.js`，全程不经过可见 shell。这样可兼容 Codex/便携 Node 启动器，同时保留不可变包权威和无 shell 子进程边界。
+- **繁忙 Windows 主机上的发布验证不再误报失败。** Graphify 合并属性现在是仓库正式跟踪规则，不会在验证中途产生未跟踪文件；Job Object 的“监督进程死亡”探针为高负载 PowerShell 进程查询保留了足够观察时间；并发验证历史夹具也会有限重试 Windows 临时目录清理。这些改动都没有放宽生产断言。
+- **v2.9.23 与 v2.9.24 的兼容修复全部继续保留。** 历史启动项自动清理、依赖状态处理、全局 `meta-theory` 投影、Graphify 隐藏探测、PR #50/#51 修正和精确 Release 审计提升均未改变。再次感谢 [@qitiandashenggogogo](https://github.com/qitiandashenggogogo) 在 [#50](https://github.com/KimYx0207/Meta_Kim/pull/50) 和 [#51](https://github.com/KimYx0207/Meta_Kim/pull/51) 中提供的初始贡献。
+
+### 验证
+
+- 验证覆盖便携 Node/无内置 npm 回归、真实打包后的全局更新、标准完整发布门禁和 GitHub Release 精确绑定。
+
+## [2.9.24] - 2026-08-05
+
+### 修复内容
+
+- **公开的发布审计 CLI 现在会在生成精确发布绑定后正常结束。** 运行时能力证据提升不再反向导入正在执行的审计模块，消除了循环模块等待；此前该问题会先写出有效的 `published_bound` 记录，随后以 Node 的 top-level await 未完成警告退出。
+- **v2.9.23 的安装、更新、启动项自动修复、Graphify 隐藏探测、全局 Claude Hook 与 runtime rebind 修复保持不变。** 本补丁只为修复其发布后审计命令而取代 v2.9.23，并继续保留对 [@qitiandashenggogogo](https://github.com/qitiandashenggogogo) 在 [#50](https://github.com/KimYx0207/Meta_Kim/pull/50) 和 [#51](https://github.com/KimYx0207/Meta_Kim/pull/51) 中贡献的致谢。
+
+### 验证
+
+- 发布验证覆盖共享 canonical 哈希边界、新旧验证报告阶段结构、真实打包后的审计 CLI，以及一次新的干净完整打包产品门禁和后续精确 GitHub Release 绑定。
+
+## [2.9.23] - 2026-08-04
+
+### 修复内容
+
+- **Windows 历史安装用户不再需要手工删除失效的 MCP Memory 开机启动项。** 正常安装/更新会在依赖处理前，仅识别并清理“命令目标已经丢失”的 Meta_Kim 精确 `mcp-memory-silent.vbs` 形态；公开的恢复卸载入口也能执行同一套有边界修复，未知或被用户修改的启动文件继续保留。
+- **MCP Memory 依赖安装现在会区分“从未安装”“已有健康环境”和“替换失败”。** 安装/更新不再盲信 PATH 中第一个候选，而是验证真实可执行性；健康环境直接复用，新环境只有验证通过后才激活，升级候选失败时保留原来可用的运行时。
+- **Claude 的历史 MCP 注册会通过公开更新入口自动迁移。** 严格历史识别现在覆盖过去产生的直接 Node 和 `cmd /c` 形态，包括绝对 `node.exe` 路径；只把已证明属于 Meta_Kim 的 `meta_kim_runtime` 替换成稳定的 `meta-kim-runtime`，其他服务器、认证、环境变量和用户配置保持不变。
+- **历史安装用户兼容性成为发布硬规则。** 安装、更新、同步、清理、依赖、启动项、manifest 和生成配置相关改动，必须覆盖全新安装、同版本重装、历史版本升级、上次安装残留和用户修改漂移；维护者专用清理命令或只修全新安装的补丁不再算产品修复。
+- **Windows 的 Graphify 验证不再调用 `py -3` 或弹出可见终端。** 自动发现只接受 PATH 或标准安装目录中的绝对 `python.exe` / `python3.exe`，拒绝 WindowsApps 别名，并把版本、pip、Graphify、Git 与迁移相关子进程统一隐藏运行；没有 Python 时会干净地进入依赖缺失分支，已有健康 Python 时直接复用。
+- **全局 Claude Code 安装现在会真正注册已经投影的能力优先治理 Hook。** 历史全局设置在正常更新时补上 `enforce-agent-dispatch`，重复更新保持幂等，项目内与全局治理不再出现一边生效、一边漏接线的差异。
+- **运行时 CLI 升级后可以只刷新启动清单，不再顺带重装开机启动。** 新的 `meta-kim runtime rebind` 公开入口只重绑 Claude Code / Codex 可执行身份，严格校验 target、scope 和 Node 版本。macOS / Linux 的 MCP Memory 启动链与 Windows 一样由正常更新写入精确 manifest，不依赖文件名或脚本文本启发式判断。
+- **贡献致谢：** 感谢 [@qitiandashenggogogo](https://github.com/qitiandashenggogogo) 通过 [#50](https://github.com/KimYx0207/Meta_Kim/pull/50) 和 [#51](https://github.com/KimYx0207/Meta_Kim/pull/51) 发现全局 Claude 治理 Hook 漏接线与运行时清单重绑问题，并提供初始实现；本版本在这些贡献基础上补齐历史更新、公开 CLI、跨平台 scope、安全边界和发行回归。
+
+### 验证
+
+- 标准完整发布门禁使用真实打包后的公开 CLI，覆盖安装、更新、重复更新、历史迁移、孤儿启动项自动修复、跨平台启动链 manifest、归属卸载、用户状态保留、运行时重绑、全局 Claude Hook 补线、隐藏式 Graphify 探测、运行时同步与治理回归。
+
 ## [2.9.22] - 2026-08-02
 
 ### 修复内容

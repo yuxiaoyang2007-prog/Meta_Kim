@@ -6,6 +6,46 @@ This file is the reader-facing release history for Meta_Kim.
 
 The changelog explains the user-facing problem or risk each release solved, what changed to solve it, and why the change matters. It intentionally avoids long internal task ledgers, low-signal backlog ids, and implementation trivia. When exact evidence is needed, use the repository history, tests, generated reports, and PRD artifacts.
 
+## [2.9.25] - 2026-08-05
+
+### Fixed
+
+- **The installed Windows CLI can now finish a global update when its active Node executable does not bundle npm beside itself.** Stable-package sync first uses direct Node/npm layouts, then safely resolves the real `npm.cmd` on the sanitized PATH and invokes its absolute `npm-cli.js` without a visible shell. This covers Codex/portable Node launchers while preserving the immutable package authority and shell-free child-process boundary.
+- **Release verification remains stable under a busy Windows host.** The Graphify merge attribute is now a tracked repository rule instead of a verification-time untracked file; the Job Object owner-death probe allows enough time for a contended PowerShell process query; and concurrent verification-history fixtures retry bounded Windows temporary-directory cleanup. These changes do not weaken the production assertions.
+- **All v2.9.23 and v2.9.24 compatibility repairs remain included.** Historical startup cleanup, dependency-state handling, global `meta-theory` projection, hidden Graphify probing, PR #50/#51 corrections, and exact Release audit promotion are unchanged. Thanks again to [@qitiandashenggogogo](https://github.com/qitiandashenggogogo) for the starting contributions in [#50](https://github.com/KimYx0207/Meta_Kim/pull/50) and [#51](https://github.com/KimYx0207/Meta_Kim/pull/51).
+
+### Verification
+
+- Verification includes the portable-Node/no-bundled-npm regression, the real packed global update, the standard full release gate, and exact GitHub Release binding.
+
+## [2.9.24] - 2026-08-05
+
+### Fixed
+
+- **The public release audit CLI now completes after creating an exact release binding.** Runtime-capability promotion no longer imports back through the executing audit module, removing the circular module wait that could write a valid `published_bound` record and then exit with Node's unsettled top-level-await warning.
+- **The v2.9.23 installation, update, startup repair, hidden Graphify probing, global Claude Hook, and runtime rebind fixes are unchanged.** This patch supersedes v2.9.23 only to repair its post-release audit command and carries forward the contribution credit for [@qitiandashenggogogo](https://github.com/qitiandashenggogogo)'s work on [#50](https://github.com/KimYx0207/Meta_Kim/pull/50) and [#51](https://github.com/KimYx0207/Meta_Kim/pull/51).
+
+### Verification
+
+- Release verification covers the shared canonical hashing boundary, current and legacy verification-report stage layouts, the real packed audit CLI, and a new clean full packed-product gate followed by exact GitHub Release binding.
+
+## [2.9.23] - 2026-08-04
+
+### Fixed
+
+- **Existing Windows users no longer need to remove a broken MCP Memory startup entry by hand.** Normal install/update detects only the exact Meta_Kim `mcp-memory-silent.vbs` shape whose command target is missing and removes the orphan before dependency work; the public recovery uninstall path provides the same bounded repair while preserving unknown or modified startup files.
+- **MCP Memory dependency setup now distinguishes a missing dependency from a healthy existing installation and a failed replacement.** Install/update verifies executable candidates instead of trusting the first PATH match, reuses healthy state, activates a replacement only after validation, and preserves the previous working runtime when an upgrade candidate fails.
+- **Historical Claude MCP registrations migrate through the public update path.** Strict legacy matching now accepts the previously emitted direct Node and `cmd /c` forms, including an absolute `node.exe` path, then replaces only the proven `meta_kim_runtime` entry with the durable `meta-kim-runtime` registration while preserving unrelated servers, auth, environment, and user configuration.
+- **Installed-user compatibility is now a release invariant.** Install, update, sync, cleanup, dependency, startup, manifest, and generated-config changes must cover fresh installs, same-version reinstalls, historical updates, partial prior installs, and user-modified drift; a maintainer-only cleanup or fresh-install-only patch no longer counts as a product fix.
+- **Windows Graphify verification no longer calls `py -3` or opens a visible terminal.** Automatic discovery accepts only absolute `python.exe` / `python3.exe` paths from PATH or standard install roots, rejects WindowsApps aliases, and hides version, pip, Graphify, Git, and migration child processes. A missing interpreter now falls through cleanly to dependency setup, while a healthy installation is reused directly.
+- **Global Claude Code installs now register the capability-first enforcement Hook they already project.** Normal updates add `enforce-agent-dispatch` to historical global settings, repeated updates remain idempotent, and global governance no longer has a wiring gap that is absent from project installs.
+- **Runtime CLI upgrades can refresh launch inventory without reinstalling boot startup.** The public `meta-kim runtime rebind` entrypoint rebinds only Claude Code / Codex executable identities with strict target, scope, and Node validation. macOS and Linux MCP Memory boot chains, like Windows, are recorded by normal update with exact manifest ownership instead of filename or script-text heuristics.
+- **Contributor credit:** Thank you to [@qitiandashenggogogo](https://github.com/qitiandashenggogogo) for identifying the missing global Claude governance Hook wiring and runtime launch-inventory rebind gap in [#50](https://github.com/KimYx0207/Meta_Kim/pull/50) and [#51](https://github.com/KimYx0207/Meta_Kim/pull/51), and for providing the starting implementations. This release completes those contributions with historical-update behavior, the public CLI, cross-platform scope handling, safety boundaries, and release regressions.
+
+### Verification
+
+- The standard full release gate exercises the packed public CLI across install, update, repeated update, historical migration, automatic orphan-startup repair, cross-platform boot-chain manifests, manifest-owned uninstall, user-state preservation, runtime rebind, global Claude Hook upgrade, hidden Graphify probing, runtime sync, and governance regressions.
+
 ## [2.9.22] - 2026-08-02
 
 ### Fixed

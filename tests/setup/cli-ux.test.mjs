@@ -34,6 +34,7 @@ describe("stable package CLI UX", () => {
     assert.equal(help.status, 0, help.stderr);
     assert.match(help.stdout, /meta-kim status/);
     assert.match(help.stdout, /meta-kim uninstall/);
+    assert.match(help.stdout, /meta-kim uninstall \[--recover\]/);
     assert.match(help.stdout, /meta-kim doctor hooks/);
     assert.match(help.stdout, /meta-kim release audit/);
     assert.match(help.stdout, /meta-kim release close/);
@@ -66,6 +67,32 @@ describe("stable package CLI UX", () => {
     assert.match(directSetup.stderr, /unknown option/);
   });
 
+  test("rebind-runtime-launch rejects bad targets instead of silently dropping them", () => {
+    // A dropped typo looks identical to a successful rebind, so the runtime
+    // the user meant to re-record silently keeps its stale binding.
+    const typo = run(setup, ["--rebind-runtime-launch", "--targets", "codex,typo"]);
+    assert.notEqual(typo.status, 0);
+    assert.match(typo.stderr, /Unknown runtime target: typo/);
+    assert.doesNotMatch(typo.stdout, /Re-recorded/);
+
+    // Supported elsewhere in the repo, but outside this mode's contract.
+    const outOfScope = run(setup, ["--rebind-runtime-launch", "--targets", "cursor"]);
+    assert.notEqual(outOfScope.status, 0);
+    assert.match(outOfScope.stderr, /does not support cursor/);
+    assert.doesNotMatch(outOfScope.stdout, /Re-recorded/);
+  });
+
+  test("public runtime rebind command exposes the standalone repair path", () => {
+    const help = run(cli, ["--help"]);
+    assert.equal(help.status, 0, help.stderr);
+    assert.match(help.stdout, /meta-kim runtime rebind/);
+
+    const refused = run(cli, ["runtime", "rebind", "--targets", "cursor"]);
+    assert.notEqual(refused.status, 0);
+    assert.match(refused.stderr, /does not support cursor/);
+    assert.doesNotMatch(refused.stdout, /Re-recorded/);
+  });
+
   test("empty setup values fail before setup performs work", () => {
     for (const arg of ["--lang=", "--targets=", "--project-dir="]) {
       const result = run(setup, [arg]);
@@ -85,6 +112,26 @@ describe("stable package CLI UX", () => {
       );
       assert.equal(result.status, 2, result.stderr || result.stdout);
       assert.match(result.stderr, /invalid scope 'porject'/);
+    }
+  });
+
+  test("public uninstall exposes recovery while keeping internal manifest bypass private", () => {
+    const home = mkdtempSync(path.join(tmpdir(), "meta-kim-cli-recover-"));
+    try {
+      const recovery = run(cli, ["uninstall", "--recover", "--scope=global"], {
+        HOME: home,
+        USERPROFILE: home,
+        META_KIM_CLAUDE_HOME: path.join(home, ".claude"),
+        META_KIM_CODEX_HOME: path.join(home, ".codex"),
+      });
+      assert.equal(recovery.status, 0, recovery.stderr || recovery.stdout);
+      assert.match(recovery.stdout, /exact-signature legacy recovery/iu);
+
+      const internal = run(cli, ["uninstall", "--no-manifest"]);
+      assert.equal(internal.status, 2);
+      assert.match(internal.stderr, /unknown uninstall option '--no-manifest'/u);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
     }
   });
 

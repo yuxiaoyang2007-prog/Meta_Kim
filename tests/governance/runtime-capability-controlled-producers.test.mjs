@@ -9,7 +9,7 @@ import { runCodexCompositeEngineeringProducer, runCodexDesktopEngineeringSession
 import { readCodexDesktopEngineeringEvidence, readCodexDesktopSessionEvidence } from "../../scripts/live-acceptance/read-codex-session-evidence.mjs";
 import { loadEffectiveRuntimeCapabilityClaims } from "../../scripts/effective-runtime-capability-claims.mjs";
 import { evaluateRouteExecutionGate } from "../../scripts/runtime-execution-gate.mjs";
-import { selectVerificationBoundControlledAttempts, writeRuntimeCapabilityAcceptanceAttempt } from "../../scripts/runtime-capability-acceptance.mjs";
+import { controlledProducerStageFromVerification, selectVerificationBoundControlledAttempts, writeRuntimeCapabilityAcceptanceAttempt } from "../../scripts/runtime-capability-acceptance.mjs";
 import { parseRuntimeAcceptanceCliArgs } from "../../scripts/attest-runtime-capability-acceptance.mjs";
 import { loadSetupBoundRuntimeExecutable, recordSetupRuntimeExecutableBindings } from "../../scripts/runtime-executable-binding.mjs";
 import { observeClaudeJsonl } from "../../scripts/live-acceptance/observe-host-events.mjs";
@@ -716,6 +716,60 @@ test("Codex Desktop engineering reader ignores string-output outer exec calls wi
   );
 });
 
+test("Codex Desktop engineering reader accepts the current exec_command completed wrapper without accepting failures", async () => {
+  const projectRoot = fixtureProject();
+  const fixture = codexDesktopEngineeringFixture(projectRoot);
+  const parentPath = path.join(
+    fixture.codexHome,
+    "sessions",
+    "2026",
+    "07",
+    "28",
+    `rollout-desktop-${fixture.threadId}.jsonl`,
+  );
+  const records = readFileSync(parentPath, "utf8")
+    .split(/\r?\n/u)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  for (const record of records) {
+    if (record?.payload?.type === "custom_tool_call" && record.payload.name === "exec") {
+      record.payload.input = record.payload.input.replaceAll("tools.shell_command", "tools.exec_command");
+    }
+    if (
+      record?.payload?.type === "custom_tool_call_output" &&
+      ["desktop-shell", "desktop-read-before", "desktop-read-after"].includes(record.payload.call_id)
+    ) {
+      const prior = record.payload.output[0].text.replace(/^Exit code: 0\r?\n/u, "");
+      record.payload.output = [
+        { type: "input_text", text: "Script completed\nWall time 0.1 seconds\nOutput:\n" },
+        { type: "input_text", text: prior },
+      ];
+    }
+  }
+  writeFileSync(parentPath, `${jsonl(records)}\n`, "utf8");
+
+  const evidence = await readCodexDesktopEngineeringEvidence(fixture);
+  assert.equal(evidence.events.shell.hostSurface, "functions.exec.exec_command");
+  assert.equal(evidence.events.filesystemBefore.hostSurface, "functions.exec.exec_command");
+  assert.equal(evidence.events.filesystemAfter.hostSurface, "functions.exec.exec_command");
+
+  const failedOutput = records.find((record) => record?.payload?.call_id === "desktop-shell" && record?.payload?.type === "custom_tool_call_output");
+  failedOutput.payload.output[0].text = "Script failed\nWall time 0.1 seconds\nOutput:\n";
+  writeFileSync(parentPath, `${jsonl(records)}\n`, "utf8");
+  await assert.rejects(
+    readCodexDesktopEngineeringEvidence(fixture),
+    /codex_desktop_engineering_chain_invalid/u,
+  );
+
+  failedOutput.payload.output[0].text = "Script completed\nWall time 0.1 seconds\nOutput:\n";
+  failedOutput.payload.output[1].text = "New-Item:\nLine |\n  1 | New-Item -BadFlag\n    | A parameter cannot be found";
+  writeFileSync(parentPath, `${jsonl(records)}\n`, "utf8");
+  await assert.rejects(
+    readCodexDesktopEngineeringEvidence(fixture),
+    /codex_desktop_engineering_chain_invalid/u,
+  );
+});
+
 test("Codex Desktop session producer rejects a mismatched child backlink", async () => {
   const fixture = codexDesktopFixture();
   try {
@@ -893,6 +947,19 @@ test("standard verification reads fresh controlled evidence instead of invoking 
   const stage = buildVerificationStages().find((entry) => entry.name === "meta:runtime:produce");
   assert.match(stage.cmd, /--status --require-fresh/u);
   assert.doesNotMatch(stage.cmd, /--source|--codex-engineering-composite/u);
+});
+
+test("release promotion reads controlled evidence from current and legacy verification reports", () => {
+  const currentStage = { name: "meta:runtime:produce", controlledProducerEvidence: { ok: true } };
+  assert.equal(
+    controlledProducerStageFromVerification({ stages: [currentStage] }),
+    currentStage,
+  );
+  assert.equal(
+    controlledProducerStageFromVerification({ results: [currentStage] }),
+    currentStage,
+  );
+  assert.equal(controlledProducerStageFromVerification({ stages: [] }), null);
 });
 
 test("release promotion selects only exact verification-bound controlled attempts", () => {

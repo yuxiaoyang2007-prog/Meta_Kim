@@ -1,6 +1,6 @@
 {
   "name": "meta-kim",
-  "version": "2.9.22",
+  "version": "2.9.25",
   "description": "Governance layer for AI coding: canonical meta agents, workflow contracts, default Claude/Codex projections, non-default OpenClaw/Cursor projections, and source-backed candidate probes.",
   "private": true,
   "type": "module",
@@ -12,6 +12,7 @@
     "meta:sync:global": "node scripts/sync-global-meta-theory.mjs",
     "meta:sync:global:release": "node scripts/sync-global-meta-theory.mjs --with-global-hooks",
     "meta:check:global": "node scripts/sync-global-meta-theory.mjs --check",
+    "meta:runtime:rebind": "node setup.mjs --rebind-runtime-launch",
     "meta:check:global:release": "node scripts/sync-global-meta-theory.mjs --check --with-global-hooks",
     "meta:show:global:targets": "node scripts/sync-global-meta-theory.mjs --print-targets",
     "discover:global": "node scripts/discover-global-capabilities.mjs",

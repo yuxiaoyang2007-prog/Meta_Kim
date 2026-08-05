@@ -34,6 +34,16 @@ const CANONICAL_PACKED_TARGETS = JSON.parse(
   readFileSync("config/sync.json", "utf8"),
 ).supportedTargets;
 
+test("release audit promotion hashing does not create a CLI module cycle", () => {
+  const acceptanceSource = readFileSync("scripts/runtime-capability-acceptance.mjs", "utf8");
+  assert.match(acceptanceSource, /from "\.\/release-binding-canonical\.mjs"/u);
+  assert.doesNotMatch(acceptanceSource, /from "\.\/audit-release-binding\.mjs"/u);
+  assert.equal(
+    canonicalJson({ z: 1, nested: { b: 2, a: 1 } }),
+    '{"nested":{"a":1,"b":2},"z":1}',
+  );
+});
+
 function octalField(value, length) {
   return `${value.toString(8).padStart(length - 1, "0")}\0`;
 }
@@ -122,6 +132,44 @@ function completePackedUserProof(packageSha256) {
         { mode: "update", status: "passed" },
         { mode: "update", status: "passed" },
       ],
+      automaticOrphanBootRepair: {
+        status: "passed",
+        evidenceTier: "packed_isolated_installed_public_cli",
+        fixture: "exact_startup_vbs_with_missing_command_target",
+        removedBeforeDependencyWork: true,
+      },
+      packedUninstall: {
+        status: "passed",
+        platform: "win32",
+        evidenceTier: "packed_isolated_installed_public_cli",
+        packageSha256,
+        isolatedHomeAndPrefix: true,
+        normalManifestUninstall: {
+          status: "passed",
+          evidenceScope: "synthetic_manifest_fixture_consumed_by_packed_public_cli",
+          descriptorIds: [
+            "windows-powershell",
+            "windows-command",
+            "windows-startup",
+          ],
+          syntheticFixtureExactOwnershipAndIntegrityRecorded: true,
+          allChainFilesRemoved: true,
+        },
+        privateManifestBypass: {
+          status: "passed",
+          option: "--no-manifest",
+          exitCode: 2,
+          rejectedByPublicCli: true,
+        },
+        windowsRecovery: {
+          status: "passed",
+          fixture: "shared_renderer_exact_orphan_startup_vbs",
+          missingCommandTarget: true,
+          dryRunPreserved: true,
+          unprovenBoundaryReported: true,
+          liveRunRemoved: true,
+        },
+      },
       projectPackage: {
         status: "passed",
         targets: [...CANONICAL_PACKED_TARGETS],
@@ -455,6 +503,9 @@ test("release audit recomputes packed completeness and rejects legacy or partial
   reject((proof) => {
     delete proof.currentPackage.targets;
   }, "missing current package targets");
+  reject((proof) => {
+    delete proof.currentPackage.packedUninstall;
+  }, "cached report missing packed uninstall proof");
   reject((proof) => {
     proof.currentPackage.projectPackage.targets = [CANONICAL_PACKED_TARGETS[0]];
   }, "one-target project proof");
