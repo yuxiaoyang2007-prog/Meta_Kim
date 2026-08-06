@@ -6,6 +6,39 @@
 
 更新说明先解释本次解决的用户痛点或风险，再说明为了解决它改了什么、为什么重要。过细的内部任务编号、低价值 backlog id 和实现流水账不放在这里；需要精确证据时，请看 Git 历史、测试、生成报告和 PRD 产物。
 
+## [2.9.27] - 2026-08-05
+
+### 修复内容
+
+- **正式打包 CLI 的全局安装与更新现在会迁移已有 MCP Memory runtime，不再直接跳过。** v2.9.26 的不可变正式包虽然正确刷新了 Claude/Codex 投影，却误把独立的 Memory 运行生命周期视为已经处理，导致历史用户仍可能保留旧的、会受系统代理影响的开机脚本。现在正式包会按正常策略完成依赖判断、旁路候选升级、精确暂停自有进程、失败回滚、开机文件刷新、自动重启和健康回读；全新安装、同版本重装、缺少依赖和显式跳过可选工具的行为保持不变。
+- **没有旧 manifest 记录的 Windows 启动链，也只会在归属证据完整时自动纳管。** 更新必须同时验证历史 PowerShell 字节、CMD/VBS 完整引用链、未变化的 active runtime 状态、安全的物理 runtime/Python/数据库文件、身份一致且健康的 listener，以及路径不存在既有或并发 manifest 所有者。缺失、被修改、链接、归属含糊或用户自有内容一律不碰，并保持 fail closed。
+- **全局 Memory 生命周期不再把 `.mcp.json` 写进不可变正式包。** 回滚状态改存于 Meta_Kim 用户状态目录，因此 Memory 迁移成功后不会破坏 stable package 闭包，也不会误改调用者项目；对外仍由 `meta-kim-runtime` 提供唯一的 Meta_Kim MCP server 入口。
+- **切换后验证只容忍短暂观测空窗，不放宽身份匹配。** Windows 健康与进程身份回读会在最多 5 秒内有限重试，但成功时仍必须精确匹配同一可执行文件、launcher、参数、host 和端口；持续不一致仍会回滚。
+- **Windows 短暂目录占用不再让全局 Skill 安装倒在最后一次改名。** 普通 Skill 首次落盘、归档落盘和 `meta-skill-creator` 多目标事务，现在只会对本事务拥有的精确同级 rename 在 `EPERM`、`EBUSY` 或 `EACCES` 下做短时有界重试。持续占用仍会明确失败，且不会发布半成品；原有正式目标或已准备的 staging 保持可恢复，也不会泛化删除或重试未知路径。
+- **正式包发布验证不再让耗时的历史升级验收把“已经复制”的 runtime 观测快照拖到过期。** 只读建议快照改为在历史用户验收结束后、便携安装 CLI 回读前一刻才复制。真实主机证据的 24 小时新鲜度要求完全不变；本修复只消除检查与使用之间的竞态，不会把旧证据伪装成新证据。
+- **受控 Claude 能力探测不再继承提示词改写设置或无关 MCP server。** 它保留当前认证边界，但使用空 setting sources、严格空 MCP 配置和仅限本能力的原生工具运行。edit 探测还要求最终只能保留一行精确的 `after-<marker>`，禁止保留 `before` marker 或增加解释文字。这样既不会被用户配置中的提示词优化替换掉受控动作，也不会加载十几万 Token 的无关上下文，更不会因假失败再次浪费实机探测。
+- **贡献者致谢：** 感谢 [@qitiandashenggogogo](https://github.com/qitiandashenggogogo) 发起 [#50](https://github.com/KimYx0207/Meta_Kim/pull/50) 和 [#51](https://github.com/KimYx0207/Meta_Kim/pull/51) 的贡献；这些成果与其上的历史安装用户迁移加固一并保留在本版本中。
+
+### 验证
+
+- 验证包含针对真实“旧 manifest 未登记”Memory runtime 的正式包全局更新，并回读历史链在不扩大归属边界的前提下完成纳管、Windows launcher 已使用禁用代理的 `HttpClientHandler`、所引用可执行文件存在、重启后服务健康、没有残留孤儿启动项，且不可变正式包仍与其精确 receipt 一致。聚焦回归还注入了短暂与持续的 Windows rename 锁，证明普通 Skill 与多目标 meta-skill 事务共享有界恢复、失败原子性和可恢复 staging 边界，断言便携 runtime 观测只能在耗时的历史升级验收之后复制，并把实机 edit 探测绑定到唯一精确的最终行。
+
+## [2.9.26] - 2026-08-05
+
+### 修复内容
+
+- **Windows 历史安装用户重新安装或更新时，不再需要手动结束 MCP Memory 或删除被占用文件。** 只有 endpoint PID、启动身份、可执行文件、launcher、参数、host/port、全局 manifest、当前解释器和数据库都与 Meta_Kim 记录的权威完全一致，安装器才会暂停旧服务；未知 listener 或用户改动一律 fail closed。对同版本重装和历史版本更新，安装器会先在旁路目录准备并验证候选，再停止旧 runtime；切换、重启或健康/身份回读失败时，会恢复旧 runtime、数据库、启动文件、MCP 配置项和 active state。
+- **Windows 启动项与依赖检查不再把机器环境问题丢给用户处理。** 精确匹配的 Meta_Kim 孤儿启动项会在依赖步骤前自动修复；健康依赖直接复用，缺失依赖进入正常安装，替换失败保留上一份可工作 runtime。PowerShell 5.1 与 7 的本地健康检查会绕过用户代理，真实 503 等 HTTP 失败仍会判定为失败；相关子进程均隐藏窗口、禁用 shell 并设置有界超时。
+- **历史安装状态会沿正常 update 路径做严格受限的自动迁移。** 只有同时满足历史分类与精确所有权的陈旧 manifest 记录，才会在全局安装锁内移除；不可读、仍存在、已漂移、链接或用户所有内容全部保留。install、update 与精确 uninstall 还共用不可变投影包的 digest 锁，避免清理与正在使用该包的进程竞态。
+- **发布证明更严格，也更适配 Windows 网络环境。** Release 审计与规划关闭使用有界 WinINET/WinHTTP/直连策略、可信 Windows 系统工具、显式代理/TLS 清理、调用方仓库状态权威，以及精确 asset 大小与摘要绑定。新增 `meta:release:plan` 根据真实 diff 推荐 smoke 或 full；install、runtime、安全、未知或空变更会 fail closed 到完整门禁，且不会削弱 `meta:verify:all`。
+- **运行时声明继续保留真实来源。** 仓库外或链接报告不能继承仓库 run identity；runtime acceptance 统一写入规范运行端名称；未知运行端在写状态前失败；激活元数据也不能凭空制造 provider registry 未声明的支持能力。
+- **Graphify 发布重建现在能严格恢复上游序列化边界，同时不掩盖危险输出。** 单一 `$text` JSON 对象包装的超边、节点列表外层精确的 `{item:[...]}` 包装、精确的 `name/kind/paths/weight` 备用超边结构，以及严格处于 0–1 的十进制置信度字符串，都会先纳入绑定白名单并规范化，再继续执行原有 ID/引用校验。公开 `https://` 标签不再被误判为 Windows 盘符路径，安全的 `~/.meta-kim` 展示别名会渲染为 `<meta-kim-home>`；字段混搭或多余字段、非法包装或置信度、不安全别名穿越、悬空引用、真实本机路径和不完整图谱身份仍会阻断发布。
+- **贡献者致谢：** 感谢 [@qitiandashenggogogo](https://github.com/qitiandashenggogogo) 在 [#50](https://github.com/KimYx0207/Meta_Kim/pull/50) 和 [#51](https://github.com/KimYx0207/Meta_Kim/pull/51) 中提供的初始贡献。本版本继续保留这两项已合并贡献，并补齐其上的历史用户更新、回滚与发布证明加固。
+
+### 验证
+
+- 发布验证覆盖全新安装、同版本重装、历史版本更新、部分失败残留、用户改动漂移、Windows 精确进程权威、事务回滚与直接重试、本地健康检查绕过代理、受锁保护的历史 manifest 迁移、共享包生命周期锁、公共打包 CLI 安装/更新、runtime/provider 来源，以及 GitHub Release 精确绑定。
+
 ## [2.9.25] - 2026-08-05
 
 ### 修复内容

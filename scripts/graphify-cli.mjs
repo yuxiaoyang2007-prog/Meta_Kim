@@ -32,9 +32,14 @@ import {
 } from "./graphify-runtime.mjs";
 import { enrichMetaKimGraph } from "./graphify-enrichment.mjs";
 import {
+  graphifyOutputNormalizationValues,
   sanitizeGraphifyAnalysisSidecar,
   sanitizeGraphifyOutput,
 } from "./graphify-output-sanitize.mjs";
+import {
+  hasPrivateLocalPath,
+  sanitizeKnownMetaKimHomeAliases,
+} from "./graphify-private-path.mjs";
 import {
   createGraphifyRuntimeNormalizer,
   GRAPHIFY_NODE_ID_NORMALIZATION,
@@ -453,27 +458,6 @@ function repositoryStateDigest(repoRoot, repositoryFiles) {
   return digest.digest("hex");
 }
 
-function hasPrivateLocalPath(value) {
-  return typeof value === "string" &&
-    /(?:[A-Za-z]:[\\/]|\\\\[^\\\s]+\\|(?:^|[^A-Za-z0-9_])~[\\/]|\/(?:Users|home|root)\/)/u.test(
-      value,
-    );
-}
-
-function sanitizeKnownGraphifyReportAliases(value) {
-  if (typeof value !== "string" || !value.includes("~/.meta-kim")) return value;
-  return value.replace(
-    /~\/\.meta-kim[^\s,;:)\]}>'"`]*/gu,
-    (candidate) => {
-      const segments = candidate.split("/").slice(2);
-      return /^~\/\.meta-kim(?:\/[A-Za-z0-9._-]+)*$/u.test(candidate) &&
-        segments.every((segment) => segment !== "." && segment !== "..")
-        ? candidate.replace(/^~\/\.meta-kim/u, "<meta-kim-home>")
-        : candidate;
-    },
-  );
-}
-
 function refreshRepositorySnapshot(expected, boundary) {
   const current = readRepositoryContext(expected.repoRoot);
   if (
@@ -500,22 +484,7 @@ function graphNormalizationValues(
   const add = (value) => {
     if (typeof value === "string") values.add(value);
   };
-  for (const node of Array.isArray(graph?.nodes) ? graph.nodes : []) add(node?.id);
-  for (const link of Array.isArray(graph?.links) ? graph.links : []) {
-    add(link?.source);
-    add(link?.target);
-  }
-  for (const surface of [
-    Array.isArray(graph?.hyperedges) ? graph.hyperedges : [],
-    Array.isArray(graph?.graph?.hyperedges) ? graph.graph.hyperedges : [],
-  ]) {
-    for (const hyperedge of surface) {
-      add(hyperedge?.id);
-      for (const nodeId of Array.isArray(hyperedge?.nodes) ? hyperedge.nodes : []) {
-        add(nodeId);
-      }
-    }
-  }
+  for (const value of graphifyOutputNormalizationValues(graph)) add(value);
   for (const source of repositoryFiles) {
     add(source);
     const extension = path.posix.extname(source);
@@ -922,7 +891,7 @@ function stampGraphFreshness(cwd = process.cwd(), runtimeBinding = null) {
 
   if (existsSync(reportPath)) {
     const reportRaw = readFileSync(reportPath, "utf8");
-    const sanitizedReport = sanitizeKnownGraphifyReportAliases(reportRaw);
+    const sanitizedReport = sanitizeKnownMetaKimHomeAliases(reportRaw);
     if (hasPrivateLocalPath(sanitizedReport)) {
       fail("GRAPH_REPORT.md exposes a private local path; refusing to stamp unsafe output.");
       return false;
@@ -1394,7 +1363,7 @@ function inspectExistingExtractSnapshot(paths, repository) {
       "existing extract graph/report is not bound to the current HEAD",
     );
   }
-  const sanitizedReport = sanitizeKnownGraphifyReportAliases(reportRaw);
+  const sanitizedReport = sanitizeKnownMetaKimHomeAliases(reportRaw);
   if (hasPrivateLocalPath(sanitizedReport)) {
     throw new Error("existing extract report still contains a private local path");
   }

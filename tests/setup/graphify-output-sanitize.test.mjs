@@ -2,9 +2,14 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   GRAPHIFY_OUTPUT_SANITIZE_SCHEMA,
+  graphifyOutputNormalizationValues,
   sanitizeGraphifyAnalysisSidecar,
   sanitizeGraphifyOutput,
 } from "../../scripts/graphify-output-sanitize.mjs";
+import {
+  hasPrivateLocalPath,
+  sanitizeKnownMetaKimHomeAliases,
+} from "../../scripts/graphify-private-path.mjs";
 
 describe("Graphify upstream output sanitizer", () => {
   test("canonicalizes Unicode IDs, rewrites exact links, and resolves canonical collisions", () => {
@@ -147,6 +152,51 @@ describe("Graphify upstream output sanitizer", () => {
     assert.deepEqual(graph, afterFirst);
   });
 
+  test("does not mistake a public URL scheme for a Windows drive path", () => {
+    const graph = {
+      nodes: [{
+        id: "public-url",
+        label: "https://www.aiking.dev/",
+        source_url: "https://www.aiking.dev/",
+      }],
+      links: [],
+    };
+    const result = sanitizeGraphifyOutput(graph);
+    assert.equal(result.redactedPrivateSourceUrls, 0);
+    assert.equal(graph.nodes[0].source_url, "https://www.aiking.dev/");
+    assert.equal(hasPrivateLocalPath("https://www.aiking.dev/"), false);
+    assert.equal(hasPrivateLocalPath("source=https://example.test/guide"), false);
+    assert.equal(hasPrivateLocalPath("C:/Users/Kim/private.txt"), true);
+    assert.equal(hasPrivateLocalPath("path=C:\\Users\\Kim\\private.txt"), true);
+    assert.equal(hasPrivateLocalPath("\\\\server\\share\\private.txt"), true);
+    assert.equal(hasPrivateLocalPath("/home/kim/private.txt"), true);
+    assert.equal(hasPrivateLocalPath("~/private.txt"), true);
+  });
+
+  test("renders only safe Meta_Kim home aliases without weakening path checks", () => {
+    const graph = {
+      nodes: [{
+        id: "store",
+        label: "Immutable store (~/.meta-kim/runtime/projection-packages)",
+        norm_label: "~/.meta-kim/state/default",
+      }],
+      links: [],
+    };
+    const result = sanitizeGraphifyOutput(graph);
+    assert.equal(result.sanitizedKnownHomeAliases, 2);
+    assert.equal(
+      graph.nodes[0].label,
+      "Immutable store (<meta-kim-home>/runtime/projection-packages)",
+    );
+    assert.equal(graph.nodes[0].norm_label, "<meta-kim-home>/state/default");
+    assert.equal(hasPrivateLocalPath(graph.nodes[0].label), false);
+    assert.equal(
+      sanitizeKnownMetaKimHomeAliases("~/.meta-kim/../private"),
+      "~/.meta-kim/../private",
+    );
+    assert.equal(hasPrivateLocalPath("~/.meta-kim/../private"), true);
+  });
+
   test("rewrites both Graphify hyperedge reference surfaces", () => {
     const hyperedge = {
       id: "Team-Group",
@@ -172,6 +222,193 @@ describe("Graphify upstream output sanitizer", () => {
       id: "team_group",
       nodes: ["foo", "bar"],
     });
+  });
+
+  test("recovers Graphify serialized hyperedge wrappers without widening malformed input", () => {
+    const serialized = {
+      $text: JSON.stringify({
+        id: "Team-Group",
+        nodes: ["Foo", "bar"],
+        relation: "participate_in",
+      }),
+    };
+    const graph = {
+      nodes: [{ id: "Foo" }, { id: "bar" }],
+      links: [],
+      hyperedges: [structuredClone(serialized)],
+      graph: { hyperedges: [structuredClone(serialized)] },
+    };
+    const result = sanitizeGraphifyOutput(graph, {
+      normalizeNodeId: (value) => ({
+        Foo: "foo",
+        bar: "bar",
+        "Team-Group": "team_group",
+      })[value] ?? value,
+    });
+    assert.equal(result.recoveredSerializedHyperedges, 2);
+    assert.equal(result.canonicalizedHyperedgeIds, 2);
+    assert.equal(result.rewrittenHyperedgeReferences, 2);
+    assert.deepEqual(graph.hyperedges, graph.graph.hyperedges);
+    assert.deepEqual(graph.hyperedges[0], {
+      id: "team_group",
+      nodes: ["foo", "bar"],
+      relation: "participate_in",
+    });
+
+    assert.throws(
+      () => sanitizeGraphifyOutput({
+        nodes: [{ id: "safe" }],
+        links: [],
+        hyperedges: [{ $text: "{not-json" }],
+      }),
+      /invalid serialized hyperedge/u,
+    );
+    assert.throws(
+      () => sanitizeGraphifyOutput({
+        nodes: [{ id: "safe" }],
+        links: [],
+        hyperedges: [{ $text: JSON.stringify({ id: "safe", nodes: ["safe"] }), extra: true }],
+      }),
+      /malformed hyperedge/u,
+    );
+  });
+
+  test("recovers exact Graphify item wrappers around hyperedge nodes only", () => {
+    const wrapped = {
+      id: "Team-Group",
+      nodes: { item: ["Foo", "bar"] },
+      relation: "participate_in",
+    };
+    const graph = {
+      nodes: [{ id: "Foo" }, { id: "bar" }],
+      links: [],
+      hyperedges: [structuredClone(wrapped)],
+      graph: { hyperedges: [structuredClone(wrapped)] },
+    };
+    const result = sanitizeGraphifyOutput(graph, {
+      normalizeNodeId: (value) => ({
+        Foo: "foo",
+        bar: "bar",
+        "Team-Group": "team_group",
+      })[value] ?? value,
+    });
+    assert.equal(result.recoveredSerializedHyperedgeNodes, 2);
+    assert.deepEqual(graph.hyperedges, graph.graph.hyperedges);
+    assert.deepEqual(graph.hyperedges[0].nodes, ["foo", "bar"]);
+
+    for (const nodes of [
+      { item: "safe" },
+      { item: ["safe"], extra: true },
+      { item: ["safe", 42] },
+    ]) {
+      assert.throws(
+        () => sanitizeGraphifyOutput({
+          nodes: [{ id: "safe" }],
+          links: [],
+          hyperedges: [{ id: "group", nodes }],
+        }),
+        /malformed hyperedge/u,
+      );
+    }
+  });
+
+  test("normalizes strict serialized confidence scores and rejects unsafe values", () => {
+    const graph = {
+      nodes: [{ id: "one", confidence_score: "1.0" }],
+      links: [{ source: "one", target: "two", confidence_score: "0.75" }],
+      hyperedges: [{ id: "group", nodes: ["one", "two"], confidence_score: "0.95" }],
+    };
+    graph.nodes.push({ id: "two", confidence_score: 0 });
+    const result = sanitizeGraphifyOutput(graph);
+    assert.equal(result.recoveredSerializedConfidenceScores, 3);
+    assert.equal(graph.nodes[0].confidence_score, 1);
+    assert.equal(graph.links[0].confidence_score, 0.75);
+    assert.equal(graph.hyperedges[0].confidence_score, 0.95);
+
+    for (const confidence_score of ["NaN", " 0.5", ".5", "1.01", -0.1, 1.1, Infinity]) {
+      assert.throws(
+        () => sanitizeGraphifyOutput({
+          nodes: [{ id: "unsafe", confidence_score }],
+          links: [],
+        }),
+        /invalid confidence score/u,
+      );
+    }
+  });
+
+  test("pre-binds IDs hidden inside strict Graphify wrappers", () => {
+    const serialized = {
+      $text: JSON.stringify({
+        id: "Serialized-Group",
+        nodes: { item: ["Wrapped-One", "Wrapped-Two"] },
+      }),
+    };
+    const graph = {
+      nodes: [{ id: "Visible" }],
+      links: [{ source: "Visible", target: "Wrapped-One" }],
+      hyperedges: [structuredClone(serialized)],
+      graph: { hyperedges: [structuredClone(serialized)] },
+    };
+    assert.deepEqual(
+      new Set(graphifyOutputNormalizationValues(graph)),
+      new Set([
+        "Visible",
+        "Wrapped-One",
+        "Serialized-Group",
+        "Wrapped-Two",
+      ]),
+    );
+  });
+
+  test("canonicalizes only the exact alternate Graphify hyperedge schema", () => {
+    const alternate = {
+      name: "Runtime-Group",
+      kind: "form",
+      paths: ["Claude", "Codex"],
+      confidence: "EXTRACTED",
+      weight: 0.9,
+    };
+    const graph = {
+      nodes: [{ id: "Claude" }, { id: "Codex" }],
+      links: [],
+      hyperedges: [structuredClone(alternate)],
+      graph: { hyperedges: [structuredClone(alternate)] },
+    };
+    assert.deepEqual(
+      new Set(graphifyOutputNormalizationValues(graph)),
+      new Set(["Claude", "Codex", "Runtime-Group"]),
+    );
+    const result = sanitizeGraphifyOutput(graph, {
+      normalizeNodeId: (value) => ({
+        Claude: "claude",
+        Codex: "codex",
+        "Runtime-Group": "runtime_group",
+      })[value] ?? value,
+    });
+    assert.equal(result.recoveredAlternateHyperedges, 2);
+    assert.deepEqual(graph.hyperedges, graph.graph.hyperedges);
+    assert.deepEqual(graph.hyperedges[0], {
+      confidence: "EXTRACTED",
+      id: "runtime_group",
+      relation: "form",
+      nodes: ["claude", "codex"],
+      confidence_score: 0.9,
+    });
+
+    assert.throws(
+      () => sanitizeGraphifyOutput({
+        nodes: [{ id: "safe" }],
+        links: [],
+        hyperedges: [{
+          name: "unsafe",
+          kind: "form",
+          paths: ["safe"],
+          weight: 1,
+          extra: true,
+        }],
+      }),
+      /malformed hyperedge/u,
+    );
   });
 
   test("refuses ambiguous duplicate raw IDs and malformed endpoints", () => {

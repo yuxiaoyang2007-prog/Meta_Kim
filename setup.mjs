@@ -58,12 +58,20 @@ import {
   resolveSetupRuntimeLaunchInventoryRoots,
 } from "./scripts/runtime-executable-binding.mjs";
 import {
+  adoptHistoricalWindowsMcpMemoryBootArtifactOwnership,
+  isExactMcpMemoryBootManifestIdentity,
   repairOrphanMcpMemoryBootLaunchers,
   recordMcpMemoryBootArtifactOwnership,
   renderCurrentWindowsMcpMemoryCommandBytes,
   renderCurrentWindowsMcpMemoryPowerShellBytes,
   renderCurrentWindowsMcpMemoryStartupVbsBytes,
+  resolveMcpMemoryBootArtifactDescriptors,
 } from "./scripts/mcp-memory-boot-artifacts.mjs";
+import {
+  manifestFileEntryMatches,
+  manifestPathFor,
+  readManifest,
+} from "./scripts/install-manifest.mjs";
 import {
   detectPython310,
   extractPipShowVersion,
@@ -152,6 +160,7 @@ import {
   isEndpointNotListening,
   resolveWindowsVenvProcessExpectation,
   stopVerifiedEndpointProcess,
+  verifyMcpMemoryRuntimeAuthority,
   verifyMemoryListenerIdentity,
 } from "./scripts/mcp-memory-process-control.mjs";
 import {
@@ -164,6 +173,7 @@ import {
   sqliteQuickCheck,
   sqliteRestoreWithQuickCheck,
   MCP_MEMORY_NO_DATABASE_DIGEST,
+  MCP_MEMORY_SUBPROCESS_TIMEOUT_MS,
   MCP_MEMORY_TRANSACTION_ID_PATTERN,
   validateMcpMemoryRecoveryMaterial,
   writeJsonAtomic,
@@ -6360,6 +6370,8 @@ function probePythonLauncher(command, args, spawnFn = spawnSync) {
     const result = spawnFn(command, [...args, "--version"], {
       encoding: "utf8",
       shell: false,
+      windowsHide: true,
+      timeout: MCP_MEMORY_SUBPROCESS_TIMEOUT_MS,
     });
     if (result?.error || result?.status !== 0) return null;
     const versionText = readProcessText(result);
@@ -6422,7 +6434,13 @@ function createMemoryServiceVenv(sourceLauncher, venvDir, spawnFn = spawnSync) {
     const result = spawnFn(
       sourceLauncher.command,
       [...sourceLauncher.args, "-m", "venv", venvDir],
-      { encoding: "utf8", shell: false, stdio: "inherit" },
+      {
+        encoding: "utf8",
+        shell: false,
+        windowsHide: true,
+        timeout: MCP_MEMORY_SUBPROCESS_TIMEOUT_MS,
+        stdio: "inherit",
+      },
     );
     if (result.status !== 0) return null;
 
@@ -6542,7 +6560,7 @@ async function runMcpMemoryHookInstaller(
 }
 
 function checkMcpMemoryService(python) {
-  const result = runPythonModule(python, [
+  const result = runMcpMemoryPython(python, [
     "-m",
     "pip",
     "show",
@@ -6562,12 +6580,76 @@ function activeMemoryRuntimeStatePath() {
   return join(homedir(), ".meta-kim", "mcp-memory-active-runtime.json");
 }
 
+function mcpMemoryRuntimeConfigPath() {
+  return join(homedir(), ".meta-kim", "mcp-memory-runtime-config.json");
+}
+
 function readActiveMemoryRuntimeState() {
   try {
     return JSON.parse(readFileSync(activeMemoryRuntimeStatePath(), "utf8"));
   } catch {
     return null;
   }
+}
+
+function mcpMemoryAuthorityPathKey(value) {
+  if (typeof value !== "string" || !isAbsolute(value)) return null;
+  const normalized = resolve(value).replace(/\\/gu, "/");
+  return platform() === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function readMcpMemoryManifestAuthority() {
+  let manifestPath;
+  try {
+    manifestPath = manifestPathFor("global");
+    const manifest = readManifest(manifestPath);
+    if (!manifest || manifest.scope !== "global") {
+      return { verified: false, reason: "runtime_manifest_missing_or_invalid" };
+    }
+    const descriptors = resolveMcpMemoryBootArtifactDescriptors({
+      homeRoot: homedir(),
+      platformName: platform(),
+    });
+    const entries = Array.isArray(manifest.entries) ? manifest.entries : [];
+    const complete = descriptors.every((descriptor) => {
+      const entry = entries.find((candidate) => (
+        mcpMemoryAuthorityPathKey(candidate?.path) === mcpMemoryAuthorityPathKey(descriptor.path) &&
+        isExactMcpMemoryBootManifestIdentity(candidate, {
+          homeRoot: homedir(),
+          platformName: platform(),
+        })
+      ));
+      return Boolean(entry && manifestFileEntryMatches(entry, descriptor.path));
+    });
+    return complete
+      ? { verified: true, manifestPath, entries }
+      : {
+          verified: false,
+          reason: "runtime_manifest_boot_chain_unverified",
+          manifestPath,
+          entries,
+        };
+  } catch {
+    return {
+      verified: false,
+      reason: "runtime_manifest_authority_unreadable",
+      manifestPath,
+    };
+  }
+}
+
+function readMcpMemoryRuntimeAuthority() {
+  return {
+    manifest: readMcpMemoryManifestAuthority(),
+    activeState: readActiveMemoryRuntimeState(),
+  };
+}
+
+function runMcpMemoryPython(python, moduleArgs, options = {}) {
+  return runPythonModule(python, moduleArgs, spawnSync, {
+    timeout: MCP_MEMORY_SUBPROCESS_TIMEOUT_MS,
+    ...options,
+  });
 }
 
 function writeActiveMemoryRuntimeState({ resolved, memoryBin, databasePath }) {
@@ -6609,10 +6691,9 @@ function findMemoryBinPath(resolved, { preferActive = true } = {}) {
   ) {
     try {
       const launcher = resolved.python;
-      const result = spawnSync(
-        launcher.command,
-        [...launcher.args, "-c", "import sys; print(sys.executable)"],
-        { encoding: "utf8", shell: false },
+      const result = runMcpMemoryPython(
+        launcher,
+        ["-c", "import sys; print(sys.executable)"],
       );
       if (result.status === 0 && result.stdout.trim()) {
         pythonCmd = result.stdout.trim();
@@ -6641,8 +6722,11 @@ function findMemoryBinPath(resolved, { preferActive = true } = {}) {
   // Strategy 2: search system PATH (handles cross-install pip --user case)
   const whichCmd = plat === "win32" ? "where" : "which";
   try {
-    const result = spawnCliSync(whichCmd, [binName], {
+    const result = spawnSync(whichCmd, [binName], {
       encoding: "utf8",
+      shell: false,
+      windowsHide: true,
+      timeout: MCP_MEMORY_SUBPROCESS_TIMEOUT_MS,
     });
     if (result.status === 0 && result.stdout.trim()) {
       const found = result.stdout.trim().split(/\r?\n/)[0];
@@ -6795,6 +6879,7 @@ async function startMcpMemoryServiceBackground(
         const child = spawn(memoryBin, memoryServerHttpArgs(endpoint), {
           env,
           detached: true,
+          shell: false,
           stdio: ["ignore", stdoutFd, stderrFd],
           windowsHide: true,
         });
@@ -6901,6 +6986,18 @@ function verifyEndpointRuntimeIdentity(endpoint, memoryBin) {
     host: endpoint.hostname,
     port: endpoint.port,
   }).verified;
+}
+
+async function verifyEndpointRuntimeHealthy(endpoint, memoryBin) {
+  const verification = await waitForMcpMemoryHealth({
+    probeHealth: async () => (
+      await probeMcpMemoryHealth(endpoint.healthUrl) &&
+      verifyEndpointRuntimeIdentity(endpoint, memoryBin)
+    ),
+    timeoutMs: 5_000,
+    pollIntervalMs: 250,
+  });
+  return verification.healthy;
 }
 
 function configureBootAutoStart(
@@ -7139,13 +7236,12 @@ function resolveMcpMemoryDatabasePathWithRuntime(python, { preferredPath = null 
   ].join("\n");
   const databaseEnv = { ...process.env };
   delete databaseEnv.MCP_MEMORY_SQLITE_PATH;
-  const result = runPythonModule(python, ["-c", script], undefined, {
+  const result = runMcpMemoryPython(python, ["-c", script], {
     cwd: PROJECT_DIR,
     env: {
       ...databaseEnv,
       ...(preferredPath ? { MCP_MEMORY_SQLITE_PATH: preferredPath } : {}),
     },
-    windowsHide: true,
   });
   if (result.status !== 0) return null;
   try {
@@ -7392,7 +7488,7 @@ async function recoverIncompleteMcpMemoryTransaction({ transactionRoot, endpoint
     expectedPython: resolved.python,
     expectedDatabasePath: trustedDatabasePath,
     expectedCandidateRoot,
-    expectedMcpPath: join(PROJECT_DIR, ".mcp.json"),
+    expectedMcpPath: mcpMemoryRuntimeConfigPath(),
     expectedSnapshotPaths: [...expectedSnapshotPaths],
     platformName: platform(),
   });
@@ -7407,7 +7503,7 @@ async function recoverIncompleteMcpMemoryTransaction({ transactionRoot, endpoint
     !isAbsoluteRecoveryPath(recovery.oldMemoryBin) ||
     !isAbsoluteRecoveryPath(recovery.candidateMemoryBin) ||
     !isAbsoluteRecoveryPath(recovery.mcpPath) ||
-    pathKeyForRecovery(recovery.mcpPath) !== pathKeyForRecovery(join(PROJECT_DIR, ".mcp.json")) ||
+    pathKeyForRecovery(recovery.mcpPath) !== pathKeyForRecovery(mcpMemoryRuntimeConfigPath()) ||
     !trustedOldMemoryBin ||
     pathKeyForRecovery(recovery.oldMemoryBin) !== pathKeyForRecovery(realpathSync(trustedOldMemoryBin)) ||
     !trustedDatabasePath ||
@@ -7538,7 +7634,10 @@ async function recoverIncompleteMcpMemoryTransaction({ transactionRoot, endpoint
           },
         ),
       }),
-      verifyOldRuntime: async () => verifyEndpointRuntimeIdentity(endpoint, trustedOldMemoryBin),
+      verifyOldRuntime: async () => (
+        await probeMcpMemoryHealth(endpoint.healthUrl) &&
+        verifyEndpointRuntimeIdentity(endpoint, trustedOldMemoryBin)
+      ),
       markRecovered: async () => {
         evidence.status = "recovered_on_next_setup";
         evidence.stage = "recovered_on_next_setup";
@@ -7554,8 +7653,9 @@ async function runTransactionalMcpMemoryUpdate({
   resolved,
   endpoint,
   mcpPath,
+  oldMemoryBinOverride = null,
 }) {
-  const oldMemoryBin = findMemoryBinPath(resolved);
+  const oldMemoryBin = oldMemoryBinOverride ?? findMemoryBinPath(resolved);
   const transactionRoot = join(homedir(), ".meta-kim", "transactions", "mcp-memory");
   preparePrivateTransactionRoot(transactionRoot);
   cleanupExpiredMcpMemoryRecoveryArtifacts({ transactionRoot });
@@ -7611,12 +7711,12 @@ async function runTransactionalMcpMemoryUpdate({
         const installed = executeMcpMemoryReconciliation({
           python: launcher,
           plan,
-          runPython: runPythonModule,
+          runPython: runMcpMemoryPython,
           repairDependencyProbe: ({ python, verifyArgs }) => repairWindowsCandidateOnnxRuntime({
             python,
             candidateDir,
             verifyArgs,
-            runPython: runPythonModule,
+            runPython: runMcpMemoryPython,
           }),
         });
         if (!installed.ok) {
@@ -7673,6 +7773,10 @@ async function runTransactionalMcpMemoryUpdate({
       stopOldRuntime: () => stopVerifiedEndpointProcess({
         endpoint,
         ...memoryProcessIdentityExpectation(effectiveOldMemoryBin),
+        expectedPythonPath: effectiveOldPython,
+        expectedDatabasePath: databasePath,
+        resolveRuntimeAuthority: () => readMcpMemoryRuntimeAuthority(),
+        requireRuntimeAuthority: true,
       }),
       backupDatabase: async () => {
         if (!existsSync(databasePath)) {
@@ -7699,10 +7803,8 @@ async function runTransactionalMcpMemoryUpdate({
           extraEnv: { MCP_MEMORY_SQLITE_PATH: databasePath },
         }),
       }),
-      verifyCandidateHealthy: async (candidate) => (
-        await probeMcpMemoryHealth(endpoint.healthUrl) &&
-        verifyEndpointRuntimeIdentity(endpoint, candidate.memoryBin)
-      ),
+      verifyCandidateHealthy: (candidate) =>
+        verifyEndpointRuntimeHealthy(endpoint, candidate.memoryBin),
       updateMcpConfig: async (candidate) => {
         let mcpConfig = {};
         if (existsSync(mcpPath)) mcpConfig = JSON.parse(readFileSync(mcpPath, "utf8"));
@@ -7786,6 +7888,89 @@ async function runTransactionalMcpMemoryUpdate({
   };
 }
 
+async function planMcpMemoryUpdateRoute({ resolved, endpoint, existingInstalled }) {
+  if (endpoint.canAutoStart === false) {
+    return { ok: true, useTransaction: false, reason: "remote_endpoint" };
+  }
+
+  const oldMemoryBin = findMemoryBinPath(resolved);
+  const listener = inspectEndpointListener(endpoint);
+  if (isEndpointNotListening(listener)) {
+    return {
+      ok: true,
+      useTransaction: Boolean(oldMemoryBin),
+      oldMemoryBin,
+      reason: existingInstalled ? "installed_runtime_not_listening" : "historical_runtime_not_listening",
+    };
+  }
+  if (listener?.kind !== "listening") {
+    return {
+      ok: false,
+      reason: listener?.reason || "unknown_listener",
+    };
+  }
+  if (!oldMemoryBin) {
+    return { ok: false, reason: "old_runtime_missing_for_listener" };
+  }
+
+  const expected = memoryProcessIdentityExpectation(oldMemoryBin);
+  const identity = verifyMemoryListenerIdentity(listener, {
+    platform: expected.platformName,
+    executablePath: expected.expectedExecutablePath,
+    executablePaths: expected.expectedExecutablePaths,
+    launcherPath: expected.expectedLauncherPath,
+    host: endpoint.hostname,
+    port: endpoint.port,
+  });
+  if (!identity.verified) {
+    return { ok: false, reason: identity.reason || "user_drift_or_unknown_listener" };
+  }
+
+  if (!await probeMcpMemoryHealth(endpoint.healthUrl)) {
+    return { ok: false, reason: "old_runtime_unhealthy" };
+  }
+
+  let authority = readMcpMemoryRuntimeAuthority();
+  if (
+    platform() === "win32" &&
+    authority.manifest?.verified !== true &&
+    authority.manifest?.reason === "runtime_manifest_boot_chain_unverified"
+  ) {
+    const adoption = await adoptHistoricalWindowsMcpMemoryBootArtifactOwnership({
+      homeRoot: homedir(),
+      platformName: platform(),
+      metaKimVersion: packageVersion,
+      manifestEntries: authority.manifest.entries,
+      expectedMemoryBin: oldMemoryBin,
+      expectedPythonPaths: expected.expectedExecutablePaths,
+      endpoint,
+      expectedLockDir: join(
+        homedir(),
+        ".meta-kim",
+        "locks",
+        endpointStartLockName(endpoint),
+      ),
+    });
+    if (!adoption.ok) return { ok: false, reason: adoption.reason };
+    authority = readMcpMemoryRuntimeAuthority();
+  }
+  const activeState = authority.activeState;
+  const authorityCheck = verifyMcpMemoryRuntimeAuthority(authority, {
+    memoryBin: oldMemoryBin,
+    pythonPath: activeState?.pythonPath ?? resolved.python,
+    databasePath: activeState?.databasePath,
+  });
+  if (!authorityCheck.verified) {
+    return { ok: false, reason: authorityCheck.reason };
+  }
+  return {
+    ok: true,
+    useTransaction: true,
+    oldMemoryBin,
+    reason: "verified_running_runtime",
+  };
+}
+
 async function installMcpMemoryServiceStep(
   inUpdateMode = false,
   activeTargets = RUNTIME_CHOICES.map(({ id }) => id),
@@ -7820,18 +8005,32 @@ async function installMcpMemoryServiceStep(
   // locked to 3.12. Falls back to the detected Python with a warning.
   let resolved = resolvePythonForMemoryService(detected);
   let python = resolved.python;
-  const mcpPath = join(PROJECT_DIR, ".mcp.json");
+  const mcpPath = mcpMemoryRuntimeConfigPath();
+  mkdirSync(dirname(mcpPath), { recursive: true });
 
   // Check if already installed
   const existing = checkMcpMemoryService(python);
+  const updateRoute = inUpdateMode
+    ? await planMcpMemoryUpdateRoute({
+        resolved,
+        endpoint: memoryEndpoint,
+        existingInstalled: existing.installed,
+      })
+    : { ok: true, useTransaction: false };
+  if (!updateRoute.ok) {
+    warn(t.mcpMemoryUpgradeFailed);
+    info(`  update refused: ${updateRoute.reason}`);
+    return false;
+  }
   let registrationOk = false;
   let backgroundOk = false;
-  if (inUpdateMode && existing.installed) {
+  if (inUpdateMode && updateRoute.useTransaction) {
     info(t.mcpMemoryUpgrading);
     const transaction = await runTransactionalMcpMemoryUpdate({
       resolved,
       endpoint: memoryEndpoint,
       mcpPath,
+      oldMemoryBinOverride: updateRoute.oldMemoryBin,
     });
     if (!transaction.ok) {
       warn(t.mcpMemoryUpgradeFailed);
@@ -7852,7 +8051,7 @@ async function installMcpMemoryServiceStep(
     const reconciliation = executeMcpMemoryReconciliation({
       python,
       plan: reconciliationPlan,
-      runPython: runPythonModule,
+      runPython: runMcpMemoryPython,
     });
     if (!reconciliation.ok) {
       const stderr = readProcessText(reconciliation.processResult);
@@ -7903,7 +8102,7 @@ async function installMcpMemoryServiceStep(
   }
 
   // Step 4.7 — auto-install runtime memory hooks so the full pipeline
-  // (pip package → .mcp.json → hook files → runtime registration →
+  // (pip package → local runtime state → hook files → runtime registration →
   // health check) runs from a single `node setup.mjs` invocation.
   const hooksOk = await runMcpMemoryHookInstaller(activeTargets, {
     allowClaudeGlobalSettings: want && activeTargets.includes("claude"),
@@ -8827,12 +9026,7 @@ async function runInstall() {
     withGlobalHooks: setupWithGlobalHooks,
     skipOptionalTools,
   });
-  const mcpMemoryOk = executingStableProjectionPackage
-    ? (
-        skip(`${C.dim}${t.mcpMemorySkipped}${C.reset}`),
-        INSTALL_STEP_OUTCOME.SKIPPED
-      )
-    : memoryPolicy.action === MCP_MEMORY_SETUP_ACTION.SKIP
+  const mcpMemoryOk = memoryPolicy.action === MCP_MEMORY_SETUP_ACTION.SKIP
     ? (
         skip(`${C.dim}${
           memoryPolicy.reason === MCP_MEMORY_SETUP_REASON.GLOBAL_HOOKS_REQUIRED
@@ -9130,12 +9324,7 @@ async function runUpdate() {
     withGlobalHooks: setupWithGlobalHooks,
     skipOptionalTools,
   });
-  const mcpMemoryOk = executingStableProjectionPackage
-    ? (
-        skip(`${C.dim}${t.mcpMemorySkipped}${C.reset}`),
-        INSTALL_STEP_OUTCOME.SKIPPED
-      )
-    : memoryPolicy.action === MCP_MEMORY_SETUP_ACTION.SKIP
+  const mcpMemoryOk = memoryPolicy.action === MCP_MEMORY_SETUP_ACTION.SKIP
     ? (
         skip(`${C.dim}${
           memoryPolicy.reason === MCP_MEMORY_SETUP_REASON.GLOBAL_HOOKS_REQUIRED

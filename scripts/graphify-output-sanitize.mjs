@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import {
+  hasPrivateLocalPath,
+  sanitizeKnownMetaKimHomeAliases,
+} from "./graphify-private-path.mjs";
 import { normalizeGraphifyNodeId } from "./graphify-unicode-normalize.mjs";
 
 export const GRAPHIFY_OUTPUT_SANITIZE_SCHEMA =
@@ -32,13 +36,6 @@ function isCanonicalRepositoryFile(value) {
     !value.startsWith("./") &&
     !value.endsWith("/") &&
     value.split("/").every((segment) => segment && segment !== "." && segment !== "..");
-}
-
-function hasPrivateLocalPath(value) {
-  return typeof value === "string" &&
-    /(?:[A-Za-z]:[\\/]|\\\\[^\\\s]+\\|(?:^|[^A-Za-z0-9_])~[\\/]|\/(?:Users|home|root)\/)/u.test(
-      value,
-    );
 }
 
 function isPrivateNodeSourceUrl(value) {
@@ -80,6 +77,128 @@ function hyperedgeSurfaces(graph) {
   ].filter(Boolean);
 }
 
+function unwrapSerializedHyperedge(value) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 1 ||
+    typeof value.$text !== "string"
+  ) {
+    return value;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(value.$text);
+  } catch {
+    throw new Error("Graphify output contains an invalid serialized hyperedge");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Graphify output contains an invalid serialized hyperedge");
+  }
+  return parsed;
+}
+
+function unwrapSerializedHyperedgeNodes(value) {
+  if (Array.isArray(value)) return value;
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 1 ||
+    !Array.isArray(value.item)
+  ) {
+    return value;
+  }
+  return value.item;
+}
+
+function canonicalizeAlternateHyperedge(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  if (value.id !== undefined || value.relation !== undefined || value.nodes !== undefined) {
+    return value;
+  }
+  const allowed = new Set([
+    "name",
+    "kind",
+    "paths",
+    "confidence",
+    "weight",
+    "source_file",
+    "label",
+  ]);
+  const keys = Object.keys(value);
+  if (
+    keys.some((key) => !allowed.has(key)) ||
+    typeof value.name !== "string" ||
+    !value.name ||
+    typeof value.kind !== "string" ||
+    !value.kind ||
+    !Array.isArray(value.paths) ||
+    value.paths.some((nodeId) => typeof nodeId !== "string")
+  ) {
+    return value;
+  }
+  const {
+    name: id,
+    kind: relation,
+    paths: nodes,
+    weight,
+    ...rest
+  } = value;
+  return {
+    ...rest,
+    id,
+    relation,
+    nodes,
+    ...(weight === undefined ? {} : { confidence_score: weight }),
+  };
+}
+
+function normalizeConfidenceScore(record) {
+  const value = record?.confidence_score;
+  if (value === undefined || value === null) return false;
+  if (typeof value === "number") {
+    if (Number.isFinite(value) && value >= 0 && value <= 1) return false;
+    throw new Error("Graphify output contains an invalid confidence score");
+  }
+  if (
+    typeof value !== "string" ||
+    !/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/u.test(value)
+  ) {
+    throw new Error("Graphify output contains an invalid confidence score");
+  }
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1) {
+    throw new Error("Graphify output contains an invalid confidence score");
+  }
+  record.confidence_score = normalized;
+  return true;
+}
+
+export function graphifyOutputNormalizationValues(graph) {
+  const values = new Set();
+  const add = (value) => {
+    if (typeof value === "string") values.add(value);
+  };
+  for (const node of Array.isArray(graph?.nodes) ? graph.nodes : []) add(node?.id);
+  for (const link of Array.isArray(graph?.links) ? graph.links : []) {
+    add(link?.source);
+    add(link?.target);
+  }
+  for (const surface of hyperedgeSurfaces(graph)) {
+    for (const serialized of surface) {
+      const hyperedge = canonicalizeAlternateHyperedge(
+        unwrapSerializedHyperedge(serialized),
+      );
+      add(hyperedge?.id);
+      const nodes = unwrapSerializedHyperedgeNodes(hyperedge?.nodes);
+      for (const nodeId of Array.isArray(nodes) ? nodes : []) add(nodeId);
+    }
+  }
+  return [...values];
+}
+
 export function sanitizeGraphifyOutput(
   graph,
   {
@@ -92,6 +211,7 @@ export function sanitizeGraphifyOutput(
   }
   const repositorySet = new Set(repositoryFiles);
   const rawIdCounts = new Map();
+  let recoveredSerializedConfidenceScores = 0;
   for (const node of graph.nodes) {
     if (
       !node ||
@@ -102,6 +222,7 @@ export function sanitizeGraphifyOutput(
     ) {
       throw new Error("Graphify output contains a missing or unsafe raw node ID");
     }
+    if (normalizeConfidenceScore(node)) recoveredSerializedConfidenceScores += 1;
     rawIdCounts.set(node.id, (rawIdCounts.get(node.id) ?? 0) + 1);
   }
   if ([...rawIdCounts.values()].some((count) => count > 1)) {
@@ -116,7 +237,16 @@ export function sanitizeGraphifyOutput(
     redactedExternalRefs: 0,
   };
   let redactedPrivateSourceUrls = 0;
+  let sanitizedKnownHomeAliases = 0;
   for (const node of graph.nodes) {
+    for (const field of ["label", "norm_label", "name", "description"]) {
+      const current = node[field];
+      const sanitized = sanitizeKnownMetaKimHomeAliases(current);
+      if (sanitized !== current) {
+        node[field] = sanitized;
+        sanitizedKnownHomeAliases += 1;
+      }
+    }
     if (isPrivateNodeSourceUrl(node.source_url)) {
       delete node.source_url;
       redactedPrivateSourceUrls += 1;
@@ -198,6 +328,7 @@ export function sanitizeGraphifyOutput(
     ) {
       throw new Error("Graphify output contains a malformed link endpoint");
     }
+    if (normalizeConfidenceScore(link)) recoveredSerializedConfidenceScores += 1;
     nextLinks.push({
       ...link,
       source: assignedByRawId.get(link.source) ?? link.source,
@@ -209,9 +340,30 @@ export function sanitizeGraphifyOutput(
   graph.links = nextLinks;
   let canonicalizedHyperedgeIds = 0;
   let rewrittenHyperedgeReferences = 0;
+  let recoveredSerializedHyperedges = 0;
+  let recoveredSerializedHyperedgeNodes = 0;
+  let recoveredAlternateHyperedges = 0;
   for (const surface of hyperedgeSurfaces(graph)) {
     const assignedHyperedgeIds = new Set();
-    for (const hyperedge of surface) {
+    for (let index = 0; index < surface.length; index += 1) {
+      const serialized = surface[index];
+      const unwrapped = unwrapSerializedHyperedge(serialized);
+      const hyperedge = canonicalizeAlternateHyperedge(unwrapped);
+      if (hyperedge !== unwrapped) {
+        surface[index] = hyperedge;
+        recoveredAlternateHyperedges += 1;
+      } else if (unwrapped !== serialized) {
+        surface[index] = hyperedge;
+      }
+      if (unwrapped !== serialized) {
+        recoveredSerializedHyperedges += 1;
+      }
+      const serializedNodes = hyperedge?.nodes;
+      const nodes = unwrapSerializedHyperedgeNodes(serializedNodes);
+      if (nodes !== serializedNodes) {
+        hyperedge.nodes = nodes;
+        recoveredSerializedHyperedgeNodes += 1;
+      }
       if (
         !hyperedge ||
         typeof hyperedge !== "object" ||
@@ -221,6 +373,7 @@ export function sanitizeGraphifyOutput(
       ) {
         throw new Error("Graphify output contains a malformed hyperedge");
       }
+      if (normalizeConfidenceScore(hyperedge)) recoveredSerializedConfidenceScores += 1;
       const rawHyperedgeId = hyperedge.id;
       const canonicalHyperedgeId = normalizeNodeId(rawHyperedgeId);
       if (!canonicalHyperedgeId) {
@@ -249,15 +402,25 @@ export function sanitizeGraphifyOutput(
     changed:
       Object.values(sourceReclassifications).some((count) => count > 0) ||
       redactedPrivateSourceUrls > 0 ||
+      sanitizedKnownHomeAliases > 0 ||
       canonicalizedNodeIds > 0 ||
       canonicalizedHyperedgeIds > 0 ||
-      rewrittenHyperedgeReferences > 0,
+      rewrittenHyperedgeReferences > 0 ||
+      recoveredSerializedHyperedges > 0 ||
+      recoveredSerializedHyperedgeNodes > 0 ||
+      recoveredAlternateHyperedges > 0 ||
+      recoveredSerializedConfidenceScores > 0,
     ...sourceReclassifications,
     redactedPrivateSourceUrls,
+    sanitizedKnownHomeAliases,
     canonicalizedNodeIds,
     resolvedCanonicalCollisions,
     canonicalizedHyperedgeIds,
     rewrittenHyperedgeReferences,
+    recoveredSerializedHyperedges,
+    recoveredSerializedHyperedgeNodes,
+    recoveredAlternateHyperedges,
+    recoveredSerializedConfidenceScores,
   };
   Object.defineProperty(result, "nodeIdMap", {
     value: assignedByRawId,
